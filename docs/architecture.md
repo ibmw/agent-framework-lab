@@ -1,26 +1,26 @@
 # Architecture
 
-## Structure minimale
+## Minimal structure
 
 ```text
 apps/
-  api/                    API FastAPI et composition des adaptateurs
+  api/                    FastAPI API and adapter composition
     src/capability_lab/
-      domain/             entités, invariants et règles e-commerce
-      application/        cas d'usage et ports
-      infrastructure/     SQLAlchemy, configuration, traces, agents
-      presentation/       routes et schémas HTTP
-    migrations/           historique Alembic portable
+      domain/             entities, invariants, and e-commerce rules
+      application/        use cases and ports
+      infrastructure/     SQLAlchemy, configuration, traces, and agents
+      presentation/       HTTP routes and schemas
+    migrations/           portable Alembic history
   web/                    playground React/Vite
 packages/
-  contracts/              contrat OpenAPI v1 et types partagés générables
+  contracts/              OpenAPI v1 contract and generated shared types
 infra/
-  phoenix/                configuration d'observabilité locale future
-docs/                     guidelines et ADR
-.codex/skills/            procédures project-local spécialisées
+  phoenix/                future local observability configuration
+docs/                     guidelines and ADRs
+.codex/skills/            specialized project-local procedures
 ```
 
-## Règle de dépendance
+## Dependency rule
 
 ```text
 presentation ──> application ──> domain
@@ -28,25 +28,26 @@ presentation ──> application ──> domain
       └──> infrastructure ┘
 ```
 
-- `domain` n'importe aucune bibliothèque web, ORM, agent ou observabilité.
-- `application` ne dépend que du domaine et définit les ports nécessaires.
-- `infrastructure` implémente ces ports. Un adaptateur n'en importe pas un autre.
-- `presentation` traduit HTTP/UI vers les cas d'usage et compose les implémentations.
-- La composition est le seul endroit autorisé à choisir SQLite, Phoenix ou un framework d'agent.
+- `domain` imports no web, ORM, agent, or observability library.
+- `application` depends only on the domain and defines the required ports.
+- `infrastructure` implements those ports. One adapter does not import another.
+- `presentation` translates HTTP/UI interactions into use cases and composes implementations.
+- Composition is the only layer allowed to select SQLite, Phoenix, or an agent framework.
 
-Le contrat `AgentAdapter` appartient à l'application. Pydantic AI et Vercel AI SDK seront deux
-implémentations isolées sous `infrastructure/agents/<framework>/`. Le playground consommera le
-même protocole d'API et le même modèle de capacités, quel que soit l'adaptateur sélectionné.
+The `AgentAdapter` contract belongs to the application. Pydantic AI and Vercel AI SDK will be
+isolated implementations under `infrastructure/agents/<framework>/`. The playground will consume
+the same API protocol and capability model regardless of the selected adapter.
 
-## Reproductibilité et écritures
+## Reproducibility and writes
 
-Chaque session enregistre `seed`, `scenario_version` et `initial_state_hash`. Les futures données
-générées doivent provenir exclusivement de ce contexte. Toute action modifiante reçoit une clé
-d'idempotence. Les mises à jour de commande comparent une version attendue et incrémentent la
-version atomiquement ; un conflit est exposé comme erreur métier, jamais écrasé silencieusement.
-Les entités de domaine reçoivent leurs timestamps UTC explicitement : elles ne lisent jamais
-l'horloge système par défaut. Le futur cas d'usage de scénario injectera son horloge à la
+Every session records `seed`, scenario ID/version, policy-set version, and `initial_state_hash`. An
+application registry retains historical definitions under `(scenario_id, scenario_version)`.
+Future generated data must derive exclusively from that context, and its fingerprint follows the
+canonical serialization in ADR 0007. Every modifying action receives an idempotency key. Order
+updates compare an expected version and increment it atomically; a conflict is exposed as a domain
+error and never silently overwritten. Domain entities receive their UTC timestamps explicitly and
+never read the system clock by default. The future scenario use case will receive its clock through
 composition.
 
-SQLite reste l'adaptateur local. Les identifiants, dates, nombres et JSON utilisent les types
-SQLAlchemy portables. Les tests de migration couvrent une base vide et une base déjà existante.
+SQLite remains the local adapter. Identifiers, dates, numbers, and JSON use portable SQLAlchemy
+types. Migration tests cover both an empty database and a database with existing unmanaged state.

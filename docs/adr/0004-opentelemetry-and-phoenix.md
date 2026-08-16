@@ -1,8 +1,7 @@
-# ADR 0004 — OpenTelemetry commun, Phoenix local
+# ADR 0004 — Common OpenTelemetry, local Phoenix
 
-Statut : accepté — 2026-08-16
+Status: accepted — 2026-08-16
 
-OpenTelemetry fournit des traces portables entre frameworks. Phoenix sera un visualiseur local et
-non une dépendance métier. Les attributs passent par une allowlist et les identifiants sont
-pseudonymisés avant export, afin qu'un changement d'outil d'observabilité ne modifie ni l'agent ni
-le domaine.
+OpenTelemetry provides portable traces across frameworks. Phoenix will be a local viewer rather
+than a business dependency. Attributes pass through an allowlist and identifiers are pseudonymized
+before export so changing observability tools affects neither the agent nor the domain.

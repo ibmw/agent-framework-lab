@@ -1,20 +1,23 @@
-# Stratégie de tests
+# Testing strategy
 
-Choisir le test le plus rapide qui prouve le comportement :
+Choose the fastest test that proves the behavior:
 
-1. tests unitaires purs pour invariants du domaine, persona, scénarios et application avec ports
-   en mémoire ;
-2. tests d'intégration pour FastAPI, adaptateurs SQLAlchemy, migrations, contrats d'outils et
-   export OpenTelemetry ;
-3. tests React Testing Library avec MSW pour les états visibles et erreurs réseau ;
-4. Playwright uniquement pour les parcours humains essentiels de génération, reprise et action
-   confirmée.
+1. pure unit tests for domain invariants, personas, scenarios, and application behavior with
+   in-memory ports;
+2. integration tests for FastAPI, SQLAlchemy adapters, migrations, tool contracts, and OpenTelemetry
+   export;
+3. React Testing Library tests with MSW for visible states and network failures;
+4. Playwright only for essential human journeys involving generation, resume, or confirmed actions.
 
-Les tests unitaires ne dépendent d'aucun serveur. Les tests d'intégration créent leurs ressources
-temporaires et documentent toute dépendance externe. Playwright réutilise le serveur local s'il
-répond déjà ; en CI il démarre une instance isolée. Faker doit être initialisé avec la graine de la
-session et factory-boy sert à exprimer les variantes pertinentes, pas à masquer les valeurs testées.
+Unit tests depend on no server. Integration tests create temporary resources and document every
+external dependency. Playwright reuses the local server when it already responds; in CI it starts an
+isolated instance. Initialize Faker with the session seed, and use factory-boy to express relevant
+variants rather than hide asserted values.
 
-La CI repart de zéro, installe depuis `uv.lock` et `pnpm-lock.yaml`, puis exécute lint, format,
-type-check, tests, migrations, build et E2E. La couverture guide les lacunes ; aucun seuil global ne
-remplace les assertions sur les règles métier et les capacités annoncées.
+Required agent-adapter suites use an injected deterministic test double and make no live-model call.
+Provider smoke tests are optional, explicitly marked, credential-gated, and separate from
+reproducible capability evidence in CI.
+
+CI starts from a clean environment, installs from `uv.lock` and `pnpm-lock.yaml`, then runs lint,
+formatting, type checking, tests, migrations, build, and E2E. Coverage helps identify gaps; no global
+threshold replaces assertions about domain rules and advertised capabilities.

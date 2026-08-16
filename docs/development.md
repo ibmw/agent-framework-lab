@@ -1,24 +1,24 @@
-# Développement
+# Development
 
-Le projet suit un flux trunk-based : une branche courte créée depuis un `main` à jour avant toute
-modification, une évolution cohérente et ses tests dans le même changement, puis intégration
-fast-forward sur `main`. Ne pas travailler directement sur `main`, ni regrouper plusieurs phases ou
-frameworks sur une branche longue.
+The project follows a trunk-based workflow: create a short-lived branch from an up-to-date `main`
+before making changes, keep one coherent change and its tests together, then fast-forward it into
+`main`. Do not work directly on `main` or combine multiple phases or frameworks on a long-lived
+branch.
 
-Boucle recommandée :
+Recommended loop:
 
-1. synchroniser depuis `main` et créer une branche courte ;
-2. écrire le test comportemental le plus proche de la règle ;
-3. implémenter sans franchir les frontières d'architecture ;
-4. exécuter les vérifications ciblées, puis `make check` ;
-5. lancer le parcours Playwright seulement si un parcours humain essentiel change ;
-6. intégrer uniquement avec un historique linéaire et une CI verte.
+1. synchronize with `main` and create a short-lived branch;
+2. write the behavior test closest to the rule;
+3. implement without crossing architecture boundaries;
+4. run targeted checks, then `make check`;
+5. run Playwright only when an essential human journey changes;
+6. integrate only with linear history and green CI.
 
-Les commits suivent Conventional Commits et restent atomiques. Ils ne mentionnent jamais un numéro
-d'étape de `PLAN.md`, un assistant IA, un outil de génération ou un trailer d'attribution. Utiliser
-le skill project-local `create-git-commit` pour préparer, découper ou créer des commits, et ne créer
-aucun commit sans demande ou approbation explicite de l'utilisateur.
+Commits follow Conventional Commits and remain atomic. They never mention a `PLAN.md` step number,
+an AI assistant, a generation tool, or an attribution trailer. Use the project-local
+`create-git-commit` skill to prepare, split, or create commits, and create no commit without an
+explicit user request or approval.
 
-Les hooks `prek` lancent Ruff, Pyright, Biome et TypeScript, sans serveur, base réelle, test E2E ou
-appel réseau. Avant toute commande de développement, tester d'abord les ports 8000 et 5173 et
-réutiliser une stack saine. Un redémarrage doit avoir une cause identifiée et être annoncé.
+The `prek` hooks run Ruff, Pyright, Biome, and TypeScript without a server, real database, E2E test,
+or network call. Before any development-server command, inspect ports 8000 and 5173 and reuse a
+healthy stack. A restart must have an identified reason and be announced.

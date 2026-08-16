@@ -1,10 +1,10 @@
 # Agent Framework Capability Lab
 
-Playground e-commerce destiné à rendre visibles et comparables les capacités de frameworks
-d'agents. Cette première étape ne contient ni agent fonctionnel ni chat final : elle pose les
-frontières, les contrats, la qualité et la reproductibilité nécessaires aux futures démos.
+An e-commerce playground designed to make agent-framework capabilities visible and comparable.
+This initial foundation does not include a working agent or final chat experience; it establishes
+the boundaries, contracts, quality gates, and reproducibility needed by future demonstrations.
 
-## Prérequis
+## Prerequisites
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
@@ -20,24 +20,24 @@ cp .env.example .env
 uv run prek install
 ```
 
-## Commandes
+## Commands
 
 ```bash
-make check          # vérifications rapides complètes
-make test           # tests Python et frontend
+make check          # complete fast quality gate
+make test           # Python and frontend tests
 make test-migrations
-make dev-api        # API sur http://localhost:8000
-make dev-web        # frontend sur http://localhost:5173
-make test-e2e       # parcours Playwright ciblés
+make dev-api        # API at http://localhost:8000
+make dev-web        # frontend at http://localhost:5173
+make test-e2e       # targeted Playwright journeys
 ```
 
-Avant `make dev-api` ou `make dev-web`, vérifier qu'aucun serveur correspondant n'est déjà actif.
-Les commandes ne démarrent, n'arrêtent ou ne redémarrent jamais un service implicitement.
+Before running `make dev-api` or `make dev-web`, check whether the corresponding server is already
+running. Commands must never start, stop, or restart a service implicitly.
 
-## Repères
+## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md) : structure et dépendances autorisées.
-- [`docs/PLAN.md`](docs/PLAN.md) : jalons futurs et résultats terminés.
-- [`docs/development.md`](docs/development.md) : workflow trunk-based et boucle locale.
-- [`docs/decisions-and-next-step.md`](docs/decisions-and-next-step.md) : périmètre reporté.
-- [`.codex/skills`](.codex/skills) : skills project-local pour les évolutions récurrentes.
+- [`docs/architecture.md`](docs/architecture.md): structure and allowed dependencies.
+- [`docs/PLAN.md`](docs/PLAN.md): future milestones and completed outcomes.
+- [`docs/development.md`](docs/development.md): trunk-based workflow and local development loop.
+- [`docs/decisions-and-next-step.md`](docs/decisions-and-next-step.md): decisions and deferred scope.
+- [`.codex/skills`](.codex/skills): project-local skills for recurring changes.

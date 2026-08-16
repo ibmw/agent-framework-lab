@@ -1,23 +1,22 @@
-# Conventions d'API et de schémas
+# API and schema conventions
 
-- Préfixer les routes publiques avec `/api/v{major}`.
-- Utiliser `snake_case` sur le fil et des noms métier stables.
-- Donner un `operationId` explicite et unique à chaque opération.
-- Valider entrées et sorties avec Pydantic ; refuser les champs inconnus pour les commandes métier.
-- Représenter les dates en ISO 8601 UTC, l'argent par montant décimal et devise ISO 4217, et les
-  identifiants par UUID textuel.
-- Retourner une erreur structurée contenant `code`, `message`, `request_id` et éventuellement
-  `details`; ne jamais exposer d'exception, de secret ou de prompt interne.
-- Exiger `Idempotency-Key` pour toute commande modifiante rejouable.
-- Utiliser `409 Conflict` pour une version de commande obsolète et `422` pour une entrée invalide.
+- Prefix public routes with `/api/v{major}`.
+- Use `snake_case` on the wire and stable domain names.
+- Give every operation an explicit, unique `operationId`.
+- Validate inputs and outputs with Pydantic; reject unknown fields in domain commands.
+- Represent dates as ISO 8601 UTC, money as a decimal amount plus ISO 4217 currency, and identifiers
+  as textual UUIDs.
+- Return structured errors containing `code`, `message`, `request_id`, and optional `details`; never
+  expose exceptions, secrets, or internal prompts.
+- Require `Idempotency-Key` for every replayable modifying command.
+- Use `409 Conflict` for a stale command version and `422` for invalid input.
 
-La source publiée est `packages/contracts/openapi/v1/openapi.yaml`. Tout changement compatible
-met à jour ce fichier et ses tests dans le même changement. Une rupture crée une nouvelle version
-majeure de route et un ADR de migration ; elle ne modifie jamais silencieusement `v1`.
-Régénérer le snapshot depuis l'application avec `make contracts`, puis relire les descriptions
-humaines avant de valider le diff.
+The published source is `packages/contracts/openapi/v1/openapi.yaml`. Every compatible change
+updates that file and its tests in the same change. A breaking change creates a new major route
+version and a migration ADR; it never silently changes `v1`. Regenerate the snapshot from the
+application with `make contracts`, then review human-authored descriptions before accepting the
+diff.
 
-Les outils d'agent sont aussi des contrats versionnés. Leur nom inclut un namespace métier, leur
-schéma possède une version documentée, et leur résultat distingue succès métier, refus et panne
-technique. Un outil modifiant des données doit accepter une clé d'idempotence et une confirmation
-préalable vérifiable.
+Agent tools are versioned contracts as well. Their names include a domain namespace, their schemas
+have documented versions, and their results distinguish domain success, refusal, and technical
+failure. A data-modifying tool must accept an idempotency key and verifiable prior confirmation.

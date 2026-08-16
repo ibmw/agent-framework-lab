@@ -1,14 +1,14 @@
-# Observabilité
+# Observability
 
-OpenTelemetry est le format interne commun. Chaque requête et exécution future d'agent propage le
-même contexte de trace. Les spans métier utilisent des noms stables et enregistrent au minimum :
-version de scénario, identifiant de framework, nom/version d'outil, résultat, tentative et durée.
+OpenTelemetry is the common internal format. Every request and future agent execution propagates the
+same trace context. Domain spans use stable names and record at least the scenario version,
+framework ID, tool name/version, outcome, attempt, and duration.
 
-Ne jamais enregistrer : secrets, tokens, cookies, en-têtes d'autorisation, adresse complète,
-e-mail brut, contenu libre non filtré ou payload complet d'outil. Le processeur de spans devra
-appliquer une allowlist d'attributs puis pseudonymiser les identifiants client/session avant export.
-Le logging structuré suit la même règle et porte `request_id`/`trace_id`.
+Never record secrets, tokens, cookies, authorization headers, full addresses, raw email addresses,
+unsanitized free-form content, or complete tool payloads. The span processor must apply an attribute
+allowlist and pseudonymize customer/session identifiers before export. Structured logging follows
+the same rule and carries `request_id`/`trace_id`.
 
-L'instrumentation dépend d'une interface d'application ou reste dans l'infrastructure. Le domaine
-ne crée aucun span. Phoenix est un consommateur local remplaçable : aucune règle ou test métier ne
-dépend de sa disponibilité. Quand l'export est désactivé, l'application continue à fonctionner.
+Instrumentation depends on an application interface or remains in infrastructure. The domain
+creates no span. Phoenix is a replaceable local consumer: no domain rule or test depends on its
+availability. The application continues to work when export is disabled.

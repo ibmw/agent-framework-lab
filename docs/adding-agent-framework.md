@@ -1,15 +1,19 @@
-# Ajouter un framework d'agent
+# Adding an agent framework
 
-1. Créer `infrastructure/agents/<framework>/` et n'y importer le SDK que localement.
-2. Implémenter `AgentAdapter` sans étendre le contrat pour refléter une API propriétaire.
-3. Mapper outils, messages, mémoire et sorties structurées vers les contrats versionnés du lab.
-4. Déclarer uniquement les `AgentCapability` prouvées par un test d'intégration.
-5. Tester succès, erreur transitoire/retry, refus métier, confirmation et reprise applicables.
-6. Émettre les spans OpenTelemetry communs et vérifier le masquage des données sensibles.
-7. Ajouter l'adaptateur au registre de composition et exposer son indisponibilité proprement.
-8. Documenter dans un ADR les compromis, limitations et comportements réellement observés.
+1. Document the provider/model, local credentials, deterministic test double, and optional smoke-test
+   policy before adding the SDK.
+2. Create `infrastructure/agents/<framework>/` and keep SDK imports local to that package.
+3. Implement `AgentAdapter` without expanding the contract to mirror a proprietary API.
+4. Map tools, messages, memory, and structured outputs to the lab's versioned contracts.
+5. Declare only the `AgentCapability` values proven by the shared conformance suite.
+6. Test applicable success, transient-error/retry, business-refusal, confirmation, and resume paths
+   with an injected offline model in the required suite.
+7. Emit the common OpenTelemetry spans and verify sensitive-data redaction.
+8. Add the adapter to the composition registry and expose unavailability cleanly.
+9. Document observed tradeoffs, limitations, and behavior in an ADR.
 
-Un framework ne doit pas modifier le domaine, les routes publiques, le format de session ou l'UI.
-Si une capacité n'existe pas, l'adaptateur la déclare absente ; il ne la simule pas silencieusement.
-Comparer l'expérience développeur dans un compte-rendu factuel (code de glue, contraintes,
-observabilité, erreurs), jamais dans un score global.
+A framework must not change the domain, public routes, stored session format, or UI. If a capability
+is unavailable, the adapter declares it absent rather than silently simulating it. A live-model call
+remains an opt-in smoke test and never replaces deterministic evidence. Compare developer experience
+in a factual report covering glue code, constraints, observability, and failures—never with a global
+score.

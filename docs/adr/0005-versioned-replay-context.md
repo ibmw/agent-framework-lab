@@ -1,8 +1,8 @@
-# ADR 0005 — Contexte de rejeu versionné
+# ADR 0005 — Versioned replay context
 
-Statut : accepté — 2026-08-16
+Status: accepted — 2026-08-16
 
-Chaque session persiste une graine, une version de scénario et l'empreinte SHA-256 de l'état
-initial. Un rejeu sélectionne explicitement cette version au lieu de la logique courante. Cela rend
-les démos explicables et comparables ; conserver les implémentations de scénarios historiques sera
-le coût assumé lorsqu'un scénario évoluera.
+Every session persists a seed, scenario ID and version, policy-set version, and the initial-state
+SHA-256 fingerprint defined by ADR 0007. A replay explicitly selects that registry entry instead of
+using current logic. This makes demonstrations explainable and comparable; retaining historical
+definitions is the accepted cost when a scenario evolves.

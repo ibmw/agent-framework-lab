@@ -1,8 +1,7 @@
-# ADR 0002 — Clean architecture et port d'agent
+# ADR 0002 — Clean architecture and agent port
 
-Statut : accepté — 2026-08-16
+Status: accepted — 2026-08-16
 
-Le domaine et l'application restent indépendants des frameworks. Les repositories et
-`AgentAdapter` sont des ports d'application, implémentés sous infrastructure. Ce choix ajoute un
-petit coût de mapping mais permet de comparer Pydantic AI et Vercel AI SDK sans réécrire le
-playground ou les règles e-commerce.
+The domain and application remain framework-independent. Repositories and `AgentAdapter` are
+application ports implemented under infrastructure. This choice adds a small mapping cost but lets
+the lab compare Pydantic AI and Vercel AI SDK without rewriting the playground or e-commerce rules.

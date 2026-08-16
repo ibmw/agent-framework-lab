@@ -1,29 +1,28 @@
-# Décisions, périmètre et prochaine étape
+# Decisions, scope, and next step
 
-## Décisions prises
+## Accepted decisions
 
-- Monorepo pnpm/uv avec deux lockfiles versionnés.
-- Clean architecture pragmatique et contrat d'agent commun défini avant les SDK.
-- SQLite + SQLAlchemy + Alembic, avec types et migrations portables vers PostgreSQL.
-- OpenAPI v1 comme contrat publié et OpenTelemetry comme format de traces.
-- Configuration typée au démarrage, exemples d'environnement sans secret.
-- Concurrence optimiste des commandes et clés d'idempotence prévues dans les ports et le schéma.
-- τ³-bench Retail comme inspiration pour les scénarios et politiques, adaptés et versionnés
-  localement sans dépendance d'exécution initiale.
-- Les bibliothèques frontend et de fixtures décidées dans la stack sont verrouillées dès les
-  fondations pour valider leur compatibilité. Elles ne constituent pas une capacité livrée tant
-  qu'aucun scénario et test ne les exercent. Les dépendances d'exécution OpenTelemetry attendront
-  l'implémentation de l'adaptateur de traces.
+- pnpm/uv monorepo with two versioned lockfiles.
+- Pragmatic clean architecture and a common agent contract defined before adding SDKs.
+- SQLite, SQLAlchemy, and Alembic with PostgreSQL-portable types and migrations.
+- OpenAPI v1 as the published contract and OpenTelemetry as the trace format.
+- Typed startup configuration and secret-free environment examples.
+- Optimistic concurrency and idempotency keys represented in application ports and the schema.
+- τ³-bench Retail as inspiration for locally adapted and versioned scenarios and policies, without
+  an initial runtime dependency.
+- Chosen frontend and fixture libraries are locked from the foundation stage to validate
+  compatibility. They are not delivered capabilities until exercised by a scenario and test.
+  OpenTelemetry runtime dependencies will wait for the trace-adapter implementation.
 
-## Explicitement reporté
+## Explicitly deferred
 
-Agent Pydantic AI, chat assistant-ui final, génération complète de personas, comparaison Vercel AI
-SDK, runtime Temporal, PostgreSQL, Phoenix en exécution, simulation automatique et intégration
-approfondie des datasets ou du harness τ³-bench.
+Pydantic AI agent, final assistant-ui chat, complete persona generation, Vercel AI SDK comparison,
+Temporal runtime, PostgreSQL, running Phoenix, autonomous simulation, and deeper τ³-bench dataset or
+harness integration.
 
-## Prochaine tâche recommandée
+## Recommended next task
 
-Implémenter verticalement la génération déterministe d'une persona : cas d'usage pur piloté par
-`seed` et `scenario_version`, repository client SQLite, endpoint v1, écran minimal, contrats et
-tests unitaires/intégration/RTL. Cette tranche valide toutes les frontières sans introduire encore
-de framework d'agent.
+Complete Milestone 1 execution slice 1: define the scenario/persona contracts and application
+registry, apply ADR 0007 as the canonical boundary, and use pure tests to prove metadata and seed
+validation plus coexistence of two scenario versions. Persistence, API, and UI remain in later
+slices so every branch stays short and carries its own automated evidence.

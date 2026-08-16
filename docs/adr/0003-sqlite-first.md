@@ -1,7 +1,8 @@
-# ADR 0003 — SQLite en premier
+# ADR 0003 — SQLite first
 
-Statut : accepté — 2026-08-16
+Status: accepted — 2026-08-16
 
-SQLite suffit à la démo locale. SQLAlchemy et Alembic sont utilisés dès le départ, sans type ni SQL
-propre à SQLite. Les écritures de commande utilisent version optimiste et idempotence. PostgreSQL
-sera introduit seulement pour concurrence, déploiement partagé, charge ou runtime durable réels.
+SQLite is sufficient for the local demonstration. SQLAlchemy and Alembic are used from the start
+without SQLite-specific types or SQL. Command writes use optimistic concurrency and idempotency.
+PostgreSQL will be introduced only for demonstrated needs involving concurrent writers, shared
+deployment, load, or a durable runtime.

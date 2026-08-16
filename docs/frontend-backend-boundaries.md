@@ -1,17 +1,16 @@
-# Frontières frontend/backend
+# Frontend/backend boundaries
 
-Le frontend gère l'affichage, la saisie, l'état éphémère de vue et le transport HTTP. Il ne décide
-jamais si une action e-commerce est autorisée, ne reconstruit pas la mémoire durable et ne connaît
-pas les SDK d'agents.
+The frontend owns rendering, input, ephemeral view state, and HTTP transport. It never decides
+whether an e-commerce action is allowed, reconstructs durable memory, or knows about agent SDKs.
 
-Le backend possède les invariants, autorisations, confirmations, idempotence, sessions, mémoire et
-traces. Un refus métier est calculé côté backend même si l'UI avait déjà désactivé l'action.
+The backend owns invariants, authorization, confirmation, idempotency, sessions, memory, and traces.
+A domain refusal is computed on the backend even when the UI has already disabled the action.
 
-Règles d'intégration :
+Integration rules:
 
-- consommer uniquement `/api/v1/...` depuis le frontend ;
-- isoler les appels HTTP dans des adaptateurs sous `apps/web/src/api` lors de leur création ;
-- partager des schémas, jamais des entités de domaine ni des modèles SQLAlchemy ;
-- générer les types TypeScript depuis l'OpenAPI quand le contrat grandira ;
-- conserver assistant-ui comme couche de présentation/runtime, derrière l'adaptateur API du lab ;
-- simuler le réseau avec MSW dans les tests de composants ; ne pas simuler les règles métier.
+- consume only `/api/v1/...` from the frontend;
+- isolate HTTP calls in adapters under `apps/web/src/api` when they are introduced;
+- share schemas, never domain entities or SQLAlchemy models;
+- generate TypeScript types from OpenAPI when the contract grows;
+- keep assistant-ui as a presentation/runtime layer behind the lab's API adapter;
+- mock the network with MSW in component tests; do not mock domain rules.
