@@ -1,0 +1,34 @@
+openapi: 3.1.0
+info:
+  title: Agent Framework Capability Lab API
+  version: 1.0.0
+paths:
+  /api/v1/health:
+    get:
+      summary: Report API availability
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+components:
+  schemas:
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+        api_version:
+          type: string
+          const: v1
+          title: Api Version
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - api_version
+      title: HealthResponse

@@ -1,0 +1,17 @@
+{
+  "name": "agent-framework-capability-lab",
+  "private": true,
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "dev": "pnpm --filter @agent-lab/web dev",
+    "build": "pnpm -r build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @agent-lab/web test:e2e"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.8"
+  }
+}
