@@ -3,7 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import JSON, CheckConstraint, ForeignKey, Index, Integer, Numeric, String
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+)
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -54,7 +63,7 @@ class ConversationSessionModel(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"))
-    seed: Mapped[int] = mapped_column(Integer)
+    seed: Mapped[int] = mapped_column(BigInteger)
     scenario_version: Mapped[str] = mapped_column(String(64))
     initial_state_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())

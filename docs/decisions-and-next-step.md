@@ -22,7 +22,7 @@ harness integration.
 
 ## Recommended next task
 
-Complete Milestone 1 execution slice 1: define the scenario/persona contracts and application
-registry, apply ADR 0007 as the canonical boundary, and use pure tests to prove metadata and seed
-validation plus coexistence of two scenario versions. Persistence, API, and UI remain in later
+Complete Milestone 1 execution slice 2: implement the deterministic generation kernel for the
+registered `retail-profile` scenario, generate the minimal coherent retail state, and serialize and
+fingerprint it through ADR 0007's canonical boundary. Persistence, API, and UI remain in later
 slices so every branch stays short and carries its own automated evidence.

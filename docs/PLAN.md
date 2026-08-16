@@ -42,6 +42,8 @@ that convention when adding or updating guidance.
 The foundations already provide:
 
 - domain entities for customers, products, orders, conversation sessions, and memory records;
+- immutable persona, versioned scenario, operational metadata, and canonical initial-state domain
+  boundaries plus an application-level scenario registry;
 - repository ports, optimistic order version/idempotency parameters, `AgentAdapter`, and explicit
   `AgentCapability` values;
 - SQLite/SQLAlchemy adapters, Alembic migrations, UTC persistence, and migration drift tests;
@@ -49,10 +51,10 @@ The foundations already provide:
 - a React playground shell with assistant-ui installed but no final persona or chat journey;
 - shared quality gates, CI, architecture guidance, and project-local skills.
 
-The project does not yet implement persona generation, a scenario registry, support conversations,
-an agent SDK adapter, or OpenTelemetry export. Update this anchor when a milestone is completed so a
-fresh contributor does not recreate existing foundations or mistake installed libraries for
-delivered capabilities.
+The project does not yet implement persona generation, canonical serialization, persisted scenario
+state, support conversations, an agent SDK adapter, or OpenTelemetry export. Update this anchor when
+a milestone is completed so a fresh contributor does not recreate existing foundations or mistake
+installed libraries for delivered capabilities.
 
 ## Stable vocabulary
 
@@ -150,11 +152,11 @@ agent framework. This establishes the scenario sandbox that future agent adapter
 Deliver the domain/application vocabulary required by generation without publishing an endpoint
 that has no implementation.
 
-- [ ] Define immutable `ScenarioDefinition`, `Persona`, and canonical initial-state boundaries.
-- [ ] Implement the application-level scenario registry keyed by scenario ID and version.
-- [ ] Define scenario metadata: scenario ID/version, seed, policy-set version, canonical-state schema
+- [x] Define immutable `ScenarioDefinition`, `Persona`, and canonical initial-state boundaries.
+- [x] Implement the application-level scenario registry keyed by scenario ID and version.
+- [x] Define scenario metadata: scenario ID/version, seed, policy-set version, canonical-state schema
   version, and operational creation timestamp.
-- [ ] Document the initial τ³-inspired retail concepts and their lab-specific adaptations.
+- [x] Document the initial τ³-inspired retail concepts and their lab-specific adaptations.
 - [x] Specify canonical initial-state serialization and SHA-256 fingerprinting in ADR 0007.
 
 Slice evidence: pure tests prove metadata validation, seed bounds, duplicate registry rejection, and
