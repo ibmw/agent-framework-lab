@@ -1,6 +1,7 @@
 from dataclasses import FrozenInstanceError, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -58,6 +59,36 @@ def persona(
     )
 
 
+def canonical_state() -> CanonicalInitialState:
+    generated_persona = persona()
+    customer = Customer(
+        id=UUID("1f5ab725-e20c-4a40-aa45-75ec7842fab5"),
+        email=generated_persona.email,
+        display_name=generated_persona.display_name,
+        created_at=CREATED_AT,
+    )
+    product = Product(
+        id=UUID("c30d6b41-c352-477b-b9f0-5f30b8865db5"),
+        sku="LAB-001",
+        name="Travel mug",
+        price_amount=Decimal("19.90"),
+        currency="EUR",
+    )
+    order = Order(
+        id=UUID("4d00aa94-18b7-4b0f-89ff-008657dd71c5"),
+        customer_id=customer.id,
+        created_at=CREATED_AT + timedelta(days=1),
+    )
+    return CanonicalInitialState(
+        definition=scenario_definition(),
+        seed=42,
+        persona=generated_persona,
+        customer=customer,
+        products=(product,),
+        orders=(order,),
+    )
+
+
 def assign_attribute(instance: object, name: str, value: object) -> None:
     setattr(instance, name, value)
 
@@ -80,6 +111,7 @@ def test_scenario_metadata_accepts_inclusive_seed_bounds(seed: int) -> None:
         (-1, "scenario seed must be between"),
         (MAX_SCENARIO_SEED + 1, "scenario seed must be between"),
         (True, "not a boolean"),
+        (cast(int, 1.5), "must be an integer"),
     ],
 )
 def test_scenario_metadata_rejects_invalid_seed(seed: int, message: str) -> None:
@@ -264,6 +296,35 @@ def test_canonical_state_requires_orders_owned_by_canonical_customer() -> None:
         )
 
 
+def test_canonical_state_requires_unique_skus_and_entity_ids() -> None:
+    state = canonical_state()
+    duplicate_sku = replace(
+        state.products[0],
+        id=UUID("2b3d6b41-c352-477b-b9f0-5f30b8865db5"),
+    )
+    colliding_id = replace(
+        state.products[0],
+        id=state.customer.id,
+        sku="LAB-002",
+    )
+
+    with pytest.raises(DomainError, match="unique SKUs"):
+        replace(state, products=(*state.products, duplicate_sku))
+    with pytest.raises(DomainError, match="globally unique"):
+        replace(state, products=(*state.products, colliding_id))
+
+
+def test_canonical_state_rejects_order_that_predates_customer() -> None:
+    state = canonical_state()
+    predating_order = replace(
+        state.orders[0],
+        created_at=state.customer.created_at - timedelta(microseconds=1),
+    )
+
+    with pytest.raises(DomainError, match="cannot predate"):
+        replace(state, orders=(predating_order,))
+
+
 @pytest.mark.parametrize(
     ("seed", "scenario_version", "message"),
     [(-1, "v1", "scenario seed"), (42, "latest", "scenario version")],
@@ -280,6 +341,19 @@ def test_conversation_session_reuses_scenario_metadata_validation(
             seed=seed,
             scenario_version=scenario_version,
             initial_state_hash="0" * 64,
+            created_at=CREATED_AT,
+        )
+
+
+@pytest.mark.parametrize("initial_state_hash", ["g" * 64, "A" * 64, "0" * 63])
+def test_conversation_session_requires_lowercase_sha256_hash(initial_state_hash: str) -> None:
+    with pytest.raises(DomainError, match="SHA-256 hex digest"):
+        ConversationSession(
+            id=UUID("308d5e20-1319-4c00-ad4f-8d97dfa8b07b"),
+            customer_id=UUID("1f5ab725-e20c-4a40-aa45-75ec7842fab5"),
+            seed=42,
+            scenario_version="v1",
+            initial_state_hash=initial_state_hash,
             created_at=CREATED_AT,
         )
 

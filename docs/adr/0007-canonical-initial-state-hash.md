@@ -2,6 +2,8 @@
 
 Status: accepted — 2026-08-16
 
+Amendment: 2026-08-16 — Defined the concrete `v1` canonical fields and collection semantics.
+
 ## Context
 
 Replaying a generated sandbox requires more than storing a seed. The lab must detect whether two
@@ -33,8 +35,16 @@ The canonical document has this versioned envelope:
 }
 ```
 
-The concrete persona and retail fields are defined by the versioned initial-state schema introduced
-with Milestone 1. Every field that can change scenario behavior belongs in this document.
+The concrete `v1` fields are:
+
+- `persona`: `id`, `display_name`, `email`, `locale`, and `support_traits`;
+- `customer`: `id`, `email`, `display_name`, and `created_at`;
+- each product: `id`, `sku`, `name`, `price_amount`, and `currency`;
+- each order: `id`, `customer_id`, `created_at`, `status`, and `version`.
+
+Every field that can change scenario behavior belongs in this document. Persona support traits are
+set-like in `v1` and serialize in Unicode code-point order. Products and orders serialize by their
+stable ID. No other array order is behaviorally meaningful in this schema.
 
 Canonical serialization follows these rules:
 

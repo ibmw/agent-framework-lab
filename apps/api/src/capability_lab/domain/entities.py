@@ -23,6 +23,7 @@ MAX_SCENARIO_SEED = 2**32 - 1
 
 _SCENARIO_ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 _VERSION_PATTERN = re.compile(r"v[1-9][0-9]*")
+_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 def _require_utc(value: datetime, field_name: str) -> None:
@@ -50,9 +51,11 @@ def _require_version(value: str, field_name: str) -> None:
         )
 
 
-def _require_scenario_seed(value: int) -> None:
+def _require_scenario_seed(value: object) -> None:
     if isinstance(value, bool):
         raise DomainError("scenario seed must be an integer, not a boolean")
+    if not isinstance(value, int):
+        raise DomainError("scenario seed must be an integer")
     if not MIN_SCENARIO_SEED <= value <= MAX_SCENARIO_SEED:
         raise DomainError(
             f"scenario seed must be between {MIN_SCENARIO_SEED} and {MAX_SCENARIO_SEED}"
@@ -62,6 +65,39 @@ def _require_scenario_seed(value: int) -> None:
 def _require_email(value: str, owner: str) -> None:
     if "@" not in value:
         raise DomainError(f"{owner} email must be valid")
+
+
+def _require_uuid(value: object, field_name: str) -> None:
+    if not isinstance(value, UUID):
+        raise DomainError(f"{field_name} must be a UUID")
+
+
+def _require_order_status(value: object) -> None:
+    if not isinstance(value, OrderStatus):
+        raise DomainError("order status must be a supported status")
+
+
+def _require_money_amount(value: object) -> None:
+    if not isinstance(value, Decimal):
+        raise DomainError("product price must be a decimal value")
+    if not value.is_finite():
+        raise DomainError("product price must be finite")
+    if value < 0:
+        raise DomainError("product price cannot be negative")
+    decimal_tuple = value.as_tuple()
+    exponent = decimal_tuple.exponent
+    if not isinstance(exponent, int):
+        raise DomainError("product price must be finite")
+    excess_fractional_digits = max(-exponent - 2, 0)
+    if excess_fractional_digits and any(
+        digit != 0 for digit in decimal_tuple.digits[-excess_fractional_digits:]
+    ):
+        raise DomainError("product price cannot have more than two fractional digits")
+
+
+def _require_positive_order_version(value: object) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise DomainError("order version must be a positive integer")
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +150,7 @@ class Persona:
     support_traits: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        _require_uuid(self.id, "persona ID")
         if not self.display_name.strip():
             raise DomainError("persona display name cannot be empty")
         _require_email(self.email, "persona")
@@ -133,6 +170,7 @@ class Customer:
     created_at: datetime
 
     def __post_init__(self) -> None:
+        _require_uuid(self.id, "customer ID")
         _require_email(self.email, "customer")
         if not self.display_name.strip():
             raise DomainError("customer display name cannot be empty")
@@ -148,10 +186,14 @@ class Product:
     currency: str
 
     def __post_init__(self) -> None:
-        if self.price_amount < 0:
-            raise DomainError("product price cannot be negative")
-        if len(self.currency) != 3:
-            raise DomainError("currency must be an ISO 4217 code")
+        _require_uuid(self.id, "product ID")
+        if not self.sku.strip():
+            raise DomainError("product SKU cannot be empty")
+        if not self.name.strip():
+            raise DomainError("product name cannot be empty")
+        _require_money_amount(self.price_amount)
+        if re.fullmatch(r"[A-Z]{3}", self.currency) is None:
+            raise DomainError("currency must be an uppercase ISO 4217 code")
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,8 +205,10 @@ class Order:
     version: int = 1
 
     def __post_init__(self) -> None:
-        if self.version < 1:
-            raise DomainError("order version must be positive")
+        _require_uuid(self.id, "order ID")
+        _require_uuid(self.customer_id, "order customer ID")
+        _require_order_status(self.status)
+        _require_positive_order_version(self.version)
         _require_utc(self.created_at, "order created_at")
 
 
@@ -188,10 +232,22 @@ class CanonicalInitialState:
             )
         if len({product.id for product in self.products}) != len(self.products):
             raise DomainError("canonical products must have unique IDs")
+        if len({product.sku for product in self.products}) != len(self.products):
+            raise DomainError("canonical products must have unique SKUs")
         if len({order.id for order in self.orders}) != len(self.orders):
             raise DomainError("canonical orders must have unique IDs")
+        all_ids = (
+            self.persona.id,
+            self.customer.id,
+            *(product.id for product in self.products),
+            *(order.id for order in self.orders),
+        )
+        if len(set(all_ids)) != len(all_ids):
+            raise DomainError("canonical entity IDs must be globally unique")
         if any(order.customer_id != self.customer.id for order in self.orders):
             raise DomainError("canonical orders must belong to the canonical customer")
+        if any(order.created_at < self.customer.created_at for order in self.orders):
+            raise DomainError("canonical orders cannot predate the canonical customer")
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,7 +262,7 @@ class ConversationSession:
     def __post_init__(self) -> None:
         _require_scenario_seed(self.seed)
         _require_version(self.scenario_version, "scenario version")
-        if len(self.initial_state_hash) != 64:
+        if _SHA256_PATTERN.fullmatch(self.initial_state_hash) is None:
             raise DomainError("initial state hash must be a SHA-256 hex digest")
         _require_utc(self.created_at, "session created_at")
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
@@ -42,6 +43,10 @@ class MemoryRepository(Protocol):
     def list_for_session(self, session_id: UUID) -> list[MemoryRecord]: ...
 
     def append(self, record: MemoryRecord) -> None: ...
+
+
+class Clock(Protocol):
+    def now(self) -> datetime: ...
 
 
 class AgentCapability(StrEnum):

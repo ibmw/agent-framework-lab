@@ -44,6 +44,8 @@ The foundations already provide:
 - domain entities for customers, products, orders, conversation sessions, and memory records;
 - immutable persona, versioned scenario, operational metadata, and canonical initial-state domain
   boundaries plus an application-level scenario registry;
+- deterministic `retail-profile@v1` persona and initial-state generation with canonical JSON and
+  SHA-256 fingerprinting;
 - repository ports, optimistic order version/idempotency parameters, `AgentAdapter`, and explicit
   `AgentCapability` values;
 - SQLite/SQLAlchemy adapters, Alembic migrations, UTC persistence, and migration drift tests;
@@ -51,10 +53,10 @@ The foundations already provide:
 - a React playground shell with assistant-ui installed but no final persona or chat journey;
 - shared quality gates, CI, architecture guidance, and project-local skills.
 
-The project does not yet implement persona generation, canonical serialization, persisted scenario
-state, support conversations, an agent SDK adapter, or OpenTelemetry export. Update this anchor when
-a milestone is completed so a fresh contributor does not recreate existing foundations or mistake
-installed libraries for delivered capabilities.
+The project does not yet persist generated scenario state or expose it through the API/UI, and it
+does not implement support conversations, an agent SDK adapter, or OpenTelemetry export. Update
+this anchor when a milestone is completed so a fresh contributor does not recreate existing
+foundations or mistake installed libraries for delivered capabilities.
 
 ## Stable vocabulary
 
@@ -164,12 +166,12 @@ simultaneous resolution of two test scenario versions without FastAPI or a datab
 
 ### Execution slice 2 — Deterministic generation kernel
 
-- [ ] Implement persona generation in the domain/application layers with all randomness derived
+- [x] Implement persona generation in the domain/application layers with all randomness derived
   from the recorded seed.
-- [ ] Generate a minimal coherent initial state: persona, customer, products, and orders required by
+- [x] Generate a minimal coherent initial state: persona, customer, products, and orders required by
   the first support scenario.
-- [ ] Compute the initial-state hash through the canonical serializer.
-- [ ] Record seeded identifiers and scenario timestamps deterministically.
+- [x] Compute the initial-state hash through the canonical serializer.
+- [x] Record seeded identifiers and scenario timestamps deterministically.
 
 Slice evidence: pure tests prove same inputs produce byte-identical canonical state and hash,
 different seeds produce valid independent state, invariants reject invalid generated data, and

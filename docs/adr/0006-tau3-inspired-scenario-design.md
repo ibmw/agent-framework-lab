@@ -4,6 +4,8 @@ Status: accepted — 2026-08-16
 
 Amendment: 2026-08-16 — Recorded the initial `retail-profile` family and its local adaptations.
 
+Amendment: 2026-08-16 — Pinned the deterministic `retail-profile@v1` generation rules.
+
 ## Context
 
 τ³-bench Retail offers a useful vocabulary for customer-support work: fictional customers, product
@@ -48,6 +50,20 @@ Operational scenario metadata records the registry key, seed, pinned policy-set 
 canonical-state schema version, and UTC creation time. The creation time describes when generation
 ran and is deliberately excluded from the canonical initial state and its hash, as specified by ADR
 0007.
+
+`retail-profile@v1` derives fixture choices, identifiers, and fictional timestamps from labeled
+SHA-256 digests over the scenario ID, scenario version, policy-set version, canonical schema
+version, and recorded seed. Seeded identifiers use UUIDv8 as defined by RFC 9562, with its RFC
+4122-compatible variant bits. Fictional customer and order timestamps are offsets from a fixed UTC
+epoch; they never use operational time. The local fixture produces one persona, its
+verbatim-derived customer, two products selected from a small versioned catalog, and one paid
+customer order. Changing the derivation labels, fixture catalog, choice sets, timestamp ranges, or
+resulting state requires a new scenario version.
+
+Including `canonical_schema_version` in the derivation context is deliberate: a scenario definition
+pins its complete replay context, so adopting a new canonical schema occurs under a new immutable
+scenario registry version even when the human-visible fixture rules are otherwise unchanged. This
+favors exact historical replay over preserving fictional identities across schema versions.
 
 ## Consequences
 

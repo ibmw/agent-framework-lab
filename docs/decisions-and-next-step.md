@@ -16,13 +16,13 @@
 
 ## Explicitly deferred
 
-Pydantic AI agent, final assistant-ui chat, complete persona generation, Vercel AI SDK comparison,
-Temporal runtime, PostgreSQL, running Phoenix, autonomous simulation, and deeper τ³-bench dataset or
-harness integration.
+Pydantic AI agent, final assistant-ui chat, persisted/public persona generation, Vercel AI SDK
+comparison, Temporal runtime, PostgreSQL, running Phoenix, autonomous simulation, and deeper
+τ³-bench dataset or harness integration.
 
 ## Recommended next task
 
-Complete Milestone 1 execution slice 2: implement the deterministic generation kernel for the
-registered `retail-profile` scenario, generate the minimal coherent retail state, and serialize and
-fingerprint it through ADR 0007's canonical boundary. Persistence, API, and UI remain in later
-slices so every branch stays short and carries its own automated evidence.
+Complete Milestone 1 execution slice 3: persist personas and generated scenario state through the
+repository ports, then publish generation and retrieval through the versioned API contract.
+Idempotent requests, exact historical scenario references, and deterministic round trips are the
+required evidence; the UI remains in the following slice.
