@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop Python Backend"
+  short_description: "Build the lab backend within clean boundaries"
+  default_prompt: "Use $develop-python-backend to implement a tested backend change in this lab."

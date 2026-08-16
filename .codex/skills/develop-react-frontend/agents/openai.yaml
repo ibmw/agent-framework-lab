@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop React Frontend"
+  short_description: "Build the lab frontend and API adapters"
+  default_prompt: "Use $develop-react-frontend to implement a tested frontend change in this lab."

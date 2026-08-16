@@ -1,0 +1,4 @@
+interface:
+  display_name: "Integrate Agent Framework"
+  short_description: "Add an agent adapter with capability evidence"
+  default_prompt: "Use $integrate-agent-framework to add a framework adapter to the capability lab."

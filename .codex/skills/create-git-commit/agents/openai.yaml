@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Git Commit"
+  short_description: "Create clean atomic conventional commits"
+  default_prompt: "Use $create-git-commit to prepare and create an atomic commit for this change."
