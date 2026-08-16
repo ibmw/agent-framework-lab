@@ -1,0 +1,30 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff check
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+      - id: pyright
+        name: Pyright
+        entry: uv run pyright
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: biome
+        name: Biome
+        entry: pnpm exec biome check --write --no-errors-on-unmatched
+        language: system
+        types_or: [javascript, jsx, json, ts, tsx]
+      - id: typescript
+        name: TypeScript
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+        types_or: [ts, tsx]
