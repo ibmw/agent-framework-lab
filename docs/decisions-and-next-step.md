@@ -4,7 +4,8 @@
 
 - pnpm/uv monorepo with two versioned lockfiles.
 - Pragmatic clean architecture and a common agent contract defined before adding SDKs.
-- SQLite, SQLAlchemy, and Alembic with PostgreSQL-portable types and migrations.
+- SQLite, SQLAlchemy, and Alembic with PostgreSQL-portable types and migrations, including
+  fingerprint-verified generated scenario aggregates.
 - OpenAPI v1 as the published contract and OpenTelemetry as the trace format.
 - Typed startup configuration and secret-free environment examples.
 - Optimistic concurrency and idempotency keys represented in application ports and the schema.
@@ -16,13 +17,11 @@
 
 ## Explicitly deferred
 
-Pydantic AI agent, final assistant-ui chat, persisted/public persona generation, Vercel AI SDK
-comparison, Temporal runtime, PostgreSQL, running Phoenix, autonomous simulation, and deeper
-τ³-bench dataset or harness integration.
+Pydantic AI agent, final assistant-ui chat, Vercel AI SDK comparison, Temporal runtime, PostgreSQL,
+running Phoenix, autonomous simulation, and deeper τ³-bench dataset or harness integration.
 
 ## Recommended next task
 
-Complete Milestone 1 execution slice 3: persist personas and generated scenario state through the
-repository ports, then publish generation and retrieval through the versioned API contract.
-Idempotent requests, exact historical scenario references, and deterministic round trips are the
-required evidence; the UI remains in the following slice.
+Complete Milestone 1 execution slice 4: add the scenario selection, seed input, generated persona
+summary, and visible loading/empty/error states to the playground. Consume only the generated
+OpenAPI v1 types and prove the essential generation-and-retrieval journey with Playwright.

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
@@ -24,7 +25,7 @@ class CustomerModel(Base):
     __tablename__ = "customers"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    email: Mapped[str] = mapped_column(String(320), unique=True)
+    email: Mapped[str] = mapped_column(String(320))
     display_name: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
 
@@ -33,7 +34,7 @@ class ProductModel(Base):
     __tablename__ = "products"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    sku: Mapped[str] = mapped_column(String(80), unique=True)
+    sku: Mapped[str] = mapped_column(String(80))
     name: Mapped[str] = mapped_column(String(200))
     price_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     currency: Mapped[str] = mapped_column(String(3))
@@ -87,3 +88,54 @@ class IdempotencyRecordModel(Base):
     operation: Mapped[str] = mapped_column(String(100), primary_key=True)
     response: Mapped[dict[str, object]] = mapped_column(MutableDict.as_mutable(JSON))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class PersonaModel(Base):
+    __tablename__ = "personas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str] = mapped_column(String(320))
+    locale: Mapped[str] = mapped_column(String(32))
+    support_traits: Mapped[list[str]] = mapped_column(JSON)
+
+
+class GeneratedScenarioModel(Base):
+    __tablename__ = "generated_scenarios"
+    __table_args__ = (
+        CheckConstraint("seed >= 0 AND seed <= 4294967295", name="ck_generated_seed_range"),
+        UniqueConstraint(
+            "scenario_id",
+            "scenario_version",
+            "seed",
+            name="uq_generated_scenarios_reference",
+        ),
+    )
+
+    initial_state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scenario_id: Mapped[str] = mapped_column(String(64))
+    scenario_version: Mapped[str] = mapped_column(String(64))
+    policy_set_version: Mapped[str] = mapped_column(String(64))
+    canonical_schema_version: Mapped[str] = mapped_column(String(64))
+    seed: Mapped[int] = mapped_column(BigInteger)
+    persona_id: Mapped[str] = mapped_column(ForeignKey("personas.id"))
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class GeneratedScenarioProductModel(Base):
+    __tablename__ = "generated_scenario_products"
+
+    initial_state_hash: Mapped[str] = mapped_column(
+        ForeignKey("generated_scenarios.initial_state_hash"), primary_key=True
+    )
+    product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), primary_key=True)
+
+
+class GeneratedScenarioOrderModel(Base):
+    __tablename__ = "generated_scenario_orders"
+
+    initial_state_hash: Mapped[str] = mapped_column(
+        ForeignKey("generated_scenarios.initial_state_hash"), primary_key=True
+    )
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), primary_key=True)

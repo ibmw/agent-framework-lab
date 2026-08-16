@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -7,15 +8,26 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import BigInteger, create_engine, inspect, text
 
+from capability_lab.application.scenario_generation import create_retail_profile_kernel
 from capability_lab.domain.entities import MAX_SCENARIO_SEED
 from capability_lab.infrastructure import models
 from capability_lab.infrastructure.config import get_settings
-from capability_lab.infrastructure.database import Base
+from capability_lab.infrastructure.database import (
+    Base,
+    create_database_engine,
+    create_session_factory,
+    session_scope,
+)
+from capability_lab.infrastructure.repositories import SqlAlchemyGeneratedScenarioRepository
 
 APPLICATION_TABLES = {
     "customers",
+    "generated_scenario_orders",
+    "generated_scenario_products",
+    "generated_scenarios",
     "products",
     "orders",
+    "personas",
     "conversation_sessions",
     "memory_records",
     "idempotency_records",
@@ -29,6 +41,11 @@ def alembic_config(database_url: str, monkeypatch: pytest.MonkeyPatch) -> Config
     config = Config(api_root / "alembic.ini")
     config.set_main_option("script_location", str(api_root / "migrations"))
     return config
+
+
+class FixedClock:
+    def now(self) -> datetime:
+        return datetime(2026, 8, 16, 12, 30, tzinfo=UTC)
 
 
 @pytest.mark.migration
@@ -48,6 +65,15 @@ def test_upgrade_empty_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert {"ck_orders_status_valid", "ck_orders_version_positive"} <= {
         constraint["name"] for constraint in inspector.get_check_constraints("orders")
     }
+    assert {"ck_generated_seed_range"} <= {
+        constraint["name"] for constraint in inspector.get_check_constraints("generated_scenarios")
+    }
+    assert frozenset({"scenario_id", "scenario_version", "seed"}) in {
+        frozenset(constraint["column_names"])
+        for constraint in inspector.get_unique_constraints("generated_scenarios")
+    }
+    assert inspector.get_unique_constraints("customers") == []
+    assert inspector.get_unique_constraints("products") == []
     seed_column = next(
         column
         for column in inspector.get_columns("conversation_sessions")
@@ -139,6 +165,62 @@ def test_upgrade_downgrade_upgrade_cycle(
 
     command.upgrade(config, "head")
     assert set(inspect(create_engine(database_url)).get_table_names()) >= APPLICATION_TABLES
+
+
+@pytest.mark.migration
+def test_downgrade_refuses_populated_generated_state_without_schema_damage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'populated-downgrade.db'}"
+    config = alembic_config(database_url, monkeypatch)
+    command.upgrade(config, "head")
+    engine = create_database_engine(database_url)
+    factory = create_session_factory(engine)
+    kernel = create_retail_profile_kernel(FixedClock())
+    with session_scope(factory) as session:
+        repository = SqlAlchemyGeneratedScenarioRepository(session)
+        repository.save(kernel.generate("retail-profile", "v1", 1))
+        repository.save(kernel.generate("retail-profile", "v1", 2))
+        repository.save(kernel.generate("retail-profile", "v1", 3))
+
+    with pytest.raises(RuntimeError, match="refusing to downgrade"):
+        command.downgrade(config, "20260816_0002")
+
+    inspector = inspect(engine)
+    assert set(inspector.get_table_names()) >= APPLICATION_TABLES
+    assert not any(table.startswith("_alembic_tmp") for table in inspector.get_table_names())
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260816_0003"
+        assert connection.scalar(text("SELECT count(*) FROM generated_scenarios")) == 3
+
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM generated_scenario_orders"))
+        connection.execute(text("DELETE FROM generated_scenario_products"))
+        connection.execute(text("DELETE FROM generated_scenarios"))
+        connection.execute(text("DELETE FROM personas"))
+        connection.execute(
+            text("DELETE FROM idempotency_records WHERE operation = 'generate_scenario_v1'")
+        )
+
+    with pytest.raises(RuntimeError, match=r"duplicate values in products\.sku"):
+        command.downgrade(config, "20260816_0002")
+
+    inspector = inspect(engine)
+    assert set(inspector.get_table_names()) >= APPLICATION_TABLES
+    assert not any(table.startswith("_alembic_tmp") for table in inspector.get_table_names())
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260816_0003"
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT count(*) FROM ("
+                    "SELECT sku FROM products GROUP BY sku HAVING count(*) > 1"
+                    ") AS duplicate_skus"
+                )
+            )
+            == 2
+        )
 
 
 @pytest.mark.migration

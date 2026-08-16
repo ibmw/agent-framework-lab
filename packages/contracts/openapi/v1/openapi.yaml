@@ -14,8 +14,223 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations:
+    post:
+      summary: Generate and persist deterministic scenario state
+      operationId: generateScenario
+      parameters:
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          description: Stable scenario family identifier.
+          title: Scenario Id
+        description: Stable scenario family identifier.
+      - name: scenario_version
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 2
+          maxLength: 64
+          pattern: ^v[1-9][0-9]*$
+          description: Immutable scenario behavior version.
+          title: Scenario Version
+        description: Immutable scenario behavior version.
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Unique retry key for this generation command.
+          title: Idempotency-Key
+        description: Unique retry key for this generation command.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateScenarioRequest'
+      responses:
+        '201':
+          description: Generated scenario state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratedScenarioResponse'
+        '404':
+          description: Scenario version is not registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or generated-state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid command
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations/{seed}:
+    get:
+      summary: Retrieve persisted generated scenario state
+      operationId: getGeneratedScenario
+      parameters:
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          description: Stable scenario family identifier.
+          title: Scenario Id
+        description: Stable scenario family identifier.
+      - name: scenario_version
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 2
+          maxLength: 64
+          pattern: ^v[1-9][0-9]*$
+          description: Immutable scenario behavior version.
+          title: Scenario Version
+        description: Immutable scenario behavior version.
+      - name: seed
+        in: path
+        required: true
+        schema:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          description: Unsigned 32-bit deterministic generation seed.
+          title: Seed
+        description: Unsigned 32-bit deterministic generation seed.
+      responses:
+        '200':
+          description: Persisted generated scenario state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratedScenarioResponse'
+        '404':
+          description: Generated scenario is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid scenario reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    CustomerResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        email:
+          type: string
+          title: Email
+        display_name:
+          type: string
+          title: Display Name
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - email
+      - display_name
+      - created_at
+      title: CustomerResponse
+    ErrorResponse:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        request_id:
+          type: string
+          title: Request Id
+        details:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ValidationIssue'
+            type: array
+          - type: 'null'
+          title: Details
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      - request_id
+      title: ErrorResponse
+    GenerateScenarioRequest:
+      properties:
+        seed:
+          type: integer
+          maximum: 4294967295.0
+          minimum: 0.0
+          title: Seed
+          description: Unsigned 32-bit deterministic generation seed.
+      additionalProperties: false
+      type: object
+      required:
+      - seed
+      title: GenerateScenarioRequest
+    GeneratedScenarioResponse:
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ScenarioMetadataResponse'
+        initial_state_hash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Initial State Hash
+        initial_state:
+          $ref: '#/components/schemas/InitialStateResponse'
+      additionalProperties: false
+      type: object
+      required:
+      - metadata
+      - initial_state_hash
+      - initial_state
+      title: GeneratedScenarioResponse
     HealthResponse:
       properties:
         status:
@@ -32,3 +247,197 @@ components:
       - status
       - api_version
       title: HealthResponse
+    InitialStateResponse:
+      properties:
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        scenario:
+          $ref: '#/components/schemas/ScenarioReferenceResponse'
+        seed:
+          type: integer
+          title: Seed
+        persona:
+          $ref: '#/components/schemas/PersonaResponse'
+        customer:
+          $ref: '#/components/schemas/CustomerResponse'
+        products:
+          items:
+            $ref: '#/components/schemas/ProductResponse'
+          type: array
+          title: Products
+        orders:
+          items:
+            $ref: '#/components/schemas/OrderResponse'
+          type: array
+          title: Orders
+      additionalProperties: false
+      type: object
+      required:
+      - canonical_schema_version
+      - scenario
+      - seed
+      - persona
+      - customer
+      - products
+      - orders
+      title: InitialStateResponse
+    OrderResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        customer_id:
+          type: string
+          format: uuid
+          title: Customer Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        status:
+          type: string
+          enum:
+          - pending
+          - paid
+          - cancelled
+          title: Status
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - customer_id
+      - created_at
+      - status
+      - version
+      title: OrderResponse
+    PersonaResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        display_name:
+          type: string
+          title: Display Name
+        email:
+          type: string
+          title: Email
+        locale:
+          type: string
+          title: Locale
+        support_traits:
+          items:
+            type: string
+          type: array
+          title: Support Traits
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - display_name
+      - email
+      - locale
+      - support_traits
+      title: PersonaResponse
+    ProductResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        sku:
+          type: string
+          title: Sku
+        name:
+          type: string
+          title: Name
+        price_amount:
+          type: string
+          pattern: ^[0-9]+\.[0-9]{2}$
+          title: Price Amount
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Currency
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - sku
+      - name
+      - price_amount
+      - currency
+      title: ProductResponse
+    ScenarioMetadataResponse:
+      properties:
+        scenario_id:
+          type: string
+          title: Scenario Id
+        scenario_version:
+          type: string
+          title: Scenario Version
+        policy_set_version:
+          type: string
+          title: Policy Set Version
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        seed:
+          type: integer
+          title: Seed
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - scenario_id
+      - scenario_version
+      - policy_set_version
+      - canonical_schema_version
+      - seed
+      - created_at
+      title: ScenarioMetadataResponse
+    ScenarioReferenceResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        version:
+          type: string
+          title: Version
+        policy_set_version:
+          type: string
+          title: Policy Set Version
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - version
+      - policy_set_version
+      title: ScenarioReferenceResponse
+    ValidationIssue:
+      properties:
+        location:
+          type: string
+          title: Location
+        message:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Type
+      additionalProperties: false
+      type: object
+      required:
+      - location
+      - message
+      - type
+      title: ValidationIssue

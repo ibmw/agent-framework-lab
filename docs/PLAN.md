@@ -179,14 +179,20 @@ generation does not read the system clock or global randomness.
 
 ### Execution slice 3 — Persistence and public API
 
-- [ ] Persist personas and generated scenario state through repository ports and SQLite adapters.
-- [ ] Define and publish versioned persona-generation and initial-state API schemas together with
+- [x] Persist personas and generated scenario state through repository ports and SQLite adapters.
+- [x] Define and publish versioned persona-generation and initial-state API schemas together with
   their implementation.
-- [ ] Expose generation and retrieval through versioned FastAPI endpoints.
-- [ ] Preserve exact scenario/policy references needed to load historical definitions.
+- [x] Expose generation and retrieval through versioned FastAPI endpoints.
+- [x] Preserve exact scenario/policy references needed to load historical definitions.
 
 Slice evidence: repository and API integration tests prove round trips, contract drift protection,
 unknown scenario handling, duplicate/idempotent requests, and coexistence of two scenario versions.
+
+Implementation note: `POST /api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations`
+requires an `Idempotency-Key`; the corresponding `GET` route adds the recorded seed. Persisted
+aggregates retain the scenario, policy-set, and canonical-schema versions and verify the canonical
+fingerprint when loaded. The idempotency key is claimed atomically before generation so concurrent
+same-key requests replay one committed result.
 
 ### Execution slice 4 — Human persona journey
 
