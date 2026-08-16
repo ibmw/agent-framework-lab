@@ -1,0 +1,53 @@
+[project]
+name = "agent-framework-capability-lab"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "factory-boy>=3.3.3,<4",
+  "faker>=37.5.3,<38",
+  "httpx>=0.28.1,<1",
+  "prek>=0.2.12,<1",
+  "pyright>=1.1.403,<2",
+  "pytest>=8.4.1,<9",
+  "pytest-asyncio>=1.1.0,<2",
+  "pytest-cov>=6.2.1,<7",
+  "pyyaml>=6.0.2,<7",
+  "ruff>=0.12.8,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/api"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps/api/src", "apps/api/tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+include = ["apps/api/src", "apps/api/tests", "apps/api/migrations", "packages/contracts/scripts"]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --cov=capability_lab --cov-report=term-missing"
+asyncio_mode = "auto"
+testpaths = ["apps/api/tests"]
+markers = ["migration: exercises Alembic against a real temporary database"]
+
+[tool.coverage.run]
+branch = true
+source = ["capability_lab"]
