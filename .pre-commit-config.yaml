@@ -28,3 +28,9 @@ repos:
         language: system
         pass_filenames: false
         types_or: [ts, tsx]
+      - id: generated-contracts
+        name: Generated TypeScript contracts
+        entry: pnpm --filter @agent-lab/contracts check:generated
+        language: system
+        pass_filenames: false
+        files: ^packages/contracts/(openapi/v1/openapi\.yaml|src/generated/v1\.ts)$

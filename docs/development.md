@@ -22,3 +22,7 @@ explicit user request or approval.
 The `prek` hooks run Ruff, Pyright, Biome, and TypeScript without a server, real database, E2E test,
 or network call. Before any development-server command, inspect ports 8000 and 5173 and reuse a
 healthy stack. A restart must have an identified reason and be announced.
+
+The Vite development server proxies same-origin `/api` requests to `http://localhost:8000`, matching
+the production reverse-proxy shape. `VITE_API_BASE_URL` is optional and reserved for frontend build
+environments that intentionally use a different API origin.

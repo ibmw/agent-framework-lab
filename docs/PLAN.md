@@ -196,13 +196,19 @@ same-key requests replay one committed result.
 
 ### Execution slice 4 — Human persona journey
 
-- [ ] Add the frontend flow with scenario selection, seed input, generated persona summary, loading,
+- [x] Add the frontend flow with scenario selection, seed input, generated persona summary, loading,
   empty, validation, and network-error states.
-- [ ] Consume only generated/versioned backend contract types from the web application.
-- [ ] Add component tests for visible states and one essential Playwright persona-generation journey.
+- [x] Consume only generated/versioned backend contract types from the web application.
+- [x] Add component tests for visible states and one essential Playwright persona-generation journey.
 
 Slice evidence: frontend type-check/build and component tests pass, and Playwright proves a user can
 generate and retrieve the same persona using the recorded inputs.
+
+Implementation note: OpenAPI v1 is generated into the shared TypeScript contracts package and the
+web API adapter uses those request, response, and error types. Component tests isolate HTTP with
+MSW; Playwright starts the migrated FastAPI application and Vite against an isolated SQLite file to
+prove the real generation and retrieval round trip. The initial selector uses a local catalog for
+the single `retail-profile@v1` entry because scenario discovery is not yet a public API contract.
 
 ### Acceptance criteria
 

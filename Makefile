@@ -1,4 +1,4 @@
-.PHONY: install check lint typecheck test test-migrations test-e2e contracts dev-api dev-web migrate
+.PHONY: install check check-contracts lint typecheck test test-migrations test-e2e contracts dev-api dev-web migrate
 
 install:
 	uv sync --all-packages
@@ -20,13 +20,17 @@ test:
 test-migrations:
 	uv run pytest -m migration
 
+check-contracts:
+	pnpm --filter @agent-lab/contracts check:generated
+
 test-e2e:
 	pnpm test:e2e
 
-check: lint typecheck test test-migrations
+check: lint typecheck test test-migrations check-contracts
 
 contracts:
 	uv run python packages/contracts/scripts/export_openapi.py
+	pnpm --filter @agent-lab/contracts generate
 
 dev-api:
 	uv run uvicorn capability_lab.presentation.api:app --app-dir apps/api/src --reload
