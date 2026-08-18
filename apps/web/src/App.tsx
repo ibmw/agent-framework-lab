@@ -36,6 +36,7 @@ const fieldControlClasses =
 interface ScenarioOption extends ScenarioReference {
   name: string;
   description: string;
+  suggestedCustomerMessage: string;
 }
 
 const scenarios: ScenarioOption[] = [
@@ -44,12 +45,14 @@ const scenarios: ScenarioOption[] = [
     version: "v1",
     name: "Retail customer profile",
     description: "A fictional customer, two products, and one paid order.",
+    suggestedCustomerMessage: "Hi, could you tell me which orders and products are on my account?",
   },
   {
     id: "retail-order-cancellation",
     version: "v1",
     name: "Safe order cancellation",
     description: "A paid order that can be cancelled only after exact confirmation.",
+    suggestedCustomerMessage: "Hi, I'd like to cancel my paid order. Can you help me?",
   },
 ];
 
@@ -343,6 +346,13 @@ export function App() {
   const handleConversationUpdated = useCallback((updated: ConversationResponse) => {
     setConversation(updated);
   }, []);
+  const activeScenario = conversation
+    ? scenarios.find(
+        (scenario) =>
+          scenario.id === conversation.scenario_id &&
+          scenario.version === conversation.scenario_version,
+      )
+    : undefined;
 
   return (
     <main className="mx-auto w-full max-w-[1200px] px-5 pt-6 pb-20">
@@ -570,9 +580,10 @@ export function App() {
         <SupportConversation
           key={`${conversation.id}:${conversation.turns.length === 0 ? "empty" : "active"}`}
           conversation={conversation}
+          suggestedCustomerMessage={activeScenario?.suggestedCustomerMessage}
           order={
-            result?.metadata.scenario_id === "retail-order-cancellation"
-              ? result.initial_state.orders[0]
+            activeScenario?.id === "retail-order-cancellation"
+              ? result?.initial_state.orders[0]
               : undefined
           }
           onConversationUpdated={handleConversationUpdated}

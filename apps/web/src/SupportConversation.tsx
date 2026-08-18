@@ -312,10 +312,12 @@ function OrderActionPanel({
 
 export function SupportConversation({
   conversation,
+  suggestedCustomerMessage,
   order,
   onConversationUpdated,
 }: {
   conversation: ConversationResponse;
+  suggestedCustomerMessage?: string;
   order?: ScenarioOrder;
   onConversationUpdated: (conversation: ConversationResponse) => void;
 }) {
@@ -340,6 +342,7 @@ export function SupportConversation({
     initialMessages: initialMessages(conversation),
   });
   const latestTurn = conversation.turns.at(-1);
+  const suggestedCustomerMessageId = `suggested-customer-message-${conversation.id}`;
 
   return (
     <section className="mt-8" aria-labelledby="support-title">
@@ -362,9 +365,32 @@ export function SupportConversation({
           <ThreadPrimitive.Root className="rounded-panel border border-lab-ink/20 bg-lab-paper/90 shadow-panel">
             <ThreadPrimitive.Viewport className="flex min-h-[420px] max-h-[620px] flex-col overflow-y-auto p-5">
               <ThreadPrimitive.Empty>
-                <div className="m-auto max-w-md py-12 text-center text-lab-muted">
-                  Ask about the generated customer, catalog, or order history. Modifying actions
-                  require a separate exact confirmation below.
+                <div className="m-auto grid max-w-md gap-4 py-8 text-center">
+                  <div>
+                    <p className="font-bold text-lab-ink">
+                      Start the conversation as the customer.
+                    </p>
+                    <p className="mt-1 text-sm text-lab-muted">
+                      Use the scenario suggestion or write a different opening message.
+                    </p>
+                  </div>
+                  {suggestedCustomerMessage && (
+                    <ThreadPrimitive.Suggestion
+                      className="grid min-h-11 gap-2 rounded-xl border border-lab-accent/30 bg-lab-accent-soft p-4 text-left transition hover:border-lab-accent hover:bg-lab-paper"
+                      prompt={suggestedCustomerMessage}
+                      send={false}
+                      aria-label="Use suggested customer message"
+                      aria-describedby={suggestedCustomerMessageId}
+                    >
+                      <span className="text-[0.68rem] font-extrabold tracking-wide text-lab-accent uppercase">
+                        Suggested customer message
+                      </span>
+                      <span className="text-sm text-lab-ink" id={suggestedCustomerMessageId}>
+                        “{suggestedCustomerMessage}”
+                      </span>
+                      <span className="text-xs font-bold text-lab-muted">Use and edit</span>
+                    </ThreadPrimitive.Suggestion>
+                  )}
                 </div>
               </ThreadPrimitive.Empty>
               <ThreadPrimitive.Messages components={{ Message: ConversationMessage }} />
@@ -373,7 +399,7 @@ export function SupportConversation({
                   <ComposerPrimitive.Input
                     className="min-h-11 flex-1 resize-none bg-transparent px-2 py-2 outline-none"
                     aria-label="Support message"
-                    placeholder="Ask about this customer’s account…"
+                    placeholder="Write the customer’s message…"
                   />
                   <ComposerPrimitive.Send className="grid size-11 shrink-0 place-items-center rounded-lg bg-lab-ink text-lab-paper disabled:opacity-50">
                     <Send aria-hidden="true" size={18} />

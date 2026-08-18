@@ -302,10 +302,18 @@ describe("human persona journey", () => {
     expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
     expect(screen.getByText("pydantic-ai · unsupported locally")).toBeVisible();
 
-    await user.type(
-      screen.getByRole("textbox", { name: "Support message" }),
-      "What orders are on my account?",
+    const composer = screen.getByRole("textbox", { name: "Support message" });
+    expect(screen.getByText("Start the conversation as the customer.")).toBeVisible();
+    const suggestion = screen.getByRole("button", { name: "Use suggested customer message" });
+    expect(suggestion).toHaveAccessibleDescription(
+      "“Hi, could you tell me which orders and products are on my account?”",
     );
+    await user.click(suggestion);
+    expect(composer).toHaveValue(
+      "Hi, could you tell me which orders and products are on my account?",
+    );
+    await user.clear(composer);
+    await user.type(composer, "What orders are on my account?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(await screen.findByText("I found one paid order.")).toBeVisible();

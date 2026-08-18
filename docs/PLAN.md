@@ -50,8 +50,9 @@ The foundations already provide:
   `AgentCapability` values;
 - SQLite/SQLAlchemy adapters, Alembic migrations, UTC persistence, and migration drift tests;
 - a versioned FastAPI health contract plus deterministic OpenAPI generation;
-- a React playground with deterministic persona generation, resumable support conversations, and
-  an explicitly confirmed order-cancellation journey;
+- a React playground with deterministic persona generation, optional editable customer-message
+  suggestions, resumable support conversations, and an explicitly confirmed order-cancellation
+  journey;
 - `retail-profile@v1` read-only support and `retail-order-cancellation@v1` safe modifying scenarios;
 - persisted exact action proposals, idempotent optimistic order updates, safe retries, and sanitized
   action lifecycle traces;
