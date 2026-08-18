@@ -333,6 +333,15 @@ describe("human persona journey", () => {
     expect(screen.getByText("pydantic-ai · unsupported locally")).toBeVisible();
 
     const composer = screen.getByRole("textbox", { name: "Support message" });
+    const messageHistory = screen.getByRole("log", { name: "Conversation messages" });
+    const composerForm = screen.getByRole("form", { name: "Message composer" });
+    expect(messageHistory).toHaveClass("overflow-y-auto");
+    expect(messageHistory.parentElement).toHaveClass(
+      "h-[clamp(480px,75dvh,760px)]",
+      "overflow-hidden",
+    );
+    expect(messageHistory).not.toContainElement(composer);
+    expect(composerForm).toContainElement(composer);
     expect(screen.getByText("Start the conversation as the customer.")).toBeVisible();
     const suggestion = screen.getByRole("button", { name: "Use suggested customer message" });
     expect(suggestion).toHaveAccessibleDescription(

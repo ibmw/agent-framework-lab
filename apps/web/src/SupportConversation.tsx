@@ -373,8 +373,12 @@ export function SupportConversation({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
         <AssistantRuntimeProvider runtime={runtime}>
-          <ThreadPrimitive.Root className="rounded-panel border border-lab-ink/20 bg-lab-paper/90 shadow-panel">
-            <ThreadPrimitive.Viewport className="flex min-h-[420px] max-h-[620px] flex-col overflow-y-auto p-5">
+          <ThreadPrimitive.Root className="rounded-panel flex h-[clamp(480px,75dvh,760px)] flex-col overflow-hidden border border-lab-ink/20 bg-lab-paper/90 shadow-panel">
+            <ThreadPrimitive.Viewport
+              className="min-h-0 flex-1 overflow-y-auto p-5"
+              role="log"
+              aria-label="Conversation messages"
+            >
               <ThreadPrimitive.Empty>
                 <div className="m-auto grid max-w-md gap-4 py-8 text-center">
                   <div>
@@ -405,20 +409,23 @@ export function SupportConversation({
                 </div>
               </ThreadPrimitive.Empty>
               <ThreadPrimitive.Messages components={{ Message: ConversationMessage }} />
-              <ThreadPrimitive.ViewportFooter className="mt-auto pt-5">
-                <ComposerPrimitive.Root className="flex items-end gap-2 rounded-xl border border-lab-border bg-lab-paper p-2 focus-within:ring-3 focus-within:ring-lab-accent/15">
-                  <ComposerPrimitive.Input
-                    className="min-h-11 flex-1 resize-none bg-transparent px-2 py-2 outline-none"
-                    aria-label="Support message"
-                    placeholder="Write the customer’s message…"
-                  />
-                  <ComposerPrimitive.Send className="grid size-11 shrink-0 place-items-center rounded-lg bg-lab-ink text-lab-paper disabled:opacity-50">
-                    <Send aria-hidden="true" size={18} />
-                    <span className="sr-only">Send message</span>
-                  </ComposerPrimitive.Send>
-                </ComposerPrimitive.Root>
-              </ThreadPrimitive.ViewportFooter>
             </ThreadPrimitive.Viewport>
+            <div className="shrink-0 border-t border-lab-ink/15 bg-lab-paper/95 p-4">
+              <ComposerPrimitive.Root
+                className="flex items-end gap-2 rounded-xl border border-lab-border bg-lab-paper p-2 shadow-sm focus-within:ring-3 focus-within:ring-lab-accent/15"
+                aria-label="Message composer"
+              >
+                <ComposerPrimitive.Input
+                  className="min-h-11 flex-1 resize-none bg-transparent px-2 py-2 outline-none"
+                  aria-label="Support message"
+                  placeholder="Write the customer’s message…"
+                />
+                <ComposerPrimitive.Send className="grid size-11 shrink-0 place-items-center rounded-lg bg-lab-ink text-lab-paper disabled:opacity-50">
+                  <Send aria-hidden="true" size={18} />
+                  <span className="sr-only">Send message</span>
+                </ComposerPrimitive.Send>
+              </ComposerPrimitive.Root>
+            </div>
           </ThreadPrimitive.Root>
         </AssistantRuntimeProvider>
 
