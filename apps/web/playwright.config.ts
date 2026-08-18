@@ -22,8 +22,10 @@ export default defineConfig({
         "uv run alembic -c apps/api/alembic.ini upgrade head && uv run uvicorn capability_lab.presentation.api:app --app-dir apps/api/src --host 127.0.0.1 --port 8000",
       cwd: "../..",
       env: {
+        AGENT_LAB_ENVIRONMENT: "test",
         AGENT_LAB_DATABASE_URL: databaseUrl,
         AGENT_LAB_FRONTEND_ORIGIN: "http://localhost:5173",
+        AGENT_LAB_TELEMETRY_HASH_SALT: "playwright-test-only-salt",
       },
       url: "http://localhost:8000/api/v1/health",
       reuseExistingServer: !process.env.CI,
