@@ -16,6 +16,12 @@ from capability_lab.domain.entities import (
 )
 
 if TYPE_CHECKING:
+    from capability_lab.application.order_actions import (
+        ActionProposal,
+        ActionProposalDraft,
+        ActionStatus,
+        OrderActionRequest,
+    )
     from capability_lab.application.scenario_generation import GeneratedScenario
     from capability_lab.application.support_tools import RetailSupportContext
 
@@ -41,7 +47,40 @@ class ProductRepository(Protocol):
 class OrderRepository(Protocol):
     def get(self, order_id: UUID) -> Order | None: ...
 
+    def list_for_customer(self, customer_id: UUID) -> list[Order]: ...
+
     def save(self, order: Order, *, expected_version: int, idempotency_key: str) -> None: ...
+
+
+class OrderWriteConflictError(RuntimeError):
+    """Raised when an optimistic order update loses a race."""
+
+
+class OrderWriteTransientError(RuntimeError):
+    """Raised when a modifying write can be retried safely."""
+
+
+class ActionProposalRepository(Protocol):
+    def get(self, proposal_id: UUID) -> ActionProposal | None: ...
+
+    def save(
+        self,
+        proposal: ActionProposal,
+        *,
+        expected_status: ActionStatus | None,
+    ) -> None: ...
+
+
+class ActionDecisionIdempotencyRepository(Protocol):
+    def claim(
+        self,
+        idempotency_key: str,
+        proposal_id: UUID,
+        decision: str,
+        created_at: datetime,
+    ) -> tuple[UUID, str] | None:
+        """Return an existing decision identity, or None after claiming a new key."""
+        ...
 
 
 class SessionRepository(Protocol):
@@ -90,8 +129,6 @@ class AgentCapability(StrEnum):
     DURABLE_MEMORY = "durable_memory"
     SESSION_RESUME = "session_resume"
     STRUCTURED_OUTPUT = "structured_output"
-    CONFIRMATION = "confirmation"
-    RETRIES = "retries"
     TRACING = "tracing"
 
 
@@ -154,3 +191,5 @@ class AgentAdapter(Protocol):
     def capabilities(self) -> frozenset[AgentCapability]: ...
 
     async def run(self, request: AgentRequest) -> AgentResponse: ...
+
+    async def propose_action(self, request: OrderActionRequest) -> ActionProposalDraft: ...

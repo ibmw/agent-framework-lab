@@ -159,3 +159,32 @@ class GeneratedScenarioOrderModel(Base):
         ForeignKey("generated_scenarios.initial_state_hash"), primary_key=True
     )
     order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(String(36))
+    status: Mapped[str] = mapped_column(String(32))
+    version: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ActionProposalModel(Base):
+    __tablename__ = "action_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('proposed', 'confirmed', 'cancelled', 'executed')",
+            name="ck_action_proposals_status_valid",
+        ),
+        Index("ix_action_proposals_session_id", "session_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("conversation_sessions.id"))
+    action_type: Mapped[str] = mapped_column(String(64))
+    tool_name: Mapped[str] = mapped_column(String(100))
+    tool_version: Mapped[str] = mapped_column(String(64))
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"))
+    expected_version: Mapped[int] = mapped_column(Integer)
+    summary: Mapped[str] = mapped_column(String(1000))
+    confirmation_token: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(32))
+    attempts: Mapped[int] = mapped_column(Integer)
+    result_order_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    result_order_version: Mapped[int | None] = mapped_column(Integer, nullable=True)

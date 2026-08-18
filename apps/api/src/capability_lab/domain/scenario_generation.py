@@ -24,6 +24,13 @@ RETAIL_PROFILE_V1 = ScenarioDefinition(
     canonical_schema_version="v1",
 )
 
+RETAIL_ORDER_CANCELLATION_V1 = ScenarioDefinition(
+    scenario_id="retail-order-cancellation",
+    scenario_version="v1",
+    policy_set_version="v2",
+    canonical_schema_version="v1",
+)
+
 _FIRST_NAMES = ("Alex", "Casey", "Jordan", "Morgan", "Riley", "Sam", "Taylor", "Yuki")
 _LAST_NAMES = ("Bernard", "Garcia", "Kim", "Martin", "Nakamura", "Singh", "Smith", "Wilson")
 _LOCALES = ("en-GB", "en-US", "fr-FR")
@@ -87,6 +94,25 @@ def generate_retail_profile_v1(
     """Generate the immutable retail-profile v1 state from versioned inputs only."""
     if definition != RETAIL_PROFILE_V1:
         raise DomainError("retail-profile v1 generator requires its exact versioned definition")
+    return _generate_retail_state(definition, seed)
+
+
+def generate_retail_order_cancellation_v1(
+    definition: ScenarioDefinition,
+    seed: int,
+) -> CanonicalInitialState:
+    """Generate the paid-order state required by cancellation scenario v1."""
+    if definition != RETAIL_ORDER_CANCELLATION_V1:
+        raise DomainError(
+            "retail-order-cancellation v1 generator requires its exact versioned definition"
+        )
+    return _generate_retail_state(definition, seed)
+
+
+def _generate_retail_state(
+    definition: ScenarioDefinition,
+    seed: int,
+) -> CanonicalInitialState:
 
     # CanonicalInitialState validates the seed. Constructing the deriver has no observable side
     # effects, so invalid input cannot consume clock or random state.

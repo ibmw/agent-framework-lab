@@ -4,14 +4,17 @@ from datetime import datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
+from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.ports import (
     AgentResponse,
+    Clock,
     ConversationTurn,
+    OrderWriteConflictError,
     StructuredSupportResult,
     ToolActivity,
 )
@@ -28,6 +31,7 @@ from capability_lab.domain.entities import (
     ScenarioMetadata,
 )
 from capability_lab.infrastructure.models import (
+    ActionProposalModel,
     ConversationSessionModel,
     ConversationTurnModel,
     CustomerModel,
@@ -41,6 +45,8 @@ from capability_lab.infrastructure.models import (
 )
 
 _GENERATION_OPERATION = "generate_scenario_v1"
+_CANCEL_ORDER_OPERATION = "cancel_order_v1"
+_ACTION_DECISION_OPERATION = "decide_order_action_v1"
 
 
 class GeneratedScenarioConflictError(ValueError):
@@ -188,6 +194,178 @@ class SqlAlchemyCustomerRepository:
                 created_at=customer.created_at,
             )
         )
+
+
+class SqlAlchemyOrderRepository:
+    """Apply optimistic, idempotent updates to operational order state."""
+
+    def __init__(self, session: Session, clock: Clock) -> None:
+        self._session = session
+        self._clock = clock
+
+    def get(self, order_id: UUID) -> Order | None:
+        model = self._session.get(OrderModel, str(order_id))
+        return None if model is None else _order_from_model(model)
+
+    def list_for_customer(self, customer_id: UUID) -> list[Order]:
+        models = self._session.scalars(
+            select(OrderModel)
+            .where(OrderModel.customer_id == str(customer_id))
+            .order_by(OrderModel.created_at, OrderModel.id)
+        ).all()
+        return [_order_from_model(model) for model in models]
+
+    def save(self, order: Order, *, expected_version: int, idempotency_key: str) -> None:
+        identity = {
+            "order_id": str(order.id),
+            "expected_version": expected_version,
+            "status": order.status.value,
+            "result_version": order.version,
+        }
+        existing = self._session.get(
+            IdempotencyRecordModel, (idempotency_key, _CANCEL_ORDER_OPERATION)
+        )
+        if existing is not None:
+            if existing.response != identity:
+                raise OrderWriteConflictError(
+                    "the idempotency key was already used for a different order action"
+                )
+            return
+        result = self._session.connection().execute(
+            update(OrderModel)
+            .where(OrderModel.id == str(order.id), OrderModel.version == expected_version)
+            .values(status=order.status.value, version=order.version)
+        )
+        if result.rowcount != 1:
+            raise OrderWriteConflictError("the order version changed before the update")
+        self._session.add(
+            IdempotencyRecordModel(
+                key=idempotency_key,
+                operation=_CANCEL_ORDER_OPERATION,
+                response=identity,
+                created_at=self._clock.now(),
+            )
+        )
+        self._session.flush()
+
+
+class SqlAlchemyActionProposalRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, proposal_id: UUID) -> ActionProposal | None:
+        model = self._session.get(ActionProposalModel, str(proposal_id))
+        if model is None:
+            return None
+        return ActionProposal(
+            id=UUID(model.id),
+            session_id=UUID(model.session_id),
+            action_type=OrderActionType(model.action_type),
+            tool_name=model.tool_name,
+            tool_version=model.tool_version,
+            order_id=UUID(model.order_id),
+            expected_version=model.expected_version,
+            summary=model.summary,
+            confirmation_token=model.confirmation_token,
+            status=ActionStatus(model.status),
+            attempts=model.attempts,
+            result_order_status=model.result_order_status,
+            result_order_version=model.result_order_version,
+        )
+
+    def save(
+        self,
+        proposal: ActionProposal,
+        *,
+        expected_status: ActionStatus | None,
+    ) -> None:
+        if expected_status is None:
+            self._session.add(_proposal_model(proposal))
+            self._session.flush()
+            return
+        result = self._session.connection().execute(
+            update(ActionProposalModel)
+            .where(
+                ActionProposalModel.id == str(proposal.id),
+                ActionProposalModel.status == expected_status.value,
+            )
+            .values(
+                status=proposal.status.value,
+                attempts=proposal.attempts,
+                result_order_status=proposal.result_order_status,
+                result_order_version=proposal.result_order_version,
+            )
+        )
+        if result.rowcount != 1:
+            current = self.get(proposal.id)
+            if current == proposal:
+                return
+            raise OrderWriteConflictError("the action proposal changed concurrently")
+
+
+def _proposal_model(proposal: ActionProposal) -> ActionProposalModel:
+    return ActionProposalModel(
+        id=str(proposal.id),
+        session_id=str(proposal.session_id),
+        action_type=proposal.action_type.value,
+        tool_name=proposal.tool_name,
+        tool_version=proposal.tool_version,
+        order_id=str(proposal.order_id),
+        expected_version=proposal.expected_version,
+        summary=proposal.summary,
+        confirmation_token=proposal.confirmation_token,
+        status=proposal.status.value,
+        attempts=proposal.attempts,
+        result_order_status=proposal.result_order_status,
+        result_order_version=proposal.result_order_version,
+    )
+
+
+class SqlAlchemyActionDecisionIdempotencyRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, idempotency_key: str) -> tuple[UUID, str] | None:
+        model = self._session.get(
+            IdempotencyRecordModel,
+            (idempotency_key, _ACTION_DECISION_OPERATION),
+        )
+        if model is None:
+            return None
+        proposal_id = model.response.get("proposal_id")
+        decision = model.response.get("decision")
+        if not isinstance(proposal_id, str) or decision not in ("confirm", "cancel"):
+            raise PersistedScenarioIntegrityError("action decision idempotency record is invalid")
+        return UUID(proposal_id), cast(str, decision)
+
+    def claim(
+        self,
+        idempotency_key: str,
+        proposal_id: UUID,
+        decision: str,
+        created_at: datetime,
+    ) -> tuple[UUID, str] | None:
+        try:
+            self._session.add(
+                IdempotencyRecordModel(
+                    key=idempotency_key,
+                    operation=_ACTION_DECISION_OPERATION,
+                    response={"proposal_id": str(proposal_id), "decision": decision},
+                    created_at=created_at,
+                )
+            )
+            self._session.flush()
+        except IntegrityError as error:
+            # OrderActionService makes this claim before any other write. Rollback is required to
+            # recover the SQLAlchemy session after a failed flush and cannot discard prior work.
+            self._session.rollback()
+            replay_identity = self.get(idempotency_key)
+            if replay_identity is None:
+                raise PersistedScenarioIntegrityError(
+                    "action decision idempotency claim could not be resolved"
+                ) from error
+            return replay_identity
+        return None
 
 
 class SqlAlchemySessionRepository:
@@ -406,14 +584,10 @@ class SqlAlchemyGeneratedScenarioRepository:
             .where(GeneratedScenarioProductModel.initial_state_hash == model.initial_state_hash)
             .order_by(ProductModel.id)
         ).all()
-        order_models = self._session.scalars(
-            select(OrderModel)
-            .join(
-                GeneratedScenarioOrderModel,
-                GeneratedScenarioOrderModel.order_id == OrderModel.id,
-            )
+        order_snapshots = self._session.scalars(
+            select(GeneratedScenarioOrderModel)
             .where(GeneratedScenarioOrderModel.initial_state_hash == model.initial_state_hash)
-            .order_by(OrderModel.id)
+            .order_by(GeneratedScenarioOrderModel.order_id)
         ).all()
 
         definition = ScenarioDefinition(
@@ -428,7 +602,16 @@ class SqlAlchemyGeneratedScenarioRepository:
             persona=_persona_from_model(persona_model),
             customer=_customer_from_model(customer_model),
             products=tuple(_product_from_model(product) for product in product_models),
-            orders=tuple(_order_from_model(order) for order in order_models),
+            orders=tuple(
+                Order(
+                    id=UUID(order.order_id),
+                    customer_id=UUID(order.customer_id),
+                    created_at=order.created_at,
+                    status=OrderStatus(order.status),
+                    version=order.version,
+                )
+                for order in order_snapshots
+            ),
         )
         fingerprint = fingerprint_initial_state(state)
         if fingerprint.initial_state_hash != model.initial_state_hash:
@@ -499,6 +682,10 @@ class SqlAlchemyGeneratedScenarioRepository:
             GeneratedScenarioOrderModel(
                 initial_state_hash=generated.initial_state_hash,
                 order_id=str(order.id),
+                customer_id=str(order.customer_id),
+                status=order.status.value,
+                version=order.version,
+                created_at=order.created_at,
             )
             for order in state.orders
         )

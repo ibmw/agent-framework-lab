@@ -10,6 +10,7 @@ from capability_lab.application.ports import (
     ConversationTurn,
     ConversationTurnRepository,
     GeneratedScenarioRepository,
+    OrderRepository,
     SessionRepository,
 )
 from capability_lab.application.support_tools import RetailSupportContext
@@ -92,12 +93,14 @@ class ConversationService:
         generated_scenarios: GeneratedScenarioRepository,
         agents: AgentRegistry,
         clock: Clock,
+        orders: OrderRepository,
     ) -> None:
         self._sessions = sessions
         self._turns = turns
         self._generated_scenarios = generated_scenarios
         self._agents = agents
         self._clock = clock
+        self._orders = orders
 
     def start(
         self,
@@ -170,6 +173,11 @@ class ConversationService:
         )
         if generated is None or generated.initial_state_hash != session.initial_state_hash:
             raise ConversationNotFoundError("conversation replay state is unavailable")
+        current_orders = tuple(
+            current
+            for order in generated.state.orders
+            if (current := self._orders.get(order.id)) is not None
+        )
         response = await self._agents.get(session.framework_id).run(
             AgentRequest(
                 session_id=session.id,
@@ -180,7 +188,7 @@ class ConversationService:
                 support_context=RetailSupportContext(
                     customer=generated.state.customer,
                     products=generated.state.products,
-                    orders=generated.state.orders,
+                    orders=current_orders,
                 ),
             )
         )

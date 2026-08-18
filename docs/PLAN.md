@@ -37,7 +37,7 @@ that convention when adding or updating guidance.
 - Keep completed checkboxes where they are. Add a milestone to the completed summary only after all
   of its acceptance criteria pass; do not duplicate or relocate individual outcomes.
 
-## Current implementation state — 2026-08-16
+## Current implementation state — 2026-08-18
 
 The foundations already provide:
 
@@ -50,13 +50,17 @@ The foundations already provide:
   `AgentCapability` values;
 - SQLite/SQLAlchemy adapters, Alembic migrations, UTC persistence, and migration drift tests;
 - a versioned FastAPI health contract plus deterministic OpenAPI generation;
-- a React playground shell with assistant-ui installed but no final persona or chat journey;
+- a React playground with deterministic persona generation, resumable support conversations, and
+  an explicitly confirmed order-cancellation journey;
+- `retail-profile@v1` read-only support and `retail-order-cancellation@v1` safe modifying scenarios;
+- persisted exact action proposals, idempotent optimistic order updates, safe retries, and sanitized
+  action lifecycle traces;
 - shared quality gates, CI, architecture guidance, and project-local skills.
 
-The project does not yet persist generated scenario state or expose it through the API/UI, and it
-does not implement support conversations, an agent SDK adapter, or OpenTelemetry export. Update
-this anchor when a milestone is completed so a fresh contributor does not recreate existing
-foundations or mistake installed libraries for delivered capabilities.
+The project does not yet implement the Vercel AI SDK comparison, regression-scenario runners,
+PostgreSQL, Temporal, or autonomous simulation. Update this anchor when a milestone is completed so
+a fresh contributor does not recreate existing capabilities or mistake installed libraries for
+delivered behavior.
 
 ## Stable vocabulary
 
@@ -284,15 +288,20 @@ reproducibly.
 
 ### Outcomes
 
-- [ ] Add a τ³-inspired scenario requiring one modifying order action.
-- [ ] Define the versioned modifying tool contract and business validation rules.
-- [ ] Require explicit user confirmation bound to the exact proposed action.
-- [ ] Enforce idempotency and optimistic concurrency through the existing application ports.
-- [ ] Add retry rules that never duplicate a successful business action.
-- [ ] Expose proposal, confirmation, execution, refusal, conflict, and retry states in the UI.
-- [ ] Trace the full action lifecycle with sanitized OpenTelemetry attributes.
-- [ ] Test success, cancellation, validation refusal, replay, stale version, and transient failure.
-- [ ] Add one essential Playwright journey covering confirmation and execution.
+- [x] Add a τ³-inspired scenario requiring one modifying order action.
+- [x] Define the versioned modifying tool contract and business validation rules.
+- [x] Require explicit user confirmation bound to the exact proposed action.
+- [x] Enforce idempotency and optimistic concurrency through the existing application ports.
+- [x] Add retry rules that never duplicate a successful business action.
+- [x] Expose proposal, confirmation, execution, refusal, conflict, and retry states in the UI.
+- [x] Trace the full action lifecycle with sanitized OpenTelemetry attributes.
+- [x] Test success, cancellation, validation refusal, replay, stale version, and transient failure.
+- [x] Add one essential Playwright journey covering confirmation and execution.
+
+Implementation note: `retail-order-cancellation@v1` pins policy set `v2` and exposes only
+`cancel_order@v1`. The application persists the exact proposal and its binding token, then requires
+separate decision and execution commands. Immutable generated-order snapshots preserve replay
+fingerprints while operational order state advances optimistically and idempotently. See ADR 0009.
 
 ### Acceptance criteria
 
@@ -380,6 +389,12 @@ coordinate retries beyond stored session recovery. Do not add it only to demonst
 Evaluate after the interactive scenarios are stable. Adopt it only if its datasets, harness, or
 evaluation model adds value beyond locally versioned τ³-inspired scenarios without compromising the
 lab's framework-neutral contracts.
+
+## Completed milestones
+
+- [x] Milestone 1 — Deterministic persona and scenario foundation.
+- [x] Milestone 2 — First Pydantic AI support agent.
+- [x] Milestone 3 — Safe modifying actions.
 
 ## Completed — Project foundations
 

@@ -181,6 +181,217 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/conversations/{session_id}/actions/proposals:
+    post:
+      summary: Propose one versioned modifying order action
+      operationId: proposeOrderAction
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeOrderActionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionProposalResponse'
+        '404':
+          description: Conversation or order is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Stale version or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Action is refused or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/conversations/{session_id}/actions/{proposal_id}:
+    get:
+      summary: Retrieve a persisted order-action proposal
+      operationId: getOrderAction
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      - name: proposal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Proposal Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionProposalResponse'
+        '404':
+          description: Action proposal is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/conversations/{session_id}/actions/{proposal_id}/decision:
+    post:
+      summary: Confirm or cancel an exact proposed action
+      operationId: decideOrderAction
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      - name: proposal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Proposal Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideOrderActionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionProposalResponse'
+        '404':
+          description: Action proposal is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Action state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Confirmation does not match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/conversations/{session_id}/actions/{proposal_id}/execution:
+    post:
+      summary: Execute a confirmed order action idempotently
+      operationId: executeOrderAction
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      - name: proposal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Proposal Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Idempotency-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionProposalResponse'
+        '404':
+          description: Action proposal is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Stale order version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Action is unconfirmed or refused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Safe retries were exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations:
     post:
       summary: Generate and persist deterministic scenario state
@@ -319,6 +530,85 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    ActionProposalResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        session_id:
+          type: string
+          format: uuid
+          title: Session Id
+        action_type:
+          type: string
+          const: cancel_order
+          title: Action Type
+        tool_name:
+          type: string
+          const: cancel_order
+          title: Tool Name
+        tool_version:
+          type: string
+          const: v1
+          title: Tool Version
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        expected_version:
+          type: integer
+          title: Expected Version
+        summary:
+          type: string
+          title: Summary
+        confirmation_token:
+          type: string
+          title: Confirmation Token
+        status:
+          type: string
+          enum:
+          - proposed
+          - confirmed
+          - cancelled
+          - executed
+          title: Status
+        attempts:
+          type: integer
+          title: Attempts
+        result_order_status:
+          anyOf:
+          - type: string
+            const: cancelled
+          - type: 'null'
+          title: Result Order Status
+        result_order_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Result Order Version
+        trace_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trace Id
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - session_id
+      - action_type
+      - tool_name
+      - tool_version
+      - order_id
+      - expected_version
+      - summary
+      - confirmation_token
+      - status
+      - attempts
+      - result_order_status
+      - result_order_version
+      title: ActionProposalResponse
     AgentFrameworkListResponse:
       properties:
         frameworks:
@@ -476,6 +766,26 @@ components:
       - display_name
       - created_at
       title: CustomerResponse
+    DecideOrderActionRequest:
+      properties:
+        decision:
+          type: string
+          enum:
+          - confirm
+          - cancel
+          title: Decision
+        confirmation_token:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 64
+          - type: 'null'
+          title: Confirmation Token
+      additionalProperties: false
+      type: object
+      required:
+      - decision
+      title: DecideOrderActionRequest
     ErrorResponse:
       properties:
         code:
@@ -674,6 +984,27 @@ components:
       - price_amount
       - currency
       title: ProductResponse
+    ProposeOrderActionRequest:
+      properties:
+        action_type:
+          type: string
+          const: cancel_order
+          title: Action Type
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        expected_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Version
+      additionalProperties: false
+      type: object
+      required:
+      - action_type
+      - order_id
+      - expected_version
+      title: ProposeOrderActionRequest
     ScenarioMetadataResponse:
       properties:
         scenario_id:

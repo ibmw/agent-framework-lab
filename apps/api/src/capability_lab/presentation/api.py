@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
@@ -25,7 +25,16 @@ from capability_lab.application.conversations import (
     FrameworkDeclaration,
     InvalidConversationMessageError,
 )
-from capability_lab.application.ports import Clock, ConversationTurn
+from capability_lab.application.order_actions import (
+    ActionConfirmationError,
+    ActionConflictError,
+    ActionProposal,
+    ActionProposalNotFoundError,
+    ActionRefusedError,
+    ActionTransientError,
+    OrderActionService,
+)
+from capability_lab.application.ports import Clock, ConversationTurn, OrderWriteConflictError
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioNotFoundError,
@@ -51,8 +60,11 @@ from capability_lab.infrastructure.repositories import (
     ConversationTurnConflictError,
     GeneratedScenarioConflictError,
     PersistedScenarioIntegrityError,
+    SqlAlchemyActionDecisionIdempotencyRepository,
+    SqlAlchemyActionProposalRepository,
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyGeneratedScenarioRepository,
+    SqlAlchemyOrderRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
 )
@@ -240,6 +252,58 @@ class StartConversationRequest(StrictApiModel):
 
 class SendConversationMessageRequest(StrictApiModel):
     message: str = Field(min_length=1, max_length=4000)
+
+
+class ProposeOrderActionRequest(StrictApiModel):
+    action_type: Literal["cancel_order"]
+    order_id: UUID
+    expected_version: int = Field(ge=1)
+
+
+class DecideOrderActionRequest(StrictApiModel):
+    decision: Literal["confirm", "cancel"]
+    confirmation_token: str | None = Field(default=None, min_length=64, max_length=64)
+
+
+class ActionProposalResponse(StrictApiModel):
+    id: UUID
+    session_id: UUID
+    action_type: Literal["cancel_order"]
+    tool_name: Literal["cancel_order"]
+    tool_version: Literal["v1"]
+    order_id: UUID
+    expected_version: int
+    summary: str
+    confirmation_token: str
+    status: Literal["proposed", "confirmed", "cancelled", "executed"]
+    attempts: int
+    result_order_status: Literal["cancelled"] | None
+    result_order_version: int | None
+    trace_id: str | None = None
+
+    @classmethod
+    def from_proposal(cls, proposal: ActionProposal, trace_id: str | None = None) -> Self:
+        if proposal.result_order_status not in (None, "cancelled"):
+            raise ValueError("persisted action result has an unsupported order status")
+        result_order_status: Literal["cancelled"] | None = (
+            "cancelled" if proposal.result_order_status == "cancelled" else None
+        )
+        return cls(
+            id=proposal.id,
+            session_id=proposal.session_id,
+            action_type="cancel_order",
+            tool_name="cancel_order",
+            tool_version="v1",
+            order_id=proposal.order_id,
+            expected_version=proposal.expected_version,
+            summary=proposal.summary,
+            confirmation_token=proposal.confirmation_token,
+            status=proposal.status.value,
+            attempts=proposal.attempts,
+            result_order_status=result_order_status,
+            result_order_version=proposal.result_order_version,
+            trace_id=trace_id,
+        )
 
 
 class AgentFrameworkResponse(StrictApiModel):
@@ -576,6 +640,51 @@ async def _agent_execution_error_handler(request: Request, error: Exception) -> 
     )
 
 
+async def _action_not_found_handler(request: Request, _error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=404,
+        code="action_not_found",
+        message="The action proposal or scoped order was not found",
+    )
+
+
+async def _action_conflict_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=409,
+        code="action_conflict",
+        message=str(error),
+    )
+
+
+async def _action_confirmation_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=422,
+        code="action_confirmation_required",
+        message=str(error),
+    )
+
+
+async def _action_refused_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=422,
+        code="action_refused",
+        message=str(error),
+    )
+
+
+async def _action_transient_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=503,
+        code="action_transient_error",
+        message=str(error),
+    )
+
+
 def health() -> HealthResponse:
     return HealthResponse(status="ok", api_version="v1")
 
@@ -644,6 +753,12 @@ def create_app(
         _invalid_conversation_message_handler,
     )
     application.add_exception_handler(AgentExecutionError, _agent_execution_error_handler)
+    application.add_exception_handler(ActionProposalNotFoundError, _action_not_found_handler)
+    application.add_exception_handler(ActionConflictError, _action_conflict_handler)
+    application.add_exception_handler(OrderWriteConflictError, _action_conflict_handler)
+    application.add_exception_handler(ActionConfirmationError, _action_confirmation_handler)
+    application.add_exception_handler(ActionRefusedError, _action_refused_handler)
+    application.add_exception_handler(ActionTransientError, _action_transient_handler)
     application.add_exception_handler(PersistedScenarioIntegrityError, _internal_error_handler)
     application.add_exception_handler(IdempotencyStateNotFoundError, _internal_error_handler)
     application.add_exception_handler(ScenarioGeneratorNotConfiguredError, _internal_error_handler)
@@ -673,6 +788,19 @@ def create_app(
                 SqlAlchemySessionRepository(session),
                 SqlAlchemyConversationTurnRepository(session),
                 SqlAlchemyGeneratedScenarioRepository(session),
+                agents,
+                clock,
+                SqlAlchemyOrderRepository(session, clock),
+            )
+
+    def order_action_service() -> Generator[OrderActionService, None, None]:
+        with session_scope(factory) as session:
+            yield OrderActionService(
+                SqlAlchemySessionRepository(session),
+                SqlAlchemyGeneratedScenarioRepository(session),
+                SqlAlchemyOrderRepository(session, clock),
+                SqlAlchemyActionProposalRepository(session),
+                SqlAlchemyActionDecisionIdempotencyRepository(session),
                 agents,
                 clock,
             )
@@ -758,6 +886,96 @@ def create_app(
             )
         )
 
+    async def propose_order_action(
+        session_id: UUID,
+        command: ProposeOrderActionRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(alias="Idempotency-Key", min_length=1, max_length=128),
+        ],
+        service: Annotated[OrderActionService, Depends(order_action_service)],
+    ) -> ActionProposalResponse:
+        context = (
+            configured_telemetry.action_span("propose", session_id=session_id)
+            if configured_telemetry is not None
+            else nullcontext()
+        )
+        with context as span:
+            proposal = await service.propose_cancel(
+                session_id,
+                order_id=command.order_id,
+                expected_version=command.expected_version,
+                idempotency_key=idempotency_key,
+            )
+            trace_id = None
+            if span is not None:
+                span.set_attribute("action.outcome", proposal.status.value)
+                trace_id = format(span.get_span_context().trace_id, "032x")
+            return ActionProposalResponse.from_proposal(proposal, trace_id)
+
+    def get_order_action(
+        session_id: UUID,
+        proposal_id: UUID,
+        service: Annotated[OrderActionService, Depends(order_action_service)],
+    ) -> ActionProposalResponse:
+        return ActionProposalResponse.from_proposal(service.get(session_id, proposal_id))
+
+    def decide_order_action(
+        session_id: UUID,
+        proposal_id: UUID,
+        command: DecideOrderActionRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(alias="Idempotency-Key", min_length=1, max_length=128),
+        ],
+        service: Annotated[OrderActionService, Depends(order_action_service)],
+    ) -> ActionProposalResponse:
+        context = (
+            configured_telemetry.action_span(command.decision, session_id=session_id)
+            if configured_telemetry is not None
+            else nullcontext()
+        )
+        with context as span:
+            proposal = service.decide(
+                session_id,
+                proposal_id,
+                confirm=command.decision == "confirm",
+                confirmation_token=command.confirmation_token,
+                idempotency_key=idempotency_key,
+            )
+            trace_id = None
+            if span is not None:
+                span.set_attribute("action.outcome", proposal.status.value)
+                trace_id = format(span.get_span_context().trace_id, "032x")
+            return ActionProposalResponse.from_proposal(proposal, trace_id)
+
+    def execute_order_action(
+        session_id: UUID,
+        proposal_id: UUID,
+        idempotency_key: Annotated[
+            str,
+            Header(alias="Idempotency-Key", min_length=1, max_length=128),
+        ],
+        service: Annotated[OrderActionService, Depends(order_action_service)],
+    ) -> ActionProposalResponse:
+        context = (
+            configured_telemetry.action_span("execute", session_id=session_id)
+            if configured_telemetry is not None
+            else nullcontext()
+        )
+        with context as span:
+            proposal = service.execute(
+                session_id,
+                proposal_id,
+                idempotency_key=idempotency_key,
+            )
+            trace_id = None
+            if span is not None:
+                span.set_attribute("action.outcome", proposal.status.value)
+                span.set_attribute("action.attempt", proposal.attempts)
+                trace_id = format(span.get_span_context().trace_id, "032x")
+            return ActionProposalResponse.from_proposal(proposal, trace_id)
+
     router.add_api_route(
         "/health",
         health,
@@ -820,6 +1038,60 @@ def create_app(
             502: {"model": ErrorResponse, "description": "Agent execution failed"},
             503: {"model": ErrorResponse, "description": "Transient agent failure"},
             500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
+        "/conversations/{session_id}/actions/proposals",
+        propose_order_action,
+        methods=["POST"],
+        status_code=201,
+        response_model=ActionProposalResponse,
+        operation_id="proposeOrderAction",
+        summary="Propose one versioned modifying order action",
+        responses={
+            404: {"model": ErrorResponse, "description": "Conversation or order is not found"},
+            409: {"model": ErrorResponse, "description": "Stale version or idempotency conflict"},
+            422: {"model": ErrorResponse, "description": "Action is refused or invalid"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
+        "/conversations/{session_id}/actions/{proposal_id}",
+        get_order_action,
+        methods=["GET"],
+        response_model=ActionProposalResponse,
+        operation_id="getOrderAction",
+        summary="Retrieve a persisted order-action proposal",
+        responses={
+            404: {"model": ErrorResponse, "description": "Action proposal is not found"},
+            422: {"model": ErrorResponse, "description": "Invalid identifier"},
+        },
+    )
+    router.add_api_route(
+        "/conversations/{session_id}/actions/{proposal_id}/decision",
+        decide_order_action,
+        methods=["POST"],
+        response_model=ActionProposalResponse,
+        operation_id="decideOrderAction",
+        summary="Confirm or cancel an exact proposed action",
+        responses={
+            404: {"model": ErrorResponse, "description": "Action proposal is not found"},
+            409: {"model": ErrorResponse, "description": "Action state conflict"},
+            422: {"model": ErrorResponse, "description": "Confirmation does not match"},
+        },
+    )
+    router.add_api_route(
+        "/conversations/{session_id}/actions/{proposal_id}/execution",
+        execute_order_action,
+        methods=["POST"],
+        response_model=ActionProposalResponse,
+        operation_id="executeOrderAction",
+        summary="Execute a confirmed order action idempotently",
+        responses={
+            404: {"model": ErrorResponse, "description": "Action proposal is not found"},
+            409: {"model": ErrorResponse, "description": "Stale order version"},
+            422: {"model": ErrorResponse, "description": "Action is unconfirmed or refused"},
+            503: {"model": ErrorResponse, "description": "Safe retries were exhausted"},
         },
     )
     router.add_api_route(

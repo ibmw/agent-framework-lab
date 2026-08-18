@@ -45,6 +45,12 @@ const scenarios: ScenarioOption[] = [
     name: "Retail customer profile",
     description: "A fictional customer, two products, and one paid order.",
   },
+  {
+    id: "retail-order-cancellation",
+    version: "v1",
+    name: "Safe order cancellation",
+    description: "A paid order that can be cancelled only after exact confirmation.",
+  },
 ];
 
 type RequestState = "idle" | "generating" | "retrieving";
@@ -233,7 +239,15 @@ export function App() {
       return;
     }
     void getConversation(sessionId)
-      .then(setConversation)
+      .then(async (resumed) => {
+        setConversation(resumed);
+        const generated = await getGeneratedScenario(
+          { id: resumed.scenario_id, version: resumed.scenario_version },
+          resumed.seed,
+        );
+        setResult(generated);
+        setResultSource("retrieved");
+      })
       .catch(() => window.localStorage.removeItem("agent-lab-support-session"));
   }, []);
 
@@ -357,7 +371,7 @@ export function App() {
         </h1>
         <p className="m-0 max-w-[730px] text-[clamp(1.05rem,1.7vw,1.28rem)] leading-relaxed text-lab-muted">
           Select a versioned retail scenario and record a seed. The same inputs always recreate the
-          same fictional customer state—ready for a read-only support conversation.
+          same fictional customer state—ready for support and explicitly confirmed actions.
         </p>
       </section>
 
@@ -556,6 +570,11 @@ export function App() {
         <SupportConversation
           key={`${conversation.id}:${conversation.turns.length === 0 ? "empty" : "active"}`}
           conversation={conversation}
+          order={
+            result?.metadata.scenario_id === "retail-order-cancellation"
+              ? result.initial_state.orders[0]
+              : undefined
+          }
           onConversationUpdated={handleConversationUpdated}
         />
       )}

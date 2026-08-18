@@ -10,8 +10,10 @@ from capability_lab.domain.entities import (
     DomainError,
     MemoryRecord,
     Order,
+    OrderActionRefusedError,
     OrderStatus,
     Product,
+    StaleOrderVersionError,
 )
 
 
@@ -125,6 +127,26 @@ def test_order_rejects_unsupported_status() -> None:
             created_at=datetime(2026, 8, 16, tzinfo=UTC),
             status=cast(OrderStatus, "shipped"),
         )
+
+
+def test_paid_order_cancellation_is_versioned_and_rejects_stale_or_repeated_actions() -> None:
+    paid = Order(
+        id=uuid4(),
+        customer_id=uuid4(),
+        created_at=datetime(2026, 8, 16, tzinfo=UTC),
+        status=OrderStatus.PAID,
+        version=3,
+    )
+
+    cancelled = paid.cancel(expected_version=3)
+
+    assert cancelled.status is OrderStatus.CANCELLED
+    assert cancelled.version == 4
+    assert paid.status is OrderStatus.PAID
+    with pytest.raises(StaleOrderVersionError, match="stale"):
+        paid.cancel(expected_version=2)
+    with pytest.raises(OrderActionRefusedError, match="only a paid order"):
+        cancelled.cancel(expected_version=4)
 
 
 def test_customer_requires_an_explicit_utc_timestamp() -> None:

@@ -19,7 +19,12 @@ from capability_lab.domain.entities import (
     ScenarioDefinition,
     ScenarioMetadata,
 )
-from capability_lab.domain.scenario_generation import RETAIL_PROFILE_V1, generate_retail_profile_v1
+from capability_lab.domain.scenario_generation import (
+    RETAIL_ORDER_CANCELLATION_V1,
+    RETAIL_PROFILE_V1,
+    generate_retail_order_cancellation_v1,
+    generate_retail_profile_v1,
+)
 
 StateGenerator = Callable[[ScenarioDefinition, int], CanonicalInitialState]
 
@@ -167,11 +172,15 @@ class ScenarioGenerationService:
 
 def create_retail_profile_kernel(clock: Clock) -> ScenarioGenerationKernel:
     return ScenarioGenerationKernel(
-        registry=ScenarioRegistry((RETAIL_PROFILE_V1,)),
+        registry=ScenarioRegistry((RETAIL_PROFILE_V1, RETAIL_ORDER_CANCELLATION_V1)),
         generators={
             (RETAIL_PROFILE_V1.scenario_id, RETAIL_PROFILE_V1.scenario_version): (
                 generate_retail_profile_v1
-            )
+            ),
+            (
+                RETAIL_ORDER_CANCELLATION_V1.scenario_id,
+                RETAIL_ORDER_CANCELLATION_V1.scenario_version,
+            ): generate_retail_order_cancellation_v1,
         },
         clock=clock,
     )

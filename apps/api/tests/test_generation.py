@@ -19,7 +19,11 @@ from capability_lab.application.scenario_generation import (
 )
 from capability_lab.application.scenario_registry import ScenarioRegistry
 from capability_lab.domain.entities import DomainError, ScenarioDefinition
-from capability_lab.domain.scenario_generation import RETAIL_PROFILE_V1, generate_retail_profile_v1
+from capability_lab.domain.scenario_generation import (
+    RETAIL_ORDER_CANCELLATION_V1,
+    RETAIL_PROFILE_V1,
+    generate_retail_profile_v1,
+)
 
 OPERATIONAL_TIME = datetime(2026, 8, 16, 12, 30, tzinfo=UTC)
 EXPECTED_CANONICAL_JSON = (
@@ -63,6 +67,21 @@ def test_same_inputs_produce_byte_identical_state_and_hash() -> None:
     assert first.metadata.created_at == OPERATIONAL_TIME
     assert second.metadata.created_at == datetime(2030, 1, 1, tzinfo=UTC)
     assert first_clock.calls == later_clock.calls == 1
+
+
+def test_order_cancellation_scenario_is_immutable_deterministic_and_independent() -> None:
+    kernel = create_retail_profile_kernel(FakeClock(OPERATIONAL_TIME))
+
+    first = kernel.generate("retail-order-cancellation", "v1", 1234)
+    replay = kernel.generate("retail-order-cancellation", "v1", 1234)
+    read_only = kernel.generate("retail-profile", "v1", 1234)
+
+    assert first.metadata.definition == RETAIL_ORDER_CANCELLATION_V1
+    assert first.metadata.policy_set_version == "v2"
+    assert first.canonical_json == replay.canonical_json
+    assert first.initial_state_hash == replay.initial_state_hash
+    assert first.initial_state_hash != read_only.initial_state_hash
+    assert first.state.orders[0].status.value == "paid"
 
 
 def test_different_seeds_produce_independent_coherent_state() -> None:

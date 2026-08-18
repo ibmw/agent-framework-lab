@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from capability_lab.application.order_actions import (
+    ACTION_TOOL_VERSION,
+    CANCEL_ORDER_TOOL_NAME,
+    ActionProposalDraft,
+    OrderActionRequest,
+)
 from capability_lab.application.ports import (
     AgentAdapter,
     AgentCapability,
@@ -52,4 +58,16 @@ class FakeAgentAdapter(AgentAdapter):
                 order_ids=tuple(order.id for order in request.support_context.orders),
             ),
             tool_activity=activities,
+        )
+
+    async def propose_action(self, request: OrderActionRequest) -> ActionProposalDraft:
+        return ActionProposalDraft(
+            action_type=request.action_type,
+            tool_name=CANCEL_ORDER_TOOL_NAME,
+            tool_version=ACTION_TOOL_VERSION,
+            order_id=request.order.id,
+            expected_version=request.expected_version,
+            summary=(
+                f"Cancel paid order {request.order.id} at version {request.expected_version}."
+            ),
         )

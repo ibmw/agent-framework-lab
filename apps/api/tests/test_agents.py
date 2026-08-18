@@ -20,6 +20,7 @@ from capability_lab.application.conversations import (
     AgentTransientError,
     AgentValidationError,
 )
+from capability_lab.application.order_actions import OrderActionRequest, OrderActionType
 from capability_lab.application.ports import (
     AgentAdapter,
     AgentCapability,
@@ -113,6 +114,23 @@ async def test_agent_adapter_conformance_for_tools_structure_and_resume(
     assert all(activity.tool_version == "v1" for activity in first.tool_activity)
     assert all(activity.outcome == "success" for activity in first.tool_activity)
 
+    request = request_with_history()
+    order = request.support_context.orders[0]
+    proposal = await adapter.propose_action(
+        OrderActionRequest(
+            session_id=request.session_id,
+            customer_id=request.customer_id,
+            order=order,
+            action_type=OrderActionType.CANCEL_ORDER,
+            expected_version=order.version,
+        )
+    )
+    assert proposal.action_type is OrderActionType.CANCEL_ORDER
+    assert proposal.tool_name == "cancel_order"
+    assert proposal.tool_version == "v1"
+    assert proposal.order_id == order.id
+    assert proposal.expected_version == order.version
+
 
 async def test_pydantic_adapter_rejects_output_without_proven_tool_use() -> None:
     adapter = PydanticAiAgentAdapter(TestModel(call_tools=[]))
@@ -164,6 +182,28 @@ async def test_common_traces_are_correlated_and_exclude_sensitive_content() -> N
     exported = repr([(span.attributes, span.events) for span in spans])
     assert request.message not in exported
     assert request.support_context.customer.email not in exported
+
+
+def test_action_lifecycle_trace_uses_only_sanitized_stable_attributes() -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    telemetry = Telemetry(provider.get_tracer("test"), b"unit-test-salt")
+    session_id = UUID("10000000-0000-4000-8000-000000000000")
+
+    with telemetry.action_span("execute", session_id=session_id, attempt=2) as span:
+        span.set_attribute("action.outcome", "executed")
+
+    [exported] = exporter.get_finished_spans()
+    attributes = dict(exported.attributes or {})
+    assert exported.name == "agent.action.execute"
+    assert attributes["tool.name"] == "cancel_order"
+    assert attributes["tool.version"] == "v1"
+    assert attributes["action.stage"] == "execute"
+    assert attributes["action.attempt"] == 2
+    assert attributes["action.outcome"] == "executed"
+    assert attributes["lab.session.id"] != str(session_id)
+    assert str(session_id) not in repr(attributes)
 
 
 def test_agent_sdk_imports_are_isolated_to_framework_adapters() -> None:

@@ -89,6 +89,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/conversations/{session_id}/actions/proposals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Propose one versioned modifying order action */
+    post: operations["proposeOrderAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{session_id}/actions/{proposal_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve a persisted order-action proposal */
+    get: operations["getOrderAction"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{session_id}/actions/{proposal_id}/decision": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Confirm or cancel an exact proposed action */
+    post: operations["decideOrderAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{session_id}/actions/{proposal_id}/execution": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Execute a confirmed order action idempotently */
+    post: operations["executeOrderAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations": {
     parameters: {
       query?: never;
@@ -127,6 +195,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** ActionProposalResponse */
+    ActionProposalResponse: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Session Id
+       * Format: uuid
+       */
+      session_id: string;
+      /**
+       * Action Type
+       * @constant
+       */
+      action_type: "cancel_order";
+      /**
+       * Tool Name
+       * @constant
+       */
+      tool_name: "cancel_order";
+      /**
+       * Tool Version
+       * @constant
+       */
+      tool_version: "v1";
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /** Expected Version */
+      expected_version: number;
+      /** Summary */
+      summary: string;
+      /** Confirmation Token */
+      confirmation_token: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "proposed" | "confirmed" | "cancelled" | "executed";
+      /** Attempts */
+      attempts: number;
+      /** Result Order Status */
+      result_order_status: "cancelled" | null;
+      /** Result Order Version */
+      result_order_version: number | null;
+      /** Trace Id */
+      trace_id?: string | null;
+    };
     /** AgentFrameworkListResponse */
     AgentFrameworkListResponse: {
       /** Frameworks */
@@ -215,6 +335,16 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+    };
+    /** DecideOrderActionRequest */
+    DecideOrderActionRequest: {
+      /**
+       * Decision
+       * @enum {string}
+       */
+      decision: "confirm" | "cancel";
+      /** Confirmation Token */
+      confirmation_token?: string | null;
     };
     /** ErrorResponse */
     ErrorResponse: {
@@ -325,6 +455,21 @@ export interface components {
       price_amount: string;
       /** Currency */
       currency: string;
+    };
+    /** ProposeOrderActionRequest */
+    ProposeOrderActionRequest: {
+      /**
+       * Action Type
+       * @constant
+       */
+      action_type: "cancel_order";
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /** Expected Version */
+      expected_version: number;
     };
     /** ScenarioMetadataResponse */
     ScenarioMetadataResponse: {
@@ -637,6 +782,228 @@ export interface operations {
         };
       };
       /** @description Transient agent failure */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  proposeOrderAction: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProposeOrderActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionProposalResponse"];
+        };
+      };
+      /** @description Conversation or order is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Stale version or idempotency conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Action is refused or invalid */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getOrderAction: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+        proposal_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionProposalResponse"];
+        };
+      };
+      /** @description Action proposal is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid identifier */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  decideOrderAction: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        session_id: string;
+        proposal_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DecideOrderActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionProposalResponse"];
+        };
+      };
+      /** @description Action proposal is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Action state conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Confirmation does not match */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  executeOrderAction: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        session_id: string;
+        proposal_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionProposalResponse"];
+        };
+      };
+      /** @description Action proposal is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Stale order version */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Action is unconfirmed or refused */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Safe retries were exhausted */
       503: {
         headers: {
           [name: string]: unknown;

@@ -24,13 +24,16 @@
   evidence uses Pydantic AI `TestModel` and a separate fake adapter without live calls.
 - Sanitized common OpenTelemetry spans can be exported to the pinned local Phoenix Compose service;
   native prompt/payload instrumentation remains disabled.
+- `retail-order-cancellation@v1` and policy set `v2` add the single `cancel_order@v1` modifying
+  action with persisted exact proposals, separate confirmation/execution, idempotency, optimistic
+  concurrency, safe retries, immutable initial snapshots, and sanitized lifecycle traces.
 
 ## Explicitly deferred
 
-Vercel AI SDK comparison, modifying support actions, Temporal runtime, PostgreSQL, autonomous
-simulation, and deeper τ³-bench dataset or harness integration.
+Vercel AI SDK comparison, additional modifying support actions, Temporal runtime, PostgreSQL,
+autonomous simulation, and deeper τ³-bench dataset or harness integration.
 
 ## Recommended next task
 
-Begin Milestone 3 with explicit confirmation and idempotent, concurrency-safe modifying order
-actions while preserving the M2 adapter and conversation contracts.
+Begin Milestone 4 by implementing the same read-only and modifying semantics behind the Vercel AI
+SDK adapter without changing the public API, stored session/action formats, or playground behavior.

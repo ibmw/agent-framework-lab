@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -10,6 +10,14 @@ from uuid import UUID
 
 class DomainError(ValueError):
     """Raised when a domain invariant is violated."""
+
+
+class OrderActionRefusedError(DomainError):
+    """Raised when policy does not permit the requested order transition."""
+
+
+class StaleOrderVersionError(DomainError):
+    """Raised when an order command targets an obsolete version."""
 
 
 class OrderStatus(StrEnum):
@@ -210,6 +218,16 @@ class Order:
         _require_order_status(self.status)
         _require_positive_order_version(self.version)
         _require_utc(self.created_at, "order created_at")
+
+    def cancel(self, *, expected_version: int) -> Order:
+        _require_positive_order_version(expected_version)
+        if self.version != expected_version:
+            raise StaleOrderVersionError(
+                f"order version {expected_version} is stale; current version is {self.version}"
+            )
+        if self.status is not OrderStatus.PAID:
+            raise OrderActionRefusedError("only a paid order can be cancelled")
+        return replace(self, status=OrderStatus.CANCELLED, version=self.version + 1)
 
 
 @dataclass(frozen=True, slots=True)

@@ -19,6 +19,12 @@ from capability_lab.application.conversations import (
     AgentTransientError,
     AgentValidationError,
 )
+from capability_lab.application.order_actions import (
+    ACTION_TOOL_VERSION,
+    CANCEL_ORDER_TOOL_NAME,
+    ActionProposalDraft,
+    OrderActionRequest,
+)
 from capability_lab.application.ports import (
     AgentAdapter,
     AgentCapability,
@@ -118,6 +124,20 @@ class PydanticAiAgentAdapter(AgentAdapter):
                 order_ids=tuple(order.id for order in request.support_context.orders),
             ),
             tool_activity=tuple(dependencies.activities),
+        )
+
+    async def propose_action(self, request: OrderActionRequest) -> ActionProposalDraft:
+        # The application owns confirmation and execution. The adapter maps the framework-neutral
+        # action request without granting the model authority to mutate business state.
+        return ActionProposalDraft(
+            action_type=request.action_type,
+            tool_name=CANCEL_ORDER_TOOL_NAME,
+            tool_version=ACTION_TOOL_VERSION,
+            order_id=request.order.id,
+            expected_version=request.expected_version,
+            summary=(
+                f"Cancel paid order {request.order.id} at version {request.expected_version}."
+            ),
         )
 
     @staticmethod

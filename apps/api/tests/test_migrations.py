@@ -21,6 +21,7 @@ from capability_lab.infrastructure.database import (
 from capability_lab.infrastructure.repositories import SqlAlchemyGeneratedScenarioRepository
 
 APPLICATION_TABLES = {
+    "action_proposals",
     "customers",
     "generated_scenario_orders",
     "generated_scenario_products",
@@ -68,6 +69,12 @@ def test_upgrade_empty_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     }
     assert {"ix_memory_records_session_id"} <= {
         index["name"] for index in inspector.get_indexes("memory_records")
+    }
+    assert {"ix_action_proposals_session_id"} <= {
+        index["name"] for index in inspector.get_indexes("action_proposals")
+    }
+    assert {"customer_id", "status", "version", "created_at"} <= {
+        column["name"] for column in inspector.get_columns("generated_scenario_orders")
     }
     assert {"ck_orders_status_valid", "ck_orders_version_positive"} <= {
         constraint["name"] for constraint in inspector.get_check_constraints("orders")
@@ -202,7 +209,7 @@ def test_downgrade_refuses_populated_generated_state_without_schema_damage(
     assert set(inspector.get_table_names()) >= APPLICATION_TABLES
     assert not any(table.startswith("_alembic_tmp") for table in inspector.get_table_names())
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260818_0004"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260818_0005"
         assert connection.scalar(text("SELECT count(*) FROM generated_scenarios")) == 3
 
     with engine.begin() as connection:
@@ -214,11 +221,14 @@ def test_downgrade_refuses_populated_generated_state_without_schema_damage(
             text("DELETE FROM idempotency_records WHERE operation = 'generate_scenario_v1'")
         )
 
-    with pytest.raises(RuntimeError, match=r"duplicate values in products\.sku"):
-        command.downgrade(config, "20260816_0002")
+    command.downgrade(config, "20260818_0004")
 
     inspector = inspect(engine)
-    assert set(inspector.get_table_names()) >= APPLICATION_TABLES
+    assert set(inspector.get_table_names()) >= APPLICATION_TABLES - {"action_proposals"}
+    assert "action_proposals" not in inspector.get_table_names()
+    assert {"customer_id", "status", "version", "created_at"}.isdisjoint(
+        column["name"] for column in inspector.get_columns("generated_scenario_orders")
+    )
     assert not any(table.startswith("_alembic_tmp") for table in inspector.get_table_names())
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260818_0004"
@@ -232,6 +242,12 @@ def test_downgrade_refuses_populated_generated_state_without_schema_damage(
             )
             == 2
         )
+
+    with pytest.raises(RuntimeError, match=r"duplicate values in products\.sku"):
+        command.downgrade(config, "20260816_0002")
+
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260818_0004"
 
 
 @pytest.mark.migration

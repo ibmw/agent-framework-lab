@@ -13,6 +13,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from capability_lab.application.ports import (
     AgentResponse,
     ConversationTurn,
+    OrderWriteTransientError,
     StructuredSupportResult,
 )
 from capability_lab.application.scenario_generation import (
@@ -23,6 +24,7 @@ from capability_lab.application.scenario_registry import ScenarioRegistry
 from capability_lab.domain.entities import (
     CanonicalInitialState,
     ConversationSession,
+    Order,
     ScenarioDefinition,
 )
 from capability_lab.domain.scenario_generation import (
@@ -39,6 +41,7 @@ from capability_lab.infrastructure.repositories import (
     ConversationTurnConflictError,
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyGeneratedScenarioRepository,
+    SqlAlchemyOrderRepository,
     SqlAlchemySessionRepository,
 )
 from capability_lab.infrastructure.telemetry import Telemetry
@@ -447,6 +450,16 @@ async def test_support_conversation_starts_sends_and_resumes_with_neutral_contra
             },
         )
         session_id = started.json()["id"]
+        read_only_order = generated.json()["initial_state"]["orders"][0]
+        refused_action = await client.post(
+            f"/api/v1/conversations/{session_id}/actions/proposals",
+            headers={"Idempotency-Key": "read-only-action"},
+            json={
+                "action_type": "cancel_order",
+                "order_id": read_only_order["id"],
+                "expected_version": read_only_order["version"],
+            },
+        )
         sent = await client.post(
             f"/api/v1/conversations/{session_id}/messages",
             headers={"Idempotency-Key": "support-turn-1"},
@@ -467,6 +480,8 @@ async def test_support_conversation_starts_sends_and_resumes_with_neutral_contra
     assert generated.status_code == 201
     assert started.status_code == replayed_start.status_code == 201
     assert started.json() == replayed_start.json()
+    assert refused_action.status_code == 422
+    assert refused_action.json()["code"] == "action_refused"
     assert sent.status_code == replayed_turn.status_code == 200
     assert sent.json() == replayed_turn.json() == resumed.json()
     payload = sent.json()
@@ -482,6 +497,267 @@ async def test_support_conversation_starts_sends_and_resumes_with_neutral_contra
         "list_customer_orders",
     }
     assert len(turn["trace_id"]) == 32
+
+
+async def test_confirmed_order_cancellation_is_safe_idempotent_and_preserves_replay_state(
+    tmp_path: Path,
+) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    generation_path = "/api/v1/scenarios/retail-order-cancellation/versions/v1/generations"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        generated = await client.post(
+            generation_path,
+            headers={"Idempotency-Key": "action-state"},
+            json={"seed": 3300},
+        )
+        order = generated.json()["initial_state"]["orders"][0]
+        started = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "action-session"},
+            json={
+                "scenario_id": "retail-order-cancellation",
+                "scenario_version": "v1",
+                "seed": 3300,
+                "framework_id": "fake",
+            },
+        )
+        session_id = started.json()["id"]
+        proposal_path = f"/api/v1/conversations/{session_id}/actions/proposals"
+        proposed = await client.post(
+            proposal_path,
+            headers={"Idempotency-Key": "cancel-proposal"},
+            json={
+                "action_type": "cancel_order",
+                "order_id": order["id"],
+                "expected_version": order["version"],
+            },
+        )
+        replayed_proposal = await client.post(
+            proposal_path,
+            headers={"Idempotency-Key": "cancel-proposal"},
+            json={
+                "action_type": "cancel_order",
+                "order_id": order["id"],
+                "expected_version": order["version"],
+            },
+        )
+        proposal = proposed.json()
+        decision_path = f"/api/v1/conversations/{session_id}/actions/{proposal['id']}/decision"
+        wrong_confirmation = await client.post(
+            decision_path,
+            headers={"Idempotency-Key": "wrong-confirmation"},
+            json={"decision": "confirm", "confirmation_token": "0" * 64},
+        )
+        confirmed = await client.post(
+            decision_path,
+            headers={"Idempotency-Key": "exact-confirmation"},
+            json={
+                "decision": "confirm",
+                "confirmation_token": proposal["confirmation_token"],
+            },
+        )
+        execution_path = f"/api/v1/conversations/{session_id}/actions/{proposal['id']}/execution"
+        executed = await client.post(
+            execution_path,
+            headers={"Idempotency-Key": "cancel-execution"},
+        )
+        replayed_execution = await client.post(
+            execution_path,
+            headers={"Idempotency-Key": "cancel-execution"},
+        )
+        initial_state = await client.get(f"{generation_path}/3300")
+        support = await client.post(
+            f"/api/v1/conversations/{session_id}/messages",
+            headers={"Idempotency-Key": "post-action-support"},
+            json={"message": "What is the current order status?"},
+        )
+        refused = await client.post(
+            proposal_path,
+            headers={"Idempotency-Key": "cancel-again"},
+            json={
+                "action_type": "cancel_order",
+                "order_id": order["id"],
+                "expected_version": order["version"] + 1,
+            },
+        )
+
+    assert proposed.status_code == replayed_proposal.status_code == 201
+    assert proposal["status"] == replayed_proposal.json()["status"] == "proposed"
+    assert proposal["tool_name"] == "cancel_order"
+    assert proposal["tool_version"] == "v1"
+    assert len(proposal["trace_id"]) == 32
+    assert wrong_confirmation.status_code == 422
+    assert wrong_confirmation.json()["code"] == "action_confirmation_required"
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "confirmed"
+    assert executed.status_code == replayed_execution.status_code == 200
+    assert executed.json()["status"] == replayed_execution.json()["status"] == "executed"
+    assert executed.json()["result_order_status"] == "cancelled"
+    assert executed.json()["result_order_version"] == order["version"] + 1
+    assert executed.json()["attempts"] == 1
+    assert initial_state.json()["initial_state"]["orders"][0] == order
+    order_activity = next(
+        activity
+        for activity in support.json()["turns"][-1]["tool_activity"]
+        if activity["tool_name"] == "list_customer_orders"
+    )
+    assert order_activity["result"]["orders"][0]["status"] == "cancelled"
+    assert order_activity["result"]["orders"][0]["version"] == order["version"] + 1
+    assert refused.status_code == 422
+    assert refused.json()["code"] == "action_refused"
+
+
+async def test_order_action_exposes_cancellation_refusal_and_stale_conflict(tmp_path: Path) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    generation_path = "/api/v1/scenarios/retail-order-cancellation/versions/v1/generations"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        generated = await client.post(
+            generation_path,
+            headers={"Idempotency-Key": "cancelled-proposal-state"},
+            json={"seed": 4400},
+        )
+        order = generated.json()["initial_state"]["orders"][0]
+        started = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "cancelled-proposal-session"},
+            json={
+                "scenario_id": "retail-order-cancellation",
+                "scenario_version": "v1",
+                "seed": 4400,
+                "framework_id": "fake",
+            },
+        )
+        session_id = started.json()["id"]
+        proposal_path = f"/api/v1/conversations/{session_id}/actions/proposals"
+        proposed = await client.post(
+            proposal_path,
+            headers={"Idempotency-Key": "cancelled-proposal"},
+            json={
+                "action_type": "cancel_order",
+                "order_id": order["id"],
+                "expected_version": 1,
+            },
+        )
+        proposal = proposed.json()
+        decision_path = f"/api/v1/conversations/{session_id}/actions/{proposal['id']}/decision"
+        cancelled = await client.post(
+            decision_path,
+            headers={"Idempotency-Key": "declined-action"},
+            json={"decision": "cancel"},
+        )
+        replayed_cancel = await client.post(
+            decision_path,
+            headers={"Idempotency-Key": "declined-action"},
+            json={"decision": "cancel"},
+        )
+        changed_decision = await client.post(
+            decision_path,
+            headers={"Idempotency-Key": "declined-action"},
+            json={
+                "decision": "confirm",
+                "confirmation_token": proposal["confirmation_token"],
+            },
+        )
+        unconfirmed_execution = await client.post(
+            f"/api/v1/conversations/{session_id}/actions/{proposal['id']}/execution",
+            headers={"Idempotency-Key": "declined-execution"},
+        )
+        stale = await client.post(
+            proposal_path,
+            headers={"Idempotency-Key": "stale-action"},
+            json={
+                "action_type": "cancel_order",
+                "order_id": order["id"],
+                "expected_version": 2,
+            },
+        )
+
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert replayed_cancel.status_code == 200
+    assert replayed_cancel.json()["status"] == "cancelled"
+    assert changed_decision.status_code == 409
+    assert changed_decision.json()["code"] == "action_conflict"
+    assert unconfirmed_execution.status_code == 422
+    assert unconfirmed_execution.json()["code"] == "action_confirmation_required"
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "action_conflict"
+
+
+async def test_transient_order_write_retries_without_duplicate_cancellation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_save = SqlAlchemyOrderRepository.save
+    calls = 0
+
+    def flaky_save(
+        repository: SqlAlchemyOrderRepository,
+        order: Order,
+        *,
+        expected_version: int,
+        idempotency_key: str,
+    ) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OrderWriteTransientError("offline transient failure")
+        original_save(
+            repository,
+            order,
+            expected_version=expected_version,
+            idempotency_key=idempotency_key,
+        )
+
+    monkeypatch.setattr(SqlAlchemyOrderRepository, "save", flaky_save)
+    transport = ASGITransport(app=integration_app(tmp_path))
+    generation_path = "/api/v1/scenarios/retail-order-cancellation/versions/v1/generations"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        generated = await client.post(
+            generation_path,
+            headers={"Idempotency-Key": "retry-state"},
+            json={"seed": 5500},
+        )
+        order = generated.json()["initial_state"]["orders"][0]
+        started = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "retry-session"},
+            json={
+                "scenario_id": "retail-order-cancellation",
+                "scenario_version": "v1",
+                "seed": 5500,
+                "framework_id": "fake",
+            },
+        )
+        session_id = started.json()["id"]
+        proposed = await client.post(
+            f"/api/v1/conversations/{session_id}/actions/proposals",
+            headers={"Idempotency-Key": "retry-proposal"},
+            json={
+                "action_type": "cancel_order",
+                "order_id": order["id"],
+                "expected_version": 1,
+            },
+        )
+        proposal = proposed.json()
+        await client.post(
+            f"/api/v1/conversations/{session_id}/actions/{proposal['id']}/decision",
+            headers={"Idempotency-Key": "retry-confirmation"},
+            json={
+                "decision": "confirm",
+                "confirmation_token": proposal["confirmation_token"],
+            },
+        )
+        executed = await client.post(
+            f"/api/v1/conversations/{session_id}/actions/{proposal['id']}/execution",
+            headers={"Idempotency-Key": "retry-execution"},
+        )
+
+    assert executed.status_code == 200
+    assert executed.json()["status"] == "executed"
+    assert executed.json()["attempts"] == 2
+    assert executed.json()["result_order_version"] == 2
+    assert calls == 2
 
 
 async def test_support_conversation_rejects_missing_state_and_idempotency_reuse(

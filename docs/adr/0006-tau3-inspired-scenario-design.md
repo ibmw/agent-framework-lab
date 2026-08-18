@@ -6,6 +6,8 @@ Amendment: 2026-08-16 — Recorded the initial `retail-profile` family and its l
 
 Amendment: 2026-08-16 — Pinned the deterministic `retail-profile@v1` generation rules.
 
+Amendment: 2026-08-18 — Added `retail-order-cancellation@v1` with policy set `v2`.
+
 ## Context
 
 τ³-bench Retail offers a useful vocabulary for customer-support work: fictional customers, product
@@ -64,6 +66,12 @@ Including `canonical_schema_version` in the derivation context is deliberate: a 
 pins its complete replay context, so adopting a new canonical schema occurs under a new immutable
 scenario registry version even when the human-visible fixture rules are otherwise unchanged. This
 favors exact historical replay over preserving fictional identities across schema versions.
+
+`retail-order-cancellation@v1` is a separate τ³-inspired scenario rather than a mutation of the
+read-only `retail-profile@v1` definition. It reuses the locally owned deterministic retail fixture
+shape, but its scenario identity changes every seeded identifier and its policy set `v2` permits
+exactly one modifying behavior: cancelling a paid order after exact user confirmation. The original
+scenario remains simultaneously resolvable and read-only.
 
 ## Consequences
 

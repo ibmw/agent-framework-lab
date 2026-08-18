@@ -4,10 +4,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 from sqlalchemy.exc import IntegrityError
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
+from capability_lab.application.ports import OrderWriteTransientError
 from capability_lab.application.scenario_generation import create_retail_profile_kernel
 from capability_lab.domain.entities import Customer, Persona
 from capability_lab.infrastructure.clock import SystemClock
@@ -19,6 +20,7 @@ from capability_lab.infrastructure.database import (
 )
 from capability_lab.infrastructure.models import (
     CustomerModel,
+    IdempotencyRecordModel,
     OrderModel,
     PersonaModel,
     ProductModel,
@@ -28,6 +30,7 @@ from capability_lab.infrastructure.repositories import (
     PersistedScenarioIntegrityError,
     SqlAlchemyCustomerRepository,
     SqlAlchemyGeneratedScenarioRepository,
+    SqlAlchemyOrderRepository,
     SqlAlchemyPersonaRepository,
 )
 
@@ -179,6 +182,59 @@ def test_generated_scenario_repository_round_trip_and_multiple_seeds(tmp_path: P
     assert set(loaded_first.state.orders) == set(first.state.orders)
     assert loaded_second is not None
     assert loaded_second.initial_state_hash == second.initial_state_hash
+
+
+def test_order_retry_does_not_treat_an_unapplied_update_as_completed(tmp_path: Path) -> None:
+    engine = create_database_engine(database_url(tmp_path))
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    generated = create_retail_profile_kernel(FixedClock()).generate("retail-profile", "v1", 1234)
+    order = generated.state.orders[0]
+    cancelled = order.cancel(expected_version=order.version)
+    failed_once = False
+
+    with session_scope(factory) as session:
+        SqlAlchemyGeneratedScenarioRepository(session).save(generated)
+
+    def fail_before_first_order_update(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        nonlocal failed_once
+        if not failed_once and statement.lstrip().upper().startswith("UPDATE ORDERS SET"):
+            failed_once = True
+            raise OrderWriteTransientError("simulated mid-write failure")
+
+    event.listen(engine, "before_cursor_execute", fail_before_first_order_update)
+    with session_scope(factory) as session:
+        repository = SqlAlchemyOrderRepository(session, FixedClock())
+        with pytest.raises(OrderWriteTransientError, match="mid-write"):
+            repository.save(
+                cancelled,
+                expected_version=order.version,
+                idempotency_key="mid-write-retry",
+            )
+        assert session.get(IdempotencyRecordModel, ("mid-write-retry", "cancel_order_v1")) is None
+        repository.save(
+            cancelled,
+            expected_version=order.version,
+            idempotency_key="mid-write-retry",
+        )
+
+    with session_scope(factory) as session:
+        persisted = SqlAlchemyOrderRepository(session, FixedClock()).get(order.id)
+        completion = session.get(
+            IdempotencyRecordModel,
+            ("mid-write-retry", "cancel_order_v1"),
+        )
+
+    assert failed_once
+    assert persisted == cancelled
+    assert completion is not None
 
 
 def test_generated_scenario_repository_detects_persisted_state_drift(tmp_path: Path) -> None:

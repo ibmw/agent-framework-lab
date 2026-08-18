@@ -33,7 +33,8 @@ not satisfy the lab's content-minimization rule.
   response as sufficient to proceed to output. Resume evidence therefore proves history mapping
   and valid structured output, while first-turn evidence proves all three tool calls.
 - M2 advertises tool calls, conversation memory, session resume, structured output, and common
-  tracing. Durable cross-session memory, confirmations, and retries remain visibly absent.
+  tracing. At M2 completion, durable cross-session memory, confirmations, and retries were visibly
+  absent; ADR 0009 records their later Milestone 3 addition.
 - Pydantic AI validation and provider exceptions are normalized into validation, provider, or
   transient application failures. Provider retry policy is not advertised as a capability yet.
 - The HTTP API is turn-based rather than token-streaming. This keeps persistence and idempotency

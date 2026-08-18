@@ -1,4 +1,8 @@
-import type { ConversationResponse, GeneratedScenarioResponse } from "@agent-lab/contracts";
+import type {
+  ActionProposalResponse,
+  ConversationResponse,
+  GeneratedScenarioResponse,
+} from "@agent-lab/contracts";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
@@ -7,6 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
 
 const generationUrl = "*/api/v1/scenarios/retail-profile/versions/v1/generations";
+const actionGenerationUrl = "*/api/v1/scenarios/retail-order-cancellation/versions/v1/generations";
 
 const generatedPersona: GeneratedScenarioResponse = {
   metadata: {
@@ -79,6 +84,28 @@ const emptyConversation: ConversationResponse = {
   turns: [],
 };
 
+const actionGeneratedPersona: GeneratedScenarioResponse = {
+  ...generatedPersona,
+  metadata: {
+    ...generatedPersona.metadata,
+    scenario_id: "retail-order-cancellation",
+    policy_set_version: "v2",
+  },
+  initial_state: {
+    ...generatedPersona.initial_state,
+    scenario: {
+      id: "retail-order-cancellation",
+      version: "v1",
+      policy_set_version: "v2",
+    },
+  },
+};
+
+const actionEmptyConversation: ConversationResponse = {
+  ...emptyConversation,
+  scenario_id: "retail-order-cancellation",
+};
+
 const conversationWithTurn: ConversationResponse = {
   ...emptyConversation,
   turns: [
@@ -107,6 +134,23 @@ const conversationWithTurn: ConversationResponse = {
   ],
 };
 
+const proposedAction: ActionProposalResponse = {
+  id: "30000000-0000-4000-8000-000000000000",
+  session_id: emptyConversation.id,
+  action_type: "cancel_order",
+  tool_name: "cancel_order",
+  tool_version: "v1",
+  order_id: generatedPersona.initial_state.orders[0].id,
+  expected_version: 1,
+  summary: `Cancel paid order ${generatedPersona.initial_state.orders[0].id} at version 1.`,
+  confirmation_token: "c".repeat(64),
+  status: "proposed",
+  attempts: 0,
+  result_order_status: null,
+  result_order_version: null,
+  trace_id: "b".repeat(32),
+};
+
 const server = setupServer();
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -119,6 +163,16 @@ afterAll(() => server.close());
 async function enterReplayInputs() {
   const user = userEvent.setup();
   await user.selectOptions(screen.getByRole("combobox", { name: "Scenario" }), "retail-profile@v1");
+  await user.type(screen.getByRole("textbox", { name: "Seed" }), "20260816");
+  return user;
+}
+
+async function enterActionInputs() {
+  const user = userEvent.setup();
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "Scenario" }),
+    "retail-order-cancellation@v1",
+  );
   await user.type(screen.getByRole("textbox", { name: "Seed" }), "20260816");
   return user;
 }
@@ -245,9 +299,7 @@ describe("human persona journey", () => {
     await screen.findByRole("heading", { name: "Maya Chen" });
 
     await user.click(screen.getByRole("button", { name: "Start support conversation" }));
-    expect(
-      await screen.findByRole("heading", { name: "Read-only support conversation" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
     expect(screen.getByText("pydantic-ai · unsupported locally")).toBeVisible();
 
     await user.type(
@@ -267,13 +319,204 @@ describe("human persona journey", () => {
       http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
         HttpResponse.json(conversationWithTurn),
       ),
+      http.get(`${generationUrl}/20260816`, () => HttpResponse.json(generatedPersona)),
     );
 
     render(<App />);
 
-    expect(
-      await screen.findByRole("heading", { name: "Read-only support conversation" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
     expect(await screen.findByText("I found one paid order.")).toBeVisible();
+  });
+
+  it("restores a persisted action state on reload", async () => {
+    window.localStorage.setItem("agent-lab-support-session", actionEmptyConversation.id);
+    window.localStorage.setItem(
+      `agent-lab:action-proposal:${actionEmptyConversation.id}`,
+      proposedAction.id,
+    );
+    server.use(
+      http.get(`*/api/v1/conversations/${actionEmptyConversation.id}`, () =>
+        HttpResponse.json(actionEmptyConversation),
+      ),
+      http.get(`${actionGenerationUrl}/20260816`, () => HttpResponse.json(actionGeneratedPersona)),
+      http.get(`*/actions/${proposedAction.id}`, () =>
+        HttpResponse.json({
+          ...proposedAction,
+          status: "executed",
+          attempts: 1,
+          result_order_status: "cancelled",
+          result_order_version: 2,
+        }),
+      ),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("Executed")).toBeVisible();
+    expect(screen.getByText(/Order is cancelled at version 2. Attempts: 1/)).toBeVisible();
+  });
+
+  it("shows proposal, exact confirmation, and executed action states", async () => {
+    server.use(
+      http.post(actionGenerationUrl, () =>
+        HttpResponse.json(actionGeneratedPersona, { status: 201 }),
+      ),
+      http.get("*/api/v1/agent-frameworks", () =>
+        HttpResponse.json({
+          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
+        }),
+      ),
+      http.post("*/api/v1/conversations", () =>
+        HttpResponse.json(actionEmptyConversation, { status: 201 }),
+      ),
+      http.post("*/actions/proposals", async ({ request }) => {
+        expect(await request.json()).toEqual({
+          action_type: "cancel_order",
+          order_id: proposedAction.order_id,
+          expected_version: 1,
+        });
+        return HttpResponse.json(proposedAction, { status: 201 });
+      }),
+      http.post("*/actions/*/decision", async ({ request }) => {
+        expect(await request.json()).toEqual({
+          decision: "confirm",
+          confirmation_token: proposedAction.confirmation_token,
+        });
+        return HttpResponse.json({ ...proposedAction, status: "confirmed" });
+      }),
+      http.post("*/actions/*/execution", () =>
+        HttpResponse.json({
+          ...proposedAction,
+          status: "executed",
+          attempts: 1,
+          result_order_status: "cancelled",
+          result_order_version: 2,
+        }),
+      ),
+    );
+    render(<App />);
+    const user = await enterActionInputs();
+    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
+
+    await user.click(await screen.findByRole("button", { name: "Propose order cancellation" }));
+    expect(await screen.findByText("Proposal ready")).toBeVisible();
+    expect(screen.getByText(/cancel_order@v1 · expected version 1/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Confirm exact action" }));
+    expect(await screen.findByText("Confirmed")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Execute cancellation" }));
+    expect(await screen.findByText("Executed")).toBeVisible();
+    expect(screen.getByText(/Order is cancelled at version 2. Attempts: 1/)).toBeVisible();
+  });
+
+  it("shows user cancellation plus backend refusal and conflict states", async () => {
+    let proposalAttempt = 0;
+    server.use(
+      http.post(actionGenerationUrl, () =>
+        HttpResponse.json(actionGeneratedPersona, { status: 201 }),
+      ),
+      http.get("*/api/v1/agent-frameworks", () =>
+        HttpResponse.json({
+          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
+        }),
+      ),
+      http.post("*/api/v1/conversations", () =>
+        HttpResponse.json(actionEmptyConversation, { status: 201 }),
+      ),
+      http.post("*/actions/proposals", () => {
+        proposalAttempt += 1;
+        if (proposalAttempt === 1) return HttpResponse.json(proposedAction, { status: 201 });
+        const conflict = proposalAttempt === 2;
+        return HttpResponse.json(
+          {
+            code: conflict ? "action_refused" : "action_conflict",
+            message: conflict ? "Only a paid order can be cancelled" : "Order version is stale",
+            request_id: "request-action-error",
+          },
+          { status: conflict ? 422 : 409 },
+        );
+      }),
+      http.post("*/actions/*/decision", () =>
+        HttpResponse.json({ ...proposedAction, status: "cancelled" }),
+      ),
+    );
+    const view = render(<App />);
+    const user = await enterActionInputs();
+    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
+    await user.click(await screen.findByRole("button", { name: "Propose order cancellation" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel proposal" }));
+    expect(await screen.findByText(/Cancelled by user/)).toBeVisible();
+
+    view.unmount();
+    window.localStorage.clear();
+    render(<App />);
+    const secondUser = await enterActionInputs();
+    await secondUser.click(screen.getByRole("button", { name: "Generate persona" }));
+    await secondUser.click(
+      await screen.findByRole("button", { name: "Start support conversation" }),
+    );
+    await secondUser.click(
+      await screen.findByRole("button", { name: "Propose order cancellation" }),
+    );
+    expect(await screen.findByText("Refused")).toBeVisible();
+    await secondUser.click(screen.getByRole("button", { name: "Propose order cancellation" }));
+    expect(await screen.findByText("Conflict")).toBeVisible();
+  });
+
+  it("offers an idempotent retry after a transient execution failure", async () => {
+    let executions = 0;
+    server.use(
+      http.post(actionGenerationUrl, () =>
+        HttpResponse.json(actionGeneratedPersona, { status: 201 }),
+      ),
+      http.get("*/api/v1/agent-frameworks", () =>
+        HttpResponse.json({
+          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
+        }),
+      ),
+      http.post("*/api/v1/conversations", () =>
+        HttpResponse.json(actionEmptyConversation, { status: 201 }),
+      ),
+      http.post("*/actions/proposals", () => HttpResponse.json(proposedAction, { status: 201 })),
+      http.post("*/actions/*/decision", () =>
+        HttpResponse.json({ ...proposedAction, status: "confirmed" }),
+      ),
+      http.post("*/actions/*/execution", () => {
+        executions += 1;
+        if (executions === 1) {
+          return HttpResponse.json(
+            {
+              code: "action_transient_error",
+              message: "The action could not complete after safe retry attempts",
+              request_id: "request-retry",
+            },
+            { status: 503 },
+          );
+        }
+        return HttpResponse.json({
+          ...proposedAction,
+          status: "executed",
+          attempts: 1,
+          result_order_status: "cancelled",
+          result_order_version: 2,
+        });
+      }),
+    );
+    render(<App />);
+    const user = await enterActionInputs();
+    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
+    await user.click(await screen.findByRole("button", { name: "Propose order cancellation" }));
+    await user.click(await screen.findByRole("button", { name: "Confirm exact action" }));
+    await user.click(await screen.findByRole("button", { name: "Execute cancellation" }));
+
+    expect(await screen.findByText("Retry available")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Execute cancellation" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry execution safely" }));
+    expect(await screen.findByText("Executed")).toBeVisible();
+    expect(executions).toBe(2);
   });
 });
