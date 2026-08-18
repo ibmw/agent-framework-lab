@@ -353,6 +353,12 @@ export function SupportConversation({
     initialMessages: initialMessages(conversation),
   });
   const latestTurn = conversation.turns.at(-1);
+  const [selectedTurnId, setSelectedTurnId] = useState(latestTurn?.id);
+  useEffect(() => {
+    setSelectedTurnId(latestTurn?.id);
+  }, [latestTurn?.id]);
+  const selectedTurn = conversation.turns.find((turn) => turn.id === selectedTurnId) ?? latestTurn;
+  const viewingLatest = selectedTurn?.id === latestTurn?.id;
   const suggestedCustomerMessageId = `suggested-customer-message-${conversation.id}`;
 
   return (
@@ -446,30 +452,83 @@ export function SupportConversation({
             </aside>
           )}
           <aside className="rounded-panel border border-lab-ink/20 bg-lab-paper/90 p-5 shadow-panel">
-            <h3 className="mb-4 flex items-center gap-2 font-bold">
-              <Wrench aria-hidden="true" size={17} /> Evidence
-            </h3>
-            {!latestTurn ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 font-bold">
+                <Wrench aria-hidden="true" size={17} /> Evidence
+              </h3>
+              {selectedTurn && (
+                <span className="text-xs font-bold text-lab-muted">
+                  Turn {selectedTurn.ordinal} of {conversation.turns.length}
+                  {viewingLatest && " · latest"}
+                </span>
+              )}
+            </div>
+            {!selectedTurn ? (
               <p className="text-sm text-lab-muted">
                 Tool activity and structured output appear here.
               </p>
             ) : (
               <div className="grid gap-5 text-sm">
+                {conversation.turns.length > 1 && (
+                  <nav aria-label="Evidence turn selector" className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold tracking-wide text-lab-muted uppercase">
+                        Turns
+                      </p>
+                      {!viewingLatest && (
+                        <button
+                          className="text-xs font-bold text-lab-accent underline-offset-2 hover:underline"
+                          type="button"
+                          onClick={() => setSelectedTurnId(latestTurn?.id)}
+                        >
+                          View latest
+                        </button>
+                      )}
+                    </div>
+                    <ul className="grid max-h-40 gap-1 overflow-y-auto pr-1">
+                      {conversation.turns.map((turn) => {
+                        const active = turn.id === selectedTurn.id;
+                        return (
+                          <li key={turn.id}>
+                            <button
+                              className={`grid w-full min-w-0 gap-0.5 rounded-lg border px-3 py-2 text-left transition ${
+                                active
+                                  ? "border-lab-accent bg-lab-accent-soft"
+                                  : "border-lab-border bg-lab-subtle hover:border-lab-accent/50"
+                              }`}
+                              type="button"
+                              aria-pressed={active}
+                              aria-label={`Turn ${turn.ordinal}: ${turn.request_message}`}
+                              onClick={() => setSelectedTurnId(turn.id)}
+                            >
+                              <span className="text-[0.68rem] font-extrabold tracking-wide text-lab-accent uppercase">
+                                Turn {turn.ordinal}
+                              </span>
+                              <span className="truncate text-xs text-lab-ink">
+                                {turn.request_message}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </nav>
+                )}
                 <div>
                   <p className="mb-2 text-xs font-bold tracking-wide text-lab-muted uppercase">
                     Structured result
                   </p>
-                  <p>{latestTurn.structured_result.summary}</p>
+                  <p>{selectedTurn.structured_result.summary}</p>
                 </div>
                 <div>
                   <p className="mb-2 text-xs font-bold tracking-wide text-lab-muted uppercase">
                     Tools
                   </p>
                   <ul className="grid gap-2">
-                    {latestTurn.tool_activity.map((activity) => (
+                    {selectedTurn.tool_activity.map((activity) => (
                       <li
                         className="rounded-lg bg-lab-subtle px-3 py-2 font-mono text-xs"
-                        key={`${latestTurn.id}:${activity.tool_name}`}
+                        key={`${selectedTurn.id}:${activity.tool_name}`}
                       >
                         {activity.tool_name}@{activity.tool_version} · {activity.outcome}
                       </li>
@@ -481,7 +540,7 @@ export function SupportConversation({
                     Trace
                   </p>
                   <code className="break-all text-xs">
-                    {latestTurn.trace_id ?? "Tracing disabled"}
+                    {selectedTurn.trace_id ?? "Tracing disabled"}
                   </code>
                 </div>
               </div>
