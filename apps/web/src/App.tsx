@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   MessageCircle,
   RotateCcw,
+  Target,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
@@ -37,6 +38,7 @@ interface ScenarioOption extends ScenarioReference {
   name: string;
   description: string;
   suggestedCustomerMessage: string;
+  goal: string;
 }
 
 const scenarios: ScenarioOption[] = [
@@ -46,6 +48,7 @@ const scenarios: ScenarioOption[] = [
     name: "Retail customer profile",
     description: "A fictional customer, two products, and one paid order.",
     suggestedCustomerMessage: "Hi, could you tell me which orders and products are on my account?",
+    goal: "You're a customer who wants a clear picture of your account. Start by asking what products and orders are on file, then follow up on whatever is unclear — an order's status, a product's price, or how many items you have. You're done once you understand your account.",
   },
   {
     id: "retail-order-cancellation",
@@ -53,6 +56,7 @@ const scenarios: ScenarioOption[] = [
     name: "Safe order cancellation",
     description: "A paid order that can be cancelled only after exact confirmation.",
     suggestedCustomerMessage: "Hi, I'd like to cancel my paid order. Can you help me?",
+    goal: "You're a customer who wants to cancel your paid order. Ask the agent to cancel it and confirm which order you mean. Then use the Safe order action panel to Propose, Confirm, and Execute — the order only changes after you confirm the exact action.",
   },
 ];
 
@@ -431,10 +435,28 @@ export function App() {
                   </option>
                 ))}
               </select>
-              <p className="m-0 text-sm leading-snug text-lab-muted" id="scenario-help">
-                {selectedOption?.description ??
-                  "Scenario versions preserve their generation rules."}
-              </p>
+              {selectedOption ? (
+                <div
+                  className="grid gap-2 rounded-lg border border-lab-accent/25 bg-lab-accent-soft/50 p-3.5"
+                  id="scenario-help"
+                >
+                  <p className="m-0 text-sm font-bold leading-snug text-lab-ink">
+                    {selectedOption.description}
+                  </p>
+                  <p className="m-0 flex items-start gap-1.5 text-sm leading-snug text-lab-ink-soft">
+                    <Target
+                      className="mt-0.5 shrink-0 text-lab-accent"
+                      aria-hidden="true"
+                      size={15}
+                    />
+                    <span>{selectedOption.goal}</span>
+                  </p>
+                </div>
+              ) : (
+                <p className="m-0 text-sm leading-snug text-lab-muted" id="scenario-help">
+                  Scenario versions preserve their generation rules.
+                </p>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -581,6 +603,7 @@ export function App() {
           key={`${conversation.id}:${conversation.turns.length === 0 ? "empty" : "active"}`}
           conversation={conversation}
           suggestedCustomerMessage={activeScenario?.suggestedCustomerMessage}
+          scenarioGoal={activeScenario?.goal}
           order={
             activeScenario?.id === "retail-order-cancellation"
               ? result?.initial_state.orders[0]

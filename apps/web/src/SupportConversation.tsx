@@ -12,7 +12,16 @@ import {
   ThreadPrimitive,
   useLocalRuntime,
 } from "@assistant-ui/react";
-import { Bot, CheckCircle2, RotateCcw, Send, ShieldCheck, UserRound, Wrench } from "lucide-react";
+import {
+  Bot,
+  CheckCircle2,
+  RotateCcw,
+  Send,
+  ShieldCheck,
+  Target,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   ConversationApiError,
@@ -313,11 +322,13 @@ function OrderActionPanel({
 export function SupportConversation({
   conversation,
   suggestedCustomerMessage,
+  scenarioGoal,
   order,
   onConversationUpdated,
 }: {
   conversation: ConversationResponse;
   suggestedCustomerMessage?: string;
+  scenarioGoal?: string;
   order?: ScenarioOrder;
   onConversationUpdated: (conversation: ConversationResponse) => void;
 }) {
@@ -412,6 +423,21 @@ export function SupportConversation({
         </AssistantRuntimeProvider>
 
         <div className="grid content-start gap-4">
+          {scenarioGoal && (
+            <aside
+              className="rounded-panel border border-lab-accent/30 bg-lab-accent-soft/60 p-5 shadow-panel"
+              aria-labelledby="scenario-goal-title"
+            >
+              <h3
+                className="mb-2 flex items-center gap-2 font-bold text-lab-ink"
+                id="scenario-goal-title"
+              >
+                <Target className="text-lab-accent" aria-hidden="true" size={17} /> Your goal as the
+                customer
+              </h3>
+              <p className="text-sm leading-relaxed text-lab-ink-soft">{scenarioGoal}</p>
+            </aside>
+          )}
           <aside className="rounded-panel border border-lab-ink/20 bg-lab-paper/90 p-5 shadow-panel">
             <h3 className="mb-4 flex items-center gap-2 font-bold">
               <Wrench aria-hidden="true" size={17} /> Evidence

@@ -3,7 +3,7 @@ import type {
   ConversationResponse,
   GeneratedScenarioResponse,
 } from "@agent-lab/contracts";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -177,6 +177,15 @@ async function enterActionInputs() {
   return user;
 }
 
+function conversationGoalCard() {
+  const heading = screen.getByRole("heading", { name: "Your goal as the customer" });
+  const card = heading.closest("aside");
+  if (!(card instanceof HTMLElement)) {
+    throw new Error("Expected the customer goal card to be present.");
+  }
+  return within(card);
+}
+
 describe("human persona journey", () => {
   it("starts with scenario controls and an informative empty state", () => {
     render(<App />);
@@ -217,6 +226,26 @@ describe("human persona journey", () => {
       expect(scenario).not.toHaveAttribute("aria-invalid", "true");
       expect(scenario).toHaveAttribute("aria-describedby", "scenario-help");
     }
+  });
+
+  it("explains the selected scenario in plain language and updates on change", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const scenario = screen.getByRole("combobox", { name: "Scenario" });
+    expect(screen.getByText("Scenario versions preserve their generation rules.")).toBeVisible();
+    expect(screen.queryByText(/a clear picture of your account/i)).not.toBeInTheDocument();
+
+    await user.selectOptions(scenario, "retail-profile@v1");
+    expect(
+      screen.getByText("A fictional customer, two products, and one paid order."),
+    ).toBeVisible();
+    expect(screen.getByText(/a clear picture of your account/i)).toBeVisible();
+
+    await user.selectOptions(scenario, "retail-order-cancellation@v1");
+    expect(screen.getByText(/cancel your paid order/i)).toBeVisible();
+    expect(screen.getByText(/Safe order action panel/i)).toBeVisible();
+    expect(screen.queryByText(/a clear picture of your account/i)).not.toBeInTheDocument();
   });
 
   it("announces loading and renders the generated persona summary", async () => {
@@ -300,6 +329,7 @@ describe("human persona journey", () => {
 
     await user.click(screen.getByRole("button", { name: "Start support conversation" }));
     expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
+    expect(conversationGoalCard().getByText(/a clear picture of your account/i)).toBeVisible();
     expect(screen.getByText("pydantic-ai · unsupported locally")).toBeVisible();
 
     const composer = screen.getByRole("textbox", { name: "Support message" });
@@ -334,6 +364,7 @@ describe("human persona journey", () => {
 
     expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
     expect(await screen.findByText("I found one paid order.")).toBeVisible();
+    expect(conversationGoalCard().getByText(/a clear picture of your account/i)).toBeVisible();
   });
 
   it("restores a persisted action state on reload", async () => {
@@ -409,6 +440,7 @@ describe("human persona journey", () => {
 
     await user.click(await screen.findByRole("button", { name: "Propose order cancellation" }));
     expect(await screen.findByText("Proposal ready")).toBeVisible();
+    expect(conversationGoalCard().getByText(/cancel your paid order/i)).toBeVisible();
     expect(screen.getByText(/cancel_order@v1 · expected version 1/)).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Confirm exact action" }));
