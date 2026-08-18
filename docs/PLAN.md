@@ -238,23 +238,23 @@ capabilities against the shared sandbox.
 
 ### Execution slices and outcomes
 
-- [ ] Select and document one τ³-inspired read-only retail support scenario.
-- [ ] Decide and document the provider/model family, local credential names, supported model
+- [x] Select and document one τ³-inspired read-only retail support scenario.
+- [x] Decide and document the provider/model family, local credential names, supported model
   versions, deterministic test double, and opt-in live-test policy before adding the SDK adapter.
-- [ ] Add a deterministic fake `AgentAdapter` and shared adapter-conformance suite so framework
+- [x] Add a deterministic fake `AgentAdapter` and shared adapter-conformance suite so framework
   neutrality is testable before a second real framework exists.
-- [ ] Define versioned tools for reading customer, product, and order information.
-- [ ] Implement the Pydantic AI infrastructure adapter behind `AgentAdapter`.
-- [ ] Add an architecture test that rejects agent-framework SDK imports outside their
+- [x] Define versioned tools for reading customer, product, and order information.
+- [x] Implement the Pydantic AI infrastructure adapter behind `AgentAdapter`.
+- [x] Add an architecture test that rejects agent-framework SDK imports outside their
   `infrastructure/agents/<framework>/` adapter.
-- [ ] Implement a minimal assistant-ui conversation through the framework-neutral backend API.
-- [ ] Persist conversation state and support session resume.
-- [ ] Add structured responses and expose only capability declarations proven by shared tests.
-- [ ] Classify framework, model-provider, tool, validation, and transient failures.
-- [ ] Emit sanitized common OpenTelemetry traces and visualize them in local Phoenix.
-- [ ] Add integration tests for every advertised capability and relevant failure path.
-- [ ] Add one essential Playwright journey for starting and resuming a support conversation.
-- [ ] Document Pydantic AI glue code, limitations, and observed developer experience in an ADR.
+- [x] Implement a minimal assistant-ui conversation through the framework-neutral backend API.
+- [x] Persist conversation state and support session resume.
+- [x] Add structured responses and expose only capability declarations proven by shared tests.
+- [x] Classify framework, model-provider, tool, validation, and transient failures.
+- [x] Emit sanitized common OpenTelemetry traces and visualize them in local Phoenix.
+- [x] Add integration tests for every advertised capability and relevant failure path.
+- [x] Add one essential Playwright journey for starting and resuming a support conversation.
+- [x] Document Pydantic AI glue code, limitations, and observed developer experience in an ADR.
 
 Organize these outcomes into short slices in this order: provider/test policy and fake adapter;
 read-only tool contracts and use cases; Pydantic AI adapter and conversation API; UI/session resume;

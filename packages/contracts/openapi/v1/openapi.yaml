@@ -14,6 +14,173 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /api/v1/agent-frameworks:
+    get:
+      summary: List agent frameworks and proven capabilities
+      operationId: listAgentFrameworks
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentFrameworkListResponse'
+  /api/v1/conversations:
+    post:
+      summary: Start a support conversation from generated scenario state
+      operationId: startConversation
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartConversationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '404':
+          description: Generated state is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid command or framework
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/conversations/{session_id}:
+    get:
+      summary: Resume a persisted support conversation
+      operationId: getConversation
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '404':
+          description: Conversation is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/conversations/{session_id}/messages:
+    post:
+      summary: Send one message to a support conversation
+      operationId: sendConversationMessage
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendConversationMessageRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '404':
+          description: Conversation is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or advanced-conversation conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Agent execution failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Transient agent failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations:
     post:
       summary: Generate and persist deterministic scenario state
@@ -152,6 +319,139 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    AgentFrameworkListResponse:
+      properties:
+        frameworks:
+          items:
+            $ref: '#/components/schemas/AgentFrameworkResponse'
+          type: array
+          title: Frameworks
+      additionalProperties: false
+      type: object
+      required:
+      - frameworks
+      title: AgentFrameworkListResponse
+    AgentFrameworkResponse:
+      properties:
+        framework_id:
+          type: string
+          title: Framework Id
+        available:
+          type: boolean
+          title: Available
+        model_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Id
+        capabilities:
+          items:
+            type: string
+          type: array
+          title: Capabilities
+        unavailability_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unavailability Reason
+      additionalProperties: false
+      type: object
+      required:
+      - framework_id
+      - available
+      - model_id
+      - capabilities
+      title: AgentFrameworkResponse
+    ConversationResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        customer_id:
+          type: string
+          format: uuid
+          title: Customer Id
+        scenario_id:
+          type: string
+          title: Scenario Id
+        scenario_version:
+          type: string
+          title: Scenario Version
+        seed:
+          type: integer
+          title: Seed
+        framework_id:
+          type: string
+          title: Framework Id
+        initial_state_hash:
+          type: string
+          title: Initial State Hash
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        turns:
+          items:
+            $ref: '#/components/schemas/ConversationTurnResponse'
+          type: array
+          title: Turns
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - customer_id
+      - scenario_id
+      - scenario_version
+      - seed
+      - framework_id
+      - initial_state_hash
+      - created_at
+      - turns
+      title: ConversationResponse
+    ConversationTurnResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        ordinal:
+          type: integer
+          title: Ordinal
+        request_message:
+          type: string
+          title: Request Message
+        response_message:
+          type: string
+          title: Response Message
+        structured_result:
+          $ref: '#/components/schemas/StructuredSupportResultResponse'
+        tool_activity:
+          items:
+            $ref: '#/components/schemas/ToolActivityResponse'
+          type: array
+          title: Tool Activity
+        trace_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trace Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - ordinal
+      - request_message
+      - response_message
+      - structured_result
+      - tool_activity
+      - trace_id
+      - created_at
+      title: ConversationTurnResponse
     CustomerResponse:
       properties:
         id:
@@ -423,6 +723,102 @@ components:
       - version
       - policy_set_version
       title: ScenarioReferenceResponse
+    SendConversationMessageRequest:
+      properties:
+        message:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Message
+      additionalProperties: false
+      type: object
+      required:
+      - message
+      title: SendConversationMessageRequest
+    StartConversationRequest:
+      properties:
+        scenario_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Scenario Id
+        scenario_version:
+          type: string
+          maxLength: 64
+          minLength: 2
+          pattern: ^v[1-9][0-9]*$
+          title: Scenario Version
+        seed:
+          type: integer
+          maximum: 4294967295.0
+          minimum: 0.0
+          title: Seed
+        framework_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Framework Id
+      additionalProperties: false
+      type: object
+      required:
+      - scenario_id
+      - scenario_version
+      - seed
+      - framework_id
+      title: StartConversationRequest
+    StructuredSupportResultResponse:
+      properties:
+        summary:
+          type: string
+          title: Summary
+        customer_id:
+          type: string
+          format: uuid
+          title: Customer Id
+        product_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Product Ids
+        order_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Order Ids
+      additionalProperties: false
+      type: object
+      required:
+      - summary
+      - customer_id
+      - product_ids
+      - order_ids
+      title: StructuredSupportResultResponse
+    ToolActivityResponse:
+      properties:
+        tool_name:
+          type: string
+          title: Tool Name
+        tool_version:
+          type: string
+          title: Tool Version
+        outcome:
+          type: string
+          title: Outcome
+        result:
+          additionalProperties: true
+          type: object
+          title: Result
+      additionalProperties: false
+      type: object
+      required:
+      - tool_name
+      - tool_version
+      - outcome
+      - result
+      title: ToolActivityResponse
     ValidationIssue:
       properties:
         location:

@@ -339,7 +339,9 @@ def test_conversation_session_reuses_scenario_metadata_validation(
             id=UUID("308d5e20-1319-4c00-ad4f-8d97dfa8b07b"),
             customer_id=UUID("1f5ab725-e20c-4a40-aa45-75ec7842fab5"),
             seed=seed,
+            scenario_id="retail-profile",
             scenario_version=scenario_version,
+            framework_id="fake",
             initial_state_hash="0" * 64,
             created_at=CREATED_AT,
         )
@@ -352,7 +354,9 @@ def test_conversation_session_requires_lowercase_sha256_hash(initial_state_hash:
             id=UUID("308d5e20-1319-4c00-ad4f-8d97dfa8b07b"),
             customer_id=UUID("1f5ab725-e20c-4a40-aa45-75ec7842fab5"),
             seed=42,
+            scenario_id="retail-profile",
             scenario_version="v1",
+            framework_id="fake",
             initial_state_hash=initial_state_hash,
             created_at=CREATED_AT,
         )

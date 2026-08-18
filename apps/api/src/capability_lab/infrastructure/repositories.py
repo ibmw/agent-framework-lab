@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -8,9 +9,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
+from capability_lab.application.ports import (
+    AgentResponse,
+    ConversationTurn,
+    StructuredSupportResult,
+    ToolActivity,
+)
 from capability_lab.application.scenario_generation import GeneratedScenario
 from capability_lab.domain.entities import (
     CanonicalInitialState,
+    ConversationSession,
     Customer,
     Order,
     OrderStatus,
@@ -20,6 +28,8 @@ from capability_lab.domain.entities import (
     ScenarioMetadata,
 )
 from capability_lab.infrastructure.models import (
+    ConversationSessionModel,
+    ConversationTurnModel,
     CustomerModel,
     GeneratedScenarioModel,
     GeneratedScenarioOrderModel,
@@ -35,6 +45,10 @@ _GENERATION_OPERATION = "generate_scenario_v1"
 
 class GeneratedScenarioConflictError(ValueError):
     """Raised when an immutable scenario reference is saved with different state."""
+
+
+class ConversationTurnConflictError(ValueError):
+    """Raised when a conversation advances before a turn can claim its ordinal."""
 
 
 class PersistedScenarioIntegrityError(RuntimeError):
@@ -174,6 +188,172 @@ class SqlAlchemyCustomerRepository:
                 created_at=customer.created_at,
             )
         )
+
+
+class SqlAlchemySessionRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, session_id: UUID) -> ConversationSession | None:
+        model = self._session.get(ConversationSessionModel, str(session_id))
+        if model is None:
+            return None
+        return ConversationSession(
+            id=UUID(model.id),
+            customer_id=UUID(model.customer_id),
+            seed=model.seed,
+            scenario_id=model.scenario_id,
+            scenario_version=model.scenario_version,
+            framework_id=model.framework_id,
+            initial_state_hash=model.initial_state_hash,
+            created_at=model.created_at,
+        )
+
+    def save(self, session: ConversationSession) -> None:
+        existing = self.get(session.id)
+        if existing is not None:
+            if existing != session:
+                raise GeneratedScenarioConflictError(
+                    f"conversation session {session.id} already has different state"
+                )
+            return
+        self._session.add(
+            ConversationSessionModel(
+                id=str(session.id),
+                customer_id=str(session.customer_id),
+                seed=session.seed,
+                scenario_id=session.scenario_id,
+                scenario_version=session.scenario_version,
+                framework_id=session.framework_id,
+                initial_state_hash=session.initial_state_hash,
+                created_at=session.created_at,
+            )
+        )
+
+
+class SqlAlchemyConversationTurnRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, turn_id: UUID) -> ConversationTurn | None:
+        model = self._session.get(ConversationTurnModel, str(turn_id))
+        return None if model is None else _turn_from_model(model)
+
+    def list_for_session(self, session_id: UUID) -> list[ConversationTurn]:
+        models = self._session.scalars(
+            select(ConversationTurnModel)
+            .where(ConversationTurnModel.session_id == str(session_id))
+            .order_by(ConversationTurnModel.ordinal)
+        ).all()
+        return [_turn_from_model(model) for model in models]
+
+    def save(self, turn: ConversationTurn) -> None:
+        existing = self.get(turn.id)
+        if existing is not None:
+            if existing != turn:
+                raise GeneratedScenarioConflictError(
+                    f"conversation turn {turn.id} already has different state"
+                )
+            return
+        result = turn.response.structured_result
+        try:
+            self._session.add(
+                ConversationTurnModel(
+                    id=str(turn.id),
+                    session_id=str(turn.session_id),
+                    ordinal=turn.ordinal,
+                    request_message=turn.request_message,
+                    response_message=turn.response.message,
+                    structured_result={
+                        "summary": result.summary,
+                        "customer_id": str(result.customer_id),
+                        "product_ids": [str(value) for value in result.product_ids],
+                        "order_ids": [str(value) for value in result.order_ids],
+                    },
+                    tool_activity=[
+                        {
+                            "tool_name": activity.tool_name,
+                            "tool_version": activity.tool_version,
+                            "outcome": activity.outcome,
+                            "result": activity.result,
+                        }
+                        for activity in turn.response.tool_activity
+                    ],
+                    trace_id=turn.response.trace_id,
+                    created_at=turn.created_at,
+                )
+            )
+            self._session.flush()
+        except IntegrityError as error:
+            self._session.rollback()
+            raise ConversationTurnConflictError(
+                f"conversation {turn.session_id} advanced past ordinal {turn.ordinal}"
+            ) from error
+
+
+def _turn_from_model(model: ConversationTurnModel) -> ConversationTurn:
+    structured = model.structured_result
+    summary = structured.get("summary")
+    customer_id = structured.get("customer_id")
+    product_ids = _string_tuple(structured.get("product_ids"))
+    order_ids = _string_tuple(structured.get("order_ids"))
+    if (
+        not isinstance(summary, str)
+        or not isinstance(customer_id, str)
+        or product_ids is None
+        or order_ids is None
+    ):
+        raise PersistedScenarioIntegrityError("conversation turn structured result is invalid")
+    activities: list[ToolActivity] = []
+    for value in model.tool_activity:
+        tool_name = value.get("tool_name")
+        tool_version = value.get("tool_version")
+        outcome = value.get("outcome")
+        result = value.get("result")
+        if (
+            not isinstance(tool_name, str)
+            or not isinstance(tool_version, str)
+            or not isinstance(outcome, str)
+            or not isinstance(result, dict)
+        ):
+            raise PersistedScenarioIntegrityError("conversation turn tool activity is invalid")
+        activities.append(
+            ToolActivity(
+                tool_name=tool_name,
+                tool_version=tool_version,
+                outcome=outcome,
+                result=cast(dict[str, object], result),
+            )
+        )
+    return ConversationTurn(
+        id=UUID(model.id),
+        session_id=UUID(model.session_id),
+        ordinal=model.ordinal,
+        request_message=model.request_message,
+        response=AgentResponse(
+            message=model.response_message,
+            structured_result=StructuredSupportResult(
+                summary=summary,
+                customer_id=UUID(customer_id),
+                product_ids=tuple(UUID(value) for value in product_ids),
+                order_ids=tuple(UUID(value) for value in order_ids),
+            ),
+            tool_activity=tuple(activities),
+            trace_id=model.trace_id,
+        ),
+        created_at=model.created_at,
+    )
+
+
+def _string_tuple(value: object) -> tuple[str, ...] | None:
+    if not isinstance(value, list):
+        return None
+    values: list[str] = []
+    for item in cast(list[object], value):
+        if not isinstance(item, str):
+            return None
+        values.append(item)
+    return tuple(values)
 
 
 class SqlAlchemyPersonaRepository:

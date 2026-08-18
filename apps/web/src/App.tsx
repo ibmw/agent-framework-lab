@@ -1,13 +1,32 @@
-import type { GeneratedScenarioResponse } from "@agent-lab/contracts";
+import type {
+  AgentFrameworkListResponse,
+  ConversationResponse,
+  GeneratedScenarioResponse,
+} from "@agent-lab/contracts";
 import { API_VERSION } from "@agent-lab/contracts";
-import { ArrowRight, Check, Database, Fingerprint, LoaderCircle, RotateCcw } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import {
+  ArrowRight,
+  Check,
+  Database,
+  Fingerprint,
+  LoaderCircle,
+  MessageCircle,
+  RotateCcw,
+} from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  ConversationApiError,
+  getConversation,
+  listAgentFrameworks,
+  startConversation,
+} from "./api/conversations";
 import {
   generateScenario,
   getGeneratedScenario,
   ScenarioApiError,
   type ScenarioReference,
 } from "./api/scenarios";
+import { SupportConversation } from "./SupportConversation";
 
 const MAX_SEED = 4_294_967_295;
 const panelClasses = "rounded-panel border border-lab-ink/20 bg-lab-paper/90 shadow-panel";
@@ -58,7 +77,7 @@ function validateSeed(value: string): string | undefined {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof ScenarioApiError) {
+  if (error instanceof ScenarioApiError || error instanceof ConversationApiError) {
     return error.requestId ? `${error.message} (request ${error.requestId})` : error.message;
   }
   return "Could not reach the scenario API. Check the connection and try again.";
@@ -69,11 +88,15 @@ function PersonaResult({
   source,
   requestState,
   onRetrieve,
+  onStartSupport,
+  supportStarting,
 }: {
   result: GeneratedScenarioResponse;
   source: ResultSource;
   requestState: RequestState;
   onRetrieve: () => void;
+  onStartSupport: () => void;
+  supportStarting: boolean;
 }) {
   const { metadata, initial_state: initialState } = result;
   const { persona } = initialState;
@@ -164,15 +187,30 @@ function PersonaResult({
         </div>
       </div>
 
-      <button
-        className="mt-5 inline-flex min-h-11 items-center justify-center gap-2.5 rounded-lg border border-lab-border px-4 font-bold text-lab-ink-soft transition hover:bg-lab-subtle disabled:cursor-not-allowed disabled:opacity-65"
-        type="button"
-        onClick={onRetrieve}
-        disabled={requestState !== "idle"}
-      >
-        <RotateCcw aria-hidden="true" size={16} />
-        Retrieve recorded persona
-      </button>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button
+          className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-lg border border-lab-border px-4 font-bold text-lab-ink-soft transition hover:bg-lab-subtle disabled:cursor-not-allowed disabled:opacity-65"
+          type="button"
+          onClick={onRetrieve}
+          disabled={requestState !== "idle" || supportStarting}
+        >
+          <RotateCcw aria-hidden="true" size={16} />
+          Retrieve recorded persona
+        </button>
+        <button
+          className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-lg bg-lab-ink px-4 font-bold text-lab-paper transition hover:bg-lab-ink-hover disabled:cursor-not-allowed disabled:opacity-65"
+          type="button"
+          onClick={onStartSupport}
+          disabled={requestState !== "idle" || supportStarting}
+        >
+          {supportStarting ? (
+            <LoaderCircle className="motion-safe:animate-spin" aria-hidden="true" size={16} />
+          ) : (
+            <MessageCircle aria-hidden="true" size={16} />
+          )}
+          {supportStarting ? "Starting support…" : "Start support conversation"}
+        </button>
+      </div>
     </section>
   );
 }
@@ -185,6 +223,19 @@ export function App() {
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [result, setResult] = useState<GeneratedScenarioResponse>();
   const [resultSource, setResultSource] = useState<ResultSource>("generated");
+  const [conversation, setConversation] = useState<ConversationResponse>();
+  const [frameworks, setFrameworks] = useState<AgentFrameworkListResponse["frameworks"]>([]);
+  const [supportStarting, setSupportStarting] = useState(false);
+
+  useEffect(() => {
+    const sessionId = window.localStorage.getItem("agent-lab-support-session");
+    if (!sessionId) {
+      return;
+    }
+    void getConversation(sessionId)
+      .then(setConversation)
+      .catch(() => window.localStorage.removeItem("agent-lab-support-session"));
+  }, []);
 
   const selectedOption = scenarios.find((scenario) => scenarioValue(scenario) === selectedScenario);
 
@@ -244,6 +295,41 @@ export function App() {
     }
   }
 
+  async function handleStartSupport() {
+    if (!result) {
+      return;
+    }
+    setRequestError(undefined);
+    setSupportStarting(true);
+    try {
+      const availableFrameworks = await listAgentFrameworks();
+      setFrameworks(availableFrameworks.frameworks);
+      const framework =
+        availableFrameworks.frameworks.find(
+          (candidate) => candidate.framework_id === "pydantic-ai" && candidate.available,
+        ) ?? availableFrameworks.frameworks.find((candidate) => candidate.available);
+      if (!framework) {
+        throw new Error("No agent framework is available.");
+      }
+      const started = await startConversation({
+        scenario_id: result.metadata.scenario_id,
+        scenario_version: result.metadata.scenario_version,
+        seed: result.metadata.seed,
+        framework_id: framework.framework_id,
+      });
+      window.localStorage.setItem("agent-lab-support-session", started.id);
+      setConversation(started);
+    } catch (error) {
+      setRequestError(errorMessage(error));
+    } finally {
+      setSupportStarting(false);
+    }
+  }
+
+  const handleConversationUpdated = useCallback((updated: ConversationResponse) => {
+    setConversation(updated);
+  }, []);
+
   return (
     <main className="mx-auto w-full max-w-[1200px] px-5 pt-6 pb-20">
       <header className="flex items-center justify-between pb-12 md:pb-[4.5rem]">
@@ -271,7 +357,7 @@ export function App() {
         </h1>
         <p className="m-0 max-w-[730px] text-[clamp(1.05rem,1.7vw,1.28rem)] leading-relaxed text-lab-muted">
           Select a versioned retail scenario and record a seed. The same inputs always recreate the
-          same fictional customer state—ready for future support conversations.
+          same fictional customer state—ready for a read-only support conversation.
         </p>
       </section>
 
@@ -416,6 +502,8 @@ export function App() {
               source={resultSource}
               requestState={requestState}
               onRetrieve={handleRetrieve}
+              onStartSupport={handleStartSupport}
+              supportStarting={supportStarting}
             />
           )}
 
@@ -444,6 +532,33 @@ export function App() {
           )}
         </div>
       </div>
+
+      {frameworks.length > 0 && (
+        <fieldset className="mt-5 flex flex-wrap gap-2 border-0 p-0">
+          <legend className="sr-only">Agent framework availability</legend>
+          {frameworks.map((framework) => (
+            <span
+              className={`rounded-full border px-3 py-1.5 font-mono text-xs ${
+                framework.available
+                  ? "border-lab-success/40 text-lab-success"
+                  : "border-lab-border text-lab-muted"
+              }`}
+              key={framework.framework_id}
+              title={framework.unavailability_reason ?? undefined}
+            >
+              {framework.framework_id} · {framework.available ? "available" : "unsupported locally"}
+            </span>
+          ))}
+        </fieldset>
+      )}
+
+      {conversation && (
+        <SupportConversation
+          key={`${conversation.id}:${conversation.turns.length === 0 ? "empty" : "active"}`}
+          conversation={conversation}
+          onConversationUpdated={handleConversationUpdated}
+        />
+      )}
     </main>
   );
 }

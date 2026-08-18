@@ -17,6 +17,7 @@ from capability_lab.domain.entities import (
 
 if TYPE_CHECKING:
     from capability_lab.application.scenario_generation import GeneratedScenario
+    from capability_lab.application.support_tools import RetailSupportContext
 
 
 class CustomerRepository(Protocol):
@@ -97,13 +98,53 @@ class AgentCapability(StrEnum):
 @dataclass(frozen=True, slots=True)
 class AgentRequest:
     session_id: UUID
+    customer_id: UUID
+    scenario_version: str
     message: str
+    history: tuple[ConversationTurn, ...]
+    support_context: RetailSupportContext
+
+
+@dataclass(frozen=True, slots=True)
+class ToolActivity:
+    tool_name: str
+    tool_version: str
+    outcome: str
+    result: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredSupportResult:
+    summary: str
+    customer_id: UUID
+    product_ids: tuple[UUID, ...]
+    order_ids: tuple[UUID, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class AgentResponse:
     message: str
+    structured_result: StructuredSupportResult
+    tool_activity: tuple[ToolActivity, ...]
     trace_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationTurn:
+    id: UUID
+    session_id: UUID
+    ordinal: int
+    request_message: str
+    response: AgentResponse
+    created_at: datetime
+
+
+class ConversationTurnRepository(Protocol):
+    def get(self, turn_id: UUID) -> ConversationTurn | None: ...
+
+    def list_for_session(self, session_id: UUID) -> list[ConversationTurn]: ...
+
+    def save(self, turn: ConversationTurn) -> None: ...
 
 
 class AgentAdapter(Protocol):

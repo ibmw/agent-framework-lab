@@ -14,7 +14,7 @@ typecheck:
 	pnpm typecheck
 
 test:
-	uv run pytest -m "not migration"
+	uv run pytest -m "not migration and not live_model"
 	pnpm test
 
 test-migrations:

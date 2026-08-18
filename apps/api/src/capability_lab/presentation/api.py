@@ -1,4 +1,5 @@
-from collections.abc import Awaitable, Callable, Generator
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
@@ -13,7 +14,18 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from capability_lab.application.ports import Clock
+from capability_lab.application.conversations import (
+    AgentExecutionError,
+    AgentFrameworkNotFoundError,
+    AgentRegistry,
+    AgentTransientError,
+    ConversationConflictError,
+    ConversationNotFoundError,
+    ConversationService,
+    FrameworkDeclaration,
+    InvalidConversationMessageError,
+)
+from capability_lab.application.ports import Clock, ConversationTurn
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioNotFoundError,
@@ -26,7 +38,8 @@ from capability_lab.application.scenario_generation import (
     create_retail_profile_kernel,
 )
 from capability_lab.application.scenario_registry import ScenarioNotFoundError
-from capability_lab.domain.entities import MAX_SCENARIO_SEED
+from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
+from capability_lab.infrastructure.agents.registry import create_agent_registry
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.config import Settings, get_settings
 from capability_lab.infrastructure.database import (
@@ -35,11 +48,15 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.infrastructure.repositories import (
+    ConversationTurnConflictError,
     GeneratedScenarioConflictError,
     PersistedScenarioIntegrityError,
+    SqlAlchemyConversationTurnRepository,
     SqlAlchemyGeneratedScenarioRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
+    SqlAlchemySessionRepository,
 )
+from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
 
 API_TITLE = "Agent Framework Capability Lab API"
 API_VERSION = "1.0.0"
@@ -207,6 +224,125 @@ class GeneratedScenarioResponse(StrictApiModel):
                     for order in sorted(state.orders, key=lambda item: str(item.id))
                 ],
             ),
+        )
+
+
+class StartConversationRequest(StrictApiModel):
+    scenario_id: str = Field(
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+    )
+    scenario_version: str = Field(min_length=2, max_length=64, pattern=r"^v[1-9][0-9]*$")
+    seed: int = Field(ge=0, le=MAX_SCENARIO_SEED)
+    framework_id: str = Field(min_length=1, max_length=64)
+
+
+class SendConversationMessageRequest(StrictApiModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class AgentFrameworkResponse(StrictApiModel):
+    framework_id: str
+    available: bool
+    model_id: str | None
+    capabilities: list[str]
+    unavailability_reason: str | None = None
+
+    @classmethod
+    def from_declaration(cls, declaration: FrameworkDeclaration) -> Self:
+        return cls(
+            framework_id=declaration.framework_id,
+            available=declaration.available,
+            model_id=declaration.model_id,
+            capabilities=list(declaration.capabilities),
+            unavailability_reason=declaration.unavailability_reason,
+        )
+
+
+class AgentFrameworkListResponse(StrictApiModel):
+    frameworks: list[AgentFrameworkResponse]
+
+
+class ToolActivityResponse(StrictApiModel):
+    tool_name: str
+    tool_version: str
+    outcome: str
+    result: dict[str, object]
+
+
+class StructuredSupportResultResponse(StrictApiModel):
+    summary: str
+    customer_id: UUID
+    product_ids: list[UUID]
+    order_ids: list[UUID]
+
+
+class ConversationTurnResponse(StrictApiModel):
+    id: UUID
+    ordinal: int
+    request_message: str
+    response_message: str
+    structured_result: StructuredSupportResultResponse
+    tool_activity: list[ToolActivityResponse]
+    trace_id: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_turn(cls, turn: ConversationTurn) -> Self:
+        result = turn.response.structured_result
+        return cls(
+            id=turn.id,
+            ordinal=turn.ordinal,
+            request_message=turn.request_message,
+            response_message=turn.response.message,
+            structured_result=StructuredSupportResultResponse(
+                summary=result.summary,
+                customer_id=result.customer_id,
+                product_ids=list(result.product_ids),
+                order_ids=list(result.order_ids),
+            ),
+            tool_activity=[
+                ToolActivityResponse(
+                    tool_name=activity.tool_name,
+                    tool_version=activity.tool_version,
+                    outcome=activity.outcome,
+                    result=activity.result,
+                )
+                for activity in turn.response.tool_activity
+            ],
+            trace_id=turn.response.trace_id,
+            created_at=turn.created_at,
+        )
+
+
+class ConversationResponse(StrictApiModel):
+    id: UUID
+    customer_id: UUID
+    scenario_id: str
+    scenario_version: str
+    seed: int
+    framework_id: str
+    initial_state_hash: str
+    created_at: datetime
+    turns: list[ConversationTurnResponse]
+
+    @classmethod
+    def from_conversation(
+        cls,
+        value: tuple[ConversationSession, list[ConversationTurn]],
+    ) -> Self:
+        session_value, turns = value
+        return cls(
+            id=session_value.id,
+            customer_id=session_value.customer_id,
+            scenario_id=session_value.scenario_id,
+            scenario_version=session_value.scenario_version,
+            seed=session_value.seed,
+            framework_id=session_value.framework_id,
+            initial_state_hash=session_value.initial_state_hash,
+            created_at=session_value.created_at,
+            turns=[ConversationTurnResponse.from_turn(turn) for turn in turns],
         )
 
 
@@ -381,6 +517,65 @@ async def _generated_scenario_conflict_handler(
     )
 
 
+async def _conversation_not_found_handler(request: Request, _error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=404,
+        code="conversation_not_found",
+        message="The conversation or its generated scenario state was not found",
+    )
+
+
+async def _agent_framework_not_found_handler(request: Request, _error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=422,
+        code="agent_framework_unavailable",
+        message="The requested agent framework is unavailable",
+    )
+
+
+async def _conversation_conflict_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=409,
+        code="conversation_conflict",
+        message=str(error),
+    )
+
+
+async def _conversation_turn_conflict_handler(
+    request: Request,
+    _error: Exception,
+) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=409,
+        code="conversation_advanced",
+        message="The conversation advanced before this message could be persisted; retry it",
+    )
+
+
+async def _invalid_conversation_message_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=422,
+        code="validation_error",
+        message=str(error),
+    )
+
+
+async def _agent_execution_error_handler(request: Request, error: Exception) -> JSONResponse:
+    if not isinstance(error, AgentExecutionError):
+        raise TypeError("agent error handler received an unexpected exception")
+    return _error_response(
+        request,
+        status_code=503 if isinstance(error, AgentTransientError) else 502,
+        code=error.code,
+        message=str(error),
+    )
+
+
 def health() -> HealthResponse:
     return HealthResponse(status="ok", api_version="v1")
 
@@ -391,6 +586,8 @@ def create_app(
     session_factory: sessionmaker[Session] | None = None,
     generation_kernel: ScenarioGenerationKernel | None = None,
     command_clock: Clock | None = None,
+    agent_registry: AgentRegistry | None = None,
+    telemetry: Telemetry | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     if session_factory is None:
@@ -399,8 +596,22 @@ def create_app(
     factory = session_factory
     clock = command_clock or SystemClock()
     kernel = generation_kernel or create_retail_profile_kernel(clock)
+    configured_telemetry = telemetry
+    if agent_registry is None:
+        configured_telemetry = configured_telemetry or create_telemetry(settings)
+        agents = create_agent_registry(settings, configured_telemetry)
+    else:
+        agents = agent_registry
 
-    application = FastAPI(title=API_TITLE, version=API_VERSION)
+    @asynccontextmanager
+    async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
+        try:
+            yield
+        finally:
+            if configured_telemetry is not None:
+                configured_telemetry.shutdown()
+
+    application = FastAPI(title=API_TITLE, version=API_VERSION, lifespan=lifespan)
     application.middleware("http")(_add_request_id)
     application.add_exception_handler(RequestValidationError, _validation_error_handler)
     application.add_exception_handler(ScenarioNotFoundError, _scenario_not_found_handler)
@@ -418,6 +629,21 @@ def create_app(
         GeneratedScenarioConflictError,
         _generated_scenario_conflict_handler,
     )
+    application.add_exception_handler(ConversationNotFoundError, _conversation_not_found_handler)
+    application.add_exception_handler(
+        AgentFrameworkNotFoundError,
+        _agent_framework_not_found_handler,
+    )
+    application.add_exception_handler(ConversationConflictError, _conversation_conflict_handler)
+    application.add_exception_handler(
+        ConversationTurnConflictError,
+        _conversation_turn_conflict_handler,
+    )
+    application.add_exception_handler(
+        InvalidConversationMessageError,
+        _invalid_conversation_message_handler,
+    )
+    application.add_exception_handler(AgentExecutionError, _agent_execution_error_handler)
     application.add_exception_handler(PersistedScenarioIntegrityError, _internal_error_handler)
     application.add_exception_handler(IdempotencyStateNotFoundError, _internal_error_handler)
     application.add_exception_handler(ScenarioGeneratorNotConfiguredError, _internal_error_handler)
@@ -438,6 +664,16 @@ def create_app(
                 kernel,
                 SqlAlchemyGeneratedScenarioRepository(session),
                 SqlAlchemyScenarioGenerationIdempotencyRepository(session),
+                clock,
+            )
+
+    def conversation_service() -> Generator[ConversationService, None, None]:
+        with session_scope(factory) as session:
+            yield ConversationService(
+                SqlAlchemySessionRepository(session),
+                SqlAlchemyConversationTurnRepository(session),
+                SqlAlchemyGeneratedScenarioRepository(session),
+                agents,
                 clock,
             )
 
@@ -474,6 +710,54 @@ def create_app(
             service.get(scenario_id, scenario_version, seed)
         )
 
+    def list_agent_frameworks() -> AgentFrameworkListResponse:
+        return AgentFrameworkListResponse(
+            frameworks=[
+                AgentFrameworkResponse.from_declaration(value) for value in agents.declarations()
+            ]
+        )
+
+    def start_conversation(
+        command: StartConversationRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(alias="Idempotency-Key", min_length=1, max_length=128),
+        ],
+        service: Annotated[ConversationService, Depends(conversation_service)],
+    ) -> ConversationResponse:
+        return ConversationResponse.from_conversation(
+            service.start(
+                scenario_id=command.scenario_id,
+                scenario_version=command.scenario_version,
+                seed=command.seed,
+                framework_id=command.framework_id,
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    def get_conversation(
+        session_id: UUID,
+        service: Annotated[ConversationService, Depends(conversation_service)],
+    ) -> ConversationResponse:
+        return ConversationResponse.from_conversation(service.get(session_id))
+
+    async def send_conversation_message(
+        session_id: UUID,
+        command: SendConversationMessageRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(alias="Idempotency-Key", min_length=1, max_length=128),
+        ],
+        service: Annotated[ConversationService, Depends(conversation_service)],
+    ) -> ConversationResponse:
+        return ConversationResponse.from_conversation(
+            await service.send(
+                session_id,
+                command.message,
+                idempotency_key=idempotency_key,
+            )
+        )
+
     router.add_api_route(
         "/health",
         health,
@@ -482,6 +766,61 @@ def create_app(
         operation_id="getHealth",
         summary="Report API availability",
         response_description="Service available",
+    )
+    router.add_api_route(
+        "/agent-frameworks",
+        list_agent_frameworks,
+        methods=["GET"],
+        response_model=AgentFrameworkListResponse,
+        operation_id="listAgentFrameworks",
+        summary="List agent frameworks and proven capabilities",
+    )
+    router.add_api_route(
+        "/conversations",
+        start_conversation,
+        methods=["POST"],
+        status_code=201,
+        response_model=ConversationResponse,
+        operation_id="startConversation",
+        summary="Start a support conversation from generated scenario state",
+        responses={
+            404: {"model": ErrorResponse, "description": "Generated state is not found"},
+            409: {"model": ErrorResponse, "description": "Idempotency conflict"},
+            422: {"model": ErrorResponse, "description": "Invalid command or framework"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
+        "/conversations/{session_id}",
+        get_conversation,
+        methods=["GET"],
+        response_model=ConversationResponse,
+        operation_id="getConversation",
+        summary="Resume a persisted support conversation",
+        responses={
+            404: {"model": ErrorResponse, "description": "Conversation is not found"},
+            422: {"model": ErrorResponse, "description": "Invalid session ID"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
+        "/conversations/{session_id}/messages",
+        send_conversation_message,
+        methods=["POST"],
+        response_model=ConversationResponse,
+        operation_id="sendConversationMessage",
+        summary="Send one message to a support conversation",
+        responses={
+            404: {"model": ErrorResponse, "description": "Conversation is not found"},
+            409: {
+                "model": ErrorResponse,
+                "description": "Idempotency or advanced-conversation conflict",
+            },
+            422: {"model": ErrorResponse, "description": "Invalid message"},
+            502: {"model": ErrorResponse, "description": "Agent execution failed"},
+            503: {"model": ErrorResponse, "description": "Transient agent failure"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
     )
     router.add_api_route(
         "/scenarios/{scenario_id}/versions/{scenario_version}/generations",

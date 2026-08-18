@@ -1,4 +1,4 @@
-import type { GeneratedScenarioResponse } from "@agent-lab/contracts";
+import type { ConversationResponse, GeneratedScenarioResponse } from "@agent-lab/contracts";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
@@ -67,10 +67,53 @@ const generatedPersona: GeneratedScenarioResponse = {
   },
 };
 
+const emptyConversation: ConversationResponse = {
+  id: "10000000-0000-4000-8000-000000000000",
+  customer_id: generatedPersona.initial_state.customer.id,
+  scenario_id: "retail-profile",
+  scenario_version: "v1",
+  seed: 20_260_816,
+  framework_id: "fake",
+  initial_state_hash: generatedPersona.initial_state_hash,
+  created_at: "2026-08-18T12:00:00Z",
+  turns: [],
+};
+
+const conversationWithTurn: ConversationResponse = {
+  ...emptyConversation,
+  turns: [
+    {
+      id: "20000000-0000-4000-8000-000000000000",
+      ordinal: 1,
+      request_message: "What orders are on my account?",
+      response_message: "I found one paid order.",
+      structured_result: {
+        summary: "Customer profile, product catalog, and order history retrieved.",
+        customer_id: generatedPersona.initial_state.customer.id,
+        product_ids: generatedPersona.initial_state.products.map((product) => product.id),
+        order_ids: generatedPersona.initial_state.orders.map((order) => order.id),
+      },
+      tool_activity: [
+        {
+          tool_name: "list_customer_orders",
+          tool_version: "v1",
+          outcome: "success",
+          result: { orders: [] },
+        },
+      ],
+      trace_id: "a".repeat(32),
+      created_at: "2026-08-18T12:01:00Z",
+    },
+  ],
+};
+
 const server = setupServer();
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  window.localStorage.clear();
+});
 afterAll(() => server.close());
 
 async function enterReplayInputs() {
@@ -164,5 +207,73 @@ describe("human persona journey", () => {
       screen.queryByRole("heading", { name: "Your generated persona will appear here." }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generate persona" })).toBeEnabled();
+  });
+
+  it("starts a support conversation and exposes tool and trace evidence", async () => {
+    server.use(
+      http.post(generationUrl, () => HttpResponse.json(generatedPersona, { status: 201 })),
+      http.get("*/api/v1/agent-frameworks", () =>
+        HttpResponse.json({
+          frameworks: [
+            {
+              framework_id: "fake",
+              available: true,
+              model_id: null,
+              capabilities: ["tool_calls", "session_resume", "structured_output"],
+            },
+            {
+              framework_id: "pydantic-ai",
+              available: false,
+              model_id: "gpt-5-mini",
+              capabilities: [],
+              unavailability_reason: "credential missing",
+            },
+          ],
+        }),
+      ),
+      http.post("*/api/v1/conversations", () =>
+        HttpResponse.json(emptyConversation, { status: 201 }),
+      ),
+      http.post("*/api/v1/conversations/*/messages", async ({ request }) => {
+        expect(await request.json()).toEqual({ message: "What orders are on my account?" });
+        return HttpResponse.json(conversationWithTurn);
+      }),
+    );
+    render(<App />);
+    const user = await enterReplayInputs();
+    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+    await screen.findByRole("heading", { name: "Maya Chen" });
+
+    await user.click(screen.getByRole("button", { name: "Start support conversation" }));
+    expect(
+      await screen.findByRole("heading", { name: "Read-only support conversation" }),
+    ).toBeVisible();
+    expect(screen.getByText("pydantic-ai · unsupported locally")).toBeVisible();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Support message" }),
+      "What orders are on my account?",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("I found one paid order.")).toBeVisible();
+    expect(screen.getByText("list_customer_orders@v1 · success")).toBeVisible();
+    expect(screen.getByText("a".repeat(32))).toBeVisible();
+  });
+
+  it("resumes a saved support session on reload", async () => {
+    window.localStorage.setItem("agent-lab-support-session", emptyConversation.id);
+    server.use(
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(conversationWithTurn),
+      ),
+    );
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Read-only support conversation" }),
+    ).toBeVisible();
+    expect(await screen.findByText("I found one paid order.")).toBeVisible();
   });
 });

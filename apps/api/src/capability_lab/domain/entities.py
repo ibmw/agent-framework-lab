@@ -255,13 +255,20 @@ class ConversationSession:
     id: UUID
     customer_id: UUID
     seed: int
+    scenario_id: str
     scenario_version: str
+    framework_id: str
     initial_state_hash: str
     created_at: datetime
 
     def __post_init__(self) -> None:
+        _require_uuid(self.id, "session ID")
+        _require_uuid(self.customer_id, "session customer ID")
         _require_scenario_seed(self.seed)
+        _require_scenario_id(self.scenario_id)
         _require_version(self.scenario_version, "scenario version")
+        if not self.framework_id.strip() or len(self.framework_id) > 64:
+            raise DomainError("framework ID must contain at most 64 non-blank characters")
         if _SHA256_PATTERN.fullmatch(self.initial_state_hash) is None:
             raise DomainError("initial state hash must be a SHA-256 hex digest")
         _require_utc(self.created_at, "session created_at")

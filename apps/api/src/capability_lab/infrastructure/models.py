@@ -65,8 +65,28 @@ class ConversationSessionModel(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"))
     seed: Mapped[int] = mapped_column(BigInteger)
+    scenario_id: Mapped[str] = mapped_column(String(64), server_default="retail-profile")
     scenario_version: Mapped[str] = mapped_column(String(64))
+    framework_id: Mapped[str] = mapped_column(String(64), server_default="fake")
     initial_state_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ConversationTurnModel(Base):
+    __tablename__ = "conversation_turns"
+    __table_args__ = (
+        UniqueConstraint("session_id", "ordinal", name="uq_conversation_turns_ordinal"),
+        Index("ix_conversation_turns_session_id", "session_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("conversation_sessions.id"))
+    ordinal: Mapped[int] = mapped_column(Integer)
+    request_message: Mapped[str] = mapped_column(String(4000))
+    response_message: Mapped[str] = mapped_column(String(8000))
+    structured_result: Mapped[dict[str, object]] = mapped_column(JSON)
+    tool_activity: Mapped[list[dict[str, object]]] = mapped_column(JSON)
+    trace_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
 
 

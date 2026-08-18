@@ -11,6 +11,7 @@ def isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, 
     monkeypatch.setenv("AGENT_LAB_DATABASE_URL", "sqlite://")
     monkeypatch.setenv("AGENT_LAB_FRONTEND_ORIGIN", "http://localhost:5173")
     monkeypatch.setenv("AGENT_LAB_LOG_LEVEL", "INFO")
+    monkeypatch.setenv("AGENT_LAB_TELEMETRY_HASH_SALT", "test-only-telemetry-salt")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

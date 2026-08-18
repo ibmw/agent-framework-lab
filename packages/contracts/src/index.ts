@@ -5,5 +5,10 @@ export type { components, operations, paths } from "./generated/v1";
 import type { components } from "./generated/v1";
 
 export type ErrorResponse = components["schemas"]["ErrorResponse"];
+export type AgentFrameworkListResponse = components["schemas"]["AgentFrameworkListResponse"];
+export type ConversationResponse = components["schemas"]["ConversationResponse"];
 export type GenerateScenarioRequest = components["schemas"]["GenerateScenarioRequest"];
 export type GeneratedScenarioResponse = components["schemas"]["GeneratedScenarioResponse"];
+export type SendConversationMessageRequest =
+  components["schemas"]["SendConversationMessageRequest"];
+export type StartConversationRequest = components["schemas"]["StartConversationRequest"];

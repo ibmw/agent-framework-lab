@@ -46,7 +46,10 @@ venv = ".venv"
 addopts = "--strict-config --strict-markers --cov=capability_lab --cov-report=term-missing"
 asyncio_mode = "auto"
 testpaths = ["apps/api/tests"]
-markers = ["migration: exercises Alembic against a real temporary database"]
+markers = [
+  "live_model: makes an explicit opt-in call to a configured model provider",
+  "migration: exercises Alembic against a real temporary database",
+]
 
 [tool.coverage.run]
 branch = true

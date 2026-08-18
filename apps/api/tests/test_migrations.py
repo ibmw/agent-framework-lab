@@ -29,6 +29,7 @@ APPLICATION_TABLES = {
     "orders",
     "personas",
     "conversation_sessions",
+    "conversation_turns",
     "memory_records",
     "idempotency_records",
 }
@@ -58,6 +59,12 @@ def test_upgrade_empty_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert {"ix_orders_customer_id"} <= {index["name"] for index in inspector.get_indexes("orders")}
     assert {"ix_conversation_sessions_customer_id"} <= {
         index["name"] for index in inspector.get_indexes("conversation_sessions")
+    }
+    assert {"ix_conversation_turns_session_id"} <= {
+        index["name"] for index in inspector.get_indexes("conversation_turns")
+    }
+    assert {"scenario_id", "framework_id"} <= {
+        column["name"] for column in inspector.get_columns("conversation_sessions")
     }
     assert {"ix_memory_records_session_id"} <= {
         index["name"] for index in inspector.get_indexes("memory_records")
@@ -129,11 +136,15 @@ def test_seed_bigint_migration_preserves_existing_session(
     command.upgrade(config, "head")
 
     with engine.connect() as connection:
-        migrated_seed = connection.scalar(
-            text("SELECT seed FROM conversation_sessions WHERE id = :id"),
+        migrated_session = connection.execute(
+            text(
+                "SELECT seed, scenario_id, framework_id FROM conversation_sessions WHERE id = :id"
+            ),
             {"id": "308d5e20-1319-4c00-ad4f-8d97dfa8b07b"},
-        )
-    assert migrated_seed == MAX_SCENARIO_SEED
+        ).one()
+    assert migrated_session.seed == MAX_SCENARIO_SEED
+    assert migrated_session.scenario_id == "retail-profile"
+    assert migrated_session.framework_id == "fake"
 
 
 @pytest.mark.migration
@@ -191,7 +202,7 @@ def test_downgrade_refuses_populated_generated_state_without_schema_damage(
     assert set(inspector.get_table_names()) >= APPLICATION_TABLES
     assert not any(table.startswith("_alembic_tmp") for table in inspector.get_table_names())
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260816_0003"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260818_0004"
         assert connection.scalar(text("SELECT count(*) FROM generated_scenarios")) == 3
 
     with engine.begin() as connection:
@@ -210,7 +221,7 @@ def test_downgrade_refuses_populated_generated_state_without_schema_damage(
     assert set(inspector.get_table_names()) >= APPLICATION_TABLES
     assert not any(table.startswith("_alembic_tmp") for table in inspector.get_table_names())
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260816_0003"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260818_0004"
         assert (
             connection.scalar(
                 text(

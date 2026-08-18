@@ -21,6 +21,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/agent-frameworks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List agent frameworks and proven capabilities */
+    get: operations["listAgentFrameworks"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Start a support conversation from generated scenario state */
+    post: operations["startConversation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Resume a persisted support conversation */
+    get: operations["getConversation"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{session_id}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Send one message to a support conversation */
+    post: operations["sendConversationMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations": {
     parameters: {
       query?: never;
@@ -59,6 +127,78 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** AgentFrameworkListResponse */
+    AgentFrameworkListResponse: {
+      /** Frameworks */
+      frameworks: components["schemas"]["AgentFrameworkResponse"][];
+    };
+    /** AgentFrameworkResponse */
+    AgentFrameworkResponse: {
+      /** Framework Id */
+      framework_id: string;
+      /** Available */
+      available: boolean;
+      /** Model Id */
+      model_id: string | null;
+      /** Capabilities */
+      capabilities: string[];
+      /** Unavailability Reason */
+      unavailability_reason?: string | null;
+    };
+    /** ConversationResponse */
+    ConversationResponse: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Customer Id
+       * Format: uuid
+       */
+      customer_id: string;
+      /** Scenario Id */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: string;
+      /** Seed */
+      seed: number;
+      /** Framework Id */
+      framework_id: string;
+      /** Initial State Hash */
+      initial_state_hash: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Turns */
+      turns: components["schemas"]["ConversationTurnResponse"][];
+    };
+    /** ConversationTurnResponse */
+    ConversationTurnResponse: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Ordinal */
+      ordinal: number;
+      /** Request Message */
+      request_message: string;
+      /** Response Message */
+      response_message: string;
+      structured_result: components["schemas"]["StructuredSupportResultResponse"];
+      /** Tool Activity */
+      tool_activity: components["schemas"]["ToolActivityResponse"][];
+      /** Trace Id */
+      trace_id: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
     /** CustomerResponse */
     CustomerResponse: {
       /**
@@ -213,6 +353,49 @@ export interface components {
       /** Policy Set Version */
       policy_set_version: string;
     };
+    /** SendConversationMessageRequest */
+    SendConversationMessageRequest: {
+      /** Message */
+      message: string;
+    };
+    /** StartConversationRequest */
+    StartConversationRequest: {
+      /** Scenario Id */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: string;
+      /** Seed */
+      seed: number;
+      /** Framework Id */
+      framework_id: string;
+    };
+    /** StructuredSupportResultResponse */
+    StructuredSupportResultResponse: {
+      /** Summary */
+      summary: string;
+      /**
+       * Customer Id
+       * Format: uuid
+       */
+      customer_id: string;
+      /** Product Ids */
+      product_ids: string[];
+      /** Order Ids */
+      order_ids: string[];
+    };
+    /** ToolActivityResponse */
+    ToolActivityResponse: {
+      /** Tool Name */
+      tool_name: string;
+      /** Tool Version */
+      tool_version: string;
+      /** Outcome */
+      outcome: string;
+      /** Result */
+      result: {
+        [key: string]: unknown;
+      };
+    };
     /** ValidationIssue */
     ValidationIssue: {
       /** Location */
@@ -247,6 +430,219 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HealthResponse"];
+        };
+      };
+    };
+  };
+  listAgentFrameworks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentFrameworkListResponse"];
+        };
+      };
+    };
+  };
+  startConversation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartConversationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationResponse"];
+        };
+      };
+      /** @description Generated state is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Idempotency conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid command or framework */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationResponse"];
+        };
+      };
+      /** @description Conversation is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid session ID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  sendConversationMessage: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SendConversationMessageRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationResponse"];
+        };
+      };
+      /** @description Conversation is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Idempotency or advanced-conversation conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid message */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Agent execution failed */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Transient agent failure */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
         };
       };
     };

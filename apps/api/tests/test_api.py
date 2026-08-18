@@ -2,16 +2,29 @@ import asyncio
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import Mock
+from uuid import UUID
 
+import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from opentelemetry.sdk.trace import TracerProvider
 
+from capability_lab.application.ports import (
+    AgentResponse,
+    ConversationTurn,
+    StructuredSupportResult,
+)
 from capability_lab.application.scenario_generation import (
     ScenarioGenerationKernel,
     create_retail_profile_kernel,
 )
 from capability_lab.application.scenario_registry import ScenarioRegistry
-from capability_lab.domain.entities import CanonicalInitialState, ScenarioDefinition
+from capability_lab.domain.entities import (
+    CanonicalInitialState,
+    ConversationSession,
+    ScenarioDefinition,
+)
 from capability_lab.domain.scenario_generation import (
     RETAIL_PROFILE_V1,
     generate_retail_profile_v1,
@@ -22,6 +35,13 @@ from capability_lab.infrastructure.database import (
     create_session_factory,
 )
 from capability_lab.infrastructure.models import IdempotencyRecordModel, ProductModel
+from capability_lab.infrastructure.repositories import (
+    ConversationTurnConflictError,
+    SqlAlchemyConversationTurnRepository,
+    SqlAlchemyGeneratedScenarioRepository,
+    SqlAlchemySessionRepository,
+)
+from capability_lab.infrastructure.telemetry import Telemetry
 from capability_lab.presentation.api import create_app
 
 
@@ -69,6 +89,24 @@ async def test_local_frontend_origin_is_allowed() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+async def test_application_lifespan_flushes_and_shuts_down_telemetry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = TracerProvider()
+    force_flush = Mock(return_value=True)
+    shutdown = Mock()
+    monkeypatch.setattr(provider, "force_flush", force_flush)
+    monkeypatch.setattr(provider, "shutdown", shutdown)
+    telemetry = Telemetry(provider.get_tracer("test"), b"unit-test-salt", provider)
+    application = create_app(telemetry=telemetry)
+
+    async with application.router.lifespan_context(application):
+        pass
+
+    force_flush.assert_called_once_with()
+    shutdown.assert_called_once_with()
 
 
 async def test_unmatched_route_and_method_use_structured_errors() -> None:
@@ -374,3 +412,238 @@ async def test_new_idempotency_key_records_command_time_for_existing_state(
         assert august_record is not None
         assert january_record.created_at == january
         assert august_record.created_at == august
+
+
+async def test_support_conversation_starts_sends_and_resumes_with_neutral_contract(
+    tmp_path: Path,
+) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    generation_path = "/api/v1/scenarios/retail-profile/versions/v1/generations"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        frameworks = await client.get("/api/v1/agent-frameworks")
+        generated = await client.post(
+            generation_path,
+            headers={"Idempotency-Key": "support-state"},
+            json={"seed": 1234},
+        )
+        started = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "support-session"},
+            json={
+                "scenario_id": "retail-profile",
+                "scenario_version": "v1",
+                "seed": 1234,
+                "framework_id": "fake",
+            },
+        )
+        replayed_start = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "support-session"},
+            json={
+                "scenario_id": "retail-profile",
+                "scenario_version": "v1",
+                "seed": 1234,
+                "framework_id": "fake",
+            },
+        )
+        session_id = started.json()["id"]
+        sent = await client.post(
+            f"/api/v1/conversations/{session_id}/messages",
+            headers={"Idempotency-Key": "support-turn-1"},
+            json={"message": "What orders and products are on my account?"},
+        )
+        replayed_turn = await client.post(
+            f"/api/v1/conversations/{session_id}/messages",
+            headers={"Idempotency-Key": "support-turn-1"},
+            json={"message": "What orders and products are on my account?"},
+        )
+        resumed = await client.get(f"/api/v1/conversations/{session_id}")
+
+    assert frameworks.status_code == 200
+    declarations = {item["framework_id"]: item for item in frameworks.json()["frameworks"]}
+    assert declarations["fake"]["available"] is True
+    assert "tool_calls" in declarations["fake"]["capabilities"]
+    assert declarations["pydantic-ai"]["available"] is True
+    assert generated.status_code == 201
+    assert started.status_code == replayed_start.status_code == 201
+    assert started.json() == replayed_start.json()
+    assert sent.status_code == replayed_turn.status_code == 200
+    assert sent.json() == replayed_turn.json() == resumed.json()
+    payload = sent.json()
+    assert payload["framework_id"] == "fake"
+    assert payload["initial_state_hash"] == generated.json()["initial_state_hash"]
+    assert len(payload["turns"]) == 1
+    turn = payload["turns"][0]
+    assert turn["response_message"]
+    assert turn["structured_result"]["customer_id"] == payload["customer_id"]
+    assert {activity["tool_name"] for activity in turn["tool_activity"]} == {
+        "read_customer",
+        "list_products",
+        "list_customer_orders",
+    }
+    assert len(turn["trace_id"]) == 32
+
+
+async def test_support_conversation_rejects_missing_state_and_idempotency_reuse(
+    tmp_path: Path,
+) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    command = {
+        "scenario_id": "retail-profile",
+        "scenario_version": "v1",
+        "seed": 7,
+        "framework_id": "fake",
+    }
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        missing = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "missing-state"},
+            json=command,
+        )
+        await client.post(
+            "/api/v1/scenarios/retail-profile/versions/v1/generations",
+            headers={"Idempotency-Key": "state-seven"},
+            json={"seed": 7},
+        )
+        started = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "reused-conversation"},
+            json=command,
+        )
+        conflict = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "reused-conversation"},
+            json={**command, "framework_id": "pydantic-ai"},
+        )
+        session_id = started.json()["id"]
+        first_turn = await client.post(
+            f"/api/v1/conversations/{session_id}/messages",
+            headers={"Idempotency-Key": "reused-turn"},
+            json={"message": "First normalized question"},
+        )
+        turn_conflict = await client.post(
+            f"/api/v1/conversations/{session_id}/messages",
+            headers={"Idempotency-Key": "reused-turn"},
+            json={"message": "Different question"},
+        )
+
+    assert missing.status_code == 404
+    assert started.status_code == 201
+    assert first_turn.status_code == 200
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "conversation_conflict"
+    assert turn_conflict.status_code == 409
+    assert turn_conflict.json()["code"] == "conversation_conflict"
+
+
+def test_conversation_turn_repository_translates_advanced_ordinal_conflict(
+    tmp_path: Path,
+) -> None:
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'turn-conflict.db'}")
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    generated = create_retail_profile_kernel(FixedClock()).generate(
+        "retail-profile",
+        "v1",
+        1234,
+    )
+    session_id = UUID("10000000-0000-4000-8000-000000000000")
+    response = AgentResponse(
+        message="A grounded answer",
+        structured_result=StructuredSupportResult(
+            summary="Account summary",
+            customer_id=generated.state.customer.id,
+            product_ids=(),
+            order_ids=(),
+        ),
+        tool_activity=(),
+    )
+
+    with factory() as database_session:
+        SqlAlchemyGeneratedScenarioRepository(database_session).save(generated)
+        SqlAlchemySessionRepository(database_session).save(
+            ConversationSession(
+                id=session_id,
+                customer_id=generated.state.customer.id,
+                seed=generated.metadata.seed,
+                scenario_id=generated.metadata.scenario_id,
+                scenario_version=generated.metadata.scenario_version,
+                framework_id="fake",
+                initial_state_hash=generated.initial_state_hash,
+                created_at=FixedClock().now(),
+            )
+        )
+        turns = SqlAlchemyConversationTurnRepository(database_session)
+        turns.save(
+            ConversationTurn(
+                id=UUID("20000000-0000-4000-8000-000000000001"),
+                session_id=session_id,
+                ordinal=1,
+                request_message="First message",
+                response=response,
+                created_at=FixedClock().now(),
+            )
+        )
+
+        with pytest.raises(
+            ConversationTurnConflictError,
+            match=f"conversation {session_id} advanced past ordinal 1",
+        ):
+            turns.save(
+                ConversationTurn(
+                    id=UUID("20000000-0000-4000-8000-000000000002"),
+                    session_id=session_id,
+                    ordinal=1,
+                    request_message="Concurrent message",
+                    response=response,
+                    created_at=FixedClock().now(),
+                )
+            )
+
+
+async def test_advanced_conversation_turn_is_a_retryable_conflict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    application = integration_app(tmp_path)
+    transport = ASGITransport(app=application)
+    generation_path = "/api/v1/scenarios/retail-profile/versions/v1/generations"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post(
+            generation_path,
+            headers={"Idempotency-Key": "advanced-turn-state"},
+            json={"seed": 81},
+        )
+        started = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "advanced-turn-session"},
+            json={
+                "scenario_id": "retail-profile",
+                "scenario_version": "v1",
+                "seed": 81,
+                "framework_id": "fake",
+            },
+        )
+
+        def reject_advanced_turn(
+            _repository: SqlAlchemyConversationTurnRepository,
+            turn: ConversationTurn,
+        ) -> None:
+            raise ConversationTurnConflictError(
+                f"conversation {turn.session_id} advanced past ordinal {turn.ordinal}"
+            )
+
+        monkeypatch.setattr(
+            SqlAlchemyConversationTurnRepository,
+            "save",
+            reject_advanced_turn,
+        )
+        conflict = await client.post(
+            f"/api/v1/conversations/{started.json()['id']}/messages",
+            headers={"Idempotency-Key": "advanced-turn-message"},
+            json={"message": "What is on my account?"},
+        )
+
+    assert conflict.status_code == 409
+    assert conflict.json()["code"] == "conversation_advanced"
+    assert "retry" in conflict.json()["message"]
