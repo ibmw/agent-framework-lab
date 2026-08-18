@@ -103,6 +103,7 @@ function PersonaResult({
   onRetrieve,
   onStartSupport,
   supportStarting,
+  supportStarted,
 }: {
   result: GeneratedScenarioResponse;
   source: ResultSource;
@@ -110,6 +111,7 @@ function PersonaResult({
   onRetrieve: () => void;
   onStartSupport: () => void;
   supportStarting: boolean;
+  supportStarted: boolean;
 }) {
   const { metadata, initial_state: initialState } = result;
   const { persona } = initialState;
@@ -214,14 +216,20 @@ function PersonaResult({
           className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-lg bg-lab-ink px-4 font-bold text-lab-paper transition hover:bg-lab-ink-hover disabled:cursor-not-allowed disabled:opacity-65"
           type="button"
           onClick={onStartSupport}
-          disabled={requestState !== "idle" || supportStarting}
+          disabled={requestState !== "idle" || supportStarting || supportStarted}
         >
           {supportStarting ? (
             <LoaderCircle className="motion-safe:animate-spin" aria-hidden="true" size={16} />
+          ) : supportStarted ? (
+            <Check aria-hidden="true" size={16} />
           ) : (
             <MessageCircle aria-hidden="true" size={16} />
           )}
-          {supportStarting ? "Starting support…" : "Start support conversation"}
+          {supportStarting
+            ? "Starting support…"
+            : supportStarted
+              ? "Support conversation started"
+              : "Start support conversation"}
         </button>
       </div>
     </section>
@@ -281,6 +289,9 @@ export function App() {
     setValidationError(undefined);
     setRequestState("generating");
     setResult(undefined);
+    setConversation(undefined);
+    setFrameworks([]);
+    window.localStorage.removeItem("agent-lab-support-session");
 
     try {
       const generated = await generateScenario(selectedOption, Number(seedInput.trim()));
@@ -493,7 +504,7 @@ export function App() {
             <button
               className="inline-flex min-h-13 items-center justify-center gap-2.5 rounded-lg bg-lab-ink font-bold text-lab-paper transition hover:-translate-y-px hover:bg-lab-ink-hover disabled:cursor-not-allowed disabled:opacity-65"
               type="submit"
-              disabled={requestState !== "idle"}
+              disabled={requestState !== "idle" || supportStarting}
             >
               {requestState === "generating" ? (
                 <>
@@ -550,6 +561,7 @@ export function App() {
               onRetrieve={handleRetrieve}
               onStartSupport={handleStartSupport}
               supportStarting={supportStarting}
+              supportStarted={conversation !== undefined}
             />
           )}
 

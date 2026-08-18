@@ -293,6 +293,10 @@ describe("human persona journey", () => {
   });
 
   it("starts a support conversation and exposes tool and trace evidence", async () => {
+    let releaseStart: (() => void) | undefined;
+    const startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
     server.use(
       http.post(generationUrl, () => HttpResponse.json(generatedPersona, { status: 201 })),
       http.get("*/api/v1/agent-frameworks", () =>
@@ -314,9 +318,10 @@ describe("human persona journey", () => {
           ],
         }),
       ),
-      http.post("*/api/v1/conversations", () =>
-        HttpResponse.json(emptyConversation, { status: 201 }),
-      ),
+      http.post("*/api/v1/conversations", async () => {
+        await startGate;
+        return HttpResponse.json(emptyConversation, { status: 201 });
+      }),
       http.post("*/api/v1/conversations/*/messages", async ({ request }) => {
         expect(await request.json()).toEqual({ message: "What orders are on my account?" });
         return HttpResponse.json(conversationWithTurn);
@@ -328,7 +333,10 @@ describe("human persona journey", () => {
     await screen.findByRole("heading", { name: "Maya Chen" });
 
     await user.click(screen.getByRole("button", { name: "Start support conversation" }));
+    expect(screen.getByRole("button", { name: "Generate persona" })).toBeDisabled();
+    releaseStart?.();
     expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Support conversation started" })).toBeDisabled();
     expect(conversationGoalCard().getByText(/a clear picture of your account/i)).toBeVisible();
     expect(screen.getByText("pydantic-ai · unsupported locally")).toBeVisible();
 
@@ -342,7 +350,7 @@ describe("human persona journey", () => {
     );
     expect(messageHistory).not.toContainElement(composer);
     expect(composerForm).toContainElement(composer);
-    expect(screen.getByText("Start the conversation as the customer.")).toBeVisible();
+    expect(await screen.findByText("Start the conversation as the customer.")).toBeVisible();
     const suggestion = screen.getByRole("button", { name: "Use suggested customer message" });
     expect(suggestion).toHaveAccessibleDescription(
       "“Hi, could you tell me which orders and products are on my account?”",
@@ -358,6 +366,33 @@ describe("human persona journey", () => {
     expect(await screen.findByText("I found one paid order.")).toBeVisible();
     expect(screen.getByText("list_customer_orders@v1 · success")).toBeVisible();
     expect(screen.getByText("a".repeat(32))).toBeVisible();
+  });
+
+  it("clears the previous support conversation when generating a new persona", async () => {
+    server.use(
+      http.post(generationUrl, () => HttpResponse.json(generatedPersona, { status: 201 })),
+      http.get("*/api/v1/agent-frameworks", () =>
+        HttpResponse.json({
+          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
+        }),
+      ),
+      http.post("*/api/v1/conversations", () =>
+        HttpResponse.json(emptyConversation, { status: 201 }),
+      ),
+    );
+    render(<App />);
+    const user = await enterReplayInputs();
+    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
+
+    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
+    expect(window.localStorage.getItem("agent-lab-support-session")).toBe(emptyConversation.id);
+
+    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+
+    expect(screen.queryByRole("heading", { name: "Support conversation" })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("agent-lab-support-session")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Start support conversation" })).toBeEnabled();
   });
 
   it("resumes a saved support session on reload", async () => {
