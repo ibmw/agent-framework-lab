@@ -8,6 +8,11 @@ export type ErrorResponse = components["schemas"]["ErrorResponse"];
 export type ActionProposalResponse = components["schemas"]["ActionProposalResponse"];
 export type AgentFrameworkListResponse = components["schemas"]["AgentFrameworkListResponse"];
 export type ConversationResponse = components["schemas"]["ConversationResponse"];
+export type ConversationSummaryResponse = components["schemas"]["ConversationSummaryResponse"];
+export type ConversationListResponse = components["schemas"]["ConversationListResponse"];
+export type GeneratedScenarioSummaryResponse =
+  components["schemas"]["GeneratedScenarioSummaryResponse"];
+export type GeneratedScenarioListResponse = components["schemas"]["GeneratedScenarioListResponse"];
 export type GenerateScenarioRequest = components["schemas"]["GenerateScenarioRequest"];
 export type DecideOrderActionRequest = components["schemas"]["DecideOrderActionRequest"];
 export type GeneratedScenarioResponse = components["schemas"]["GeneratedScenarioResponse"];

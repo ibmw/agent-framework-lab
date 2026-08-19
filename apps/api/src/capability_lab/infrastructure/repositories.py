@@ -1,14 +1,25 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import sha256
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import (
+    ColumnElement,
+    Integer,
+    and_,
+    delete,
+    func,
+    select,
+    type_coerce,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
+from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.ports import (
     AgentResponse,
@@ -18,7 +29,11 @@ from capability_lab.application.ports import (
     StructuredSupportResult,
     ToolActivity,
 )
-from capability_lab.application.scenario_generation import GeneratedScenario
+from capability_lab.application.scenario_generation import (
+    GeneratedScenario,
+    GeneratedScenarioSummary,
+    PersonaLibraryFilter,
+)
 from capability_lab.domain.entities import (
     CanonicalInitialState,
     ConversationSession,
@@ -39,14 +54,18 @@ from capability_lab.infrastructure.models import (
     GeneratedScenarioOrderModel,
     GeneratedScenarioProductModel,
     IdempotencyRecordModel,
+    MemoryRecordModel,
     OrderModel,
     PersonaModel,
     ProductModel,
 )
+from capability_lab.infrastructure.sql_types import UtcDateTime
 
 _GENERATION_OPERATION = "generate_scenario_v1"
 _CANCEL_ORDER_OPERATION = "cancel_order_v1"
 _ACTION_DECISION_OPERATION = "decide_order_action_v1"
+_DELETED_CONVERSATION_OPERATION = "deleted_conversation_v1"
+_DELETED_GENERATED_SCENARIO_OPERATION = "deleted_generated_scenario_v1"
 
 
 class GeneratedScenarioConflictError(ValueError):
@@ -368,6 +387,67 @@ class SqlAlchemyActionDecisionIdempotencyRepository:
         return None
 
 
+def _session_last_activity() -> ColumnElement[datetime]:
+    """Latest turn time for a session, falling back to when the session was created."""
+    return type_coerce(
+        func.coalesce(
+            select(func.max(ConversationTurnModel.created_at))
+            .where(ConversationTurnModel.session_id == ConversationSessionModel.id)
+            .correlate(ConversationSessionModel)
+            .scalar_subquery(),
+            ConversationSessionModel.created_at,
+        ),
+        UtcDateTime(),
+    )
+
+
+def _session_turn_count() -> ColumnElement[int]:
+    return type_coerce(
+        select(func.count())
+        .select_from(ConversationTurnModel)
+        .where(ConversationTurnModel.session_id == ConversationSessionModel.id)
+        .correlate(ConversationSessionModel)
+        .scalar_subquery(),
+        Integer(),
+    )
+
+
+def _delete_session_records(session: Session, session_id: str, deleted_at: datetime) -> bool:
+    """Delete one session graph and retain its deterministic identity as a tombstone."""
+    connection = session.connection()
+    connection.execute(
+        delete(ConversationTurnModel).where(ConversationTurnModel.session_id == session_id)
+    )
+    connection.execute(delete(MemoryRecordModel).where(MemoryRecordModel.session_id == session_id))
+    connection.execute(
+        delete(ActionProposalModel).where(ActionProposalModel.session_id == session_id)
+    )
+    result = connection.execute(
+        delete(ConversationSessionModel).where(ConversationSessionModel.id == session_id)
+    )
+    if result.rowcount != 1:
+        return False
+    session.add(
+        IdempotencyRecordModel(
+            key=session_id,
+            operation=_DELETED_CONVERSATION_OPERATION,
+            response={"session_id": session_id},
+            created_at=deleted_at,
+        )
+    )
+    session.flush()
+    return True
+
+
+def _generated_scenario_tombstone_key(
+    scenario_id: str,
+    scenario_version: str,
+    seed: int,
+) -> str:
+    reference = "\x1f".join((scenario_id, scenario_version, str(seed))).encode()
+    return sha256(reference).hexdigest()
+
+
 class SqlAlchemySessionRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -407,6 +487,67 @@ class SqlAlchemySessionRepository:
                 created_at=session.created_at,
             )
         )
+
+    def was_deleted(self, session_id: UUID) -> bool:
+        return (
+            self._session.get(
+                IdempotencyRecordModel,
+                (str(session_id), _DELETED_CONVERSATION_OPERATION),
+            )
+            is not None
+        )
+
+    def delete(self, session_id: UUID, *, deleted_at: datetime) -> bool:
+        return _delete_session_records(self._session, str(session_id), deleted_at)
+
+    def list_summaries(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: ConversationListFilter,
+    ) -> tuple[list[ConversationSummary], int]:
+        activity = _session_last_activity()
+        statement = select(
+            ConversationSessionModel,
+            activity.label("last_activity_at"),
+            _session_turn_count().label("turn_count"),
+        )
+        predicates: list[ColumnElement[bool]] = []
+        if filters.scenario_id is not None:
+            predicates.append(ConversationSessionModel.scenario_id == filters.scenario_id)
+        if filters.scenario_version is not None:
+            predicates.append(ConversationSessionModel.scenario_version == filters.scenario_version)
+        if filters.seed is not None:
+            predicates.append(ConversationSessionModel.seed == filters.seed)
+        if filters.framework_id is not None:
+            predicates.append(ConversationSessionModel.framework_id == filters.framework_id)
+        if filters.active_since is not None:
+            predicates.append(activity >= filters.active_since)
+        if predicates:
+            statement = statement.where(*predicates)
+
+        total = self._session.scalar(select(func.count()).select_from(statement.subquery())) or 0
+        page = (
+            statement.order_by(activity.desc(), ConversationSessionModel.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        summaries = [
+            ConversationSummary(
+                id=UUID(model.id),
+                scenario_id=model.scenario_id,
+                scenario_version=model.scenario_version,
+                seed=model.seed,
+                framework_id=model.framework_id,
+                created_at=model.created_at,
+                last_activity_at=last_activity_at,
+                turn_count=turn_count,
+            )
+            for model, last_activity_at, turn_count in self._session.execute(page).tuples().all()
+        ]
+        return summaries, total
 
 
 class SqlAlchemyConversationTurnRepository:
@@ -689,6 +830,258 @@ class SqlAlchemyGeneratedScenarioRepository:
             )
             for order in state.orders
         )
+
+    def was_deleted(self, scenario_id: str, scenario_version: str, seed: int) -> bool:
+        return (
+            self._session.get(
+                IdempotencyRecordModel,
+                (
+                    _generated_scenario_tombstone_key(scenario_id, scenario_version, seed),
+                    _DELETED_GENERATED_SCENARIO_OPERATION,
+                ),
+            )
+            is not None
+        )
+
+    def delete(
+        self,
+        scenario_id: str,
+        scenario_version: str,
+        seed: int,
+        *,
+        deleted_at: datetime,
+    ) -> bool:
+        generated = self._session.scalar(
+            select(GeneratedScenarioModel).where(
+                GeneratedScenarioModel.scenario_id == scenario_id,
+                GeneratedScenarioModel.scenario_version == scenario_version,
+                GeneratedScenarioModel.seed == seed,
+            )
+        )
+        if generated is None:
+            return False
+
+        fingerprint = generated.initial_state_hash
+        persona_id = generated.persona_id
+        customer_id = generated.customer_id
+        product_ids = list(
+            self._session.scalars(
+                select(GeneratedScenarioProductModel.product_id).where(
+                    GeneratedScenarioProductModel.initial_state_hash == fingerprint
+                )
+            )
+        )
+        order_ids = list(
+            self._session.scalars(
+                select(GeneratedScenarioOrderModel.order_id).where(
+                    GeneratedScenarioOrderModel.initial_state_hash == fingerprint
+                )
+            )
+        )
+        session_ids = list(
+            self._session.scalars(
+                select(ConversationSessionModel.id).where(
+                    ConversationSessionModel.scenario_id == scenario_id,
+                    ConversationSessionModel.scenario_version == scenario_version,
+                    ConversationSessionModel.seed == seed,
+                )
+            )
+        )
+        for session_id in session_ids:
+            if not _delete_session_records(self._session, session_id, deleted_at):
+                raise PersistedScenarioIntegrityError(
+                    f"conversation session {session_id} disappeared during persona deletion"
+                )
+
+        connection = self._session.connection()
+        connection.execute(
+            delete(GeneratedScenarioProductModel).where(
+                GeneratedScenarioProductModel.initial_state_hash == fingerprint
+            )
+        )
+        connection.execute(
+            delete(GeneratedScenarioOrderModel).where(
+                GeneratedScenarioOrderModel.initial_state_hash == fingerprint
+            )
+        )
+        result = connection.execute(
+            delete(GeneratedScenarioModel).where(
+                GeneratedScenarioModel.initial_state_hash == fingerprint
+            )
+        )
+        if result.rowcount != 1:
+            raise PersistedScenarioIntegrityError(
+                "generated scenario disappeared during persona deletion"
+            )
+
+        for order_id in order_ids:
+            still_snapshotted = self._session.scalar(
+                select(GeneratedScenarioOrderModel.order_id)
+                .where(GeneratedScenarioOrderModel.order_id == order_id)
+                .limit(1)
+            )
+            still_proposed = self._session.scalar(
+                select(ActionProposalModel.order_id)
+                .where(ActionProposalModel.order_id == order_id)
+                .limit(1)
+            )
+            if still_snapshotted is None and still_proposed is None:
+                connection.execute(delete(OrderModel).where(OrderModel.id == order_id))
+
+        for product_id in product_ids:
+            still_referenced = self._session.scalar(
+                select(GeneratedScenarioProductModel.product_id)
+                .where(GeneratedScenarioProductModel.product_id == product_id)
+                .limit(1)
+            )
+            if still_referenced is None:
+                connection.execute(delete(ProductModel).where(ProductModel.id == product_id))
+
+        persona_still_referenced = self._session.scalar(
+            select(GeneratedScenarioModel.persona_id)
+            .where(GeneratedScenarioModel.persona_id == persona_id)
+            .limit(1)
+        )
+        if persona_still_referenced is None:
+            connection.execute(delete(PersonaModel).where(PersonaModel.id == persona_id))
+
+        customer_still_referenced = any(
+            value is not None
+            for value in (
+                self._session.scalar(
+                    select(GeneratedScenarioModel.customer_id)
+                    .where(GeneratedScenarioModel.customer_id == customer_id)
+                    .limit(1)
+                ),
+                self._session.scalar(
+                    select(ConversationSessionModel.customer_id)
+                    .where(ConversationSessionModel.customer_id == customer_id)
+                    .limit(1)
+                ),
+                self._session.scalar(
+                    select(OrderModel.customer_id)
+                    .where(OrderModel.customer_id == customer_id)
+                    .limit(1)
+                ),
+            )
+        )
+        if not customer_still_referenced:
+            connection.execute(delete(CustomerModel).where(CustomerModel.id == customer_id))
+
+        tombstone_key = _generated_scenario_tombstone_key(scenario_id, scenario_version, seed)
+        self._session.add(
+            IdempotencyRecordModel(
+                key=tombstone_key,
+                operation=_DELETED_GENERATED_SCENARIO_OPERATION,
+                response={
+                    "scenario_id": scenario_id,
+                    "scenario_version": scenario_version,
+                    "seed": seed,
+                },
+                created_at=deleted_at,
+            )
+        )
+        self._session.flush()
+        return True
+
+    def list_summaries(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: PersonaLibraryFilter,
+    ) -> tuple[list[GeneratedScenarioSummary], int]:
+        # Aggregate each persona's conversation activity without reconstructing the
+        # (heavier) full generated aggregate the way ``get`` does.
+        sessions_select = select(
+            ConversationSessionModel.scenario_id.label("scenario_id"),
+            ConversationSessionModel.scenario_version.label("scenario_version"),
+            ConversationSessionModel.seed.label("seed"),
+            _session_last_activity().label("activity"),
+        )
+        # A framework filter narrows the aggregate to that framework's conversations, so the
+        # count and activity reflect it, and the inner join drops personas without a match.
+        if filters.framework_id is not None:
+            sessions_select = sessions_select.where(
+                ConversationSessionModel.framework_id == filters.framework_id
+            )
+        sessions = sessions_select.subquery()
+        activity_by_persona = (
+            select(
+                sessions.c.scenario_id,
+                sessions.c.scenario_version,
+                sessions.c.seed,
+                func.count().label("conversation_count"),
+                func.max(sessions.c.activity).label("last_activity"),
+            )
+            .group_by(sessions.c.scenario_id, sessions.c.scenario_version, sessions.c.seed)
+            .subquery()
+        )
+
+        activity = type_coerce(
+            func.coalesce(activity_by_persona.c.last_activity, GeneratedScenarioModel.created_at),
+            UtcDateTime(),
+        )
+        conversation_count = type_coerce(
+            func.coalesce(activity_by_persona.c.conversation_count, 0), Integer()
+        )
+
+        statement = (
+            select(
+                GeneratedScenarioModel,
+                PersonaModel,
+                activity.label("last_activity_at"),
+                conversation_count.label("conversation_count"),
+            )
+            .join(PersonaModel, PersonaModel.id == GeneratedScenarioModel.persona_id)
+            .join(
+                activity_by_persona,
+                and_(
+                    activity_by_persona.c.scenario_id == GeneratedScenarioModel.scenario_id,
+                    activity_by_persona.c.scenario_version
+                    == GeneratedScenarioModel.scenario_version,
+                    activity_by_persona.c.seed == GeneratedScenarioModel.seed,
+                ),
+                isouter=filters.framework_id is None,
+            )
+        )
+
+        predicates: list[ColumnElement[bool]] = []
+        if filters.scenario_id is not None:
+            predicates.append(GeneratedScenarioModel.scenario_id == filters.scenario_id)
+        if filters.scenario_version is not None:
+            predicates.append(GeneratedScenarioModel.scenario_version == filters.scenario_version)
+        if filters.active_since is not None:
+            predicates.append(activity >= filters.active_since)
+        if predicates:
+            statement = statement.where(*predicates)
+
+        # Offset paging over a stable order gives page numbers and a total for the UI; the
+        # id tie-breaker keeps the order deterministic when activity timestamps coincide.
+        total = self._session.scalar(select(func.count()).select_from(statement.subquery())) or 0
+        page = (
+            statement.order_by(activity.desc(), GeneratedScenarioModel.initial_state_hash.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        summaries = [
+            GeneratedScenarioSummary(
+                scenario_id=generated.scenario_id,
+                scenario_version=generated.scenario_version,
+                seed=generated.seed,
+                display_name=persona.display_name,
+                locale=persona.locale,
+                initial_state_hash=generated.initial_state_hash,
+                created_at=generated.created_at,
+                last_activity_at=last_activity_at,
+                conversation_count=count,
+            )
+            for generated, persona, last_activity_at, count in self._session.execute(page)
+            .tuples()
+            .all()
+        ]
+        return summaries, total
 
 
 class SqlAlchemyScenarioGenerationIdempotencyRepository:

@@ -37,7 +37,7 @@ that convention when adding or updating guidance.
 - Keep completed checkboxes where they are. Add a milestone to the completed summary only after all
   of its acceptance criteria pass; do not duplicate or relocate individual outcomes.
 
-## Current implementation state — 2026-08-18
+## Current implementation state — 2026-08-19
 
 The foundations already provide:
 
@@ -56,6 +56,11 @@ The foundations already provide:
 - `retail-profile@v1` read-only support and `retail-order-cancellation@v1` safe modifying scenarios;
 - persisted exact action proposals, idempotent optimistic order updates, safe retries, and sanitized
   action lifecycle traces;
+- activity-ordered persona and conversation list endpoints with framework-neutral read models and
+  numbered offset pagination (Prev/Next and page numbers, selectable page size), a URL-addressable
+  persona library filterable by scenario, framework, and activity window, a per-persona conversation
+  history filterable by framework and activity window with hard delete, cascading persona deletion,
+  multiple conversations per persona, and a framework picker;
 - shared quality gates, CI, architecture guidance, and project-local skills.
 
 The project does not yet implement the Vercel AI SDK comparison, regression-scenario runners,
@@ -316,6 +321,49 @@ fingerprints while operational order state advances optimistically and idempoten
 Additional modifying tools, payment processing, external commerce APIs, Temporal, autonomous model
 simulation, and framework scoring.
 
+## Milestone 3.5 — Persona library and conversation journey
+
+### Goal
+
+Make every generated persona and support conversation durably reachable from the UI, and rework the
+single linear flow into two paths: generate a new persona and start a conversation, or revisit a
+persona from a library to resume an existing conversation or start a new one. This is a
+surfacing/navigation change — all persona, conversation, and turn state is already persisted; the
+gap is read endpoints and a journey that exposes them.
+
+### Outcomes
+
+- [x] Add list endpoints for personas and conversations with offset pagination and
+  activity-based ordering (`(last_activity_at DESC, id DESC)`).
+- [x] Define framework-neutral application read models with presentation-only response mappers.
+- [x] Allow multiple conversations per persona via retained command-id idempotency (no migration).
+- [x] Make the journey URL-addressable (React Router) with a persona library and per-persona
+  conversation history; treat `localStorage` only as a fallback.
+- [x] Expose an agent-framework picker when starting a conversation.
+- [x] Hard-delete personas from the library and cascade deletion to their conversations.
+- [x] Record the design and the local-lab, not-tenant-safe listing limitation in an ADR.
+- [x] Add component, integration, and one Playwright journey covering resume vs. new conversation.
+
+### Acceptance criteria
+
+- Past personas and conversations remain reachable from the UI after generating new personas or
+  reloading; no persisted session is orphaned by client-only state.
+- Listings order by most recent activity and page deterministically by number, with a stable
+  secondary key when activity timestamps tie.
+- One persona supports multiple conversations, and a retried "new conversation" command never
+  duplicates a committed session.
+- Deleting a persona removes its generated state and conversations without allowing delayed command
+  retries to recreate either resource.
+- Application read models and repositories expose no FastAPI or SQLAlchemy types; response models
+  remain presentation-only.
+- The global listing behavior is documented as local-lab only and explicitly not tenant-safe.
+
+### Out of scope
+
+Authentication, per-user scoping or tenancy, archiving personas or conversations, cross-persona
+search, server-side full-text history, and any change to deterministic generation or the canonical
+initial-state fingerprint.
+
 ## Milestone 4 — Vercel AI SDK comparison
 
 ### Goal
@@ -396,6 +444,7 @@ lab's framework-neutral contracts.
 - [x] Milestone 1 — Deterministic persona and scenario foundation.
 - [x] Milestone 2 — First Pydantic AI support agent.
 - [x] Milestone 3 — Safe modifying actions.
+- [x] Milestone 3.5 — Persona library and conversation journey.
 
 ## Completed — Project foundations
 

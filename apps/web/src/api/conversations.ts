@@ -1,6 +1,7 @@
 import type {
   ActionProposalResponse,
   AgentFrameworkListResponse,
+  ConversationListResponse,
   ConversationResponse,
   DecideOrderActionRequest,
   ErrorResponse,
@@ -49,13 +50,16 @@ export async function listAgentFrameworks(): Promise<AgentFrameworkListResponse>
 
 export async function startConversation(
   command: StartConversationRequest,
+  commandId: string,
 ): Promise<ConversationResponse> {
   return readResponse(
     await fetch(`${API_BASE_URL}/api/v1/conversations`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Idempotency-Key": `conversation:${command.scenario_id}:${command.scenario_version}:${command.seed}:${command.framework_id}`,
+        // The command id is minted once when the user starts a conversation and reused across
+        // retries, so a retried start recovers the committed session instead of duplicating it.
+        "Idempotency-Key": `conversation:${command.scenario_id}:${command.scenario_version}:${command.seed}:${command.framework_id}:${commandId}`,
       },
       body: JSON.stringify(command),
     }),
@@ -65,6 +69,51 @@ export async function startConversation(
 export async function getConversation(sessionId: string): Promise<ConversationResponse> {
   return readResponse(
     await fetch(`${API_BASE_URL}/api/v1/conversations/${encodeURIComponent(sessionId)}`),
+  );
+}
+
+export interface ConversationHistoryQuery {
+  frameworkId?: string;
+  activeSince?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listConversations(
+  persona: { scenario_id: string; scenario_version: string; seed: number },
+  query: ConversationHistoryQuery = {},
+): Promise<ConversationListResponse> {
+  const params = new URLSearchParams({
+    scenario_id: persona.scenario_id,
+    scenario_version: persona.scenario_version,
+    seed: String(persona.seed),
+  });
+  if (query.frameworkId) params.set("framework_id", query.frameworkId);
+  if (query.activeSince) params.set("active_since", query.activeSince);
+  if (query.page) params.set("page", String(query.page));
+  if (query.pageSize) params.set("page_size", String(query.pageSize));
+  return readResponse(await fetch(`${API_BASE_URL}/api/v1/conversations?${params.toString()}`));
+}
+
+export async function deleteConversation(sessionId: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/conversations/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+  );
+  if (response.ok) {
+    return;
+  }
+  let error: ErrorResponse | undefined;
+  try {
+    error = (await response.json()) as ErrorResponse;
+  } catch {
+    // Keep non-contract intermediary details out of the UI.
+  }
+  throw new ConversationApiError(
+    error?.message ?? "The conversation could not be deleted.",
+    response.status,
+    error?.request_id,
+    error?.code,
   );
 }
 

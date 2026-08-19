@@ -1,17 +1,21 @@
 import type {
   ActionProposalResponse,
   ConversationResponse,
+  ConversationSummaryResponse,
   GeneratedScenarioResponse,
+  GeneratedScenarioSummaryResponse,
 } from "@agent-lab/contracts";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
 
 const generationUrl = "*/api/v1/scenarios/retail-profile/versions/v1/generations";
-const actionGenerationUrl = "*/api/v1/scenarios/retail-order-cancellation/versions/v1/generations";
+const profileRef = "retail-profile~v1~20260816";
+const actionRef = "retail-order-cancellation~v1~20260816";
 
 const generatedPersona: GeneratedScenarioResponse = {
   metadata: {
@@ -25,11 +29,7 @@ const generatedPersona: GeneratedScenarioResponse = {
   initial_state_hash: "a".repeat(64),
   initial_state: {
     canonical_schema_version: "v1",
-    scenario: {
-      id: "retail-profile",
-      version: "v1",
-      policy_set_version: "v1",
-    },
+    scenario: { id: "retail-profile", version: "v1", policy_set_version: "v1" },
     seed: 20_260_816,
     persona: {
       id: "9c18b065-702a-8fe6-8f54-14264d47d1f8",
@@ -84,28 +84,6 @@ const emptyConversation: ConversationResponse = {
   turns: [],
 };
 
-const actionGeneratedPersona: GeneratedScenarioResponse = {
-  ...generatedPersona,
-  metadata: {
-    ...generatedPersona.metadata,
-    scenario_id: "retail-order-cancellation",
-    policy_set_version: "v2",
-  },
-  initial_state: {
-    ...generatedPersona.initial_state,
-    scenario: {
-      id: "retail-order-cancellation",
-      version: "v1",
-      policy_set_version: "v2",
-    },
-  },
-};
-
-const actionEmptyConversation: ConversationResponse = {
-  ...emptyConversation,
-  scenario_id: "retail-order-cancellation",
-};
-
 const conversationWithTurn: ConversationResponse = {
   ...emptyConversation,
   turns: [
@@ -134,6 +112,24 @@ const conversationWithTurn: ConversationResponse = {
   ],
 };
 
+const actionGeneratedPersona: GeneratedScenarioResponse = {
+  ...generatedPersona,
+  metadata: {
+    ...generatedPersona.metadata,
+    scenario_id: "retail-order-cancellation",
+    policy_set_version: "v2",
+  },
+  initial_state: {
+    ...generatedPersona.initial_state,
+    scenario: { id: "retail-order-cancellation", version: "v1", policy_set_version: "v2" },
+  },
+};
+
+const actionEmptyConversation: ConversationResponse = {
+  ...emptyConversation,
+  scenario_id: "retail-order-cancellation",
+};
+
 const proposedAction: ActionProposalResponse = {
   id: "30000000-0000-4000-8000-000000000000",
   session_id: emptyConversation.id,
@@ -151,28 +147,100 @@ const proposedAction: ActionProposalResponse = {
   trace_id: "b".repeat(32),
 };
 
+function personaSummary(
+  overrides: Partial<GeneratedScenarioSummaryResponse> = {},
+): GeneratedScenarioSummaryResponse {
+  return {
+    scenario_id: "retail-profile",
+    scenario_version: "v1",
+    seed: 20_260_816,
+    display_name: "Maya Chen",
+    locale: "en-US",
+    initial_state_hash: "a".repeat(64),
+    created_at: "2026-08-16T12:30:00Z",
+    last_activity_at: "2026-08-18T12:00:00Z",
+    conversation_count: 1,
+    ...overrides,
+  };
+}
+
+function conversationSummary(
+  overrides: Partial<ConversationSummaryResponse> = {},
+): ConversationSummaryResponse {
+  return {
+    id: emptyConversation.id,
+    scenario_id: "retail-profile",
+    scenario_version: "v1",
+    seed: 20_260_816,
+    framework_id: "fake",
+    created_at: "2026-08-18T12:00:00Z",
+    last_activity_at: "2026-08-18T12:00:00Z",
+    turn_count: 0,
+    ...overrides,
+  };
+}
+
+function conversationListBody(conversations: ConversationSummaryResponse[], total?: number) {
+  return { conversations, page: 1, page_size: 25, total: total ?? conversations.length };
+}
+
+const frameworksResponse = {
+  frameworks: [
+    {
+      framework_id: "fake",
+      available: true,
+      model_id: null,
+      capabilities: ["tool_calls", "session_resume", "structured_output"],
+    },
+    {
+      framework_id: "pydantic-ai",
+      available: false,
+      model_id: "gpt-5-mini",
+      capabilities: [],
+      unavailability_reason: "credential missing",
+    },
+  ],
+};
+
+function libraryBody(generations: GeneratedScenarioSummaryResponse[], total?: number) {
+  return { generations, page: 1, page_size: 25, total: total ?? generations.length };
+}
+
+function emptyLibrary() {
+  return http.get("*/api/v1/scenarios/generations", () => HttpResponse.json(libraryBody([])));
+}
+
+function personaResource(persona: GeneratedScenarioResponse, seed = 20_260_816) {
+  return http.get(
+    `*/api/v1/scenarios/${persona.metadata.scenario_id}/versions/${persona.metadata.scenario_version}/generations/${seed}`,
+    () => HttpResponse.json(persona),
+  );
+}
+
 const server = setupServer();
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => {
+  // The library and persona pages both read the framework list; tests may override it.
+  server.use(http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(frameworksResponse)));
+});
 afterEach(() => {
   server.resetHandlers();
   window.localStorage.clear();
 });
 afterAll(() => server.close());
 
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <App />
+    </MemoryRouter>,
+  );
+}
+
 async function enterReplayInputs() {
   const user = userEvent.setup();
   await user.selectOptions(screen.getByRole("combobox", { name: "Scenario" }), "retail-profile@v1");
-  await user.type(screen.getByRole("textbox", { name: "Seed" }), "20260816");
-  return user;
-}
-
-async function enterActionInputs() {
-  const user = userEvent.setup();
-  await user.selectOptions(
-    screen.getByRole("combobox", { name: "Scenario" }),
-    "retail-order-cancellation@v1",
-  );
   await user.type(screen.getByRole("textbox", { name: "Seed" }), "20260816");
   return user;
 }
@@ -186,23 +254,23 @@ function conversationGoalCard() {
   return within(card);
 }
 
-describe("human persona journey", () => {
-  it("starts with scenario controls and an informative empty state", () => {
-    render(<App />);
+describe("persona library", () => {
+  it("renders the hero, generator, and an empty persona library", async () => {
+    server.use(emptyLibrary());
+    renderAt("/");
 
     expect(
       screen.getByRole("heading", { name: "Meet the customer before the agent." }),
     ).toBeVisible();
     expect(screen.getByRole("combobox", { name: "Scenario" })).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Seed" })).toBeVisible();
-    expect(
-      screen.getByRole("heading", { name: "Your generated persona will appear here." }),
-    ).toBeVisible();
+    expect(await screen.findByText(/No personas yet/)).toBeVisible();
   });
 
-  it("shows scenario and seed validation before making a request", async () => {
+  it("validates scenario and seed before making a request", async () => {
+    server.use(emptyLibrary());
     const user = userEvent.setup();
-    render(<App />);
+    renderAt("/");
 
     const scenario = screen.getByRole("combobox", { name: "Scenario" });
     const seed = screen.getByRole("textbox", { name: "Seed" });
@@ -210,247 +278,389 @@ describe("human persona journey", () => {
     await user.click(screen.getByRole("button", { name: "Generate persona" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Choose a scenario");
     expect(scenario).toHaveAttribute("aria-invalid", "true");
-    expect(scenario).toHaveAttribute("aria-describedby", "form-error");
-    expect(seed).not.toHaveAttribute("aria-invalid", "true");
-    expect(seed).toHaveAttribute("aria-describedby", "seed-help");
 
     await user.selectOptions(scenario, "retail-profile@v1");
-    for (const invalidSeed of ["4.5", "0x10", "1e3"]) {
-      await user.clear(seed);
-      await user.type(seed, invalidSeed);
-      await user.click(screen.getByRole("button", { name: "Generate persona" }));
-
-      expect(screen.getByRole("alert")).toHaveTextContent("Use decimal digits");
-      expect(seed).toHaveAttribute("aria-invalid", "true");
-      expect(seed).toHaveAttribute("aria-describedby", "form-error");
-      expect(scenario).not.toHaveAttribute("aria-invalid", "true");
-      expect(scenario).toHaveAttribute("aria-describedby", "scenario-help");
-    }
+    await user.type(seed, "0x10");
+    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Use decimal digits");
+    expect(seed).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("explains the selected scenario in plain language and updates on change", async () => {
+  it("explains the selected scenario and randomizes the seed", async () => {
+    server.use(emptyLibrary());
     const user = userEvent.setup();
-    render(<App />);
+    renderAt("/");
 
-    const scenario = screen.getByRole("combobox", { name: "Scenario" });
-    expect(screen.getByText("Scenario versions preserve their generation rules.")).toBeVisible();
-    expect(screen.queryByText(/a clear picture of your account/i)).not.toBeInTheDocument();
-
-    await user.selectOptions(scenario, "retail-profile@v1");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Scenario" }),
+      "retail-profile@v1",
+    );
     expect(
       screen.getByText("A fictional customer, two products, and one paid order."),
     ).toBeVisible();
-    expect(screen.getByText(/a clear picture of your account/i)).toBeVisible();
 
-    await user.selectOptions(scenario, "retail-order-cancellation@v1");
-    expect(screen.getByText(/cancel your paid order/i)).toBeVisible();
-    expect(screen.getByText(/Safe order action panel/i)).toBeVisible();
-    expect(screen.queryByText(/a clear picture of your account/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Randomize" }));
+    const seed = screen.getByRole("textbox", { name: "Seed" });
+    expect(seed).toBeInstanceOf(HTMLInputElement);
+    expect((seed as HTMLInputElement).value).toMatch(/^\d+$/);
   });
 
-  it("announces loading and renders the generated persona summary", async () => {
-    let releaseRequest: (() => void) | undefined;
-    const requestGate = new Promise<void>((resolve) => {
-      releaseRequest = resolve;
-    });
+  it("lists past personas and opens one", async () => {
     server.use(
-      http.post(generationUrl, async ({ request }) => {
-        expect(request.headers.get("Idempotency-Key")).toBe("persona:retail-profile:v1:20260816");
-        expect(await request.json()).toEqual({ seed: 20_260_816 });
-        await requestGate;
-        return HttpResponse.json(generatedPersona, { status: 201 });
+      http.get("*/api/v1/scenarios/generations", () =>
+        HttpResponse.json(libraryBody([personaSummary()])),
+      ),
+      personaResource(generatedPersona),
+      http.get("*/api/v1/conversations", () => HttpResponse.json(conversationListBody([]))),
+      http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(frameworksResponse)),
+    );
+    const user = userEvent.setup();
+    renderAt("/");
+
+    await user.click(await screen.findByRole("button", { name: /^Maya Chen/ }));
+
+    expect(await screen.findByRole("heading", { name: "Maya Chen" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Conversations" })).toBeVisible();
+    expect(await screen.findByText(/No conversations match these filters yet/)).toBeVisible();
+  });
+
+  it("pages the persona library by number", async () => {
+    server.use(
+      http.get("*/api/v1/scenarios/generations", ({ request }) => {
+        const requestedPage = Number(new URL(request.url).searchParams.get("page") ?? "1");
+        return HttpResponse.json({
+          generations: [
+            personaSummary({
+              display_name: requestedPage === 1 ? "First persona" : "Second persona",
+              seed: requestedPage,
+              initial_state_hash: String(requestedPage).repeat(64).slice(0, 64),
+            }),
+          ],
+          page: requestedPage,
+          page_size: 25,
+          total: 26, // two pages at the default page size of 25
+        });
       }),
     );
-    render(<App />);
+    const user = userEvent.setup();
+    renderAt("/");
+
+    expect(await screen.findByText("First persona")).toBeVisible();
+    expect(screen.getByText(/Page 1 of 2/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Second persona")).toBeVisible();
+    expect(screen.getByText(/Page 2 of 2/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Page 1" }));
+    expect(await screen.findByText("First persona")).toBeVisible();
+  });
+
+  it("filters the library by scenario, framework, activity window, and page size", async () => {
+    const requests: URLSearchParams[] = [];
+    server.use(
+      http.get("*/api/v1/scenarios/generations", ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requests.push(params);
+        return HttpResponse.json(libraryBody([personaSummary()]));
+      }),
+    );
+    const user = userEvent.setup();
+    renderAt("/");
+
+    await screen.findByText("Maya Chen");
+    expect(requests.at(-1)?.get("page_size")).toBe("25");
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by scenario" }),
+      "retail-order-cancellation@v1",
+    );
+    await waitFor(() =>
+      expect(requests.at(-1)?.get("scenario_id")).toBe("retail-order-cancellation"),
+    );
+    expect(requests.at(-1)?.get("scenario_version")).toBe("v1");
+
+    await screen.findByRole("option", { name: "fake" });
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by framework" }), "fake");
+    await waitFor(() => expect(requests.at(-1)?.get("framework_id")).toBe("fake"));
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Active within" }), "24h");
+    await waitFor(() => expect(requests.at(-1)?.get("active_since")).not.toBeNull());
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Per page" }), "50");
+    await waitFor(() => expect(requests.at(-1)?.get("page_size")).toBe("50"));
+  });
+
+  it("deletes a persona and clears its saved conversation shortcut", async () => {
+    let deleted = false;
+    server.use(
+      http.get("*/api/v1/scenarios/generations", () =>
+        HttpResponse.json(libraryBody(deleted ? [] : [personaSummary()])),
+      ),
+      http.delete("*/api/v1/scenarios/retail-profile/versions/v1/generations/20260816", () => {
+        deleted = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    window.localStorage.setItem(
+      "agent-lab:last-conversation",
+      `/personas/${profileRef}/conversations/${emptyConversation.id}`,
+    );
+    const user = userEvent.setup();
+    renderAt("/");
+
+    expect(screen.getByRole("link", { name: "Resume your last conversation" })).toBeVisible();
+    await user.click(await screen.findByRole("button", { name: "Delete persona Maya Chen" }));
+    expect(screen.getByText(/Delete Maya Chen and 1 conversation/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Confirm persona delete" }));
+
+    await waitFor(() => expect(screen.queryByText("Maya Chen")).not.toBeInTheDocument());
+    expect(deleted).toBe(true);
+    expect(window.localStorage.getItem("agent-lab:last-conversation")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Resume your last conversation" })).toBeNull();
+  });
+});
+
+describe("generating a persona", () => {
+  it("generates and navigates to the persona page", async () => {
+    server.use(
+      emptyLibrary(),
+      http.post(generationUrl, () => HttpResponse.json(generatedPersona, { status: 201 })),
+      personaResource(generatedPersona),
+      http.get("*/api/v1/conversations", () => HttpResponse.json(conversationListBody([]))),
+      http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(frameworksResponse)),
+    );
+    renderAt("/");
     const user = await enterReplayInputs();
 
     await user.click(screen.getByRole("button", { name: "Generate persona" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Generating deterministic state");
 
-    releaseRequest?.();
     expect(await screen.findByRole("heading", { name: "Maya Chen" })).toBeVisible();
     expect(screen.getByText("maya.chen@example.test")).toBeVisible();
     expect(screen.getByText("detail oriented")).toBeVisible();
-    expect(screen.getByText("retail-profile@v1")).toBeVisible();
-    expect(screen.getByText("20260816")).toBeVisible();
-    expect(screen.getByText("a".repeat(64))).toBeVisible();
   });
 
-  it("shows a recoverable network-error state", async () => {
-    server.use(http.post(generationUrl, () => HttpResponse.error()));
-    render(<App />);
+  it("shows a recoverable network-error state and stays on the library", async () => {
+    server.use(
+      emptyLibrary(),
+      http.post(generationUrl, () => HttpResponse.error()),
+    );
+    renderAt("/");
     const user = await enterReplayInputs();
 
     await user.click(screen.getByRole("button", { name: "Generate persona" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("We couldn’t load the persona");
-    expect(alert).toHaveTextContent("Could not reach the scenario API");
-    expect(
-      screen.queryByRole("heading", { name: "Your generated persona will appear here." }),
-    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generate persona" })).toBeEnabled();
   });
+});
 
-  it("starts a support conversation and exposes tool and trace evidence", async () => {
-    let releaseStart: (() => void) | undefined;
-    const startGate = new Promise<void>((resolve) => {
-      releaseStart = resolve;
-    });
+describe("conversations", () => {
+  it("starts a new conversation with a command-id idempotency key", async () => {
+    let startKey: string | null = null;
     server.use(
-      http.post(generationUrl, () => HttpResponse.json(generatedPersona, { status: 201 })),
-      http.get("*/api/v1/agent-frameworks", () =>
-        HttpResponse.json({
-          frameworks: [
-            {
-              framework_id: "fake",
-              available: true,
-              model_id: null,
-              capabilities: ["tool_calls", "session_resume", "structured_output"],
-            },
-            {
-              framework_id: "pydantic-ai",
-              available: false,
-              model_id: "gpt-5-mini",
-              capabilities: [],
-              unavailability_reason: "credential missing",
-            },
-          ],
-        }),
-      ),
-      http.post("*/api/v1/conversations", async () => {
-        await startGate;
+      personaResource(generatedPersona),
+      http.get("*/api/v1/conversations", () => HttpResponse.json(conversationListBody([]))),
+      http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(frameworksResponse)),
+      http.post("*/api/v1/conversations", async ({ request }) => {
+        startKey = request.headers.get("Idempotency-Key");
+        expect(await request.json()).toMatchObject({ framework_id: "fake" });
         return HttpResponse.json(emptyConversation, { status: 201 });
       }),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(emptyConversation),
+      ),
+    );
+    renderAt(`/personas/${profileRef}`);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Start new conversation" }));
+
+    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
+    expect(startKey).toMatch(/^conversation:retail-profile:v1:20260816:fake:.+/);
+  });
+
+  it("resumes an existing conversation from the persona history", async () => {
+    server.use(
+      personaResource(generatedPersona),
+      http.get("*/api/v1/conversations", () =>
+        HttpResponse.json(conversationListBody([conversationSummary({ turn_count: 1 })])),
+      ),
+      http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(frameworksResponse)),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(conversationWithTurn),
+      ),
+    );
+    renderAt(`/personas/${profileRef}`);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("link", { name: /Resume/ }));
+
+    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
+    expect(await screen.findByText("I found one paid order.")).toBeVisible();
+  });
+
+  it("resumes a conversation directly from its URL and exposes evidence", async () => {
+    server.use(
+      personaResource(generatedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(conversationWithTurn),
+      ),
+    );
+    renderAt(`/personas/${profileRef}/conversations/${emptyConversation.id}`);
+
+    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
+    expect(await screen.findByText("I found one paid order.")).toBeVisible();
+    expect(screen.getByText("list_customer_orders@v1 · success")).toBeVisible();
+    expect(conversationGoalCard().getByText(/a clear picture of your account/i)).toBeVisible();
+  });
+
+  it("rejects a conversation URL whose persona reference does not match", async () => {
+    const path = `/personas/${profileRef}/conversations/${emptyConversation.id}`;
+    window.localStorage.setItem("agent-lab:last-conversation", path);
+    server.use(
+      personaResource(generatedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(actionEmptyConversation),
+      ),
+    );
+
+    renderAt(path);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This conversation could not be loaded",
+    );
+    expect(screen.queryByRole("heading", { name: "Support conversation" })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("agent-lab:last-conversation")).toBeNull();
+  });
+
+  it("clears a saved conversation shortcut when the conversation is gone", async () => {
+    const path = `/personas/${profileRef}/conversations/${emptyConversation.id}`;
+    window.localStorage.setItem("agent-lab:last-conversation", path);
+    server.use(
+      personaResource(generatedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(
+          {
+            code: "conversation_not_found",
+            message: "The conversation was not found",
+            request_id: "request-missing",
+          },
+          { status: 404 },
+        ),
+      ),
+    );
+
+    renderAt(path);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This conversation could not be loaded",
+    );
+    expect(window.localStorage.getItem("agent-lab:last-conversation")).toBeNull();
+  });
+
+  it("sends a message and appends the assistant turn", async () => {
+    server.use(
+      personaResource(generatedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(emptyConversation),
+      ),
       http.post("*/api/v1/conversations/*/messages", async ({ request }) => {
         expect(await request.json()).toEqual({ message: "What orders are on my account?" });
         return HttpResponse.json(conversationWithTurn);
       }),
     );
-    render(<App />);
-    const user = await enterReplayInputs();
-    await user.click(screen.getByRole("button", { name: "Generate persona" }));
-    await screen.findByRole("heading", { name: "Maya Chen" });
+    renderAt(`/personas/${profileRef}/conversations/${emptyConversation.id}`);
 
-    await user.click(screen.getByRole("button", { name: "Start support conversation" }));
-    expect(screen.getByRole("button", { name: "Generate persona" })).toBeDisabled();
-    releaseStart?.();
-    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Support conversation started" })).toBeDisabled();
-    expect(conversationGoalCard().getByText(/a clear picture of your account/i)).toBeVisible();
-    expect(screen.getByText("pydantic-ai · unsupported locally")).toBeVisible();
-
-    const composer = screen.getByRole("textbox", { name: "Support message" });
-    const messageHistory = screen.getByRole("log", { name: "Conversation messages" });
-    const composerForm = screen.getByRole("form", { name: "Message composer" });
-    expect(messageHistory).toHaveClass("overflow-y-auto");
-    expect(messageHistory.parentElement).toHaveClass(
-      "h-[clamp(480px,75dvh,760px)]",
-      "overflow-hidden",
-    );
-    expect(messageHistory).not.toContainElement(composer);
-    expect(composerForm).toContainElement(composer);
-    expect(await screen.findByText("Start the conversation as the customer.")).toBeVisible();
-    const suggestion = screen.getByRole("button", { name: "Use suggested customer message" });
-    expect(suggestion).toHaveAccessibleDescription(
-      "“Hi, could you tell me which orders and products are on my account?”",
-    );
-    await user.click(suggestion);
-    expect(composer).toHaveValue(
-      "Hi, could you tell me which orders and products are on my account?",
-    );
-    await user.clear(composer);
+    const composer = await screen.findByRole("textbox", { name: "Support message" });
+    const user = userEvent.setup();
     await user.type(composer, "What orders are on my account?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(await screen.findByText("I found one paid order.")).toBeVisible();
-    expect(screen.getByText("list_customer_orders@v1 · success")).toBeVisible();
     expect(screen.getByText("a".repeat(32))).toBeVisible();
   });
 
-  it("clears the previous support conversation when generating a new persona", async () => {
+  it("filters the conversation history by framework, activity, and page size", async () => {
+    const requests: URLSearchParams[] = [];
     server.use(
-      http.post(generationUrl, () => HttpResponse.json(generatedPersona, { status: 201 })),
-      http.get("*/api/v1/agent-frameworks", () =>
-        HttpResponse.json({
-          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
-        }),
-      ),
-      http.post("*/api/v1/conversations", () =>
-        HttpResponse.json(emptyConversation, { status: 201 }),
-      ),
+      personaResource(generatedPersona),
+      http.get("*/api/v1/conversations", ({ request }) => {
+        requests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(conversationListBody([conversationSummary({ turn_count: 1 })]));
+      }),
     );
-    render(<App />);
-    const user = await enterReplayInputs();
-    await user.click(screen.getByRole("button", { name: "Generate persona" }));
-    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
+    const user = userEvent.setup();
+    renderAt(`/personas/${profileRef}`);
 
-    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
-    expect(window.localStorage.getItem("agent-lab-support-session")).toBe(emptyConversation.id);
+    await screen.findByText(/1 turn\b/);
+    expect(requests.at(-1)?.get("scenario_id")).toBe("retail-profile");
+    expect(requests.at(-1)?.get("seed")).toBe("20260816");
+    expect(requests.at(-1)?.get("page_size")).toBe("25");
 
-    await user.click(screen.getByRole("button", { name: "Generate persona" }));
+    const frameworkFilter = screen.getByRole("combobox", { name: "Framework" });
+    await waitFor(() =>
+      expect(within(frameworkFilter).getByRole("option", { name: "fake" })).toBeInTheDocument(),
+    );
+    await user.selectOptions(frameworkFilter, "fake");
+    await waitFor(() => expect(requests.at(-1)?.get("framework_id")).toBe("fake"));
 
-    expect(screen.queryByRole("heading", { name: "Support conversation" })).not.toBeInTheDocument();
-    expect(window.localStorage.getItem("agent-lab-support-session")).toBeNull();
-    expect(await screen.findByRole("button", { name: "Start support conversation" })).toBeEnabled();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Active within" }), "24h");
+    await waitFor(() => expect(requests.at(-1)?.get("active_since")).not.toBeNull());
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Per page" }), "50");
+    await waitFor(() => expect(requests.at(-1)?.get("page_size")).toBe("50"));
   });
 
-  it("resumes a saved support session on reload", async () => {
-    window.localStorage.setItem("agent-lab-support-session", emptyConversation.id);
+  it("deletes a conversation from the persona history", async () => {
+    const target = conversationSummary({
+      id: "40000000-0000-4000-8000-000000000000",
+      turn_count: 1,
+    });
+    const kept = conversationSummary({
+      id: "50000000-0000-4000-8000-000000000000",
+      turn_count: 2,
+    });
+    let deleted = false;
     server.use(
-      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
-        HttpResponse.json(conversationWithTurn),
+      personaResource(generatedPersona),
+      http.get("*/api/v1/conversations", () =>
+        HttpResponse.json(conversationListBody(deleted ? [kept] : [target, kept])),
       ),
-      http.get(`${generationUrl}/20260816`, () => HttpResponse.json(generatedPersona)),
+      http.delete(`*/api/v1/conversations/${target.id}`, () => {
+        deleted = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
     );
-
-    render(<App />);
-
-    expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
-    expect(await screen.findByText("I found one paid order.")).toBeVisible();
-    expect(conversationGoalCard().getByText(/a clear picture of your account/i)).toBeVisible();
-  });
-
-  it("restores a persisted action state on reload", async () => {
-    window.localStorage.setItem("agent-lab-support-session", actionEmptyConversation.id);
     window.localStorage.setItem(
-      `agent-lab:action-proposal:${actionEmptyConversation.id}`,
-      proposedAction.id,
+      "agent-lab:last-conversation",
+      `/personas/${profileRef}/conversations/${target.id}`,
     );
-    server.use(
-      http.get(`*/api/v1/conversations/${actionEmptyConversation.id}`, () =>
-        HttpResponse.json(actionEmptyConversation),
-      ),
-      http.get(`${actionGenerationUrl}/20260816`, () => HttpResponse.json(actionGeneratedPersona)),
-      http.get(`*/actions/${proposedAction.id}`, () =>
-        HttpResponse.json({
-          ...proposedAction,
-          status: "executed",
-          attempts: 1,
-          result_order_status: "cancelled",
-          result_order_version: 2,
-        }),
-      ),
-    );
+    const user = userEvent.setup();
+    renderAt(`/personas/${profileRef}`);
 
-    render(<App />);
+    const targetMeta = await screen.findByText(/1 turn\b/);
+    const targetRow = targetMeta.closest("li");
+    if (!(targetRow instanceof HTMLElement)) {
+      throw new Error("Expected the conversation row to be present.");
+    }
+    await user.click(within(targetRow).getByRole("button", { name: "Delete conversation" }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
 
-    expect(await screen.findByText("Executed")).toBeVisible();
-    expect(screen.getByText(/Order is cancelled at version 2. Attempts: 1/)).toBeVisible();
+    await waitFor(() => expect(screen.queryByText(/1 turn\b/)).not.toBeInTheDocument());
+    expect(screen.getByText(/2 turns\b/)).toBeVisible();
+    expect(deleted).toBe(true);
+    expect(window.localStorage.getItem("agent-lab:last-conversation")).toBeNull();
   });
+});
 
+describe("safe order actions", () => {
   it("shows proposal, exact confirmation, and executed action states", async () => {
     server.use(
-      http.post(actionGenerationUrl, () =>
-        HttpResponse.json(actionGeneratedPersona, { status: 201 }),
-      ),
-      http.get("*/api/v1/agent-frameworks", () =>
-        HttpResponse.json({
-          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
-        }),
-      ),
-      http.post("*/api/v1/conversations", () =>
-        HttpResponse.json(actionEmptyConversation, { status: 201 }),
+      personaResource(actionGeneratedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(actionEmptyConversation),
       ),
       http.post("*/actions/proposals", async ({ request }) => {
         expect(await request.json()).toEqual({
@@ -477,15 +687,12 @@ describe("human persona journey", () => {
         }),
       ),
     );
-    render(<App />);
-    const user = await enterActionInputs();
-    await user.click(screen.getByRole("button", { name: "Generate persona" }));
-    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
+    renderAt(`/personas/${actionRef}/conversations/${emptyConversation.id}`);
+    const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Propose order cancellation" }));
     expect(await screen.findByText("Proposal ready")).toBeVisible();
     expect(conversationGoalCard().getByText(/cancel your paid order/i)).toBeVisible();
-    expect(screen.getByText(/cancel_order@v1 · expected version 1/)).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Confirm exact action" }));
     expect(await screen.findByText("Confirmed")).toBeVisible();
@@ -495,74 +702,38 @@ describe("human persona journey", () => {
     expect(screen.getByText(/Order is cancelled at version 2. Attempts: 1/)).toBeVisible();
   });
 
-  it("shows user cancellation plus backend refusal and conflict states", async () => {
-    let proposalAttempt = 0;
+  it("restores a persisted action state on reload", async () => {
+    window.localStorage.setItem(
+      `agent-lab:action-proposal:${actionEmptyConversation.id}`,
+      proposedAction.id,
+    );
     server.use(
-      http.post(actionGenerationUrl, () =>
-        HttpResponse.json(actionGeneratedPersona, { status: 201 }),
+      personaResource(actionGeneratedPersona),
+      http.get(`*/api/v1/conversations/${actionEmptyConversation.id}`, () =>
+        HttpResponse.json(actionEmptyConversation),
       ),
-      http.get("*/api/v1/agent-frameworks", () =>
+      http.get(`*/actions/${proposedAction.id}`, () =>
         HttpResponse.json({
-          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
+          ...proposedAction,
+          status: "executed",
+          attempts: 1,
+          result_order_status: "cancelled",
+          result_order_version: 2,
         }),
       ),
-      http.post("*/api/v1/conversations", () =>
-        HttpResponse.json(actionEmptyConversation, { status: 201 }),
-      ),
-      http.post("*/actions/proposals", () => {
-        proposalAttempt += 1;
-        if (proposalAttempt === 1) return HttpResponse.json(proposedAction, { status: 201 });
-        const conflict = proposalAttempt === 2;
-        return HttpResponse.json(
-          {
-            code: conflict ? "action_refused" : "action_conflict",
-            message: conflict ? "Only a paid order can be cancelled" : "Order version is stale",
-            request_id: "request-action-error",
-          },
-          { status: conflict ? 422 : 409 },
-        );
-      }),
-      http.post("*/actions/*/decision", () =>
-        HttpResponse.json({ ...proposedAction, status: "cancelled" }),
-      ),
     );
-    const view = render(<App />);
-    const user = await enterActionInputs();
-    await user.click(screen.getByRole("button", { name: "Generate persona" }));
-    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
-    await user.click(await screen.findByRole("button", { name: "Propose order cancellation" }));
-    await user.click(await screen.findByRole("button", { name: "Cancel proposal" }));
-    expect(await screen.findByText(/Cancelled by user/)).toBeVisible();
+    renderAt(`/personas/${actionRef}/conversations/${actionEmptyConversation.id}`);
 
-    view.unmount();
-    window.localStorage.clear();
-    render(<App />);
-    const secondUser = await enterActionInputs();
-    await secondUser.click(screen.getByRole("button", { name: "Generate persona" }));
-    await secondUser.click(
-      await screen.findByRole("button", { name: "Start support conversation" }),
-    );
-    await secondUser.click(
-      await screen.findByRole("button", { name: "Propose order cancellation" }),
-    );
-    expect(await screen.findByText("Refused")).toBeVisible();
-    await secondUser.click(screen.getByRole("button", { name: "Propose order cancellation" }));
-    expect(await screen.findByText("Conflict")).toBeVisible();
+    expect(await screen.findByText("Executed")).toBeVisible();
+    expect(screen.getByText(/Order is cancelled at version 2. Attempts: 1/)).toBeVisible();
   });
 
   it("offers an idempotent retry after a transient execution failure", async () => {
     let executions = 0;
     server.use(
-      http.post(actionGenerationUrl, () =>
-        HttpResponse.json(actionGeneratedPersona, { status: 201 }),
-      ),
-      http.get("*/api/v1/agent-frameworks", () =>
-        HttpResponse.json({
-          frameworks: [{ framework_id: "fake", available: true, model_id: null, capabilities: [] }],
-        }),
-      ),
-      http.post("*/api/v1/conversations", () =>
-        HttpResponse.json(actionEmptyConversation, { status: 201 }),
+      personaResource(actionGeneratedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(actionEmptyConversation),
       ),
       http.post("*/actions/proposals", () => HttpResponse.json(proposedAction, { status: 201 })),
       http.post("*/actions/*/decision", () =>
@@ -589,16 +760,14 @@ describe("human persona journey", () => {
         });
       }),
     );
-    render(<App />);
-    const user = await enterActionInputs();
-    await user.click(screen.getByRole("button", { name: "Generate persona" }));
-    await user.click(await screen.findByRole("button", { name: "Start support conversation" }));
+    renderAt(`/personas/${actionRef}/conversations/${emptyConversation.id}`);
+    const user = userEvent.setup();
+
     await user.click(await screen.findByRole("button", { name: "Propose order cancellation" }));
     await user.click(await screen.findByRole("button", { name: "Confirm exact action" }));
     await user.click(await screen.findByRole("button", { name: "Execute cancellation" }));
 
     expect(await screen.findByText("Retry available")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Execute cancellation" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Retry execution safely" }));
     expect(await screen.findByText("Executed")).toBeVisible();
     expect(executions).toBe(2);

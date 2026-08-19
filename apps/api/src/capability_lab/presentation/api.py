@@ -1,11 +1,11 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import asynccontextmanager, nullcontext
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Path, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -20,8 +20,10 @@ from capability_lab.application.conversations import (
     AgentRegistry,
     AgentTransientError,
     ConversationConflictError,
+    ConversationListFilter,
     ConversationNotFoundError,
     ConversationService,
+    ConversationSummary,
     FrameworkDeclaration,
     InvalidConversationMessageError,
 )
@@ -34,13 +36,17 @@ from capability_lab.application.order_actions import (
     ActionTransientError,
     OrderActionService,
 )
+from capability_lab.application.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from capability_lab.application.ports import Clock, ConversationTurn, OrderWriteConflictError
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
+    GeneratedScenarioDeletedError,
     GeneratedScenarioNotFoundError,
+    GeneratedScenarioSummary,
     IdempotencyConflictError,
     IdempotencyStateNotFoundError,
     InvalidIdempotencyKeyError,
+    PersonaLibraryFilter,
     ScenarioGenerationKernel,
     ScenarioGenerationService,
     ScenarioGeneratorNotConfiguredError,
@@ -410,6 +416,70 @@ class ConversationResponse(StrictApiModel):
         )
 
 
+class GeneratedScenarioSummaryResponse(StrictApiModel):
+    scenario_id: str
+    scenario_version: str
+    seed: int
+    display_name: str
+    locale: str
+    initial_state_hash: str
+    created_at: datetime
+    last_activity_at: datetime
+    conversation_count: int
+
+    @classmethod
+    def from_summary(cls, summary: GeneratedScenarioSummary) -> Self:
+        return cls(
+            scenario_id=summary.scenario_id,
+            scenario_version=summary.scenario_version,
+            seed=summary.seed,
+            display_name=summary.display_name,
+            locale=summary.locale,
+            initial_state_hash=summary.initial_state_hash,
+            created_at=summary.created_at,
+            last_activity_at=summary.last_activity_at,
+            conversation_count=summary.conversation_count,
+        )
+
+
+class GeneratedScenarioListResponse(StrictApiModel):
+    generations: list[GeneratedScenarioSummaryResponse]
+    page: int
+    page_size: int
+    total: int
+
+
+class ConversationSummaryResponse(StrictApiModel):
+    id: UUID
+    scenario_id: str
+    scenario_version: str
+    seed: int
+    framework_id: str
+    created_at: datetime
+    last_activity_at: datetime
+    turn_count: int
+
+    @classmethod
+    def from_summary(cls, summary: ConversationSummary) -> Self:
+        return cls(
+            id=summary.id,
+            scenario_id=summary.scenario_id,
+            scenario_version=summary.scenario_version,
+            seed=summary.seed,
+            framework_id=summary.framework_id,
+            created_at=summary.created_at,
+            last_activity_at=summary.last_activity_at,
+            turn_count=summary.turn_count,
+        )
+
+
+class ConversationListResponse(StrictApiModel):
+    conversations: list[ConversationSummaryResponse]
+    page: int
+    page_size: int
+    total: int
+
+
 class ValidationIssue(StrictApiModel):
     location: str
     message: str
@@ -509,6 +579,15 @@ async def _generated_scenario_not_found_handler(
         status_code=404,
         code="generated_scenario_not_found",
         message="No generated state exists for the requested scenario reference and seed",
+    )
+
+
+async def _generated_scenario_deleted_handler(request: Request, _error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=409,
+        code="generated_scenario_deleted",
+        message="The generated persona was permanently deleted and cannot be recreated",
     )
 
 
@@ -728,6 +807,10 @@ def create_app(
         GeneratedScenarioNotFoundError,
         _generated_scenario_not_found_handler,
     )
+    application.add_exception_handler(
+        GeneratedScenarioDeletedError,
+        _generated_scenario_deleted_handler,
+    )
     application.add_exception_handler(IdempotencyConflictError, _idempotency_conflict_handler)
     application.add_exception_handler(
         InvalidIdempotencyKeyError,
@@ -767,7 +850,7 @@ def create_app(
     application.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Idempotency-Key"],
         expose_headers=["X-Request-ID"],
     )
@@ -838,6 +921,56 @@ def create_app(
             service.get(scenario_id, scenario_version, seed)
         )
 
+    def delete_generated_scenario(
+        scenario_id: ScenarioId,
+        scenario_version: ScenarioVersion,
+        seed: ScenarioSeed,
+        service: Annotated[ScenarioGenerationService, Depends(generation_service)],
+    ) -> Response:
+        service.delete(scenario_id, scenario_version, seed)
+        return Response(status_code=204)
+
+    def list_generated_scenarios(
+        service: Annotated[ScenarioGenerationService, Depends(generation_service)],
+        scenario_id: Annotated[
+            str | None,
+            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
+        ] = None,
+        scenario_version: Annotated[
+            str | None,
+            Query(min_length=2, max_length=64, pattern=r"^v[1-9][0-9]*$"),
+        ] = None,
+        framework_id: Annotated[
+            str | None,
+            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
+        ] = None,
+        active_since: Annotated[datetime | None, Query()] = None,
+        page: Annotated[int, Query(ge=1)] = 1,
+        page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
+    ) -> GeneratedScenarioListResponse:
+        summaries, total = service.list_summaries(
+            limit=page_size,
+            page=page,
+            filters=PersonaLibraryFilter(
+                scenario_id=scenario_id,
+                scenario_version=scenario_version,
+                framework_id=framework_id,
+                active_since=(
+                    active_since.replace(tzinfo=UTC)
+                    if active_since is not None and active_since.tzinfo is None
+                    else active_since
+                ),
+            ),
+        )
+        return GeneratedScenarioListResponse(
+            generations=[
+                GeneratedScenarioSummaryResponse.from_summary(summary) for summary in summaries
+            ],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
     def list_agent_frameworks() -> AgentFrameworkListResponse:
         return AgentFrameworkListResponse(
             frameworks=[
@@ -868,6 +1001,69 @@ def create_app(
         service: Annotated[ConversationService, Depends(conversation_service)],
     ) -> ConversationResponse:
         return ConversationResponse.from_conversation(service.get(session_id))
+
+    def list_conversations(
+        service: Annotated[ConversationService, Depends(conversation_service)],
+        scenario_id: Annotated[
+            str | None,
+            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
+        ] = None,
+        scenario_version: Annotated[
+            str | None,
+            Query(min_length=2, max_length=64, pattern=r"^v[1-9][0-9]*$"),
+        ] = None,
+        seed: Annotated[int | None, Query(ge=0, le=MAX_SCENARIO_SEED)] = None,
+        framework_id: Annotated[
+            str | None,
+            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
+        ] = None,
+        active_since: Annotated[datetime | None, Query()] = None,
+        page: Annotated[int, Query(ge=1)] = 1,
+        page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
+    ) -> ConversationListResponse:
+        persona_filter = (scenario_id, scenario_version, seed)
+        if any(part is not None for part in persona_filter) and not all(
+            part is not None for part in persona_filter
+        ):
+            raise RequestValidationError(
+                [
+                    {
+                        "loc": ("query", "scenario_id, scenario_version, seed"),
+                        "msg": "scenario_id, scenario_version and seed must be provided together",
+                        "type": "value_error",
+                    }
+                ]
+            )
+        summaries, total = service.list(
+            limit=page_size,
+            page=page,
+            filters=ConversationListFilter(
+                scenario_id=scenario_id,
+                scenario_version=scenario_version,
+                seed=seed,
+                framework_id=framework_id,
+                active_since=(
+                    active_since.replace(tzinfo=UTC)
+                    if active_since is not None and active_since.tzinfo is None
+                    else active_since
+                ),
+            ),
+        )
+        return ConversationListResponse(
+            conversations=[
+                ConversationSummaryResponse.from_summary(summary) for summary in summaries
+            ],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    def delete_conversation(
+        session_id: UUID,
+        service: Annotated[ConversationService, Depends(conversation_service)],
+    ) -> Response:
+        service.delete(session_id)
+        return Response(status_code=204)
 
     async def send_conversation_message(
         session_id: UUID,
@@ -1009,12 +1205,37 @@ def create_app(
         },
     )
     router.add_api_route(
+        "/conversations",
+        list_conversations,
+        methods=["GET"],
+        response_model=ConversationListResponse,
+        operation_id="listConversations",
+        summary="List support conversations most recently active first",
+        responses={
+            422: {"model": ErrorResponse, "description": "Invalid filter or page"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
         "/conversations/{session_id}",
         get_conversation,
         methods=["GET"],
         response_model=ConversationResponse,
         operation_id="getConversation",
         summary="Resume a persisted support conversation",
+        responses={
+            404: {"model": ErrorResponse, "description": "Conversation is not found"},
+            422: {"model": ErrorResponse, "description": "Invalid session ID"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
+        "/conversations/{session_id}",
+        delete_conversation,
+        methods=["DELETE"],
+        status_code=204,
+        operation_id="deleteConversation",
+        summary="Permanently delete a conversation and its records",
         responses={
             404: {"model": ErrorResponse, "description": "Conversation is not found"},
             422: {"model": ErrorResponse, "description": "Invalid session ID"},
@@ -1114,6 +1335,18 @@ def create_app(
         },
     )
     router.add_api_route(
+        "/scenarios/generations",
+        list_generated_scenarios,
+        methods=["GET"],
+        response_model=GeneratedScenarioListResponse,
+        operation_id="listGeneratedScenarios",
+        summary="List generated personas most recently active first",
+        responses={
+            422: {"model": ErrorResponse, "description": "Invalid filter or page"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
         "/scenarios/{scenario_id}/versions/{scenario_version}/generations/{seed}",
         get_generated_scenario,
         methods=["GET"],
@@ -1121,6 +1354,19 @@ def create_app(
         operation_id="getGeneratedScenario",
         summary="Retrieve persisted generated scenario state",
         response_description="Persisted generated scenario state",
+        responses={
+            404: {"model": ErrorResponse, "description": "Generated scenario is not found"},
+            422: {"model": ErrorResponse, "description": "Invalid scenario reference"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+    )
+    router.add_api_route(
+        "/scenarios/{scenario_id}/versions/{scenario_version}/generations/{seed}",
+        delete_generated_scenario,
+        methods=["DELETE"],
+        status_code=204,
+        operation_id="deleteGeneratedScenario",
+        summary="Permanently delete a generated persona and its conversations",
         responses={
             404: {"model": ErrorResponse, "description": "Generated scenario is not found"},
             422: {"model": ErrorResponse, "description": "Invalid scenario reference"},

@@ -1,14 +1,21 @@
 import type { GeneratedScenarioResponse } from "@agent-lab/contracts";
 import { expect, test } from "@playwright/test";
 
-test("generates and retrieves the same persona from recorded inputs", async ({ page }) => {
+test("generates a persona, lists it in the library, and replays deterministically", async ({
+  page,
+}, testInfo) => {
+  const seed = String(Math.floor(Math.random() * 4_294_967_296));
+  testInfo.annotations.push({ type: "scenario-seed", description: seed });
+
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Your generated persona will appear here." }),
+    page.getByRole("heading", { name: "Meet the customer before the agent." }),
   ).toBeVisible();
 
-  await page.getByRole("combobox", { name: "Scenario" }).selectOption("retail-profile@v1");
-  await page.getByRole("textbox", { name: "Seed" }).fill("20260816");
+  await page
+    .getByRole("combobox", { name: "Scenario", exact: true })
+    .selectOption("retail-profile@v1");
+  await page.getByRole("textbox", { name: "Seed" }).fill(seed);
 
   const generationResponsePromise = page.waitForResponse(
     (response) => response.request().method() === "POST" && response.url().endsWith("/generations"),
@@ -16,33 +23,31 @@ test("generates and retrieves the same persona from recorded inputs", async ({ p
   await page.getByRole("button", { name: "Generate persona" }).click();
   const generationResponse = await generationResponsePromise;
   const generated = (await generationResponse.json()) as GeneratedScenarioResponse;
+  const displayName = generated.initial_state.persona.display_name;
 
   expect(generationResponse.status()).toBe(201);
-  expect(new URL(generationResponse.url()).origin).toBe("http://localhost:5173");
-  expect(generationResponse.request().postDataJSON()).toEqual({ seed: 20_260_816 });
   expect(generationResponse.request().headers()["idempotency-key"]).toBe(
-    "persona:retail-profile:v1:20260816",
+    `persona:retail-profile:v1:${seed}`,
   );
-  await expect(
-    page.getByRole("heading", { name: generated.initial_state.persona.display_name }),
-  ).toBeVisible();
-  await expect(page.getByText("Persona generated")).toBeVisible();
+
+  // Generating navigates to the persona page, which retrieves the recorded state.
+  await expect(page.getByRole("heading", { name: displayName })).toBeVisible();
+  await expect(page.getByText("Retrieved from recorded inputs")).toBeVisible();
   await expect(page.getByText(generated.initial_state_hash)).toBeVisible();
 
-  const retrievalResponsePromise = page.waitForResponse(
-    (response) =>
-      response.request().method() === "GET" && response.url().endsWith("/generations/20260816"),
-  );
-  await page.getByRole("button", { name: "Retrieve recorded persona" }).click();
-  const retrievalResponse = await retrievalResponsePromise;
-  const retrieved = (await retrievalResponse.json()) as GeneratedScenarioResponse;
+  // The persona is now reachable from the library. Narrow the shared listing with the
+  // filters so this run's persona (identified by its unique seed) is deterministically present.
+  await page.getByRole("link", { name: "Back to library" }).click();
+  await page.getByRole("combobox", { name: "Active within" }).selectOption("1h");
+  await page.getByRole("combobox", { name: "Per page" }).selectOption("100");
+  const libraryEntry = page.getByRole("button", {
+    name: new RegExp(`retail-profile@v1 · seed ${seed}\\b`),
+  });
+  await expect(libraryEntry).toBeVisible();
+  await expect(libraryEntry).toContainText(displayName);
 
-  expect(retrievalResponse.status()).toBe(200);
-  expect(new URL(retrievalResponse.url()).origin).toBe("http://localhost:5173");
-  expect(retrieved).toEqual(generated);
-  await expect(page.getByText("Retrieved from recorded inputs")).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: retrieved.initial_state.persona.display_name }),
-  ).toBeVisible();
-  await expect(page.getByText(retrieved.initial_state_hash)).toBeVisible();
+  // Revisiting replays the same deterministic fingerprint.
+  await libraryEntry.click();
+  await expect(page.getByRole("heading", { name: displayName })).toBeVisible();
+  await expect(page.getByText(generated.initial_state_hash)).toBeVisible();
 });

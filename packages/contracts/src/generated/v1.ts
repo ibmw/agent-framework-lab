@@ -45,7 +45,8 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /** List support conversations most recently active first */
+    get: operations["listConversations"];
     put?: never;
     /** Start a support conversation from generated scenario state */
     post: operations["startConversation"];
@@ -66,7 +67,8 @@ export interface paths {
     get: operations["getConversation"];
     put?: never;
     post?: never;
-    delete?: never;
+    /** Permanently delete a conversation and its records */
+    delete: operations["deleteConversation"];
     options?: never;
     head?: never;
     patch?: never;
@@ -174,6 +176,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/scenarios/generations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List generated personas most recently active first */
+    get: operations["listGeneratedScenarios"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations/{seed}": {
     parameters: {
       query?: never;
@@ -185,7 +204,8 @@ export interface paths {
     get: operations["getGeneratedScenario"];
     put?: never;
     post?: never;
-    delete?: never;
+    /** Permanently delete a generated persona and its conversations */
+    delete: operations["deleteGeneratedScenario"];
     options?: never;
     head?: never;
     patch?: never;
@@ -265,6 +285,17 @@ export interface components {
       /** Unavailability Reason */
       unavailability_reason?: string | null;
     };
+    /** ConversationListResponse */
+    ConversationListResponse: {
+      /** Conversations */
+      conversations: components["schemas"]["ConversationSummaryResponse"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
     /** ConversationResponse */
     ConversationResponse: {
       /**
@@ -294,6 +325,34 @@ export interface components {
       created_at: string;
       /** Turns */
       turns: components["schemas"]["ConversationTurnResponse"][];
+    };
+    /** ConversationSummaryResponse */
+    ConversationSummaryResponse: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Scenario Id */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: string;
+      /** Seed */
+      seed: number;
+      /** Framework Id */
+      framework_id: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Last Activity At
+       * Format: date-time
+       */
+      last_activity_at: string;
+      /** Turn Count */
+      turn_count: number;
     };
     /** ConversationTurnResponse */
     ConversationTurnResponse: {
@@ -365,12 +424,50 @@ export interface components {
        */
       seed: number;
     };
+    /** GeneratedScenarioListResponse */
+    GeneratedScenarioListResponse: {
+      /** Generations */
+      generations: components["schemas"]["GeneratedScenarioSummaryResponse"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
     /** GeneratedScenarioResponse */
     GeneratedScenarioResponse: {
       metadata: components["schemas"]["ScenarioMetadataResponse"];
       /** Initial State Hash */
       initial_state_hash: string;
       initial_state: components["schemas"]["InitialStateResponse"];
+    };
+    /** GeneratedScenarioSummaryResponse */
+    GeneratedScenarioSummaryResponse: {
+      /** Scenario Id */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: string;
+      /** Seed */
+      seed: number;
+      /** Display Name */
+      display_name: string;
+      /** Locale */
+      locale: string;
+      /** Initial State Hash */
+      initial_state_hash: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Last Activity At
+       * Format: date-time
+       */
+      last_activity_at: string;
+      /** Conversation Count */
+      conversation_count: number;
     };
     /** HealthResponse */
     HealthResponse: {
@@ -599,6 +696,52 @@ export interface operations {
       };
     };
   };
+  listConversations: {
+    parameters: {
+      query?: {
+        scenario_id?: string | null;
+        scenario_version?: string | null;
+        seed?: number | null;
+        framework_id?: string | null;
+        active_since?: string | null;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationListResponse"];
+        };
+      };
+      /** @description Invalid filter or page */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   startConversation: {
     parameters: {
       query?: never;
@@ -680,6 +823,53 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["ConversationResponse"];
         };
+      };
+      /** @description Conversation is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid session ID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  deleteConversation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Conversation is not found */
       404: {
@@ -1082,6 +1272,51 @@ export interface operations {
       };
     };
   };
+  listGeneratedScenarios: {
+    parameters: {
+      query?: {
+        scenario_id?: string | null;
+        scenario_version?: string | null;
+        framework_id?: string | null;
+        active_since?: string | null;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GeneratedScenarioListResponse"];
+        };
+      };
+      /** @description Invalid filter or page */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   getGeneratedScenario: {
     parameters: {
       query?: never;
@@ -1106,6 +1341,58 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["GeneratedScenarioResponse"];
         };
+      };
+      /** @description Generated scenario is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid scenario reference */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  deleteGeneratedScenario: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable scenario family identifier. */
+        scenario_id: string;
+        /** @description Immutable scenario behavior version. */
+        scenario_version: string;
+        /** @description Unsigned 32-bit deterministic generation seed. */
+        seed: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Generated scenario is not found */
       404: {

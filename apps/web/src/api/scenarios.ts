@@ -1,5 +1,6 @@
 import type {
   ErrorResponse,
+  GeneratedScenarioListResponse,
   GeneratedScenarioResponse,
   GenerateScenarioRequest,
 } from "@agent-lab/contracts";
@@ -69,4 +70,66 @@ export async function getGeneratedScenario(
 ): Promise<GeneratedScenarioResponse> {
   const response = await fetch(`${generationPath(scenario)}/${seed}`);
   return readGeneratedScenario(response);
+}
+
+export async function deleteGeneratedScenario(
+  scenario: ScenarioReference,
+  seed: number,
+): Promise<void> {
+  const response = await fetch(`${generationPath(scenario)}/${seed}`, { method: "DELETE" });
+  if (response.ok) {
+    return;
+  }
+
+  let error: ErrorResponse | undefined;
+  try {
+    error = (await response.json()) as ErrorResponse;
+  } catch {
+    // Keep non-contract intermediary details out of the UI.
+  }
+  throw new ScenarioApiError(
+    error?.message ?? "The generated persona could not be deleted.",
+    response.status,
+    error?.request_id,
+  );
+}
+
+export interface PersonaLibraryQuery {
+  scenarioId?: string;
+  scenarioVersion?: string;
+  frameworkId?: string;
+  activeSince?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listGeneratedScenarios(
+  query: PersonaLibraryQuery = {},
+): Promise<GeneratedScenarioListResponse> {
+  const params = new URLSearchParams();
+  if (query.scenarioId) params.set("scenario_id", query.scenarioId);
+  if (query.scenarioVersion) params.set("scenario_version", query.scenarioVersion);
+  if (query.frameworkId) params.set("framework_id", query.frameworkId);
+  if (query.activeSince) params.set("active_since", query.activeSince);
+  if (query.page) params.set("page", String(query.page));
+  if (query.pageSize) params.set("page_size", String(query.pageSize));
+  const search = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/scenarios/generations${search ? `?${search}` : ""}`,
+  );
+  if (response.ok) {
+    return (await response.json()) as GeneratedScenarioListResponse;
+  }
+
+  let error: ErrorResponse | undefined;
+  try {
+    error = (await response.json()) as ErrorResponse;
+  } catch {
+    // Keep non-contract intermediary details out of the UI.
+  }
+  throw new ScenarioApiError(
+    error?.message ?? "The scenario service could not list personas.",
+    response.status,
+    error?.request_id,
+  );
 }

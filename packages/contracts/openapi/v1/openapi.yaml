@@ -75,6 +75,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: List support conversations most recently active first
+      operationId: listConversations
+      parameters:
+      - name: scenario_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Scenario Id
+      - name: scenario_version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 2
+            maxLength: 64
+            pattern: ^v[1-9][0-9]*$
+          - type: 'null'
+          title: Scenario Version
+      - name: seed
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 4294967295
+            minimum: 0
+          - type: 'null'
+          title: Seed
+      - name: framework_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Framework Id
+      - name: active_since
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Active Since
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Page Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '422':
+          description: Invalid filter or page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/conversations/{session_id}:
     get:
       summary: Resume a persisted support conversation
@@ -94,6 +186,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConversationResponse'
+        '404':
+          description: Conversation is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Permanently delete a conversation and its records
+      operationId: deleteConversation
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      responses:
+        '204':
+          description: Successful Response
         '404':
           description: Conversation is not found
           content:
@@ -466,6 +590,89 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/scenarios/generations:
+    get:
+      summary: List generated personas most recently active first
+      operationId: listGeneratedScenarios
+      parameters:
+      - name: scenario_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Scenario Id
+      - name: scenario_version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 2
+            maxLength: 64
+            pattern: ^v[1-9][0-9]*$
+          - type: 'null'
+          title: Scenario Version
+      - name: framework_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            maxLength: 64
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Framework Id
+      - name: active_since
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Active Since
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Page Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratedScenarioListResponse'
+        '422':
+          description: Invalid filter or page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations/{seed}:
     get:
       summary: Retrieve persisted generated scenario state
@@ -510,6 +717,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GeneratedScenarioResponse'
+        '404':
+          description: Generated scenario is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid scenario reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Permanently delete a generated persona and its conversations
+      operationId: deleteGeneratedScenario
+      parameters:
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          description: Stable scenario family identifier.
+          title: Scenario Id
+        description: Stable scenario family identifier.
+      - name: scenario_version
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 2
+          maxLength: 64
+          pattern: ^v[1-9][0-9]*$
+          description: Immutable scenario behavior version.
+          title: Scenario Version
+        description: Immutable scenario behavior version.
+      - name: seed
+        in: path
+        required: true
+        schema:
+          type: integer
+          maximum: 4294967295
+          minimum: 0
+          description: Unsigned 32-bit deterministic generation seed.
+          title: Seed
+        description: Unsigned 32-bit deterministic generation seed.
+      responses:
+        '204':
+          description: Successful Response
         '404':
           description: Generated scenario is not found
           content:
@@ -652,6 +916,30 @@ components:
       - model_id
       - capabilities
       title: AgentFrameworkResponse
+    ConversationListResponse:
+      properties:
+        conversations:
+          items:
+            $ref: '#/components/schemas/ConversationSummaryResponse'
+          type: array
+          title: Conversations
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+        total:
+          type: integer
+          title: Total
+      additionalProperties: false
+      type: object
+      required:
+      - conversations
+      - page
+      - page_size
+      - total
+      title: ConversationListResponse
     ConversationResponse:
       properties:
         id:
@@ -699,6 +987,47 @@ components:
       - created_at
       - turns
       title: ConversationResponse
+    ConversationSummaryResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        scenario_id:
+          type: string
+          title: Scenario Id
+        scenario_version:
+          type: string
+          title: Scenario Version
+        seed:
+          type: integer
+          title: Seed
+        framework_id:
+          type: string
+          title: Framework Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        last_activity_at:
+          type: string
+          format: date-time
+          title: Last Activity At
+        turn_count:
+          type: integer
+          title: Turn Count
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - scenario_id
+      - scenario_version
+      - seed
+      - framework_id
+      - created_at
+      - last_activity_at
+      - turn_count
+      title: ConversationSummaryResponse
     ConversationTurnResponse:
       properties:
         id:
@@ -824,6 +1153,30 @@ components:
       required:
       - seed
       title: GenerateScenarioRequest
+    GeneratedScenarioListResponse:
+      properties:
+        generations:
+          items:
+            $ref: '#/components/schemas/GeneratedScenarioSummaryResponse'
+          type: array
+          title: Generations
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+        total:
+          type: integer
+          title: Total
+      additionalProperties: false
+      type: object
+      required:
+      - generations
+      - page
+      - page_size
+      - total
+      title: GeneratedScenarioListResponse
     GeneratedScenarioResponse:
       properties:
         metadata:
@@ -841,6 +1194,50 @@ components:
       - initial_state_hash
       - initial_state
       title: GeneratedScenarioResponse
+    GeneratedScenarioSummaryResponse:
+      properties:
+        scenario_id:
+          type: string
+          title: Scenario Id
+        scenario_version:
+          type: string
+          title: Scenario Version
+        seed:
+          type: integer
+          title: Seed
+        display_name:
+          type: string
+          title: Display Name
+        locale:
+          type: string
+          title: Locale
+        initial_state_hash:
+          type: string
+          title: Initial State Hash
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        last_activity_at:
+          type: string
+          format: date-time
+          title: Last Activity At
+        conversation_count:
+          type: integer
+          title: Conversation Count
+      additionalProperties: false
+      type: object
+      required:
+      - scenario_id
+      - scenario_version
+      - seed
+      - display_name
+      - locale
+      - initial_state_hash
+      - created_at
+      - last_activity_at
+      - conversation_count
+      title: GeneratedScenarioSummaryResponse
     HealthResponse:
       properties:
         status:

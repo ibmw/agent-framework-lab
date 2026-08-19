@@ -923,3 +923,393 @@ async def test_advanced_conversation_turn_is_a_retryable_conflict(
     assert conflict.status_code == 409
     assert conflict.json()["code"] == "conversation_advanced"
     assert "retry" in conflict.json()["message"]
+
+
+def _clocked_app(tmp_path: Path, clock: MutableClock) -> FastAPI:
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'listing.db'}")
+    Base.metadata.create_all(engine)
+    return create_app(
+        session_factory=create_session_factory(engine),
+        generation_kernel=create_retail_profile_kernel(clock),
+        command_clock=clock,
+    )
+
+
+_GEN_PATH = "/api/v1/scenarios/retail-profile/versions/v1/generations"
+
+
+async def _generate(client: AsyncClient, seed: int) -> None:
+    response = await client.post(
+        _GEN_PATH, headers={"Idempotency-Key": f"gen-{seed}"}, json={"seed": seed}
+    )
+    assert response.status_code == 201, response.text
+
+
+async def _start(client: AsyncClient, seed: int, nonce: str) -> str:
+    response = await client.post(
+        "/api/v1/conversations",
+        headers={"Idempotency-Key": f"start-{seed}-{nonce}"},
+        json={
+            "scenario_id": "retail-profile",
+            "scenario_version": "v1",
+            "seed": seed,
+            "framework_id": "fake",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+async def _message(client: AsyncClient, session_id: str, key: str) -> None:
+    response = await client.post(
+        f"/api/v1/conversations/{session_id}/messages",
+        headers={"Idempotency-Key": key},
+        json={"message": "What is on my account?"},
+    )
+    assert response.status_code == 200, response.text
+
+
+def _at(minute: int) -> datetime:
+    return datetime(2026, 8, 19, 12, minute, tzinfo=UTC)
+
+
+async def test_list_generated_scenarios_orders_by_activity_with_counts(tmp_path: Path) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        empty = await client.get("/api/v1/scenarios/generations")
+        assert empty.status_code == 200
+        assert empty.json() == {"generations": [], "page": 1, "page_size": 50, "total": 0}
+
+        clock.value = _at(0)
+        await _generate(client, 1)
+        clock.value = _at(1)
+        await _generate(client, 2)
+        clock.value = _at(2)
+        session_one = await _start(client, 1, "a")
+        clock.value = _at(3)
+        await _start(client, 2, "b")
+        clock.value = _at(4)
+        await _message(client, session_one, "m1")
+        clock.value = _at(5)
+        await _generate(client, 3)  # generated but never conversed
+
+        listing = await client.get("/api/v1/scenarios/generations")
+
+    body = listing.json()
+    rows = body["generations"]
+    assert [row["seed"] for row in rows] == [3, 1, 2]
+    by_seed = {row["seed"]: row for row in rows}
+    assert by_seed[3]["conversation_count"] == 0
+    assert by_seed[1]["conversation_count"] == 1
+    assert by_seed[2]["conversation_count"] == 1
+    # A never-conversed persona falls back to its generation time.
+    assert by_seed[3]["last_activity_at"] == by_seed[3]["created_at"] == "2026-08-19T12:05:00Z"
+    # A conversed persona surfaces at its latest turn time, not its creation time.
+    assert by_seed[1]["last_activity_at"] == "2026-08-19T12:04:00Z"
+    assert body["total"] == 3
+    assert body["page"] == 1
+
+
+async def test_list_conversations_filters_by_persona_and_orders_by_activity(
+    tmp_path: Path,
+) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        clock.value = _at(0)
+        await _generate(client, 1)
+        await _generate(client, 2)
+        clock.value = _at(1)
+        conv_a = await _start(client, 1, "a")
+        clock.value = _at(2)
+        conv_b = await _start(client, 1, "b")
+        clock.value = _at(3)
+        await _start(client, 2, "c")  # different persona, must be excluded
+        clock.value = _at(4)
+        await _message(client, conv_a, "m1")
+
+        listing = await client.get(
+            "/api/v1/conversations",
+            params={"scenario_id": "retail-profile", "scenario_version": "v1", "seed": 1},
+        )
+
+    body = listing.json()
+    ids = [row["id"] for row in body["conversations"]]
+    assert ids == [conv_a, conv_b]
+    by_id = {row["id"]: row for row in body["conversations"]}
+    assert by_id[conv_a]["turn_count"] == 1
+    assert by_id[conv_b]["turn_count"] == 0
+    assert by_id[conv_a]["last_activity_at"] == "2026-08-19T12:04:00Z"
+    assert body["total"] == 2
+    assert body["page"] == 1
+
+
+async def test_list_conversations_rejects_partial_persona_filter(tmp_path: Path) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/conversations", params={"scenario_id": "retail-profile"}
+        )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+async def test_list_generated_scenarios_enforces_page_bounds(tmp_path: Path) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        page_too_small = await client.get("/api/v1/scenarios/generations", params={"page": 0})
+        size_too_small = await client.get("/api/v1/scenarios/generations", params={"page_size": 0})
+        size_too_large = await client.get(
+            "/api/v1/scenarios/generations", params={"page_size": 101}
+        )
+        at_maximum = await client.get("/api/v1/scenarios/generations", params={"page_size": 100})
+
+    assert page_too_small.status_code == 422
+    assert size_too_small.status_code == 422
+    assert size_too_large.status_code == 422
+    assert at_maximum.status_code == 200
+
+
+async def test_list_conversations_pages_by_number_and_breaks_ties_by_id(tmp_path: Path) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        clock.value = _at(0)
+        await _generate(client, 1)
+        clock.value = _at(1)
+        tie_x = await _start(client, 1, "x")
+        tie_y = await _start(client, 1, "y")  # identical activity to tie_x
+        clock.value = _at(2)
+        newest = await _start(client, 1, "z")
+
+        collected: list[str] = []
+        for page in (1, 2, 3):
+            response = await client.get(
+                "/api/v1/conversations",
+                params={
+                    "page": page,
+                    "page_size": 1,
+                    "scenario_id": "retail-profile",
+                    "scenario_version": "v1",
+                    "seed": 1,
+                },
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["total"] == 3
+            collected.append(body["conversations"][0]["id"])
+
+    assert collected[0] == newest
+    assert collected[1:] == sorted([tie_x, tie_y], reverse=True)
+
+
+async def test_list_conversations_filters_by_framework_and_activity(tmp_path: Path) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        clock.value = _at(0)
+        await _generate(client, 1)
+        clock.value = _at(1)
+        await _start(client, 1, "a")
+        clock.value = _at(3)
+        await _start(client, 1, "b")
+
+        by_framework = await client.get("/api/v1/conversations", params={"framework_id": "fake"})
+        other_framework = await client.get(
+            "/api/v1/conversations", params={"framework_id": "pydantic-ai"}
+        )
+        recent = await client.get(
+            "/api/v1/conversations", params={"active_since": "2026-08-19T12:02:00Z"}
+        )
+
+    assert by_framework.json()["total"] == 2
+    assert other_framework.json()["total"] == 0
+    assert other_framework.json()["conversations"] == []
+    # Only the conversation created at 12:03 is active at/after 12:02.
+    assert recent.json()["total"] == 1
+
+
+async def test_delete_conversation_removes_it_and_its_records(tmp_path: Path) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _generate(client, 1)
+        session_id = await _start(client, 1, "a")
+        await _message(client, session_id, "m1")
+        # A modifying action would also be scoped to the session; proving one dependent is enough.
+
+        before = await client.get("/api/v1/scenarios/generations")
+        deleted = await client.delete(f"/api/v1/conversations/{session_id}")
+        replayed_start = await client.post(
+            "/api/v1/conversations",
+            headers={"Idempotency-Key": "start-1-a"},
+            json={
+                "scenario_id": "retail-profile",
+                "scenario_version": "v1",
+                "seed": 1,
+                "framework_id": "fake",
+            },
+        )
+        resumed = await client.get(f"/api/v1/conversations/{session_id}")
+        listing = await client.get(
+            "/api/v1/conversations",
+            params={"scenario_id": "retail-profile", "scenario_version": "v1", "seed": 1},
+        )
+
+    assert before.json()["generations"][0]["conversation_count"] == 1
+    assert deleted.status_code == 204
+    assert replayed_start.status_code == 409
+    assert replayed_start.json()["code"] == "conversation_conflict"
+    assert resumed.status_code == 404
+    assert listing.json()["total"] == 0
+
+
+async def test_delete_conversation_missing_returns_404(tmp_path: Path) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.delete("/api/v1/conversations/00000000-0000-4000-8000-000000000000")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "conversation_not_found"
+
+
+async def test_delete_generated_persona_cascades_conversations_and_blocks_recreation(
+    tmp_path: Path,
+) -> None:
+    transport = ASGITransport(app=integration_app(tmp_path))
+    generation_path = "/api/v1/scenarios/retail-profile/versions/v1/generations/1"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _generate(client, 1)
+        first_session = await _start(client, 1, "a")
+        second_session = await _start(client, 1, "b")
+        await _message(client, first_session, "m1")
+
+        deleted = await client.delete(generation_path)
+        persona = await client.get(generation_path)
+        first_conversation = await client.get(f"/api/v1/conversations/{first_session}")
+        second_conversation = await client.get(f"/api/v1/conversations/{second_session}")
+        persona_listing = await client.get("/api/v1/scenarios/generations")
+        conversation_listing = await client.get(
+            "/api/v1/conversations",
+            params={"scenario_id": "retail-profile", "scenario_version": "v1", "seed": 1},
+        )
+        replayed_generation = await client.post(
+            _GEN_PATH,
+            headers={"Idempotency-Key": "gen-1"},
+            json={"seed": 1},
+        )
+
+    assert deleted.status_code == 204
+    assert persona.status_code == 404
+    assert first_conversation.status_code == 404
+    assert second_conversation.status_code == 404
+    assert persona_listing.json()["total"] == 0
+    assert conversation_listing.json()["total"] == 0
+    assert replayed_generation.status_code == 409
+    assert replayed_generation.json()["code"] == "generated_scenario_deleted"
+
+
+async def _generate_scenario(client: AsyncClient, scenario_id: str, seed: int) -> None:
+    response = await client.post(
+        f"/api/v1/scenarios/{scenario_id}/versions/v1/generations",
+        headers={"Idempotency-Key": f"gen-{scenario_id}-{seed}"},
+        json={"seed": seed},
+    )
+    assert response.status_code == 201, response.text
+
+
+async def test_list_generated_scenarios_filters_by_scenario(tmp_path: Path) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        clock.value = _at(0)
+        await _generate_scenario(client, "retail-profile", 1)
+        clock.value = _at(1)
+        await _generate_scenario(client, "retail-order-cancellation", 1)
+
+        profile = await client.get(
+            "/api/v1/scenarios/generations", params={"scenario_id": "retail-profile"}
+        )
+        cancellation = await client.get(
+            "/api/v1/scenarios/generations",
+            params={"scenario_id": "retail-order-cancellation", "scenario_version": "v1"},
+        )
+
+    assert [row["scenario_id"] for row in profile.json()["generations"]] == ["retail-profile"]
+    assert [row["scenario_id"] for row in cancellation.json()["generations"]] == [
+        "retail-order-cancellation"
+    ]
+
+
+async def test_list_generated_scenarios_filters_by_framework(tmp_path: Path) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        clock.value = _at(0)
+        await _generate(client, 1)
+        await _generate(client, 2)
+        clock.value = _at(1)
+        await _start(client, 1, "a")  # only persona 1 gets a (fake) conversation
+
+        matching = await client.get(
+            "/api/v1/scenarios/generations", params={"framework_id": "fake"}
+        )
+        other = await client.get(
+            "/api/v1/scenarios/generations", params={"framework_id": "pydantic-ai"}
+        )
+        unfiltered = await client.get("/api/v1/scenarios/generations")
+
+    matching_rows = matching.json()["generations"]
+    assert [row["seed"] for row in matching_rows] == [1]
+    assert matching_rows[0]["conversation_count"] == 1
+    # No persona has a pydantic-ai conversation, so the framework filter excludes them all.
+    assert other.json()["generations"] == []
+    # Without a framework filter, the never-conversed persona is still listed.
+    assert {row["seed"] for row in unfiltered.json()["generations"]} == {1, 2}
+
+
+async def test_list_generated_scenarios_filters_by_active_since(tmp_path: Path) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        clock.value = _at(0)
+        await _generate(client, 1)
+        clock.value = _at(5)
+        await _generate(client, 2)
+
+        recent = await client.get(
+            "/api/v1/scenarios/generations", params={"active_since": "2026-08-19T12:03:00Z"}
+        )
+
+    assert [row["seed"] for row in recent.json()["generations"]] == [2]
+
+
+async def test_list_generated_scenarios_pages_by_number(tmp_path: Path) -> None:
+    clock = MutableClock(_at(0))
+    transport = ASGITransport(app=_clocked_app(tmp_path, clock))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        clock.value = _at(0)
+        await _generate(client, 1)  # oldest activity → last
+        clock.value = _at(1)
+        await _generate(client, 2)  # newest activity → first
+
+        first = await client.get(
+            "/api/v1/scenarios/generations", params={"page": 1, "page_size": 1}
+        )
+        second = await client.get(
+            "/api/v1/scenarios/generations", params={"page": 2, "page_size": 1}
+        )
+
+    first_body = first.json()
+    second_body = second.json()
+    assert first_body == {
+        "generations": first_body["generations"],
+        "page": 1,
+        "page_size": 1,
+        "total": 2,
+    }
+    assert [row["seed"] for row in first_body["generations"]] == [2]
+    assert [row["seed"] for row in second_body["generations"]] == [1]
+    assert second_body["page"] == 2
+    assert second_body["total"] == 2

@@ -16,13 +16,18 @@ from capability_lab.domain.entities import (
 )
 
 if TYPE_CHECKING:
+    from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
     from capability_lab.application.order_actions import (
         ActionProposal,
         ActionProposalDraft,
         ActionStatus,
         OrderActionRequest,
     )
-    from capability_lab.application.scenario_generation import GeneratedScenario
+    from capability_lab.application.scenario_generation import (
+        GeneratedScenario,
+        GeneratedScenarioSummary,
+        PersonaLibraryFilter,
+    )
     from capability_lab.application.support_tools import RetailSupportContext
 
 
@@ -88,6 +93,22 @@ class SessionRepository(Protocol):
 
     def save(self, session: ConversationSession) -> None: ...
 
+    def was_deleted(self, session_id: UUID) -> bool:
+        """Return whether this deterministic session identity was permanently deleted."""
+        ...
+
+    def delete(self, session_id: UUID, *, deleted_at: datetime) -> bool:
+        """Hard-delete the session and its dependents; return whether it existed."""
+        ...
+
+    def list_summaries(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: ConversationListFilter,
+    ) -> tuple[list[ConversationSummary], int]: ...
+
 
 class MemoryRepository(Protocol):
     def list_for_session(self, session_id: UUID) -> list[MemoryRecord]: ...
@@ -104,6 +125,29 @@ class GeneratedScenarioRepository(Protocol):
     ) -> GeneratedScenario | None: ...
 
     def save(self, generated: GeneratedScenario) -> None: ...
+
+    def was_deleted(self, scenario_id: str, scenario_version: str, seed: int) -> bool:
+        """Return whether this generated persona reference was permanently deleted."""
+        ...
+
+    def delete(
+        self,
+        scenario_id: str,
+        scenario_version: str,
+        seed: int,
+        *,
+        deleted_at: datetime,
+    ) -> bool:
+        """Delete generated state and dependent conversations; return whether it existed."""
+        ...
+
+    def list_summaries(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: PersonaLibraryFilter,
+    ) -> tuple[list[GeneratedScenarioSummary], int]: ...
 
 
 class ScenarioGenerationIdempotencyRepository(Protocol):
