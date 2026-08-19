@@ -1,9 +1,5 @@
-import type {
-  AgentFrameworkListResponse,
-  ConversationSummaryResponse,
-  GeneratedScenarioResponse,
-} from "@agent-lab/contracts";
-import { ArrowLeft, LoaderCircle, MessageCircle, Plus, RotateCcw, Trash2 } from "lucide-react";
+import type { AgentFrameworkListResponse, ConversationSummaryResponse } from "@agent-lab/contracts";
+import { LoaderCircle, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import {
@@ -15,31 +11,20 @@ import {
   startConversation,
 } from "../api/conversations";
 import { getGeneratedScenario, ScenarioApiError } from "../api/scenarios";
+import { FrameworkPicker } from "../components/FrameworkPicker";
 import { Pagination } from "../components/Pagination";
 import { PersonaSummary } from "../components/PersonaSummary";
 import { ACTIVITY_WINDOWS, activeSinceFromWindow, PAGE_SIZES } from "../lib/filters";
-import {
-  conversationPath,
-  decodePersonaRef,
-  findScenarioOption,
-  type PersonaRef,
-} from "../lib/scenarios";
+import { comparePath, conversationPath, decodePersonaRef, type PersonaRef } from "../lib/scenarios";
 import {
   clearLastConversationIfMatches,
-  fieldControlClasses,
   filterControlClasses,
-  filterLabelClasses,
   formatActivity,
   panelClasses,
+  writeLastComparison,
 } from "../lib/ui";
 
 type Framework = AgentFrameworkListResponse["frameworks"][number];
-
-function pickDefaultFramework(frameworks: Framework[]): string {
-  const available = frameworks.filter((framework) => framework.available);
-  const preferred = available.find((framework) => framework.framework_id === "pydantic-ai");
-  return (preferred ?? available[0])?.framework_id ?? "";
-}
 
 function ConversationRow({
   conversation,
@@ -169,7 +154,6 @@ function ConversationHistory({
       await deleteConversation(id);
       clearLastConversationIfMatches(conversationPath(personaRef, id));
       setConfirmingId(undefined);
-      // Step back a page if the last item on a later page was removed; otherwise refetch in place.
       if (conversations.length === 1 && page > 1) {
         setPage(page - 1);
       } else {
@@ -183,97 +167,107 @@ function ConversationHistory({
   }
 
   return (
-    <div className="grid content-start gap-3">
-      <div className="grid gap-3 min-[420px]:grid-cols-3">
-        <label className={filterLabelClasses}>
-          Framework
-          <select
-            className={filterControlClasses}
-            value={frameworkFilter}
-            onChange={(event) => updateFilter(() => setFrameworkFilter(event.target.value))}
-          >
-            <option value="">All frameworks</option>
-            {frameworkOptions.map((framework) => (
-              <option key={framework} value={framework}>
-                {framework}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={filterLabelClasses}>
-          Active within
-          <select
-            className={filterControlClasses}
-            value={windowFilter}
-            onChange={(event) => updateFilter(() => setWindowFilter(event.target.value))}
-          >
-            <option value="">Any time</option>
-            {ACTIVITY_WINDOWS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={filterLabelClasses}>
-          Per page
-          <select
-            className={filterControlClasses}
-            value={pageSize}
-            onChange={(event) => updateFilter(() => setPageSize(Number(event.target.value)))}
-          >
-            {PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </label>
+    <section className={`${panelClasses} p-6`} aria-labelledby="conversations-title">
+      <div className="mb-5 border-b border-lab-ink/15 pb-5">
+        <h2 className="font-display text-2xl font-medium" id="conversations-title">
+          Conversations
+        </h2>
+        <p className="m-0 text-sm text-lab-muted">
+          Resume an existing run or delete one you no longer need.
+        </p>
       </div>
+      <div className="grid content-start gap-3">
+        <div className="grid gap-3 min-[420px]:grid-cols-3">
+          <label className="grid gap-1 text-[0.68rem] font-extrabold tracking-wide text-lab-muted uppercase">
+            Framework
+            <select
+              className={filterControlClasses}
+              value={frameworkFilter}
+              onChange={(event) => updateFilter(() => setFrameworkFilter(event.target.value))}
+            >
+              <option value="">All frameworks</option>
+              {frameworkOptions.map((framework) => (
+                <option key={framework} value={framework}>
+                  {framework}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-[0.68rem] font-extrabold tracking-wide text-lab-muted uppercase">
+            Active within
+            <select
+              className={filterControlClasses}
+              value={windowFilter}
+              onChange={(event) => updateFilter(() => setWindowFilter(event.target.value))}
+            >
+              <option value="">Any time</option>
+              {ACTIVITY_WINDOWS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-[0.68rem] font-extrabold tracking-wide text-lab-muted uppercase">
+            Per page
+            <select
+              className={filterControlClasses}
+              value={pageSize}
+              onChange={(event) => updateFilter(() => setPageSize(Number(event.target.value)))}
+            >
+              {PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
-      {state === "loading" && (
-        <p className="flex items-center gap-2 text-sm text-lab-muted" role="status">
-          <LoaderCircle className="motion-safe:animate-spin" aria-hidden="true" size={16} />
-          Loading conversations…
-        </p>
-      )}
+        {state === "loading" && (
+          <p className="flex items-center gap-2 text-sm text-lab-muted" role="status">
+            <LoaderCircle className="motion-safe:animate-spin" aria-hidden="true" size={16} />
+            Loading conversations…
+          </p>
+        )}
 
-      {state === "error" && (
-        <p className="text-sm text-lab-error" role="alert">
-          The conversation history could not be loaded.
-        </p>
-      )}
+        {state === "error" && (
+          <p className="text-sm text-lab-error" role="alert">
+            The conversation history could not be loaded.
+          </p>
+        )}
 
-      {state === "ready" && conversations.length === 0 && (
-        <p className="text-sm text-lab-muted">No conversations match these filters yet.</p>
-      )}
+        {state === "ready" && conversations.length === 0 && (
+          <p className="text-sm text-lab-muted">No conversations match these filters yet.</p>
+        )}
 
-      {state === "ready" && conversations.length > 0 && (
-        <ul className="grid gap-2">
-          {conversations.map((conversation) => (
-            <ConversationRow
-              key={conversation.id}
-              conversation={conversation}
-              personaRef={personaRef}
-              confirming={confirmingId === conversation.id}
-              deleting={deletingId === conversation.id}
-              onConfirm={() => handleDelete(conversation.id)}
-              onCancel={() => setConfirmingId(undefined)}
-              onDelete={() => setConfirmingId(conversation.id)}
-            />
-          ))}
-        </ul>
-      )}
+        {state === "ready" && conversations.length > 0 && (
+          <ul className="grid gap-2">
+            {conversations.map((conversation) => (
+              <ConversationRow
+                key={conversation.id}
+                conversation={conversation}
+                personaRef={personaRef}
+                confirming={confirmingId === conversation.id}
+                deleting={deletingId === conversation.id}
+                onConfirm={() => handleDelete(conversation.id)}
+                onCancel={() => setConfirmingId(undefined)}
+                onDelete={() => setConfirmingId(conversation.id)}
+              />
+            ))}
+          </ul>
+        )}
 
-      <Pagination
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        noun="conversation"
-        label="Conversation pages"
-        onPageChange={setPage}
-      />
-    </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          noun="conversation"
+          label="Conversation pages"
+          onPageChange={setPage}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -282,13 +276,14 @@ export function PersonaPage() {
   const personaRef = decodePersonaRef(ref);
   const navigate = useNavigate();
 
-  const [persona, setPersona] = useState<GeneratedScenarioResponse>();
   const [personaState, setPersonaState] = useState<"loading" | "ready" | "error">("loading");
+  const [persona, setPersona] = useState<Awaited<ReturnType<typeof getGeneratedScenario>>>();
   const [frameworks, setFrameworks] = useState<Framework[]>([]);
-  const [selectedFramework, setSelectedFramework] = useState("");
+  const [frameworksLoading, setFrameworksLoading] = useState(true);
+  const [selected, setSelected] = useState<string[]>([]);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string>();
-  const startCommandId = useRef<string | null>(null);
+  const startCommandIds = useRef<Record<string, string>>({});
 
   const scenarioId = personaRef?.scenarioId;
   const scenarioVersion = personaRef?.scenarioVersion;
@@ -308,14 +303,25 @@ export function PersonaPage() {
         }
       })
       .catch(() => active && setPersonaState("error"));
+    setFrameworksLoading(true);
     listAgentFrameworks()
       .then((response) => {
         if (active) {
           setFrameworks(response.frameworks);
-          setSelectedFramework(pickDefaultFramework(response.frameworks));
+          setSelected(
+            response.frameworks
+              .filter((framework) => framework.available)
+              .slice(0, 2)
+              .map((framework) => framework.framework_id),
+          );
+          setFrameworksLoading(false);
         }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (active) {
+          setFrameworksLoading(false);
+        }
+      });
     return () => {
       active = false;
     };
@@ -325,37 +331,59 @@ export function PersonaPage() {
     return <Navigate to="/" replace />;
   }
 
-  const scenarioOption = findScenarioOption(personaRef.scenarioId, personaRef.scenarioVersion);
-  const availableFrameworks = frameworks.filter((framework) => framework.available);
+  function toggleFramework(frameworkId: string) {
+    setSelected((current) => {
+      if (current.includes(frameworkId)) {
+        return current.filter((id) => id !== frameworkId);
+      }
+      if (current.length >= 2) {
+        return [current[1], frameworkId];
+      }
+      return [...current, frameworkId];
+    });
+  }
 
-  async function handleStartConversation() {
-    if (
-      scenarioId === undefined ||
-      scenarioVersion === undefined ||
-      seed === undefined ||
-      !selectedFramework
-    ) {
+  async function handleRunSelected() {
+    if (scenarioId === undefined || scenarioVersion === undefined || seed === undefined) {
+      return;
+    }
+    const chosen = selected.filter((id) =>
+      frameworks.some((framework) => framework.framework_id === id && framework.available),
+    );
+    if (chosen.length === 0) {
       return;
     }
     setStartError(undefined);
     setStarting(true);
-    if (startCommandId.current === null) {
-      startCommandId.current = crypto.randomUUID();
-    }
     try {
-      const started = await startConversation(
-        {
-          scenario_id: scenarioId,
-          scenario_version: scenarioVersion,
-          seed,
-          framework_id: selectedFramework,
-        },
-        startCommandId.current,
+      const started = await Promise.all(
+        chosen.map(async (frameworkId) => {
+          if (!startCommandIds.current[frameworkId]) {
+            startCommandIds.current[frameworkId] = crypto.randomUUID();
+          }
+          return startConversation(
+            {
+              scenario_id: scenarioId,
+              scenario_version: scenarioVersion,
+              seed,
+              framework_id: frameworkId,
+            },
+            startCommandIds.current[frameworkId],
+          );
+        }),
       );
-      startCommandId.current = null;
-      navigate(conversationPath(personaRef as PersonaRef, started.id));
+      startCommandIds.current = {};
+      if (started.length === 1) {
+        navigate(conversationPath(personaRef as PersonaRef, started[0].id));
+        return;
+      }
+      writeLastComparison({
+        personaPath: `/personas/${ref}`,
+        a: started[0].id,
+        b: started[1].id,
+      });
+      navigate(comparePath(personaRef as PersonaRef, started[0].id, started[1].id));
     } catch (error) {
-      // Keep the command id so a retry recovers the same session instead of duplicating it.
       setStartError(
         error instanceof ConversationApiError || error instanceof ScenarioApiError
           ? error.message
@@ -365,13 +393,15 @@ export function PersonaPage() {
     }
   }
 
+  const runLabel = selected.length >= 2 ? "Run both on this fingerprint" : "Start conversation";
+
   return (
     <div className="grid gap-6">
       <Link
-        className="inline-flex w-fit items-center gap-2 text-sm font-bold text-lab-ink-soft hover:text-lab-ink"
-        to="/"
+        className="inline-flex w-fit text-sm font-bold text-lab-ink-soft no-underline hover:text-lab-ink"
+        to="/#library"
       >
-        <ArrowLeft aria-hidden="true" size={16} /> Back to library
+        Back to library
       </Link>
 
       {personaState === "loading" && (
@@ -396,79 +426,33 @@ export function PersonaPage() {
 
       {personaState === "ready" && persona && (
         <>
-          <PersonaSummary result={persona} source="retrieved" />
-
-          <section className={`${panelClasses} p-6`} aria-labelledby="conversations-title">
-            <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-lab-ink/15 pb-5">
-              <div>
-                <h2 className="font-display text-2xl font-medium" id="conversations-title">
-                  Conversations
-                </h2>
-                <p className="m-0 text-sm text-lab-muted">
-                  Resume an existing conversation or start a new one against a framework.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.6fr)]">
-              <ConversationHistory
-                personaRef={personaRef}
-                frameworkOptions={frameworks.map((framework) => framework.framework_id)}
-              />
-
-              <aside className="grid content-start gap-3 rounded-lg border border-lab-border bg-lab-subtle p-4">
-                <h3 className="flex items-center gap-2 text-sm font-bold">
-                  <Plus aria-hidden="true" size={16} /> Start a new conversation
-                </h3>
-                {scenarioOption && (
-                  <p className="m-0 text-xs leading-snug text-lab-muted">{scenarioOption.goal}</p>
-                )}
-                <label className={filterLabelClasses} htmlFor="framework">
-                  Agent framework
-                </label>
-                <select
-                  className={fieldControlClasses}
-                  id="framework"
-                  value={selectedFramework}
-                  onChange={(event) => setSelectedFramework(event.target.value)}
-                  disabled={starting || availableFrameworks.length === 0}
-                >
-                  {availableFrameworks.length === 0 && (
-                    <option value="">No framework available</option>
-                  )}
-                  {availableFrameworks.map((framework) => (
-                    <option key={framework.framework_id} value={framework.framework_id}>
-                      {framework.framework_id}
-                    </option>
-                  ))}
-                </select>
-
-                {startError && (
-                  <p className="m-0 text-xs text-lab-error" role="alert">
-                    {startError}
-                  </p>
-                )}
-
-                <button
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-lab-ink px-4 font-bold text-lab-paper transition hover:bg-lab-ink-hover disabled:cursor-not-allowed disabled:opacity-65"
-                  type="button"
-                  onClick={handleStartConversation}
-                  disabled={starting || !selectedFramework}
-                >
-                  {starting ? (
-                    <LoaderCircle
-                      className="motion-safe:animate-spin"
-                      aria-hidden="true"
-                      size={16}
-                    />
-                  ) : (
-                    <MessageCircle aria-hidden="true" size={16} />
-                  )}
-                  {starting ? "Starting…" : "Start new conversation"}
-                </button>
-              </aside>
-            </div>
-          </section>
+          <PersonaSummary
+            result={persona}
+            onChooseFramework={() => {
+              document.getElementById("frameworks")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          />
+          <div className="scroll-mt-6" id="frameworks">
+            <FrameworkPicker
+              frameworks={frameworks}
+              selected={selected}
+              onToggle={toggleFramework}
+              onRunSelected={handleRunSelected}
+              running={starting}
+              error={startError}
+              loading={frameworksLoading}
+              runLabel={runLabel}
+              helper={
+                selected.length >= 2
+                  ? "one conversation per framework"
+                  : "one conversation on this fingerprint"
+              }
+            />
+          </div>
+          <ConversationHistory
+            personaRef={personaRef}
+            frameworkOptions={frameworks.map((framework) => framework.framework_id)}
+          />
         </>
       )}
     </div>

@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 const generationUrl = "*/api/v1/scenarios/retail-profile/versions/v1/generations";
@@ -222,7 +222,16 @@ const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   // The library and persona pages both read the framework list; tests may override it.
-  server.use(http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(frameworksResponse)));
+  server.use(
+    http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(frameworksResponse)),
+    http.get("*/api/v1/conversations", ({ request }) => {
+      const path = new URL(request.url).pathname.replace(/\/$/, "");
+      if (!path.endsWith("/api/v1/conversations")) {
+        return;
+      }
+      return HttpResponse.json(conversationListBody([]));
+    }),
+  );
 });
 afterEach(() => {
   server.resetHandlers();
@@ -255,16 +264,43 @@ function conversationGoalCard() {
 }
 
 describe("persona library", () => {
-  it("renders the hero, generator, and an empty persona library", async () => {
+  it("renders the generator, bench rail, and an empty persona library", async () => {
     server.use(emptyLibrary());
     renderAt("/");
 
+    expect(screen.getByRole("heading", { name: "Generate a persona" })).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "This bench" })).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Meet the customer before the agent." }),
-    ).toBeVisible();
+      screen.getByRole("navigation", { name: "Bench steps", hidden: true }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Scenario" })).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Seed" })).toBeVisible();
     expect(await screen.findByText(/No personas yet/)).toBeVisible();
+  });
+
+  it("scrolls to generate and library from This bench", async () => {
+    server.use(emptyLibrary());
+    const originalScroll = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    try {
+      const user = userEvent.setup();
+      renderAt("/");
+
+      const rail = screen.getByRole("navigation", { name: "This bench" });
+      const generate = within(rail).getByRole("link", { name: /Generate persona/ });
+      const library = within(rail).getByRole("link", { name: /Persona library/ });
+      expect(generate).toHaveAttribute("href", "/#generate");
+      expect(library).toHaveAttribute("href", "/#library");
+
+      await user.click(library);
+      expect(scrollIntoView).toHaveBeenCalled();
+      expect(document.getElementById("library")).toBeTruthy();
+      expect(document.getElementById("generate")).toBeTruthy();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScroll;
+    }
   });
 
   it("validates scenario and seed before making a request", async () => {
@@ -295,11 +331,8 @@ describe("persona library", () => {
       screen.getByRole("combobox", { name: "Scenario" }),
       "retail-profile@v1",
     );
-    expect(
-      screen.getByText("A fictional customer, two products, and one paid order."),
-    ).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Randomize" }));
+    await user.click(screen.getByRole("button", { name: "Random seed" }));
     const seed = screen.getByRole("textbox", { name: "Seed" });
     expect(seed).toBeInstanceOf(HTMLInputElement);
     expect((seed as HTMLInputElement).value).toMatch(/^\d+$/);
@@ -317,11 +350,50 @@ describe("persona library", () => {
     const user = userEvent.setup();
     renderAt("/");
 
-    await user.click(await screen.findByRole("button", { name: /^Maya Chen/ }));
+    await user.click(await screen.findByRole("link", { name: /Maya Chen/ }));
 
     expect(await screen.findByRole("heading", { name: "Maya Chen" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Conversations" })).toBeVisible();
     expect(await screen.findByText(/No conversations match these filters yet/)).toBeVisible();
+  });
+
+  it("loads library conversations in one list request for the page", async () => {
+    const conversationRequests: URLSearchParams[] = [];
+    server.use(
+      http.get("*/api/v1/scenarios/generations", () =>
+        HttpResponse.json(
+          libraryBody([
+            personaSummary(),
+            personaSummary({
+              display_name: "Jordan Smith",
+              seed: 20_260_817,
+              initial_state_hash: "b".repeat(64),
+            }),
+            personaSummary({
+              display_name: "Casey Garcia",
+              seed: 20_260_818,
+              initial_state_hash: "c".repeat(64),
+            }),
+          ]),
+        ),
+      ),
+      http.get("*/api/v1/conversations", ({ request }) => {
+        const path = new URL(request.url).pathname.replace(/\/$/, "");
+        if (!path.endsWith("/api/v1/conversations")) {
+          return;
+        }
+        conversationRequests.push(new URL(request.url).searchParams);
+        return HttpResponse.json(conversationListBody([conversationSummary({ turn_count: 1 })]));
+      }),
+    );
+    renderAt("/");
+
+    expect(await screen.findByText("Maya Chen")).toBeVisible();
+    expect(screen.getByText("Jordan Smith")).toBeVisible();
+    expect(screen.getByText("Casey Garcia")).toBeVisible();
+    await waitFor(() => expect(conversationRequests).toHaveLength(1));
+    expect(conversationRequests[0].get("seed")).toBeNull();
+    expect(conversationRequests[0].get("page_size")).toBe("100");
   });
 
   it("pages the persona library by number", async () => {
@@ -436,8 +508,11 @@ describe("generating a persona", () => {
     await user.click(screen.getByRole("button", { name: "Generate persona" }));
 
     expect(await screen.findByRole("heading", { name: "Maya Chen" })).toBeVisible();
-    expect(screen.getByText("maya.chen@example.test")).toBeVisible();
+    expect(screen.getByText(/maya.chen@example.test/)).toBeVisible();
     expect(screen.getByText("detail oriented")).toBeVisible();
+    expect(screen.getByText("canonical schema v1")).toBeVisible();
+    expect(screen.getByText("policy set v1")).toBeVisible();
+    expect(screen.getByText("seed 20260816")).toBeVisible();
   });
 
   it("shows a recoverable network-error state and stays on the library", async () => {
@@ -475,7 +550,7 @@ describe("conversations", () => {
     renderAt(`/personas/${profileRef}`);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole("button", { name: "Start new conversation" }));
+    await user.click(await screen.findByRole("button", { name: "Start conversation" }));
 
     expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
     expect(startKey).toMatch(/^conversation:retail-profile:v1:20260816:fake:.+/);
@@ -512,7 +587,8 @@ describe("conversations", () => {
 
     expect(await screen.findByRole("heading", { name: "Support conversation" })).toBeVisible();
     expect(await screen.findByText("I found one paid order.")).toBeVisible();
-    expect(screen.getByText("list_customer_orders@v1 · success")).toBeVisible();
+    expect(screen.getByText("list_customer_orders")).toBeVisible();
+    expect(screen.getByText("ok")).toBeVisible();
     expect(conversationGoalCard().getByText(/a clear picture of your account/i)).toBeVisible();
   });
 
@@ -580,6 +656,36 @@ describe("conversations", () => {
 
     expect(await screen.findByText("I found one paid order.")).toBeVisible();
     expect(screen.getByText("a".repeat(32))).toBeVisible();
+  });
+
+  it("shows the customer message while the assistant turn is in flight", async () => {
+    let release: (value?: unknown) => void = () => undefined;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      personaResource(generatedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(emptyConversation),
+      ),
+      http.post("*/api/v1/conversations/*/messages", async () => {
+        await held;
+        return HttpResponse.json(conversationWithTurn);
+      }),
+    );
+    renderAt(`/personas/${profileRef}/conversations/${emptyConversation.id}`);
+
+    const composer = await screen.findByRole("textbox", { name: "Support message" });
+    const user = userEvent.setup();
+    await user.type(composer, "What orders are on my account?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("What orders are on my account?")).toBeVisible();
+    expect(screen.getByText("Thinking…")).toBeVisible();
+
+    release();
+    expect(await screen.findByText("I found one paid order.")).toBeVisible();
+    expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
   });
 
   it("filters the conversation history by framework, activity, and page size", async () => {
@@ -695,11 +801,11 @@ describe("safe order actions", () => {
     expect(conversationGoalCard().getByText(/cancel your paid order/i)).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Confirm exact action" }));
-    expect(await screen.findByText("Confirmed")).toBeVisible();
+    expect((await screen.findAllByText("Confirmed")).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Execute cancellation" }));
-    expect(await screen.findByText("Executed")).toBeVisible();
-    expect(screen.getByText(/Order is cancelled at version 2. Attempts: 1/)).toBeVisible();
+    expect((await screen.findAllByText("Executed")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Order is cancelled at version 2/)).toBeVisible();
   });
 
   it("restores a persisted action state on reload", async () => {
@@ -724,8 +830,8 @@ describe("safe order actions", () => {
     );
     renderAt(`/personas/${actionRef}/conversations/${actionEmptyConversation.id}`);
 
-    expect(await screen.findByText("Executed")).toBeVisible();
-    expect(screen.getByText(/Order is cancelled at version 2. Attempts: 1/)).toBeVisible();
+    expect((await screen.findAllByText("Executed")).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Order is cancelled at version 2/)).toBeVisible();
   });
 
   it("offers an idempotent retry after a transient execution failure", async () => {
@@ -769,7 +875,272 @@ describe("safe order actions", () => {
 
     expect(await screen.findByText("Retry available")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Retry execution safely" }));
-    expect(await screen.findByText("Executed")).toBeVisible();
+    expect((await screen.findAllByText("Executed")).length).toBeGreaterThan(0);
     expect(executions).toBe(2);
+  });
+});
+
+const availableFrameworksResponse = {
+  frameworks: [
+    {
+      framework_id: "fake",
+      available: true,
+      model_id: null,
+      capabilities: ["tool_calls", "conversation_memory", "session_resume", "structured_output"],
+    },
+    {
+      framework_id: "pydantic-ai",
+      available: true,
+      model_id: "gpt-5-mini",
+      capabilities: ["tool_calls", "conversation_memory", "session_resume", "structured_output"],
+    },
+  ],
+};
+
+const pydanticConversation: ConversationResponse = {
+  ...conversationWithTurn,
+  id: "60000000-0000-4000-8000-000000000000",
+  framework_id: "pydantic-ai",
+  turns: [
+    {
+      ...conversationWithTurn.turns[0],
+      id: "70000000-0000-4000-8000-000000000000",
+      tool_activity: [
+        {
+          tool_name: "read_customer",
+          tool_version: "v1",
+          outcome: "success",
+          result: {},
+        },
+        {
+          tool_name: "list_customer_orders",
+          tool_version: "v1",
+          outcome: "success",
+          result: { orders: [] },
+        },
+      ],
+    },
+  ],
+};
+
+const fakeCompareConversation: ConversationResponse = {
+  ...conversationWithTurn,
+  turns: [
+    {
+      ...conversationWithTurn.turns[0],
+      tool_activity: [
+        {
+          tool_name: "read_customer",
+          tool_version: "v1",
+          outcome: "success",
+          result: {},
+        },
+        {
+          tool_name: "list_products",
+          tool_version: "v1",
+          outcome: "success",
+          result: {},
+        },
+        {
+          tool_name: "list_customer_orders",
+          tool_version: "v1",
+          outcome: "success",
+          result: { orders: [] },
+        },
+      ],
+    },
+  ],
+};
+
+describe("framework comparison", () => {
+  it("starts both frameworks and opens the comparison", async () => {
+    const started: string[] = [];
+    server.use(
+      personaResource(generatedPersona),
+      http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(availableFrameworksResponse)),
+      http.post("*/api/v1/conversations", async ({ request }) => {
+        const body = (await request.json()) as { framework_id: string };
+        started.push(body.framework_id);
+        if (body.framework_id === "pydantic-ai") {
+          return HttpResponse.json(
+            { ...emptyConversation, id: pydanticConversation.id, framework_id: "pydantic-ai" },
+            { status: 201 },
+          );
+        }
+        return HttpResponse.json(emptyConversation, { status: 201 });
+      }),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(fakeCompareConversation),
+      ),
+      http.get(`*/api/v1/conversations/${pydanticConversation.id}`, () =>
+        HttpResponse.json(pydanticConversation),
+      ),
+    );
+    renderAt(`/personas/${profileRef}`);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Run both on this fingerprint" }));
+
+    expect(
+      await screen.findByRole("heading", { name: /They do not behave the same/ }),
+    ).toBeVisible();
+    expect(started.sort()).toEqual(["fake", "pydantic-ai"]);
+    expect(
+      screen.getByRole("table", { name: "Framework comparison signals", hidden: true }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("all three, fixed order").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("two, on demand").length).toBeGreaterThan(0);
+  });
+
+  it("refuses to compare conversations with different fingerprints", async () => {
+    server.use(
+      personaResource(generatedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(conversationWithTurn),
+      ),
+      http.get(`*/api/v1/conversations/${pydanticConversation.id}`, () =>
+        HttpResponse.json({ ...pydanticConversation, initial_state_hash: "b".repeat(64) }),
+      ),
+    );
+    renderAt(
+      `/personas/${profileRef}/compare?a=${emptyConversation.id}&b=${pydanticConversation.id}`,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "These conversations do not share a fingerprint",
+    );
+  });
+
+  it("colors confirmation independently for each framework", async () => {
+    window.localStorage.setItem(`agent-lab:action-proposal:${emptyConversation.id}`, "proposal-a");
+    window.localStorage.setItem(
+      `agent-lab:action-proposal:${pydanticConversation.id}`,
+      "proposal-b",
+    );
+    server.use(
+      personaResource(generatedPersona),
+      http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(availableFrameworksResponse)),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(fakeCompareConversation),
+      ),
+      http.get(`*/api/v1/conversations/${pydanticConversation.id}`, () =>
+        HttpResponse.json(pydanticConversation),
+      ),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}/actions/proposal-a`, () =>
+        HttpResponse.json({
+          ...proposedAction,
+          id: "proposal-a",
+          session_id: emptyConversation.id,
+          status: "executed",
+          attempts: 1,
+          result_order_status: "cancelled",
+          result_order_version: 2,
+        }),
+      ),
+      http.get(`*/api/v1/conversations/${pydanticConversation.id}/actions/proposal-b`, () =>
+        HttpResponse.json({
+          ...proposedAction,
+          id: "proposal-b",
+          session_id: pydanticConversation.id,
+          status: "proposed",
+          attempts: 0,
+        }),
+      ),
+    );
+    renderAt(
+      `/personas/${profileRef}/compare?a=${emptyConversation.id}&b=${pydanticConversation.id}`,
+    );
+
+    const table = await screen.findByRole("table", {
+      name: "Framework comparison signals",
+      hidden: true,
+    });
+    const row = within(table).getByRole("row", { name: /Confirmation respected/, hidden: true });
+    const cells = within(row).getAllByRole("cell", { hidden: true });
+    expect(cells[0]).toHaveTextContent("yes · token matched, attempts 1");
+    expect(cells[0]).toHaveClass("text-lab-success");
+    expect(cells[1]).toHaveTextContent("proposed · attempts 0");
+    expect(cells[1]).toHaveClass("text-lab-muted");
+    expect(cells[1]).not.toHaveClass("text-lab-success");
+  });
+
+  it("compares two library rows that share a fingerprint", async () => {
+    server.use(
+      http.get("*/api/v1/scenarios/generations", () =>
+        HttpResponse.json(libraryBody([personaSummary()])),
+      ),
+      http.get("*/api/v1/conversations", () =>
+        HttpResponse.json(
+          conversationListBody([
+            conversationSummary({ turn_count: 1 }),
+            conversationSummary({
+              id: pydanticConversation.id,
+              framework_id: "pydantic-ai",
+              turn_count: 1,
+            }),
+          ]),
+        ),
+      ),
+      personaResource(generatedPersona),
+      http.get(`*/api/v1/conversations/${emptyConversation.id}`, () =>
+        HttpResponse.json(fakeCompareConversation),
+      ),
+      http.get(`*/api/v1/conversations/${pydanticConversation.id}`, () =>
+        HttpResponse.json(pydanticConversation),
+      ),
+      http.get("*/api/v1/agent-frameworks", () => HttpResponse.json(availableFrameworksResponse)),
+    );
+    const user = userEvent.setup();
+    renderAt("/");
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Select Maya Chen fake conversation/ }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: /Select Maya Chen pydantic-ai conversation/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Compare selected" }));
+
+    expect(
+      await screen.findByRole("heading", { name: /They do not behave the same/ }),
+    ).toBeVisible();
+  });
+
+  it("clears library comparison selection when filters change", async () => {
+    server.use(
+      http.get("*/api/v1/scenarios/generations", () =>
+        HttpResponse.json(libraryBody([personaSummary()])),
+      ),
+      http.get("*/api/v1/conversations", () =>
+        HttpResponse.json(
+          conversationListBody([
+            conversationSummary({ turn_count: 1 }),
+            conversationSummary({
+              id: pydanticConversation.id,
+              framework_id: "pydantic-ai",
+              turn_count: 1,
+            }),
+          ]),
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAt("/");
+
+    await user.click(
+      await screen.findByRole("checkbox", { name: /Select Maya Chen fake conversation/ }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: /Select Maya Chen pydantic-ai conversation/ }),
+    );
+    expect(screen.getByText("2 conversations selected · same fingerprint")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Compare selected" })).toBeEnabled();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by scenario" }),
+      "retail-order-cancellation@v1",
+    );
+    expect(await screen.findByText("Select two conversations to compare")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Compare selected" })).toBeDisabled();
   });
 });

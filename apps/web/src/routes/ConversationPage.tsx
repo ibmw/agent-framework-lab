@@ -1,5 +1,5 @@
 import type { ConversationResponse, GeneratedScenarioResponse } from "@agent-lab/contracts";
-import { ArrowLeft, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { ConversationApiError, getConversation } from "../api/conversations";
@@ -10,7 +10,12 @@ import {
   findScenarioOption,
   personaPath,
 } from "../lib/scenarios";
-import { clearLastConversationIfMatches, LAST_CONVERSATION_KEY, panelClasses } from "../lib/ui";
+import {
+  clearLastConversationIfMatches,
+  LAST_CONVERSATION_KEY,
+  notifyLabStorageChanged,
+  panelClasses,
+} from "../lib/ui";
 import { SupportConversation } from "../SupportConversation";
 
 export function ConversationPage() {
@@ -58,6 +63,7 @@ export function ConversationPage() {
         setPersona(resumedPersona);
         setState("ready");
         window.localStorage.setItem(LAST_CONVERSATION_KEY, routePath);
+        notifyLabStorageChanged();
       })
       .catch((error: unknown) => {
         if (!active) {
@@ -82,14 +88,16 @@ export function ConversationPage() {
   }
 
   const scenarioOption = findScenarioOption(personaRef.scenarioId, personaRef.scenarioVersion);
+  const latestTurn = conversation?.turns.at(-1);
+  const traceId = latestTurn?.trace_id;
 
   return (
     <div className="grid gap-6">
       <Link
-        className="inline-flex w-fit items-center gap-2 text-sm font-bold text-lab-ink-soft hover:text-lab-ink"
+        className="inline-flex w-fit text-sm font-bold text-lab-ink-soft no-underline hover:text-lab-ink"
         to={personaPath(personaRef)}
       >
-        <ArrowLeft aria-hidden="true" size={16} /> Back to persona
+        Back to persona
       </Link>
 
       {state === "loading" && (
@@ -112,18 +120,30 @@ export function ConversationPage() {
       )}
 
       {state === "ready" && conversation && (
-        <SupportConversation
-          key={`${conversation.id}:${conversation.turns.length === 0 ? "empty" : "active"}`}
-          conversation={conversation}
-          suggestedCustomerMessage={scenarioOption?.suggestedCustomerMessage}
-          scenarioGoal={scenarioOption?.goal}
-          order={
-            personaRef.scenarioId === "retail-order-cancellation"
-              ? persona?.initial_state.orders[0]
-              : undefined
-          }
-          onConversationUpdated={handleConversationUpdated}
-        />
+        <section className={`${panelClasses} overflow-hidden`}>
+          <div className="flex flex-wrap items-center gap-4 border-b border-lab-ink/15 px-[22px] py-[13px] font-mono text-[11px] text-lab-muted">
+            <span className="font-extrabold text-lab-accent">04</span>
+            <span>framework {conversation.framework_id}</span>
+            <span>seed {conversation.seed}</span>
+            {persona && <span>policy set {persona.metadata.policy_set_version}</span>}
+            {persona && <span>schema {persona.initial_state.canonical_schema_version}</span>}
+            <span className="ml-auto break-all">{conversation.id}</span>
+            {traceId && <span title={traceId}>trace {traceId.slice(0, 12)}</span>}
+          </div>
+          <SupportConversation
+            key={`${conversation.id}:${conversation.turns.length === 0 ? "empty" : "active"}`}
+            conversation={conversation}
+            suggestedCustomerMessage={scenarioOption?.suggestedCustomerMessage}
+            scenarioGoal={scenarioOption?.goal}
+            fingerprint={conversation.initial_state_hash}
+            order={
+              personaRef.scenarioId === "retail-order-cancellation"
+                ? persona?.initial_state.orders[0]
+                : undefined
+            }
+            onConversationUpdated={handleConversationUpdated}
+          />
+        </section>
       )}
     </div>
   );

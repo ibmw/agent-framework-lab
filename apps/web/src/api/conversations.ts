@@ -3,6 +3,7 @@ import type {
   AgentFrameworkListResponse,
   ConversationListResponse,
   ConversationResponse,
+  ConversationSummaryResponse,
   DecideOrderActionRequest,
   ErrorResponse,
   ProposeOrderActionRequest,
@@ -73,26 +74,62 @@ export async function getConversation(sessionId: string): Promise<ConversationRe
 }
 
 export interface ConversationHistoryQuery {
+  scenarioId?: string;
+  scenarioVersion?: string;
+  seed?: number;
   frameworkId?: string;
   activeSince?: string;
   page?: number;
   pageSize?: number;
 }
 
+const CONVERSATION_LIST_PAGE_SIZE = 100;
+
 export async function listConversations(
-  persona: { scenario_id: string; scenario_version: string; seed: number },
+  persona?: { scenario_id: string; scenario_version: string; seed: number },
   query: ConversationHistoryQuery = {},
 ): Promise<ConversationListResponse> {
-  const params = new URLSearchParams({
-    scenario_id: persona.scenario_id,
-    scenario_version: persona.scenario_version,
-    seed: String(persona.seed),
-  });
+  const params = new URLSearchParams();
+  const scenarioId = persona?.scenario_id ?? query.scenarioId;
+  const scenarioVersion = persona?.scenario_version ?? query.scenarioVersion;
+  const seed = persona?.seed ?? query.seed;
+  if (scenarioId) params.set("scenario_id", scenarioId);
+  if (scenarioVersion) params.set("scenario_version", scenarioVersion);
+  if (seed !== undefined) params.set("seed", String(seed));
   if (query.frameworkId) params.set("framework_id", query.frameworkId);
   if (query.activeSince) params.set("active_since", query.activeSince);
   if (query.page) params.set("page", String(query.page));
   if (query.pageSize) params.set("page_size", String(query.pageSize));
-  return readResponse(await fetch(`${API_BASE_URL}/api/v1/conversations?${params.toString()}`));
+  const search = params.toString();
+  return readResponse(
+    await fetch(`${API_BASE_URL}/api/v1/conversations${search ? `?${search}` : ""}`),
+  );
+}
+
+export async function listAllConversations(
+  persona?: { scenario_id: string; scenario_version: string; seed: number },
+  query: Omit<ConversationHistoryQuery, "page" | "pageSize"> = {},
+): Promise<ConversationSummaryResponse[]> {
+  const collected: ConversationSummaryResponse[] = [];
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+  while (collected.length < total) {
+    const result = await listConversations(persona, {
+      ...query,
+      page,
+      pageSize: CONVERSATION_LIST_PAGE_SIZE,
+    });
+    collected.push(...result.conversations);
+    total = result.total;
+    if (
+      result.conversations.length === 0 ||
+      result.conversations.length < CONVERSATION_LIST_PAGE_SIZE
+    ) {
+      break;
+    }
+    page += 1;
+  }
+  return collected;
 }
 
 export async function deleteConversation(sessionId: string): Promise<void> {

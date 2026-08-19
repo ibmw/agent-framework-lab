@@ -1,5 +1,8 @@
 export const MAX_SEED = 4_294_967_295;
 
+/** Matches the four-item catalog in `scenario_generation.py`; generation always selects two. */
+export const CATALOG_SIZE = 4;
+
 export interface ScenarioReference {
   id: string;
   version: string;
@@ -94,4 +97,35 @@ export function personaPath(ref: PersonaRef): string {
 
 export function conversationPath(ref: PersonaRef, conversationId: string): string {
   return `${personaPath(ref)}/conversations/${conversationId}`;
+}
+
+export function comparePath(ref: PersonaRef, a: string, b: string): string {
+  const params = new URLSearchParams({ a, b });
+  return `${personaPath(ref)}/compare?${params.toString()}`;
+}
+
+export function formatMoney(amount: string, currency: string): string {
+  const symbols: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" };
+  const symbol = symbols[currency];
+  return symbol ? `${symbol}${amount}` : `${amount} ${currency}`;
+}
+
+export function truncateHash(hash: string): string {
+  if (hash.length <= 20) {
+    return hash;
+  }
+  return `${hash.slice(0, 12)}…${hash.slice(-8)}`;
+}
+
+export function parseConversationPath(
+  path: string | null,
+): { personaPath: string; conversationId: string } | null {
+  if (!path) {
+    return null;
+  }
+  const match = path.match(/^(\/personas\/[^/]+)\/conversations\/([^/?#]+)/);
+  if (!match) {
+    return null;
+  }
+  return { personaPath: match[1], conversationId: match[2] };
 }

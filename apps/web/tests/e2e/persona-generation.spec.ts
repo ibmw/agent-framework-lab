@@ -8,9 +8,7 @@ test("generates a persona, lists it in the library, and replays deterministicall
   testInfo.annotations.push({ type: "scenario-seed", description: seed });
 
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Meet the customer before the agent." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Generate a persona" })).toBeVisible();
 
   await page
     .getByRole("combobox", { name: "Scenario", exact: true })
@@ -32,7 +30,6 @@ test("generates a persona, lists it in the library, and replays deterministicall
 
   // Generating navigates to the persona page, which retrieves the recorded state.
   await expect(page.getByRole("heading", { name: displayName })).toBeVisible();
-  await expect(page.getByText("Retrieved from recorded inputs")).toBeVisible();
   await expect(page.getByText(generated.initial_state_hash)).toBeVisible();
 
   // The persona is now reachable from the library. Narrow the shared listing with the
@@ -40,7 +37,7 @@ test("generates a persona, lists it in the library, and replays deterministicall
   await page.getByRole("link", { name: "Back to library" }).click();
   await page.getByRole("combobox", { name: "Active within" }).selectOption("1h");
   await page.getByRole("combobox", { name: "Per page" }).selectOption("100");
-  const libraryEntry = page.getByRole("button", {
+  const libraryEntry = page.getByRole("link", {
     name: new RegExp(`retail-profile@v1 · seed ${seed}\\b`),
   });
   await expect(libraryEntry).toBeVisible();
