@@ -1,0 +1,174 @@
+import type { ShopSummarySchema } from "@agent-lab/contracts";
+import {
+  Boxes,
+  ClipboardList,
+  Clock,
+  FileText,
+  Home,
+  MessageSquare,
+  Play,
+  Settings,
+  Shapes,
+  Tag,
+  Users,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+
+interface NavEntry {
+  label: string;
+  to?: string;
+  icon: ReactNode;
+  /** Sections whose slice has not landed yet stay visible but inert. */
+  milestone?: string;
+}
+
+interface NavSection {
+  title?: string;
+  entries: NavEntry[];
+}
+
+function studioSections(shopId: string): NavSection[] {
+  const base = `/shops/${shopId}`;
+  return [
+    {
+      entries: [
+        { label: "Home", to: base, icon: <Home size={15} /> },
+        { label: "Products", to: `${base}/products`, icon: <Tag size={15} /> },
+        { label: "Orders", icon: <Boxes size={15} />, milestone: "Milestone 2" },
+        { label: "Customers", icon: <Users size={15} />, milestone: "Milestone 1 slice 3" },
+        { label: "Tickets", icon: <MessageSquare size={15} />, milestone: "Milestone 2" },
+        { label: "Scenarios", icon: <ClipboardList size={15} />, milestone: "Milestone 2" },
+      ],
+    },
+    {
+      title: "Shop setup",
+      entries: [
+        { label: "Policies & FAQ", to: `${base}/setup/policies`, icon: <FileText size={15} /> },
+        {
+          label: "Support guidelines",
+          to: `${base}/setup/support`,
+          icon: <ClipboardList size={15} />,
+        },
+        { label: "Tone of voice", to: `${base}/setup/tone`, icon: <Shapes size={15} /> },
+        { label: "Settings", to: `${base}/setup/identity`, icon: <Settings size={15} /> },
+      ],
+    },
+    {
+      title: "Experiment lab · cross-shop",
+      entries: [
+        {
+          label: "Agent configurations",
+          icon: <Shapes size={15} />,
+          milestone: "Milestone 3",
+        },
+        { label: "Bench", icon: <Play size={15} />, milestone: "Milestone 4" },
+        { label: "History", icon: <Clock size={15} />, milestone: "Milestone 5" },
+      ],
+    },
+  ];
+}
+
+const entryClasses =
+  "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-admin-ink-soft transition hover:bg-admin-border/50";
+
+function SidebarEntry({ entry }: { entry: NavEntry }) {
+  if (!entry.to) {
+    return (
+      <span
+        className={`${entryClasses} cursor-not-allowed opacity-55`}
+        title={`Arrives with ${entry.milestone}`}
+      >
+        {entry.icon}
+        <span>{entry.label}</span>
+        <span className="ml-auto text-[10px] font-semibold tracking-wide text-admin-muted uppercase">
+          soon
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <NavLink
+      to={entry.to}
+      end
+      className={({ isActive }) =>
+        isActive
+          ? `${entryClasses} bg-[#e8f0ed] font-semibold text-lab-ink`
+          : `${entryClasses} no-underline`
+      }
+    >
+      {entry.icon}
+      <span>{entry.label}</span>
+    </NavLink>
+  );
+}
+
+interface AppShellProps {
+  shops: ShopSummarySchema[];
+  currentShopId?: string;
+  children: ReactNode;
+}
+
+export function AppShell({ shops, currentShopId, children }: AppShellProps) {
+  const navigate = useNavigate();
+  const current = shops.find((shop) => shop.shop_id === currentShopId);
+
+  return (
+    <div className="flex min-h-screen flex-col bg-admin-canvas text-admin-ink">
+      <header className="flex h-13 flex-none items-center gap-3.5 bg-lab-ink px-4 text-lab-paper">
+        <NavLink
+          to="/shops"
+          className="flex items-center gap-2 font-display text-[15px] font-bold text-white no-underline"
+        >
+          Agent Framework Lab
+        </NavLink>
+        {shops.length > 0 ? (
+          <label className="flex items-center gap-2 text-xs">
+            <span className="sr-only">Shop</span>
+            <select
+              aria-label="Shop"
+              className="h-8 rounded-lg border border-white/20 bg-white/10 px-2.5 text-[12.5px] font-semibold text-white outline-none"
+              value={current?.shop_id ?? ""}
+              onChange={(event) => navigate(`/shops/${event.target.value}`)}
+            >
+              {!current && <option value="">Select a shop</option>}
+              {shops.map((shop) => (
+                <option key={shop.shop_id} value={shop.shop_id} className="text-admin-ink">
+                  {shop.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <span className="ml-auto rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold text-[#b9cdc5]">
+          Synthetic sandbox
+        </span>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        {currentShopId ? (
+          <nav
+            aria-label="Shop workspace"
+            className="flex w-[226px] flex-none flex-col gap-0.5 border-r border-admin-border bg-admin-sidebar p-2.5"
+          >
+            {studioSections(currentShopId).map((section) => (
+              <div key={section.title ?? "primary"} className="grid gap-0.5">
+                {section.title ? (
+                  <div className="px-2.5 pt-3 pb-1 text-[10.5px] font-bold tracking-wider text-admin-muted uppercase">
+                    {section.title}
+                  </div>
+                ) : null}
+                {section.entries.map((entry) => (
+                  <SidebarEntry key={entry.label} entry={entry} />
+                ))}
+              </div>
+            ))}
+          </nav>
+        ) : null}
+
+        <main className="min-w-0 flex-1 px-6 py-5">{children}</main>
+      </div>
+    </div>
+  );
+}

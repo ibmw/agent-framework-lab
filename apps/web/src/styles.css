@@ -17,6 +17,18 @@
   --color-lab-error-soft: #fff3ef;
   --color-lab-subtle: #eeeee6;
   --color-lab-fingerprint: #e8eee9;
+  /* Commerce-admin surfaces: familiar ergonomics under the lab's pine identity. */
+  --color-admin-canvas: #f6f6f7;
+  --color-admin-surface: #ffffff;
+  --color-admin-sidebar: #f7f7f8;
+  --color-admin-border: #e1e3e5;
+  --color-admin-ink: #202223;
+  --color-admin-ink-soft: #42474c;
+  --color-admin-muted: #6d7175;
+  --color-admin-published: #dff0e7;
+  --color-admin-published-ink: #0f5132;
+  --color-admin-draft: #ffe9a3;
+  --color-admin-draft-ink: #5c4813;
   --font-display: Georgia, "Times New Roman", serif;
   --radius-panel: 1.15rem;
   --shadow-panel: 0 22px 70px rgb(31 56 49 / 8%);
@@ -35,13 +47,8 @@
   body {
     min-width: 320px;
     min-height: 100vh;
-    background:
-      radial-gradient(
-        circle at 86% 4%,
-        color-mix(in srgb, var(--color-lab-accent) 17%, transparent),
-        transparent 26rem
-      ),
-      linear-gradient(180deg, var(--color-lab-canvas-top) 0%, var(--color-lab-canvas-bottom) 100%);
+    background: var(--color-admin-canvas);
+    color: var(--color-admin-ink);
   }
 
   button:not(:disabled),
