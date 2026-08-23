@@ -221,9 +221,10 @@ def resolve_experiment_inputs(
         raise DefinitionResolutionError("an experiment requires one or two agent configurations")
     _require_seed(seed)
     for name, version in tool_contract_versions.items():
-        if not name.strip() or not version.strip():
+        if not name or name != name.strip() or not version or version != version.strip():
             raise DefinitionResolutionError(
-                "tool contract names and versions must be non-empty strings"
+                "tool contract names and versions must be non-empty strings "
+                "without surrounding whitespace"
             )
 
     arms: list[ArmResolution] = []

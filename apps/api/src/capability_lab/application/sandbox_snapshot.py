@@ -3,13 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from capability_lab.application.canonical_json import (
-    CanonicalSerializationError,
     CanonicalValue,
     canonical_json_bytes,
     canonical_sha256,
 )
 from capability_lab.application.definition_resolution import ExperimentResolution
 from capability_lab.domain.definitions import DefinitionType
+
+
+class SandboxBoundaryError(ValueError):
+    """Raised when arm-specific input would leak into the shared sandbox fingerprint."""
+
 
 SANDBOX_CANONICAL_SCHEMA_VERSION = "sandbox-v1"
 
@@ -45,7 +49,7 @@ def fingerprint_sandbox_snapshot(
         ),
     ):
         if entry.definition.definition_type in ARM_INPUT_DEFINITION_TYPES:
-            raise CanonicalSerializationError(
+            raise SandboxBoundaryError(
                 f"{entry.definition.definition_type} is an arm input and cannot enter "
                 "the sandbox fingerprint"
             )

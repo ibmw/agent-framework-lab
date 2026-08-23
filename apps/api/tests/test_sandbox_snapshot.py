@@ -3,7 +3,6 @@ from uuid import uuid4
 
 import pytest
 
-from capability_lab.application.canonical_json import CanonicalSerializationError
 from capability_lab.application.definition_resolution import (
     ArmResolution,
     ExperimentResolution,
@@ -12,6 +11,7 @@ from capability_lab.application.definition_resolution import (
 )
 from capability_lab.application.sandbox_snapshot import (
     SANDBOX_CANONICAL_SCHEMA_VERSION,
+    SandboxBoundaryError,
     fingerprint_sandbox_snapshot,
 )
 from capability_lab.domain.definitions import DefinitionId, DefinitionType
@@ -115,11 +115,35 @@ def test_every_behaviorally_relevant_change_alters_the_fingerprint(field: str) -
 
 def test_arm_inputs_never_enter_the_sandbox_fingerprint() -> None:
     contaminated = (*sandbox_inputs(), resolved(DefinitionType.AGENT_CONFIGURATION))
-    with pytest.raises(CanonicalSerializationError, match="arm input"):
+    with pytest.raises(SandboxBoundaryError, match="arm input"):
         fingerprint_sandbox_snapshot(resolution(contaminated))
     with_identity = (*sandbox_inputs(), resolved(DefinitionType.SUPPORT_IDENTITY))
-    with pytest.raises(CanonicalSerializationError, match="arm input"):
+    with pytest.raises(SandboxBoundaryError, match="arm input"):
         fingerprint_sandbox_snapshot(resolution(with_identity))
+
+
+def test_adding_removing_or_reidentifying_a_definition_changes_the_fingerprint() -> None:
+    inputs = sandbox_inputs()
+    base = fingerprint_sandbox_snapshot(resolution(inputs)).sandbox_fingerprint
+
+    added = (*inputs, resolved(DefinitionType.OBJECTIVE_BLOCK))
+    assert fingerprint_sandbox_snapshot(resolution(added)).sandbox_fingerprint != base
+
+    removed = inputs[:-1]
+    assert fingerprint_sandbox_snapshot(resolution(removed)).sandbox_fingerprint != base
+
+    scenario = inputs[-1]
+    reidentified = (
+        *inputs[:-1],
+        ResolvedDefinition(
+            definition=DefinitionId(
+                definition_type=scenario.definition.definition_type, id=uuid4()
+            ),
+            version=scenario.version,
+            content_fingerprint=scenario.content_fingerprint,
+        ),
+    )
+    assert fingerprint_sandbox_snapshot(resolution(reidentified)).sandbox_fingerprint != base
 
 
 def test_changing_arm_inputs_keeps_the_shared_sandbox_fingerprint() -> None:
