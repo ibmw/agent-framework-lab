@@ -211,6 +211,94 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List shops with their draft identity and published-version provenance */
+    get: operations["listShops"];
+    put?: never;
+    /** Create a shop identity and its first draft */
+    post: operations["createShop"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable shop draft */
+    get: operations["getShopDraft"];
+    /** Replace the shop draft without touching any published version */
+    put: operations["replaceShopDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft and preview the version publishing would create */
+    get: operations["previewShopDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a shop's published versions, newest first */
+    get: operations["listShopVersions"];
+    put?: never;
+    /** Freeze the draft into the next immutable published version */
+    post: operations["publishShop"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published shop version */
+    get: operations["getShopVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -285,6 +373,26 @@ export interface components {
       /** Unavailability Reason */
       unavailability_reason?: string | null;
     };
+    /** AttributeSchema */
+    AttributeSchema: {
+      /** Key */
+      key: string;
+      /** Label */
+      label: string;
+      attribute_type: components["schemas"]["AttributeType"];
+      /** Value */
+      value: string;
+      /** Unit */
+      unit: string | null;
+      /** Choices */
+      choices: string[];
+    };
+    /**
+     * AttributeType
+     * @description The first bounded set of author-defined typed attributes.
+     * @enum {string}
+     */
+    AttributeType: "text" | "number" | "boolean" | "choice" | "measurement";
     /** ConversationListResponse */
     ConversationListResponse: {
       /** Conversations */
@@ -378,6 +486,16 @@ export interface components {
        */
       created_at: string;
     };
+    /** CreateShopRequest */
+    CreateShopRequest: {
+      identity: components["schemas"]["ShopIdentitySchema"];
+    };
+    /**
+     * Currency
+     * @description Currencies the lab can express; extend deliberately, never from authored input.
+     * @enum {string}
+     */
+    Currency: "EUR" | "USD" | "GBP";
     /** CustomerResponse */
     CustomerResponse: {
       /**
@@ -415,6 +533,28 @@ export interface components {
       request_id: string;
       /** Details */
       details?: components["schemas"]["ValidationIssue"][] | null;
+    };
+    /** FaqEntrySchema */
+    FaqEntrySchema: {
+      /** Id */
+      id: string;
+      /** Question */
+      question: string;
+      /** Answer */
+      answer: string;
+    };
+    /** FulfilmentMethodSchema */
+    FulfilmentMethodSchema: {
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      /** Carrier */
+      carrier: string;
+      /** Min Transit Days */
+      min_transit_days: number;
+      /** Max Transit Days */
+      max_transit_days: number;
     };
     /** GenerateScenarioRequest */
     GenerateScenarioRequest: {
@@ -496,6 +636,34 @@ export interface components {
       /** Orders */
       orders: components["schemas"]["OrderResponse"][];
     };
+    /** MediaReferenceSchema */
+    MediaReferenceSchema: {
+      /**
+       * Reference
+       * @description URL or path metadata; managed upload is deferred.
+       */
+      reference: string;
+      /** Alt Text */
+      alt_text: string;
+    };
+    /** MoneySchema */
+    MoneySchema: {
+      /**
+       * Amount
+       * @description Exact decimal amount; never a binary float.
+       */
+      amount: string;
+      currency: components["schemas"]["Currency"];
+    };
+    /** OptionSchema */
+    OptionSchema: {
+      /** Key */
+      key: string;
+      /** Name */
+      name: string;
+      /** Values */
+      values: string[];
+    };
     /** OrderResponse */
     OrderResponse: {
       /**
@@ -521,6 +689,21 @@ export interface components {
       /** Version */
       version: number;
     };
+    /**
+     * PaymentMethodKind
+     * @enum {string}
+     */
+    PaymentMethodKind: "card" | "wallet" | "bank_transfer" | "gift_card";
+    /** PaymentMethodSchema */
+    PaymentMethodSchema: {
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      kind: components["schemas"]["PaymentMethodKind"];
+      /** Enabled */
+      enabled: boolean;
+    };
     /** PersonaResponse */
     PersonaResponse: {
       /**
@@ -536,6 +719,21 @@ export interface components {
       locale: string;
       /** Support Traits */
       support_traits: string[];
+    };
+    /**
+     * PolicyKind
+     * @enum {string}
+     */
+    PolicyKind: "returns" | "shipping" | "cancellation" | "privacy" | "warranty" | "terms";
+    /** PolicySchema */
+    PolicySchema: {
+      /** Id */
+      id: string;
+      /** Title */
+      title: string;
+      kind: components["schemas"]["PolicyKind"];
+      /** Body */
+      body: string;
     };
     /** ProductResponse */
     ProductResponse: {
@@ -553,6 +751,59 @@ export interface components {
       /** Currency */
       currency: string;
     };
+    /** ProductSchema */
+    ProductSchema: {
+      /** Handle */
+      handle: string;
+      /** Title */
+      title: string;
+      /** Description */
+      description: string;
+      status: components["schemas"]["ProductStatus"];
+      /** Category */
+      category: string;
+      /** Options */
+      options: components["schemas"]["OptionSchema"][];
+      /** Variants */
+      variants: components["schemas"]["VariantSchema"][];
+      /** Media */
+      media: components["schemas"]["MediaReferenceSchema"][];
+      /** Attributes */
+      attributes: components["schemas"]["AttributeSchema"][];
+      /** Reviews */
+      reviews: components["schemas"]["ReviewSchema"][];
+    };
+    /**
+     * ProductStatus
+     * @enum {string}
+     */
+    ProductStatus: "draft" | "active" | "archived";
+    /**
+     * ProductViewSchema
+     * @description A product as the API returns it, including its derived rating evidence.
+     */
+    ProductViewSchema: {
+      /** Handle */
+      handle: string;
+      /** Title */
+      title: string;
+      /** Description */
+      description: string;
+      status: components["schemas"]["ProductStatus"];
+      /** Category */
+      category: string;
+      /** Options */
+      options: components["schemas"]["OptionSchema"][];
+      /** Variants */
+      variants: components["schemas"]["VariantSchema"][];
+      /** Media */
+      media: components["schemas"]["MediaReferenceSchema"][];
+      /** Attributes */
+      attributes: components["schemas"]["AttributeSchema"][];
+      /** Reviews */
+      reviews: components["schemas"]["ReviewSchema"][];
+      ratings: components["schemas"]["RatingSummarySchema"];
+    };
     /** ProposeOrderActionRequest */
     ProposeOrderActionRequest: {
       /**
@@ -567,6 +818,31 @@ export interface components {
       order_id: string;
       /** Expected Version */
       expected_version: number;
+    };
+    /** RatingSummarySchema */
+    RatingSummarySchema: {
+      /** Review Count */
+      review_count: number;
+      /**
+       * Average Rating
+       * @description Derived from the product's reviews; never authored directly.
+       */
+      average_rating: string | null;
+    };
+    /** ReplaceShopDraftRequest */
+    ReplaceShopDraftRequest: {
+      payload: components["schemas"]["ShopPayloadSchema"];
+    };
+    /** ReviewSchema */
+    ReviewSchema: {
+      /** Id */
+      id: string;
+      /** Author Display Name */
+      author_display_name: string;
+      /** Rating */
+      rating: number;
+      /** Body */
+      body: string;
     };
     /** ScenarioMetadataResponse */
     ScenarioMetadataResponse: {
@@ -600,6 +876,210 @@ export interface components {
       /** Message */
       message: string;
     };
+    /**
+     * ShopChangeKind
+     * @enum {string}
+     */
+    ShopChangeKind: "added" | "removed" | "updated";
+    /** ShopChangeSchema */
+    ShopChangeSchema: {
+      kind: components["schemas"]["ShopChangeKind"];
+      /** Path */
+      path: string;
+      /** Description */
+      description: string;
+    };
+    /**
+     * ShopContentSchema
+     * @description A shop payload as the API returns it, with derived read-only evidence.
+     */
+    ShopContentSchema: {
+      identity: components["schemas"]["ShopIdentitySchema"];
+      /** Products */
+      products: components["schemas"]["ProductViewSchema"][];
+      /** Faq */
+      faq: components["schemas"]["FaqEntrySchema"][];
+      /** Policies */
+      policies: components["schemas"]["PolicySchema"][];
+      /** Payment Methods */
+      payment_methods: components["schemas"]["PaymentMethodSchema"][];
+      /** Fulfilment Methods */
+      fulfilment_methods: components["schemas"]["FulfilmentMethodSchema"][];
+      /** Support Guidelines */
+      support_guidelines: components["schemas"]["SupportGuidelineSchema"][];
+      /** Tone Of Voice Guidelines */
+      tone_of_voice_guidelines: components["schemas"]["ToneOfVoiceSchema"][];
+      /** Default Tone Of Voice Id */
+      default_tone_of_voice_id: string | null;
+    };
+    /** ShopDraftResponse */
+    ShopDraftResponse: {
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["ShopContentSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /** ShopIdentitySchema */
+    ShopIdentitySchema: {
+      /** Name */
+      name: string;
+      /** Slug */
+      slug: string;
+      /** Locale */
+      locale: string;
+      /** Currencies */
+      currencies: components["schemas"]["Currency"][];
+      /** Channels */
+      channels: components["schemas"]["SupportChannel"][];
+    };
+    /** ShopIssueSchema */
+    ShopIssueSchema: {
+      severity: components["schemas"]["ShopIssueSeverity"];
+      /** Code */
+      code: string;
+      /** Message */
+      message: string;
+      /** Path */
+      path: string;
+    };
+    /**
+     * ShopIssueSeverity
+     * @enum {string}
+     */
+    ShopIssueSeverity: "error" | "warning";
+    /** ShopListResponse */
+    ShopListResponse: {
+      /** Shops */
+      shops: components["schemas"]["ShopSummarySchema"][];
+    };
+    /**
+     * ShopPayloadSchema
+     * @description The whole authored content of a shop draft or published version.
+     */
+    ShopPayloadSchema: {
+      identity: components["schemas"]["ShopIdentitySchema"];
+      /** Products */
+      products: components["schemas"]["ProductSchema"][];
+      /** Faq */
+      faq: components["schemas"]["FaqEntrySchema"][];
+      /** Policies */
+      policies: components["schemas"]["PolicySchema"][];
+      /** Payment Methods */
+      payment_methods: components["schemas"]["PaymentMethodSchema"][];
+      /** Fulfilment Methods */
+      fulfilment_methods: components["schemas"]["FulfilmentMethodSchema"][];
+      /** Support Guidelines */
+      support_guidelines: components["schemas"]["SupportGuidelineSchema"][];
+      /** Tone Of Voice Guidelines */
+      tone_of_voice_guidelines: components["schemas"]["ToneOfVoiceSchema"][];
+    };
+    /**
+     * ShopPreviewResponse
+     * @description The publish gate: what blocks publication and what a publish would freeze.
+     */
+    ShopPreviewResponse: {
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["ShopIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["ShopChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["ShopContentSchema"];
+    };
+    /** ShopSummarySchema */
+    ShopSummarySchema: {
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /** Name */
+      name: string;
+      /** Slug */
+      slug: string;
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+    };
+    /**
+     * ShopValidationErrorResponse
+     * @description A publish refusal that carries the exact publish-gate findings.
+     */
+    ShopValidationErrorResponse: {
+      /** Code */
+      code: string;
+      /** Message */
+      message: string;
+      /** Request Id */
+      request_id: string;
+      /** Details */
+      details?: components["schemas"]["ValidationIssue"][] | null;
+      /** Issues */
+      issues: components["schemas"]["ShopIssueSchema"][];
+    };
+    /** ShopVersionListResponse */
+    ShopVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["ShopVersionSummarySchema"][];
+    };
+    /** ShopVersionResponse */
+    ShopVersionResponse: {
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      content: components["schemas"]["ShopContentSchema"];
+    };
+    /** ShopVersionSummarySchema */
+    ShopVersionSummarySchema: {
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+    };
     /** StartConversationRequest */
     StartConversationRequest: {
       /** Scenario Id */
@@ -625,6 +1105,31 @@ export interface components {
       /** Order Ids */
       order_ids: string[];
     };
+    /**
+     * SupportChannel
+     * @enum {string}
+     */
+    SupportChannel: "chat" | "email" | "phone";
+    /** SupportGuidelineSchema */
+    SupportGuidelineSchema: {
+      /** Id */
+      id: string;
+      /** Title */
+      title: string;
+      /** Body */
+      body: string;
+    };
+    /** ToneOfVoiceSchema */
+    ToneOfVoiceSchema: {
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      /** Guidance */
+      guidance: string;
+      /** Is Default */
+      is_default: boolean;
+    };
     /** ToolActivityResponse */
     ToolActivityResponse: {
       /** Tool Name */
@@ -646,6 +1151,30 @@ export interface components {
       message: string;
       /** Type */
       type: string;
+    };
+    /**
+     * VariantAvailability
+     * @enum {string}
+     */
+    VariantAvailability: "in_stock" | "backorder" | "out_of_stock" | "discontinued";
+    /** VariantOptionValueSchema */
+    VariantOptionValueSchema: {
+      /** Key */
+      key: string;
+      /** Value */
+      value: string;
+    };
+    /** VariantSchema */
+    VariantSchema: {
+      /** Sku */
+      sku: string;
+      /** Option Values */
+      option_values: components["schemas"]["VariantOptionValueSchema"][];
+      availability: components["schemas"]["VariantAvailability"];
+      /** Stock Quantity */
+      stock_quantity: number;
+      /** @description Null while a draft variant is still unpriced. */
+      price: components["schemas"]["MoneySchema"] | null;
     };
   };
   responses: never;
@@ -1414,6 +1943,320 @@ export interface operations {
       };
       /** @description Internal server error */
       500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listShops: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopListResponse"];
+        };
+      };
+    };
+  };
+  createShop: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateShopRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopDraftResponse"];
+        };
+      };
+      /** @description Invalid shop content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getShopDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopDraftResponse"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid shop content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceShopDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceShopDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopDraftResponse"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid shop content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewShopDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopPreviewResponse"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid shop content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listShopVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopVersionListResponse"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid shop content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishShop: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopVersionResponse"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  getShopVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Immutable published shop version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopVersionResponse"];
+        };
+      };
+      /** @description The shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid shop content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

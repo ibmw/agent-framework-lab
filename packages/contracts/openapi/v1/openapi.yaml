@@ -792,6 +792,256 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops:
+    get:
+      summary: List shops with their draft identity and published-version provenance
+      operationId: listShops
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopListResponse'
+    post:
+      summary: Create a shop identity and its first draft
+      operationId: createShop
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShopRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopDraftResponse'
+        '422':
+          description: Invalid shop content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/draft:
+    get:
+      summary: Retrieve the mutable shop draft
+      operationId: getShopDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopDraftResponse'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the shop draft without touching any published version
+      operationId: replaceShopDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceShopDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopDraftResponse'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/draft/preview:
+    get:
+      summary: Validate the draft and preview the version publishing would create
+      operationId: previewShopDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopPreviewResponse'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/versions:
+    post:
+      summary: Freeze the draft into the next immutable published version
+      operationId: publishShop
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopVersionResponse'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopValidationErrorResponse'
+    get:
+      summary: List a shop's published versions, newest first
+      operationId: listShopVersions
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopVersionListResponse'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published shop version
+      operationId: getShopVersion
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published shop version number.
+          title: Version
+        description: Immutable published shop version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopVersionResponse'
+        '404':
+          description: The shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid shop content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     ActionProposalResponse:
@@ -916,6 +1166,60 @@ components:
       - model_id
       - capabilities
       title: AgentFrameworkResponse
+    AttributeSchema:
+      properties:
+        key:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Key
+        label:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Label
+        attribute_type:
+          $ref: '#/components/schemas/AttributeType'
+        value:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Value
+        unit:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Unit
+        choices:
+          items:
+            type: string
+            maxLength: 200
+            minLength: 1
+          type: array
+          title: Choices
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - label
+      - attribute_type
+      - value
+      - unit
+      - choices
+      title: AttributeSchema
+    AttributeType:
+      type: string
+      enum:
+      - text
+      - number
+      - boolean
+      - choice
+      - measurement
+      title: AttributeType
+      description: The first bounded set of author-defined typed attributes.
     ConversationListResponse:
       properties:
         conversations:
@@ -1071,6 +1375,24 @@ components:
       - trace_id
       - created_at
       title: ConversationTurnResponse
+    CreateShopRequest:
+      properties:
+        identity:
+          $ref: '#/components/schemas/ShopIdentitySchema'
+      additionalProperties: false
+      type: object
+      required:
+      - identity
+      title: CreateShopRequest
+    Currency:
+      type: string
+      enum:
+      - EUR
+      - USD
+      - GBP
+      title: Currency
+      description: Currencies the lab can express; extend deliberately, never from
+        authored input.
     CustomerResponse:
       properties:
         id:
@@ -1140,6 +1462,68 @@ components:
       - message
       - request_id
       title: ErrorResponse
+    FaqEntrySchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        question:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Question
+        answer:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Answer
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - question
+      - answer
+      title: FaqEntrySchema
+    FulfilmentMethodSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        carrier:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Carrier
+        min_transit_days:
+          type: integer
+          maximum: 365.0
+          minimum: 0.0
+          title: Min Transit Days
+        max_transit_days:
+          type: integer
+          maximum: 365.0
+          minimum: 0.0
+          title: Max Transit Days
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - carrier
+      - min_transit_days
+      - max_transit_days
+      title: FulfilmentMethodSchema
     GenerateScenarioRequest:
       properties:
         seed:
@@ -1289,6 +1673,68 @@ components:
       - products
       - orders
       title: InitialStateResponse
+    MediaReferenceSchema:
+      properties:
+        reference:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Reference
+          description: URL or path metadata; managed upload is deferred.
+        alt_text:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Alt Text
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - alt_text
+      title: MediaReferenceSchema
+    MoneySchema:
+      properties:
+        amount:
+          type: string
+          pattern: ^\d{1,10}(?:\.\d{1,2})?$
+          title: Amount
+          description: Exact decimal amount; never a binary float.
+        currency:
+          $ref: '#/components/schemas/Currency'
+      additionalProperties: false
+      type: object
+      required:
+      - amount
+      - currency
+      title: MoneySchema
+    OptionSchema:
+      properties:
+        key:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Key
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        values:
+          items:
+            type: string
+            maxLength: 200
+            minLength: 1
+          type: array
+          minItems: 1
+          title: Values
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - name
+      - values
+      title: OptionSchema
     OrderResponse:
       properties:
         id:
@@ -1323,6 +1769,40 @@ components:
       - status
       - version
       title: OrderResponse
+    PaymentMethodKind:
+      type: string
+      enum:
+      - card
+      - wallet
+      - bank_transfer
+      - gift_card
+      title: PaymentMethodKind
+    PaymentMethodSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        kind:
+          $ref: '#/components/schemas/PaymentMethodKind'
+        enabled:
+          type: boolean
+          title: Enabled
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - kind
+      - enabled
+      title: PaymentMethodSchema
     PersonaResponse:
       properties:
         id:
@@ -1352,6 +1832,44 @@ components:
       - locale
       - support_traits
       title: PersonaResponse
+    PolicyKind:
+      type: string
+      enum:
+      - returns
+      - shipping
+      - cancellation
+      - privacy
+      - warranty
+      - terms
+      title: PolicyKind
+    PolicySchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        kind:
+          $ref: '#/components/schemas/PolicyKind'
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - kind
+      - body
+      title: PolicySchema
     ProductResponse:
       properties:
         id:
@@ -1381,6 +1899,143 @@ components:
       - price_amount
       - currency
       title: ProductResponse
+    ProductSchema:
+      properties:
+        handle:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Handle
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        category:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Category
+        options:
+          items:
+            $ref: '#/components/schemas/OptionSchema'
+          type: array
+          title: Options
+        variants:
+          items:
+            $ref: '#/components/schemas/VariantSchema'
+          type: array
+          title: Variants
+        media:
+          items:
+            $ref: '#/components/schemas/MediaReferenceSchema'
+          type: array
+          title: Media
+        attributes:
+          items:
+            $ref: '#/components/schemas/AttributeSchema'
+          type: array
+          title: Attributes
+        reviews:
+          items:
+            $ref: '#/components/schemas/ReviewSchema'
+          type: array
+          title: Reviews
+      additionalProperties: false
+      type: object
+      required:
+      - handle
+      - title
+      - description
+      - status
+      - category
+      - options
+      - variants
+      - media
+      - attributes
+      - reviews
+      title: ProductSchema
+    ProductStatus:
+      type: string
+      enum:
+      - draft
+      - active
+      - archived
+      title: ProductStatus
+    ProductViewSchema:
+      properties:
+        handle:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Handle
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        category:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Category
+        options:
+          items:
+            $ref: '#/components/schemas/OptionSchema'
+          type: array
+          title: Options
+        variants:
+          items:
+            $ref: '#/components/schemas/VariantSchema'
+          type: array
+          title: Variants
+        media:
+          items:
+            $ref: '#/components/schemas/MediaReferenceSchema'
+          type: array
+          title: Media
+        attributes:
+          items:
+            $ref: '#/components/schemas/AttributeSchema'
+          type: array
+          title: Attributes
+        reviews:
+          items:
+            $ref: '#/components/schemas/ReviewSchema'
+          type: array
+          title: Reviews
+        ratings:
+          $ref: '#/components/schemas/RatingSummarySchema'
+      additionalProperties: false
+      type: object
+      required:
+      - handle
+      - title
+      - description
+      - status
+      - category
+      - options
+      - variants
+      - media
+      - attributes
+      - reviews
+      - ratings
+      title: ProductViewSchema
+      description: A product as the API returns it, including its derived rating evidence.
     ProposeOrderActionRequest:
       properties:
         action_type:
@@ -1402,6 +2057,63 @@ components:
       - order_id
       - expected_version
       title: ProposeOrderActionRequest
+    RatingSummarySchema:
+      properties:
+        review_count:
+          type: integer
+          title: Review Count
+        average_rating:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Average Rating
+          description: Derived from the product's reviews; never authored directly.
+      additionalProperties: false
+      type: object
+      required:
+      - review_count
+      - average_rating
+      title: RatingSummarySchema
+    ReplaceShopDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ShopPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceShopDraftRequest
+    ReviewSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        author_display_name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Author Display Name
+        rating:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Rating
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - author_display_name
+      - rating
+      - body
+      title: ReviewSchema
     ScenarioMetadataResponse:
       properties:
         scenario_id:
@@ -1463,6 +2175,420 @@ components:
       required:
       - message
       title: SendConversationMessageRequest
+    ShopChangeKind:
+      type: string
+      enum:
+      - added
+      - removed
+      - updated
+      title: ShopChangeKind
+    ShopChangeSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/ShopChangeKind'
+        path:
+          type: string
+          title: Path
+        description:
+          type: string
+          title: Description
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - path
+      - description
+      title: ShopChangeSchema
+    ShopContentSchema:
+      properties:
+        identity:
+          $ref: '#/components/schemas/ShopIdentitySchema'
+        products:
+          items:
+            $ref: '#/components/schemas/ProductViewSchema'
+          type: array
+          title: Products
+        faq:
+          items:
+            $ref: '#/components/schemas/FaqEntrySchema'
+          type: array
+          title: Faq
+        policies:
+          items:
+            $ref: '#/components/schemas/PolicySchema'
+          type: array
+          title: Policies
+        payment_methods:
+          items:
+            $ref: '#/components/schemas/PaymentMethodSchema'
+          type: array
+          title: Payment Methods
+        fulfilment_methods:
+          items:
+            $ref: '#/components/schemas/FulfilmentMethodSchema'
+          type: array
+          title: Fulfilment Methods
+        support_guidelines:
+          items:
+            $ref: '#/components/schemas/SupportGuidelineSchema'
+          type: array
+          title: Support Guidelines
+        tone_of_voice_guidelines:
+          items:
+            $ref: '#/components/schemas/ToneOfVoiceSchema'
+          type: array
+          title: Tone Of Voice Guidelines
+        default_tone_of_voice_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Tone Of Voice Id
+      additionalProperties: false
+      type: object
+      required:
+      - identity
+      - products
+      - faq
+      - policies
+      - payment_methods
+      - fulfilment_methods
+      - support_guidelines
+      - tone_of_voice_guidelines
+      - default_tone_of_voice_id
+      title: ShopContentSchema
+      description: A shop payload as the API returns it, with derived read-only evidence.
+    ShopDraftResponse:
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/ShopContentSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - shop_id
+      - content
+      - created_at
+      - updated_at
+      title: ShopDraftResponse
+    ShopIdentitySchema:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        slug:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Slug
+        locale:
+          type: string
+          pattern: ^[a-z]{2}(?:-[A-Z]{2})?$
+          title: Locale
+        currencies:
+          items:
+            $ref: '#/components/schemas/Currency'
+          type: array
+          minItems: 1
+          title: Currencies
+        channels:
+          items:
+            $ref: '#/components/schemas/SupportChannel'
+          type: array
+          minItems: 1
+          title: Channels
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - slug
+      - locale
+      - currencies
+      - channels
+      title: ShopIdentitySchema
+    ShopIssueSchema:
+      properties:
+        severity:
+          $ref: '#/components/schemas/ShopIssueSeverity'
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        path:
+          type: string
+          title: Path
+      additionalProperties: false
+      type: object
+      required:
+      - severity
+      - code
+      - message
+      - path
+      title: ShopIssueSchema
+    ShopIssueSeverity:
+      type: string
+      enum:
+      - error
+      - warning
+      title: ShopIssueSeverity
+    ShopListResponse:
+      properties:
+        shops:
+          items:
+            $ref: '#/components/schemas/ShopSummarySchema'
+          type: array
+          title: Shops
+      additionalProperties: false
+      type: object
+      required:
+      - shops
+      title: ShopListResponse
+    ShopPayloadSchema:
+      properties:
+        identity:
+          $ref: '#/components/schemas/ShopIdentitySchema'
+        products:
+          items:
+            $ref: '#/components/schemas/ProductSchema'
+          type: array
+          title: Products
+        faq:
+          items:
+            $ref: '#/components/schemas/FaqEntrySchema'
+          type: array
+          title: Faq
+        policies:
+          items:
+            $ref: '#/components/schemas/PolicySchema'
+          type: array
+          title: Policies
+        payment_methods:
+          items:
+            $ref: '#/components/schemas/PaymentMethodSchema'
+          type: array
+          title: Payment Methods
+        fulfilment_methods:
+          items:
+            $ref: '#/components/schemas/FulfilmentMethodSchema'
+          type: array
+          title: Fulfilment Methods
+        support_guidelines:
+          items:
+            $ref: '#/components/schemas/SupportGuidelineSchema'
+          type: array
+          title: Support Guidelines
+        tone_of_voice_guidelines:
+          items:
+            $ref: '#/components/schemas/ToneOfVoiceSchema'
+          type: array
+          title: Tone Of Voice Guidelines
+      additionalProperties: false
+      type: object
+      required:
+      - identity
+      - products
+      - faq
+      - policies
+      - payment_methods
+      - fulfilment_methods
+      - support_guidelines
+      - tone_of_voice_guidelines
+      title: ShopPayloadSchema
+      description: The whole authored content of a shop draft or published version.
+    ShopPreviewResponse:
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/ShopIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/ShopChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/ShopContentSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - shop_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      title: ShopPreviewResponse
+      description: 'The publish gate: what blocks publication and what a publish would
+        freeze.'
+    ShopSummarySchema:
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        name:
+          type: string
+          title: Name
+        slug:
+          type: string
+          title: Slug
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+      additionalProperties: false
+      type: object
+      required:
+      - shop_id
+      - name
+      - slug
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      title: ShopSummarySchema
+    ShopValidationErrorResponse:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        request_id:
+          type: string
+          title: Request Id
+        details:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ValidationIssue'
+            type: array
+          - type: 'null'
+          title: Details
+        issues:
+          items:
+            $ref: '#/components/schemas/ShopIssueSchema'
+          type: array
+          title: Issues
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      - request_id
+      - issues
+      title: ShopValidationErrorResponse
+      description: A publish refusal that carries the exact publish-gate findings.
+    ShopVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/ShopVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: ShopVersionListResponse
+    ShopVersionResponse:
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        content:
+          $ref: '#/components/schemas/ShopContentSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - shop_id
+      - version
+      - content_fingerprint
+      - published_at
+      - content
+      title: ShopVersionResponse
+    ShopVersionSummarySchema:
+      properties:
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+      additionalProperties: false
+      type: object
+      required:
+      - version
+      - content_fingerprint
+      - published_at
+      title: ShopVersionSummarySchema
     StartConversationRequest:
       properties:
         scenario_id:
@@ -1524,6 +2650,67 @@ components:
       - product_ids
       - order_ids
       title: StructuredSupportResultResponse
+    SupportChannel:
+      type: string
+      enum:
+      - chat
+      - email
+      - phone
+      title: SupportChannel
+    SupportGuidelineSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - body
+      title: SupportGuidelineSchema
+    ToneOfVoiceSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        guidance:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Guidance
+        is_default:
+          type: boolean
+          title: Is Default
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - guidance
+      - is_default
+      title: ToneOfVoiceSchema
     ToolActivityResponse:
       properties:
         tool_name:
@@ -1565,3 +2752,63 @@ components:
       - message
       - type
       title: ValidationIssue
+    VariantAvailability:
+      type: string
+      enum:
+      - in_stock
+      - backorder
+      - out_of_stock
+      - discontinued
+      title: VariantAvailability
+    VariantOptionValueSchema:
+      properties:
+        key:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Key
+        value:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Value
+      additionalProperties: false
+      type: object
+      required:
+      - key
+      - value
+      title: VariantOptionValueSchema
+    VariantSchema:
+      properties:
+        sku:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[A-Z0-9]+(?:-[A-Z0-9]+)*$
+          title: Sku
+        option_values:
+          items:
+            $ref: '#/components/schemas/VariantOptionValueSchema'
+          type: array
+          title: Option Values
+        availability:
+          $ref: '#/components/schemas/VariantAvailability'
+        stock_quantity:
+          type: integer
+          minimum: 0.0
+          title: Stock Quantity
+        price:
+          anyOf:
+          - $ref: '#/components/schemas/MoneySchema'
+          - type: 'null'
+          description: Null while a draft variant is still unpriced.
+      additionalProperties: false
+      type: object
+      required:
+      - sku
+      - option_values
+      - availability
+      - stock_quantity
+      - price
+      title: VariantSchema

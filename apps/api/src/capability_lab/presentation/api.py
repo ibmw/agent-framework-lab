@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -26,6 +26,10 @@ from capability_lab.application.conversations import (
     ConversationSummary,
     FrameworkDeclaration,
     InvalidConversationMessageError,
+)
+from capability_lab.application.definition_resolution import (
+    MissingDraftError,
+    PublishedVersionExistsError,
 )
 from capability_lab.application.order_actions import (
     ActionConfirmationError,
@@ -53,7 +57,15 @@ from capability_lab.application.scenario_generation import (
     create_retail_profile_kernel,
 )
 from capability_lab.application.scenario_registry import ScenarioNotFoundError
+from capability_lab.application.shops import (
+    ShopNotFoundError,
+    ShopNotPublishableError,
+    ShopService,
+    ShopVersionNotFoundError,
+)
+from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
+from capability_lab.domain.shop import ShopConfigurationError
 from capability_lab.infrastructure.agents.registry import create_agent_registry
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.config import Settings, get_settings
@@ -65,6 +77,7 @@ from capability_lab.infrastructure.database import (
 from capability_lab.infrastructure.repositories import (
     ConversationTurnConflictError,
     GeneratedScenarioConflictError,
+    PersistedDefinitionIntegrityError,
     PersistedScenarioIntegrityError,
     SqlAlchemyActionDecisionIdempotencyRepository,
     SqlAlchemyActionProposalRepository,
@@ -73,8 +86,11 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyOrderRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
+    SqlAlchemyShopRepository,
 )
 from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
+from capability_lab.presentation.base import ErrorResponse, StrictApiModel, ValidationIssue
+from capability_lab.presentation.shops import ShopIssueSchema, ShopRoutes
 
 API_TITLE = "Agent Framework Capability Lab API"
 API_VERSION = "1.0.0"
@@ -105,10 +121,6 @@ ScenarioSeed = Annotated[
         description="Unsigned 32-bit deterministic generation seed.",
     ),
 ]
-
-
-class StrictApiModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
 
 class HealthResponse(StrictApiModel):
@@ -480,19 +492,6 @@ class ConversationListResponse(StrictApiModel):
     total: int
 
 
-class ValidationIssue(StrictApiModel):
-    location: str
-    message: str
-    type: str
-
-
-class ErrorResponse(StrictApiModel):
-    code: str
-    message: str
-    request_id: str
-    details: list[ValidationIssue] | None = None
-
-
 def _money(value: Decimal) -> str:
     return format(value, ".2f")
 
@@ -764,6 +763,72 @@ async def _action_transient_handler(request: Request, error: Exception) -> JSONR
     )
 
 
+async def _shop_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=404,
+        code="shop_not_found",
+        message=str(error),
+    )
+
+
+async def _shop_version_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=404,
+        code="shop_version_not_found",
+        message=str(error),
+    )
+
+
+async def _shop_not_publishable_handler(request: Request, error: Exception) -> JSONResponse:
+    """Refuse publication with the exact publish-gate findings, not a bare 422."""
+    issues = (
+        [ShopIssueSchema.from_domain(issue).model_dump() for issue in error.validation.issues]
+        if isinstance(error, ShopNotPublishableError)
+        else []
+    )
+    request_id = _request_id(request)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": "shop_not_publishable",
+            "message": str(error),
+            "request_id": request_id,
+            "issues": issues,
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
+async def _definition_lifecycle_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=422,
+        code="definition_lifecycle_error",
+        message=str(error),
+    )
+
+
+async def _shop_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    """A structural shop invariant the contract cannot express in a field schema."""
+    return _error_response(
+        request,
+        status_code=422,
+        code="shop_configuration_error",
+        message=str(error),
+    )
+
+
+async def _published_version_exists_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=409,
+        code="published_version_exists",
+        message=str(error),
+    )
+
+
 def health() -> HealthResponse:
     return HealthResponse(status="ok", api_version="v1")
 
@@ -843,14 +908,24 @@ def create_app(
     application.add_exception_handler(ActionRefusedError, _action_refused_handler)
     application.add_exception_handler(ActionTransientError, _action_transient_handler)
     application.add_exception_handler(PersistedScenarioIntegrityError, _internal_error_handler)
+    application.add_exception_handler(PersistedDefinitionIntegrityError, _internal_error_handler)
     application.add_exception_handler(IdempotencyStateNotFoundError, _internal_error_handler)
+    application.add_exception_handler(ShopNotFoundError, _shop_not_found_handler)
+    application.add_exception_handler(ShopVersionNotFoundError, _shop_version_not_found_handler)
+    application.add_exception_handler(ShopNotPublishableError, _shop_not_publishable_handler)
+    application.add_exception_handler(
+        PublishedVersionExistsError, _published_version_exists_handler
+    )
+    application.add_exception_handler(MissingDraftError, _shop_not_found_handler)
+    application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
+    application.add_exception_handler(ShopConfigurationError, _shop_configuration_handler)
     application.add_exception_handler(ScenarioGeneratorNotConfiguredError, _internal_error_handler)
     application.add_exception_handler(SQLAlchemyError, _internal_error_handler)
     application.add_exception_handler(Exception, _internal_error_handler)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],
-        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Idempotency-Key"],
         expose_headers=["X-Request-ID"],
     )
@@ -875,6 +950,10 @@ def create_app(
                 clock,
                 SqlAlchemyOrderRepository(session, clock),
             )
+
+    def shop_service() -> Generator[ShopService, None, None]:
+        with session_scope(factory) as session:
+            yield ShopService(SqlAlchemyShopRepository(session), clock)
 
     def order_action_service() -> Generator[OrderActionService, None, None]:
         with session_scope(factory) as session:
@@ -1374,6 +1453,7 @@ def create_app(
         },
     )
 
+    ShopRoutes(shop_service).register(router)
     application.include_router(router)
     return application
 
