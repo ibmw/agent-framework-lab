@@ -21,6 +21,10 @@ class CrossShopReferenceError(DefinitionLifecycleError):
     """Raised when a shop-scoped reference crosses shop boundaries."""
 
 
+class RequiredReferenceCountError(DefinitionLifecycleError):
+    """Raised when a published version misses a required reference cardinality."""
+
+
 class DefinitionType(StrEnum):
     SHOP = "shop"
     CUSTOMER_PROFILE = "customer_profile"
@@ -60,6 +64,14 @@ ALLOWED_REFERENCE_TARGETS: dict[DefinitionType, frozenset[DefinitionType]] = {
 SAME_SHOP_REFERENCE_PAIRS: frozenset[tuple[DefinitionType, DefinitionType]] = frozenset(
     {(DefinitionType.SCENARIO, DefinitionType.TICKET)}
 )
+
+# Exact reference counts a published version must satisfy; drafts may stay incomplete.
+# Block references remain 0..N and are not listed.
+REQUIRED_REFERENCE_COUNTS: dict[DefinitionType, dict[DefinitionType, int]] = {
+    DefinitionType.TICKET: {DefinitionType.CUSTOMER_PROFILE: 1},
+    DefinitionType.SCENARIO: {DefinitionType.TICKET: 1},
+    DefinitionType.AGENT_CONFIGURATION: {DefinitionType.SUPPORT_IDENTITY: 1},
+}
 
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
@@ -139,6 +151,18 @@ def _require_allowed_references(
         seen.add(target)
 
 
+def _require_reference_counts(definition: DefinitionId, targets: tuple[DefinitionId, ...]) -> None:
+    for target_type, required in REQUIRED_REFERENCE_COUNTS.get(
+        definition.definition_type, {}
+    ).items():
+        count = sum(1 for target in targets if target.definition_type is target_type)
+        if count != required:
+            raise RequiredReferenceCountError(
+                f"a published {definition.definition_type} must reference exactly "
+                f"{required} {target_type} definition(s), found {count}"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class DefinitionDraft:
     """The single editable draft of a definition; editing replaces the draft value."""
@@ -176,9 +200,9 @@ class PublishedDefinitionVersion:
                 )
         else:
             _require_published_version_number(self.shop_version)
-        _require_allowed_references(
-            self.definition, tuple(reference.definition for reference in self.references)
-        )
+        targets = tuple(reference.definition for reference in self.references)
+        _require_allowed_references(self.definition, targets)
+        _require_reference_counts(self.definition, targets)
         _require_utc(self.published_at, "published_at")
 
     @property

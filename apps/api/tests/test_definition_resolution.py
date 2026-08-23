@@ -268,13 +268,15 @@ def test_resolution_rejects_conflicting_pinned_versions(
     repository: InMemoryDefinitionRepository,
 ) -> None:
     shop = definition_id(DefinitionType.SHOP)
+    profile = definition_id(DefinitionType.CUSTOMER_PROFILE)
     ticket = definition_id(DefinitionType.TICKET)
     scenario = definition_id(DefinitionType.SCENARIO)
     identity = definition_id(DefinitionType.SUPPORT_IDENTITY)
     agent = definition_id(DefinitionType.AGENT_CONFIGURATION)
 
     draft_and_publish(repository, shop)
-    draft_and_publish(repository, ticket, shop=shop)
+    draft_and_publish(repository, profile)
+    draft_and_publish(repository, ticket, shop=shop, references=(profile,))
     # The shop republishes, so the scenario pins shop v2 while its ticket pinned shop v1.
     publish_definition(repository, shop, content_fingerprint=FINGERPRINT, clock=FixedClock())
     scenario_version = draft_and_publish(repository, scenario, shop=shop, references=(ticket,))
@@ -283,6 +285,28 @@ def test_resolution_rejects_conflicting_pinned_versions(
 
     with pytest.raises(ConflictingReferenceVersionsError, match="pinned at both"):
         resolve(repository, scenario_version.ref, agent_version.ref)
+
+
+def test_publishing_surfaces_a_repository_missing_the_version_it_reported() -> None:
+    class InconsistentRepository(InMemoryDefinitionRepository):
+        def get_published(self, ref: VersionRef) -> PublishedDefinitionVersion | None:
+            return None
+
+    inconsistent = InconsistentRepository()
+    shop = definition_id(DefinitionType.SHOP)
+    draft_and_publish(inconsistent, shop)
+    ticket = definition_id(DefinitionType.TICKET)
+    inconsistent.save_draft(
+        DefinitionDraft(
+            definition=ticket,
+            shop=shop,
+            references=(definition_id(DefinitionType.CUSTOMER_PROFILE),),
+        )
+    )
+    with pytest.raises(MissingReferenceVersionError, match="not resolvable"):
+        publish_definition(
+            inconsistent, ticket, content_fingerprint=FINGERPRINT, clock=FixedClock()
+        )
 
 
 def test_resolution_validates_roots_arms_seed_and_tool_contracts(
