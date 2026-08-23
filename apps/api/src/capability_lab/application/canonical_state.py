@@ -1,30 +1,29 @@
 from __future__ import annotations
 
-import json
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from hashlib import sha256
 
+from capability_lab.application.canonical_json import (
+    CanonicalSerializationError,
+    CanonicalValue,
+    canonical_json_bytes,
+    canonical_sha256,
+    canonical_timestamp,
+)
 from capability_lab.domain.entities import CanonicalInitialState, Order, Product
 
-type CanonicalValue = bool | int | str | list[CanonicalValue] | dict[str, CanonicalValue] | None
-
-
-class CanonicalSerializationError(ValueError):
-    """Raised when state cannot be represented by the pinned canonical schema."""
+__all__ = [
+    "CanonicalSerializationError",
+    "CanonicalStateFingerprint",
+    "CanonicalValue",
+    "fingerprint_initial_state",
+]
 
 
 @dataclass(frozen=True, slots=True)
 class CanonicalStateFingerprint:
     canonical_json: bytes
     initial_state_hash: str
-
-
-def _timestamp(value: datetime) -> str:
-    if value.utcoffset() != timedelta(0):
-        raise CanonicalSerializationError("canonical timestamps must be timezone-aware UTC")
-    return value.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def _product(product: Product) -> dict[str, CanonicalValue]:
@@ -39,31 +38,12 @@ def _product(product: Product) -> dict[str, CanonicalValue]:
 
 def _order(order: Order) -> dict[str, CanonicalValue]:
     return {
-        "created_at": _timestamp(order.created_at),
+        "created_at": canonical_timestamp(order.created_at),
         "customer_id": str(order.customer_id),
         "id": str(order.id),
         "status": order.status.value,
         "version": order.version,
     }
-
-
-def _normalize(value: CanonicalValue) -> CanonicalValue:
-    if isinstance(value, str):
-        return unicodedata.normalize("NFC", value)
-    if value is None or isinstance(value, bool | int):
-        return value
-    if isinstance(value, list):
-        return [_normalize(item) for item in value]
-
-    normalized: dict[str, CanonicalValue] = {}
-    for key, item in value.items():
-        normalized_key = unicodedata.normalize("NFC", key)
-        if normalized_key in normalized:
-            raise CanonicalSerializationError(
-                "canonical object keys must be unique after NFC normalization"
-            )
-        normalized[normalized_key] = _normalize(item)
-    return normalized
 
 
 def fingerprint_initial_state(state: CanonicalInitialState) -> CanonicalStateFingerprint:
@@ -73,16 +53,16 @@ def fingerprint_initial_state(state: CanonicalInitialState) -> CanonicalStateFin
         )
 
     customer: dict[str, CanonicalValue] = {
-        "created_at": _timestamp(state.customer.created_at),
+        "created_at": canonical_timestamp(state.customer.created_at),
         "display_name": state.customer.display_name,
         "email": state.customer.email,
         "id": str(state.customer.id),
     }
-    normalized_traits = sorted(
-        unicodedata.normalize("NFC", trait) for trait in state.persona.support_traits
-    )
+    # Trait order is set-like: sort by code point after NFC normalization (ADR 0007).
     support_traits: list[CanonicalValue] = []
-    support_traits.extend(normalized_traits)
+    support_traits.extend(
+        sorted(unicodedata.normalize("NFC", trait) for trait in state.persona.support_traits)
+    )
     persona: dict[str, CanonicalValue] = {
         "display_name": state.persona.display_name,
         "email": state.persona.email,
@@ -112,15 +92,8 @@ def fingerprint_initial_state(state: CanonicalInitialState) -> CanonicalStateFin
         "scenario": scenario,
         "seed": state.seed,
     }
-    normalized = _normalize(payload)
-    canonical_json = json.dumps(
-        normalized,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
+    canonical_json = canonical_json_bytes(payload)
     return CanonicalStateFingerprint(
         canonical_json=canonical_json,
-        initial_state_hash=sha256(canonical_json).hexdigest(),
+        initial_state_hash=canonical_sha256(canonical_json),
     )
