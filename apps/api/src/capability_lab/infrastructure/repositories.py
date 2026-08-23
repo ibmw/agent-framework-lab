@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
 from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
+from capability_lab.application.definition_resolution import PublishedVersionExistsError
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.ports import (
     AgentResponse,
@@ -33,6 +34,23 @@ from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioSummary,
     PersonaLibraryFilter,
+)
+from capability_lab.application.shop_payload import (
+    shop_content_fingerprint,
+    shop_payload_document,
+    shop_payload_from_document,
+)
+from capability_lab.application.shops import (
+    ShopDraftRecord,
+    ShopSummary,
+    ShopVersionRecord,
+)
+from capability_lab.domain.definitions import (
+    DefinitionDraft,
+    DefinitionId,
+    DefinitionType,
+    PublishedDefinitionVersion,
+    VersionRef,
 )
 from capability_lab.domain.entities import (
     CanonicalInitialState,
@@ -50,6 +68,8 @@ from capability_lab.infrastructure.models import (
     ConversationSessionModel,
     ConversationTurnModel,
     CustomerModel,
+    DefinitionDraftModel,
+    DefinitionVersionModel,
     GeneratedScenarioModel,
     GeneratedScenarioOrderModel,
     GeneratedScenarioProductModel,
@@ -78,6 +98,10 @@ class ConversationTurnConflictError(ValueError):
 
 class PersistedScenarioIntegrityError(RuntimeError):
     """Raised when persisted state no longer matches its recorded fingerprint."""
+
+
+class PersistedDefinitionIntegrityError(RuntimeError):
+    """Raised when a stored published version no longer matches its content fingerprint."""
 
 
 def _persona_from_model(model: PersonaModel) -> Persona:
@@ -1142,3 +1166,182 @@ class SqlAlchemyScenarioGenerationIdempotencyRepository:
                 ) from error
             return replay_identity
         return None
+
+
+class SqlAlchemyShopRepository:
+    """Store shop drafts and immutable published versions as canonical documents.
+
+    ADR 0012 requires the storage boundary to reject an overwrite of `(definition_type,
+    definition_id, version)` rather than upsert it; the composite primary key enforces that
+    and the insert is translated into `PublishedVersionExistsError`.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_shops(self) -> tuple[ShopSummary, ...]:
+        published = self._session.execute(
+            select(
+                DefinitionVersionModel.definition_id,
+                func.max(DefinitionVersionModel.version),
+                func.count(),
+            )
+            .where(DefinitionVersionModel.definition_type == DefinitionType.SHOP.value)
+            .group_by(DefinitionVersionModel.definition_id)
+        ).all()
+        latest_versions: dict[str, int] = {row[0]: row[1] for row in published}
+        version_counts: dict[str, int] = {row[0]: row[2] for row in published}
+        drafts = self._session.scalars(
+            select(DefinitionDraftModel)
+            .where(DefinitionDraftModel.definition_type == DefinitionType.SHOP.value)
+            .order_by(DefinitionDraftModel.created_at, DefinitionDraftModel.definition_id)
+        ).all()
+        summaries: list[ShopSummary] = []
+        for draft in drafts:
+            payload = shop_payload_from_document(draft.payload)
+            summaries.append(
+                ShopSummary(
+                    definition_id=UUID(draft.definition_id),
+                    name=payload.identity.name,
+                    slug=payload.identity.slug,
+                    updated_at=draft.updated_at,
+                    latest_published_version=latest_versions.get(draft.definition_id),
+                    published_version_count=version_counts.get(draft.definition_id, 0),
+                )
+            )
+        return tuple(summaries)
+
+    def get_draft(self, definition: DefinitionId) -> ShopDraftRecord | None:
+        model = self._session.get(
+            DefinitionDraftModel, (definition.definition_type.value, str(definition.id))
+        )
+        if model is None:
+            return None
+        return ShopDraftRecord(
+            draft=DefinitionDraft(definition=definition),
+            payload=shop_payload_from_document(model.payload),
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    def save_draft(self, record: ShopDraftRecord) -> None:
+        definition = record.definition
+        document = cast("dict[str, object]", shop_payload_document(record.payload))
+        model = self._session.get(
+            DefinitionDraftModel, (definition.definition_type.value, str(definition.id))
+        )
+        if model is None:
+            self._session.add(
+                DefinitionDraftModel(
+                    definition_type=definition.definition_type.value,
+                    definition_id=str(definition.id),
+                    shop_id=None,
+                    references=[],
+                    payload=document,
+                    created_at=record.created_at,
+                    updated_at=record.updated_at,
+                )
+            )
+        else:
+            model.payload = document
+            model.updated_at = record.updated_at
+        self._session.flush()
+
+    def latest_published_version(self, definition: DefinitionId) -> int | None:
+        return self._session.scalar(
+            select(func.max(DefinitionVersionModel.version)).where(
+                DefinitionVersionModel.definition_type == definition.definition_type.value,
+                DefinitionVersionModel.definition_id == str(definition.id),
+            )
+        )
+
+    def get_version(self, ref: VersionRef) -> ShopVersionRecord | None:
+        model = self._session.get(
+            DefinitionVersionModel,
+            (
+                ref.definition.definition_type.value,
+                str(ref.definition.id),
+                ref.version,
+            ),
+        )
+        if model is None:
+            return None
+        payload = shop_payload_from_document(model.payload)
+        # A published version is historical evidence: refuse to serve content that no longer
+        # hashes to the fingerprint recorded when it was frozen.
+        recomputed = shop_content_fingerprint(payload)
+        if recomputed != model.content_fingerprint:
+            raise PersistedDefinitionIntegrityError(
+                f"{ref.definition.definition_type} {ref.definition.id} version {ref.version} "
+                "no longer matches its recorded content fingerprint"
+            )
+        return ShopVersionRecord(
+            published=self._published(model, ref.definition),
+            payload=payload,
+        )
+
+    def list_versions(self, definition: DefinitionId) -> tuple[PublishedDefinitionVersion, ...]:
+        models = self._session.scalars(
+            select(DefinitionVersionModel)
+            .where(
+                DefinitionVersionModel.definition_type == definition.definition_type.value,
+                DefinitionVersionModel.definition_id == str(definition.id),
+            )
+            .order_by(DefinitionVersionModel.version.desc())
+        ).all()
+        return tuple(self._published(model, definition) for model in models)
+
+    def save_version(self, record: ShopVersionRecord) -> None:
+        published = record.published
+        self._session.add(
+            DefinitionVersionModel(
+                definition_type=published.definition.definition_type.value,
+                definition_id=str(published.definition.id),
+                version=published.version,
+                content_fingerprint=published.content_fingerprint,
+                shop_id=None if published.shop is None else str(published.shop.id),
+                shop_version=published.shop_version,
+                references=[
+                    {
+                        "definition_type": reference.definition.definition_type.value,
+                        "definition_id": str(reference.definition.id),
+                        "version": reference.version,
+                    }
+                    for reference in published.references
+                ],
+                payload=cast("dict[str, object]", shop_payload_document(record.payload)),
+                published_at=published.published_at,
+            )
+        )
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            raise PublishedVersionExistsError(
+                f"{published.definition.definition_type} {published.definition.id} "
+                f"version {published.version} is already published"
+            ) from error
+
+    @staticmethod
+    def _published(
+        model: DefinitionVersionModel, definition: DefinitionId
+    ) -> PublishedDefinitionVersion:
+        return PublishedDefinitionVersion(
+            definition=definition,
+            version=model.version,
+            content_fingerprint=model.content_fingerprint,
+            published_at=model.published_at,
+            shop=None
+            if model.shop_id is None
+            else DefinitionId(definition_type=DefinitionType.SHOP, id=UUID(model.shop_id)),
+            shop_version=model.shop_version,
+            references=tuple(
+                VersionRef(
+                    definition=DefinitionId(
+                        definition_type=DefinitionType(str(reference["definition_type"])),
+                        id=UUID(str(reference["definition_id"])),
+                    ),
+                    version=int(cast("int", reference["version"])),
+                )
+                for reference in model.references
+            ),
+        )

@@ -188,3 +188,56 @@ class ActionProposalModel(Base):
     attempts: Mapped[int] = mapped_column(Integer)
     result_order_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     result_order_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class DefinitionDraftModel(Base):
+    """The single mutable draft of one authorable definition."""
+
+    __tablename__ = "definition_drafts"
+    __table_args__ = (
+        CheckConstraint(
+            "definition_type IN ("
+            "'shop', 'customer_profile', 'support_identity', 'ticket', 'scenario', "
+            "'objective_block', 'mutation_block', 'agent_configuration')",
+            name="ck_definition_drafts_type_valid",
+        ),
+        Index("ix_definition_drafts_shop_id", "shop_id"),
+    )
+
+    definition_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    definition_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    shop_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    references: Mapped[list[dict[str, object]]] = mapped_column(JSON)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class DefinitionVersionModel(Base):
+    """An immutable published version; the primary key forbids overwriting one."""
+
+    __tablename__ = "definition_versions"
+    __table_args__ = (
+        CheckConstraint("version >= 1", name="ck_definition_versions_version_positive"),
+        CheckConstraint(
+            "shop_version IS NULL OR shop_version >= 1",
+            name="ck_definition_versions_shop_version_positive",
+        ),
+        CheckConstraint(
+            "definition_type IN ("
+            "'shop', 'customer_profile', 'support_identity', 'ticket', 'scenario', "
+            "'objective_block', 'mutation_block', 'agent_configuration')",
+            name="ck_definition_versions_type_valid",
+        ),
+        Index("ix_definition_versions_definition", "definition_type", "definition_id"),
+    )
+
+    definition_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    definition_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    content_fingerprint: Mapped[str] = mapped_column(String(64))
+    shop_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    shop_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    references: Mapped[list[dict[str, object]]] = mapped_column(JSON)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON)
+    published_at: Mapped[datetime] = mapped_column(UtcDateTime())

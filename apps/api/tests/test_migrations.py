@@ -7,6 +7,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import BigInteger, create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from capability_lab.application.scenario_generation import create_retail_profile_kernel
 from capability_lab.domain.entities import MAX_SCENARIO_SEED
@@ -20,7 +21,10 @@ from capability_lab.infrastructure.database import (
 )
 from capability_lab.infrastructure.repositories import SqlAlchemyGeneratedScenarioRepository
 
-APPLICATION_TABLES = {
+# The definition lifecycle tables arrive alongside the POC tables; a downgrade past their
+# revision removes only them.
+DEFINITION_TABLES = {"definition_drafts", "definition_versions"}
+POC_TABLES = {
     "action_proposals",
     "customers",
     "generated_scenario_orders",
@@ -34,6 +38,7 @@ APPLICATION_TABLES = {
     "memory_records",
     "idempotency_records",
 }
+APPLICATION_TABLES = POC_TABLES | DEFINITION_TABLES
 
 
 def alembic_config(database_url: str, monkeypatch: pytest.MonkeyPatch) -> Config:
@@ -155,6 +160,80 @@ def test_seed_bigint_migration_preserves_existing_session(
 
 
 @pytest.mark.migration
+def test_definition_versions_reject_overwriting_a_published_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'definitions.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    row = {
+        "definition_type": "shop",
+        "definition_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac001",
+        "version": 1,
+        "content_fingerprint": "a" * 64,
+        "shop_id": None,
+        "shop_version": None,
+        "references": "[]",
+        "payload": "{}",
+        "published_at": "2026-08-23 12:00:00.000000",
+    }
+    insert = text(
+        """
+        INSERT INTO definition_versions (
+            definition_type, definition_id, version, content_fingerprint,
+            shop_id, shop_version, "references", payload, published_at
+        ) VALUES (
+            :definition_type, :definition_id, :version, :content_fingerprint,
+            :shop_id, :shop_version, :references, :payload, :published_at
+        )
+        """
+    )
+    with engine.begin() as connection:
+        connection.execute(insert, row)
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "content_fingerprint": "b" * 64})
+
+    with engine.connect() as connection:
+        stored = connection.scalar(
+            text("SELECT content_fingerprint FROM definition_versions WHERE version = 1")
+        )
+    assert stored == "a" * 64
+
+
+@pytest.mark.migration
+def test_downgrade_refuses_to_drop_published_definition_versions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'published-downgrade.db'}"
+    config = alembic_config(database_url, monkeypatch)
+    command.upgrade(config, "head")
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO definition_versions (
+                    definition_type, definition_id, version, content_fingerprint,
+                    shop_id, shop_version, "references", payload, published_at
+                ) VALUES (
+                    'shop', '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac002', 1, :fingerprint,
+                    NULL, NULL, '[]', '{}', '2026-08-23 12:00:00.000000'
+                )
+                """
+            ),
+            {"fingerprint": "c" * 64},
+        )
+
+    with pytest.raises(RuntimeError, match="refusing to downgrade"):
+        command.downgrade(config, "20260818_0005")
+
+    assert {"definition_drafts", "definition_versions"} <= set(inspect(engine).get_table_names())
+
+
+@pytest.mark.migration
 def test_upgrade_preserves_unmanaged_existing_table(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -206,7 +285,8 @@ def test_downgrade_refuses_populated_generated_state_without_schema_damage(
         command.downgrade(config, "20260816_0002")
 
     inspector = inspect(engine)
-    assert set(inspector.get_table_names()) >= APPLICATION_TABLES
+    assert set(inspector.get_table_names()) >= POC_TABLES
+    assert DEFINITION_TABLES.isdisjoint(inspector.get_table_names())
     assert not any(table.startswith("_alembic_tmp") for table in inspector.get_table_names())
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260818_0005"
@@ -224,7 +304,7 @@ def test_downgrade_refuses_populated_generated_state_without_schema_damage(
     command.downgrade(config, "20260818_0004")
 
     inspector = inspect(engine)
-    assert set(inspector.get_table_names()) >= APPLICATION_TABLES - {"action_proposals"}
+    assert set(inspector.get_table_names()) >= POC_TABLES - {"action_proposals"}
     assert "action_proposals" not in inspector.get_table_names()
     assert {"customer_id", "status", "version", "created_at"}.isdisjoint(
         column["name"] for column in inspector.get_columns("generated_scenario_orders")
