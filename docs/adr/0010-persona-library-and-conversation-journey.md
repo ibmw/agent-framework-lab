@@ -2,9 +2,10 @@
 
 Status: superseded as target product journey by ADR 0011 — 2026-08-23
 
-This ADR remains an accurate record of the currently implemented POC routes, persistence behavior,
-and UI. New product work uses experiment-first history and the authoring journey in
-`docs/product-direction.md`; it must not assume the persona library is the target navigation.
+This ADR remains an accurate record of the implemented POC routes and persistence behavior. Its
+frontend was removed by ADR 0013 when the Studio shell replaced persona-first navigation; the HTTP
+contracts it describes are still published and tested. New product work uses experiment-first
+history and the authoring journey in `docs/product-direction.md`.
 
 ## Context
 

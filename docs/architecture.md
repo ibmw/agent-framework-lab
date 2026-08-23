@@ -16,7 +16,7 @@ apps/
       application/        current use cases and ports
       infrastructure/     SQLAlchemy, configuration, traces, and agents
       presentation/       HTTP routes and schemas
-  web/                    current React/Vite playground
+  web/                    React/Vite Studio workspace
 packages/
   contracts/              OpenAPI v1 contract and generated shared types
 infra/
@@ -26,9 +26,13 @@ docs/                     product, architecture, guidelines, and ADRs
 ```
 
 The POC implements generated personas, minimal customers/products/orders, hard-coded scenario
-definitions, conversations, one safe cancellation action, a Pydantic AI adapter, framework
-selection, and a conversation comparison view. This is reusable evidence, not the target domain
-model or navigation.
+definitions, conversations, one safe cancellation action, a Pydantic AI adapter, and framework
+selection. This is reusable evidence, not the target domain model.
+
+Milestone 1 has begun replacing it: the definition lifecycle (ADR 0012), the versioned shop and
+extensible catalog with its publish gate (ADR 0013), the `definition_drafts`/`definition_versions`
+tables, and the Studio application shell are target code. The POC's persona-first frontend was
+removed with that shell; its HTTP contracts remain published and tested without a UI consumer.
 
 ## Binding dependency rule
 
@@ -143,9 +147,12 @@ evidence view; manually maintained pseudo-code is not authoritative evidence.
 
 ## Persistence, versioning, and extensibility
 
-Authorable definitions use mutable drafts and immutable published versions. Experiments and judge
-executions are append-oriented historical evidence. Operational sandbox state is mutable only
-inside one run and never changes the published definitions or canonical starting snapshot.
+Authorable definitions use mutable drafts and immutable published versions, stored as one canonical
+document per draft and per version in `definition_drafts` and `definition_versions`; the composite
+primary key `(definition_type, definition_id, version)` is the overwrite guard, and typed domain
+constructors re-validate every document on read (ADR 0013). Experiments and judge executions are
+append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
+never changes the published definitions or canonical starting snapshot.
 
 Typed domain objects protect important commerce invariants. Configurable typed attributes extend
 catalog content without one schema change per display field; versioned metadata extensions are
@@ -182,8 +189,9 @@ starting-state fingerprint.
 
 ## Public contracts during redesign
 
-`packages/contracts/openapi/v1/openapi.yaml` and current tool schemas remain the contracts of the
-running POC until a roadmap slice deliberately replaces or versions them. Do not incrementally bend
-persona or conversation routes into the target model. Introduce target contracts with their domain,
-application behavior, persistence, frontend consumer, migration behavior, and tests in the same
-cohesive slice.
+`packages/contracts/openapi/v1/openapi.yaml` carries both the POC routes and the target routes added
+by accepted slices; the shop operations under `/api/v1/shops` are the first target contract. The POC
+persona, conversation, and order-action routes remain published until a roadmap slice deliberately
+replaces or versions them. Do not incrementally bend persona or conversation routes into the target
+model. Introduce target contracts with their domain, application behavior, persistence, frontend
+consumer, migration behavior, and tests in the same cohesive slice.

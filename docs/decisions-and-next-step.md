@@ -65,8 +65,9 @@ SDK immediately.
   redesign now precede another framework adapter.
 - ADR 0006's hard-coded generated scenario/persona model is implemented history, not the target
   authoring model.
-- ADR 0010's persona library and conversation history remain current POC behavior, not the target
-  primary navigation or historical record.
+- ADR 0010's persona library and conversation history are superseded as navigation: their frontend
+  was removed by ADR 0013 in favour of the Studio shell. The underlying conversation and persona
+  HTTP contracts remain published POC behavior, not the target historical record.
 - The minimal customer/product/order canonical schema in ADR 0007 remains valid for POC replay but
   is not the target commerce schema. A target snapshot format requires a new canonical schema
   version and ADR amendment or replacement.
@@ -94,9 +95,14 @@ SDK immediately.
    version lifecycle, `sandbox-v1` canonical boundary, and migration/reset policy, implemented as
    pure domain/application code with tests and formalizing the `docs/design-direction.md` model
    revisions in `docs/product-direction.md`.
-3. The next implementation task is `docs/PLAN.md` Milestone 1 Slice 2: shop drafts/published
-   versions, the extensible catalog, and the first target UI with the selected design direction's
-   application shell and Studio navigation.
+3. Milestone 1 Slice 2 is complete: ADR 0013 records the `shop-payload-v1` payload schema, the
+   split between structural invariants and the publish gate, the canonical-document persistence
+   for `definition_drafts`/`definition_versions`, the `/api/v1/shops` contract, and the Studio
+   application shell. The POC's persona-first frontend was removed with that shell; its HTTP
+   contracts remain published and tested without a UI consumer.
+4. The next implementation task is `docs/PLAN.md` Milestone 1 Slice 3: versioned customer profiles
+   with the named address book, and versioned support identities, with their Studio forms on the
+   shell delivered by Slice 2.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

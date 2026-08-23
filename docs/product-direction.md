@@ -301,8 +301,8 @@ port, versioned contracts, deterministic fingerprints, durable conversations, sa
 actions, and sanitized tracing. Preserve those principles unless a later ADR deliberately changes
 them.
 
-The current hard-coded `ScenarioDefinition`, generated persona flow, minimal catalog/order model,
-persona-first navigation, and conversation-level comparison are POC implementations, not target
-constraints. They may be replaced through cohesive, tested slices. Existing local POC data does not
+The current hard-coded `ScenarioDefinition`, generated persona flow, and minimal catalog/order model
+are POC implementations, not target constraints; the persona-first navigation and conversation-level
+comparison view were removed with the Studio shell (ADR 0013). They may be replaced through cohesive, tested slices. Existing local POC data does not
 require backward compatibility; migrations must still behave safely and predictably for supported
 repository states.

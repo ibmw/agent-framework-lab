@@ -36,10 +36,15 @@ The current POC already proves:
 - durable conversations, resume, persona/conversation listings, and a basic comparison view; and
 - sanitized OpenTelemetry traces with optional Phoenix export.
 
-The POC does not implement the target Shop/Scenario Studio, rich commerce model, published agent
-configurations, paired experiment runner, participant-driver port, LLM judge, experiment-first
-history, or target wrong-address journey. Existing persona-first contracts and data may be replaced
-through cohesive tested slices.
+Milestone 1 Slice 2 replaced the persona-first frontend with the target Studio shell and delivered
+the versioned shop and catalog (ADR 0013). The POC's conversation, persona, and order-action HTTP
+contracts remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are
+built on the new shell.
+
+The POC does not implement the target Scenario Studio, published agent configurations, paired
+experiment runner, participant-driver port, LLM judge, experiment-first history, or target
+wrong-address journey. Existing persona-first contracts and data may be replaced through cohesive
+tested slices.
 
 ## Delivery rules
 
@@ -198,19 +203,21 @@ cannot mutate and that an experiment resolution can identify every behaviorally 
 
 ### Slice 2 — Shop and extensible catalog
 
-- [ ] Add shop drafts and published versions.
-- [ ] Add products, option definitions, variants, prices, availability, media references, ratings,
+- [x] Add shop drafts and published versions.
+- [x] Add products, option definitions, variants, prices, availability, media references, ratings,
   reviews, and a first bounded set of typed custom attributes.
-- [ ] Add FAQ, policy, payment-method, fulfilment, and support-guideline configuration needed by the
+- [x] Add FAQ, policy, payment-method, fulfilment, and support-guideline configuration needed by the
   first scenario.
-- [ ] Persist through ports and publish the contract together with a minimal Studio UI.
-- [ ] Introduce the selected design direction's application shell and Studio navigation with this
+- [x] Persist through ports and publish the contract together with a minimal Studio UI.
+- [x] Introduce the selected design direction's application shell and Studio navigation with this
   first target UI instead of extending persona-first navigation (requires the Milestone 0.5
   decision).
-- [ ] Validate and preview a shop before publication.
+- [x] Validate and preview a shop before publication.
 
 Slice evidence: an author can publish a shop containing a product with size/color variants and
-retrieve the same immutable version through the public contract.
+retrieve the same immutable version through the public contract. ADR 0013 records the
+`shop-payload-v1` schema, the publish gate, the definition-document persistence shape, and the
+Studio shell that replaced the POC's persona-first navigation.
 
 ### Slice 3 — Synthetic customer and support identity
 
