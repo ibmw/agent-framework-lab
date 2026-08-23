@@ -56,6 +56,9 @@ tested slices.
   boundary.
 - Do not add compatibility layers for discarded local POC data unless the slice declares that
   starting state supported.
+- UI-bearing slices implement the frames named in their "Frames:" line from the Milestone 0.5
+  authoritative set (`docs/design-direction.md`; local export with index in
+  `tmp/design-frames/README.md`) instead of inventing layout ad hoc.
 - Mark an outcome complete only when its tests, contracts, migrations, documentation, and UI where
   applicable are present.
 - `make check` passes before handoff. Frontend/build changes also pass `pnpm build`; essential changed
@@ -214,6 +217,11 @@ cannot mutate and that an experiment resolution can identify every behaviorally 
   decision).
 - [x] Validate and preview a shop before publication.
 
+Frames: 1 · Shop home (the application shell: pine top bar, shop switcher, resource sidebar,
+index-table and draft/published-chip conventions) and 2c · Product editor. Shop setup surfaces
+(identity, policies, FAQ, tone of voice) have no dedicated frame; they live under the sidebar's
+Shop setup section and follow the same shell conventions.
+
 Slice evidence: an author can publish a shop containing a product with size/color variants and
 retrieve the same immutable version through the public contract. ADR 0013 records the
 `shop-payload-v1` schema, the publish gate, the definition-document persistence shape, and the
@@ -226,6 +234,10 @@ Studio shell that replaced the POC's persona-first navigation.
 - [ ] Add versioned support identities with role, tone, permissions, and guidance.
 - [ ] Clearly label synthetic data and prove sensitive fields are excluded from logs/traces.
 - [ ] Add Studio forms, validation, persistence, and contract tests.
+
+Frames: 6 · Customers and 6b · Customer editor — address book. Support-identity forms have no
+dedicated frame and follow the shell's resource-editor conventions. The address book authored here
+is the selection source for the order editor's frozen address copies (frame 2b, Milestone 2).
 
 ### Milestone acceptance
 
@@ -245,6 +257,9 @@ instance.
 
 ### Outcomes
 
+- [ ] Author order fixtures through the order editor: typed status transitions, derived totals,
+  authored order events, and a shipping address selected from the customer's address book and
+  stored as a frozen, source-labeled copy.
 - [ ] Define versioned tickets (channel, origin references, prior conversation, trigger) and the
   scenario recipe on top of them: hidden facts, context documents, composed objective and mutation
   blocks, and completion conditions.
@@ -260,6 +275,9 @@ instance.
   optimistic concurrency.
 - [ ] Prove deterministic generation, canonical serialization, and tool behavior with unit and
   integration tests.
+
+Frames: 2 · Orders, 2b · Order editor, 3 · Tickets — helpdesk view, 4 · Scenario editor — composed
+blocks, 4a · Objective block library, and 4b · Mutation block library.
 
 ### Acceptance criteria
 
@@ -284,6 +302,10 @@ Make the support agent and customer-input mechanism reusable, versioned experime
 - [ ] Introduce a participant-driver port and human-operator implementation.
 - [ ] Persist resolved configurations and participant events without framework SDK types.
 - [ ] Keep deterministic adapter tests and optional live-model smoke tests separate.
+
+Frames: 5 · Agent configuration — variables (markdown prompt editor with variable chips, grouped
+insert menu with the non-injectable group, preview context, and the LLM/runtime configuration
+card).
 
 ### Acceptance criteria
 
@@ -312,6 +334,9 @@ behavior side by side.
 - [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
   essential Playwright journey.
 
+Frames: 7 · Experiment setup and 8 · Live bench (icon-only rail, ticket-thread chat UI, provenance
+chip strip, director's notes, objectives matrix).
+
 ### Acceptance criteria
 
 - An action in one arm cannot alter the other arm.
@@ -336,6 +361,10 @@ Turn completed runs into durable, searchable comparison evidence.
 - [ ] Preserve evaluator executions, notes, tags, state diffs, traces, replay, and fork provenance.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
+Frames: 9 · Experiment results — General tab, 9a · Execution timeline tab, 9b · Traces tab,
+9c · Code paths tab, and 10 · History. Together with the Milestone 4 frames this completes the
+18-frame authoritative set.
+
 ### Acceptance criteria
 
 - Deterministic evidence remains readable and unchanged when a judge is unavailable or rerun.
@@ -358,6 +387,8 @@ environment, scenario, runner, and evidence model are proven.
 - [ ] Produce equivalent normalized tools, events, traces, and evaluation inputs.
 - [ ] Document project-owned glue code, constraints, failures, and observed behavior.
 - [ ] Prove the wrong-address scenario in a two-arm comparison.
+
+Frames: none new; this milestone reuses the Milestone 3–5 surfaces (frames 5, 7–10).
 
 Vercel AI SDK remains a candidate, not an automatic next task.
 
