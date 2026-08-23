@@ -27,8 +27,10 @@ matrix is the clearest rendering of per-arm deterministic evidence.
 
 - Canvas: **Simulation Lab Design Directions** —
   https://claude.ai/code/artifact/eff44346-3154-43cd-a7da-d61226061413
-- Page "Direction A merged — stage one" holds the authoritative frames for implementation.
-- Page "Exploration — first pass" preserves the three original candidates for history.
+- Page **"Shop workspace — v2 IA"** holds the 18 authoritative frames — the only set to implement.
+  UI slices cite these frames.
+- Pages "Exploration — first pass" and "Direction A merged — stage one" are historical records of
+  the selection process; nothing on them is an implementation reference.
 
 ## Implications
 
