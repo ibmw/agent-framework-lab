@@ -1,8 +1,14 @@
 # Agent Framework Capability Lab
 
-An e-commerce playground designed to make agent-framework capabilities visible and comparable.
-This initial foundation does not include a working agent or final chat experience; it establishes
-the boundaries, contracts, quality gates, and reproducibility needed by future demonstrations.
+A controlled customer-support simulation lab for configuring synthetic e-commerce environments,
+running one or two agent implementations against equivalent isolated state, and comparing their
+behavior with objective evidence.
+
+The current application is a proof of concept for deterministic fixtures, safe tool-mediated
+actions, durable conversations, traces, and framework-neutral adapters. The approved target product
+is the Simulation Studio and Experiment Lab described in
+[`docs/product-direction.md`](docs/product-direction.md). The POC's persona-first workflow and
+hard-coded scenarios are not the target roadmap.
 
 ## Prerequisites
 
@@ -36,8 +42,12 @@ running. Commands must never start, stop, or restart a service implicitly.
 
 ## Documentation
 
+- [`docs/product-direction.md`](docs/product-direction.md): authoritative product scope, vocabulary,
+  journeys, and comparison principles.
+- [`docs/design-brief.md`](docs/design-brief.md): brief for three distinct product-design directions.
 - [`docs/architecture.md`](docs/architecture.md): structure and allowed dependencies.
-- [`docs/PLAN.md`](docs/PLAN.md): future milestones and completed outcomes.
+- [`docs/PLAN.md`](docs/PLAN.md): current redesign roadmap and POC baseline.
 - [`docs/development.md`](docs/development.md): trunk-based workflow and local development loop.
-- [`docs/decisions-and-next-step.md`](docs/decisions-and-next-step.md): decisions and deferred scope.
+- [`docs/decisions-and-next-step.md`](docs/decisions-and-next-step.md): accepted direction,
+  superseded assumptions, and next task.
 - [`.codex/skills`](.codex/skills): project-local skills for recurring changes.

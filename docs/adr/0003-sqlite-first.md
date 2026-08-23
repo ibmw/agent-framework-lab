@@ -5,6 +5,10 @@ Status: accepted — 2026-08-16
 Amendment: 2026-08-16 — Added persisted generated-scenario aggregates and scoped reusable retail
 attributes to those aggregates.
 
+Amendment: 2026-08-23 — ADR 0011 permits replacing the POC aggregate schema and discarding local POC
+data through an explicit, tested migration/reset slice. SQLite-first portability, idempotency, and
+optimistic-concurrency decisions remain accepted.
+
 SQLite is sufficient for the local demonstration. SQLAlchemy and Alembic are used from the start
 without SQLite-specific types or SQL. Command writes use optimistic concurrency and idempotency.
 Scenario seeds use `BigInteger` so the documented unsigned 32-bit seed range is portable to

@@ -1,5 +1,9 @@
 # Adding an agent framework
 
+Agent-framework expansion is deferred until the Simulation Studio domain and first target scenario
+are stable. See `docs/product-direction.md`, ADR 0011, and the current `docs/PLAN.md`. The rules below
+still apply when a roadmap slice authorizes another adapter.
+
 1. Document the provider/model, local credentials, deterministic test double, and optional smoke-test
    policy before adding the SDK.
 2. Create `infrastructure/agents/<framework>/` and keep SDK imports local to that package.

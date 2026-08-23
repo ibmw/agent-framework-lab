@@ -1,6 +1,10 @@
 # ADR 0010 — Persona library and conversation journey
 
-Status: accepted — 2026-08-19
+Status: superseded as target product journey by ADR 0011 — 2026-08-23
+
+This ADR remains an accurate record of the currently implemented POC routes, persistence behavior,
+and UI. New product work uses experiment-first history and the authoring journey in
+`docs/product-direction.md`; it must not assume the persona library is the target navigation.
 
 ## Context
 

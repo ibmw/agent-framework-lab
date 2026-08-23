@@ -1,10 +1,16 @@
 # Repository instructions
 
-Read `docs/architecture.md` before changing code and the relevant guideline/ADR for the task.
+Read `docs/product-direction.md`, `docs/architecture.md`, and `docs/PLAN.md` before changing code,
+plus the relevant guideline/ADR for the task. The running application is a POC; do not extend its
+persona-first scenario model or treat the old Vercel milestone as current direction unless a new
+roadmap slice explicitly requires it.
 
 - Preserve the dependency rule: presentation/infrastructure -> application -> domain. Domain and
   application must not import FastAPI, SQLAlchemy, agent SDKs, Phoenix or Temporal.
 - Treat `packages/contracts/openapi/v1/openapi.yaml` and tool schemas as versioned public contracts.
+- Treat the current persona/scenario/conversation contracts as implemented POC contracts, not the
+  target product model. Replace them only in a cohesive versioned slice with implementation,
+  migration behavior, consumers, tests, and documentation together.
 - Keep writes idempotent and order updates concurrency-safe. Never log or trace secrets or raw
   sensitive customer content.
 - Add behavior-focused tests with every change. Use unit tests first, integration tests at I/O

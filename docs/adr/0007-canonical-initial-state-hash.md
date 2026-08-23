@@ -4,6 +4,10 @@ Status: accepted — 2026-08-16
 
 Amendment: 2026-08-16 — Defined the concrete `v1` canonical fields and collection semantics.
 
+Amendment: 2026-08-23 — The concrete schema below remains authoritative for POC replay only. The
+Simulation Studio requires a new canonical schema version covering its resolved sandbox; ADR 0011
+retains the canonical-fingerprint principle but does not extend `v1` implicitly.
+
 ## Context
 
 Replaying a generated sandbox requires more than storing a seed. The lab must detect whether two

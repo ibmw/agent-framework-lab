@@ -1,4 +1,7 @@
-# M2 retail support scenario and model policy
+# Historical POC policy — M2 retail support scenario and model
+
+Status: implemented POC record; not the current product roadmap. See `docs/product-direction.md`
+and ADR 0011 before adding scenarios, models, or agent frameworks.
 
 ## Selected scenario
 

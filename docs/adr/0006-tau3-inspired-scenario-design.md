@@ -1,6 +1,10 @@
 # ADR 0006 — τ³-inspired scenario design
 
-Status: accepted — 2026-08-16
+Status: partially superseded by ADR 0011 — 2026-08-23
+
+This ADR remains the record of the implemented POC fixtures and their deterministic generation
+rules. ADR 0011 supersedes its hard-coded scenario model and persona-first journey as target product
+direction; local ownership, versioning, and useful τ³-inspired vocabulary remain valid.
 
 Amendment: 2026-08-16 — Recorded the initial `retail-profile` family and its local adaptations.
 
