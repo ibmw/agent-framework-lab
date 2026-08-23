@@ -157,7 +157,8 @@ persona-first navigation.
 - [x] Expand the selected direction to the brief's stage-one deliverables: the four high-fidelity
   key frames, supporting workflow frames, and the navigation/information-architecture model. (The
   brief's narrow-width live-comparison treatment was deliberately dropped; desktop is the
-  operating environment.) The full frame set lives on the canvas page "Shop workspace — v2 IA".
+  operating environment.) The full frame set lives on the canvas page "Shop workspace — v2 IA"
+  and is exported locally to `tmp/design-frames/` (see `docs/design-direction.md`).
 - [x] Update this roadmap's UI-bearing slices where the selected direction changes their scope or
   ordering (ticket model, block libraries, shop-level tone of voice, and address-book decisions
   are reflected in the vocabulary and milestone outcomes above).

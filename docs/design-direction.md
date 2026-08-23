@@ -29,6 +29,10 @@ matrix is the clearest rendering of per-arm deterministic evidence.
   https://claude.ai/code/artifact/eff44346-3154-43cd-a7da-d61226061413
 - The canvas holds exactly the **18 authoritative frames** of the shop-workspace design — the only
   set to implement. UI slices cite these frames.
+- A local export of the frames lives in `tmp/design-frames/` — one self-contained `.dc.html` file
+  per frame, `canvas.json` for titles and layout, and a README index — so agents can read the
+  frames without canvas access. `tmp/` is not under version control; if the directory is missing
+  or the canvas has changed, re-export it from the artifact above.
 - The exploration and merged-stage-one mockups were removed from the canvas after selection; this
   document is the record of how the direction was chosen.
 

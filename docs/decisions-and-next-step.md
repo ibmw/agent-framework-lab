@@ -87,8 +87,9 @@ SDK immediately.
 
 1. Milestone 0.5 is complete. The design direction is selected and recorded in
    `docs/design-direction.md` (Direction A merged with named strengths of B and C), and the 18
-   authoritative frames live on the design canvas page "Shop workspace — v2 IA". No further design
-   exploration is required before implementation; UI slices cite those frames.
+   authoritative frames live on the design canvas page "Shop workspace — v2 IA", with a local
+   export in `tmp/design-frames/` (see `docs/design-direction.md`). No further design exploration
+   is required before implementation; UI slices cite those frames.
 2. The next implementation task is `docs/PLAN.md` Milestone 1 Slice 1, which is UI-free: define the
    target identifiers, draft/published version lifecycle, canonical sandbox boundary, and
    migration/reset policy in domain and application code with pure tests. Its ADR also formalizes
