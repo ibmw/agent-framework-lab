@@ -1,39 +1,97 @@
-# Decisions, scope, and next step
+# Decisions, superseded scope, and next step
 
-## Accepted decisions
+Status: current — 2026-08-23
 
-- pnpm/uv monorepo with two versioned lockfiles.
-- Pragmatic clean architecture and a common agent contract defined before adding SDKs.
-- SQLite, SQLAlchemy, and Alembic with PostgreSQL-portable types and migrations, including
-  fingerprint-verified generated scenario aggregates.
-- OpenAPI v1 as the published contract and OpenTelemetry as the trace format.
-- OpenAPI-generated TypeScript v1 types as the only backend contract types consumed by the web
-  application.
-- Typed startup configuration and secret-free environment examples.
-- Optimistic concurrency and idempotency keys represented in application ports and the schema.
-- τ³-bench Retail as inspiration for locally adapted and versioned scenarios and policies, without
-  an initial runtime dependency.
-- Chosen frontend and fixture libraries are locked from the foundation stage to validate
-  compatibility. They are not delivered capabilities until exercised by a scenario and test.
-  OpenTelemetry runtime dependencies will wait for the trace-adapter implementation.
-- Playground components use Tailwind utilities over semantic theme tokens; shadcn primitives are
-  added when a control is reusable rather than duplicating one-off component CSS.
-- The first support scenario is `retail-profile@v1`, with three customer-scoped read tools, a
-  framework-neutral conversation API, durable neutral turns, and explicit capability declarations.
-- Pydantic AI uses OpenAI Responses with the credential-gated `gpt-5-mini` configuration. Required
-  evidence uses Pydantic AI `TestModel` and a separate fake adapter without live calls.
-- Sanitized common OpenTelemetry spans can be exported to the pinned local Phoenix Compose service;
-  native prompt/payload instrumentation remains disabled.
-- `retail-order-cancellation@v1` and policy set `v2` add the single `cancel_order@v1` modifying
-  action with persisted exact proposals, separate confirmation/execution, idempotency, optimistic
-  concurrency, safe retries, immutable initial snapshots, and sanitized lifecycle traces.
+## Authoritative direction
+
+The approved product is the Simulation Studio and Experiment Lab in
+`docs/product-direction.md`, accepted by ADR 0011. The current application is a POC baseline. Future
+work follows the redesigned roadmap in `docs/PLAN.md`, not the former instruction to add Vercel AI
+SDK immediately.
+
+## Accepted product decisions
+
+- Configure realistic, synthetic e-commerce environments without building a customer-facing
+  storefront in V1.
+- Keep core commerce concepts typed while allowing administrator-defined typed attributes and
+  versioned non-critical extensions.
+- Give agents minimal interaction references directly and provide most commerce information through
+  framework-neutral, versioned tools.
+- Separate shop, customer, support identity, ticket, scenario, agent configuration, experiment,
+  run, sandbox snapshot, and evaluation concepts.
+- Author inside a shop-scoped admin workspace: orders, tickets, and scenarios belong to one shop;
+  customer profiles are reusable across shops while their commerce/support history stays
+  shop-scoped. Agent configurations remain shop-independent through prompt variables and tool
+  bindings resolved at experiment start.
+- Compose scenarios from shared, versioned objective and mutation block templates; templates are
+  shop-independent while every parameter binding stays same-shop. Context documents (policies,
+  support guidelines) are referenced by scenarios, readable by agents through tools, and
+  document-read objectives record whether each arm actually consulted them.
+- Edit agent prompts as markdown templates with inline variable chips, a grouped insert menu, and
+  selectable preview context; customer/order/ticket facts are visibly non-injectable. LLM
+  provider/model/runtime are explicit configuration. Tone of voice is a shop-level named guideline
+  set with one default; agent configurations select the shop default or a named override.
+- Give customer profiles a named address book with one default entry. Orders select an address
+  from the book and store a frozen, source-labeled copy; address-book edits never rewrite existing
+  orders, published scenarios, or snapshots.
+- Use editable drafts and immutable published versions for authorable definitions.
+- Run a maximum of two isolated arms from the same canonical starting snapshot and record operator
+  input divergence.
+- Make human operation the first participant driver while preserving ports for future LLM and
+  scripted customer drivers.
+- Evaluate deterministic objectives, anonymized versioned LLM-judge dimensions, and quantitative
+  metrics separately.
+- Treat turns, tokens, latency, calls, retries, and cost as contextual observations, not universal
+  framework scores.
+- Make experiment history, evidence, replay, and fork the primary review journey.
+- Use the wrong-shipping-address incident as the first complete target vertical slice.
+- Permit cohesive replacement of the POC domain and contracts; existing local POC data does not
+  require backward compatibility.
+
+## Technical principles retained from the POC
+
+- Pragmatic clean architecture and inward dependencies.
+- Framework-neutral application ports and isolated SDK adapters.
+- Versioned OpenAPI and tool contracts.
+- Canonical starting-state fingerprints and explicit replay context.
+- Confirmed, idempotent, concurrency-safe modifying actions.
+- SQLite-first portable persistence until its documented trigger is reached.
+- Sanitized OpenTelemetry evidence with optional exporters.
+- Deterministic test doubles and no required live-model calls in CI.
+
+## Superseded instructions
+
+- `docs/PLAN.md` Milestone 4 previously named Vercel AI SDK as the next task. Domain and product
+  redesign now precede another framework adapter.
+- ADR 0006's hard-coded generated scenario/persona model is implemented history, not the target
+  authoring model.
+- ADR 0010's persona library and conversation history remain current POC behavior, not the target
+  primary navigation or historical record.
+- The minimal customer/product/order canonical schema in ADR 0007 remains valid for POC replay but
+  is not the target commerce schema. A target snapshot format requires a new canonical schema
+  version and ADR amendment or replacement.
+- The M2 provider/model policy remains a historical POC policy. Target agent and judge configuration
+  will be versioned authorable definitions.
 
 ## Explicitly deferred
 
-Vercel AI SDK comparison, additional modifying support actions, Temporal runtime, PostgreSQL,
-autonomous simulation, and deeper τ³-bench dataset or harness integration.
+- Customer-facing storefront.
+- Autonomous LLM customer driver and broad regression runner.
+- Managed image upload or object storage.
+- External commerce platform integrations.
+- Multi-user authentication and tenancy.
+- PostgreSQL or durable workflow runtime without a documented operational trigger.
+- Global framework leaderboard.
 
-## Recommended next task
+## Recommended next steps
 
-Begin Milestone 4 by implementing the same read-only and modifying semantics behind the Vercel AI
-SDK adapter without changing the public API, stored session/action formats, or playground behavior.
+1. The design direction is selected and recorded in `docs/design-direction.md` (PLAN.md
+   Milestone 0.5): Direction A merged with named strengths of B and C. Review and refine the
+   expanded stage-one frames on the retained design canvas until they cover the brief's
+   deliverables.
+2. In parallel, Milestone 1 Slice 1 may proceed because it is UI-free: define the target
+   identifiers, draft/published version lifecycle, canonical sandbox boundary, and migration/reset
+   policy in domain and application code with pure tests.
+
+Do not start a UI-bearing slice before the design direction is recorded, add another agent
+framework, or grow the POC scenario registry first.

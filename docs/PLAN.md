@@ -1,458 +1,381 @@
 # Project plan
 
-## Purpose
+Status: current redesign roadmap — 2026-08-23
 
-Build a human-operated, traceable e-commerce playground where a user generates a fictional
-customer persona and then interacts with a support agent. The lab exists to expose how agent
-frameworks implement real capabilities; it is not a performance leaderboard.
+## Purpose and authority
 
-This document is the execution roadmap for contributors and fresh coding agents. It defines
-delivery slices and acceptance evidence. Keep detailed designs in linked ADRs and branch-level
-implementation notes in issues or pull requests.
+Build the Simulation Studio and Experiment Lab defined by `docs/product-direction.md` and accepted
+by ADR 0011. This roadmap replaces the former plan whose next milestone was the Vercel AI SDK
+adapter.
 
-## Read this before starting a task
+Read documents in this order before changing code:
 
-1. Read `AGENTS.md`, `docs/architecture.md`, and the guideline relevant to the task.
-2. Invoke the matching project-local skill under `.codex/skills/` when applicable.
-3. Synchronize `main` and create a short-lived branch before modifying files.
-4. Start with the first incomplete execution slice in the current milestone unless an issue names a
-   smaller independently testable increment.
-5. Confirm its API/tool contract, architecture boundary, test level, and observability impact.
-6. Mark an outcome checkbox complete in place only when the whole outcome and its automated
-   acceptance evidence are present.
+1. `AGENTS.md`;
+2. `docs/product-direction.md`;
+3. `docs/architecture.md`;
+4. this roadmap; and
+5. the task-specific guideline and ADRs.
 
-Project documentation, code identifiers, and public contracts use English consistently. Preserve
-that convention when adding or updating guidance.
+For target UI work, also read `docs/design-brief.md` and `docs/design-direction.md` (the selected
+direction and its retained mockups).
 
-## Unit of delivery
+When an old ADR describes currently implemented POC behavior and conflicts with the approved target
+product, preserve it as history but follow ADR 0011 and this roadmap for new work.
 
-- An execution slice is the default unit for one short-lived branch. It must leave `main` coherent,
-  reviewable, and automatically testable.
-- Outcome checkboxes are roadmap state, not branch boundaries. One slice may complete several
-  outcomes; a large outcome may take several branches when every branch has its own useful behavior
-  and acceptance evidence.
-- Do not split a public contract from the implementation and consumer needed to validate it.
-- State the exact slice, expected contract changes, and acceptance commands in the issue or pull
-  request before implementation grows beyond the plan.
-- Keep completed checkboxes where they are. Add a milestone to the completed summary only after all
-  of its acceptance criteria pass; do not duplicate or relocate individual outcomes.
+## Current implementation state
 
-## Current implementation state — 2026-08-19
+The current POC already proves:
 
-The foundations already provide:
+- a pnpm/uv monorepo, FastAPI backend, React/Vite frontend, and generated OpenAPI types;
+- clean architecture boundaries, repositories, and a framework-neutral `AgentAdapter`;
+- a minimal customer, product, order, scenario, session, memory, and action domain;
+- deterministic seeded personas and canonical initial-state fingerprints;
+- SQLite/SQLAlchemy/Alembic persistence with migration tests;
+- read-only commerce tools and one confirmed, idempotent, optimistic cancellation action;
+- Pydantic AI plus deterministic fake-adapter evidence;
+- durable conversations, resume, persona/conversation listings, and a basic comparison view; and
+- sanitized OpenTelemetry traces with optional Phoenix export.
 
-- domain entities for customers, products, orders, conversation sessions, and memory records;
-- immutable persona, versioned scenario, operational metadata, and canonical initial-state domain
-  boundaries plus an application-level scenario registry;
-- deterministic `retail-profile@v1` persona and initial-state generation with canonical JSON and
-  SHA-256 fingerprinting;
-- repository ports, optimistic order version/idempotency parameters, `AgentAdapter`, and explicit
-  `AgentCapability` values;
-- SQLite/SQLAlchemy adapters, Alembic migrations, UTC persistence, and migration drift tests;
-- a versioned FastAPI health contract plus deterministic OpenAPI generation;
-- a React playground with deterministic persona generation, optional editable customer-message
-  suggestions, resumable support conversations, and an explicitly confirmed order-cancellation
-  journey;
-- `retail-profile@v1` read-only support and `retail-order-cancellation@v1` safe modifying scenarios;
-- persisted exact action proposals, idempotent optimistic order updates, safe retries, and sanitized
-  action lifecycle traces;
-- activity-ordered persona and conversation list endpoints with framework-neutral read models and
-  numbered offset pagination (Prev/Next and page numbers, selectable page size), a URL-addressable
-  persona library filterable by scenario, framework, and activity window, a per-persona conversation
-  history filterable by framework and activity window with hard delete, cascading persona deletion,
-  multiple conversations per persona, and a framework picker;
-- shared quality gates, CI, architecture guidance, and project-local skills.
+The POC does not implement the target Shop/Scenario Studio, rich commerce model, published agent
+configurations, paired experiment runner, participant-driver port, LLM judge, experiment-first
+history, or target wrong-address journey. Existing persona-first contracts and data may be replaced
+through cohesive tested slices.
 
-The project does not yet implement the Vercel AI SDK comparison, regression-scenario runners,
-PostgreSQL, Temporal, or autonomous simulation. Update this anchor when a milestone is completed so
-a fresh contributor does not recreate existing capabilities or mistake installed libraries for
-delivered behavior.
+## Delivery rules
 
-## Stable vocabulary
+- One short-lived branch delivers one independently useful, reviewable slice.
+- Do not split a public contract from its application behavior, persistence, frontend consumer,
+  migration behavior, and acceptance evidence.
+- Prefer a vertical path that works end to end over broad disconnected tables or forms.
+- Keep current POC behavior working unless the slice explicitly replaces it and tests the new
+  boundary.
+- Do not add compatibility layers for discarded local POC data unless the slice declares that
+  starting state supported.
+- Mark an outcome complete only when its tests, contracts, migrations, documentation, and UI where
+  applicable are present.
+- `make check` passes before handoff. Frontend/build changes also pass `pnpm build`; essential changed
+  journeys pass Playwright.
 
-- **Persona**: an immutable, fictional, lab-owned profile generated for a scenario. It contains
-  only scenario-relevant identity and support traits. It is distinct from the retail `Customer`
-  entity, which is derived from the persona and persisted with products and orders.
-- **Scenario ID**: a stable kebab-case family name such as `retail-profile`.
-- **Scenario version**: an immutable behavior version matching `v[1-9][0-9]*`, such as `v1`.
-  A behavior or fixture change creates a new version; it never mutates an existing definition.
-- **Policy-set version**: an independently versioned set of business/support rules using the same
-  `vN` format. A scenario definition pins exactly one policy-set version.
-- **Scenario registry**: an application-level registry keyed by `(scenario_id, scenario_version)`.
-  Historical definitions remain resolvable while a persisted or replayable session references them.
-- **Seed**: an integer in the inclusive range `0..4294967295`, represented as a JSON integer and
-  accepted by the UI as a base-10 integer.
-- **Initial state**: the canonical persona, customer, products, orders, and pinned scenario/policy
-  metadata produced before a conversation begins. Its fingerprint follows ADR 0007.
-- **Human journey**: an interactive playground flow exercised by a person and, when essential, by
-  Playwright.
-- **Regression scenario**: a deterministic automated replay of a proven human journey. It is not an
-  autonomous model simulation or a framework benchmark.
+## Stable target vocabulary
 
-The scenario version, public API prefix (`/api/v1`), and OpenAPI document version (`1.0.0`) are
-independent version axes. Name the axis explicitly in documentation and tests.
+- **Definition:** an authorable resource with a mutable draft and immutable published versions.
+- **Shop:** versioned synthetic commerce configuration and support knowledge, including named
+  tone-of-voice guidelines with one shop default.
+- **Customer profile:** versioned fictional identity and behavior used to create sandbox customer
+  state, including a named address book with one default; orders select an address and store a
+  frozen, source-labeled copy.
+- **Support identity:** versioned role, permissions, and guidance adopted by the support agent;
+  tone of voice comes from the shop's guidelines.
+- **Ticket:** versioned support-incident record scoped to one shop and one customer: channel,
+  origin references, prior message history, and the triggering first message.
+- **Scenario:** versioned experiment recipe built on one ticket and its linked shop-scoped objects,
+  adding hidden facts, context documents, bound objective and mutation blocks, and completion
+  conditions.
+- **Objective block:** versioned, parameterized, shop-independent objective template; a scenario
+  binds its parameters to same-shop objects and a severity.
+- **Mutation block:** versioned, parameterized, shop-independent fault/mutation template applied by
+  the scenario runtime at a bound trigger time, never visible to the support agent.
+- **Agent configuration:** versioned framework, architecture, model, prompt, tools, memory, support
+  identity, and runtime settings.
+- **Sandbox snapshot:** canonical immutable starting state resolved for an experiment.
+- **Experiment:** immutable record binding one scenario to one or two agent configurations.
+- **Run:** independently mutable experiment arm and its evidence.
+- **Participant driver:** human, future LLM, or scripted source of customer turns.
+- **Evaluation:** deterministic, judge, or quantitative evidence associated with a run or comparison.
+
+Exact code names may evolve through accepted designs; documents and UI should use these meanings
+consistently.
 
 ## Planning principles
 
-### Scenario sandbox
+### Tool-first simulation
 
-- Use τ³-bench Retail as inspiration for e-commerce vocabulary, policies, tool shapes, fixtures, and
-  scenario structure.
-- Adapt and version every scenario locally. Do not make τ³-bench a runtime, package, data-download,
-  or test-suite dependency for the initial lab.
-- Record which concepts are τ³-inspired and which are lab-specific when introducing a scenario or
-  policy set.
-- Design scenarios for a human demo first. Autonomous model simulation can be considered only after
-  the interactive experience and contracts are stable.
+- Direct agent input carries the customer message and minimal interaction resource references.
+- Most commerce facts and all commerce mutations flow through versioned, framework-neutral tools.
+- Tool handlers call application use cases and never bypass authorization or domain rules.
+- Comparison treats tool selection, arguments, ordering, retries, and effects as evidence.
 
-See `docs/adr/0006-tau3-inspired-scenario-design.md` for the decision boundary.
+### Reproducibility and isolation
 
-### Reproducibility
+- Publish immutable versions of every definition that can affect behavior.
+- Resolve and fingerprint the complete sandbox before execution.
+- Clone equivalent starting state into isolated arms; one arm never mutates the other.
+- Record all configuration and evaluator versions needed to explain a historical result.
+- Record human input divergence after the identical scenario trigger.
 
-- Every generated persona and demo session records a `seed`, scenario registry key,
-  `policy_set_version`, and `initial_state_hash`.
-- The same recorded inputs must recreate the same canonical initial state.
-- Scenario behavior changes create a new registry entry; they do not silently alter past sessions.
-- Fixtures may use Faker and factory-boy, but all randomness must flow from the recorded seed.
-- Serialize and fingerprint initial state only through the canonical boundary defined by
-  `docs/adr/0007-canonical-initial-state-hash.md`.
+### Evidence, not leaderboard scoring
 
-### Architecture and framework neutrality
+- Deterministic state/event/policy evidence is authoritative for encoded rules.
+- LLM judge evidence is anonymized, versioned, structured, rerunnable, and separate.
+- Quantitative metrics are interpreted in context and only compare efficiency after outcome quality.
+- Do not collapse evidence into one global framework score.
 
-- Domain rules, scenario policies, and application use cases remain independent of FastAPI,
-  SQLAlchemy, agent frameworks, Phoenix, databases, and durable runtimes.
-- Pydantic AI and Vercel AI SDK implement the same application-level `AgentAdapter` contract.
-- The playground and public API must not require framework-specific messages or events.
-- Add abstractions only when a concrete use case or second implementation proves the need.
+### Extensibility with invariants
 
-### Capability evidence
+- Use typed models for variants, money, inventory, orders, permissions, and business transitions.
+- Use administrator-defined typed attributes for extensible catalog content.
+- Use versioned extension metadata only where it cannot silently bypass core rules.
+- Add concrete capability before generalizing a speculative abstraction.
 
-- Advertise an agent capability only when a human-visible scenario and automated test demonstrate
-  it.
-- Cover relevant failures as well as success: validation, refusal, confirmation, retry, conflict,
-  and resume behavior.
-- Record unsupported or difficult capabilities explicitly instead of simulating them silently.
-- Compare developer experience and observed behavior without producing a global framework score.
-
-### Contracts, safety, and observability
-
-- Version public APIs and agent tools; document incompatible changes.
-- Require explicit confirmation and idempotency for modifying actions.
-- Use optimistic order versions to detect conflicting writes.
-- Emit common OpenTelemetry spans and sanitize them before export. Never store secrets or raw
-  sensitive customer content in fixtures, logs, or traces.
-- Keep Phoenix optional: telemetry export failures must not change business behavior.
-
-## Definition of done for every checked item
-
-- Behavior and milestone acceptance criteria affected by the item are implemented.
-- Appropriate unit, integration, component, or E2E tests pass.
-- Contracts, migrations, documentation, and ADRs are updated when affected.
-- `make check` passes; frontend/build changes also pass `pnpm build`.
-- Essential changed human journeys pass Playwright.
-- The outcome checkbox is updated in place in the same change.
-
-## Milestone 1 — Deterministic persona and scenario foundation
+## Milestone 0 — Direction reset
 
 ### Goal
 
-Prove the architecture with a reproducible customer and initial retail state without introducing an
-agent framework. This establishes the scenario sandbox that future agent adapters will consume.
-
-### Execution slice 1 — Scenario contract and registry
-
-Deliver the domain/application vocabulary required by generation without publishing an endpoint
-that has no implementation.
-
-- [x] Define immutable `ScenarioDefinition`, `Persona`, and canonical initial-state boundaries.
-- [x] Implement the application-level scenario registry keyed by scenario ID and version.
-- [x] Define scenario metadata: scenario ID/version, seed, policy-set version, canonical-state schema
-  version, and operational creation timestamp.
-- [x] Document the initial τ³-inspired retail concepts and their lab-specific adaptations.
-- [x] Specify canonical initial-state serialization and SHA-256 fingerprinting in ADR 0007.
-
-Slice evidence: pure tests prove metadata validation, seed bounds, duplicate registry rejection, and
-simultaneous resolution of two test scenario versions without FastAPI or a database.
-
-### Execution slice 2 — Deterministic generation kernel
-
-- [x] Implement persona generation in the domain/application layers with all randomness derived
-  from the recorded seed.
-- [x] Generate a minimal coherent initial state: persona, customer, products, and orders required by
-  the first support scenario.
-- [x] Compute the initial-state hash through the canonical serializer.
-- [x] Record seeded identifiers and scenario timestamps deterministically.
-
-Slice evidence: pure tests prove same inputs produce byte-identical canonical state and hash,
-different seeds produce valid independent state, invariants reject invalid generated data, and
-generation does not read the system clock or global randomness.
-
-### Execution slice 3 — Persistence and public API
-
-- [x] Persist personas and generated scenario state through repository ports and SQLite adapters.
-- [x] Define and publish versioned persona-generation and initial-state API schemas together with
-  their implementation.
-- [x] Expose generation and retrieval through versioned FastAPI endpoints.
-- [x] Preserve exact scenario/policy references needed to load historical definitions.
-
-Slice evidence: repository and API integration tests prove round trips, contract drift protection,
-unknown scenario handling, duplicate/idempotent requests, and coexistence of two scenario versions.
-
-Implementation note: `POST /api/v1/scenarios/{scenario_id}/versions/{scenario_version}/generations`
-requires an `Idempotency-Key`; the corresponding `GET` route adds the recorded seed. Persisted
-aggregates retain the scenario, policy-set, and canonical-schema versions and verify the canonical
-fingerprint when loaded. The idempotency key is claimed atomically before generation so concurrent
-same-key requests replay one committed result.
-
-### Execution slice 4 — Human persona journey
-
-- [x] Add the frontend flow with scenario selection, seed input, generated persona summary, loading,
-  empty, validation, and network-error states.
-- [x] Consume only generated/versioned backend contract types from the web application.
-- [x] Add component tests for visible states and one essential Playwright persona-generation journey.
-
-Slice evidence: frontend type-check/build and component tests pass, and Playwright proves a user can
-generate and retrieve the same persona using the recorded inputs.
-
-Implementation note: OpenAPI v1 is generated into the shared TypeScript contracts package and the
-web API adapter uses those request, response, and error types. Component tests isolate HTTP with
-MSW; Playwright starts the migrated FastAPI application and Vite against an isolated SQLite file to
-prove the real generation and retrieval round trip. The initial selector uses a local catalog for
-the single `retail-profile@v1` entry because scenario discovery is not yet a public API contract.
-
-### Acceptance criteria
-
-- Reusing the same seed, scenario version, and policy-set version produces the same canonical state
-  and initial-state hash.
-- A changed scenario definition receives a new version, and old and new definitions remain
-  simultaneously resolvable through the registry.
-- Domain and application tests run without FastAPI, a real database, or wall-clock/global-random
-  access.
-- SQLite integration tests prove persistence through ports, not direct UI/route access to the ORM.
-- The UI consumes only versioned backend contracts.
-- No Pydantic AI, chat runtime, Phoenix service, live model, or external τ³ dependency is required.
-- Architectural decisions and known limitations discovered by the slices are recorded in ADRs or
-  milestone documentation.
-
-### Out of scope
-
-Agent conversations, tool execution, modifying actions, autonomous model simulation, PostgreSQL,
-Temporal, and importing the full τ³-bench dataset or harness.
-
-## Milestone 2 — First Pydantic AI support agent
-
-### Goal
-
-Deliver the first human-operated support conversation and prove a small set of read-only agent
-capabilities against the shared sandbox.
-
-### Execution slices and outcomes
-
-- [x] Select and document one τ³-inspired read-only retail support scenario.
-- [x] Decide and document the provider/model family, local credential names, supported model
-  versions, deterministic test double, and opt-in live-test policy before adding the SDK adapter.
-- [x] Add a deterministic fake `AgentAdapter` and shared adapter-conformance suite so framework
-  neutrality is testable before a second real framework exists.
-- [x] Define versioned tools for reading customer, product, and order information.
-- [x] Implement the Pydantic AI infrastructure adapter behind `AgentAdapter`.
-- [x] Add an architecture test that rejects agent-framework SDK imports outside their
-  `infrastructure/agents/<framework>/` adapter.
-- [x] Implement a minimal assistant-ui conversation through the framework-neutral backend API.
-- [x] Persist conversation state and support session resume.
-- [x] Add structured responses and expose only capability declarations proven by shared tests.
-- [x] Classify framework, model-provider, tool, validation, and transient failures.
-- [x] Emit sanitized common OpenTelemetry traces and visualize them in local Phoenix.
-- [x] Add integration tests for every advertised capability and relevant failure path.
-- [x] Add one essential Playwright journey for starting and resuming a support conversation.
-- [x] Document Pydantic AI glue code, limitations, and observed developer experience in an ADR.
-
-Organize these outcomes into short slices in this order: provider/test policy and fake adapter;
-read-only tool contracts and use cases; Pydantic AI adapter and conversation API; UI/session resume;
-telemetry and evidence. Each slice must satisfy the unit-of-delivery rules above.
-
-### Acceptance criteria
-
-- The fake and Pydantic AI adapters pass the same framework-neutral conformance suite.
-- No framework-specific type appears in the public API, tool schema, stored session format, or UI.
-- Required CI and `make check` tests make no live model call and require no provider credential.
-- Credential-gated live smoke tests are explicit, optional, and separate from deterministic evidence.
-- A user can inspect tool activity, structured results, session state, and a correlated trace.
-- Unsupported capabilities are visible and do not appear as successful framework features.
-- Sensitive content is absent from exported trace attributes and structured logs.
-
-### Out of scope
-
-Modifying order actions, Vercel AI SDK, framework scoring, Temporal, autonomous model simulation, and
-mandatory live-model tests.
-
-## Milestone 3 — Safe modifying actions
-
-### Goal
-
-Demonstrate that an agent can propose and execute a business-changing action safely and
-reproducibly.
+Prevent further work from extending obsolete POC assumptions.
 
 ### Outcomes
 
-- [x] Add a τ³-inspired scenario requiring one modifying order action.
-- [x] Define the versioned modifying tool contract and business validation rules.
-- [x] Require explicit user confirmation bound to the exact proposed action.
-- [x] Enforce idempotency and optimistic concurrency through the existing application ports.
-- [x] Add retry rules that never duplicate a successful business action.
-- [x] Expose proposal, confirmation, execution, refusal, conflict, and retry states in the UI.
-- [x] Trace the full action lifecycle with sanitized OpenTelemetry attributes.
-- [x] Test success, cancellation, validation refusal, replay, stale version, and transient failure.
-- [x] Add one essential Playwright journey covering confirmation and execution.
-
-Implementation note: `retail-order-cancellation@v1` pins policy set `v2` and exposes only
-`cancel_order@v1`. The application persists the exact proposal and its binding token, then requires
-separate decision and execution commands. Immutable generated-order snapshots preserve replay
-fingerprints while operational order state advances optimistically and idempotently. See ADR 0009.
+- [x] Approve the Simulation Studio and Experiment Lab product direction.
+- [x] Record ADR 0011 and its relationship to POC ADRs.
+- [x] Replace the old Vercel-first roadmap.
+- [x] Mark persona-first and hard-coded scenario documentation as historical where necessary.
+- [x] Update contributor entry points to distinguish current code from target architecture.
 
 ### Acceptance criteria
 
-- No modifying action executes without a confirmation bound to the exact proposed action.
-- Replaying a completed request with the same idempotency key does not duplicate the change.
-- A stale order version returns a visible conflict instead of overwriting newer state.
-- Shared contract tests prove equivalent proposal/action semantics through every available adapter.
+- A fresh contributor can identify the product source of truth and next implementation slice.
+- No current document names a second framework adapter as the immediate next task.
+- Historical POC behavior remains documented without being presented as the target product.
 
-### Out of scope
-
-Additional modifying tools, payment processing, external commerce APIs, Temporal, autonomous model
-simulation, and framework scoring.
-
-## Milestone 3.5 — Persona library and conversation journey
+## Milestone 0.5 — Design direction selection
 
 ### Goal
 
-Make every generated persona and support conversation durably reachable from the UI, and rework the
-single linear flow into two paths: generate a new persona and start a conversation, or revisit a
-persona from a library to resume an existing conversation or start a new one. This is a
-surfacing/navigation change — all persona, conversation, and turn state is already persisted; the
-gap is read endpoints and a journey that exposes them.
+Select the product design direction before building any target UI, so Studio, Bench, and History
+increments implement one coherent information architecture instead of extending the POC's
+persona-first navigation.
 
 ### Outcomes
 
-- [x] Add list endpoints for personas and conversations with offset pagination and
-  activity-based ordering (`(last_activity_at DESC, id DESC)`).
-- [x] Define framework-neutral application read models with presentation-only response mappers.
-- [x] Allow multiple conversations per persona via retained command-id idempotency (no migration).
-- [x] Make the journey URL-addressable (React Router) with a persona library and per-persona
-  conversation history; treat `localStorage` only as a fallback.
-- [x] Expose an agent-framework picker when starting a conversation.
-- [x] Hard-delete personas from the library and cascade deletion to their conversations.
-- [x] Record the design and the local-lab, not-tenant-safe listing limitation in an ADR.
-- [x] Add component, integration, and one Playwright journey covering resume vs. new conversation.
+- [x] Produce the three concept directions defined by `docs/design-brief.md`. A first iteration may
+  scope each direction to its most differentiating signature frame (the live split-view experiment)
+  before investing in the full stage-one frame set.
+- [x] Evaluate the directions against the brief's evaluation criteria and record strengths, risks,
+  and implementation implications per direction.
+- [x] Select or deliberately merge one direction and record the decision in a design-decision
+  document or ADR, with pointers to the retained mockups. See `docs/design-direction.md`.
+- [x] Expand the selected direction to the brief's stage-one deliverables: the four high-fidelity
+  key frames, supporting workflow frames, and the navigation/information-architecture model. (The
+  brief's narrow-width live-comparison treatment was deliberately dropped; desktop is the
+  operating environment.) The full frame set lives on the canvas page "Shop workspace — v2 IA".
+- [x] Update this roadmap's UI-bearing slices where the selected direction changes their scope or
+  ordering (ticket model, block libraries, shop-level tone of voice, and address-book decisions
+  are reflected in the vocabulary and milestone outcomes above).
+
+### Sequencing
+
+Milestone 1 Slice 1 is UI-free and may proceed in parallel with this milestone. No UI-bearing slice
+(Milestone 1 Slice 2 onward) starts before the direction decision is recorded.
 
 ### Acceptance criteria
 
-- Past personas and conversations remain reachable from the UI after generating new personas or
-  reloading; no persisted session is orphaned by client-only state.
-- Listings order by most recent activity and page deterministically by number, with a stable
-  secondary key when activity timestamps tie.
-- One persona supports multiple conversations, and a retried "new conversation" command never
-  duplicates a committed session.
-- Deleting a persona removes its generated state and conversations without allowing delayed command
-  retries to recreate either resource.
-- Application read models and repositories expose no FastAPI or SQLAlchemy types; response models
-  remain presentation-only.
-- The global listing behavior is documented as local-lab only and explicitly not tenant-safe.
+- A discoverable, recorded decision names the selected direction and its mockups.
+- The Studio/Bench/History application shell is assigned to a concrete implementation slice.
+- Subsequent UI increments can cite the frames they implement instead of inventing layout ad hoc.
 
-### Out of scope
-
-Authentication, per-user scoping or tenancy, archiving personas or conversations, cross-persona
-search, server-side full-text history, and any change to deterministic generation or the canonical
-initial-state fingerprint.
-
-## Milestone 4 — Vercel AI SDK comparison
+## Milestone 1 — Versioned simulation definitions
 
 ### Goal
 
-Implement the same proven scenarios through Vercel AI SDK and compare integration characteristics
-without changing the sandbox, domain, public API, or playground behavior.
+Establish the target authoring and snapshot foundations without prematurely rebuilding the entire
+frontend or adding another agent framework.
 
-### Outcomes
+### Slice 1 — Definition lifecycle and snapshot boundary
 
-- [ ] Implement the Vercel AI SDK adapter behind the existing `AgentAdapter` contract.
-- [ ] Run the same read-only and modifying scenarios with the same versioned tools.
-- [ ] Produce the same common OpenTelemetry trace vocabulary.
-- [ ] Prove capability declarations with the shared conformance/integration test suite.
-- [ ] Document glue code, framework constraints, missing capabilities, and observed failure behavior.
-- [ ] Present a side-by-side capability matrix without a single aggregate score.
+- [ ] Define stable identifiers and the draft/published-version lifecycle for target definitions.
+- [ ] Define the canonical sandbox snapshot boundary and version axes without copying the POC's
+  minimal aggregate shape.
+- [ ] Decide and test the supported migration/reset path from existing POC databases.
+- [ ] Add pure domain/application tests for immutability, version resolution, and invalid references.
+- [ ] Record the schema and fingerprint decisions in an ADR before publishing new contracts.
 
-### Acceptance criteria
+Slice evidence: no live model or server is required; pure tests demonstrate that a published version
+cannot mutate and that an experiment resolution can identify every behaviorally relevant input.
 
-- Shared contract, API, and component tests run unchanged against both adapter selections.
-- No scenario, domain rule, public route, stored session format, or shared UI component is forked by
-  framework.
-- Framework-specific limitations are explicit and supported by scenario/test evidence.
-- Both adapters remain independently selectable in application composition.
+### Slice 2 — Shop and extensible catalog
 
-### Out of scope
+- [ ] Add shop drafts and published versions.
+- [ ] Add products, option definitions, variants, prices, availability, media references, ratings,
+  reviews, and a first bounded set of typed custom attributes.
+- [ ] Add FAQ, policy, payment-method, fulfilment, and support-guideline configuration needed by the
+  first scenario.
+- [ ] Persist through ports and publish the contract together with a minimal Studio UI.
+- [ ] Introduce the selected design direction's application shell and Studio navigation with this
+  first target UI instead of extending persona-first navigation (requires the Milestone 0.5
+  decision).
+- [ ] Validate and preview a shop before publication.
 
-Adding new business scenarios solely for one framework, global framework scoring, production model
-routing, Temporal, and performance benchmarking.
+Slice evidence: an author can publish a shop containing a product with size/color variants and
+retrieve the same immutable version through the public contract.
 
-## Milestone 5 — Regression scenarios
+### Slice 3 — Synthetic customer and support identity
+
+- [ ] Add versioned customer profiles separating fictional personal facts from behavioral persona.
+- [ ] Support addresses, account facts, relevant commerce/support history, and hidden simulator facts.
+- [ ] Add versioned support identities with role, tone, permissions, and guidance.
+- [ ] Clearly label synthetic data and prove sensitive fields are excluded from logs/traces.
+- [ ] Add Studio forms, validation, persistence, and contract tests.
+
+### Milestone acceptance
+
+- Published definitions remain immutable and historical versions resolvable.
+- Core commerce concepts enforce typed invariants while configured attributes can grow safely.
+- The UI and API distinguish drafts from published versions.
+- Target UI increments follow the design direction selected in Milestone 0.5.
+- The current POC contract is either preserved or deliberately replaced according to the accepted
+  slice design; there is no accidental hybrid model.
+
+## Milestone 2 — Scenario Studio and wrong-address sandbox
 
 ### Goal
 
-Add repeatable automation only after the human demo and capability contracts are stable.
+Author and materialize the first complete target incident without editing code for each scenario
+instance.
 
 ### Outcomes
 
-- [ ] Define a compact, versioned regression-scenario format derived from proven human journeys.
-- [ ] Add deterministic runners for selected success and failure cases.
-- [ ] Evaluate whether deeper τ³-bench dataset or harness integration provides enough value.
-- [ ] Store results and trace references without turning the project into a performance leaderboard.
-- [ ] Document which evidence is deterministic replay and which, if any, uses an opt-in live model.
+- [ ] Define versioned tickets (channel, origin references, prior conversation, trigger) and the
+  scenario recipe on top of them: hidden facts, context documents, composed objective and mutation
+  blocks, and completion conditions.
+- [ ] Define the shared objective/mutation block libraries: parameterized templates, draft/published
+  versions, and same-shop binding validation.
+- [ ] Build a scenario editor with validation and a resolved-state preview.
+- [ ] Support product-page and order-page origins using minimal resource references.
+- [ ] Materialize the paid-order/wrong-shipping-address scenario into a canonical snapshot.
+- [ ] Clone a snapshot into independently mutable sandbox state.
+- [ ] Add versioned read tools for interaction context, catalog, customer, order, and support
+  knowledge.
+- [ ] Add a safe address-change proposal/action with authorization, confirmation, idempotency, and
+  optimistic concurrency.
+- [ ] Prove deterministic generation, canonical serialization, and tool behavior with unit and
+  integration tests.
 
 ### Acceptance criteria
 
-- Every regression case references an immutable scenario, policy-set, tool-contract, and runner
-  version.
-- Deterministic cases reproduce their canonical inputs and expected business outcomes without a live
-  model or network dependency.
-- Results distinguish application regressions, adapter failures, and optional model variability.
-- Historical regression definitions and results remain readable after adding a new version.
+- An author can publish the scenario and reproduce the same canonical snapshot from recorded inputs.
+- A product-page question can resolve “this product” from the interaction reference and tool calls,
+  without embedding the full product payload in the initial prompt.
+- Two sandbox clones begin with the same fingerprint and mutations remain isolated.
+- Backend rules reject unsafe or stale address changes regardless of model output.
 
-### Out of scope
+## Milestone 3 — Agent configurations and human participant driver
 
-Leaderboard scoring, broad model/provider comparisons, uncontrolled autonomous simulation, and
-adopting the full τ³-bench harness without a separate accepted ADR.
+### Goal
 
-## Deferred technology decision triggers
+Make the support agent and customer-input mechanism reusable, versioned experiment inputs.
+
+### Outcomes
+
+- [ ] Add draft/published agent configurations covering framework, architecture, model, prompt,
+  tools, memory, support identity, and runtime settings.
+- [ ] Validate requested configuration against proven adapter capabilities.
+- [ ] Evolve the agent port only for requirements proven by the target scenario.
+- [ ] Introduce a participant-driver port and human-operator implementation.
+- [ ] Persist resolved configurations and participant events without framework SDK types.
+- [ ] Keep deterministic adapter tests and optional live-model smoke tests separate.
+
+### Acceptance criteria
+
+- The same published agent configuration can be selected for multiple experiments.
+- Human participant input flows through a port that can later support LLM/scripted implementations.
+- Framework, model, prompt, tools, and architecture are explicit versioned inputs rather than hidden
+  composition defaults.
+
+## Milestone 4 — Paired experiment runner and live bench
+
+### Goal
+
+Run one or two agent configurations against isolated copies of the same incident and expose their
+behavior side by side.
+
+### Outcomes
+
+- [ ] Create immutable experiment records and independently progressing runs.
+- [ ] Start both arms from one canonical snapshot and send the same trigger.
+- [ ] Add a linked customer composer that can split into arm-specific replies.
+- [ ] Persist operator input divergence, assistant turns, tool events, confirmations, state changes,
+  failures, traces, and completion.
+- [ ] Warn when framework, architecture, model, prompt, or tools introduce multiple comparison
+  variables.
+- [ ] Show normalized execution timelines and project-owned source locations where available.
+- [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
+  essential Playwright journey.
+
+### Acceptance criteria
+
+- An action in one arm cannot alter the other arm.
+- Both arms are explainably tied to the same initial fingerprint and exact published inputs.
+- Divergent human replies remain visible in later comparison.
+- A framework-specific event never leaks into the shared public or stored evidence contract.
+
+## Milestone 5 — Evaluation and experiment history
+
+### Goal
+
+Turn completed runs into durable, searchable comparison evidence.
+
+### Outcomes
+
+- [ ] Evaluate deterministic state, event, tool, policy, safety, and completion objectives.
+- [ ] Add a versioned judge configuration and anonymized structured LLM-judge execution.
+- [ ] Record turns, token usage, model/tool calls, duration, retries, failures, and estimated cost
+  when available.
+- [ ] Present objective-level comparison without a global framework score.
+- [ ] Replace persona-first history with experiment-first filters and detail pages.
+- [ ] Preserve evaluator executions, notes, tags, state diffs, traces, replay, and fork provenance.
+- [ ] Test judge failure/rerun separately from deterministic outcome calculation.
+
+### Acceptance criteria
+
+- Deterministic evidence remains readable and unchanged when a judge is unavailable or rerun.
+- Judge inputs are framework-blind and every output is tied to a model, prompt, rubric, and input
+  fingerprint.
+- Efficiency metrics are displayed with outcome and configuration context.
+- Historical experiments remain reproducible after newer definition versions are published.
+
+## Milestone 6 — Second comparison implementation
+
+### Goal
+
+Add the second framework or a materially different agent architecture only after the target
+environment, scenario, runner, and evidence model are proven.
+
+### Outcomes
+
+- [ ] Select whether the first controlled comparison changes framework or architecture.
+- [ ] Implement it behind the shared target contracts and conformance suite.
+- [ ] Produce equivalent normalized tools, events, traces, and evaluation inputs.
+- [ ] Document project-owned glue code, constraints, failures, and observed behavior.
+- [ ] Prove the wrong-address scenario in a two-arm comparison.
+
+Vercel AI SDK remains a candidate, not an automatic next task.
+
+## Deferred decision triggers
+
+### Autonomous customer simulator
+
+Implement after the human driver and scenario hidden-fact contract are stable. It must use the
+participant-driver port, remain independent of the support framework, and record its model/prompt
+configuration and nondeterministic outputs.
 
 ### PostgreSQL
 
-Evaluate when SQLite becomes insufficient because of meaningful concurrent writers, shared
-deployment, higher load, or a durable runtime. Preserve SQLAlchemy/Alembic portability until then.
+Evaluate when meaningful concurrent writers, shared deployment, or query/load requirements exceed
+SQLite. Preserve SQLAlchemy/Alembic portability until then.
 
-### Temporal
+### Durable workflow runtime
 
-Evaluate when workflows must survive process failure, wait for long-running external events, or
-coordinate retries beyond stored session recovery. Do not add it only to demonstrate an agent SDK.
+Evaluate when experiments must survive process failure or coordinate long waits/retries beyond
+stored run recovery. Do not add one solely to demonstrate a framework feature.
 
-### Deeper τ³-bench integration
+### Deeper benchmark integration
 
-Evaluate after the interactive scenarios are stable. Adopt it only if its datasets, harness, or
-evaluation model adds value beyond locally versioned τ³-inspired scenarios without compromising the
-lab's framework-neutral contracts.
+Evaluate external datasets, harnesses, or evaluator patterns only after the local authoring and
+experiment contracts are stable and only when they add evidence without taking ownership of the
+product model away from the lab.
 
-## Completed milestones
+## Historical POC milestones
 
-- [x] Milestone 1 — Deterministic persona and scenario foundation.
-- [x] Milestone 2 — First Pydantic AI support agent.
-- [x] Milestone 3 — Safe modifying actions.
-- [x] Milestone 3.5 — Persona library and conversation journey.
-
-## Completed — Project foundations
-
-- [x] Establish pnpm and uv workspaces with versioned lockfiles.
-- [x] Define pragmatic clean architecture boundaries and repository ports.
-- [x] Define the common agent adapter and capability contract.
-- [x] Configure SQLite, SQLAlchemy, Alembic, and portable initial migrations.
-- [x] Configure frontend and backend quality tools, tests, prek, and CI.
-- [x] Publish the initial versioned OpenAPI contract.
-- [x] Document architecture, testing, observability, security, and framework integration.
-- [x] Create and validate project-local Codex skills.
+The former Milestones 1–3.5 were completed and remain documented by ADRs 0005–0010, Git history,
+tests, and the running code. Their outcomes are the POC baseline summarized above; they are not
+unfinished target-product milestones.
