@@ -7,12 +7,10 @@ proof of concept, but its persona-first workflow and hard-coded scenario model a
 product. Read this document before extending the domain, public contracts, persistence, frontend,
 or agent adapters.
 
-Later model revisions recorded in `docs/design-direction.md` (2026-08-23) refine this document and
-take precedence where they differ: scenarios build on first-class shop-scoped tickets, objectives
-and faults compose from shared versioned block templates, customer profiles carry a named address
-book whose orders store frozen source-labeled copies, and tone of voice moves from the support
-identity to shop-level guidelines. The Milestone 1 Slice 1 ADR aligns this document with those
-decisions.
+The model revisions recorded in `docs/design-direction.md` (2026-08-23) — first-class shop-scoped
+tickets, shared versioned objective/mutation block templates, the customer address book with
+frozen source-labeled order copies, and shop-level tone-of-voice guidelines — are formalized by
+ADR 0012 and reflected throughout this document.
 
 ## Purpose
 
@@ -49,13 +47,19 @@ The primary navigation should eventually reflect these workflows:
 The target model separates concepts that the POC currently combines:
 
 - **Shop:** the configurable synthetic commerce platform, including catalog, policies, FAQ,
-  payments, fulfilment, and support content.
-- **Customer:** synthetic personal information, behavioral persona, account state, addresses,
-  commerce history, and past support interactions.
-- **Support identity:** the role, tone, seniority, permissions, and operating guidance adopted by the
-  support agent under test.
-- **Scenario:** the support incident, expressed as setup actions, optional prior conversation,
-  interaction origin, first message, objectives, constraints, faults, and completion conditions.
+  payments, fulfilment, support content, and named tone-of-voice guidelines with one shop default.
+- **Customer:** synthetic personal information, behavioral persona, account state, a named address
+  book with one default entry, commerce history, and past support interactions. Orders select an
+  address-book entry and store a frozen, source-labeled copy; address-book edits never rewrite
+  existing orders, published scenarios, or snapshots.
+- **Support identity:** the role, seniority, permissions, and operating guidance adopted by the
+  support agent under test; tone of voice comes from the shop's guidelines.
+- **Ticket:** the versioned support-incident record scoped to one shop and one customer: channel,
+  origin references, prior message history, and the triggering first message.
+- **Scenario:** the experiment recipe built on one ticket and its linked same-shop objects, adding
+  hidden facts, context documents, bound objective and mutation blocks, constraints, and
+  completion conditions. Objective and mutation blocks are shared, versioned, parameterized,
+  shop-independent templates whose scenario bindings stay same-shop.
 - **Agent configuration:** framework, model, support identity, system prompt, tools, memory,
   architecture, and runtime settings.
 - **Experiment:** an immutable execution record that binds one scenario to one or two agent
@@ -157,18 +161,25 @@ and state effects are experiment evidence.
 
 ## Scenario model
 
-Scenarios are goal-based rather than rigid conversation scripts. A scenario version contains:
+Scenarios are goal-based rather than rigid conversation scripts. A scenario version builds on one
+published ticket — which carries the channel, interaction origin references (product page, order
+page, checkout, FAQ, or generic support entry), prior message history, and the triggering first
+message — and adds:
 
-- references to a published shop and customer profile, plus any required support role or authority;
 - setup actions that create the incident;
-- interaction context such as a product page, order page, checkout, FAQ, or generic support entry;
-- optional prior conversation and support history;
-- the first customer message;
 - hidden facts visible only to the human or future customer simulator;
-- deterministic objectives and forbidden outcomes;
+- context documents (policies, support guidelines, FAQ entries) the agent can reach through tools,
+  with document-read objectives recording whether each arm consulted them;
+- bound objective blocks: shared versioned templates bound to same-shop objects with a severity,
+  covering deterministic objectives and forbidden outcomes;
 - policy and safety constraints;
-- optional failures, time advances, or concurrent mutations; and
+- bound mutation blocks for failures, time advances, or concurrent mutations, applied by the
+  scenario runtime in timeline order and never visible to the support agent; and
 - completion conditions.
+
+Publishing a scenario pins the exact ticket, block template, and shop versions it was authored
+against. Objective order is display priority only; a scenario never implies a scripted
+conversation.
 
 The first complete vertical scenario is a paid order using the wrong shipping address. It should
 exercise contextual product/order discovery, identity and eligibility rules, a safe address-change

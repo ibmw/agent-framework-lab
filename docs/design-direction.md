@@ -58,7 +58,7 @@ Shopify admin. We adopt the conventions, not any vendor's branding: surfaces mov
 light admin language while the lab's pine/paper identity remains in the top bar, accents, and
 typography.
 
-Model changes this implies (to be formalized by the Slice 1 ADR):
+Model changes this implies (formalized by ADR 0012):
 
 - **Shop is the entry point.** Orders, products, customers-in-shop, tickets, and scenarios are
   administered inside one shop's workspace; a shop switcher changes scope.
@@ -170,5 +170,5 @@ ElevenLabs' agent configuration) adapted to the lab's template model:
   only. The agent configuration selects "shop default" (recommended — resolves per shop through
   `{{shop.tone_of_voice}}`) or a named guideline override; an override missing from the target
   shop fails validation at experiment setup, and any override is reported as a configuration
-  variable in comparisons. `docs/product-direction.md` still describes tone on the support
-  identity; the Slice 1 ADR aligns the model documents with this decision.
+  variable in comparisons. ADR 0012 formalized this decision and aligned
+  `docs/product-direction.md` with it.

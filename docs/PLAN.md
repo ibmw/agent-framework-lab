@@ -183,14 +183,15 @@ frontend or adding another agent framework.
 
 ### Slice 1 — Definition lifecycle and snapshot boundary
 
-- [ ] Define stable identifiers and the draft/published-version lifecycle for target definitions.
-- [ ] Define the canonical sandbox snapshot boundary and version axes without copying the POC's
+- [x] Define stable identifiers and the draft/published-version lifecycle for target definitions.
+- [x] Define the canonical sandbox snapshot boundary and version axes without copying the POC's
   minimal aggregate shape.
-- [ ] Decide and test the supported migration/reset path from existing POC databases.
-- [ ] Add pure domain/application tests for immutability, version resolution, and invalid references.
-- [ ] Record the schema and fingerprint decisions in an ADR before publishing new contracts; the
+- [x] Decide and test the supported migration/reset path from existing POC databases.
+- [x] Add pure domain/application tests for immutability, version resolution, and invalid references.
+- [x] Record the schema and fingerprint decisions in an ADR before publishing new contracts; the
   same ADR formalizes the model revisions in `docs/design-direction.md` (ticket, objective/mutation
-  blocks, address book, shop-level tone of voice) and aligns `docs/product-direction.md`.
+  blocks, address book, shop-level tone of voice) and aligns `docs/product-direction.md`. See
+  ADR 0012.
 
 Slice evidence: no live model or server is required; pure tests demonstrate that a published version
 cannot mutate and that an experiment resolution can identify every behaviorally relevant input.

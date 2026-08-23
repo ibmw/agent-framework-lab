@@ -90,13 +90,13 @@ SDK immediately.
    authoritative frames live on the design canvas page "Shop workspace — v2 IA", with a local
    export in `tmp/design-frames/` (see `docs/design-direction.md`). No further design exploration
    is required before implementation; UI slices cite those frames.
-2. The next implementation task is `docs/PLAN.md` Milestone 1 Slice 1, which is UI-free: define the
-   target identifiers, draft/published version lifecycle, canonical sandbox boundary, and
-   migration/reset policy in domain and application code with pure tests. Its ADR also formalizes
-   the model revisions recorded in `docs/design-direction.md` and aligns
-   `docs/product-direction.md`.
-3. The Studio application shell and navigation land with Milestone 1 Slice 2, the first UI-bearing
-   slice.
+2. Milestone 1 Slice 1 is complete: ADR 0012 records the target identifiers, draft/published
+   version lifecycle, `sandbox-v1` canonical boundary, and migration/reset policy, implemented as
+   pure domain/application code with tests and formalizing the `docs/design-direction.md` model
+   revisions in `docs/product-direction.md`.
+3. The next implementation task is `docs/PLAN.md` Milestone 1 Slice 2: shop drafts/published
+   versions, the extensible catalog, and the first target UI with the selected design direction's
+   application shell and Studio navigation.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
