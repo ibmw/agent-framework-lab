@@ -187,7 +187,9 @@ frontend or adding another agent framework.
   minimal aggregate shape.
 - [ ] Decide and test the supported migration/reset path from existing POC databases.
 - [ ] Add pure domain/application tests for immutability, version resolution, and invalid references.
-- [ ] Record the schema and fingerprint decisions in an ADR before publishing new contracts.
+- [ ] Record the schema and fingerprint decisions in an ADR before publishing new contracts; the
+  same ADR formalizes the model revisions in `docs/design-direction.md` (ticket, objective/mutation
+  blocks, address book, shop-level tone of voice) and aligns `docs/product-direction.md`.
 
 Slice evidence: no live model or server is required; pure tests demonstrate that a published version
 cannot mutate and that an experiment resolution can identify every behaviorally relevant input.

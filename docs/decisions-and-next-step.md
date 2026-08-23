@@ -85,13 +85,17 @@ SDK immediately.
 
 ## Recommended next steps
 
-1. The design direction is selected and recorded in `docs/design-direction.md` (PLAN.md
-   Milestone 0.5): Direction A merged with named strengths of B and C. Review and refine the
-   expanded stage-one frames on the retained design canvas until they cover the brief's
-   deliverables.
-2. In parallel, Milestone 1 Slice 1 may proceed because it is UI-free: define the target
-   identifiers, draft/published version lifecycle, canonical sandbox boundary, and migration/reset
-   policy in domain and application code with pure tests.
+1. Milestone 0.5 is complete. The design direction is selected and recorded in
+   `docs/design-direction.md` (Direction A merged with named strengths of B and C), and the 18
+   authoritative frames live on the design canvas page "Shop workspace — v2 IA". No further design
+   exploration is required before implementation; UI slices cite those frames.
+2. The next implementation task is `docs/PLAN.md` Milestone 1 Slice 1, which is UI-free: define the
+   target identifiers, draft/published version lifecycle, canonical sandbox boundary, and
+   migration/reset policy in domain and application code with pure tests. Its ADR also formalizes
+   the model revisions recorded in `docs/design-direction.md` and aligns
+   `docs/product-direction.md`.
+3. The Studio application shell and navigation land with Milestone 1 Slice 2, the first UI-bearing
+   slice.
 
-Do not start a UI-bearing slice before the design direction is recorded, add another agent
-framework, or grow the POC scenario registry first.
+Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
+them.

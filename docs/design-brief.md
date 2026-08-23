@@ -1,6 +1,7 @@
 # Product design brief — Three concept directions
 
-Status: ready for design exploration — 2026-08-23
+Status: exploration complete — direction selected 2026-08-23; see `docs/design-direction.md`. This
+brief remains the record of the assignment and its evaluation criteria.
 
 ## Assignment
 

@@ -72,10 +72,11 @@ Model changes this implies (to be formalized by the Slice 1 ADR):
 - **Versioning survives the admin skin.** Draft/published chips stay in the workspace chrome, and
   a ticket referenced by a published scenario version is frozen with it.
 
-Frames: canvas page "Shop workspace — v2 IA" supersedes the merged stage-one page, which is kept
-as history. Experiment setup, the live bench, results, and history are restyled into the admin
-shell on the same page. The live bench uses the icon-only rail and reuses the ticket thread's
-chat UI — avatar bubbles with name/timestamp captions, a collapsed prior-history divider from the
+Frames: canvas page "Shop workspace — v2 IA" supersedes the merged stage-one page, which was later
+removed from the canvas (see "Retained mockups" above). Experiment setup, the live bench, results,
+and history are restyled into the admin shell on the same page. The live bench uses the icon-only
+rail and reuses the ticket thread's chat UI — avatar bubbles with name/timestamp captions, a
+collapsed prior-history divider from the
 ticket, and the labeled trigger divider — so ticket authoring and bench operation read as one
 continuous surface. A dedicated narrow-width treatment was considered and dropped; desktop is the
 operating environment. Experiment results organize technical depth as tabs — General (evidence

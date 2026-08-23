@@ -7,6 +7,13 @@ proof of concept, but its persona-first workflow and hard-coded scenario model a
 product. Read this document before extending the domain, public contracts, persistence, frontend,
 or agent adapters.
 
+Later model revisions recorded in `docs/design-direction.md` (2026-08-23) refine this document and
+take precedence where they differ: scenarios build on first-class shop-scoped tickets, objectives
+and faults compose from shared versioned block templates, customer profiles carry a named address
+book whose orders store frozen source-labeled copies, and tone of voice moves from the support
+identity to shop-level guidelines. The Milestone 1 Slice 1 ADR aligns this document with those
+decisions.
+
 ## Purpose
 
 Build a controlled customer-support simulation lab that can:
