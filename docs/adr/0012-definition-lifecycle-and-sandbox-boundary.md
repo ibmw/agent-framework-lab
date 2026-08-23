@@ -68,6 +68,10 @@ The design-direction revisions of 2026-08-23 are the accepted target model:
   every other type holds no definition references. A `scenario → ticket` reference must stay in
   the scenario's shop. Same-shop parameter bindings inside scenario payloads arrive with later
   slices and must obey the same rule.
+- Published versions enforce required reference cardinalities: a ticket references exactly one
+  customer profile, a scenario exactly one ticket, and an agent configuration exactly one support
+  identity; block references stay 0..N. Drafts may remain incomplete — publishing is the
+  completeness gate.
 - This reference type graph is acyclic by construction, so reference cycles cannot be built from
   valid domain objects; resolution deduplicates shared targets.
 
@@ -133,6 +137,13 @@ byte-identical after the canonical serializer extraction.
 
 - Later slices implement persistence, contracts, and UI against this lifecycle instead of
   designing their own; the shared canonical serializer backs both POC `v1` and `sandbox-v1`.
+- The first persistence adapter must enforce a unique `(definition_type, definition_id, version)`
+  constraint (raising the overwrite error instead of upserting) and re-check the same-shop rule at
+  the storage boundary, because a `VersionRef` alone does not carry the target's shop.
+- Publish failures surface two error families: domain `DefinitionLifecycleError` subtypes for
+  rule violations and application `DefinitionResolutionError` subtypes for missing drafts,
+  unpublished references, and repository conflicts. The first HTTP slice maps both families
+  explicitly rather than expecting a single hierarchy.
 - Republish cascades are explicit: publishing a new shop version does not update tickets or
   scenarios until each is republished, and stale mixed closures fail loudly at resolution.
 - Every materialized-state slice must version the sandbox schema; `sandbox-v1` fingerprints only

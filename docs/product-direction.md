@@ -283,7 +283,8 @@ V1 proves one complete wrong-shipping-address journey:
 
 1. configure and publish a shop with a limited but extensible catalog and support knowledge;
 2. configure and publish a synthetic customer and support identity;
-3. author, validate, preview, and publish the scenario;
+3. author and publish the ticket, then author, validate, preview, and publish the scenario built
+   on it;
 4. configure one or two agent variants;
 5. run isolated arms through the human-operated split view;
 6. evaluate deterministic objectives, execute an LLM judge, and collect quantitative metrics; and
