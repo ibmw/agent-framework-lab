@@ -1,12 +1,15 @@
-import type { ShopVersionSummarySchema } from "@agent-lab/contracts";
+import type { DefinitionVersionSummarySchema } from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { listShopVersions, ShopApiError } from "../api/shops";
+import { LabApiError } from "../api/client";
+import { listShopVersions } from "../api/shops";
 import {
   Card,
+  canPublish,
   Fingerprint,
   IssueList,
   PageHeader,
+  PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { groupIssues } from "../lib/shop";
@@ -22,7 +25,7 @@ import { useShopWorkspace } from "../shell/ShopWorkspace";
 export function ShopHomePage() {
   const { shopId, content, preview, publish, publishing, save, saving, dirty, error } =
     useShopWorkspace();
-  const [versions, setVersions] = useState<ShopVersionSummarySchema[]>([]);
+  const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
   const [versionsError, setVersionsError] = useState<string | null>(null);
   const [published, setPublished] = useState<number | null>(null);
 
@@ -37,7 +40,7 @@ export function ShopHomePage() {
         if (!controller.signal.aborted) {
           // An empty table would otherwise read as "never published".
           setVersionsError(
-            cause instanceof ShopApiError ? cause.message : "Published versions are unavailable.",
+            cause instanceof LabApiError ? cause.message : "Published versions are unavailable.",
           );
         }
       });
@@ -173,31 +176,11 @@ export function ShopHomePage() {
               className={inkButtonClasses}
               type="button"
               onClick={onPublish}
-              disabled={publishing || dirty || !preview?.publishable || unchanged}
+              disabled={publishing || !canPublish(preview, dirty)}
             >
               {publishing ? "Publishing…" : `Publish v${preview?.next_version}`}
             </button>
-            {dirty ? (
-              <p className="text-xs text-lab-error">
-                Save the draft first — publishing freezes the saved draft, not unsaved edits.
-              </p>
-            ) : null}
-            {preview && !preview.publishable ? (
-              <p className="text-xs text-lab-error">
-                Resolve {issues.errors.length} error(s) to publish.
-              </p>
-            ) : null}
-            {unchanged ? (
-              <p className="text-xs text-admin-muted">
-                The draft is identical to v{preview?.latest_published_version}; there is nothing new
-                to freeze.
-              </p>
-            ) : null}
-            {issues.warnings.length > 0 ? (
-              <p className="text-xs text-admin-muted">
-                {issues.warnings.length} warning(s) do not block publication.
-              </p>
-            ) : null}
+            <PublishReasons preview={preview} dirty={dirty} />
           </Card>
 
           <Card title="What publishing would freeze">

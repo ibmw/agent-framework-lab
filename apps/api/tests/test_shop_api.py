@@ -163,6 +163,19 @@ async def test_an_invalid_identity_is_rejected_by_the_contract(client: AsyncClie
     assert response.json()["code"] == "validation_error"
 
 
+async def test_an_unknown_shop_answers_404_on_every_operation(client: AsyncClient) -> None:
+    missing = uuid4()
+
+    for response in (
+        await client.get(f"/api/v1/shops/{missing}/draft"),
+        await client.get(f"/api/v1/shops/{missing}/draft/preview"),
+        await client.get(f"/api/v1/shops/{missing}/versions"),
+        await client.post(f"/api/v1/shops/{missing}/versions"),
+    ):
+        assert response.status_code == 404
+        assert response.json()["code"] == "shop_not_found"
+
+
 async def test_an_author_publishes_a_shop_and_reads_back_the_same_immutable_version(
     client: AsyncClient,
 ) -> None:

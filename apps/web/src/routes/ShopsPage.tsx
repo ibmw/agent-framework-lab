@@ -1,7 +1,8 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createShop, listShops, ShopApiError } from "../api/shops";
+import { LabApiError } from "../api/client";
+import { createShop, listShops } from "../api/shops";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -33,7 +34,7 @@ export function ShopsPage() {
       .then((response) => setShops(response.shops))
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(cause instanceof ShopApiError ? cause.message : "The lab is unavailable.");
+          setError(cause instanceof LabApiError ? cause.message : "The lab is unavailable.");
         }
       })
       .finally(() => {
@@ -58,7 +59,7 @@ export function ShopsPage() {
       });
       navigate(`/shops/${created.shop_id}`);
     } catch (cause: unknown) {
-      setError(cause instanceof ShopApiError ? cause.message : "The shop could not be created.");
+      setError(cause instanceof LabApiError ? cause.message : "The shop could not be created.");
       setCreating(false);
     }
   }

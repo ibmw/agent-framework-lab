@@ -8,10 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from capability_lab.application.definition_resolution import (
-    MissingDraftError,
-    PublishedVersionExistsError,
-)
+from capability_lab.application.definition_resolution import PublishedVersionExistsError
 from capability_lab.application.shop_payload import shop_content_fingerprint
 from capability_lab.application.shops import (
     ShopNotFoundError,
@@ -31,7 +28,7 @@ from capability_lab.infrastructure.database import (
 )
 from capability_lab.infrastructure.repositories import (
     PersistedDefinitionIntegrityError,
-    SqlAlchemyShopRepository,
+    shop_repository,
 )
 from shop_factories import identity, product, publishable_shop, variant
 
@@ -55,7 +52,7 @@ def session(tmp_path: Path) -> Generator[Session, None, None]:
 
 @pytest.fixture
 def service(session: Session) -> ShopService:
-    return ShopService(SqlAlchemyShopRepository(session), AdvancingClock())
+    return ShopService(shop_repository(session), AdvancingClock())
 
 
 def test_a_new_shop_starts_as_one_incomplete_draft(service: ShopService) -> None:
@@ -88,7 +85,7 @@ def test_an_unknown_shop_is_reported_rather_than_created(service: ShopService) -
         service.get_draft(uuid4())
     with pytest.raises(ShopNotFoundError):
         service.list_versions(uuid4())
-    with pytest.raises(MissingDraftError):
+    with pytest.raises(ShopNotFoundError):
         service.publish(uuid4())
 
 
@@ -163,13 +160,13 @@ def test_the_storage_boundary_refuses_to_overwrite_a_published_version(
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
     with session_scope(factory) as writing:
-        service = ShopService(SqlAlchemyShopRepository(writing), AdvancingClock())
+        service = ShopService(shop_repository(writing), AdvancingClock())
         record = service.create_shop(identity())
         service.replace_draft(record.definition.id, publishable_shop())
         published = service.publish(record.definition.id)
 
     with pytest.raises(PublishedVersionExistsError), session_scope(factory) as overwriting:
-        SqlAlchemyShopRepository(overwriting).save_version(
+        shop_repository(overwriting).save_version(
             ShopVersionRecord(
                 published=published.published,
                 payload=replace(publishable_shop(), products=(product(title="Rewritten"),)),
@@ -177,7 +174,7 @@ def test_the_storage_boundary_refuses_to_overwrite_a_published_version(
         )
 
     with session_scope(factory) as reading:
-        stored = ShopService(SqlAlchemyShopRepository(reading), AdvancingClock()).get_version(
+        stored = ShopService(shop_repository(reading), AdvancingClock()).get_version(
             record.definition.id, 1
         )
     assert stored.payload == publishable_shop()
@@ -188,7 +185,7 @@ def test_reading_a_tampered_published_version_is_refused(tmp_path: Path) -> None
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
     with session_scope(factory) as writing:
-        service = ShopService(SqlAlchemyShopRepository(writing), AdvancingClock())
+        service = ShopService(shop_repository(writing), AdvancingClock())
         record = service.create_shop(identity())
         service.replace_draft(record.definition.id, publishable_shop())
         service.publish(record.definition.id)
@@ -205,9 +202,7 @@ def test_reading_a_tampered_published_version_is_refused(tmp_path: Path) -> None
         pytest.raises(PersistedDefinitionIntegrityError),
         session_scope(factory) as reading,
     ):
-        ShopService(SqlAlchemyShopRepository(reading), AdvancingClock()).get_version(
-            record.definition.id, 1
-        )
+        ShopService(shop_repository(reading), AdvancingClock()).get_version(record.definition.id, 1)
 
 
 def test_the_preview_reports_the_gate_and_the_version_publishing_would_create(
@@ -272,16 +267,14 @@ def test_published_content_survives_a_new_repository_and_session(tmp_path: Path)
     payload = publishable_shop()
 
     with session_scope(factory) as writing:
-        service = ShopService(SqlAlchemyShopRepository(writing), AdvancingClock())
+        service = ShopService(shop_repository(writing), AdvancingClock())
         record = service.create_shop(identity())
         service.replace_draft(record.definition.id, payload)
         service.publish(record.definition.id)
         shop_id = record.definition.id
 
     with session_scope(factory) as reading:
-        reloaded = ShopService(SqlAlchemyShopRepository(reading), AdvancingClock()).get_version(
-            shop_id, 1
-        )
+        reloaded = ShopService(shop_repository(reading), AdvancingClock()).get_version(shop_id, 1)
 
     assert reloaded.payload == payload
     assert reloaded.published.definition == shop_definition_id(shop_id)

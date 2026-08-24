@@ -23,7 +23,11 @@ from capability_lab.infrastructure.repositories import SqlAlchemyGeneratedScenar
 
 # The definition lifecycle tables arrive alongside the POC tables; a downgrade past their
 # revision removes only them.
-DEFINITION_TABLES = {"definition_drafts", "definition_versions"}
+DEFINITION_TABLES = {
+    "definition_drafts",
+    "definition_versions",
+    "definition_shop_attachments",
+}
 POC_TABLES = {
     "action_proposals",
     "customers",
@@ -231,6 +235,38 @@ def test_downgrade_refuses_to_drop_published_definition_versions(
         command.downgrade(config, "20260818_0005")
 
     assert {"definition_drafts", "definition_versions"} <= set(inspect(engine).get_table_names())
+
+
+@pytest.mark.migration
+def test_shop_attachments_reject_a_definition_type_that_cannot_be_attached(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tickets and scenarios already carry their shop; only shop-independent types attach."""
+    database_url = f"sqlite:///{tmp_path / 'attachments.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO definition_shop_attachments (
+            definition_type, definition_id, shop_id, attached_at
+        ) VALUES (:definition_type, :definition_id, :shop_id, '2026-08-23 12:00:00.000000')
+        """
+    )
+    row = {
+        "definition_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac003",
+        "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac004",
+    }
+    with engine.begin() as connection:
+        connection.execute(insert, {**row, "definition_type": "customer_profile"})
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "definition_type": "ticket"})
+
+    # Attaching the same profile to the same shop twice is refused at the storage boundary,
+    # so the repository's idempotent attach can never create a duplicate row.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "definition_type": "customer_profile"})
 
 
 @pytest.mark.migration

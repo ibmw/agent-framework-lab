@@ -1,4 +1,4 @@
-import type { ShopContentSchema, ShopIssueSchema } from "@agent-lab/contracts";
+import type { DefinitionIssueSchema, ShopContentSchema } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
 import {
   groupIssues,
@@ -94,7 +94,7 @@ describe("variant labels", () => {
 });
 
 describe("issues", () => {
-  const issues: ShopIssueSchema[] = [
+  const issues: DefinitionIssueSchema[] = [
     {
       severity: "error",
       code: "variant_without_price",

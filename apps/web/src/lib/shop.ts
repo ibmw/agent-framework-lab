@@ -1,8 +1,8 @@
 import type {
+  DefinitionIssueSchema,
   ProductSchema,
   ProductViewSchema,
   ShopContentSchema,
-  ShopIssueSchema,
   ShopPayloadSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
@@ -60,11 +60,11 @@ export function variantPriceLabel(variant: VariantSchema): string {
 }
 
 export interface IssueGroups {
-  errors: ShopIssueSchema[];
-  warnings: ShopIssueSchema[];
+  errors: DefinitionIssueSchema[];
+  warnings: DefinitionIssueSchema[];
 }
 
-export function groupIssues(issues: ShopIssueSchema[]): IssueGroups {
+export function groupIssues(issues: DefinitionIssueSchema[]): IssueGroups {
   return {
     errors: issues.filter((issue) => issue.severity === "error"),
     warnings: issues.filter((issue) => issue.severity === "warning"),
@@ -72,7 +72,10 @@ export function groupIssues(issues: ShopIssueSchema[]): IssueGroups {
 }
 
 /** Issues raised by one product, so the product editor can show its own findings. */
-export function issuesForProduct(issues: ShopIssueSchema[], handle: string): ShopIssueSchema[] {
+export function issuesForProduct(
+  issues: DefinitionIssueSchema[],
+  handle: string,
+): DefinitionIssueSchema[] {
   const prefix = `products.${handle}`;
   return issues.filter((issue) => issue.path === prefix || issue.path.startsWith(`${prefix}.`));
 }

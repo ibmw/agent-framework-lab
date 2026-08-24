@@ -20,6 +20,13 @@ from sqlalchemy.orm import Session
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
 from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
+from capability_lab.application.customer_profiles import CUSTOMER_PROFILE_CODEC
+from capability_lab.application.definition_authoring import (
+    DefinitionDraftRecord,
+    DefinitionListing,
+    DefinitionVersionRecord,
+    PayloadCodec,
+)
 from capability_lab.application.definition_resolution import PublishedVersionExistsError
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.ports import (
@@ -35,16 +42,9 @@ from capability_lab.application.scenario_generation import (
     GeneratedScenarioSummary,
     PersonaLibraryFilter,
 )
-from capability_lab.application.shop_payload import (
-    shop_content_fingerprint,
-    shop_payload_document,
-    shop_payload_from_document,
-)
-from capability_lab.application.shops import (
-    ShopDraftRecord,
-    ShopSummary,
-    ShopVersionRecord,
-)
+from capability_lab.application.shops import SHOP_CODEC
+from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
+from capability_lab.domain.customer_profile import CustomerProfilePayload
 from capability_lab.domain.definitions import (
     DefinitionDraft,
     DefinitionId,
@@ -63,12 +63,15 @@ from capability_lab.domain.entities import (
     ScenarioDefinition,
     ScenarioMetadata,
 )
+from capability_lab.domain.shop import ShopPayload
+from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.infrastructure.models import (
     ActionProposalModel,
     ConversationSessionModel,
     ConversationTurnModel,
     CustomerModel,
     DefinitionDraftModel,
+    DefinitionShopAttachmentModel,
     DefinitionVersionModel,
     GeneratedScenarioModel,
     GeneratedScenarioOrderModel,
@@ -1168,65 +1171,70 @@ class SqlAlchemyScenarioGenerationIdempotencyRepository:
         return None
 
 
-class SqlAlchemyShopRepository:
-    """Store shop drafts and immutable published versions as canonical documents.
+class SqlAlchemyDefinitionRepository[PayloadT]:
+    """Store one definition type's drafts and immutable versions as canonical documents.
 
     ADR 0012 requires the storage boundary to reject an overwrite of `(definition_type,
     definition_id, version)` rather than upsert it; the composite primary key enforces that
     and the insert is translated into `PublishedVersionExistsError`.
+
+    Only the payload codec is per-type, so every shop-independent definition shares this
+    adapter instead of copying the same six statements.
     """
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, codec: PayloadCodec[PayloadT]) -> None:
         self._session = session
+        self._codec = codec
 
-    def list_shops(self) -> tuple[ShopSummary, ...]:
+    @property
+    def _type(self) -> str:
+        return self._codec.definition_type.value
+
+    def list_definitions(self) -> tuple[DefinitionListing[PayloadT], ...]:
         published = self._session.execute(
             select(
                 DefinitionVersionModel.definition_id,
                 func.max(DefinitionVersionModel.version),
                 func.count(),
             )
-            .where(DefinitionVersionModel.definition_type == DefinitionType.SHOP.value)
+            .where(DefinitionVersionModel.definition_type == self._type)
             .group_by(DefinitionVersionModel.definition_id)
         ).all()
         latest_versions: dict[str, int] = {row[0]: row[1] for row in published}
         version_counts: dict[str, int] = {row[0]: row[2] for row in published}
         drafts = self._session.scalars(
             select(DefinitionDraftModel)
-            .where(DefinitionDraftModel.definition_type == DefinitionType.SHOP.value)
+            .where(DefinitionDraftModel.definition_type == self._type)
             .order_by(DefinitionDraftModel.created_at, DefinitionDraftModel.definition_id)
         ).all()
-        summaries: list[ShopSummary] = []
-        for draft in drafts:
-            payload = shop_payload_from_document(draft.payload)
-            summaries.append(
-                ShopSummary(
-                    definition_id=UUID(draft.definition_id),
-                    name=payload.identity.name,
-                    slug=payload.identity.slug,
-                    updated_at=draft.updated_at,
-                    latest_published_version=latest_versions.get(draft.definition_id),
-                    published_version_count=version_counts.get(draft.definition_id, 0),
-                )
+        return tuple(
+            DefinitionListing[PayloadT](
+                definition_id=UUID(draft.definition_id),
+                payload=self._codec.from_document(draft.payload),
+                created_at=draft.created_at,
+                updated_at=draft.updated_at,
+                latest_published_version=latest_versions.get(draft.definition_id),
+                published_version_count=version_counts.get(draft.definition_id, 0),
             )
-        return tuple(summaries)
+            for draft in drafts
+        )
 
-    def get_draft(self, definition: DefinitionId) -> ShopDraftRecord | None:
+    def get_draft(self, definition: DefinitionId) -> DefinitionDraftRecord[PayloadT] | None:
         model = self._session.get(
             DefinitionDraftModel, (definition.definition_type.value, str(definition.id))
         )
         if model is None:
             return None
-        return ShopDraftRecord(
+        return DefinitionDraftRecord[PayloadT](
             draft=DefinitionDraft(definition=definition),
-            payload=shop_payload_from_document(model.payload),
+            payload=self._codec.from_document(model.payload),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
 
-    def save_draft(self, record: ShopDraftRecord) -> None:
+    def save_draft(self, record: DefinitionDraftRecord[PayloadT]) -> None:
         definition = record.definition
-        document = cast("dict[str, object]", shop_payload_document(record.payload))
+        document = cast("dict[str, object]", self._codec.document(record.payload))
         model = self._session.get(
             DefinitionDraftModel, (definition.definition_type.value, str(definition.id))
         )
@@ -1255,7 +1263,7 @@ class SqlAlchemyShopRepository:
             )
         )
 
-    def get_version(self, ref: VersionRef) -> ShopVersionRecord | None:
+    def get_version(self, ref: VersionRef) -> DefinitionVersionRecord[PayloadT] | None:
         model = self._session.get(
             DefinitionVersionModel,
             (
@@ -1266,16 +1274,16 @@ class SqlAlchemyShopRepository:
         )
         if model is None:
             return None
-        payload = shop_payload_from_document(model.payload)
+        payload = self._codec.from_document(model.payload)
         # A published version is historical evidence: refuse to serve content that no longer
         # hashes to the fingerprint recorded when it was frozen.
-        recomputed = shop_content_fingerprint(payload)
+        recomputed = self._codec.fingerprint(payload)
         if recomputed != model.content_fingerprint:
             raise PersistedDefinitionIntegrityError(
                 f"{ref.definition.definition_type} {ref.definition.id} version {ref.version} "
                 "no longer matches its recorded content fingerprint"
             )
-        return ShopVersionRecord(
+        return DefinitionVersionRecord[PayloadT](
             published=self._published(model, ref.definition),
             payload=payload,
         )
@@ -1291,7 +1299,7 @@ class SqlAlchemyShopRepository:
         ).all()
         return tuple(self._published(model, definition) for model in models)
 
-    def save_version(self, record: ShopVersionRecord) -> None:
+    def save_version(self, record: DefinitionVersionRecord[PayloadT]) -> None:
         published = record.published
         self._session.add(
             DefinitionVersionModel(
@@ -1309,7 +1317,7 @@ class SqlAlchemyShopRepository:
                     }
                     for reference in published.references
                 ],
-                payload=cast("dict[str, object]", shop_payload_document(record.payload)),
+                payload=cast("dict[str, object]", self._codec.document(record.payload)),
                 published_at=published.published_at,
             )
         )
@@ -1345,3 +1353,115 @@ class SqlAlchemyShopRepository:
                 for reference in model.references
             ),
         )
+
+
+def shop_repository(session: Session) -> SqlAlchemyDefinitionRepository[ShopPayload]:
+    return SqlAlchemyDefinitionRepository(session, SHOP_CODEC)
+
+
+def customer_profile_repository(
+    session: Session,
+) -> SqlAlchemyDefinitionRepository[CustomerProfilePayload]:
+    return SqlAlchemyDefinitionRepository(session, CUSTOMER_PROFILE_CODEC)
+
+
+def support_identity_repository(
+    session: Session,
+) -> SqlAlchemyDefinitionRepository[SupportIdentityPayload]:
+    return SqlAlchemyDefinitionRepository(session, SUPPORT_IDENTITY_CODEC)
+
+
+class SqlAlchemyShopDirectory:
+    """Existence check for a shop, without decoding its whole catalog document."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def exists(self, shop_id: UUID) -> bool:
+        return (
+            self._session.scalar(
+                select(DefinitionDraftModel.definition_id).where(
+                    DefinitionDraftModel.definition_type == DefinitionType.SHOP.value,
+                    DefinitionDraftModel.definition_id == str(shop_id),
+                )
+            )
+            is not None
+        )
+
+
+class SqlAlchemyDefinitionShopAttachmentRepository:
+    """Store which shops use a shop-independent definition.
+
+    The composite primary key makes attaching twice idempotent, which matters because the
+    Studio's "attach existing profile" control is a plain button, not a toggle.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def attach(self, definition: DefinitionId, shop_id: UUID, attached_at: datetime) -> None:
+        key = (definition.definition_type.value, str(definition.id), str(shop_id))
+        if self._session.get(DefinitionShopAttachmentModel, key) is not None:
+            return
+        savepoint = self._session.begin_nested()
+        self._session.add(
+            DefinitionShopAttachmentModel(
+                definition_type=key[0],
+                definition_id=key[1],
+                shop_id=key[2],
+                attached_at=attached_at,
+            )
+        )
+        try:
+            self._session.flush()
+        except IntegrityError:
+            # The composite primary key already says this attachment exists. Losing the
+            # insert race means the caller got what it asked for, so the savepoint rolls
+            # back and attach stays idempotent instead of surfacing a 500.
+            savepoint.rollback()
+        else:
+            savepoint.commit()
+
+    def detach(self, definition: DefinitionId, shop_id: UUID) -> bool:
+        model = self._session.get(
+            DefinitionShopAttachmentModel,
+            (definition.definition_type.value, str(definition.id), str(shop_id)),
+        )
+        if model is None:
+            return False
+        self._session.delete(model)
+        self._session.flush()
+        return True
+
+    def shops_for(self, definition: DefinitionId) -> tuple[UUID, ...]:
+        rows = self._session.scalars(
+            select(DefinitionShopAttachmentModel.shop_id)
+            .where(
+                DefinitionShopAttachmentModel.definition_type == definition.definition_type.value,
+                DefinitionShopAttachmentModel.definition_id == str(definition.id),
+            )
+            .order_by(
+                DefinitionShopAttachmentModel.attached_at,
+                DefinitionShopAttachmentModel.shop_id,
+            )
+        ).all()
+        return tuple(UUID(row) for row in rows)
+
+    def definitions_for_shop(
+        self, definition_type: DefinitionType, shop_id: UUID
+    ) -> frozenset[UUID]:
+        rows = self._session.scalars(
+            select(DefinitionShopAttachmentModel.definition_id).where(
+                DefinitionShopAttachmentModel.definition_type == definition_type.value,
+                DefinitionShopAttachmentModel.shop_id == str(shop_id),
+            )
+        ).all()
+        return frozenset(UUID(row) for row in rows)
+
+    def attachment_counts(self, definition_type: DefinitionType) -> dict[UUID, int]:
+        rows = self._session.execute(
+            select(DefinitionShopAttachmentModel.definition_id, func.count())
+            .where(DefinitionShopAttachmentModel.definition_type == definition_type.value)
+            .group_by(DefinitionShopAttachmentModel.definition_id)
+        ).all()
+        return {UUID(row[0]): row[1] for row in rows}

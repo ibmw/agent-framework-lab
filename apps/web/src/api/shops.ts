@@ -1,6 +1,5 @@
 import type {
   CreateShopRequest,
-  ErrorResponse,
   ShopDraftResponse,
   ShopIdentitySchema,
   ShopListResponse,
@@ -9,45 +8,11 @@ import type {
   ShopVersionListResponse,
   ShopVersionResponse,
 } from "@agent-lab/contracts";
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-
-export class ShopApiError extends Error {
-  readonly status: number;
-  readonly requestId?: string;
-
-  constructor(message: string, status: number, requestId?: string) {
-    super(message);
-    this.name = "ShopApiError";
-    this.status = status;
-    this.requestId = requestId;
-  }
-}
+import { apiPath, JSON_HEADERS, read } from "./client";
 
 function shopsPath(suffix = ""): string {
-  return `${API_BASE_URL}/api/v1/shops${suffix}`;
+  return apiPath(`/shops${suffix}`);
 }
-
-async function read<T>(response: Response): Promise<T> {
-  if (response.ok) {
-    return (await response.json()) as T;
-  }
-
-  let error: ErrorResponse | undefined;
-  try {
-    error = (await response.json()) as ErrorResponse;
-  } catch {
-    // An intermediary can answer with a non-contract body; keep that out of the UI.
-  }
-
-  throw new ShopApiError(
-    error?.message ?? "The shop service could not complete the request.",
-    response.status,
-    error?.request_id,
-  );
-}
-
-const JSON_HEADERS = { "Content-Type": "application/json" };
 
 export async function listShops(signal?: AbortSignal): Promise<ShopListResponse> {
   return read<ShopListResponse>(await fetch(shopsPath(), { signal }));

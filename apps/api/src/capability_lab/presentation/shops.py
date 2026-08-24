@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Generator
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path
@@ -15,7 +15,6 @@ from capability_lab.application.shops import (
     ShopSummary,
     ShopVersionRecord,
 )
-from capability_lab.domain.definitions import PublishedDefinitionVersion
 from capability_lab.domain.shop import (
     AttributeType,
     Currency,
@@ -32,11 +31,7 @@ from capability_lab.domain.shop import (
     ProductReview,
     ProductStatus,
     ProductVariant,
-    ShopChange,
-    ShopChangeKind,
     ShopIdentity,
-    ShopIssue,
-    ShopIssueSeverity,
     ShopPayload,
     SupportChannel,
     SupportGuideline,
@@ -44,15 +39,24 @@ from capability_lab.domain.shop import (
     TypedAttribute,
     VariantAvailability,
 )
-from capability_lab.presentation.base import ErrorResponse, StrictApiModel
+from capability_lab.presentation.base import StrictApiModel
+from capability_lab.presentation.definitions import (
+    Body,
+    DefinitionChangeSchema,
+    DefinitionIssueSchema,
+    DefinitionVersionPath,
+    DefinitionVersionSummarySchema,
+    InvalidResponses,
+    Label,
+    Locale,
+    NotFoundResponses,
+    PublishFailureResponses,
+    Slug,
+)
 
 ShopIdPath = Annotated[UUID, Path(description="Stable shop definition identifier.")]
-ShopVersionPath = Annotated[int, Path(ge=1, description="Immutable published shop version number.")]
 
-Slug = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
 Sku = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Z0-9]+(?:-[A-Z0-9]+)*$")]
-Label = Annotated[str, Field(min_length=1, max_length=200)]
-Body = Annotated[str, Field(min_length=1, max_length=4000)]
 MoneyAmount = Annotated[str, Field(pattern=r"^\d{1,10}(?:\.\d{1,2})?$")]
 
 
@@ -362,7 +366,7 @@ class ToneOfVoiceSchema(StrictApiModel):
 class ShopIdentitySchema(StrictApiModel):
     name: Label
     slug: Slug
-    locale: str = Field(pattern=r"^[a-z]{2}(?:-[A-Z]{2})?$")
+    locale: Locale
     currencies: list[Currency] = Field(min_length=1)
     channels: list[SupportChannel] = Field(min_length=1)
 
@@ -498,22 +502,8 @@ class ShopVersionResponse(StrictApiModel):
         )
 
 
-class ShopVersionSummarySchema(StrictApiModel):
-    version: int
-    content_fingerprint: str
-    published_at: str
-
-    @classmethod
-    def from_domain(cls, published: PublishedDefinitionVersion) -> Self:
-        return cls(
-            version=published.version,
-            content_fingerprint=published.content_fingerprint,
-            published_at=published.published_at.isoformat(),
-        )
-
-
 class ShopVersionListResponse(StrictApiModel):
-    versions: list[ShopVersionSummarySchema]
+    versions: list[DefinitionVersionSummarySchema]
 
 
 class ShopSummarySchema(StrictApiModel):
@@ -540,34 +530,13 @@ class ShopListResponse(StrictApiModel):
     shops: list[ShopSummarySchema]
 
 
-class ShopIssueSchema(StrictApiModel):
-    severity: ShopIssueSeverity
-    code: str
-    message: str
-    path: str
-
-    @classmethod
-    def from_domain(cls, issue: ShopIssue) -> Self:
-        return cls(severity=issue.severity, code=issue.code, message=issue.message, path=issue.path)
-
-
-class ShopChangeSchema(StrictApiModel):
-    kind: ShopChangeKind
-    path: str
-    description: str
-
-    @classmethod
-    def from_domain(cls, change: ShopChange) -> Self:
-        return cls(kind=change.kind, path=change.path, description=change.description)
-
-
 class ShopPreviewResponse(StrictApiModel):
     """The publish gate: what blocks publication and what a publish would freeze."""
 
     shop_id: UUID
     publishable: bool
-    issues: list[ShopIssueSchema]
-    changes: list[ShopChangeSchema]
+    issues: list[DefinitionIssueSchema]
+    changes: list[DefinitionChangeSchema]
     content_fingerprint: str
     latest_published_version: int | None
     next_version: int
@@ -579,20 +548,16 @@ class ShopPreviewResponse(StrictApiModel):
         return cls(
             shop_id=shop_id,
             publishable=preview.validation.publishable,
-            issues=[ShopIssueSchema.from_domain(issue) for issue in preview.validation.issues],
-            changes=[ShopChangeSchema.from_domain(change) for change in preview.changes],
+            issues=[
+                DefinitionIssueSchema.from_domain(issue) for issue in preview.validation.issues
+            ],
+            changes=[DefinitionChangeSchema.from_domain(change) for change in preview.changes],
             content_fingerprint=preview.content_fingerprint,
             latest_published_version=preview.latest_published_version,
             next_version=preview.next_version,
             matches_latest_published=preview.matches_latest_published,
             content=ShopContentSchema.from_domain(preview.payload),
         )
-
-
-class ShopValidationErrorResponse(ErrorResponse):
-    """A publish refusal that carries the exact publish-gate findings."""
-
-    issues: list[ShopIssueSchema]
 
 
 class ShopRoutes:
@@ -648,31 +613,21 @@ class ShopRoutes:
         ) -> ShopVersionListResponse:
             return ShopVersionListResponse(
                 versions=[
-                    ShopVersionSummarySchema.from_domain(published)
+                    DefinitionVersionSummarySchema.from_domain(published)
                     for published in service.list_versions(shop_id)
                 ]
             )
 
         def get_shop_version(
             shop_id: ShopIdPath,
-            version: ShopVersionPath,
+            version: DefinitionVersionPath,
             service: Annotated[ShopService, dependency],
         ) -> ShopVersionResponse:
             return ShopVersionResponse.from_record(service.get_version(shop_id, version))
 
-        not_found: dict[int | str, dict[str, Any]] = {
-            404: {"model": ErrorResponse, "description": "The shop is not found"}
-        }
-        invalid: dict[int | str, dict[str, Any]] = {
-            422: {"model": ErrorResponse, "description": "Invalid shop content"}
-        }
-        publish_failures: dict[int | str, dict[str, Any]] = {
-            409: {"model": ErrorResponse, "description": "The version already exists"},
-            422: {
-                "model": ShopValidationErrorResponse,
-                "description": "The draft has publish-gate errors",
-            },
-        }
+        not_found = NotFoundResponses
+        invalid = InvalidResponses
+        publish_failures = PublishFailureResponses
 
         router.add_api_route(
             "/shops",
@@ -681,6 +636,7 @@ class ShopRoutes:
             response_model=ShopListResponse,
             operation_id="listShops",
             summary="List shops with their draft identity and published-version provenance",
+            responses=invalid,
         )
         router.add_api_route(
             "/shops",

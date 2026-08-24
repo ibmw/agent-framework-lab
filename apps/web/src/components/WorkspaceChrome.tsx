@@ -1,4 +1,4 @@
-import type { ShopIssueSchema, ShopPreviewResponse } from "@agent-lab/contracts";
+import type { DefinitionIssueSchema } from "@agent-lab/contracts";
 import type { ReactNode } from "react";
 import { surfaceClasses } from "../lib/ui";
 
@@ -6,7 +6,13 @@ import { surfaceClasses } from "../lib/ui";
  * Draft and published state is never carried by colour alone: every chip pairs its colour
  * with a glyph and an explicit label.
  */
-export function VersionChips({ preview }: { preview: ShopPreviewResponse | null }) {
+export interface VersionProvenance {
+  latest_published_version: number | null;
+  next_version: number;
+  matches_latest_published: boolean;
+}
+
+export function VersionChips({ preview }: { preview: VersionProvenance | null }) {
   if (!preview) {
     return null;
   }
@@ -81,7 +87,7 @@ export function Card({
   );
 }
 
-export function IssueList({ issues }: { issues: ShopIssueSchema[] }) {
+export function IssueList({ issues }: { issues: DefinitionIssueSchema[] }) {
   if (issues.length === 0) {
     return (
       <p className="flex items-center gap-2 text-[13px] text-lab-success">
@@ -127,5 +133,55 @@ export function Fingerprint({ value }: { value: string }) {
     >
       {value.slice(0, 12)}…
     </code>
+  );
+}
+
+/** The publish-gate half of any definition preview. */
+export interface PublishGate extends VersionProvenance {
+  publishable: boolean;
+  issues: DefinitionIssueSchema[];
+}
+
+/**
+ * One definition of "may this draft be frozen", shared by every editor so the button and
+ * the explanation below it can never disagree — and so a new resource cannot quietly ship
+ * a weaker gate than the shop's.
+ */
+export function canPublish(preview: PublishGate | null, dirty: boolean): boolean {
+  return preview !== null && preview.publishable && !dirty && !preview.matches_latest_published;
+}
+
+/** Why the publish button is disabled, in the order an author can act on. */
+export function PublishReasons({
+  preview,
+  dirty,
+}: {
+  preview: PublishGate | null;
+  dirty: boolean;
+}) {
+  const errors = preview?.issues.filter((issue) => issue.severity === "error") ?? [];
+  const warnings = preview?.issues.filter((issue) => issue.severity === "warning") ?? [];
+  return (
+    <>
+      {dirty ? (
+        <p className="text-xs text-lab-error">
+          Save the draft first — publishing freezes the saved draft, not unsaved edits.
+        </p>
+      ) : null}
+      {preview && !preview.publishable ? (
+        <p className="text-xs text-lab-error">Resolve {errors.length} error(s) to publish.</p>
+      ) : null}
+      {preview?.matches_latest_published ? (
+        <p className="text-xs text-admin-muted">
+          The draft is identical to v{preview.latest_published_version}; there is nothing new to
+          freeze.
+        </p>
+      ) : null}
+      {warnings.length > 0 ? (
+        <p className="text-xs text-admin-muted">
+          {warnings.length} warning(s) do not block publication.
+        </p>
+      ) : null}
+    </>
   );
 }

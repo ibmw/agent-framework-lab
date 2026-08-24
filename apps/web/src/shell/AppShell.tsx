@@ -10,6 +10,7 @@ import {
   Settings,
   Shapes,
   Tag,
+  UserCog,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -19,6 +20,11 @@ interface NavEntry {
   label: string;
   to?: string;
   icon: ReactNode;
+  /**
+   * Match the path exactly instead of by prefix. Only Home needs it: every other section
+   * owns nested editor routes and must stay highlighted while one is open.
+   */
+  exact?: boolean;
   /** Sections whose slice has not landed yet stay visible but inert. */
   milestone?: string;
 }
@@ -33,10 +39,10 @@ function studioSections(shopId: string): NavSection[] {
   return [
     {
       entries: [
-        { label: "Home", to: base, icon: <Home size={15} /> },
+        { label: "Home", to: base, icon: <Home size={15} />, exact: true },
         { label: "Products", to: `${base}/products`, icon: <Tag size={15} /> },
         { label: "Orders", icon: <Boxes size={15} />, milestone: "Milestone 2" },
-        { label: "Customers", icon: <Users size={15} />, milestone: "Milestone 1 slice 3" },
+        { label: "Customers", to: `${base}/customers`, icon: <Users size={15} /> },
         { label: "Tickets", icon: <MessageSquare size={15} />, milestone: "Milestone 2" },
         { label: "Scenarios", icon: <ClipboardList size={15} />, milestone: "Milestone 2" },
       ],
@@ -57,6 +63,11 @@ function studioSections(shopId: string): NavSection[] {
     {
       title: "Experiment lab · cross-shop",
       entries: [
+        {
+          label: "Support identities",
+          to: `${base}/support-identities`,
+          icon: <UserCog size={15} />,
+        },
         {
           label: "Agent configurations",
           icon: <Shapes size={15} />,
@@ -91,7 +102,7 @@ function SidebarEntry({ entry }: { entry: NavEntry }) {
   return (
     <NavLink
       to={entry.to}
-      end
+      end={entry.exact ?? false}
       className={({ isActive }) =>
         isActive
           ? `${entryClasses} bg-[#e8f0ed] font-semibold text-lab-ink`

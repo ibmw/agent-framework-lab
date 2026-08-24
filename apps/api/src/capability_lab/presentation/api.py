@@ -27,6 +27,13 @@ from capability_lab.application.conversations import (
     FrameworkDeclaration,
     InvalidConversationMessageError,
 )
+from capability_lab.application.customer_profiles import (
+    CustomerProfileNotFoundError,
+    CustomerProfileNotPublishableError,
+    CustomerProfileService,
+    CustomerProfileVersionNotFoundError,
+)
+from capability_lab.application.definition_authoring import DefinitionNotPublishableError
 from capability_lab.application.definition_resolution import (
     MissingDraftError,
     PublishedVersionExistsError,
@@ -63,9 +70,17 @@ from capability_lab.application.shops import (
     ShopService,
     ShopVersionNotFoundError,
 )
+from capability_lab.application.support_identities import (
+    SupportIdentityNotFoundError,
+    SupportIdentityNotPublishableError,
+    SupportIdentityService,
+    SupportIdentityVersionNotFoundError,
+)
+from capability_lab.domain.customer_profile import CustomerProfileConfigurationError
 from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
 from capability_lab.domain.shop import ShopConfigurationError
+from capability_lab.domain.support_identity import SupportIdentityConfigurationError
 from capability_lab.infrastructure.agents.registry import create_agent_registry
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.config import Settings, get_settings
@@ -82,15 +97,22 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyActionDecisionIdempotencyRepository,
     SqlAlchemyActionProposalRepository,
     SqlAlchemyConversationTurnRepository,
+    SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyGeneratedScenarioRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
-    SqlAlchemyShopRepository,
+    SqlAlchemyShopDirectory,
+    customer_profile_repository,
+    shop_repository,
+    support_identity_repository,
 )
 from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
 from capability_lab.presentation.base import ErrorResponse, StrictApiModel, ValidationIssue
-from capability_lab.presentation.shops import ShopIssueSchema, ShopRoutes
+from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
+from capability_lab.presentation.definitions import DefinitionIssueSchema
+from capability_lab.presentation.shops import ShopRoutes
+from capability_lab.presentation.support_identities import SupportIdentityRoutes
 
 API_TITLE = "Agent Framework Capability Lab API"
 API_VERSION = "1.0.0"
@@ -781,23 +803,91 @@ async def _shop_version_not_found_handler(request: Request, error: Exception) ->
     )
 
 
-async def _shop_not_publishable_handler(request: Request, error: Exception) -> JSONResponse:
+_NOT_PUBLISHABLE_CODES: dict[type[DefinitionNotPublishableError], str] = {
+    ShopNotPublishableError: "shop_not_publishable",
+    CustomerProfileNotPublishableError: "customer_profile_not_publishable",
+    SupportIdentityNotPublishableError: "support_identity_not_publishable",
+}
+
+
+async def _not_publishable_handler(request: Request, error: Exception) -> JSONResponse:
     """Refuse publication with the exact publish-gate findings, not a bare 422."""
     issues = (
-        [ShopIssueSchema.from_domain(issue).model_dump() for issue in error.validation.issues]
-        if isinstance(error, ShopNotPublishableError)
+        [DefinitionIssueSchema.from_domain(issue).model_dump() for issue in error.validation.issues]
+        if isinstance(error, DefinitionNotPublishableError)
         else []
+    )
+    code = (
+        _NOT_PUBLISHABLE_CODES.get(type(error), "definition_not_publishable")
+        if isinstance(error, DefinitionNotPublishableError)
+        else "definition_not_publishable"
     )
     request_id = _request_id(request)
     return JSONResponse(
         status_code=422,
         content={
-            "code": "shop_not_publishable",
+            "code": code,
             "message": str(error),
             "request_id": request_id,
             "issues": issues,
         },
         headers={"X-Request-ID": request_id},
+    )
+
+
+async def _missing_draft_handler(request: Request, error: Exception) -> JSONResponse:
+    """Reference resolution asked for a draft that does not exist.
+
+    Per-resource authoring answers its own not-found code; this covers the shared
+    resolution path, which has no resource of its own to name.
+    """
+    return _error_response(
+        request, status_code=404, code="definition_draft_missing", message=str(error)
+    )
+
+
+async def _customer_profile_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="customer_profile_not_found", message=str(error)
+    )
+
+
+async def _customer_profile_version_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="customer_profile_version_not_found", message=str(error)
+    )
+
+
+async def _customer_profile_configuration_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    """A structural profile invariant the contract cannot express in a field schema."""
+    return _error_response(
+        request, status_code=422, code="customer_profile_configuration_error", message=str(error)
+    )
+
+
+async def _support_identity_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="support_identity_not_found", message=str(error)
+    )
+
+
+async def _support_identity_version_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="support_identity_version_not_found", message=str(error)
+    )
+
+
+async def _support_identity_configuration_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=422, code="support_identity_configuration_error", message=str(error)
     )
 
 
@@ -912,11 +1002,29 @@ def create_app(
     application.add_exception_handler(IdempotencyStateNotFoundError, _internal_error_handler)
     application.add_exception_handler(ShopNotFoundError, _shop_not_found_handler)
     application.add_exception_handler(ShopVersionNotFoundError, _shop_version_not_found_handler)
-    application.add_exception_handler(ShopNotPublishableError, _shop_not_publishable_handler)
+    application.add_exception_handler(DefinitionNotPublishableError, _not_publishable_handler)
+    application.add_exception_handler(
+        CustomerProfileNotFoundError, _customer_profile_not_found_handler
+    )
+    application.add_exception_handler(
+        CustomerProfileVersionNotFoundError, _customer_profile_version_not_found_handler
+    )
+    application.add_exception_handler(
+        CustomerProfileConfigurationError, _customer_profile_configuration_handler
+    )
+    application.add_exception_handler(
+        SupportIdentityNotFoundError, _support_identity_not_found_handler
+    )
+    application.add_exception_handler(
+        SupportIdentityVersionNotFoundError, _support_identity_version_not_found_handler
+    )
+    application.add_exception_handler(
+        SupportIdentityConfigurationError, _support_identity_configuration_handler
+    )
     application.add_exception_handler(
         PublishedVersionExistsError, _published_version_exists_handler
     )
-    application.add_exception_handler(MissingDraftError, _shop_not_found_handler)
+    application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
     application.add_exception_handler(ShopConfigurationError, _shop_configuration_handler)
     application.add_exception_handler(ScenarioGeneratorNotConfiguredError, _internal_error_handler)
@@ -953,7 +1061,20 @@ def create_app(
 
     def shop_service() -> Generator[ShopService, None, None]:
         with session_scope(factory) as session:
-            yield ShopService(SqlAlchemyShopRepository(session), clock)
+            yield ShopService(shop_repository(session), clock)
+
+    def customer_profile_service() -> Generator[CustomerProfileService, None, None]:
+        with session_scope(factory) as session:
+            yield CustomerProfileService(
+                customer_profile_repository(session),
+                SqlAlchemyDefinitionShopAttachmentRepository(session),
+                SqlAlchemyShopDirectory(session),
+                clock,
+            )
+
+    def support_identity_service() -> Generator[SupportIdentityService, None, None]:
+        with session_scope(factory) as session:
+            yield SupportIdentityService(support_identity_repository(session), clock)
 
     def order_action_service() -> Generator[OrderActionService, None, None]:
         with session_scope(factory) as session:
@@ -1454,6 +1575,8 @@ def create_app(
     )
 
     ShopRoutes(shop_service).register(router)
+    CustomerProfileRoutes(customer_profile_service).register(router)
+    SupportIdentityRoutes(support_identity_service).register(router)
     application.include_router(router)
     return application
 

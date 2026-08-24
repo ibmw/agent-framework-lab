@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -267,3 +268,152 @@ def publish_draft(
         shop_version=None if pinned_scope is None else pinned_scope.version,
         references=tuple(pinned_by_definition[reference].ref for reference in draft.references),
     )
+
+
+class DefinitionIssueSeverity(StrEnum):
+    ERROR = "error"
+    WARNING = "warning"
+
+
+@dataclass(frozen=True, slots=True)
+class DefinitionIssue:
+    """One publish-gate finding. Errors block publication; warnings never do."""
+
+    severity: DefinitionIssueSeverity
+    code: str
+    message: str
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class DefinitionValidation:
+    """Every publish-gate finding for one draft payload."""
+
+    issues: tuple[DefinitionIssue, ...] = ()
+
+    @property
+    def errors(self) -> tuple[DefinitionIssue, ...]:
+        return tuple(
+            issue for issue in self.issues if issue.severity is DefinitionIssueSeverity.ERROR
+        )
+
+    @property
+    def warnings(self) -> tuple[DefinitionIssue, ...]:
+        return tuple(
+            issue for issue in self.issues if issue.severity is DefinitionIssueSeverity.WARNING
+        )
+
+    @property
+    def publishable(self) -> bool:
+        return not self.errors
+
+
+def issue_error(code: str, message: str, path: str) -> DefinitionIssue:
+    return DefinitionIssue(
+        severity=DefinitionIssueSeverity.ERROR, code=code, message=message, path=path
+    )
+
+
+def issue_warning(code: str, message: str, path: str) -> DefinitionIssue:
+    return DefinitionIssue(
+        severity=DefinitionIssueSeverity.WARNING, code=code, message=message, path=path
+    )
+
+
+def validation_of(issues: list[DefinitionIssue]) -> DefinitionValidation:
+    """Order findings deterministically: errors before warnings, then path and code."""
+    return DefinitionValidation(
+        issues=tuple(
+            sorted(
+                issues,
+                key=lambda issue: (
+                    issue.severity is DefinitionIssueSeverity.WARNING,
+                    issue.path,
+                    issue.code,
+                ),
+            )
+        )
+    )
+
+
+class DefinitionChangeKind(StrEnum):
+    ADDED = "added"
+    REMOVED = "removed"
+    UPDATED = "updated"
+
+
+@dataclass(frozen=True, slots=True)
+class DefinitionChange:
+    """One authored difference between a draft and its latest published version."""
+
+    kind: DefinitionChangeKind
+    path: str
+    description: str
+
+
+def keyed[EntryT](entries: tuple[EntryT, ...], key: Callable[[EntryT], str]) -> dict[str, EntryT]:
+    return {key(entry): entry for entry in entries}
+
+
+def diff_keyed_collection[EntryT](
+    previous: tuple[EntryT, ...],
+    current: tuple[EntryT, ...],
+    *,
+    key: Callable[[EntryT], str],
+    label: Callable[[EntryT], str],
+    path: str,
+    noun: str,
+    include_updates: bool = True,
+) -> list[DefinitionChange]:
+    """Diff one keyed collection.
+
+    `include_updates=False` reports only membership, for collections whose entries are
+    diffed field by field elsewhere; otherwise one edit would be reported twice.
+    """
+    before = keyed(previous, key)
+    after = keyed(current, key)
+    changes: list[DefinitionChange] = []
+    for identifier in sorted(after.keys() - before.keys()):
+        changes.append(
+            DefinitionChange(
+                kind=DefinitionChangeKind.ADDED,
+                path=f"{path}.{identifier}",
+                description=f"Added {noun} {label(after[identifier])}",
+            )
+        )
+    for identifier in sorted(before.keys() - after.keys()):
+        changes.append(
+            DefinitionChange(
+                kind=DefinitionChangeKind.REMOVED,
+                path=f"{path}.{identifier}",
+                description=f"Removed {noun} {label(before[identifier])}",
+            )
+        )
+    if include_updates:
+        for identifier in sorted(before.keys() & after.keys()):
+            if before[identifier] != after[identifier]:
+                changes.append(
+                    DefinitionChange(
+                        kind=DefinitionChangeKind.UPDATED,
+                        path=f"{path}.{identifier}",
+                        description=f"Updated {noun} {label(after[identifier])}",
+                    )
+                )
+    return changes
+
+
+def field_changes(
+    path: str,
+    fields: tuple[tuple[str, object, object], ...],
+    describe: Callable[[str], str],
+) -> list[DefinitionChange]:
+    """Report each scalar field whose value differs between two payload entries."""
+    return [
+        DefinitionChange(
+            kind=DefinitionChangeKind.UPDATED,
+            path=f"{path}.{name}",
+            description=describe(name),
+        )
+        for name, before, after in fields
+        if before != after
+    ]

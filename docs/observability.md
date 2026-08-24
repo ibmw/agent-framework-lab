@@ -10,6 +10,15 @@ unsanitized free-form content, complete tool payloads, or LLM-judge inputs. The 
 apply an attribute allowlist and pseudonymize customer, experiment, run, and session identifiers
 before export. Structured logging follows the same rule and carries `request_id`/`trace_id`.
 
+For authored definitions the allowlist is derived, not hand-maintained. Each payload that carries
+synthetic personal or simulation-only content classifies **every leaf of its canonical document**
+as sensitive, customer-only, or operational, and exposes a `telemetry_attributes` projection built
+only from the operational fields and from counts. A test asserts the classification covers the
+document exactly, so a newly authored field fails the suite until someone decides whether it may
+leave the authoring surface. `customer_profile.FIELD_SENSITIVITY` is the first such classification
+(ADR 0014); domain validation messages and change summaries likewise name the failing field rather
+than echoing its value.
+
 Instrumentation depends on an application interface or remains in infrastructure. The domain
 creates no span. Phoenix is a replaceable local consumer: no domain rule or test depends on its
 availability. The application continues to work when export is disabled.

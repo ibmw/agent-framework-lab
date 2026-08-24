@@ -1,6 +1,6 @@
 # Project plan
 
-Status: current redesign roadmap — 2026-08-23
+Status: current redesign roadmap — 2026-08-24
 
 ## Purpose and authority
 
@@ -37,9 +37,10 @@ The current POC already proves:
 - sanitized OpenTelemetry traces with optional Phoenix export.
 
 Milestone 1 Slice 2 replaced the persona-first frontend with the target Studio shell and delivered
-the versioned shop and catalog (ADR 0013). The POC's conversation, persona, and order-action HTTP
-contracts remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are
-built on the new shell.
+the versioned shop and catalog (ADR 0013). Slice 3 added versioned customer profiles and support
+identities on a shared authoring lifecycle (ADR 0014). The POC's conversation, persona, and
+order-action HTTP contracts remain published and tested but have no UI consumer until the
+Milestone 2–4 surfaces are built on the new shell.
 
 The POC does not implement the target Scenario Studio, published agent configurations, paired
 experiment runner, participant-driver port, LLM judge, experiment-first history, or target
@@ -229,15 +230,25 @@ Studio shell that replaced the POC's persona-first navigation.
 
 ### Slice 3 — Synthetic customer and support identity
 
-- [ ] Add versioned customer profiles separating fictional personal facts from behavioral persona.
-- [ ] Support addresses, account facts, relevant commerce/support history, and hidden simulator facts.
-- [ ] Add versioned support identities with role, tone, permissions, and guidance.
-- [ ] Clearly label synthetic data and prove sensitive fields are excluded from logs/traces.
-- [ ] Add Studio forms, validation, persistence, and contract tests.
+- [x] Add versioned customer profiles separating fictional personal facts from behavioral persona.
+- [x] Support addresses, account facts, relevant commerce/support history, and hidden simulator facts.
+  Authored pre-sandbox background travels with the profile; shop-scoped order and ticket history
+  stays with its shop and arrives with Milestone 2, as the design direction requires.
+- [x] Add versioned support identities with role, permissions, and guidance. Tone of voice is
+  shop-level under ADR 0012 and is deliberately not part of a support identity.
+- [x] Clearly label synthetic data and prove sensitive fields are excluded from logs/traces.
+- [x] Add Studio forms, validation, persistence, and contract tests.
 
 Frames: 6 · Customers and 6b · Customer editor — address book. Support-identity forms have no
 dedicated frame and follow the shell's resource-editor conventions. The address book authored here
 is the selection source for the order editor's frozen address copies (frame 2b, Milestone 2).
+
+Slice evidence: an author creates a synthetic customer inside a shop, authors the address book and
+persona, publishes it, and the published version stays frozen while the draft moves on. ADR 0014
+records the `customer-profile-payload-v1` and `support-identity-payload-v1` schemas, the
+field-sensitivity classification that keeps synthetic personal data out of logs and traces, the
+per-shop attachment relation, and the extraction of the shared draft/published lifecycle that
+ADR 0013 anticipated.
 
 ### Milestone acceptance
 

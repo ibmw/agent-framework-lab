@@ -803,6 +803,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ShopListResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: Create a shop identity and its first draft
       operationId: createShop
@@ -820,7 +826,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ShopDraftResponse'
         '422':
-          description: Invalid shop content
+          description: Invalid definition content
           content:
             application/json:
               schema:
@@ -847,13 +853,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ShopDraftResponse'
         '404':
-          description: The shop is not found
+          description: The definition is not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Invalid shop content
+          description: Invalid definition content
           content:
             application/json:
               schema:
@@ -885,13 +891,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ShopDraftResponse'
         '404':
-          description: The shop is not found
+          description: The definition is not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Invalid shop content
+          description: Invalid definition content
           content:
             application/json:
               schema:
@@ -918,13 +924,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ShopPreviewResponse'
         '404':
-          description: The shop is not found
+          description: The definition is not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Invalid shop content
+          description: Invalid definition content
           content:
             application/json:
               schema:
@@ -951,7 +957,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ShopVersionResponse'
         '404':
-          description: The shop is not found
+          description: The definition is not found
           content:
             application/json:
               schema:
@@ -967,7 +973,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ShopValidationErrorResponse'
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
     get:
       summary: List a shop's published versions, newest first
       operationId: listShopVersions
@@ -989,13 +995,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ShopVersionListResponse'
         '404':
-          description: The shop is not found
+          description: The definition is not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Invalid shop content
+          description: Invalid definition content
           content:
             application/json:
               schema:
@@ -1020,9 +1026,9 @@ paths:
         schema:
           type: integer
           minimum: 1
-          description: Immutable published shop version number.
+          description: Immutable published version number.
           title: Version
-        description: Immutable published shop version number.
+        description: Immutable published version number.
       responses:
         '200':
           description: Successful Response
@@ -1031,19 +1037,695 @@ paths:
               schema:
                 $ref: '#/components/schemas/ShopVersionResponse'
         '404':
-          description: The shop is not found
+          description: The definition is not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Invalid shop content
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/customer-profiles:
+    get:
+      summary: List customer profiles, optionally scoped to one shop's attachments
+      operationId: listCustomerProfiles
+      parameters:
+      - name: shop_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: List only the profiles attached to this shop.
+          title: Shop Id
+        description: List only the profiles attached to this shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileListResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create a customer profile identity and its first draft
+      operationId: createCustomerProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerProfileRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileDraftResponse'
+        '404':
+          description: The definition or the shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/customer-profiles/{profile_id}/draft:
+    get:
+      summary: Retrieve the mutable customer-profile draft
+      operationId: getCustomerProfileDraft
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceCustomerProfileDraft
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceCustomerProfileDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/customer-profiles/{profile_id}/draft/preview:
+    get:
+      summary: Validate the draft and preview the version publishing would create
+      operationId: previewCustomerProfileDraft
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfilePreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/customer-profiles/{profile_id}/versions:
+    post:
+      summary: Freeze the draft into the next immutable published version
+      operationId: publishCustomerProfile
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
+    get:
+      summary: List a profile's published versions, newest first
+      operationId: listCustomerProfileVersions
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/customer-profiles/{profile_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published customer-profile version
+      operationId: getCustomerProfileVersion
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/customer-profiles/{profile_id}/shops:
+    get:
+      summary: List the shops this profile is attached to
+      operationId: listCustomerProfileShops
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileShopsResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Attach the profile to a shop; attaching twice changes nothing
+      operationId: attachCustomerProfileToShop
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachCustomerProfileRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileShopsResponse'
+        '404':
+          description: The definition or the shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/customer-profiles/{profile_id}/shops/{shop_id}:
+    delete:
+      summary: Detach the profile from a shop without deleting the profile
+      operationId: detachCustomerProfileFromShop
+      parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable customer-profile identifier.
+          title: Profile Id
+        description: Stable customer-profile identifier.
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerProfileShopsResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/support-identities:
+    get:
+      summary: List support identities with their published-version provenance
+      operationId: listSupportIdentities
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityListResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create a support identity and its first draft
+      operationId: createSupportIdentity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSupportIdentityRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityDraftResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/support-identities/{identity_id}/draft:
+    get:
+      summary: Retrieve the mutable support-identity draft
+      operationId: getSupportIdentityDraft
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable support-identity identifier.
+          title: Identity Id
+        description: Stable support-identity identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceSupportIdentityDraft
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable support-identity identifier.
+          title: Identity Id
+        description: Stable support-identity identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceSupportIdentityDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/support-identities/{identity_id}/draft/preview:
+    get:
+      summary: Validate the draft and preview the version publishing would create
+      operationId: previewSupportIdentityDraft
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable support-identity identifier.
+          title: Identity Id
+        description: Stable support-identity identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/support-identities/{identity_id}/versions:
+    post:
+      summary: Freeze the draft into the next immutable published version
+      operationId: publishSupportIdentity
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable support-identity identifier.
+          title: Identity Id
+        description: Stable support-identity identifier.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
+    get:
+      summary: List an identity's published versions, newest first
+      operationId: listSupportIdentityVersions
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable support-identity identifier.
+          title: Identity Id
+        description: Stable support-identity identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/support-identities/{identity_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published support-identity version
+      operationId: getSupportIdentityVersion
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable support-identity identifier.
+          title: Identity Id
+        description: Stable support-identity identifier.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportIdentityVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    AccountFactsSchema:
+      properties:
+        customer_since:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          title: Customer Since
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+        loyalty_tier:
+          $ref: '#/components/schemas/LoyaltyTier'
+        marketing_opt_in:
+          type: boolean
+          title: Marketing Opt In
+        notes:
+          type: string
+          maxLength: 4000
+          title: Notes
+      additionalProperties: false
+      type: object
+      required:
+      - customer_since
+      - status
+      - loyalty_tier
+      - marketing_opt_in
+      - notes
+      title: AccountFactsSchema
+    AccountStatus:
+      type: string
+      enum:
+      - active
+      - dormant
+      - closed
+      title: AccountStatus
     ActionProposalResponse:
       properties:
         id:
@@ -1123,6 +1805,74 @@ components:
       - result_order_status
       - result_order_version
       title: ActionProposalResponse
+    AddressSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        label:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Label
+        recipient:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Recipient
+        line1:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Line1
+        line2:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Line2
+        postal_code:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Postal Code
+        city:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: City
+        region:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Region
+        country:
+          type: string
+          pattern: ^[A-Z]{2}$
+          title: Country
+        is_default:
+          type: boolean
+          title: Is Default
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - label
+      - recipient
+      - line1
+      - line2
+      - postal_code
+      - city
+      - region
+      - country
+      - is_default
+      title: AddressSchema
     AgentFrameworkListResponse:
       properties:
         frameworks:
@@ -1166,6 +1916,17 @@ components:
       - model_id
       - capabilities
       title: AgentFrameworkResponse
+    AttachCustomerProfileRequest:
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+      additionalProperties: false
+      type: object
+      required:
+      - shop_id
+      title: AttachCustomerProfileRequest
     AttributeSchema:
       properties:
         key:
@@ -1220,6 +1981,42 @@ components:
       - measurement
       title: AttributeType
       description: The first bounded set of author-defined typed attributes.
+    BackgroundEntrySchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        kind:
+          $ref: '#/components/schemas/BackgroundKind'
+        occurred_on:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          title: Occurred On
+        note:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Note
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - kind
+      - occurred_on
+      - note
+      title: BackgroundEntrySchema
+    BackgroundKind:
+      type: string
+      enum:
+      - purchase
+      - support_contact
+      - account_event
+      - life_event
+      title: BackgroundKind
+      description: What a piece of authored pre-sandbox history is about.
     ConversationListResponse:
       properties:
         conversations:
@@ -1375,6 +2172,28 @@ components:
       - trace_id
       - created_at
       title: ConversationTurnResponse
+    CreateCustomerProfileRequest:
+      properties:
+        identity:
+          $ref: '#/components/schemas/CustomerIdentitySchema'
+        customer_since:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          title: Customer Since
+        shop_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Shop Id
+          description: Attach the new profile to this shop; null creates it unattached.
+      additionalProperties: false
+      type: object
+      required:
+      - identity
+      - customer_since
+      - shop_id
+      title: CreateCustomerProfileRequest
     CreateShopRequest:
       properties:
         identity:
@@ -1384,6 +2203,15 @@ components:
       required:
       - identity
       title: CreateShopRequest
+    CreateSupportIdentityRequest:
+      properties:
+        role:
+          $ref: '#/components/schemas/SupportRoleSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - role
+      title: CreateSupportIdentityRequest
     Currency:
       type: string
       enum:
@@ -1393,6 +2221,329 @@ components:
       title: Currency
       description: Currencies the lab can express; extend deliberately, never from
         authored input.
+    CustomerIdentitySchema:
+      properties:
+        given_name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Given Name
+        family_name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Family Name
+        email:
+          type: string
+          maxLength: 200
+          minLength: 3
+          pattern: ^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$
+          title: Email
+        locale:
+          type: string
+          pattern: ^[a-z]{2}(?:-[A-Z]{2})?$
+          title: Locale
+        phone:
+          anyOf:
+          - type: string
+            pattern: ^\+?[0-9][0-9 ()./-]{4,30}$
+          - type: 'null'
+          title: Phone
+          description: Null when the profile has no phone number.
+      additionalProperties: false
+      type: object
+      required:
+      - given_name
+      - family_name
+      - email
+      - locale
+      - phone
+      title: CustomerIdentitySchema
+    CustomerProfileContentSchema:
+      properties:
+        identity:
+          $ref: '#/components/schemas/CustomerIdentitySchema'
+        account:
+          $ref: '#/components/schemas/AccountFactsSchema'
+        persona:
+          $ref: '#/components/schemas/PersonaSchema'
+        addresses:
+          items:
+            $ref: '#/components/schemas/AddressSchema'
+          type: array
+          title: Addresses
+        background:
+          items:
+            $ref: '#/components/schemas/BackgroundEntrySchema'
+          type: array
+          title: Background
+        hidden_facts:
+          items:
+            $ref: '#/components/schemas/HiddenFactSchema'
+          type: array
+          title: Hidden Facts
+        display_name:
+          type: string
+          title: Display Name
+        default_address_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Address Id
+      additionalProperties: false
+      type: object
+      required:
+      - identity
+      - account
+      - persona
+      - addresses
+      - background
+      - hidden_facts
+      - display_name
+      - default_address_id
+      title: CustomerProfileContentSchema
+      description: A customer profile as the API returns it, with derived read-only
+        evidence.
+    CustomerProfileDraftResponse:
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          title: Profile Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/CustomerProfileContentSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - content
+      - created_at
+      - updated_at
+      title: CustomerProfileDraftResponse
+    CustomerProfileListResponse:
+      properties:
+        profiles:
+          items:
+            $ref: '#/components/schemas/CustomerProfileSummarySchema'
+          type: array
+          title: Profiles
+      additionalProperties: false
+      type: object
+      required:
+      - profiles
+      title: CustomerProfileListResponse
+    CustomerProfilePayloadSchema:
+      properties:
+        identity:
+          $ref: '#/components/schemas/CustomerIdentitySchema'
+        account:
+          $ref: '#/components/schemas/AccountFactsSchema'
+        persona:
+          $ref: '#/components/schemas/PersonaSchema'
+        addresses:
+          items:
+            $ref: '#/components/schemas/AddressSchema'
+          type: array
+          title: Addresses
+        background:
+          items:
+            $ref: '#/components/schemas/BackgroundEntrySchema'
+          type: array
+          title: Background
+        hidden_facts:
+          items:
+            $ref: '#/components/schemas/HiddenFactSchema'
+          type: array
+          title: Hidden Facts
+      additionalProperties: false
+      type: object
+      required:
+      - identity
+      - account
+      - persona
+      - addresses
+      - background
+      - hidden_facts
+      title: CustomerProfilePayloadSchema
+      description: The whole authored content of a customer-profile draft or published
+        version.
+    CustomerProfilePreviewResponse:
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          title: Profile Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/CustomerProfileContentSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      title: CustomerProfilePreviewResponse
+      description: 'The publish gate: what blocks publication and what a publish would
+        freeze.'
+    CustomerProfileShopsResponse:
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          title: Profile Id
+        shop_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Shop Ids
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - shop_ids
+      title: CustomerProfileShopsResponse
+      description: The shops that use this profile; identity and content never differ
+        per shop.
+    CustomerProfileSummarySchema:
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          title: Profile Id
+        display_name:
+          type: string
+          title: Display Name
+        email:
+          type: string
+          title: Email
+        persona_traits:
+          items:
+            type: string
+          type: array
+          title: Persona Traits
+        address_count:
+          type: integer
+          title: Address Count
+        default_address_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Address Label
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+        attached_shop_count:
+          type: integer
+          title: Attached Shop Count
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - display_name
+      - email
+      - persona_traits
+      - address_count
+      - default_address_label
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      - attached_shop_count
+      title: CustomerProfileSummarySchema
+    CustomerProfileVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: CustomerProfileVersionListResponse
+    CustomerProfileVersionResponse:
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          title: Profile Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        content:
+          $ref: '#/components/schemas/CustomerProfileContentSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - version
+      - content_fingerprint
+      - published_at
+      - content
+      title: CustomerProfileVersionResponse
     CustomerResponse:
       properties:
         id:
@@ -1437,6 +2588,107 @@ components:
       required:
       - decision
       title: DecideOrderActionRequest
+    DefinitionChangeKind:
+      type: string
+      enum:
+      - added
+      - removed
+      - updated
+      title: DefinitionChangeKind
+    DefinitionChangeSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/DefinitionChangeKind'
+        path:
+          type: string
+          title: Path
+        description:
+          type: string
+          title: Description
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - path
+      - description
+      title: DefinitionChangeSchema
+    DefinitionIssueSchema:
+      properties:
+        severity:
+          $ref: '#/components/schemas/DefinitionIssueSeverity'
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        path:
+          type: string
+          title: Path
+      additionalProperties: false
+      type: object
+      required:
+      - severity
+      - code
+      - message
+      - path
+      title: DefinitionIssueSchema
+    DefinitionIssueSeverity:
+      type: string
+      enum:
+      - error
+      - warning
+      title: DefinitionIssueSeverity
+    DefinitionValidationErrorResponse:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        request_id:
+          type: string
+          title: Request Id
+        details:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ValidationIssue'
+            type: array
+          - type: 'null'
+          title: Details
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      - request_id
+      - issues
+      title: DefinitionValidationErrorResponse
+      description: A publish refusal that carries the exact publish-gate findings.
+    DefinitionVersionSummarySchema:
+      properties:
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+      additionalProperties: false
+      type: object
+      required:
+      - version
+      - content_fingerprint
+      - published_at
+      title: DefinitionVersionSummarySchema
     ErrorResponse:
       properties:
         code:
@@ -1462,6 +2714,25 @@ components:
       - message
       - request_id
       title: ErrorResponse
+    EscalationPolicySchema:
+      properties:
+        escalate_to:
+          type: string
+          maxLength: 4000
+          title: Escalate To
+        conditions:
+          items:
+            type: string
+            maxLength: 200
+            minLength: 1
+          type: array
+          title: Conditions
+      additionalProperties: false
+      type: object
+      required:
+      - escalate_to
+      - conditions
+      title: EscalationPolicySchema
     FaqEntrySchema:
       properties:
         id:
@@ -1622,6 +2893,31 @@ components:
       - last_activity_at
       - conversation_count
       title: GeneratedScenarioSummaryResponse
+    GuidanceNoteSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - body
+      title: GuidanceNoteSchema
     HealthResponse:
       properties:
         status:
@@ -1638,6 +2934,31 @@ components:
       - status
       - api_version
       title: HealthResponse
+    HiddenFactSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        note:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Note
+        revealed_when:
+          type: string
+          maxLength: 4000
+          title: Revealed When
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - note
+      - revealed_when
+      title: HiddenFactSchema
+      description: Known to the customer side of a simulation only.
     InitialStateResponse:
       properties:
         canonical_schema_version:
@@ -1673,6 +2994,13 @@ components:
       - products
       - orders
       title: InitialStateResponse
+    LoyaltyTier:
+      type: string
+      enum:
+      - none
+      - silver
+      - gold
+      title: LoyaltyTier
     MediaReferenceSchema:
       properties:
         reference:
@@ -1832,6 +3160,27 @@ components:
       - locale
       - support_traits
       title: PersonaResponse
+    PersonaSchema:
+      properties:
+        summary:
+          type: string
+          maxLength: 4000
+          title: Summary
+        traits:
+          items:
+            type: string
+            maxLength: 200
+            minLength: 1
+          type: array
+          title: Traits
+      additionalProperties: false
+      type: object
+      required:
+      - summary
+      - traits
+      title: PersonaSchema
+      description: Operator- and simulator-facing behavior; never part of a support
+        agent's prompt.
     PolicyKind:
       type: string
       enum:
@@ -2074,6 +3423,15 @@ components:
       - review_count
       - average_rating
       title: RatingSummarySchema
+    ReplaceCustomerProfileDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/CustomerProfilePayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceCustomerProfileDraftRequest
     ReplaceShopDraftRequest:
       properties:
         payload:
@@ -2083,6 +3441,15 @@ components:
       required:
       - payload
       title: ReplaceShopDraftRequest
+    ReplaceSupportIdentityDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/SupportIdentityPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceSupportIdentityDraftRequest
     ReviewSchema:
       properties:
         id:
@@ -2175,30 +3542,6 @@ components:
       required:
       - message
       title: SendConversationMessageRequest
-    ShopChangeKind:
-      type: string
-      enum:
-      - added
-      - removed
-      - updated
-      title: ShopChangeKind
-    ShopChangeSchema:
-      properties:
-        kind:
-          $ref: '#/components/schemas/ShopChangeKind'
-        path:
-          type: string
-          title: Path
-        description:
-          type: string
-          title: Description
-      additionalProperties: false
-      type: object
-      required:
-      - kind
-      - path
-      - description
-      title: ShopChangeSchema
     ShopContentSchema:
       properties:
         identity:
@@ -2322,33 +3665,6 @@ components:
       - currencies
       - channels
       title: ShopIdentitySchema
-    ShopIssueSchema:
-      properties:
-        severity:
-          $ref: '#/components/schemas/ShopIssueSeverity'
-        code:
-          type: string
-          title: Code
-        message:
-          type: string
-          title: Message
-        path:
-          type: string
-          title: Path
-      additionalProperties: false
-      type: object
-      required:
-      - severity
-      - code
-      - message
-      - path
-      title: ShopIssueSchema
-    ShopIssueSeverity:
-      type: string
-      enum:
-      - error
-      - warning
-      title: ShopIssueSeverity
     ShopListResponse:
       properties:
         shops:
@@ -2424,12 +3740,12 @@ components:
           title: Publishable
         issues:
           items:
-            $ref: '#/components/schemas/ShopIssueSchema'
+            $ref: '#/components/schemas/DefinitionIssueSchema'
           type: array
           title: Issues
         changes:
           items:
-            $ref: '#/components/schemas/ShopChangeSchema'
+            $ref: '#/components/schemas/DefinitionChangeSchema'
           type: array
           title: Changes
         content_fingerprint:
@@ -2496,43 +3812,11 @@ components:
       - latest_published_version
       - published_version_count
       title: ShopSummarySchema
-    ShopValidationErrorResponse:
-      properties:
-        code:
-          type: string
-          title: Code
-        message:
-          type: string
-          title: Message
-        request_id:
-          type: string
-          title: Request Id
-        details:
-          anyOf:
-          - items:
-              $ref: '#/components/schemas/ValidationIssue'
-            type: array
-          - type: 'null'
-          title: Details
-        issues:
-          items:
-            $ref: '#/components/schemas/ShopIssueSchema'
-          type: array
-          title: Issues
-      additionalProperties: false
-      type: object
-      required:
-      - code
-      - message
-      - request_id
-      - issues
-      title: ShopValidationErrorResponse
-      description: A publish refusal that carries the exact publish-gate findings.
     ShopVersionListResponse:
       properties:
         versions:
           items:
-            $ref: '#/components/schemas/ShopVersionSummarySchema'
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
           type: array
           title: Versions
       additionalProperties: false
@@ -2571,24 +3855,6 @@ components:
       - published_at
       - content
       title: ShopVersionResponse
-    ShopVersionSummarySchema:
-      properties:
-        version:
-          type: integer
-          title: Version
-        content_fingerprint:
-          type: string
-          title: Content Fingerprint
-        published_at:
-          type: string
-          title: Published At
-      additionalProperties: false
-      type: object
-      required:
-      - version
-      - content_fingerprint
-      - published_at
-      title: ShopVersionSummarySchema
     StartConversationRequest:
       properties:
         scenario_id:
@@ -2682,6 +3948,243 @@ components:
       - title
       - body
       title: SupportGuidelineSchema
+    SupportIdentityDraftResponse:
+      properties:
+        identity_id:
+          type: string
+          format: uuid
+          title: Identity Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/SupportIdentityPayloadSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - identity_id
+      - content
+      - created_at
+      - updated_at
+      title: SupportIdentityDraftResponse
+    SupportIdentityListResponse:
+      properties:
+        identities:
+          items:
+            $ref: '#/components/schemas/SupportIdentitySummarySchema'
+          type: array
+          title: Identities
+      additionalProperties: false
+      type: object
+      required:
+      - identities
+      title: SupportIdentityListResponse
+    SupportIdentityPayloadSchema:
+      properties:
+        role:
+          $ref: '#/components/schemas/SupportRoleSchema'
+        permissions:
+          items:
+            $ref: '#/components/schemas/SupportPermission'
+          type: array
+          title: Permissions
+        guidance:
+          items:
+            $ref: '#/components/schemas/GuidanceNoteSchema'
+          type: array
+          title: Guidance
+        escalation:
+          $ref: '#/components/schemas/EscalationPolicySchema'
+      additionalProperties: false
+      type: object
+      required:
+      - role
+      - permissions
+      - guidance
+      - escalation
+      title: SupportIdentityPayloadSchema
+      description: The whole authored content of a support-identity draft or published
+        version.
+    SupportIdentityPreviewResponse:
+      properties:
+        identity_id:
+          type: string
+          format: uuid
+          title: Identity Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/SupportIdentityPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - identity_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      title: SupportIdentityPreviewResponse
+      description: 'The publish gate: what blocks publication and what a publish would
+        freeze.'
+    SupportIdentitySummarySchema:
+      properties:
+        identity_id:
+          type: string
+          format: uuid
+          title: Identity Id
+        name:
+          type: string
+          title: Name
+        title:
+          type: string
+          title: Title
+        permission_count:
+          type: integer
+          title: Permission Count
+        guidance_count:
+          type: integer
+          title: Guidance Count
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+      additionalProperties: false
+      type: object
+      required:
+      - identity_id
+      - name
+      - title
+      - permission_count
+      - guidance_count
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      title: SupportIdentitySummarySchema
+    SupportIdentityVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: SupportIdentityVersionListResponse
+    SupportIdentityVersionResponse:
+      properties:
+        identity_id:
+          type: string
+          format: uuid
+          title: Identity Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        content:
+          $ref: '#/components/schemas/SupportIdentityPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - identity_id
+      - version
+      - content_fingerprint
+      - published_at
+      - content
+      title: SupportIdentityVersionResponse
+    SupportPermission:
+      type: string
+      enum:
+      - read_catalog
+      - read_customer
+      - read_orders
+      - read_policies
+      - cancel_order
+      - change_shipping_address
+      - issue_refund
+      - apply_discount
+      - escalate_to_human
+      title: SupportPermission
+      description: What a support identity is authorized to do; extended deliberately,
+        in code.
+    SupportRoleSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        title:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Title
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - title
+      - description
+      title: SupportRoleSchema
     ToneOfVoiceSchema:
       properties:
         id:

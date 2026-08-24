@@ -9,21 +9,41 @@ stay incomplete until it is published.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
+from functools import partial
 
+from capability_lab.domain.content import (
+    MAX_SLUG_LENGTH,
+    require_bool,
+    require_decimal_text,
+    require_instance,
+    require_integer_in_range,
+    require_label,
+    require_locale,
+    require_non_negative_int,
+    require_slug,
+    require_text,
+    require_unique,
+)
+from capability_lab.domain.definitions import (
+    DefinitionChange,
+    DefinitionChangeKind,
+    DefinitionIssue,
+    DefinitionIssueSeverity,
+    DefinitionValidation,
+    diff_keyed_collection,
+    issue_error,
+    issue_warning,
+    keyed,
+    validation_of,
+)
 from capability_lab.domain.entities import DomainError
 
-MAX_TEXT_LENGTH = 4000
-MAX_LABEL_LENGTH = 200
-MAX_SLUG_LENGTH = 64
 MIN_REVIEW_RATING = 1
 MAX_REVIEW_RATING = 5
 
-_SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
-_LOCALE_PATTERN = re.compile(r"[a-z]{2}(?:-[A-Z]{2})?")
 _SKU_PATTERN = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)*")
 
 
@@ -31,64 +51,16 @@ class ShopConfigurationError(DomainError):
     """Raised when shop content violates a structural invariant."""
 
 
-def _require_slug(value: object, field_name: str) -> str:
-    if not isinstance(value, str) or _SLUG_PATTERN.fullmatch(value) is None:
-        raise ShopConfigurationError(f"{field_name} must be a lowercase kebab-case identifier")
-    if len(value) > MAX_SLUG_LENGTH:
-        raise ShopConfigurationError(
-            f"{field_name} must contain at most {MAX_SLUG_LENGTH} characters"
-        )
-    return value
-
-
-def _require_label(value: object, field_name: str) -> str:
-    if not isinstance(value, str) or not value.strip() or value != value.strip():
-        raise ShopConfigurationError(f"{field_name} must be non-empty text without padding")
-    if len(value) > MAX_LABEL_LENGTH:
-        raise ShopConfigurationError(
-            f"{field_name} must contain at most {MAX_LABEL_LENGTH} characters"
-        )
-    return value
-
-
-def _require_text(value: object, field_name: str, *, allow_empty: bool = False) -> str:
-    if not isinstance(value, str) or value != value.strip():
-        raise ShopConfigurationError(f"{field_name} must be text without surrounding whitespace")
-    if not allow_empty and not value:
-        raise ShopConfigurationError(f"{field_name} must not be empty")
-    if len(value) > MAX_TEXT_LENGTH:
-        raise ShopConfigurationError(
-            f"{field_name} must contain at most {MAX_TEXT_LENGTH} characters"
-        )
-    return value
-
-
-def _require_unique(values: tuple[str, ...], field_name: str) -> None:
-    if len(set(values)) != len(values):
-        raise ShopConfigurationError(f"{field_name} must be unique")
-
-
-def _require_non_negative_int(value: object, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ShopConfigurationError(f"{field_name} must be a non-negative integer")
-    return value
-
-
-def _require_instance(value: object, expected: type, message: str) -> None:
-    """Guard a typed field against callers that bypass static checking."""
-    if not isinstance(value, expected):
-        raise ShopConfigurationError(message)
-
-
-def _require_bool(value: object, field_name: str) -> None:
-    _require_instance(value, bool, f"{field_name} must be a boolean")
-
-
-def _require_integer_in_range(value: object, minimum: int, maximum: int, field_name: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
-        raise ShopConfigurationError(
-            f"{field_name} must be an integer between {minimum} and {maximum}"
-        )
+_require_slug = partial(require_slug, error=ShopConfigurationError)
+_require_label = partial(require_label, error=ShopConfigurationError)
+_require_text = partial(require_text, error=ShopConfigurationError)
+_require_unique = partial(require_unique, error=ShopConfigurationError)
+_require_non_negative_int = partial(require_non_negative_int, error=ShopConfigurationError)
+_require_instance = partial(require_instance, error=ShopConfigurationError)
+_require_bool = partial(require_bool, error=ShopConfigurationError)
+_require_integer_in_range = partial(require_integer_in_range, error=ShopConfigurationError)
+_require_decimal_text = partial(require_decimal_text, error=ShopConfigurationError)
+_require_locale = partial(require_locale, error=ShopConfigurationError)
 
 
 class Currency(StrEnum):
@@ -229,15 +201,6 @@ class TypedAttribute:
             raise ShopConfigurationError(
                 f"a {self.attribute_type} attribute cannot declare choices"
             )
-
-
-def _require_decimal_text(value: str, field_name: str) -> None:
-    try:
-        parsed = Decimal(value)
-    except ArithmeticError as error:
-        raise ShopConfigurationError(f"{field_name} must be a decimal number") from error
-    if not parsed.is_finite():
-        raise ShopConfigurationError(f"{field_name} must be a finite decimal number")
 
 
 @dataclass(frozen=True, slots=True)
@@ -450,8 +413,7 @@ class ShopIdentity:
     def __post_init__(self) -> None:
         _require_label(self.name, "shop name")
         _require_slug(self.slug, "shop slug")
-        if _LOCALE_PATTERN.fullmatch(self.locale) is None:
-            raise ShopConfigurationError("shop locale must look like 'en' or 'en-GB'")
+        _require_locale(self.locale, "shop locale")
         if not self.currencies:
             raise ShopConfigurationError("a shop must declare at least one currency")
         for currency in self.currencies:
@@ -518,44 +480,12 @@ class ShopPayload:
         return None
 
 
-class ShopIssueSeverity(StrEnum):
-    ERROR = "error"
-    WARNING = "warning"
+ShopIssueSeverity = DefinitionIssueSeverity
+ShopIssue = DefinitionIssue
+ShopValidation = DefinitionValidation
 
-
-@dataclass(frozen=True, slots=True)
-class ShopIssue:
-    """One publish-gate finding. Errors block publication; warnings never do."""
-
-    severity: ShopIssueSeverity
-    code: str
-    message: str
-    path: str
-
-
-@dataclass(frozen=True, slots=True)
-class ShopValidation:
-    issues: tuple[ShopIssue, ...] = field(default=())
-
-    @property
-    def errors(self) -> tuple[ShopIssue, ...]:
-        return tuple(issue for issue in self.issues if issue.severity is ShopIssueSeverity.ERROR)
-
-    @property
-    def warnings(self) -> tuple[ShopIssue, ...]:
-        return tuple(issue for issue in self.issues if issue.severity is ShopIssueSeverity.WARNING)
-
-    @property
-    def publishable(self) -> bool:
-        return not self.errors
-
-
-def _error(code: str, message: str, path: str) -> ShopIssue:
-    return ShopIssue(severity=ShopIssueSeverity.ERROR, code=code, message=message, path=path)
-
-
-def _warning(code: str, message: str, path: str) -> ShopIssue:
-    return ShopIssue(severity=ShopIssueSeverity.WARNING, code=code, message=message, path=path)
+_error = issue_error
+_warning = issue_warning
 
 
 def _validate_product(product: Product, payload: ShopPayload) -> list[ShopIssue]:
@@ -722,84 +652,14 @@ def validate_shop(payload: ShopPayload) -> ShopValidation:
             )
         )
 
-    return ShopValidation(
-        issues=tuple(
-            sorted(
-                issues,
-                key=lambda issue: (
-                    issue.severity is ShopIssueSeverity.WARNING,
-                    issue.path,
-                    issue.code,
-                ),
-            )
-        )
-    )
+    return validation_of(issues)
 
 
-class ShopChangeKind(StrEnum):
-    ADDED = "added"
-    REMOVED = "removed"
-    UPDATED = "updated"
+ShopChangeKind = DefinitionChangeKind
+ShopChange = DefinitionChange
 
-
-@dataclass(frozen=True, slots=True)
-class ShopChange:
-    """One authored difference between a shop draft and its latest published version."""
-
-    kind: ShopChangeKind
-    path: str
-    description: str
-
-
-def _keyed[EntryT](entries: tuple[EntryT, ...], key: Callable[[EntryT], str]) -> dict[str, EntryT]:
-    return {key(entry): entry for entry in entries}
-
-
-def _diff_collection[EntryT](
-    previous: tuple[EntryT, ...],
-    current: tuple[EntryT, ...],
-    *,
-    key: Callable[[EntryT], str],
-    label: Callable[[EntryT], str],
-    path: str,
-    noun: str,
-    include_updates: bool = True,
-) -> list[ShopChange]:
-    """Diff one keyed collection.
-
-    `include_updates=False` reports only membership, for collections whose entries are
-    diffed field by field elsewhere; otherwise one edit would be reported twice.
-    """
-    before = _keyed(previous, key)
-    after = _keyed(current, key)
-    changes: list[ShopChange] = []
-    for identifier in sorted(after.keys() - before.keys()):
-        changes.append(
-            ShopChange(
-                kind=ShopChangeKind.ADDED,
-                path=f"{path}.{identifier}",
-                description=f"Added {noun} {label(after[identifier])}",
-            )
-        )
-    for identifier in sorted(before.keys() - after.keys()):
-        changes.append(
-            ShopChange(
-                kind=ShopChangeKind.REMOVED,
-                path=f"{path}.{identifier}",
-                description=f"Removed {noun} {label(before[identifier])}",
-            )
-        )
-    if include_updates:
-        for identifier in sorted(before.keys() & after.keys()):
-            if before[identifier] != after[identifier]:
-                changes.append(
-                    ShopChange(
-                        kind=ShopChangeKind.UPDATED,
-                        path=f"{path}.{identifier}",
-                        description=f"Updated {noun} {label(after[identifier])}",
-                    )
-                )
-    return changes
+_keyed = keyed
+_diff_collection = diff_keyed_collection
 
 
 def _diff_product(previous: Product, current: Product) -> list[ShopChange]:

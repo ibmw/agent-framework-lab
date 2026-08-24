@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { CustomerEditorPage } from "./routes/CustomerEditorPage";
+import { CustomersPage } from "./routes/CustomersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
 import { ShopHomePage } from "./routes/ShopHomePage";
@@ -10,6 +12,8 @@ import {
 } from "./routes/ShopSetupPages";
 import { ShopsPage } from "./routes/ShopsPage";
 import { ShopVersionPage } from "./routes/ShopVersionPage";
+import { SupportIdentitiesPage } from "./routes/SupportIdentitiesPage";
+import { SupportIdentityEditorPage } from "./routes/SupportIdentityEditorPage";
 import { ShopWorkspace } from "./shell/ShopWorkspace";
 
 export function App() {
@@ -21,6 +25,10 @@ export function App() {
         <Route index element={<ShopHomePage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="products/:handle" element={<ProductEditorPage />} />
+        <Route path="customers" element={<CustomersPage />} />
+        <Route path="customers/:profileId" element={<CustomerEditorPage />} />
+        <Route path="support-identities" element={<SupportIdentitiesPage />} />
+        <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
         <Route path="setup/identity" element={<ShopIdentityPage />} />
         <Route path="setup/policies" element={<PoliciesAndFaqPage />} />
         <Route path="setup/support" element={<SupportGuidelinesPage />} />

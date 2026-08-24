@@ -241,3 +241,25 @@ class DefinitionVersionModel(Base):
     references: Mapped[list[dict[str, object]]] = mapped_column(JSON)
     payload: Mapped[dict[str, object]] = mapped_column(JSON)
     published_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class DefinitionShopAttachmentModel(Base):
+    """Which shops use a shop-independent definition.
+
+    An attachment scopes the Studio's per-shop lists; it pins no version and never enters
+    a content or sandbox fingerprint, so it is deliberately not an ADR 0012 reference.
+    """
+
+    __tablename__ = "definition_shop_attachments"
+    __table_args__ = (
+        CheckConstraint(
+            "definition_type IN ('customer_profile', 'support_identity')",
+            name="ck_definition_shop_attachments_type_valid",
+        ),
+        Index("ix_definition_shop_attachments_shop", "definition_type", "shop_id"),
+    )
+
+    definition_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    definition_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    shop_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    attached_at: Mapped[datetime] = mapped_column(UtcDateTime())

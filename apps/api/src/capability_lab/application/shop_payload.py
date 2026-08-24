@@ -8,11 +8,12 @@ and a stored version round-trips back into the typed domain aggregate.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
-from enum import StrEnum
-from typing import cast
 
+from capability_lab.application.canonical_document import (
+    DocumentReader,
+    require_schema_version,
+)
 from capability_lab.application.canonical_json import (
     CanonicalSerializationError,
     CanonicalValue,
@@ -170,99 +171,21 @@ def shop_content_fingerprint(payload: ShopPayload) -> str:
     return canonical_sha256(shop_payload_canonical_json(payload))
 
 
-class _Reader:
-    """Typed access to one canonical object, reporting the failing path on mismatch."""
-
-    __slots__ = ("_document", "_path")
-
-    def __init__(self, value: object, path: str) -> None:
-        if not isinstance(value, Mapping):
-            raise CanonicalSerializationError(f"{path} must be an object")
-        self._document = cast("Mapping[str, object]", value)
-        self._path = path
-
-    def text(self, key: str) -> str:
-        value = self._document.get(key)
-        if not isinstance(value, str):
-            raise CanonicalSerializationError(f"{self._path}.{key} must be a string")
-        return value
-
-    def optional_text(self, key: str) -> str | None:
-        return None if self._document.get(key) is None else self.text(key)
-
-    def integer(self, key: str) -> int:
-        value = self._document.get(key)
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise CanonicalSerializationError(f"{self._path}.{key} must be an integer")
-        return value
-
-    def boolean(self, key: str) -> bool:
-        value = self._document.get(key)
-        if not isinstance(value, bool):
-            raise CanonicalSerializationError(f"{self._path}.{key} must be a boolean")
-        return value
-
-    def enum[EnumT: StrEnum](self, enum_type: type[EnumT], key: str) -> EnumT:
-        try:
-            return enum_type(self.text(key))
-        except ValueError as error:
-            raise CanonicalSerializationError(
-                f"{self._path}.{key} is not a supported {enum_type.__name__}"
-            ) from error
-
-    def texts(self, key: str) -> tuple[str, ...]:
-        return tuple(
-            _require_text(value, f"{self._path}.{key}[{index}]")
-            for index, value in enumerate(self.sequence(key))
-        )
-
-    def enums[EnumT: StrEnum](self, enum_type: type[EnumT], key: str) -> tuple[EnumT, ...]:
-        values: list[EnumT] = []
-        for index, item in enumerate(self.sequence(key)):
-            path = f"{self._path}.{key}[{index}]"
-            try:
-                values.append(enum_type(_require_text(item, path)))
-            except ValueError as error:
-                raise CanonicalSerializationError(
-                    f"{path} is not a supported {enum_type.__name__}"
-                ) from error
-        return tuple(values)
-
-    def sequence(self, key: str) -> Sequence[object]:
-        value = self._document.get(key)
-        if not isinstance(value, Sequence) or isinstance(value, str | bytes):
-            raise CanonicalSerializationError(f"{self._path}.{key} must be a list")
-        return cast("Sequence[object]", value)
-
-    def readers(self, key: str) -> tuple[_Reader, ...]:
-        return tuple(
-            _Reader(value, f"{self._path}.{key}[{index}]")
-            for index, value in enumerate(self.sequence(key))
-        )
-
-    def reader(self, key: str) -> _Reader:
-        return _Reader(self._document.get(key), f"{self._path}.{key}")
-
-    def money(self, key: str) -> Money | None:
-        if self._document.get(key) is None:
-            return None
-        money = self.reader(key)
-        try:
-            amount = Decimal(money.text("amount"))
-        except InvalidOperation as error:
-            raise CanonicalSerializationError(
-                f"{self._path}.{key}.amount must be a decimal string"
-            ) from error
-        return Money(amount=amount, currency=money.enum(Currency, "currency"))
+def _read_money(reader: DocumentReader, key: str) -> Money | None:
+    """A variant price, which the schema allows to be null while the draft is unpriced."""
+    money = reader.optional_reader(key)
+    if money is None:
+        return None
+    try:
+        amount = Decimal(money.text("amount"))
+    except InvalidOperation as error:
+        raise CanonicalSerializationError(
+            f"{money.path}.amount must be a decimal string"
+        ) from error
+    return Money(amount=amount, currency=money.enum(Currency, "currency"))
 
 
-def _require_text(value: object, path: str) -> str:
-    if not isinstance(value, str):
-        raise CanonicalSerializationError(f"{path} must be a string")
-    return value
-
-
-def _read_variant(reader: _Reader) -> ProductVariant:
+def _read_variant(reader: DocumentReader) -> ProductVariant:
     return ProductVariant(
         sku=reader.text("sku"),
         option_values=tuple(
@@ -270,11 +193,11 @@ def _read_variant(reader: _Reader) -> ProductVariant:
         ),
         availability=reader.enum(VariantAvailability, "availability"),
         stock_quantity=reader.integer("stock_quantity"),
-        price=reader.money("price"),
+        price=_read_money(reader, "price"),
     )
 
 
-def _read_product(reader: _Reader) -> Product:
+def _read_product(reader: DocumentReader) -> Product:
     return Product(
         handle=reader.text("handle"),
         title=reader.text("title"),
@@ -317,12 +240,8 @@ def _read_product(reader: _Reader) -> Product:
 
 def shop_payload_from_document(document: object) -> ShopPayload:
     """Rebuild the typed aggregate from a stored canonical document."""
-    root = _Reader(document, "shop payload")
-    schema_version = root.text("canonical_schema_version")
-    if schema_version != SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION:
-        raise CanonicalSerializationError(
-            f"unsupported shop payload schema version {schema_version}"
-        )
+    root = DocumentReader(document, "shop payload")
+    require_schema_version(root, SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION, "shop payload")
     identity = root.reader("identity")
     return ShopPayload(
         identity=ShopIdentity(

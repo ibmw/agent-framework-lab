@@ -299,10 +299,237 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/customer-profiles": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List customer profiles, optionally scoped to one shop's attachments */
+    get: operations["listCustomerProfiles"];
+    put?: never;
+    /** Create a customer profile identity and its first draft */
+    post: operations["createCustomerProfile"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/customer-profiles/{profile_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable customer-profile draft */
+    get: operations["getCustomerProfileDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceCustomerProfileDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/customer-profiles/{profile_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft and preview the version publishing would create */
+    get: operations["previewCustomerProfileDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/customer-profiles/{profile_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a profile's published versions, newest first */
+    get: operations["listCustomerProfileVersions"];
+    put?: never;
+    /** Freeze the draft into the next immutable published version */
+    post: operations["publishCustomerProfile"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/customer-profiles/{profile_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published customer-profile version */
+    get: operations["getCustomerProfileVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/customer-profiles/{profile_id}/shops": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the shops this profile is attached to */
+    get: operations["listCustomerProfileShops"];
+    put?: never;
+    /** Attach the profile to a shop; attaching twice changes nothing */
+    post: operations["attachCustomerProfileToShop"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/customer-profiles/{profile_id}/shops/{shop_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Detach the profile from a shop without deleting the profile */
+    delete: operations["detachCustomerProfileFromShop"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/support-identities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List support identities with their published-version provenance */
+    get: operations["listSupportIdentities"];
+    put?: never;
+    /** Create a support identity and its first draft */
+    post: operations["createSupportIdentity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/support-identities/{identity_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable support-identity draft */
+    get: operations["getSupportIdentityDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceSupportIdentityDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/support-identities/{identity_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft and preview the version publishing would create */
+    get: operations["previewSupportIdentityDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/support-identities/{identity_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List an identity's published versions, newest first */
+    get: operations["listSupportIdentityVersions"];
+    put?: never;
+    /** Freeze the draft into the next immutable published version */
+    post: operations["publishSupportIdentity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/support-identities/{identity_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published support-identity version */
+    get: operations["getSupportIdentityVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** AccountFactsSchema */
+    AccountFactsSchema: {
+      /** Customer Since */
+      customer_since: string;
+      status: components["schemas"]["AccountStatus"];
+      loyalty_tier: components["schemas"]["LoyaltyTier"];
+      /** Marketing Opt In */
+      marketing_opt_in: boolean;
+      /** Notes */
+      notes: string;
+    };
+    /**
+     * AccountStatus
+     * @enum {string}
+     */
+    AccountStatus: "active" | "dormant" | "closed";
     /** ActionProposalResponse */
     ActionProposalResponse: {
       /**
@@ -355,6 +582,29 @@ export interface components {
       /** Trace Id */
       trace_id?: string | null;
     };
+    /** AddressSchema */
+    AddressSchema: {
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+      /** Recipient */
+      recipient: string;
+      /** Line1 */
+      line1: string;
+      /** Line2 */
+      line2: string | null;
+      /** Postal Code */
+      postal_code: string;
+      /** City */
+      city: string;
+      /** Region */
+      region: string | null;
+      /** Country */
+      country: string;
+      /** Is Default */
+      is_default: boolean;
+    };
     /** AgentFrameworkListResponse */
     AgentFrameworkListResponse: {
       /** Frameworks */
@@ -372,6 +622,14 @@ export interface components {
       capabilities: string[];
       /** Unavailability Reason */
       unavailability_reason?: string | null;
+    };
+    /** AttachCustomerProfileRequest */
+    AttachCustomerProfileRequest: {
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
     };
     /** AttributeSchema */
     AttributeSchema: {
@@ -393,6 +651,22 @@ export interface components {
      * @enum {string}
      */
     AttributeType: "text" | "number" | "boolean" | "choice" | "measurement";
+    /** BackgroundEntrySchema */
+    BackgroundEntrySchema: {
+      /** Id */
+      id: string;
+      kind: components["schemas"]["BackgroundKind"];
+      /** Occurred On */
+      occurred_on: string;
+      /** Note */
+      note: string;
+    };
+    /**
+     * BackgroundKind
+     * @description What a piece of authored pre-sandbox history is about.
+     * @enum {string}
+     */
+    BackgroundKind: "purchase" | "support_contact" | "account_event" | "life_event";
     /** ConversationListResponse */
     ConversationListResponse: {
       /** Conversations */
@@ -486,9 +760,24 @@ export interface components {
        */
       created_at: string;
     };
+    /** CreateCustomerProfileRequest */
+    CreateCustomerProfileRequest: {
+      identity: components["schemas"]["CustomerIdentitySchema"];
+      /** Customer Since */
+      customer_since: string;
+      /**
+       * Shop Id
+       * @description Attach the new profile to this shop; null creates it unattached.
+       */
+      shop_id: string | null;
+    };
     /** CreateShopRequest */
     CreateShopRequest: {
       identity: components["schemas"]["ShopIdentitySchema"];
+    };
+    /** CreateSupportIdentityRequest */
+    CreateSupportIdentityRequest: {
+      role: components["schemas"]["SupportRoleSchema"];
     };
     /**
      * Currency
@@ -496,6 +785,171 @@ export interface components {
      * @enum {string}
      */
     Currency: "EUR" | "USD" | "GBP";
+    /** CustomerIdentitySchema */
+    CustomerIdentitySchema: {
+      /** Given Name */
+      given_name: string;
+      /** Family Name */
+      family_name: string;
+      /** Email */
+      email: string;
+      /** Locale */
+      locale: string;
+      /**
+       * Phone
+       * @description Null when the profile has no phone number.
+       */
+      phone: string | null;
+    };
+    /**
+     * CustomerProfileContentSchema
+     * @description A customer profile as the API returns it, with derived read-only evidence.
+     */
+    CustomerProfileContentSchema: {
+      identity: components["schemas"]["CustomerIdentitySchema"];
+      account: components["schemas"]["AccountFactsSchema"];
+      persona: components["schemas"]["PersonaSchema"];
+      /** Addresses */
+      addresses: components["schemas"]["AddressSchema"][];
+      /** Background */
+      background: components["schemas"]["BackgroundEntrySchema"][];
+      /** Hidden Facts */
+      hidden_facts: components["schemas"]["HiddenFactSchema"][];
+      /** Display Name */
+      display_name: string;
+      /** Default Address Id */
+      default_address_id: string | null;
+    };
+    /** CustomerProfileDraftResponse */
+    CustomerProfileDraftResponse: {
+      /**
+       * Profile Id
+       * Format: uuid
+       */
+      profile_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["CustomerProfileContentSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /** CustomerProfileListResponse */
+    CustomerProfileListResponse: {
+      /** Profiles */
+      profiles: components["schemas"]["CustomerProfileSummarySchema"][];
+    };
+    /**
+     * CustomerProfilePayloadSchema
+     * @description The whole authored content of a customer-profile draft or published version.
+     */
+    CustomerProfilePayloadSchema: {
+      identity: components["schemas"]["CustomerIdentitySchema"];
+      account: components["schemas"]["AccountFactsSchema"];
+      persona: components["schemas"]["PersonaSchema"];
+      /** Addresses */
+      addresses: components["schemas"]["AddressSchema"][];
+      /** Background */
+      background: components["schemas"]["BackgroundEntrySchema"][];
+      /** Hidden Facts */
+      hidden_facts: components["schemas"]["HiddenFactSchema"][];
+    };
+    /**
+     * CustomerProfilePreviewResponse
+     * @description The publish gate: what blocks publication and what a publish would freeze.
+     */
+    CustomerProfilePreviewResponse: {
+      /**
+       * Profile Id
+       * Format: uuid
+       */
+      profile_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["CustomerProfileContentSchema"];
+    };
+    /**
+     * CustomerProfileShopsResponse
+     * @description The shops that use this profile; identity and content never differ per shop.
+     */
+    CustomerProfileShopsResponse: {
+      /**
+       * Profile Id
+       * Format: uuid
+       */
+      profile_id: string;
+      /** Shop Ids */
+      shop_ids: string[];
+    };
+    /** CustomerProfileSummarySchema */
+    CustomerProfileSummarySchema: {
+      /**
+       * Profile Id
+       * Format: uuid
+       */
+      profile_id: string;
+      /** Display Name */
+      display_name: string;
+      /** Email */
+      email: string;
+      /** Persona Traits */
+      persona_traits: string[];
+      /** Address Count */
+      address_count: number;
+      /** Default Address Label */
+      default_address_label: string | null;
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+      /** Attached Shop Count */
+      attached_shop_count: number;
+    };
+    /** CustomerProfileVersionListResponse */
+    CustomerProfileVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
+    };
+    /** CustomerProfileVersionResponse */
+    CustomerProfileVersionResponse: {
+      /**
+       * Profile Id
+       * Format: uuid
+       */
+      profile_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      content: components["schemas"]["CustomerProfileContentSchema"];
+    };
     /** CustomerResponse */
     CustomerResponse: {
       /**
@@ -523,6 +977,59 @@ export interface components {
       /** Confirmation Token */
       confirmation_token?: string | null;
     };
+    /**
+     * DefinitionChangeKind
+     * @enum {string}
+     */
+    DefinitionChangeKind: "added" | "removed" | "updated";
+    /** DefinitionChangeSchema */
+    DefinitionChangeSchema: {
+      kind: components["schemas"]["DefinitionChangeKind"];
+      /** Path */
+      path: string;
+      /** Description */
+      description: string;
+    };
+    /** DefinitionIssueSchema */
+    DefinitionIssueSchema: {
+      severity: components["schemas"]["DefinitionIssueSeverity"];
+      /** Code */
+      code: string;
+      /** Message */
+      message: string;
+      /** Path */
+      path: string;
+    };
+    /**
+     * DefinitionIssueSeverity
+     * @enum {string}
+     */
+    DefinitionIssueSeverity: "error" | "warning";
+    /**
+     * DefinitionValidationErrorResponse
+     * @description A publish refusal that carries the exact publish-gate findings.
+     */
+    DefinitionValidationErrorResponse: {
+      /** Code */
+      code: string;
+      /** Message */
+      message: string;
+      /** Request Id */
+      request_id: string;
+      /** Details */
+      details?: components["schemas"]["ValidationIssue"][] | null;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+    };
+    /** DefinitionVersionSummarySchema */
+    DefinitionVersionSummarySchema: {
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+    };
     /** ErrorResponse */
     ErrorResponse: {
       /** Code */
@@ -533,6 +1040,13 @@ export interface components {
       request_id: string;
       /** Details */
       details?: components["schemas"]["ValidationIssue"][] | null;
+    };
+    /** EscalationPolicySchema */
+    EscalationPolicySchema: {
+      /** Escalate To */
+      escalate_to: string;
+      /** Conditions */
+      conditions: string[];
     };
     /** FaqEntrySchema */
     FaqEntrySchema: {
@@ -609,6 +1123,15 @@ export interface components {
       /** Conversation Count */
       conversation_count: number;
     };
+    /** GuidanceNoteSchema */
+    GuidanceNoteSchema: {
+      /** Id */
+      id: string;
+      /** Title */
+      title: string;
+      /** Body */
+      body: string;
+    };
     /** HealthResponse */
     HealthResponse: {
       /**
@@ -621,6 +1144,18 @@ export interface components {
        * @constant
        */
       api_version: "v1";
+    };
+    /**
+     * HiddenFactSchema
+     * @description Known to the customer side of a simulation only.
+     */
+    HiddenFactSchema: {
+      /** Id */
+      id: string;
+      /** Note */
+      note: string;
+      /** Revealed When */
+      revealed_when: string;
     };
     /** InitialStateResponse */
     InitialStateResponse: {
@@ -636,6 +1171,11 @@ export interface components {
       /** Orders */
       orders: components["schemas"]["OrderResponse"][];
     };
+    /**
+     * LoyaltyTier
+     * @enum {string}
+     */
+    LoyaltyTier: "none" | "silver" | "gold";
     /** MediaReferenceSchema */
     MediaReferenceSchema: {
       /**
@@ -719,6 +1259,16 @@ export interface components {
       locale: string;
       /** Support Traits */
       support_traits: string[];
+    };
+    /**
+     * PersonaSchema
+     * @description Operator- and simulator-facing behavior; never part of a support agent's prompt.
+     */
+    PersonaSchema: {
+      /** Summary */
+      summary: string;
+      /** Traits */
+      traits: string[];
     };
     /**
      * PolicyKind
@@ -829,9 +1379,17 @@ export interface components {
        */
       average_rating: string | null;
     };
+    /** ReplaceCustomerProfileDraftRequest */
+    ReplaceCustomerProfileDraftRequest: {
+      payload: components["schemas"]["CustomerProfilePayloadSchema"];
+    };
     /** ReplaceShopDraftRequest */
     ReplaceShopDraftRequest: {
       payload: components["schemas"]["ShopPayloadSchema"];
+    };
+    /** ReplaceSupportIdentityDraftRequest */
+    ReplaceSupportIdentityDraftRequest: {
+      payload: components["schemas"]["SupportIdentityPayloadSchema"];
     };
     /** ReviewSchema */
     ReviewSchema: {
@@ -875,19 +1433,6 @@ export interface components {
     SendConversationMessageRequest: {
       /** Message */
       message: string;
-    };
-    /**
-     * ShopChangeKind
-     * @enum {string}
-     */
-    ShopChangeKind: "added" | "removed" | "updated";
-    /** ShopChangeSchema */
-    ShopChangeSchema: {
-      kind: components["schemas"]["ShopChangeKind"];
-      /** Path */
-      path: string;
-      /** Description */
-      description: string;
     };
     /**
      * ShopContentSchema
@@ -944,21 +1489,6 @@ export interface components {
       /** Channels */
       channels: components["schemas"]["SupportChannel"][];
     };
-    /** ShopIssueSchema */
-    ShopIssueSchema: {
-      severity: components["schemas"]["ShopIssueSeverity"];
-      /** Code */
-      code: string;
-      /** Message */
-      message: string;
-      /** Path */
-      path: string;
-    };
-    /**
-     * ShopIssueSeverity
-     * @enum {string}
-     */
-    ShopIssueSeverity: "error" | "warning";
     /** ShopListResponse */
     ShopListResponse: {
       /** Shops */
@@ -998,9 +1528,9 @@ export interface components {
       /** Publishable */
       publishable: boolean;
       /** Issues */
-      issues: components["schemas"]["ShopIssueSchema"][];
+      issues: components["schemas"]["DefinitionIssueSchema"][];
       /** Changes */
-      changes: components["schemas"]["ShopChangeSchema"][];
+      changes: components["schemas"]["DefinitionChangeSchema"][];
       /** Content Fingerprint */
       content_fingerprint: string;
       /** Latest Published Version */
@@ -1029,26 +1559,10 @@ export interface components {
       /** Published Version Count */
       published_version_count: number;
     };
-    /**
-     * ShopValidationErrorResponse
-     * @description A publish refusal that carries the exact publish-gate findings.
-     */
-    ShopValidationErrorResponse: {
-      /** Code */
-      code: string;
-      /** Message */
-      message: string;
-      /** Request Id */
-      request_id: string;
-      /** Details */
-      details?: components["schemas"]["ValidationIssue"][] | null;
-      /** Issues */
-      issues: components["schemas"]["ShopIssueSchema"][];
-    };
     /** ShopVersionListResponse */
     ShopVersionListResponse: {
       /** Versions */
-      versions: components["schemas"]["ShopVersionSummarySchema"][];
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
     };
     /** ShopVersionResponse */
     ShopVersionResponse: {
@@ -1070,15 +1584,6 @@ export interface components {
       /** Published At */
       published_at: string;
       content: components["schemas"]["ShopContentSchema"];
-    };
-    /** ShopVersionSummarySchema */
-    ShopVersionSummarySchema: {
-      /** Version */
-      version: number;
-      /** Content Fingerprint */
-      content_fingerprint: string;
-      /** Published At */
-      published_at: string;
     };
     /** StartConversationRequest */
     StartConversationRequest: {
@@ -1118,6 +1623,140 @@ export interface components {
       title: string;
       /** Body */
       body: string;
+    };
+    /** SupportIdentityDraftResponse */
+    SupportIdentityDraftResponse: {
+      /**
+       * Identity Id
+       * Format: uuid
+       */
+      identity_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["SupportIdentityPayloadSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /** SupportIdentityListResponse */
+    SupportIdentityListResponse: {
+      /** Identities */
+      identities: components["schemas"]["SupportIdentitySummarySchema"][];
+    };
+    /**
+     * SupportIdentityPayloadSchema
+     * @description The whole authored content of a support-identity draft or published version.
+     */
+    SupportIdentityPayloadSchema: {
+      role: components["schemas"]["SupportRoleSchema"];
+      /** Permissions */
+      permissions: components["schemas"]["SupportPermission"][];
+      /** Guidance */
+      guidance: components["schemas"]["GuidanceNoteSchema"][];
+      escalation: components["schemas"]["EscalationPolicySchema"];
+    };
+    /**
+     * SupportIdentityPreviewResponse
+     * @description The publish gate: what blocks publication and what a publish would freeze.
+     */
+    SupportIdentityPreviewResponse: {
+      /**
+       * Identity Id
+       * Format: uuid
+       */
+      identity_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["SupportIdentityPayloadSchema"];
+    };
+    /** SupportIdentitySummarySchema */
+    SupportIdentitySummarySchema: {
+      /**
+       * Identity Id
+       * Format: uuid
+       */
+      identity_id: string;
+      /** Name */
+      name: string;
+      /** Title */
+      title: string;
+      /** Permission Count */
+      permission_count: number;
+      /** Guidance Count */
+      guidance_count: number;
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+    };
+    /** SupportIdentityVersionListResponse */
+    SupportIdentityVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
+    };
+    /** SupportIdentityVersionResponse */
+    SupportIdentityVersionResponse: {
+      /**
+       * Identity Id
+       * Format: uuid
+       */
+      identity_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      content: components["schemas"]["SupportIdentityPayloadSchema"];
+    };
+    /**
+     * SupportPermission
+     * @description What a support identity is authorized to do; extended deliberately, in code.
+     * @enum {string}
+     */
+    SupportPermission:
+      | "read_catalog"
+      | "read_customer"
+      | "read_orders"
+      | "read_policies"
+      | "cancel_order"
+      | "change_shipping_address"
+      | "issue_refund"
+      | "apply_discount"
+      | "escalate_to_human";
+    /** SupportRoleSchema */
+    SupportRoleSchema: {
+      /** Name */
+      name: string;
+      /** Title */
+      title: string;
+      /** Description */
+      description: string;
     };
     /** ToneOfVoiceSchema */
     ToneOfVoiceSchema: {
@@ -1970,6 +2609,15 @@ export interface operations {
           "application/json": components["schemas"]["ShopListResponse"];
         };
       };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
     };
   };
   createShop: {
@@ -1994,7 +2642,7 @@ export interface operations {
           "application/json": components["schemas"]["ShopDraftResponse"];
         };
       };
-      /** @description Invalid shop content */
+      /** @description Invalid definition content */
       422: {
         headers: {
           [name: string]: unknown;
@@ -2026,7 +2674,7 @@ export interface operations {
           "application/json": components["schemas"]["ShopDraftResponse"];
         };
       };
-      /** @description The shop is not found */
+      /** @description The definition is not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -2035,7 +2683,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Invalid shop content */
+      /** @description Invalid definition content */
       422: {
         headers: {
           [name: string]: unknown;
@@ -2071,7 +2719,7 @@ export interface operations {
           "application/json": components["schemas"]["ShopDraftResponse"];
         };
       };
-      /** @description The shop is not found */
+      /** @description The definition is not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -2080,7 +2728,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Invalid shop content */
+      /** @description Invalid definition content */
       422: {
         headers: {
           [name: string]: unknown;
@@ -2112,7 +2760,7 @@ export interface operations {
           "application/json": components["schemas"]["ShopPreviewResponse"];
         };
       };
-      /** @description The shop is not found */
+      /** @description The definition is not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -2121,7 +2769,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Invalid shop content */
+      /** @description Invalid definition content */
       422: {
         headers: {
           [name: string]: unknown;
@@ -2153,7 +2801,7 @@ export interface operations {
           "application/json": components["schemas"]["ShopVersionListResponse"];
         };
       };
-      /** @description The shop is not found */
+      /** @description The definition is not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -2162,7 +2810,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Invalid shop content */
+      /** @description Invalid definition content */
       422: {
         headers: {
           [name: string]: unknown;
@@ -2194,7 +2842,7 @@ export interface operations {
           "application/json": components["schemas"]["ShopVersionResponse"];
         };
       };
-      /** @description The shop is not found */
+      /** @description The definition is not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -2218,7 +2866,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ShopValidationErrorResponse"];
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
         };
       };
     };
@@ -2230,7 +2878,7 @@ export interface operations {
       path: {
         /** @description Stable shop definition identifier. */
         shop_id: string;
-        /** @description Immutable published shop version number. */
+        /** @description Immutable published version number. */
         version: number;
       };
       cookie?: never;
@@ -2246,7 +2894,7 @@ export interface operations {
           "application/json": components["schemas"]["ShopVersionResponse"];
         };
       };
-      /** @description The shop is not found */
+      /** @description The definition is not found */
       404: {
         headers: {
           [name: string]: unknown;
@@ -2255,7 +2903,794 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description Invalid shop content */
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listCustomerProfiles: {
+    parameters: {
+      query?: {
+        /** @description List only the profiles attached to this shop. */
+        shop_id?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileListResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createCustomerProfile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateCustomerProfileRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileDraftResponse"];
+        };
+      };
+      /** @description The definition or the shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getCustomerProfileDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceCustomerProfileDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceCustomerProfileDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewCustomerProfileDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfilePreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listCustomerProfileVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishCustomerProfile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  getCustomerProfileVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listCustomerProfileShops: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileShopsResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  attachCustomerProfileToShop: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AttachCustomerProfileRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileShopsResponse"];
+        };
+      };
+      /** @description The definition or the shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  detachCustomerProfileFromShop: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable customer-profile identifier. */
+        profile_id: string;
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerProfileShopsResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listSupportIdentities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityListResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createSupportIdentity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateSupportIdentityRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityDraftResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getSupportIdentityDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable support-identity identifier. */
+        identity_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceSupportIdentityDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable support-identity identifier. */
+        identity_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceSupportIdentityDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewSupportIdentityDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable support-identity identifier. */
+        identity_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listSupportIdentityVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable support-identity identifier. */
+        identity_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishSupportIdentity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable support-identity identifier. */
+        identity_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  getSupportIdentityVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable support-identity identifier. */
+        identity_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportIdentityVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
       422: {
         headers: {
           [name: string]: unknown;

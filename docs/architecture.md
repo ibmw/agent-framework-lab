@@ -30,9 +30,11 @@ definitions, conversations, one safe cancellation action, a Pydantic AI adapter,
 selection. This is reusable evidence, not the target domain model.
 
 Milestone 1 has begun replacing it: the definition lifecycle (ADR 0012), the versioned shop and
-extensible catalog with its publish gate (ADR 0013), the `definition_drafts`/`definition_versions`
-tables, and the Studio application shell are target code. The POC's persona-first frontend was
-removed with that shell; its HTTP contracts remain published and tested without a UI consumer.
+extensible catalog with its publish gate (ADR 0013), versioned customer profiles and support
+identities on a shared authoring lifecycle (ADR 0014), the
+`definition_drafts`/`definition_versions`/`definition_shop_attachments` tables, and the Studio
+application shell are target code. The POC's persona-first frontend was removed with that shell;
+its HTTP contracts remain published and tested without a UI consumer.
 
 ## Binding dependency rule
 
@@ -150,7 +152,10 @@ evidence view; manually maintained pseudo-code is not authoritative evidence.
 Authorable definitions use mutable drafts and immutable published versions, stored as one canonical
 document per draft and per version in `definition_drafts` and `definition_versions`; the composite
 primary key `(definition_type, definition_id, version)` is the overwrite guard, and typed domain
-constructors re-validate every document on read (ADR 0013). Experiments and judge executions are
+constructors re-validate every document on read (ADR 0013). Only the payload codec and the publish
+gate are per-type: the draft/published lifecycle itself is shared (ADR 0014). Which shops use a
+shop-independent definition is a separate, unversioned relation in `definition_shop_attachments`,
+never a pinned reference and never part of a fingerprint. Experiments and judge executions are
 append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
 never changes the published definitions or canonical starting snapshot.
 

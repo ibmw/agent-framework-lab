@@ -1,7 +1,8 @@
 import type { ShopVersionResponse } from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getShopVersion, ShopApiError } from "../api/shops";
+import { LabApiError } from "../api/client";
+import { getShopVersion } from "../api/shops";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import { ratingLabel, variantOptionLabel, variantPriceLabel } from "../lib/shop";
 import { formatTimestamp, tableCellClasses, tableHeadClasses } from "../lib/ui";
@@ -20,7 +21,7 @@ export function ShopVersionPage() {
       .then(setPublished)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(cause instanceof ShopApiError ? cause.message : "That version is unavailable.");
+          setError(cause instanceof LabApiError ? cause.message : "That version is unavailable.");
         }
       });
     return () => controller.abort();

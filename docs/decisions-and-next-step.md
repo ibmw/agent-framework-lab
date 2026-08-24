@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-08-23
+Status: current — 2026-08-24
 
 ## Authoritative direction
 
@@ -100,9 +100,15 @@ SDK immediately.
    for `definition_drafts`/`definition_versions`, the `/api/v1/shops` contract, and the Studio
    application shell. The POC's persona-first frontend was removed with that shell; its HTTP
    contracts remain published and tested without a UI consumer.
-4. The next implementation task is `docs/PLAN.md` Milestone 1 Slice 3: versioned customer profiles
-   with the named address book, and versioned support identities, with their Studio forms on the
-   shell delivered by Slice 2.
+4. Milestone 1 Slice 3 is complete: ADR 0014 records the `customer-profile-payload-v1` and
+   `support-identity-payload-v1` schemas, the field-sensitivity classification that keeps synthetic
+   personal data out of logs and traces, the per-shop attachment that scopes the Studio's customer
+   list without making the profile shop-scoped, and the extraction of the shared draft/published
+   authoring lifecycle that every shop-independent definition now uses. Tone of voice stays
+   shop-level under ADR 0012 rather than joining the support identity.
+5. The next implementation task is `docs/PLAN.md` Milestone 2: the order editor with frozen
+   address copies, versioned tickets, the objective and mutation block libraries, and the scenario
+   editor, materializing the wrong-shipping-address sandbox.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

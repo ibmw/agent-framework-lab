@@ -1,20 +1,31 @@
 import type {
   ShopContentSchema,
+  ShopPayloadSchema,
   ShopPreviewResponse,
   ShopSummarySchema,
 } from "@agent-lab/contracts";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
+import { describeApiError } from "../api/client";
 import {
   getShopDraft,
   listShops,
   previewShopDraft,
   publishShop,
   replaceShopDraft,
-  ShopApiError,
 } from "../api/shops";
+import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { toPayload } from "../lib/shop";
 import { AppShell } from "./AppShell";
+
+const CLIENT: DefinitionClient<ShopContentSchema, ShopPayloadSchema, ShopPreviewResponse> = {
+  getDraft: getShopDraft,
+  previewDraft: previewShopDraft,
+  replaceDraft: replaceShopDraft,
+  publish: publishShop,
+  toPayload,
+  unavailable: "The shop service is unavailable.",
+};
 
 export interface ShopWorkspaceValue {
   shopId: string;
@@ -40,102 +51,47 @@ export function useShopWorkspace(): ShopWorkspaceValue {
   return value;
 }
 
-function describe(error: unknown): string {
-  if (error instanceof ShopApiError) {
-    return error.message;
-  }
-  return "The shop service is unavailable.";
-}
-
+/**
+ * The shop's own workspace: the shared definition editor plus the cross-shop list the top
+ * bar's switcher needs, exposed to every nested route through one context.
+ */
 export function ShopWorkspace() {
   const { shopId = "" } = useParams();
+  const editor = useDefinitionEditor(shopId, CLIENT);
   const [shops, setShops] = useState<ShopSummarySchema[]>([]);
-  const [content, setContent] = useState<ShopContentSchema | null>(null);
-  const [preview, setPreview] = useState<ShopPreviewResponse | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [shopsError, setShopsError] = useState<string | null>(null);
 
-  const reloadShops = useCallback(async (signal?: AbortSignal) => {
-    setShops((await listShops(signal)).shops);
+  const refreshShops = useCallback(async (signal?: AbortSignal) => {
+    try {
+      setShops((await listShops(signal)).shops);
+    } catch (cause: unknown) {
+      if (!signal?.aborted) {
+        setShopsError(describeApiError(cause, "The lab is unavailable."));
+      }
+    }
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      getShopDraft(shopId, controller.signal),
-      previewShopDraft(shopId, controller.signal),
-      reloadShops(controller.signal),
-    ])
-      .then(([draft, draftPreview]) => {
-        setContent(draft.content);
-        setPreview(draftPreview);
-        setDirty(false);
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(describe(cause));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+    void refreshShops(controller.signal);
     return () => controller.abort();
-  }, [shopId, reloadShops]);
+  }, [refreshShops]);
 
-  const edit = useCallback((next: ShopContentSchema) => {
-    setContent(next);
-    setDirty(true);
-  }, []);
-
+  // The switcher shows each shop's authored name, so the list follows any write that can
+  // change it.
+  const { save: saveDraft, publish: publishDraft } = editor;
   const save = useCallback(async () => {
-    if (!content) {
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const saved = await replaceShopDraft(shopId, toPayload(content));
-      setContent(saved.content);
-      setDirty(false);
-      setPreview(await previewShopDraft(shopId));
-      await reloadShops();
-    } catch (cause: unknown) {
-      setError(describe(cause));
-    } finally {
-      setSaving(false);
-    }
-  }, [content, shopId, reloadShops]);
+    await saveDraft();
+    await refreshShops();
+  }, [saveDraft, refreshShops]);
 
-  const publish = useCallback(async (): Promise<number | null> => {
-    // Publishing freezes what the server holds. Never let the button freeze an older
-    // draft than the edits sitting in this workspace.
-    if (dirty) {
-      setError("Save the draft before publishing so the frozen version matches your edits.");
-      return null;
-    }
-    setPublishing(true);
-    setError(null);
-    try {
-      const published = await publishShop(shopId);
-      setPreview(await previewShopDraft(shopId));
-      await reloadShops();
-      return published.version;
-    } catch (cause: unknown) {
-      setError(describe(cause));
-      return null;
-    } finally {
-      setPublishing(false);
-    }
-  }, [shopId, reloadShops, dirty]);
+  const publish = useCallback(async () => {
+    const version = await publishDraft();
+    await refreshShops();
+    return version;
+  }, [publishDraft, refreshShops]);
 
-  if (loading) {
+  if (editor.loading) {
     return (
       <AppShell shops={shops} currentShopId={shopId}>
         <p className="text-sm text-admin-muted">Loading shop…</p>
@@ -143,11 +99,11 @@ export function ShopWorkspace() {
     );
   }
 
-  if (!content) {
+  if (!editor.content) {
     return (
       <AppShell shops={shops}>
         <div role="alert" className="text-sm text-lab-error">
-          {error ?? "This shop could not be loaded."}
+          {editor.error ?? shopsError ?? "This shop could not be loaded."}
         </div>
       </AppShell>
     );
@@ -159,13 +115,13 @@ export function ShopWorkspace() {
         value={{
           shopId,
           shops,
-          content,
-          preview,
-          dirty,
-          saving,
-          publishing,
-          error,
-          edit,
+          content: editor.content,
+          preview: editor.preview,
+          dirty: editor.dirty,
+          saving: editor.saving,
+          publishing: editor.publishing,
+          error: editor.error ?? shopsError,
+          edit: editor.edit,
           save,
           publish,
         }}
