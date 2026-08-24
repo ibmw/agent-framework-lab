@@ -53,6 +53,7 @@ from capability_lab.application.scenario_generation import (
 )
 from capability_lab.application.shops import SHOP_CODEC
 from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
+from capability_lab.application.tickets import TICKET_CODEC
 from capability_lab.domain.customer_profile import CustomerProfilePayload
 from capability_lab.domain.definitions import (
     DefinitionDraft,
@@ -74,6 +75,7 @@ from capability_lab.domain.entities import (
 )
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload
+from capability_lab.domain.ticket import TicketPayload
 from capability_lab.infrastructure.models import (
     ActionProposalModel,
     ConversationSessionModel,
@@ -1419,6 +1421,10 @@ def support_identity_repository(
     session: Session,
 ) -> SqlAlchemyDefinitionRepository[SupportIdentityPayload]:
     return SqlAlchemyDefinitionRepository(session, SUPPORT_IDENTITY_CODEC)
+
+
+def ticket_repository(session: Session) -> SqlAlchemyDefinitionRepository[TicketPayload]:
+    return SqlAlchemyDefinitionRepository(session, TICKET_CODEC)
 
 
 class SqlAlchemyPublishedVersionDirectory:
