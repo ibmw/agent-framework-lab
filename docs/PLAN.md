@@ -38,9 +38,11 @@ The current POC already proves:
 
 Milestone 1 Slice 2 replaced the persona-first frontend with the target Studio shell and delivered
 the versioned shop and catalog (ADR 0013). Slice 3 added versioned customer profiles and support
-identities on a shared authoring lifecycle (ADR 0014). The POC's conversation, persona, and
-order-action HTTP contracts remain published and tested but have no UI consumer until the
-Milestone 2–4 surfaces are built on the new shell.
+identities on a shared authoring lifecycle (ADR 0014). Milestone 2 has begun with shop-scoped order
+fixtures: typed status axes, derived totals, authored events, and selection-only line items and
+shipping addresses (ADR 0015). The POC's conversation, persona, and order-action HTTP contracts
+remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
+the new shell.
 
 The POC does not implement the target Scenario Studio, published agent configurations, paired
 experiment runner, participant-driver port, LLM judge, experiment-first history, or target
@@ -268,7 +270,7 @@ instance.
 
 ### Outcomes
 
-- [ ] Author order fixtures through the order editor: typed status transitions, derived totals,
+- [x] Author order fixtures through the order editor: typed status transitions, derived totals,
   authored order events, and a shipping address selected from the customer's address book and
   stored as a frozen, source-labeled copy.
 - [ ] Define versioned tickets (channel, origin references, prior conversation, trigger) and the
@@ -289,6 +291,13 @@ instance.
 
 Frames: 2 · Orders, 2b · Order editor, 3 · Tickets — helpdesk view, 4 · Scenario editor — composed
 blocks, 4a · Objective block library, and 4b · Mutation block library.
+
+Order-fixture evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
+the customer's stale address, and the frozen copy survives an edit to the address-book entry it came
+from. ADR 0015 records the `order-fixture-v1` schema, the decision that an order is shop-scoped
+authored state rather than a definition, the forward-only status graph, the selection-only write
+contract, and the drift findings that replace ADR 0014's deferred address-deletion check. Freezing an
+order into a published scenario version arrives with the scenario outcome above.
 
 ### Acceptance criteria
 

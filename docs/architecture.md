@@ -31,9 +31,9 @@ selection. This is reusable evidence, not the target domain model.
 
 Milestone 1 has begun replacing it: the definition lifecycle (ADR 0012), the versioned shop and
 extensible catalog with its publish gate (ADR 0013), versioned customer profiles and support
-identities on a shared authoring lifecycle (ADR 0014), the
-`definition_drafts`/`definition_versions`/`definition_shop_attachments` tables, and the Studio
-application shell are target code. The POC's persona-first frontend was removed with that shell;
+identities on a shared authoring lifecycle (ADR 0014), shop-scoped order fixtures (ADR 0015), the
+`definition_drafts`/`definition_versions`/`definition_shop_attachments`/`shop_order_fixtures` tables,
+and the Studio application shell are target code. The POC's persona-first frontend was removed with that shell;
 its HTTP contracts remain published and tested without a UI consumer.
 
 ## Binding dependency rule
@@ -155,7 +155,10 @@ primary key `(definition_type, definition_id, version)` is the overwrite guard, 
 constructors re-validate every document on read (ADR 0013). Only the payload codec and the publish
 gate are per-type: the draft/published lifecycle itself is shared (ADR 0014). Which shops use a
 shop-independent definition is a separate, unversioned relation in `definition_shop_attachments`,
-never a pinned reference and never part of a fingerprint. Experiments and judge executions are
+never a pinned reference and never part of a fingerprint. Not every authored resource is a
+definition: an order fixture is shop-scoped authored state with no version of its own, stored as one
+canonical document with a content fingerprint so a published scenario can freeze a copy of it
+(ADR 0015). Experiments and judge executions are
 append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
 never changes the published definitions or canonical starting snapshot.
 
