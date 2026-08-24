@@ -37,6 +37,7 @@ from capability_lab.application.definition_authoring import DefinitionNotPublish
 from capability_lab.application.definition_resolution import (
     MissingDraftError,
     PublishedVersionExistsError,
+    UnpublishedReferenceError,
 )
 from capability_lab.application.order_actions import (
     ActionConfirmationError,
@@ -82,6 +83,15 @@ from capability_lab.application.support_identities import (
     SupportIdentityService,
     SupportIdentityVersionNotFoundError,
 )
+from capability_lab.application.tickets import (
+    TicketCustomerChangeError,
+    TicketCustomerNotInShopError,
+    TicketNotFoundError,
+    TicketNotPublishableError,
+    TicketReferenceExistsError,
+    TicketService,
+    TicketVersionNotFoundError,
+)
 from capability_lab.domain.customer_profile import CustomerProfileConfigurationError
 from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
@@ -91,6 +101,7 @@ from capability_lab.domain.order_fixture import (
 )
 from capability_lab.domain.shop import ShopConfigurationError
 from capability_lab.domain.support_identity import SupportIdentityConfigurationError
+from capability_lab.domain.ticket import TicketConfigurationError
 from capability_lab.infrastructure.agents.registry import create_agent_registry
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.config import Settings, get_settings
@@ -111,12 +122,14 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyGeneratedScenarioRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
+    SqlAlchemyPublishedVersionDirectory,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
     SqlAlchemyShopDirectory,
     customer_profile_repository,
     shop_repository,
     support_identity_repository,
+    ticket_repository,
 )
 from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
 from capability_lab.presentation.base import ErrorResponse, StrictApiModel, ValidationIssue
@@ -125,6 +138,7 @@ from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.support_identities import SupportIdentityRoutes
+from capability_lab.presentation.tickets import TicketRoutes
 
 API_TITLE = "Agent Framework Capability Lab API"
 API_VERSION = "1.0.0"
@@ -819,6 +833,7 @@ _NOT_PUBLISHABLE_CODES: dict[type[DefinitionNotPublishableError], str] = {
     ShopNotPublishableError: "shop_not_publishable",
     CustomerProfileNotPublishableError: "customer_profile_not_publishable",
     SupportIdentityNotPublishableError: "support_identity_not_publishable",
+    TicketNotPublishableError: "ticket_not_publishable",
 }
 
 
@@ -933,6 +948,42 @@ async def _order_transition_handler(request: Request, error: Exception) -> JSONR
 async def _order_configuration_handler(request: Request, error: Exception) -> JSONResponse:
     return _error_response(
         request, status_code=422, code="order_configuration_error", message=str(error)
+    )
+
+
+async def _ticket_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(request, status_code=404, code="ticket_not_found", message=str(error))
+
+
+async def _ticket_version_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="ticket_version_not_found", message=str(error)
+    )
+
+
+async def _ticket_reference_exists_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=409, code="ticket_reference_exists", message=str(error)
+    )
+
+
+async def _ticket_customer_handler(request: Request, error: Exception) -> JSONResponse:
+    """A ticket named a customer this shop does not use, or tried to change its own."""
+    return _error_response(
+        request, status_code=422, code="ticket_customer_error", message=str(error)
+    )
+
+
+async def _ticket_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=422, code="ticket_configuration_error", message=str(error)
+    )
+
+
+async def _unpublished_reference_handler(request: Request, error: Exception) -> JSONResponse:
+    """Publishing pins exact versions, so an unpublished target stops the publication."""
+    return _error_response(
+        request, status_code=422, code="definition_reference_unpublished", message=str(error)
     )
 
 
@@ -1074,6 +1125,13 @@ def create_app(
     application.add_exception_handler(OrderSelectionError, _order_selection_handler)
     application.add_exception_handler(OrderTransitionError, _order_transition_handler)
     application.add_exception_handler(OrderFixtureConfigurationError, _order_configuration_handler)
+    application.add_exception_handler(TicketNotFoundError, _ticket_not_found_handler)
+    application.add_exception_handler(TicketVersionNotFoundError, _ticket_version_not_found_handler)
+    application.add_exception_handler(TicketReferenceExistsError, _ticket_reference_exists_handler)
+    application.add_exception_handler(TicketCustomerNotInShopError, _ticket_customer_handler)
+    application.add_exception_handler(TicketCustomerChangeError, _ticket_customer_handler)
+    application.add_exception_handler(TicketConfigurationError, _ticket_configuration_handler)
+    application.add_exception_handler(UnpublishedReferenceError, _unpublished_reference_handler)
     application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
     application.add_exception_handler(ShopConfigurationError, _shop_configuration_handler)
@@ -1133,6 +1191,18 @@ def create_app(
                 shop_repository(session),
                 customer_profile_repository(session),
                 SqlAlchemyDefinitionShopAttachmentRepository(session),
+                clock,
+            )
+
+    def ticket_service() -> Generator[TicketService, None, None]:
+        with session_scope(factory) as session:
+            yield TicketService(
+                ticket_repository(session),
+                shop_repository(session),
+                customer_profile_repository(session),
+                SqlAlchemyOrderFixtureRepository(session),
+                SqlAlchemyDefinitionShopAttachmentRepository(session),
+                SqlAlchemyPublishedVersionDirectory(session),
                 clock,
             )
 
@@ -1638,6 +1708,7 @@ def create_app(
     OrderRoutes(order_service).register(router)
     CustomerProfileRoutes(customer_profile_service).register(router)
     SupportIdentityRoutes(support_identity_service).register(router)
+    TicketRoutes(ticket_service).register(router)
     application.include_router(router)
     return application
 

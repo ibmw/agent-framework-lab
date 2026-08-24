@@ -547,6 +547,111 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/tickets": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List one shop's tickets */
+    get: operations["listTickets"];
+    put?: never;
+    /** Open a ticket for one of this shop's customers */
+    post: operations["createTicket"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/tickets/{ticket_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable ticket draft */
+    get: operations["getTicketDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceTicketDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/tickets/{ticket_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft against its shop and preview the version it would freeze */
+    get: operations["previewTicketDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/tickets/{ticket_id}/context": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the customer, linked orders, and same-shop resources around a ticket */
+    get: operations["getTicketContext"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/tickets/{ticket_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a ticket's published versions, newest first */
+    get: operations["listTicketVersions"];
+    put?: never;
+    /** Freeze the draft, pinning its shop and customer-profile versions */
+    post: operations["publishTicket"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/tickets/{ticket_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published ticket version */
+    get: operations["getTicketVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -837,6 +942,22 @@ export interface components {
     /** CreateSupportIdentityRequest */
     CreateSupportIdentityRequest: {
       role: components["schemas"]["SupportRoleSchema"];
+    };
+    /** CreateTicketRequest */
+    CreateTicketRequest: {
+      /**
+       * Reference
+       * @description The business reference support agents quote, unique inside one shop.
+       */
+      reference: string;
+      /** Subject */
+      subject: string;
+      /**
+       * Customer Profile Id
+       * Format: uuid
+       */
+      customer_profile_id: string;
+      channel: components["schemas"]["SupportChannel"];
     };
     /**
      * Currency
@@ -1659,6 +1780,10 @@ export interface components {
     ReplaceSupportIdentityDraftRequest: {
       payload: components["schemas"]["SupportIdentityPayloadSchema"];
     };
+    /** ReplaceTicketDraftRequest */
+    ReplaceTicketDraftRequest: {
+      payload: components["schemas"]["TicketPayloadSchema"];
+    };
     /** ReviewSchema */
     ReviewSchema: {
       /** Id */
@@ -1938,6 +2063,18 @@ export interface components {
       order_ids: string[];
     };
     /**
+     * SuggestedDocumentKind
+     * @description Which of the shop's document collections a suggestion points into.
+     * @enum {string}
+     */
+    SuggestedDocumentKind: "policy" | "support_guideline" | "faq_entry";
+    /** SuggestedDocumentSchema */
+    SuggestedDocumentSchema: {
+      kind: components["schemas"]["SuggestedDocumentKind"];
+      /** Document Id */
+      document_id: string;
+    };
+    /**
      * SupportChannel
      * @enum {string}
      */
@@ -2084,6 +2221,346 @@ export interface components {
       title: string;
       /** Description */
       description: string;
+    };
+    /**
+     * TicketAuthor
+     * @description Who wrote one fixture message.
+     *
+     *     `SUPPORT_AGENT` is recorded history — a past human agent — never the agent under test.
+     *     Live replies belong to a run, not to the ticket.
+     * @enum {string}
+     */
+    TicketAuthor: "customer" | "support_agent";
+    /**
+     * TicketContentSchema
+     * @description A ticket as the API returns it, with the derived evidence a client must not author.
+     */
+    TicketContentSchema: {
+      /**
+       * Reference
+       * @description The business reference support agents quote, unique inside one shop.
+       */
+      reference: string;
+      /** Subject */
+      subject: string;
+      channel: components["schemas"]["SupportChannel"];
+      status: components["schemas"]["TicketStatus"];
+      origin: components["schemas"]["TicketOriginSchema"];
+      /** Tags */
+      tags: string[];
+      /** History */
+      history: components["schemas"]["TicketMessageSchema"][];
+      /** @description The first message every arm receives; null while the draft has none. */
+      trigger: components["schemas"]["TicketMessageSchema"] | null;
+      /** Linked Order Ids */
+      linked_order_ids: string[];
+      /** Suggested Documents */
+      suggested_documents: components["schemas"]["SuggestedDocumentSchema"][];
+      /**
+       * Customer Profile Id
+       * Format: uuid
+       */
+      customer_profile_id: string;
+      /**
+       * Opened At
+       * @description When the incident opened: the trigger's moment, never authored separately.
+       */
+      opened_at: string | null;
+      /** Message Count */
+      message_count: number;
+    };
+    /**
+     * TicketContextSchema
+     * @description Everything around the ticket the workspace shows and the ticket never stores.
+     */
+    TicketContextSchema: {
+      customer: components["schemas"]["TicketCustomerSchema"];
+      /** Linked Orders */
+      linked_orders: components["schemas"]["TicketOrderSchema"][];
+      /** Other Tickets */
+      other_tickets: components["schemas"]["TicketReferenceSchema"][];
+      resources: components["schemas"]["TicketShopResourcesSchema"];
+    };
+    /** TicketCustomerSchema */
+    TicketCustomerSchema: {
+      /**
+       * Profile Id
+       * Format: uuid
+       */
+      profile_id: string;
+      /** Display Name */
+      display_name: string;
+      /** Email */
+      email: string;
+      /** Locale */
+      locale: string;
+      /** Persona Traits */
+      persona_traits: string[];
+      /** Default Address Label */
+      default_address_label: string | null;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Order Count */
+      order_count: number;
+    };
+    /** TicketDraftResponse */
+    TicketDraftResponse: {
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["TicketContentSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /** TicketListResponse */
+    TicketListResponse: {
+      /** Tickets */
+      tickets: components["schemas"]["TicketSummarySchema"][];
+    };
+    /**
+     * TicketMessageSchema
+     * @description One fixture message. Live replies happen on the Bench and are never authored here.
+     */
+    TicketMessageSchema: {
+      /** Id */
+      id: string;
+      author: components["schemas"]["TicketAuthor"];
+      /** Body */
+      body: string;
+      /**
+       * Sent At
+       * Format: date-time
+       * @description RFC 3339 instant with an explicit UTC offset.
+       */
+      sent_at: string;
+    };
+    /**
+     * TicketOrderSchema
+     * @description One of this customer's orders, as the pickers and the linked-objects card show it.
+     */
+    TicketOrderSchema: {
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /** Reference */
+      reference: string;
+      /** Placed At */
+      placed_at: string;
+      payment_status: components["schemas"]["PaymentStatus"];
+      fulfilment_status: components["schemas"]["FulfilmentStatus"];
+      /** Total Amount */
+      total_amount: string;
+      /** Currency */
+      currency: string;
+      /** Shipping Label */
+      shipping_label: string | null;
+    };
+    /**
+     * TicketOriginKind
+     * @description Where the customer was when the incident started.
+     * @enum {string}
+     */
+    TicketOriginKind: "product_page" | "order_page" | "checkout" | "faq" | "support_entry";
+    /**
+     * TicketOriginSchema
+     * @description Where the interaction started, as a minimal reference the agent resolves by tool.
+     */
+    TicketOriginSchema: {
+      kind: components["schemas"]["TicketOriginKind"];
+      /**
+       * Product Handle
+       * @description Set only for a product-page origin; null otherwise.
+       */
+      product_handle: string | null;
+      /**
+       * Order Id
+       * @description Set only for an order-page origin; null otherwise.
+       */
+      order_id: string | null;
+    };
+    /**
+     * TicketPayloadSchema
+     * @description The whole authored content of a ticket draft or published version.
+     */
+    TicketPayloadSchema: {
+      /**
+       * Reference
+       * @description The business reference support agents quote, unique inside one shop.
+       */
+      reference: string;
+      /** Subject */
+      subject: string;
+      channel: components["schemas"]["SupportChannel"];
+      status: components["schemas"]["TicketStatus"];
+      origin: components["schemas"]["TicketOriginSchema"];
+      /** Tags */
+      tags: string[];
+      /** History */
+      history: components["schemas"]["TicketMessageSchema"][];
+      /** @description The first message every arm receives; null while the draft has none. */
+      trigger: components["schemas"]["TicketMessageSchema"] | null;
+      /** Linked Order Ids */
+      linked_order_ids: string[];
+      /** Suggested Documents */
+      suggested_documents: components["schemas"]["SuggestedDocumentSchema"][];
+    };
+    /**
+     * TicketPreviewResponse
+     * @description The publish gate: what blocks publication and what a publish would freeze.
+     */
+    TicketPreviewResponse: {
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["TicketContentSchema"];
+    };
+    /** TicketReferenceSchema */
+    TicketReferenceSchema: {
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /** Reference */
+      reference: string;
+      /** Subject */
+      subject: string;
+      status: components["schemas"]["TicketStatus"];
+    };
+    /**
+     * TicketShopResourcesSchema
+     * @description Exactly what this ticket may name, so a picker cannot offer a publish-gate error.
+     */
+    TicketShopResourcesSchema: {
+      /** Channels */
+      channels: components["schemas"]["SupportChannel"][];
+      /** Product Handles */
+      product_handles: string[];
+      /** Orders */
+      orders: components["schemas"]["TicketOrderSchema"][];
+      /** Policy Ids */
+      policy_ids: string[];
+      /** Support Guideline Ids */
+      support_guideline_ids: string[];
+      /** Faq Entry Ids */
+      faq_entry_ids: string[];
+    };
+    /**
+     * TicketStatus
+     * @description Where the incident stands.
+     *
+     *     Deliberately without a transition graph, unlike an order's two status axes. An order's
+     *     statuses describe money and goods moving in one direction; a ticket is reopened all the
+     *     time, and a fixture authored after the fact may legitimately record either state.
+     * @enum {string}
+     */
+    TicketStatus: "open" | "resolved";
+    /** TicketSummarySchema */
+    TicketSummarySchema: {
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /** Reference */
+      reference: string;
+      /** Subject */
+      subject: string;
+      /**
+       * Customer Profile Id
+       * Format: uuid
+       */
+      customer_profile_id: string;
+      /** Customer Display Name */
+      customer_display_name: string;
+      channel: components["schemas"]["SupportChannel"];
+      status: components["schemas"]["TicketStatus"];
+      origin_kind: components["schemas"]["TicketOriginKind"];
+      /** Preview */
+      preview: string;
+      /** Opened At */
+      opened_at: string | null;
+      /** Message Count */
+      message_count: number;
+      /** Tags */
+      tags: string[];
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+    };
+    /** TicketVersionListResponse */
+    TicketVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
+    };
+    /**
+     * TicketVersionResponse
+     * @description One frozen version, with the exact shop and customer versions it pinned.
+     */
+    TicketVersionResponse: {
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      /** Shop Version */
+      shop_version: number;
+      /** Customer Profile Version */
+      customer_profile_version: number;
+      content: components["schemas"]["TicketContentSchema"];
     };
     /** ToneOfVoiceSchema */
     ToneOfVoiceSchema: {
@@ -4241,6 +4718,426 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SupportIdentityVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listTickets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketListResponse"];
+        };
+      };
+      /** @description The definition or the shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createTicket: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateTicketRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketDraftResponse"];
+        };
+      };
+      /** @description The definition or the shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another ticket in this shop already uses that reference */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid ticket content, or a customer this shop does not use */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getTicketDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable ticket identifier inside one shop. */
+        ticket_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceTicketDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable ticket identifier inside one shop. */
+        ticket_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceTicketDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another ticket in this shop already uses that reference */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid ticket content, or a customer this shop does not use */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewTicketDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable ticket identifier inside one shop. */
+        ticket_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getTicketContext: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable ticket identifier inside one shop. */
+        ticket_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketContextSchema"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listTicketVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable ticket identifier inside one shop. */
+        ticket_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishTicket: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable ticket identifier inside one shop. */
+        ticket_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors, or its shop or customer profile has no published version to pin */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getTicketVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable ticket identifier inside one shop. */
+        ticket_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TicketVersionResponse"];
         };
       };
       /** @description The definition is not found */

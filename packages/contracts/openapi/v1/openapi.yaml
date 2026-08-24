@@ -1902,6 +1902,405 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/tickets:
+    get:
+      summary: List one shop's tickets
+      operationId: listTickets
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketListResponse'
+        '404':
+          description: The definition or the shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Open a ticket for one of this shop's customers
+      operationId: createTicket
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTicketRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDraftResponse'
+        '404':
+          description: The definition or the shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another ticket in this shop already uses that reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid ticket content, or a customer this shop does not use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/tickets/{ticket_id}/draft:
+    get:
+      summary: Retrieve the mutable ticket draft
+      operationId: getTicketDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable ticket identifier inside one shop.
+          title: Ticket Id
+        description: Stable ticket identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceTicketDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable ticket identifier inside one shop.
+          title: Ticket Id
+        description: Stable ticket identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceTicketDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another ticket in this shop already uses that reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid ticket content, or a customer this shop does not use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/tickets/{ticket_id}/draft/preview:
+    get:
+      summary: Validate the draft against its shop and preview the version it would
+        freeze
+      operationId: previewTicketDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable ticket identifier inside one shop.
+          title: Ticket Id
+        description: Stable ticket identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/tickets/{ticket_id}/context:
+    get:
+      summary: Read the customer, linked orders, and same-shop resources around a
+        ticket
+      operationId: getTicketContext
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable ticket identifier inside one shop.
+          title: Ticket Id
+        description: Stable ticket identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketContextSchema'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/tickets/{ticket_id}/versions:
+    post:
+      summary: Freeze the draft, pinning its shop and customer-profile versions
+      operationId: publishTicket
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable ticket identifier inside one shop.
+          title: Ticket Id
+        description: Stable ticket identifier inside one shop.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors, or its shop or customer
+            profile has no published version to pin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: List a ticket's published versions, newest first
+      operationId: listTicketVersions
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable ticket identifier inside one shop.
+          title: Ticket Id
+        description: Stable ticket identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/tickets/{ticket_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published ticket version
+      operationId: getTicketVersion
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: ticket_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable ticket identifier inside one shop.
+          title: Ticket Id
+        description: Stable ticket identifier inside one shop.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     AccountFactsSchema:
@@ -2451,6 +2850,35 @@ components:
       required:
       - role
       title: CreateSupportIdentityRequest
+    CreateTicketRequest:
+      properties:
+        reference:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[A-Z0-9]+(?:-[A-Z0-9]+)*$
+          title: Reference
+          description: The business reference support agents quote, unique inside
+            one shop.
+        subject:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Subject
+        customer_profile_id:
+          type: string
+          format: uuid
+          title: Customer Profile Id
+        channel:
+          $ref: '#/components/schemas/SupportChannel'
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - subject
+      - customer_profile_id
+      - channel
+      title: CreateTicketRequest
     Currency:
       type: string
       enum:
@@ -4105,6 +4533,15 @@ components:
       required:
       - payload
       title: ReplaceSupportIdentityDraftRequest
+    ReplaceTicketDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/TicketPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceTicketDraftRequest
     ReviewSchema:
       properties:
         id:
@@ -4682,6 +5119,30 @@ components:
       - product_ids
       - order_ids
       title: StructuredSupportResultResponse
+    SuggestedDocumentKind:
+      type: string
+      enum:
+      - policy
+      - support_guideline
+      - faq_entry
+      title: SuggestedDocumentKind
+      description: Which of the shop's document collections a suggestion points into.
+    SuggestedDocumentSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/SuggestedDocumentKind'
+        document_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Document Id
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - document_id
+      title: SuggestedDocumentSchema
     SupportChannel:
       type: string
       enum:
@@ -4951,6 +5412,656 @@ components:
       - title
       - description
       title: SupportRoleSchema
+    TicketAuthor:
+      type: string
+      enum:
+      - customer
+      - support_agent
+      title: TicketAuthor
+      description: 'Who wrote one fixture message.
+
+
+        `SUPPORT_AGENT` is recorded history — a past human agent — never the agent
+        under test.
+
+        Live replies belong to a run, not to the ticket.'
+    TicketContentSchema:
+      properties:
+        reference:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[A-Z0-9]+(?:-[A-Z0-9]+)*$
+          title: Reference
+          description: The business reference support agents quote, unique inside
+            one shop.
+        subject:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Subject
+        channel:
+          $ref: '#/components/schemas/SupportChannel'
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        origin:
+          $ref: '#/components/schemas/TicketOriginSchema'
+        tags:
+          items:
+            type: string
+            maxLength: 64
+            minLength: 1
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          type: array
+          title: Tags
+        history:
+          items:
+            $ref: '#/components/schemas/TicketMessageSchema'
+          type: array
+          title: History
+        trigger:
+          anyOf:
+          - $ref: '#/components/schemas/TicketMessageSchema'
+          - type: 'null'
+          description: The first message every arm receives; null while the draft
+            has none.
+        linked_order_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Linked Order Ids
+        suggested_documents:
+          items:
+            $ref: '#/components/schemas/SuggestedDocumentSchema'
+          type: array
+          title: Suggested Documents
+        customer_profile_id:
+          type: string
+          format: uuid
+          title: Customer Profile Id
+        opened_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Opened At
+          description: 'When the incident opened: the trigger''s moment, never authored
+            separately.'
+        message_count:
+          type: integer
+          title: Message Count
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - subject
+      - channel
+      - status
+      - origin
+      - tags
+      - history
+      - trigger
+      - linked_order_ids
+      - suggested_documents
+      - customer_profile_id
+      - opened_at
+      - message_count
+      title: TicketContentSchema
+      description: A ticket as the API returns it, with the derived evidence a client
+        must not author.
+    TicketContextSchema:
+      properties:
+        customer:
+          $ref: '#/components/schemas/TicketCustomerSchema'
+        linked_orders:
+          items:
+            $ref: '#/components/schemas/TicketOrderSchema'
+          type: array
+          title: Linked Orders
+        other_tickets:
+          items:
+            $ref: '#/components/schemas/TicketReferenceSchema'
+          type: array
+          title: Other Tickets
+        resources:
+          $ref: '#/components/schemas/TicketShopResourcesSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - customer
+      - linked_orders
+      - other_tickets
+      - resources
+      title: TicketContextSchema
+      description: Everything around the ticket the workspace shows and the ticket
+        never stores.
+    TicketCustomerSchema:
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          title: Profile Id
+        display_name:
+          type: string
+          title: Display Name
+        email:
+          type: string
+          title: Email
+        locale:
+          type: string
+          title: Locale
+        persona_traits:
+          items:
+            type: string
+          type: array
+          title: Persona Traits
+        default_address_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Address Label
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        order_count:
+          type: integer
+          title: Order Count
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - display_name
+      - email
+      - locale
+      - persona_traits
+      - default_address_label
+      - latest_published_version
+      - order_count
+      title: TicketCustomerSchema
+    TicketDraftResponse:
+      properties:
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/TicketContentSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - ticket_id
+      - shop_id
+      - content
+      - created_at
+      - updated_at
+      title: TicketDraftResponse
+    TicketListResponse:
+      properties:
+        tickets:
+          items:
+            $ref: '#/components/schemas/TicketSummarySchema'
+          type: array
+          title: Tickets
+      additionalProperties: false
+      type: object
+      required:
+      - tickets
+      title: TicketListResponse
+    TicketMessageSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        author:
+          $ref: '#/components/schemas/TicketAuthor'
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+        sent_at:
+          type: string
+          format: date-time
+          title: Sent At
+          description: RFC 3339 instant with an explicit UTC offset.
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - author
+      - body
+      - sent_at
+      title: TicketMessageSchema
+      description: One fixture message. Live replies happen on the Bench and are never
+        authored here.
+    TicketOrderSchema:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        reference:
+          type: string
+          title: Reference
+        placed_at:
+          type: string
+          title: Placed At
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        fulfilment_status:
+          $ref: '#/components/schemas/FulfilmentStatus'
+        total_amount:
+          type: string
+          title: Total Amount
+        currency:
+          type: string
+          title: Currency
+        shipping_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Shipping Label
+      additionalProperties: false
+      type: object
+      required:
+      - order_id
+      - reference
+      - placed_at
+      - payment_status
+      - fulfilment_status
+      - total_amount
+      - currency
+      - shipping_label
+      title: TicketOrderSchema
+      description: One of this customer's orders, as the pickers and the linked-objects
+        card show it.
+    TicketOriginKind:
+      type: string
+      enum:
+      - product_page
+      - order_page
+      - checkout
+      - faq
+      - support_entry
+      title: TicketOriginKind
+      description: Where the customer was when the incident started.
+    TicketOriginSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/TicketOriginKind'
+        product_handle:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Product Handle
+          description: Set only for a product-page origin; null otherwise.
+        order_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Order Id
+          description: Set only for an order-page origin; null otherwise.
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - product_handle
+      - order_id
+      title: TicketOriginSchema
+      description: Where the interaction started, as a minimal reference the agent
+        resolves by tool.
+    TicketPayloadSchema:
+      properties:
+        reference:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[A-Z0-9]+(?:-[A-Z0-9]+)*$
+          title: Reference
+          description: The business reference support agents quote, unique inside
+            one shop.
+        subject:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Subject
+        channel:
+          $ref: '#/components/schemas/SupportChannel'
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        origin:
+          $ref: '#/components/schemas/TicketOriginSchema'
+        tags:
+          items:
+            type: string
+            maxLength: 64
+            minLength: 1
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          type: array
+          title: Tags
+        history:
+          items:
+            $ref: '#/components/schemas/TicketMessageSchema'
+          type: array
+          title: History
+        trigger:
+          anyOf:
+          - $ref: '#/components/schemas/TicketMessageSchema'
+          - type: 'null'
+          description: The first message every arm receives; null while the draft
+            has none.
+        linked_order_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Linked Order Ids
+        suggested_documents:
+          items:
+            $ref: '#/components/schemas/SuggestedDocumentSchema'
+          type: array
+          title: Suggested Documents
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - subject
+      - channel
+      - status
+      - origin
+      - tags
+      - history
+      - trigger
+      - linked_order_ids
+      - suggested_documents
+      title: TicketPayloadSchema
+      description: The whole authored content of a ticket draft or published version.
+    TicketPreviewResponse:
+      properties:
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/TicketContentSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - ticket_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      title: TicketPreviewResponse
+      description: 'The publish gate: what blocks publication and what a publish would
+        freeze.'
+    TicketReferenceSchema:
+      properties:
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        reference:
+          type: string
+          title: Reference
+        subject:
+          type: string
+          title: Subject
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+      additionalProperties: false
+      type: object
+      required:
+      - ticket_id
+      - reference
+      - subject
+      - status
+      title: TicketReferenceSchema
+    TicketShopResourcesSchema:
+      properties:
+        channels:
+          items:
+            $ref: '#/components/schemas/SupportChannel'
+          type: array
+          title: Channels
+        product_handles:
+          items:
+            type: string
+          type: array
+          title: Product Handles
+        orders:
+          items:
+            $ref: '#/components/schemas/TicketOrderSchema'
+          type: array
+          title: Orders
+        policy_ids:
+          items:
+            type: string
+          type: array
+          title: Policy Ids
+        support_guideline_ids:
+          items:
+            type: string
+          type: array
+          title: Support Guideline Ids
+        faq_entry_ids:
+          items:
+            type: string
+          type: array
+          title: Faq Entry Ids
+      additionalProperties: false
+      type: object
+      required:
+      - channels
+      - product_handles
+      - orders
+      - policy_ids
+      - support_guideline_ids
+      - faq_entry_ids
+      title: TicketShopResourcesSchema
+      description: Exactly what this ticket may name, so a picker cannot offer a publish-gate
+        error.
+    TicketStatus:
+      type: string
+      enum:
+      - open
+      - resolved
+      title: TicketStatus
+      description: 'Where the incident stands.
+
+
+        Deliberately without a transition graph, unlike an order''s two status axes.
+        An order''s
+
+        statuses describe money and goods moving in one direction; a ticket is reopened
+        all the
+
+        time, and a fixture authored after the fact may legitimately record either
+        state.'
+    TicketSummarySchema:
+      properties:
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        reference:
+          type: string
+          title: Reference
+        subject:
+          type: string
+          title: Subject
+        customer_profile_id:
+          type: string
+          format: uuid
+          title: Customer Profile Id
+        customer_display_name:
+          type: string
+          title: Customer Display Name
+        channel:
+          $ref: '#/components/schemas/SupportChannel'
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        origin_kind:
+          $ref: '#/components/schemas/TicketOriginKind'
+        preview:
+          type: string
+          title: Preview
+        opened_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Opened At
+        message_count:
+          type: integer
+          title: Message Count
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+      additionalProperties: false
+      type: object
+      required:
+      - ticket_id
+      - reference
+      - subject
+      - customer_profile_id
+      - customer_display_name
+      - channel
+      - status
+      - origin_kind
+      - preview
+      - opened_at
+      - message_count
+      - tags
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      title: TicketSummarySchema
+    TicketVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: TicketVersionListResponse
+    TicketVersionResponse:
+      properties:
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        shop_version:
+          type: integer
+          title: Shop Version
+        customer_profile_version:
+          type: integer
+          title: Customer Profile Version
+        content:
+          $ref: '#/components/schemas/TicketContentSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - ticket_id
+      - shop_id
+      - version
+      - content_fingerprint
+      - published_at
+      - shop_version
+      - customer_profile_version
+      - content
+      title: TicketVersionResponse
+      description: One frozen version, with the exact shop and customer versions it
+        pinned.
     ToneOfVoiceSchema:
       properties:
         id:
