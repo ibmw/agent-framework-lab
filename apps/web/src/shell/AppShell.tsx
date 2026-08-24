@@ -140,7 +140,11 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-screen flex-col bg-admin-canvas text-admin-ink">
+    // The shell owns the viewport and the two panes scroll inside it. With the page doing the
+    // scrolling instead, a tall section stretched the rail down the document and parked its
+    // bottom control below the fold — the collapse control read as missing on exactly the
+    // longest pages, which are the ones most in need of the room.
+    <div className="flex h-screen flex-col overflow-hidden bg-admin-canvas text-admin-ink">
       <header className="flex h-13 flex-none items-center gap-3.5 bg-lab-ink px-4 text-lab-paper">
         <NavLink
           to="/shops"
@@ -175,39 +179,44 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
         {currentShopId ? (
           <nav
             aria-label="Shop workspace"
-            className={`flex flex-none flex-col gap-0.5 border-r border-admin-border bg-admin-sidebar p-2.5 ${
+            className={`flex flex-none flex-col border-r border-admin-border bg-admin-sidebar ${
               collapsed ? "w-[58px]" : "w-[226px]"
             }`}
           >
-            {studioSections(currentShopId).map((section) => (
-              <div key={section.title ?? "primary"} className="grid gap-0.5">
-                {section.title && !collapsed ? (
-                  <div className="px-2.5 pt-3 pb-1 text-[10.5px] font-bold tracking-wider text-admin-muted uppercase">
-                    {section.title}
-                  </div>
-                ) : null}
-                {section.title && collapsed ? (
-                  <div className="mx-2 my-2 h-px bg-admin-border" />
-                ) : null}
-                {section.entries.map((entry) => (
-                  <SidebarEntry key={entry.label} entry={entry} collapsed={collapsed} />
-                ))}
-              </div>
-            ))}
-            <button
-              type="button"
-              className={`${entryClasses} mt-auto ${collapsed ? "justify-center" : ""}`}
-              aria-expanded={!collapsed}
-              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
-              {collapsed ? null : <span>Collapse</span>}
-            </button>
+            {/* Only the sections scroll; the control below them is always on screen. */}
+            <div className="grid flex-1 content-start gap-0.5 overflow-y-auto p-2.5">
+              {studioSections(currentShopId).map((section) => (
+                <div key={section.title ?? "primary"} className="grid gap-0.5">
+                  {section.title && !collapsed ? (
+                    <div className="px-2.5 pt-3 pb-1 text-[10.5px] font-bold tracking-wider text-admin-muted uppercase">
+                      {section.title}
+                    </div>
+                  ) : null}
+                  {section.title && collapsed ? (
+                    <div className="mx-2 my-2 h-px bg-admin-border" />
+                  ) : null}
+                  {section.entries.map((entry) => (
+                    <SidebarEntry key={entry.label} entry={entry} collapsed={collapsed} />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="flex-none border-t border-admin-border p-2.5">
+              <button
+                type="button"
+                className={`${entryClasses} w-full ${collapsed ? "justify-center" : ""}`}
+                aria-expanded={!collapsed}
+                aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+                onClick={() => setCollapsed(!collapsed)}
+              >
+                {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+                {collapsed ? null : <span>Collapse</span>}
+              </button>
+            </div>
           </nav>
         ) : null}
 
-        <main className="min-w-0 flex-1 px-6 py-5">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-5">{children}</main>
       </div>
     </div>
   );
