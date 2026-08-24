@@ -299,6 +299,43 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/orders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the authored order fixtures of one shop */
+    get: operations["listShopOrders"];
+    put?: never;
+    /** Create an order fixture for a customer attached to this shop */
+    post: operations["createShopOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/orders/{order_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one authored order and its findings */
+    get: operations["getShopOrder"];
+    /** Replace the order from catalog, method, and address-book selections */
+    put: operations["replaceShopOrder"];
+    post?: never;
+    /** Delete an order fixture; nothing already published is affected */
+    delete: operations["deleteShopOrder"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/customer-profiles": {
     parameters: {
       query?: never;
@@ -771,6 +808,28 @@ export interface components {
        */
       shop_id: string | null;
     };
+    /**
+     * CreateOrderRequest
+     * @description The order's identity: a reference, the customer it belongs to, and when it happened.
+     */
+    CreateOrderRequest: {
+      /**
+       * Reference
+       * @description The business reference support agents quote, unique inside one shop.
+       */
+      reference: string;
+      /**
+       * Customer Profile Id
+       * Format: uuid
+       */
+      customer_profile_id: string;
+      /**
+       * Placed At
+       * Format: date-time
+       * @description RFC 3339 instant with an explicit UTC offset.
+       */
+      placed_at: string;
+    };
     /** CreateShopRequest */
     CreateShopRequest: {
       identity: components["schemas"]["ShopIdentitySchema"];
@@ -1070,6 +1129,11 @@ export interface components {
       /** Max Transit Days */
       max_transit_days: number;
     };
+    /**
+     * FulfilmentStatus
+     * @enum {string}
+     */
+    FulfilmentStatus: "unfulfilled" | "partially_fulfilled" | "fulfilled";
     /** GenerateScenarioRequest */
     GenerateScenarioRequest: {
       /**
@@ -1204,6 +1268,133 @@ export interface components {
       /** Values */
       values: string[];
     };
+    /**
+     * OrderContentSchema
+     * @description The materialized order, including the totals derived from its line items.
+     */
+    OrderContentSchema: {
+      /** Reference */
+      reference: string;
+      /**
+       * Customer Profile Id
+       * Format: uuid
+       */
+      customer_profile_id: string;
+      /** Currency */
+      currency: string;
+      /** Placed At */
+      placed_at: string;
+      /** Lines */
+      lines: components["schemas"]["OrderLineSchema"][];
+      payment: components["schemas"]["OrderPaymentSchema"];
+      fulfilment: components["schemas"]["OrderFulfilmentSchema"];
+      shipping_fee: components["schemas"]["MoneySchema"];
+      shipping_address: components["schemas"]["ShippingAddressSchema"] | null;
+      /** Events */
+      events: components["schemas"]["OrderEventSchema"][];
+      subtotal: components["schemas"]["MoneySchema"];
+      total: components["schemas"]["MoneySchema"];
+      /** Item Count */
+      item_count: number;
+      /** Allows Address Change */
+      allows_address_change: boolean;
+    };
+    /**
+     * OrderEventInputSchema
+     * @description An authored history entry. The caller owns the identifier so edits stay stable.
+     */
+    OrderEventInputSchema: {
+      /** Id */
+      id: string;
+      kind: components["schemas"]["OrderEventKind"];
+      /**
+       * Occurred At
+       * Format: date-time
+       * @description RFC 3339 instant with an explicit UTC offset.
+       */
+      occurred_at: string;
+      /** Summary */
+      summary: string;
+    };
+    /**
+     * OrderEventKind
+     * @description What an authored history entry records. Agents discover these through tools.
+     * @enum {string}
+     */
+    OrderEventKind:
+      | "placed"
+      | "payment_authorized"
+      | "payment_captured"
+      | "payment_refunded"
+      | "shipped"
+      | "delivered"
+      | "address_updated"
+      | "support_contact";
+    /** OrderEventSchema */
+    OrderEventSchema: {
+      /** Id */
+      id: string;
+      kind: components["schemas"]["OrderEventKind"];
+      /** Occurred At */
+      occurred_at: string;
+      /** Summary */
+      summary: string;
+    };
+    /** OrderFulfilmentSchema */
+    OrderFulfilmentSchema: {
+      status: components["schemas"]["FulfilmentStatus"];
+      /** Method Id */
+      method_id: string | null;
+      /** Method Name */
+      method_name: string | null;
+      /** Shipped At */
+      shipped_at: string | null;
+    };
+    /**
+     * OrderLineSchema
+     * @description One frozen line item. `unit_price` is what the catalog charged when it was added.
+     */
+    OrderLineSchema: {
+      /** Id */
+      id: string;
+      /** Sku */
+      sku: string;
+      /** Product Handle */
+      product_handle: string;
+      /** Title */
+      title: string;
+      /** Variant Summary */
+      variant_summary: string;
+      unit_price: components["schemas"]["MoneySchema"];
+      /** Quantity */
+      quantity: number;
+      line_total: components["schemas"]["MoneySchema"];
+    };
+    /**
+     * OrderLineSelectionSchema
+     * @description A catalog variant and how many of it; the price is resolved by the lab.
+     */
+    OrderLineSelectionSchema: {
+      /** Sku */
+      sku: string;
+      /** Quantity */
+      quantity: number;
+    };
+    /** OrderListResponse */
+    OrderListResponse: {
+      /** Orders */
+      orders: components["schemas"]["OrderSummarySchema"][];
+    };
+    /** OrderPaymentSchema */
+    OrderPaymentSchema: {
+      status: components["schemas"]["PaymentStatus"];
+      /** Method Id */
+      method_id: string | null;
+      /** Method Name */
+      method_name: string | null;
+      /** Paid At */
+      paid_at: string | null;
+    };
     /** OrderResponse */
     OrderResponse: {
       /**
@@ -1230,6 +1421,35 @@ export interface components {
       version: number;
     };
     /**
+     * OrderSummarySchema
+     * @description One row of the Studio's order index.
+     */
+    OrderSummarySchema: {
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /** Reference */
+      reference: string;
+      /**
+       * Customer Profile Id
+       * Format: uuid
+       */
+      customer_profile_id: string;
+      /** Customer Display Name */
+      customer_display_name: string;
+      /** Placed At */
+      placed_at: string;
+      payment_status: components["schemas"]["PaymentStatus"];
+      fulfilment_status: components["schemas"]["FulfilmentStatus"];
+      /** Line Count */
+      line_count: number;
+      total: components["schemas"]["MoneySchema"];
+      /** Updated At */
+      updated_at: string;
+    };
+    /**
      * PaymentMethodKind
      * @enum {string}
      */
@@ -1244,6 +1464,11 @@ export interface components {
       /** Enabled */
       enabled: boolean;
     };
+    /**
+     * PaymentStatus
+     * @enum {string}
+     */
+    PaymentStatus: "pending" | "authorized" | "paid" | "refunded";
     /** PersonaResponse */
     PersonaResponse: {
       /**
@@ -1383,6 +1608,49 @@ export interface components {
     ReplaceCustomerProfileDraftRequest: {
       payload: components["schemas"]["CustomerProfilePayloadSchema"];
     };
+    /** ReplaceOrderFulfilmentSchema */
+    ReplaceOrderFulfilmentSchema: {
+      status: components["schemas"]["FulfilmentStatus"];
+      /** Method Id */
+      method_id: string | null;
+      /** Shipped At */
+      shipped_at: string | null;
+    };
+    /** ReplaceOrderPaymentSchema */
+    ReplaceOrderPaymentSchema: {
+      status: components["schemas"]["PaymentStatus"];
+      /** Method Id */
+      method_id: string | null;
+      /** Paid At */
+      paid_at: string | null;
+    };
+    /**
+     * ReplaceOrderRequest
+     * @description The whole order as selections. The customer is fixed at creation and never edited.
+     */
+    ReplaceOrderRequest: {
+      /**
+       * Reference
+       * @description The business reference support agents quote, unique inside one shop.
+       */
+      reference: string;
+      /**
+       * Placed At
+       * Format: date-time
+       * @description RFC 3339 instant with an explicit UTC offset.
+       */
+      placed_at: string;
+      /** Lines */
+      lines: components["schemas"]["OrderLineSelectionSchema"][];
+      payment: components["schemas"]["ReplaceOrderPaymentSchema"];
+      fulfilment: components["schemas"]["ReplaceOrderFulfilmentSchema"];
+      /** Shipping Fee Amount */
+      shipping_fee_amount: string;
+      /** Shipping Address Id */
+      shipping_address_id: string | null;
+      /** Events */
+      events: components["schemas"]["OrderEventInputSchema"][];
+    };
     /** ReplaceShopDraftRequest */
     ReplaceShopDraftRequest: {
       payload: components["schemas"]["ShopPayloadSchema"];
@@ -1433,6 +1701,32 @@ export interface components {
     SendConversationMessageRequest: {
       /** Message */
       message: string;
+    };
+    /**
+     * ShippingAddressSchema
+     * @description The frozen copy of the address-book entry this order ships to.
+     */
+    ShippingAddressSchema: {
+      /** Source Address Id */
+      source_address_id: string;
+      /** Source Label */
+      source_label: string;
+      /** Selected At */
+      selected_at: string;
+      /** Recipient */
+      recipient: string;
+      /** Line1 */
+      line1: string;
+      /** Line2 */
+      line2: string | null;
+      /** Postal Code */
+      postal_code: string;
+      /** City */
+      city: string;
+      /** Region */
+      region: string | null;
+      /** Country */
+      country: string;
     };
     /**
      * ShopContentSchema
@@ -1493,6 +1787,39 @@ export interface components {
     ShopListResponse: {
       /** Shops */
       shops: components["schemas"]["ShopSummarySchema"][];
+    };
+    /**
+     * ShopOrderResponse
+     * @description One authored order, its findings, and the statuses it may still move to.
+     *
+     *     Named for its shop scope because the POC's scenario contract already publishes an
+     *     `OrderResponse`; two schemas of one name would make the generator rename both, and one
+     *     of them is already published.
+     */
+    ShopOrderResponse: {
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      content: components["schemas"]["OrderContentSchema"];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Payment Status Options */
+      payment_status_options: components["schemas"]["PaymentStatus"][];
+      /** Fulfilment Status Options */
+      fulfilment_status_options: components["schemas"]["FulfilmentStatus"][];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
     };
     /**
      * ShopPayloadSchema
@@ -2893,6 +3220,241 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["ShopVersionResponse"];
         };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listShopOrders: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OrderListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createShopOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateOrderRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopOrderResponse"];
+        };
+      };
+      /** @description The definition or the shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another order in this shop already uses that reference */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid order content, an unresolvable selection, or an illegal status transition */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getShopOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable order identifier inside one shop. */
+        order_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopOrderResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceShopOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable order identifier inside one shop. */
+        order_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceOrderRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopOrderResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another order in this shop already uses that reference */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid order content, an unresolvable selection, or an illegal status transition */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  deleteShopOrder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable order identifier inside one shop. */
+        order_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description The definition is not found */
       404: {

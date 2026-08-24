@@ -47,6 +47,12 @@ from capability_lab.application.order_actions import (
     ActionTransientError,
     OrderActionService,
 )
+from capability_lab.application.order_fixtures import (
+    OrderFixtureNotFoundError,
+    OrderFixtureService,
+    OrderReferenceExistsError,
+    OrderSelectionError,
+)
 from capability_lab.application.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from capability_lab.application.ports import Clock, ConversationTurn, OrderWriteConflictError
 from capability_lab.application.scenario_generation import (
@@ -79,6 +85,10 @@ from capability_lab.application.support_identities import (
 from capability_lab.domain.customer_profile import CustomerProfileConfigurationError
 from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
+from capability_lab.domain.order_fixture import (
+    OrderFixtureConfigurationError,
+    OrderTransitionError,
+)
 from capability_lab.domain.shop import ShopConfigurationError
 from capability_lab.domain.support_identity import SupportIdentityConfigurationError
 from capability_lab.infrastructure.agents.registry import create_agent_registry
@@ -99,6 +109,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyGeneratedScenarioRepository,
+    SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
@@ -111,6 +122,7 @@ from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
 from capability_lab.presentation.base import ErrorResponse, StrictApiModel, ValidationIssue
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
 from capability_lab.presentation.definitions import DefinitionIssueSchema
+from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.support_identities import SupportIdentityRoutes
 
@@ -891,6 +903,39 @@ async def _support_identity_configuration_handler(
     )
 
 
+async def _order_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(request, status_code=404, code="order_not_found", message=str(error))
+
+
+async def _order_reference_exists_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=409, code="order_reference_exists", message=str(error)
+    )
+
+
+async def _order_selection_handler(request: Request, error: Exception) -> JSONResponse:
+    """An order selected catalog, method, or address content that does not exist.
+
+    Selection is what keeps commerce data out of a client's hands, so an unresolvable
+    selection is refused rather than stored and reported later as a finding.
+    """
+    return _error_response(
+        request, status_code=422, code="order_selection_error", message=str(error)
+    )
+
+
+async def _order_transition_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=422, code="order_transition_error", message=str(error)
+    )
+
+
+async def _order_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=422, code="order_configuration_error", message=str(error)
+    )
+
+
 async def _definition_lifecycle_handler(request: Request, error: Exception) -> JSONResponse:
     return _error_response(
         request,
@@ -1024,6 +1069,11 @@ def create_app(
     application.add_exception_handler(
         PublishedVersionExistsError, _published_version_exists_handler
     )
+    application.add_exception_handler(OrderFixtureNotFoundError, _order_not_found_handler)
+    application.add_exception_handler(OrderReferenceExistsError, _order_reference_exists_handler)
+    application.add_exception_handler(OrderSelectionError, _order_selection_handler)
+    application.add_exception_handler(OrderTransitionError, _order_transition_handler)
+    application.add_exception_handler(OrderFixtureConfigurationError, _order_configuration_handler)
     application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
     application.add_exception_handler(ShopConfigurationError, _shop_configuration_handler)
@@ -1075,6 +1125,16 @@ def create_app(
     def support_identity_service() -> Generator[SupportIdentityService, None, None]:
         with session_scope(factory) as session:
             yield SupportIdentityService(support_identity_repository(session), clock)
+
+    def order_service() -> Generator[OrderFixtureService, None, None]:
+        with session_scope(factory) as session:
+            yield OrderFixtureService(
+                SqlAlchemyOrderFixtureRepository(session),
+                shop_repository(session),
+                customer_profile_repository(session),
+                SqlAlchemyDefinitionShopAttachmentRepository(session),
+                clock,
+            )
 
     def order_action_service() -> Generator[OrderActionService, None, None]:
         with session_scope(factory) as session:
@@ -1575,6 +1635,7 @@ def create_app(
     )
 
     ShopRoutes(shop_service).register(router)
+    OrderRoutes(order_service).register(router)
     CustomerProfileRoutes(customer_profile_service).register(router)
     SupportIdentityRoutes(support_identity_service).register(router)
     application.include_router(router)

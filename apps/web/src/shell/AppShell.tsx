@@ -41,7 +41,7 @@ function studioSections(shopId: string): NavSection[] {
       entries: [
         { label: "Home", to: base, icon: <Home size={15} />, exact: true },
         { label: "Products", to: `${base}/products`, icon: <Tag size={15} /> },
-        { label: "Orders", icon: <Boxes size={15} />, milestone: "Milestone 2" },
+        { label: "Orders", to: `${base}/orders`, icon: <Boxes size={15} /> },
         { label: "Customers", to: `${base}/customers`, icon: <Users size={15} /> },
         { label: "Tickets", icon: <MessageSquare size={15} />, milestone: "Milestone 2" },
         { label: "Scenarios", icon: <ClipboardList size={15} />, milestone: "Milestone 2" },

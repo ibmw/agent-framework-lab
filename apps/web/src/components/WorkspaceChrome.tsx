@@ -185,3 +185,15 @@ export function PublishReasons({
     </>
   );
 }
+
+/**
+ * An order's two status axes. Status is never carried by colour alone: the pill pairs a
+ * glyph with the written label.
+ */
+export function StatusPill({ tone, label }: { tone: "payment" | "fulfilment"; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border/60 px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft">
+      <span aria-hidden>{tone === "payment" ? "◆" : "▣"}</span> {label}
+    </span>
+  );
+}

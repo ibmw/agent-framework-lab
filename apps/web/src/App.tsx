@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { CustomerEditorPage } from "./routes/CustomerEditorPage";
 import { CustomersPage } from "./routes/CustomersPage";
+import { OrderEditorPage } from "./routes/OrderEditorPage";
+import { OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
 import { ShopHomePage } from "./routes/ShopHomePage";
@@ -25,6 +27,8 @@ export function App() {
         <Route index element={<ShopHomePage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="products/:handle" element={<ProductEditorPage />} />
+        <Route path="orders" element={<OrdersPage />} />
+        <Route path="orders/:orderId" element={<OrderEditorPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customers/:profileId" element={<CustomerEditorPage />} />
         <Route path="support-identities" element={<SupportIdentitiesPage />} />

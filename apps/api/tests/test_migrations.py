@@ -27,6 +27,9 @@ DEFINITION_TABLES = {
     "definition_drafts",
     "definition_versions",
     "definition_shop_attachments",
+    # Orders are not definitions, but they are target authoring state and share the
+    # definition tables' migration fate rather than the POC's.
+    "shop_order_fixtures",
 }
 POC_TABLES = {
     "action_proposals",
@@ -267,6 +270,56 @@ def test_shop_attachments_reject_a_definition_type_that_cannot_be_attached(
     # so the repository's idempotent attach can never create a duplicate row.
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(insert, {**row, "definition_type": "customer_profile"})
+
+
+@pytest.mark.migration
+def test_order_references_are_unique_inside_one_shop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reference a customer quotes must name exactly one order in a shop."""
+    database_url = f"sqlite:///{tmp_path / 'orders.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO shop_order_fixtures (
+            shop_id, order_id, reference, customer_profile_id, content_fingerprint,
+            payload, created_at, updated_at
+        ) VALUES (
+            :shop_id, :order_id, :reference, :customer_profile_id, :fingerprint,
+            '{}', '2026-08-24 12:00:00.000000', '2026-08-24 12:00:00.000000'
+        )
+        """
+    )
+    row = {
+        "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac005",
+        "customer_profile_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac006",
+        "fingerprint": "d" * 64,
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            insert,
+            {**row, "order_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac007", "reference": "NS-10482"},
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            insert,
+            {**row, "order_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac008", "reference": "NS-10482"},
+        )
+
+    # The same reference in another shop is a different order and stays legal.
+    with engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                **row,
+                "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac009",
+                "order_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac00a",
+                "reference": "NS-10482",
+            },
+        )
 
 
 @pytest.mark.migration

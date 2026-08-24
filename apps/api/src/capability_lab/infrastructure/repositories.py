@@ -29,6 +29,15 @@ from capability_lab.application.definition_authoring import (
 )
 from capability_lab.application.definition_resolution import PublishedVersionExistsError
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
+from capability_lab.application.order_fixture_payload import (
+    order_fixture_content_fingerprint,
+    order_fixture_document,
+    order_fixture_from_document,
+)
+from capability_lab.application.order_fixtures import (
+    OrderFixtureRecord,
+    OrderReferenceExistsError,
+)
 from capability_lab.application.ports import (
     AgentResponse,
     Clock,
@@ -78,6 +87,7 @@ from capability_lab.infrastructure.models import (
     GeneratedScenarioProductModel,
     IdempotencyRecordModel,
     MemoryRecordModel,
+    OrderFixtureModel,
     OrderModel,
     PersonaModel,
     ProductModel,
@@ -1433,6 +1443,15 @@ class SqlAlchemyDefinitionShopAttachmentRepository:
         self._session.flush()
         return True
 
+    def is_attached(self, definition: DefinitionId, shop_id: UUID) -> bool:
+        return (
+            self._session.get(
+                DefinitionShopAttachmentModel,
+                (definition.definition_type.value, str(definition.id), str(shop_id)),
+            )
+            is not None
+        )
+
     def shops_for(self, definition: DefinitionId) -> tuple[UUID, ...]:
         rows = self._session.scalars(
             select(DefinitionShopAttachmentModel.shop_id)
@@ -1465,3 +1484,88 @@ class SqlAlchemyDefinitionShopAttachmentRepository:
             .group_by(DefinitionShopAttachmentModel.definition_id)
         ).all()
         return {UUID(row[0]): row[1] for row in rows}
+
+
+class SqlAlchemyOrderFixtureRepository:
+    """Store one shop's authored orders as canonical `order-fixture-v1` documents.
+
+    The typed constructors re-validate every stored document on read, so a fixture that
+    drifted out of the schema fails loudly instead of seeding a sandbox nobody can explain.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_shop(self, shop_id: UUID) -> tuple[OrderFixtureRecord, ...]:
+        models = self._session.scalars(
+            select(OrderFixtureModel)
+            .where(OrderFixtureModel.shop_id == str(shop_id))
+            .order_by(OrderFixtureModel.created_at.desc(), OrderFixtureModel.order_id)
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def get(self, shop_id: UUID, order_id: UUID) -> OrderFixtureRecord | None:
+        model = self._session.get(OrderFixtureModel, (str(shop_id), str(order_id)))
+        return None if model is None else self._record(model)
+
+    def reference_owner(self, shop_id: UUID, reference: str) -> UUID | None:
+        owner = self._session.scalar(
+            select(OrderFixtureModel.order_id).where(
+                OrderFixtureModel.shop_id == str(shop_id),
+                OrderFixtureModel.reference == reference,
+            )
+        )
+        return None if owner is None else UUID(owner)
+
+    def save(self, record: OrderFixtureRecord) -> None:
+        document = cast("dict[str, object]", order_fixture_document(record.payload))
+        fingerprint = order_fixture_content_fingerprint(record.payload)
+        model = self._session.get(OrderFixtureModel, (str(record.shop_id), str(record.order_id)))
+        if model is None:
+            self._session.add(
+                OrderFixtureModel(
+                    shop_id=str(record.shop_id),
+                    order_id=str(record.order_id),
+                    reference=record.payload.reference,
+                    customer_profile_id=str(record.payload.customer_profile_id),
+                    content_fingerprint=fingerprint,
+                    payload=document,
+                    created_at=record.created_at,
+                    updated_at=record.updated_at,
+                )
+            )
+        else:
+            model.reference = record.payload.reference
+            model.content_fingerprint = fingerprint
+            model.payload = document
+            model.updated_at = record.updated_at
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            # The unique constraint is the last word on a shop-unique reference, even when
+            # the service's own check lost a race. Only that violation is translated: every
+            # dialect names the offending column or constraint in the message, and both
+            # spellings contain `reference`, so anything else still surfaces as a fault.
+            if "reference" not in str(error.orig):
+                raise
+            raise OrderReferenceExistsError(
+                f"another order in this shop already uses the reference {record.payload.reference}"
+            ) from error
+
+    def delete(self, shop_id: UUID, order_id: UUID) -> bool:
+        model = self._session.get(OrderFixtureModel, (str(shop_id), str(order_id)))
+        if model is None:
+            return False
+        self._session.delete(model)
+        self._session.flush()
+        return True
+
+    @staticmethod
+    def _record(model: OrderFixtureModel) -> OrderFixtureRecord:
+        return OrderFixtureRecord(
+            shop_id=UUID(model.shop_id),
+            order_id=UUID(model.order_id),
+            payload=order_fixture_from_document(model.payload),
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )

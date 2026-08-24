@@ -263,3 +263,29 @@ class DefinitionShopAttachmentModel(Base):
     definition_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     shop_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     attached_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class OrderFixtureModel(Base):
+    """One authored order fixture, stored as its canonical `order-fixture-v1` document.
+
+    Orders are not definitions (ADR 0012 fixes the definition types), so they live in their
+    own table rather than in `definition_drafts`. `reference` and `customer_profile_id` are
+    written from the document by the repository: they exist as columns so the shop-unique
+    reference can be a constraint and a shop's orders can be found for one customer, never
+    as a second source of truth.
+    """
+
+    __tablename__ = "shop_order_fixtures"
+    __table_args__ = (
+        UniqueConstraint("shop_id", "reference", name="uq_shop_order_fixtures_reference"),
+        Index("ix_shop_order_fixtures_customer", "shop_id", "customer_profile_id"),
+    )
+
+    shop_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    order_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    reference: Mapped[str] = mapped_column(String(64))
+    customer_profile_id: Mapped[str] = mapped_column(String(36))
+    content_fingerprint: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict[str, object]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime())

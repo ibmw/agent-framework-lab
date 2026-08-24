@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import cast
@@ -27,6 +27,9 @@ _EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+")
 _PHONE_PATTERN = re.compile(r"\+?[0-9][0-9 ()./-]{4,30}")
 _COUNTRY_PATTERN = re.compile(r"[A-Z]{2}")
 _DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+# ADR 0007's canonical instant: UTC, RFC 3339, exactly six fractional digits.
+_TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z")
+CANONICAL_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
 def require_slug(value: object, field_name: str, *, error: type[DomainError]) -> str:
@@ -146,6 +149,22 @@ def require_iso_date(value: object, field_name: str, *, error: type[DomainError]
         date.fromisoformat(value)
     except ValueError as cause:
         raise error(f"{field_name} must be a real calendar date") from cause
+    return value
+
+
+def require_utc_timestamp(value: object, field_name: str, *, error: type[DomainError]) -> str:
+    """A canonical instant, so an authored moment serializes exactly one way.
+
+    ADR 0007 pins UTC RFC 3339 with six fractional digits; accepting any other spelling
+    would let two identical fixtures produce two fingerprints. Callers at the HTTP boundary
+    normalize a client's ISO 8601 value into this form before it reaches the domain.
+    """
+    if not isinstance(value, str) or _TIMESTAMP_PATTERN.fullmatch(value) is None:
+        raise error(f"{field_name} must be a UTC timestamp like 2026-08-20T14:55:00.000000Z")
+    try:
+        datetime.strptime(value, CANONICAL_TIMESTAMP_FORMAT)
+    except ValueError as cause:
+        raise error(f"{field_name} must be a real instant") from cause
     return value
 
 

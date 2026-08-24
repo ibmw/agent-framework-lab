@@ -1,0 +1,800 @@
+import type {
+  CustomerProfileContentSchema,
+  OrderContentSchema,
+  OrderEventKind,
+  ShopOrderResponse,
+  VariantSchema,
+} from "@agent-lab/contracts";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { describeApiError } from "../api/client";
+import { getCustomerProfileDraft } from "../api/customerProfiles";
+import { deleteOrder, getOrder, replaceOrder } from "../api/orders";
+import {
+  Card,
+  Fingerprint,
+  IssueList,
+  PageHeader,
+  StatusPill,
+} from "../components/WorkspaceChrome";
+import { slugify, uniqueId } from "../lib/entryIds";
+import {
+  clampQuantity,
+  EVENT_KINDS,
+  eventKindLabel,
+  fromLocalInput,
+  fulfilmentLabel,
+  lineTotal,
+  MAX_LINE_QUANTITY,
+  MIN_LINE_QUANTITY,
+  paymentLabel,
+  previewTotals,
+  toLocalInput,
+  toOrderRequest,
+} from "../lib/orders";
+import {
+  accentButtonClasses,
+  fieldControlClasses,
+  fieldLabelClasses,
+  formatTimestamp,
+  outlineButtonClasses,
+  subtleButtonClasses,
+  surfaceClasses,
+  tableCellClasses,
+  tableHeadClasses,
+  textAreaClasses,
+} from "../lib/ui";
+import { useShopWorkspace } from "../shell/ShopWorkspace";
+
+const UNAVAILABLE = "The order service is unavailable.";
+
+type LineSchema = OrderContentSchema["lines"][number];
+
+interface CatalogVariant {
+  sku: string;
+  label: string;
+  handle: string;
+  title: string;
+  variantSummary: string;
+  price: NonNullable<VariantSchema["price"]>;
+}
+
+/** Frame 2b — the order fixture editor: typed, fully editable, selection-driven. */
+export function OrderEditorPage() {
+  const { orderId = "" } = useParams();
+  const { shopId, content: shop } = useShopWorkspace();
+  const navigate = useNavigate();
+  const [order, setOrder] = useState<ShopOrderResponse | null>(null);
+  const [content, setContent] = useState<OrderContentSchema | null>(null);
+  const [addressId, setAddressId] = useState<string | null>(null);
+  const [customer, setCustomer] = useState<CustomerProfileContentSchema | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newSku, setNewSku] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // What the author is currently typing into one quantity field. The order itself only ever
+  // holds a quantity the contract accepts, so a half-typed or cleared field can neither skew
+  // the totals on screen nor reach a save; the field still shows exactly what was typed.
+  const [quantityDraft, setQuantityDraft] = useState<{ id: string; text: string } | null>(null);
+
+  const apply = useCallback((response: ShopOrderResponse) => {
+    setOrder(response);
+    setQuantityDraft(null);
+    setContent(response.content);
+    setAddressId(response.content.shipping_address?.source_address_id ?? null);
+    setDirty(false);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    getOrder(shopId, orderId, controller.signal)
+      .then(async (response) => {
+        apply(response);
+        const profile = await getCustomerProfileDraft(
+          response.content.customer_profile_id,
+          controller.signal,
+        );
+        setCustomer(profile.content);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(describeApiError(cause, UNAVAILABLE));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [shopId, orderId, apply]);
+
+  if (loading) {
+    return <p className="text-sm text-admin-muted">Loading order…</p>;
+  }
+
+  if (!content || !order) {
+    return (
+      <div role="alert" className="text-sm text-lab-error">
+        {error ?? "This order could not be loaded."}
+      </div>
+    );
+  }
+
+  function edit(next: OrderContentSchema) {
+    setContent(next);
+    setDirty(true);
+  }
+
+  function selectAddress(next: string | null) {
+    setAddressId(next);
+    setDirty(true);
+  }
+
+  async function save() {
+    if (!content) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      apply(
+        await replaceOrder(shopId, orderId, {
+          ...toOrderRequest(content),
+          shipping_address_id: addressId,
+        }),
+      );
+    } catch (cause: unknown) {
+      setError(describeApiError(cause, UNAVAILABLE));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    setSaving(true);
+    try {
+      await deleteOrder(shopId, orderId);
+      navigate(`/shops/${shopId}/orders`);
+    } catch (cause: unknown) {
+      setError(describeApiError(cause, "The order could not be deleted."));
+      setConfirmingDelete(false);
+      setSaving(false);
+    }
+  }
+
+  const catalog: CatalogVariant[] = shop.products.flatMap((product) =>
+    product.variants.flatMap((variant) =>
+      // An unpriced draft variant cannot be ordered; the lab refuses it on save too.
+      variant.price === null
+        ? []
+        : [
+            {
+              sku: variant.sku,
+              handle: product.handle,
+              title: product.title,
+              variantSummary: variant.option_values.map((option) => option.value).join(" · "),
+              price: variant.price,
+              label: `${product.title} · ${variant.sku}`,
+            },
+          ],
+    ),
+  );
+
+  function changeQuantity(lineId: string, current: number, typed: string) {
+    if (!content) {
+      return;
+    }
+    setQuantityDraft({ id: lineId, text: typed });
+    const quantity = clampQuantity(typed, current);
+    if (quantity === current) {
+      return;
+    }
+    edit({
+      ...content,
+      lines: content.lines.map((entry) => (entry.id === lineId ? { ...entry, quantity } : entry)),
+    });
+  }
+
+  function addLine(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const chosen = catalog.find((variant) => variant.sku === newSku);
+    if (!content || !chosen || content.lines.some((line) => line.sku === chosen.sku)) {
+      return;
+    }
+    // An optimistic copy of what the lab will freeze: the next save answers with the
+    // authoritative line, and an already-frozen line is never re-priced from here.
+    edit({
+      ...content,
+      lines: [
+        ...content.lines,
+        {
+          id: chosen.sku.toLowerCase(),
+          sku: chosen.sku,
+          product_handle: chosen.handle,
+          title: chosen.title,
+          variant_summary: chosen.variantSummary,
+          unit_price: chosen.price,
+          quantity: 1,
+          line_total: chosen.price,
+        } satisfies LineSchema,
+      ],
+    });
+    setNewSku("");
+  }
+
+  function addEvent() {
+    if (!content) {
+      return;
+    }
+    const id = uniqueId(
+      slugify("event"),
+      content.events.map((entry) => entry.id),
+    );
+    edit({
+      ...content,
+      events: [
+        ...content.events,
+        {
+          id,
+          kind: "support_contact",
+          occurred_at: content.placed_at,
+          summary: "New event",
+        },
+      ],
+    });
+  }
+
+  const totals = previewTotals(content);
+  const address = content.shipping_address;
+  const addressBook = customer?.addresses ?? [];
+  const selection = addressBook.find((entry) => entry.id === addressId);
+  const frozenIsCurrent = address !== null && address.source_address_id === addressId;
+  const defaultAddress = addressBook.find((entry) => entry.is_default);
+
+  return (
+    <>
+      <PageHeader
+        title={content.reference}
+        chips={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill tone="payment" label={paymentLabel(content.payment.status)} />
+            <StatusPill tone="fulfilment" label={fulfilmentLabel(content.fulfilment.status)} />
+            <span className="text-[11.5px] text-admin-muted">
+              Placed {formatTimestamp(content.placed_at)}
+            </span>
+          </div>
+        }
+        actions={
+          <>
+            {confirmingDelete ? (
+              <>
+                {/* Deleting a fixture is irreversible and the workflow invites it ("delete
+                    and recreate"), so the destructive click is never the first one. */}
+                <span className="text-xs text-lab-error">Delete this order permanently?</span>
+                <button
+                  className={outlineButtonClasses}
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  Keep it
+                </button>
+                <button
+                  className={outlineButtonClasses}
+                  type="button"
+                  onClick={() => void remove()}
+                  disabled={saving}
+                >
+                  Delete permanently
+                </button>
+              </>
+            ) : (
+              <button
+                className={outlineButtonClasses}
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={saving}
+              >
+                Delete
+              </button>
+            )}
+            <button
+              className={accentButtonClasses}
+              type="button"
+              onClick={() => void save()}
+              disabled={!dirty || saving}
+            >
+              {saving ? "Saving…" : dirty ? "Save order" : "Saved"}
+            </button>
+          </>
+        }
+      />
+
+      {error ? (
+        <p role="alert" className="mb-4 text-[13px] text-lab-error">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid content-start gap-4">
+          <Card title="Line items & payment">
+            <p className="text-xs text-admin-muted">
+              Totals derive from the line items — never edited directly. A line keeps the price it
+              was frozen at, so repricing the catalog never rewrites this order.
+            </p>
+            {content.lines.length === 0 ? (
+              <p className="text-[13px] text-admin-muted">No line item yet.</p>
+            ) : (
+              <table className="w-full border-collapse text-[13px]">
+                <thead>
+                  <tr>
+                    <th className={tableHeadClasses}>Product</th>
+                    <th className={tableHeadClasses}>SKU</th>
+                    <th className={tableHeadClasses}>Qty</th>
+                    <th className={tableHeadClasses}>Unit</th>
+                    <th className={tableHeadClasses}>Total</th>
+                    <th className={tableHeadClasses}>
+                      <span className="sr-only">Remove</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {content.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td className={tableCellClasses}>
+                        <div className="font-semibold">{line.title}</div>
+                        <div className="text-admin-muted">{line.variant_summary}</div>
+                      </td>
+                      <td className={tableCellClasses}>{line.sku}</td>
+                      <td className={tableCellClasses}>
+                        <input
+                          className={`${fieldControlClasses} w-20`}
+                          type="number"
+                          min={MIN_LINE_QUANTITY}
+                          max={MAX_LINE_QUANTITY}
+                          step={1}
+                          aria-label={`Quantity for ${line.sku}`}
+                          value={
+                            quantityDraft?.id === line.id
+                              ? quantityDraft.text
+                              : String(line.quantity)
+                          }
+                          onChange={(event) =>
+                            changeQuantity(line.id, line.quantity, event.target.value)
+                          }
+                          onBlur={() => setQuantityDraft(null)}
+                        />
+                      </td>
+                      <td className={tableCellClasses}>
+                        {line.unit_price.amount} {line.unit_price.currency}
+                      </td>
+                      <td className={tableCellClasses}>
+                        {lineTotal(line.unit_price.amount, line.quantity)} {content.currency}
+                      </td>
+                      <td className={tableCellClasses}>
+                        <button
+                          className={subtleButtonClasses}
+                          type="button"
+                          aria-label={`Remove ${line.sku}`}
+                          onClick={() =>
+                            edit({
+                              ...content,
+                              lines: content.lines.filter((entry) => entry.id !== line.id),
+                            })
+                          }
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <form className="flex flex-wrap items-end gap-2" onSubmit={addLine}>
+              <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
+                Add product
+                <select
+                  aria-label="Add product"
+                  className={fieldControlClasses}
+                  value={newSku}
+                  required
+                  onChange={(event) => setNewSku(event.target.value)}
+                >
+                  <option value="">Select a variant</option>
+                  {catalog
+                    .filter((variant) => !content.lines.some((line) => line.sku === variant.sku))
+                    .map((variant) => (
+                      <option key={variant.sku} value={variant.sku}>
+                        {variant.label} · {variant.price.amount} {variant.price.currency}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button className={outlineButtonClasses} type="submit">
+                Add line
+              </button>
+            </form>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className={fieldLabelClasses}>
+                Payment status
+                <select
+                  aria-label="Payment status"
+                  className={fieldControlClasses}
+                  value={content.payment.status}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      payment: {
+                        ...content.payment,
+                        status: event.target.value as OrderContentSchema["payment"]["status"],
+                      },
+                    })
+                  }
+                >
+                  {order.payment_status_options.map((status) => (
+                    <option key={status} value={status}>
+                      {paymentLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Payment method
+                <select
+                  aria-label="Payment method"
+                  className={fieldControlClasses}
+                  value={content.payment.method_id ?? ""}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      payment: { ...content.payment, method_id: event.target.value || null },
+                    })
+                  }
+                >
+                  <option value="">Not recorded</option>
+                  {shop.payment_methods.map((method) => (
+                    <option key={method.id} value={method.id}>
+                      {method.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Paid at
+                <input
+                  className={fieldControlClasses}
+                  type="datetime-local"
+                  value={content.payment.paid_at ? toLocalInput(content.payment.paid_at) : ""}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      payment: {
+                        ...content.payment,
+                        paid_at: event.target.value ? fromLocalInput(event.target.value) : null,
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-2 border-t border-admin-border pt-3 text-[13px]">
+              <div className="flex justify-between">
+                <span className="text-admin-muted">Subtotal</span>
+                <span>
+                  {totals.subtotal} {content.currency}
+                </span>
+              </div>
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-admin-muted">Shipping fee</span>
+                <input
+                  className={`${fieldControlClasses} w-32`}
+                  value={content.shipping_fee.amount}
+                  inputMode="decimal"
+                  aria-label="Shipping fee"
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      shipping_fee: { ...content.shipping_fee, amount: event.target.value },
+                    })
+                  }
+                />
+              </label>
+              <div className="flex justify-between font-semibold">
+                <span>Total</span>
+                <span>
+                  {totals.total} {content.currency}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Fulfilment & shipping">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className={fieldLabelClasses}>
+                Fulfilment status
+                <select
+                  aria-label="Fulfilment status"
+                  className={fieldControlClasses}
+                  value={content.fulfilment.status}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      fulfilment: {
+                        ...content.fulfilment,
+                        status: event.target.value as OrderContentSchema["fulfilment"]["status"],
+                      },
+                    })
+                  }
+                >
+                  {order.fulfilment_status_options.map((status) => (
+                    <option key={status} value={status}>
+                      {fulfilmentLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Fulfilment method
+                <select
+                  aria-label="Fulfilment method"
+                  className={fieldControlClasses}
+                  value={content.fulfilment.method_id ?? ""}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      fulfilment: {
+                        ...content.fulfilment,
+                        method_id: event.target.value || null,
+                      },
+                    })
+                  }
+                >
+                  <option value="">Not recorded</option>
+                  {shop.fulfilment_methods.map((method) => (
+                    <option key={method.id} value={method.id}>
+                      {method.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Shipped at
+                <input
+                  className={fieldControlClasses}
+                  type="datetime-local"
+                  value={
+                    content.fulfilment.shipped_at ? toLocalInput(content.fulfilment.shipped_at) : ""
+                  }
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      fulfilment: {
+                        ...content.fulfilment,
+                        shipped_at: event.target.value ? fromLocalInput(event.target.value) : null,
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+            <p className="text-xs text-admin-muted">
+              {content.allows_address_change
+                ? "Address changes stay allowed while this order is not fulfilled."
+                : "This order is fulfilled; a run can no longer change its address."}
+            </p>
+
+            <label className={fieldLabelClasses}>
+              Ship to
+              <select
+                aria-label="Ship to"
+                className={fieldControlClasses}
+                value={addressId ?? ""}
+                onChange={(event) => selectAddress(event.target.value || null)}
+              >
+                <option value="">No address selected</option>
+                {addressBook.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                    {entry.is_default ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-admin-muted">
+              Selected from{" "}
+              <Link
+                className="underline underline-offset-2"
+                to={`/shops/${shopId}/customers/${content.customer_profile_id}`}
+              >
+                the customer's address book
+              </Link>{" "}
+              — no free input.
+            </p>
+
+            {address ? (
+              <div className={`${surfaceClasses} bg-admin-canvas p-3 text-[13px]`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{address.source_label}</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
+                    <span aria-hidden>❄</span> Frozen copy
+                  </span>
+                </div>
+                <div className="mt-1">
+                  {address.recipient} · {address.line1}
+                  {address.line2 ? ` · ${address.line2}` : ""} · {address.postal_code}{" "}
+                  {address.city} · {address.country}
+                </div>
+                <p className="mt-1 text-xs text-admin-muted">
+                  Selected {formatTimestamp(address.selected_at)} · address-book edits never change
+                  this order.
+                </p>
+                {defaultAddress && defaultAddress.id !== address.source_address_id ? (
+                  <p className="mt-1 text-xs text-admin-draft-ink">
+                    Differs from the default “{defaultAddress.label}”.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-[13px] text-admin-muted">This order ships nowhere yet.</p>
+            )}
+            {!frozenIsCurrent && selection ? (
+              <p className="text-xs text-admin-draft-ink">
+                Saving freezes a new copy of “{selection.label}”.
+              </p>
+            ) : null}
+          </Card>
+
+          <Card
+            title="Order events"
+            footer={
+              <button className={outlineButtonClasses} type="button" onClick={addEvent}>
+                Add event
+              </button>
+            }
+          >
+            <p className="text-xs text-admin-muted">
+              Authored history — discoverable by agents through the order tools. Events are stored
+              in chronological order.
+            </p>
+            {content.events.length === 0 ? (
+              <p className="text-[13px] text-admin-muted">No authored history yet.</p>
+            ) : (
+              content.events.map((entry) => (
+                <div key={entry.id} className={`${surfaceClasses} grid gap-2 p-3`}>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className={fieldLabelClasses}>
+                      Kind
+                      <select
+                        className={fieldControlClasses}
+                        value={entry.kind}
+                        aria-label={`Kind for ${entry.id}`}
+                        onChange={(event) =>
+                          edit({
+                            ...content,
+                            events: content.events.map((candidate) =>
+                              candidate.id === entry.id
+                                ? { ...candidate, kind: event.target.value as OrderEventKind }
+                                : candidate,
+                            ),
+                          })
+                        }
+                      >
+                        {EVENT_KINDS.map((kind) => (
+                          <option key={kind} value={kind}>
+                            {eventKindLabel(kind)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className={fieldLabelClasses}>
+                      Occurred at
+                      <input
+                        className={fieldControlClasses}
+                        type="datetime-local"
+                        aria-label={`Time for ${entry.id}`}
+                        value={toLocalInput(entry.occurred_at)}
+                        onChange={(event) =>
+                          edit({
+                            ...content,
+                            events: content.events.map((candidate) =>
+                              candidate.id === entry.id
+                                ? {
+                                    ...candidate,
+                                    occurred_at:
+                                      fromLocalInput(event.target.value) ?? candidate.occurred_at,
+                                  }
+                                : candidate,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label className={fieldLabelClasses}>
+                    Summary
+                    <textarea
+                      className={textAreaClasses}
+                      aria-label={`Summary for ${entry.id}`}
+                      value={entry.summary}
+                      onChange={(event) =>
+                        edit({
+                          ...content,
+                          events: content.events.map((candidate) =>
+                            candidate.id === entry.id
+                              ? { ...candidate, summary: event.target.value }
+                              : candidate,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <button
+                    className={subtleButtonClasses}
+                    type="button"
+                    onClick={() =>
+                      edit({
+                        ...content,
+                        events: content.events.filter((candidate) => candidate.id !== entry.id),
+                      })
+                    }
+                  >
+                    Remove event
+                  </button>
+                </div>
+              ))
+            )}
+          </Card>
+        </div>
+
+        <div className="grid content-start gap-4">
+          <Card title="Findings">
+            <IssueList issues={order.issues} />
+            <p className="text-xs text-admin-muted">
+              Fingerprint <Fingerprint value={order.content_fingerprint} />
+            </p>
+          </Card>
+
+          <Card title="Customer">
+            {customer ? (
+              <>
+                <Link
+                  className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                  to={`/shops/${shopId}/customers/${content.customer_profile_id}`}
+                >
+                  {customer.display_name}
+                </Link>
+                <p className="text-[13px] text-admin-muted">
+                  {customer.persona.traits.join(" · ") || "No persona traits yet"}
+                </p>
+                <p className="text-xs text-admin-muted">
+                  Default address: {defaultAddress?.label ?? "none"}
+                </p>
+                <p className="text-xs text-admin-muted">
+                  History shown here is this shop's only; the profile is reusable across shops.
+                </p>
+              </>
+            ) : (
+              <p className="text-[13px] text-admin-muted">Loading customer…</p>
+            )}
+          </Card>
+
+          <Card title="Freezing">
+            <p className="text-xs text-admin-muted">
+              Saving changes future scenario publications and experiments only — published scenarios
+              and past runs keep the state they pinned. The customer is fixed at creation: delete
+              and recreate to move this order.
+            </p>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}

@@ -1048,6 +1048,217 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/orders:
+    get:
+      summary: List the authored order fixtures of one shop
+      operationId: listShopOrders
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create an order fixture for a customer attached to this shop
+      operationId: createShopOrder
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopOrderResponse'
+        '404':
+          description: The definition or the shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another order in this shop already uses that reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid order content, an unresolvable selection, or an illegal
+            status transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/orders/{order_id}:
+    get:
+      summary: Retrieve one authored order and its findings
+      operationId: getShopOrder
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable order identifier inside one shop.
+          title: Order Id
+        description: Stable order identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopOrderResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the order from catalog, method, and address-book selections
+      operationId: replaceShopOrder
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable order identifier inside one shop.
+          title: Order Id
+        description: Stable order identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceOrderRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShopOrderResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another order in this shop already uses that reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid order content, an unresolvable selection, or an illegal
+            status transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete an order fixture; nothing already published is affected
+      operationId: deleteShopOrder
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable order identifier inside one shop.
+          title: Order Id
+        description: Stable order identifier inside one shop.
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/customer-profiles:
     get:
       summary: List customer profiles, optionally scoped to one shop's attachments
@@ -2194,6 +2405,34 @@ components:
       - customer_since
       - shop_id
       title: CreateCustomerProfileRequest
+    CreateOrderRequest:
+      properties:
+        reference:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[A-Z0-9]+(?:-[A-Z0-9]+)*$
+          title: Reference
+          description: The business reference support agents quote, unique inside
+            one shop.
+        customer_profile_id:
+          type: string
+          format: uuid
+          title: Customer Profile Id
+        placed_at:
+          type: string
+          format: date-time
+          title: Placed At
+          description: RFC 3339 instant with an explicit UTC offset.
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - customer_profile_id
+      - placed_at
+      title: CreateOrderRequest
+      description: 'The order''s identity: a reference, the customer it belongs to,
+        and when it happened.'
     CreateShopRequest:
       properties:
         identity:
@@ -2795,6 +3034,13 @@ components:
       - min_transit_days
       - max_transit_days
       title: FulfilmentMethodSchema
+    FulfilmentStatus:
+      type: string
+      enum:
+      - unfulfilled
+      - partially_fulfilled
+      - fulfilled
+      title: FulfilmentStatus
     GenerateScenarioRequest:
       properties:
         seed:
@@ -3063,6 +3309,260 @@ components:
       - name
       - values
       title: OptionSchema
+    OrderContentSchema:
+      properties:
+        reference:
+          type: string
+          title: Reference
+        customer_profile_id:
+          type: string
+          format: uuid
+          title: Customer Profile Id
+        currency:
+          type: string
+          title: Currency
+        placed_at:
+          type: string
+          title: Placed At
+        lines:
+          items:
+            $ref: '#/components/schemas/OrderLineSchema'
+          type: array
+          title: Lines
+        payment:
+          $ref: '#/components/schemas/OrderPaymentSchema'
+        fulfilment:
+          $ref: '#/components/schemas/OrderFulfilmentSchema'
+        shipping_fee:
+          $ref: '#/components/schemas/MoneySchema'
+        shipping_address:
+          anyOf:
+          - $ref: '#/components/schemas/ShippingAddressSchema'
+          - type: 'null'
+        events:
+          items:
+            $ref: '#/components/schemas/OrderEventSchema'
+          type: array
+          title: Events
+        subtotal:
+          $ref: '#/components/schemas/MoneySchema'
+        total:
+          $ref: '#/components/schemas/MoneySchema'
+        item_count:
+          type: integer
+          title: Item Count
+        allows_address_change:
+          type: boolean
+          title: Allows Address Change
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - customer_profile_id
+      - currency
+      - placed_at
+      - lines
+      - payment
+      - fulfilment
+      - shipping_fee
+      - shipping_address
+      - events
+      - subtotal
+      - total
+      - item_count
+      - allows_address_change
+      title: OrderContentSchema
+      description: The materialized order, including the totals derived from its line
+        items.
+    OrderEventInputSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        kind:
+          $ref: '#/components/schemas/OrderEventKind'
+        occurred_at:
+          type: string
+          format: date-time
+          title: Occurred At
+          description: RFC 3339 instant with an explicit UTC offset.
+        summary:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Summary
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - kind
+      - occurred_at
+      - summary
+      title: OrderEventInputSchema
+      description: An authored history entry. The caller owns the identifier so edits
+        stay stable.
+    OrderEventKind:
+      type: string
+      enum:
+      - placed
+      - payment_authorized
+      - payment_captured
+      - payment_refunded
+      - shipped
+      - delivered
+      - address_updated
+      - support_contact
+      title: OrderEventKind
+      description: What an authored history entry records. Agents discover these through
+        tools.
+    OrderEventSchema:
+      properties:
+        id:
+          type: string
+          title: Id
+        kind:
+          $ref: '#/components/schemas/OrderEventKind'
+        occurred_at:
+          type: string
+          title: Occurred At
+        summary:
+          type: string
+          title: Summary
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - kind
+      - occurred_at
+      - summary
+      title: OrderEventSchema
+    OrderFulfilmentSchema:
+      properties:
+        status:
+          $ref: '#/components/schemas/FulfilmentStatus'
+        method_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Method Id
+        method_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Method Name
+        shipped_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Shipped At
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - method_id
+      - method_name
+      - shipped_at
+      title: OrderFulfilmentSchema
+    OrderLineSchema:
+      properties:
+        id:
+          type: string
+          title: Id
+        sku:
+          type: string
+          title: Sku
+        product_handle:
+          type: string
+          title: Product Handle
+        title:
+          type: string
+          title: Title
+        variant_summary:
+          type: string
+          title: Variant Summary
+        unit_price:
+          $ref: '#/components/schemas/MoneySchema'
+        quantity:
+          type: integer
+          title: Quantity
+        line_total:
+          $ref: '#/components/schemas/MoneySchema'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - sku
+      - product_handle
+      - title
+      - variant_summary
+      - unit_price
+      - quantity
+      - line_total
+      title: OrderLineSchema
+      description: One frozen line item. `unit_price` is what the catalog charged
+        when it was added.
+    OrderLineSelectionSchema:
+      properties:
+        sku:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Sku
+        quantity:
+          type: integer
+          maximum: 999.0
+          minimum: 1.0
+          title: Quantity
+      additionalProperties: false
+      type: object
+      required:
+      - sku
+      - quantity
+      title: OrderLineSelectionSchema
+      description: A catalog variant and how many of it; the price is resolved by
+        the lab.
+    OrderListResponse:
+      properties:
+        orders:
+          items:
+            $ref: '#/components/schemas/OrderSummarySchema'
+          type: array
+          title: Orders
+      additionalProperties: false
+      type: object
+      required:
+      - orders
+      title: OrderListResponse
+    OrderPaymentSchema:
+      properties:
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        method_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Method Id
+        method_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Method Name
+        paid_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Paid At
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - method_id
+      - method_name
+      - paid_at
+      title: OrderPaymentSchema
     OrderResponse:
       properties:
         id:
@@ -3097,6 +3597,52 @@ components:
       - status
       - version
       title: OrderResponse
+    OrderSummarySchema:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        reference:
+          type: string
+          title: Reference
+        customer_profile_id:
+          type: string
+          format: uuid
+          title: Customer Profile Id
+        customer_display_name:
+          type: string
+          title: Customer Display Name
+        placed_at:
+          type: string
+          title: Placed At
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        fulfilment_status:
+          $ref: '#/components/schemas/FulfilmentStatus'
+        line_count:
+          type: integer
+          title: Line Count
+        total:
+          $ref: '#/components/schemas/MoneySchema'
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - order_id
+      - reference
+      - customer_profile_id
+      - customer_display_name
+      - placed_at
+      - payment_status
+      - fulfilment_status
+      - line_count
+      - total
+      - updated_at
+      title: OrderSummarySchema
+      description: One row of the Studio's order index.
     PaymentMethodKind:
       type: string
       enum:
@@ -3131,6 +3677,14 @@ components:
       - kind
       - enabled
       title: PaymentMethodSchema
+    PaymentStatus:
+      type: string
+      enum:
+      - pending
+      - authorized
+      - paid
+      - refunded
+      title: PaymentStatus
     PersonaResponse:
       properties:
         id:
@@ -3432,6 +3986,107 @@ components:
       required:
       - payload
       title: ReplaceCustomerProfileDraftRequest
+    ReplaceOrderFulfilmentSchema:
+      properties:
+        status:
+          $ref: '#/components/schemas/FulfilmentStatus'
+        method_id:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Method Id
+        shipped_at:
+          anyOf:
+          - type: string
+            format: date-time
+            description: RFC 3339 instant with an explicit UTC offset.
+          - type: 'null'
+          title: Shipped At
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - method_id
+      - shipped_at
+      title: ReplaceOrderFulfilmentSchema
+    ReplaceOrderPaymentSchema:
+      properties:
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        method_id:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Method Id
+        paid_at:
+          anyOf:
+          - type: string
+            format: date-time
+            description: RFC 3339 instant with an explicit UTC offset.
+          - type: 'null'
+          title: Paid At
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - method_id
+      - paid_at
+      title: ReplaceOrderPaymentSchema
+    ReplaceOrderRequest:
+      properties:
+        reference:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[A-Z0-9]+(?:-[A-Z0-9]+)*$
+          title: Reference
+          description: The business reference support agents quote, unique inside
+            one shop.
+        placed_at:
+          type: string
+          format: date-time
+          title: Placed At
+          description: RFC 3339 instant with an explicit UTC offset.
+        lines:
+          items:
+            $ref: '#/components/schemas/OrderLineSelectionSchema'
+          type: array
+          title: Lines
+        payment:
+          $ref: '#/components/schemas/ReplaceOrderPaymentSchema'
+        fulfilment:
+          $ref: '#/components/schemas/ReplaceOrderFulfilmentSchema'
+        shipping_fee_amount:
+          type: string
+          pattern: ^\d{1,10}(?:\.\d{1,2})?$
+          title: Shipping Fee Amount
+        shipping_address_id:
+          anyOf:
+          - type: string
+            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          - type: 'null'
+          title: Shipping Address Id
+        events:
+          items:
+            $ref: '#/components/schemas/OrderEventInputSchema'
+          type: array
+          title: Events
+      additionalProperties: false
+      type: object
+      required:
+      - reference
+      - placed_at
+      - lines
+      - payment
+      - fulfilment
+      - shipping_fee_amount
+      - shipping_address_id
+      - events
+      title: ReplaceOrderRequest
+      description: The whole order as selections. The customer is fixed at creation
+        and never edited.
     ReplaceShopDraftRequest:
       properties:
         payload:
@@ -3542,6 +4197,57 @@ components:
       required:
       - message
       title: SendConversationMessageRequest
+    ShippingAddressSchema:
+      properties:
+        source_address_id:
+          type: string
+          title: Source Address Id
+        source_label:
+          type: string
+          title: Source Label
+        selected_at:
+          type: string
+          title: Selected At
+        recipient:
+          type: string
+          title: Recipient
+        line1:
+          type: string
+          title: Line1
+        line2:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Line2
+        postal_code:
+          type: string
+          title: Postal Code
+        city:
+          type: string
+          title: City
+        region:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Region
+        country:
+          type: string
+          title: Country
+      additionalProperties: false
+      type: object
+      required:
+      - source_address_id
+      - source_label
+      - selected_at
+      - recipient
+      - line1
+      - line2
+      - postal_code
+      - city
+      - region
+      - country
+      title: ShippingAddressSchema
+      description: The frozen copy of the address-book entry this order ships to.
     ShopContentSchema:
       properties:
         identity:
@@ -3677,6 +4383,66 @@ components:
       required:
       - shops
       title: ShopListResponse
+    ShopOrderResponse:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        content:
+          $ref: '#/components/schemas/OrderContentSchema'
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        payment_status_options:
+          items:
+            $ref: '#/components/schemas/PaymentStatus'
+          type: array
+          title: Payment Status Options
+        fulfilment_status_options:
+          items:
+            $ref: '#/components/schemas/FulfilmentStatus'
+          type: array
+          title: Fulfilment Status Options
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - order_id
+      - shop_id
+      - content
+      - content_fingerprint
+      - issues
+      - payment_status_options
+      - fulfilment_status_options
+      - created_at
+      - updated_at
+      title: ShopOrderResponse
+      description: 'One authored order, its findings, and the statuses it may still
+        move to.
+
+
+        Named for its shop scope because the POC''s scenario contract already publishes
+        an
+
+        `OrderResponse`; two schemas of one name would make the generator rename both,
+        and one
+
+        of them is already published.'
     ShopPayloadSchema:
       properties:
         identity:
