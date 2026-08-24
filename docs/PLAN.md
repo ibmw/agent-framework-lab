@@ -40,9 +40,10 @@ Milestone 1 Slice 2 replaced the persona-first frontend with the target Studio s
 the versioned shop and catalog (ADR 0013). Slice 3 added versioned customer profiles and support
 identities on a shared authoring lifecycle (ADR 0014). Milestone 2 has begun with shop-scoped order
 fixtures: typed status axes, derived totals, authored events, and selection-only line items and
-shipping addresses (ADR 0015). The POC's conversation, persona, and order-action HTTP contracts
-remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
-the new shell.
+shipping addresses (ADR 0015), followed by versioned tickets — the first shop-scoped definition,
+pinning its shop and customer-profile versions at publication (ADR 0016). The POC's conversation,
+persona, and order-action HTTP contracts remain published and tested but have no UI consumer until
+the Milestone 2–4 surfaces are built on the new shell.
 
 The POC does not implement the target Scenario Studio, published agent configurations, paired
 experiment runner, participant-driver port, LLM judge, experiment-first history, or target
@@ -273,9 +274,10 @@ instance.
 - [x] Author order fixtures through the order editor: typed status transitions, derived totals,
   authored order events, and a shipping address selected from the customer's address book and
   stored as a frozen, source-labeled copy.
-- [ ] Define versioned tickets (channel, origin references, prior conversation, trigger) and the
-  scenario recipe on top of them: hidden facts, context documents, composed objective and mutation
-  blocks, and completion conditions.
+- [x] Define versioned tickets: channel, origin references, prior conversation, and the triggering
+  first message every arm receives.
+- [ ] Define the scenario recipe on top of a published ticket: hidden facts, context documents,
+  composed objective and mutation blocks, and completion conditions.
 - [ ] Define the shared objective/mutation block libraries: parameterized templates, draft/published
   versions, and same-shop binding validation.
 - [ ] Build a scenario editor with validation and a resolved-state preview.
@@ -291,6 +293,16 @@ instance.
 
 Frames: 2 · Orders, 2b · Order editor, 3 · Tickets — helpdesk view, 4 · Scenario editor — composed
 blocks, 4a · Objective block library, and 4b · Mutation block library.
+
+Ticket evidence (frame 3): an author opens the wrong-address incident on one shop's customer, authors
+the prior support history and the triggering first message, links the stale-address order, and
+publishes; the frozen version keeps what it froze while the draft moves on. ADR 0016 records the
+`ticket-payload-v1` schema, the decision that a ticket **is** a definition where the order beside it
+is not, the separation of prior history from the trigger, the minimal origin reference, and the
+extension of the shared authoring lifecycle to shop-scoped types that pin their shop and their
+references. The scenario recipe is deliberately deferred to the slice that also delivers the block
+libraries and the scenario editor, because a scenario payload is mostly block bindings whose shape
+those libraries fix.
 
 Order-fixture evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came

@@ -31,10 +31,12 @@ selection. This is reusable evidence, not the target domain model.
 
 Milestone 1 has begun replacing it: the definition lifecycle (ADR 0012), the versioned shop and
 extensible catalog with its publish gate (ADR 0013), versioned customer profiles and support
-identities on a shared authoring lifecycle (ADR 0014), shop-scoped order fixtures (ADR 0015), the
+identities on a shared authoring lifecycle (ADR 0014), shop-scoped order fixtures (ADR 0015),
+versioned tickets — the first shop-scoped definition, pinning its shop and customer versions at
+publication (ADR 0016) — the
 `definition_drafts`/`definition_versions`/`definition_shop_attachments`/`shop_order_fixtures` tables,
-and the Studio application shell are target code. The POC's persona-first frontend was removed with that shell;
-its HTTP contracts remain published and tested without a UI consumer.
+and the Studio application shell are target code. The POC's persona-first frontend was removed with
+that shell; its HTTP contracts remain published and tested without a UI consumer.
 
 ## Binding dependency rule
 
