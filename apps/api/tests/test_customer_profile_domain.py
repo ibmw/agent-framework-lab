@@ -6,7 +6,7 @@ from typing import cast
 import pytest
 
 from capability_lab.application.customer_profile_payload import customer_profile_document
-from capability_lab.domain.content import leaf_paths
+from capability_lab.domain.content import FieldSensitivity, leaf_paths
 from capability_lab.domain.customer_profile import (
     FIELD_SENSITIVITY,
     MAX_PERSONA_TRAITS,
@@ -14,7 +14,6 @@ from capability_lab.domain.customer_profile import (
     BehavioralPersona,
     CustomerProfileConfigurationError,
     CustomerProfilePayload,
-    FieldSensitivity,
     LoyaltyTier,
     restricted_values,
     summarize_customer_profile_changes,

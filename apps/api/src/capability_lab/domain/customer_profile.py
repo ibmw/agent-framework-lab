@@ -26,7 +26,7 @@ from enum import StrEnum
 from functools import partial
 
 from capability_lab.domain.content import (
-    leaf_paths,
+    FieldSensitivity,
     require_bool,
     require_country_code,
     require_email,
@@ -38,6 +38,9 @@ from capability_lab.domain.content import (
     require_slug,
     require_text,
     require_unique,
+)
+from capability_lab.domain.content import (
+    unclassified_paths as unclassified_document_paths,
 )
 from capability_lab.domain.definitions import (
     DefinitionChange,
@@ -268,19 +271,6 @@ class CustomerProfilePayload:
         return None
 
 
-class FieldSensitivity(StrEnum):
-    """Whether a canonical-document leaf may ever leave the authoring surface."""
-
-    SENSITIVE = "sensitive"
-    """Synthetic personal data: never logged, traced, or embedded in an error message."""
-
-    CUSTOMER_ONLY = "customer_only"
-    """Simulation-side content the support agent must never see, and never logged."""
-
-    OPERATIONAL = "operational"
-    """Non-identifying content that may appear in a span attribute or a log line."""
-
-
 # Every leaf of the `customer-profile-payload-v1` document, so a newly authored field
 # cannot arrive without a decision. `[]` stands for a list index.
 FIELD_SENSITIVITY: dict[str, FieldSensitivity] = {
@@ -316,14 +306,10 @@ FIELD_SENSITIVITY: dict[str, FieldSensitivity] = {
     "hidden_facts[].revealed_when": FieldSensitivity.CUSTOMER_ONLY,
 }
 
-RESTRICTED_SENSITIVITIES: frozenset[FieldSensitivity] = frozenset(
-    {FieldSensitivity.SENSITIVE, FieldSensitivity.CUSTOMER_ONLY}
-)
-
 
 def unclassified_paths(document: object) -> frozenset[str]:
     """Document leaves with no sensitivity decision; empty for a complete payload."""
-    return leaf_paths(document) - frozenset(FIELD_SENSITIVITY)
+    return unclassified_document_paths(document, FIELD_SENSITIVITY)
 
 
 def restricted_values(payload: CustomerProfilePayload) -> tuple[str, ...]:

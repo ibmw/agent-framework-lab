@@ -9,8 +9,10 @@ restating the same guards.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
+from enum import StrEnum
 from typing import cast
 
 from capability_lab.domain.entities import DomainError
@@ -145,6 +147,31 @@ def require_iso_date(value: object, field_name: str, *, error: type[DomainError]
     except ValueError as cause:
         raise error(f"{field_name} must be a real calendar date") from cause
     return value
+
+
+class FieldSensitivity(StrEnum):
+    """Whether a canonical-document leaf may ever leave the authoring surface."""
+
+    SENSITIVE = "sensitive"
+    """Synthetic personal data: never logged, traced, or embedded in an error message."""
+
+    CUSTOMER_ONLY = "customer_only"
+    """Simulation-side content the support agent must never see, and never logged."""
+
+    OPERATIONAL = "operational"
+    """Non-identifying content that may appear in a span attribute or a log line."""
+
+
+RESTRICTED_SENSITIVITIES: frozenset[FieldSensitivity] = frozenset(
+    {FieldSensitivity.SENSITIVE, FieldSensitivity.CUSTOMER_ONLY}
+)
+
+
+def unclassified_paths(
+    document: object, classification: Mapping[str, FieldSensitivity]
+) -> frozenset[str]:
+    """Document leaves with no sensitivity decision; empty for a complete classification."""
+    return leaf_paths(document) - frozenset(classification)
 
 
 def leaf_paths(document: object, prefix: str = "") -> frozenset[str]:
