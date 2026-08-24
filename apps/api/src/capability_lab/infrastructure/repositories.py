@@ -1181,6 +1181,51 @@ class SqlAlchemyScenarioGenerationIdempotencyRepository:
         return None
 
 
+def _reference_row(target: DefinitionId, *, version: int | None) -> dict[str, object]:
+    """One stored reference. A draft's targets carry no version until publication pins one."""
+    row: dict[str, object] = {
+        "definition_type": target.definition_type.value,
+        "definition_id": str(target.id),
+    }
+    if version is not None:
+        row["version"] = version
+    return row
+
+
+def _definition_id(reference: dict[str, object]) -> DefinitionId:
+    return DefinitionId(
+        definition_type=DefinitionType(str(reference["definition_type"])),
+        id=UUID(str(reference["definition_id"])),
+    )
+
+
+def _published_version(
+    model: DefinitionVersionModel, definition: DefinitionId
+) -> PublishedDefinitionVersion:
+    """Rebuild one immutable published version and everything it pinned."""
+    return PublishedDefinitionVersion(
+        definition=definition,
+        version=model.version,
+        content_fingerprint=model.content_fingerprint,
+        published_at=model.published_at,
+        shop=_shop_scope(model.shop_id),
+        shop_version=model.shop_version,
+        references=tuple(
+            VersionRef(
+                definition=_definition_id(reference),
+                version=int(cast("int", reference["version"])),
+            )
+            for reference in model.references
+        ),
+    )
+
+
+def _shop_scope(shop_id: str | None) -> DefinitionId | None:
+    if shop_id is None:
+        return None
+    return DefinitionId(definition_type=DefinitionType.SHOP, id=UUID(shop_id))
+
+
 class SqlAlchemyDefinitionRepository[PayloadT]:
     """Store one definition type's drafts and immutable versions as canonical documents.
 
@@ -1201,6 +1246,13 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
         return self._codec.definition_type.value
 
     def list_definitions(self) -> tuple[DefinitionListing[PayloadT], ...]:
+        return self._listings(None)
+
+    def list_in_shop(self, shop_id: UUID) -> tuple[DefinitionListing[PayloadT], ...]:
+        """The drafts of one shop. Shop-independent types have no rows to match."""
+        return self._listings(str(shop_id))
+
+    def _listings(self, shop_id: str | None) -> tuple[DefinitionListing[PayloadT], ...]:
         published = self._session.execute(
             select(
                 DefinitionVersionModel.definition_id,
@@ -1212,10 +1264,13 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
         ).all()
         latest_versions: dict[str, int] = {row[0]: row[1] for row in published}
         version_counts: dict[str, int] = {row[0]: row[2] for row in published}
+        statement = select(DefinitionDraftModel).where(
+            DefinitionDraftModel.definition_type == self._type
+        )
+        if shop_id is not None:
+            statement = statement.where(DefinitionDraftModel.shop_id == shop_id)
         drafts = self._session.scalars(
-            select(DefinitionDraftModel)
-            .where(DefinitionDraftModel.definition_type == self._type)
-            .order_by(DefinitionDraftModel.created_at, DefinitionDraftModel.definition_id)
+            statement.order_by(DefinitionDraftModel.created_at, DefinitionDraftModel.definition_id)
         ).all()
         return tuple(
             DefinitionListing[PayloadT](
@@ -1236,7 +1291,11 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
         if model is None:
             return None
         return DefinitionDraftRecord[PayloadT](
-            draft=DefinitionDraft(definition=definition),
+            draft=DefinitionDraft(
+                definition=definition,
+                shop=_shop_scope(model.shop_id),
+                references=tuple(_definition_id(reference) for reference in model.references),
+            ),
             payload=self._codec.from_document(model.payload),
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -1245,6 +1304,7 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
     def save_draft(self, record: DefinitionDraftRecord[PayloadT]) -> None:
         definition = record.definition
         document = cast("dict[str, object]", self._codec.document(record.payload))
+        references = [_reference_row(target, version=None) for target in record.draft.references]
         model = self._session.get(
             DefinitionDraftModel, (definition.definition_type.value, str(definition.id))
         )
@@ -1253,14 +1313,17 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
                 DefinitionDraftModel(
                     definition_type=definition.definition_type.value,
                     definition_id=str(definition.id),
-                    shop_id=None,
-                    references=[],
+                    shop_id=None if record.draft.shop is None else str(record.draft.shop.id),
+                    references=references,
                     payload=document,
                     created_at=record.created_at,
                     updated_at=record.updated_at,
                 )
             )
         else:
+            # The scope is identity and is never rewritten; the references follow the
+            # payload, which the caller may have changed.
+            model.references = references
             model.payload = document
             model.updated_at = record.updated_at
         self._session.flush()
@@ -1320,11 +1383,7 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
                 shop_id=None if published.shop is None else str(published.shop.id),
                 shop_version=published.shop_version,
                 references=[
-                    {
-                        "definition_type": reference.definition.definition_type.value,
-                        "definition_id": str(reference.definition.id),
-                        "version": reference.version,
-                    }
+                    _reference_row(reference.definition, version=reference.version)
                     for reference in published.references
                 ],
                 payload=cast("dict[str, object]", self._codec.document(record.payload)),
@@ -1343,26 +1402,7 @@ class SqlAlchemyDefinitionRepository[PayloadT]:
     def _published(
         model: DefinitionVersionModel, definition: DefinitionId
     ) -> PublishedDefinitionVersion:
-        return PublishedDefinitionVersion(
-            definition=definition,
-            version=model.version,
-            content_fingerprint=model.content_fingerprint,
-            published_at=model.published_at,
-            shop=None
-            if model.shop_id is None
-            else DefinitionId(definition_type=DefinitionType.SHOP, id=UUID(model.shop_id)),
-            shop_version=model.shop_version,
-            references=tuple(
-                VersionRef(
-                    definition=DefinitionId(
-                        definition_type=DefinitionType(str(reference["definition_type"])),
-                        id=UUID(str(reference["definition_id"])),
-                    ),
-                    version=int(cast("int", reference["version"])),
-                )
-                for reference in model.references
-            ),
-        )
+        return _published_version(model, definition)
 
 
 def shop_repository(session: Session) -> SqlAlchemyDefinitionRepository[ShopPayload]:
@@ -1379,6 +1419,32 @@ def support_identity_repository(
     session: Session,
 ) -> SqlAlchemyDefinitionRepository[SupportIdentityPayload]:
     return SqlAlchemyDefinitionRepository(session, SUPPORT_IDENTITY_CODEC)
+
+
+class SqlAlchemyPublishedVersionDirectory:
+    """The latest published version of any definition, read without its payload codec.
+
+    Publishing a shop-scoped definition pins its shop and its references, which are other
+    definition types entirely. Only the version provenance is needed, so this reads the
+    version row directly instead of decoding three different payload documents.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def latest_published(self, definition: DefinitionId) -> PublishedDefinitionVersion | None:
+        model = self._session.scalars(
+            select(DefinitionVersionModel)
+            .where(
+                DefinitionVersionModel.definition_type == definition.definition_type.value,
+                DefinitionVersionModel.definition_id == str(definition.id),
+            )
+            .order_by(DefinitionVersionModel.version.desc())
+            .limit(1)
+        ).first()
+        if model is None:
+            return None
+        return _published_version(model, definition)
 
 
 class SqlAlchemyShopDirectory:
