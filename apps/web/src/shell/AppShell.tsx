@@ -1,6 +1,8 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import {
   Boxes,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Clock,
   FileText,
@@ -13,7 +15,7 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 interface NavEntry {
@@ -43,7 +45,7 @@ function studioSections(shopId: string): NavSection[] {
         { label: "Products", to: `${base}/products`, icon: <Tag size={15} /> },
         { label: "Orders", to: `${base}/orders`, icon: <Boxes size={15} /> },
         { label: "Customers", to: `${base}/customers`, icon: <Users size={15} /> },
-        { label: "Tickets", icon: <MessageSquare size={15} />, milestone: "Milestone 2" },
+        { label: "Tickets", to: `${base}/tickets`, icon: <MessageSquare size={15} /> },
         { label: "Scenarios", icon: <ClipboardList size={15} />, milestone: "Milestone 2" },
       ],
     },
@@ -83,18 +85,27 @@ function studioSections(shopId: string): NavSection[] {
 const entryClasses =
   "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-admin-ink-soft transition hover:bg-admin-border/50";
 
-function SidebarEntry({ entry }: { entry: NavEntry }) {
+function SidebarEntry({ entry, collapsed }: { entry: NavEntry; collapsed: boolean }) {
+  const label = collapsed ? (
+    <span className="sr-only">{entry.label}</span>
+  ) : (
+    <span>{entry.label}</span>
+  );
+  const layout = collapsed ? `${entryClasses} justify-center` : entryClasses;
+
   if (!entry.to) {
     return (
       <span
-        className={`${entryClasses} cursor-not-allowed opacity-55`}
+        className={`${layout} cursor-not-allowed opacity-55`}
         title={`Arrives with ${entry.milestone}`}
       >
         {entry.icon}
-        <span>{entry.label}</span>
-        <span className="ml-auto text-[10px] font-semibold tracking-wide text-admin-muted uppercase">
-          soon
-        </span>
+        {label}
+        {collapsed ? null : (
+          <span className="ml-auto text-[10px] font-semibold tracking-wide text-admin-muted uppercase">
+            soon
+          </span>
+        )}
       </span>
     );
   }
@@ -103,14 +114,13 @@ function SidebarEntry({ entry }: { entry: NavEntry }) {
     <NavLink
       to={entry.to}
       end={entry.exact ?? false}
+      title={collapsed ? entry.label : undefined}
       className={({ isActive }) =>
-        isActive
-          ? `${entryClasses} bg-[#e8f0ed] font-semibold text-lab-ink`
-          : `${entryClasses} no-underline`
+        isActive ? `${layout} bg-[#e8f0ed] font-semibold text-lab-ink` : `${layout} no-underline`
       }
     >
       {entry.icon}
-      <span>{entry.label}</span>
+      {label}
     </NavLink>
   );
 }
@@ -124,6 +134,10 @@ interface AppShellProps {
 export function AppShell({ shops, currentShopId, children }: AppShellProps) {
   const navigate = useNavigate();
   const current = shops.find((shop) => shop.shop_id === currentShopId);
+  // One rail for every section, collapsed only when the author says so. Routes deliberately
+  // do not override this: a navigation that folded the menu on its own would make the same
+  // control mean different things depending on where you happened to be standing.
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="flex min-h-screen flex-col bg-admin-canvas text-admin-ink">
@@ -161,20 +175,35 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
         {currentShopId ? (
           <nav
             aria-label="Shop workspace"
-            className="flex w-[226px] flex-none flex-col gap-0.5 border-r border-admin-border bg-admin-sidebar p-2.5"
+            className={`flex flex-none flex-col gap-0.5 border-r border-admin-border bg-admin-sidebar p-2.5 ${
+              collapsed ? "w-[58px]" : "w-[226px]"
+            }`}
           >
             {studioSections(currentShopId).map((section) => (
               <div key={section.title ?? "primary"} className="grid gap-0.5">
-                {section.title ? (
+                {section.title && !collapsed ? (
                   <div className="px-2.5 pt-3 pb-1 text-[10.5px] font-bold tracking-wider text-admin-muted uppercase">
                     {section.title}
                   </div>
                 ) : null}
+                {section.title && collapsed ? (
+                  <div className="mx-2 my-2 h-px bg-admin-border" />
+                ) : null}
                 {section.entries.map((entry) => (
-                  <SidebarEntry key={entry.label} entry={entry} />
+                  <SidebarEntry key={entry.label} entry={entry} collapsed={collapsed} />
                 ))}
               </div>
             ))}
+            <button
+              type="button"
+              className={`${entryClasses} mt-auto ${collapsed ? "justify-center" : ""}`}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+              {collapsed ? null : <span>Collapse</span>}
+            </button>
           </nav>
         ) : null}
 

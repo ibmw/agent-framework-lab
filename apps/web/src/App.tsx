@@ -16,6 +16,7 @@ import { ShopsPage } from "./routes/ShopsPage";
 import { ShopVersionPage } from "./routes/ShopVersionPage";
 import { SupportIdentitiesPage } from "./routes/SupportIdentitiesPage";
 import { SupportIdentityEditorPage } from "./routes/SupportIdentityEditorPage";
+import { TicketsPage } from "./routes/TicketsPage";
 import { ShopWorkspace } from "./shell/ShopWorkspace";
 
 export function App() {
@@ -30,6 +31,8 @@ export function App() {
         <Route path="orders" element={<OrdersPage />} />
         <Route path="orders/:orderId" element={<OrderEditorPage />} />
         <Route path="customers" element={<CustomersPage />} />
+        <Route path="tickets" element={<TicketsPage />} />
+        <Route path="tickets/:ticketId" element={<TicketsPage />} />
         <Route path="customers/:profileId" element={<CustomerEditorPage />} />
         <Route path="support-identities" element={<SupportIdentitiesPage />} />
         <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
