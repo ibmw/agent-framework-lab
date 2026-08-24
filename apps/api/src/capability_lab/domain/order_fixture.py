@@ -20,7 +20,6 @@ fixture always describes a history a real order could have had.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -28,8 +27,8 @@ from functools import partial
 from uuid import UUID
 
 from capability_lab.domain.content import (
-    MAX_SLUG_LENGTH,
     FieldSensitivity,
+    require_business_reference,
     require_country_code,
     require_instance,
     require_integer_in_range,
@@ -56,8 +55,6 @@ MAX_ORDER_LINES = 40
 MAX_ORDER_EVENTS = 40
 MAX_LINE_QUANTITY = 999
 
-_REFERENCE_PATTERN = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)*")
-
 
 class OrderFixtureConfigurationError(DomainError):
     """Raised when order content violates a structural invariant."""
@@ -76,6 +73,7 @@ _require_instance = partial(require_instance, error=_error_type)
 _require_integer_in_range = partial(require_integer_in_range, error=_error_type)
 _require_country_code = partial(require_country_code, error=_error_type)
 _require_utc_timestamp = partial(require_utc_timestamp, error=_error_type)
+_require_business_reference = partial(require_business_reference, error=_error_type)
 
 
 class PaymentStatus(StrEnum):
@@ -178,15 +176,7 @@ FULFILMENT_EVIDENCE: dict[FulfilmentStatus, OrderEventKind] = {
 
 def require_order_reference(value: object, field_name: str) -> str:
     """A shop-unique business reference such as `NS-10482`, not a UUID."""
-    if not isinstance(value, str) or _REFERENCE_PATTERN.fullmatch(value) is None:
-        raise OrderFixtureConfigurationError(
-            f"{field_name} must be uppercase alphanumeric, like NS-10482"
-        )
-    if len(value) > MAX_SLUG_LENGTH:
-        raise OrderFixtureConfigurationError(
-            f"{field_name} must contain at most {MAX_SLUG_LENGTH} characters"
-        )
-    return value
+    return _require_business_reference(value, field_name)
 
 
 @dataclass(frozen=True, slots=True)

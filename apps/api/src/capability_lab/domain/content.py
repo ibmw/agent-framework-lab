@@ -26,6 +26,7 @@ _LOCALE_PATTERN = re.compile(r"[a-z]{2}(?:-[A-Z]{2})?")
 _EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+")
 _PHONE_PATTERN = re.compile(r"\+?[0-9][0-9 ()./-]{4,30}")
 _COUNTRY_PATTERN = re.compile(r"[A-Z]{2}")
+_REFERENCE_PATTERN = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)*")
 _DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 # ADR 0007's canonical instant: UTC, RFC 3339, exactly six fractional digits.
 _TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z")
@@ -35,6 +36,19 @@ CANONICAL_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 def require_slug(value: object, field_name: str, *, error: type[DomainError]) -> str:
     if not isinstance(value, str) or _SLUG_PATTERN.fullmatch(value) is None:
         raise error(f"{field_name} must be a lowercase kebab-case identifier")
+    if len(value) > MAX_SLUG_LENGTH:
+        raise error(f"{field_name} must contain at most {MAX_SLUG_LENGTH} characters")
+    return value
+
+
+def require_business_reference(value: object, field_name: str, *, error: type[DomainError]) -> str:
+    """A shop-unique identifier a human quotes, such as `NS-10482` or `T-204`.
+
+    Deliberately not a UUID: this is the string a customer reads out and an agent is asked
+    to look up, so it stays short, uppercase, and typeable.
+    """
+    if not isinstance(value, str) or _REFERENCE_PATTERN.fullmatch(value) is None:
+        raise error(f"{field_name} must be uppercase alphanumeric, like NS-10482")
     if len(value) > MAX_SLUG_LENGTH:
         raise error(f"{field_name} must contain at most {MAX_SLUG_LENGTH} characters")
     return value
