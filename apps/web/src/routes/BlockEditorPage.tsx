@@ -136,7 +136,7 @@ function BlockEditor<
         chips={<VersionChips preview={preview} />}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to="..">
+            <Link className="font-semibold text-lab-ink" to=".." relative="path">
               {backLabel}
             </Link>{" "}
             · {content.statement || "No statement yet"}

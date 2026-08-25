@@ -126,7 +126,7 @@ export function SupportIdentityEditorPage() {
         chips={<VersionChips preview={preview} />}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to="..">
+            <Link className="font-semibold text-lab-ink" to=".." relative="path">
               Support identities
             </Link>{" "}
             · {content.role.title}

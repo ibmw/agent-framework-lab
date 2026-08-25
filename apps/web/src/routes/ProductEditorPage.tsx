@@ -57,7 +57,7 @@ export function ProductEditorPage() {
         <PageHeader title="Product not found" />
         <p className="text-[13px] text-admin-muted">
           This draft has no product <code>{handle}</code>.{" "}
-          <Link className="font-semibold text-lab-ink" to="..">
+          <Link className="font-semibold text-lab-ink" to=".." relative="path">
             Back to products
           </Link>
         </p>

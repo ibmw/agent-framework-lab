@@ -235,7 +235,7 @@ export function CustomerEditorPage() {
         chips={<VersionChips preview={preview} />}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to="..">
+            <Link className="font-semibold text-lab-ink" to=".." relative="path">
               Customers
             </Link>{" "}
             · synthetic profile · customer since {content.account.customer_since}
