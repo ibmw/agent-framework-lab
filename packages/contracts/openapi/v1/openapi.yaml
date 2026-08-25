@@ -2301,6 +2301,542 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/objective-blocks:
+    get:
+      summary: List the shared objective-block library with version provenance
+      operationId: listObjectiveBlocks
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockListResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create an objective block and its first draft
+      operationId: createObjectiveBlock
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlockRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveBlockDraftResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another block in this library already answers to that name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/objective-blocks/{block_id}/draft:
+    get:
+      summary: Retrieve the mutable objective-block draft
+      operationId: getObjectiveBlockDraft
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveBlockDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceObjectiveBlockDraft
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceObjectiveBlockDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveBlockDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another block in this library already answers to that name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/objective-blocks/{block_id}/draft/preview:
+    get:
+      summary: Validate the draft and preview the version publishing would create
+      operationId: previewObjectiveBlockDraft
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveBlockPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/objective-blocks/{block_id}/versions:
+    post:
+      summary: Freeze the draft into the next immutable published version
+      operationId: publishObjectiveBlock
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveBlockVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
+    get:
+      summary: List a block's published versions, newest first
+      operationId: listObjectiveBlockVersions
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/objective-blocks/{block_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published objective-block version
+      operationId: getObjectiveBlockVersion
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectiveBlockVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/mutation-blocks:
+    get:
+      summary: List the shared mutation-block library with version provenance
+      operationId: listMutationBlocks
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockListResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create a mutation block and its first draft
+      operationId: createMutationBlock
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlockRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationBlockDraftResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another block in this library already answers to that name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/mutation-blocks/{block_id}/draft:
+    get:
+      summary: Retrieve the mutable mutation-block draft
+      operationId: getMutationBlockDraft
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationBlockDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceMutationBlockDraft
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceMutationBlockDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationBlockDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another block in this library already answers to that name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/mutation-blocks/{block_id}/draft/preview:
+    get:
+      summary: Validate the draft and preview the version publishing would create
+      operationId: previewMutationBlockDraft
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationBlockPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/mutation-blocks/{block_id}/versions:
+    post:
+      summary: Freeze the draft into the next immutable published version
+      operationId: publishMutationBlock
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationBlockVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
+    get:
+      summary: List a block's published versions, newest first
+      operationId: listMutationBlockVersions
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/mutation-blocks/{block_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published mutation-block version
+      operationId: getMutationBlockVersion
+      parameters:
+      - name: block_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable block identifier.
+          title: Block Id
+        description: Stable block identifier.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationBlockVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     AccountFactsSchema:
@@ -2627,6 +3163,132 @@ components:
       - life_event
       title: BackgroundKind
       description: What a piece of authored pre-sandbox history is about.
+    BlockListResponse:
+      properties:
+        blocks:
+          items:
+            $ref: '#/components/schemas/BlockSummarySchema'
+          type: array
+          title: Blocks
+      additionalProperties: false
+      type: object
+      required:
+      - blocks
+      title: BlockListResponse
+    BlockParameterKind:
+      type: string
+      enum:
+      - document_reference
+      - entity_reference
+      - data_reference
+      - tool_reference
+      - severity
+      - timing
+      - duration
+      - text
+      title: BlockParameterKind
+      description: 'What a scenario must supply for one parameter.
+
+
+        A closed enumeration, extended in code: the scenario editor offers a picker
+        per kind and
+
+        the runtime resolves a binding by kind, so a kind that does not exist here
+        can never be
+
+        bound to anything.'
+    BlockParameterSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$
+          title: Name
+        kind:
+          $ref: '#/components/schemas/BlockParameterKind'
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+        required:
+          type: boolean
+          title: Required
+        default:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default
+        shop_bound:
+          type: boolean
+          title: Shop Bound
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - kind
+      - description
+      - required
+      - default
+      title: BlockParameterSchema
+    BlockSummarySchema:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        name:
+          type: string
+          title: Name
+        statement:
+          type: string
+          title: Statement
+        type_label:
+          type: string
+          title: Type Label
+        parameter_count:
+          type: integer
+          title: Parameter Count
+        shop_bound_parameter_count:
+          type: integer
+          title: Shop Bound Parameter Count
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - name
+      - statement
+      - type_label
+      - parameter_count
+      - shop_bound_parameter_count
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      title: BlockSummarySchema
+    BlockVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: BlockVersionListResponse
     ConversationListResponse:
       properties:
         conversations:
@@ -2782,6 +3444,21 @@ components:
       - trace_id
       - created_at
       title: ConversationTurnResponse
+    CreateBlockRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Name
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: CreateBlockRequest
+      description: A block is created with its name only; everything else is decided
+        in the editor.
     CreateCustomerProfileRequest:
       properties:
         identity:
@@ -3709,6 +4386,328 @@ components:
       - amount
       - currency
       title: MoneySchema
+    MutationBlockDraftResponse:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/MutationBlockPayloadSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - content
+      - created_at
+      - updated_at
+      title: MutationBlockDraftResponse
+    MutationBlockPayloadSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Name
+        statement:
+          type: string
+          maxLength: 4000
+          title: Statement
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+        effect:
+          $ref: '#/components/schemas/MutationEffect'
+        parameters:
+          items:
+            $ref: '#/components/schemas/BlockParameterSchema'
+          type: array
+          maxItems: 8
+          title: Parameters
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - statement
+      - description
+      - effect
+      - parameters
+      title: MutationBlockPayloadSchema
+      description: The whole authored content of a mutation-block draft or published
+        version.
+    MutationBlockPreviewResponse:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/MutationBlockPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      title: MutationBlockPreviewResponse
+      description: 'The publish gate: what blocks publication and what a publish would
+        freeze.'
+    MutationBlockVersionResponse:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        content:
+          $ref: '#/components/schemas/MutationBlockPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - version
+      - content_fingerprint
+      - published_at
+      - content
+      title: MutationBlockVersionResponse
+    MutationEffect:
+      type: string
+      enum:
+      - entity_mutation
+      - tool_fault
+      - clock_shift
+      - service_outage
+      title: MutationEffect
+      description: 'What a mutation perturbs when the runtime injects it.
+
+
+        Mutations are applied to the sandbox, never exposed as agent tools: an arm
+        observes the
+
+        consequence and never the cause. The effect says which part of the sandbox
+        moves.'
+    ObjectiveAssessment:
+      type: string
+      enum:
+      - deterministic
+      - judge
+      title: ObjectiveAssessment
+      description: Who decides whether the objective was met.
+    ObjectiveBlockDraftResponse:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/ObjectiveBlockPayloadSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - content
+      - created_at
+      - updated_at
+      title: ObjectiveBlockDraftResponse
+    ObjectiveBlockPayloadSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Name
+        statement:
+          type: string
+          maxLength: 4000
+          title: Statement
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+        assessment:
+          $ref: '#/components/schemas/ObjectiveAssessment'
+        evidence:
+          $ref: '#/components/schemas/ObjectiveEvidence'
+        parameters:
+          items:
+            $ref: '#/components/schemas/BlockParameterSchema'
+          type: array
+          maxItems: 8
+          title: Parameters
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - statement
+      - description
+      - assessment
+      - evidence
+      - parameters
+      title: ObjectiveBlockPayloadSchema
+      description: The whole authored content of an objective-block draft or published
+        version.
+    ObjectiveBlockPreviewResponse:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/ObjectiveBlockPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      title: ObjectiveBlockPreviewResponse
+      description: 'The publish gate: what blocks publication and what a publish would
+        freeze.'
+    ObjectiveBlockVersionResponse:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        content:
+          $ref: '#/components/schemas/ObjectiveBlockPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - version
+      - content_fingerprint
+      - published_at
+      - content
+      title: ObjectiveBlockVersionResponse
+    ObjectiveEvidence:
+      type: string
+      enum:
+      - event
+      - policy
+      - state
+      - forbidden
+      - dimension
+      title: ObjectiveEvidence
+      description: What the assessment reads.
     OptionSchema:
       properties:
         key:
@@ -4414,6 +5413,24 @@ components:
       required:
       - payload
       title: ReplaceCustomerProfileDraftRequest
+    ReplaceMutationBlockDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/MutationBlockPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceMutationBlockDraftRequest
+    ReplaceObjectiveBlockDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ObjectiveBlockPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceObjectiveBlockDraftRequest
     ReplaceOrderFulfilmentSchema:
       properties:
         status:

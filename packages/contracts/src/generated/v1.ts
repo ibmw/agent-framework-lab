@@ -652,6 +652,182 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/objective-blocks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the shared objective-block library with version provenance */
+    get: operations["listObjectiveBlocks"];
+    put?: never;
+    /** Create an objective block and its first draft */
+    post: operations["createObjectiveBlock"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/objective-blocks/{block_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable objective-block draft */
+    get: operations["getObjectiveBlockDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceObjectiveBlockDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/objective-blocks/{block_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft and preview the version publishing would create */
+    get: operations["previewObjectiveBlockDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/objective-blocks/{block_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a block's published versions, newest first */
+    get: operations["listObjectiveBlockVersions"];
+    put?: never;
+    /** Freeze the draft into the next immutable published version */
+    post: operations["publishObjectiveBlock"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/objective-blocks/{block_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published objective-block version */
+    get: operations["getObjectiveBlockVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/mutation-blocks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the shared mutation-block library with version provenance */
+    get: operations["listMutationBlocks"];
+    put?: never;
+    /** Create a mutation block and its first draft */
+    post: operations["createMutationBlock"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/mutation-blocks/{block_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable mutation-block draft */
+    get: operations["getMutationBlockDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceMutationBlockDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/mutation-blocks/{block_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft and preview the version publishing would create */
+    get: operations["previewMutationBlockDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/mutation-blocks/{block_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a block's published versions, newest first */
+    get: operations["listMutationBlockVersions"];
+    put?: never;
+    /** Freeze the draft into the next immutable published version */
+    post: operations["publishMutationBlock"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/mutation-blocks/{block_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published mutation-block version */
+    get: operations["getMutationBlockVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -809,6 +985,75 @@ export interface components {
      * @enum {string}
      */
     BackgroundKind: "purchase" | "support_contact" | "account_event" | "life_event";
+    /** BlockListResponse */
+    BlockListResponse: {
+      /** Blocks */
+      blocks: components["schemas"]["BlockSummarySchema"][];
+    };
+    /**
+     * BlockParameterKind
+     * @description What a scenario must supply for one parameter.
+     *
+     *     A closed enumeration, extended in code: the scenario editor offers a picker per kind and
+     *     the runtime resolves a binding by kind, so a kind that does not exist here can never be
+     *     bound to anything.
+     * @enum {string}
+     */
+    BlockParameterKind:
+      | "document_reference"
+      | "entity_reference"
+      | "data_reference"
+      | "tool_reference"
+      | "severity"
+      | "timing"
+      | "duration"
+      | "text";
+    /** BlockParameterSchema */
+    BlockParameterSchema: {
+      /** Name */
+      name: string;
+      kind: components["schemas"]["BlockParameterKind"];
+      /** Description */
+      description: string;
+      /** Required */
+      required: boolean;
+      /** Default */
+      default: string | null;
+      /**
+       * Shop Bound
+       * @default false
+       */
+      shop_bound: boolean;
+    };
+    /** BlockSummarySchema */
+    BlockSummarySchema: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Name */
+      name: string;
+      /** Statement */
+      statement: string;
+      /** Type Label */
+      type_label: string;
+      /** Parameter Count */
+      parameter_count: number;
+      /** Shop Bound Parameter Count */
+      shop_bound_parameter_count: number;
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+    };
+    /** BlockVersionListResponse */
+    BlockVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
+    };
     /** ConversationListResponse */
     ConversationListResponse: {
       /** Conversations */
@@ -901,6 +1146,14 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+    };
+    /**
+     * CreateBlockRequest
+     * @description A block is created with its name only; everything else is decided in the editor.
+     */
+    CreateBlockRequest: {
+      /** Name */
+      name: string;
     };
     /** CreateCustomerProfileRequest */
     CreateCustomerProfileRequest: {
@@ -1380,6 +1633,190 @@ export interface components {
       amount: string;
       currency: components["schemas"]["Currency"];
     };
+    /** MutationBlockDraftResponse */
+    MutationBlockDraftResponse: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["MutationBlockPayloadSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /**
+     * MutationBlockPayloadSchema
+     * @description The whole authored content of a mutation-block draft or published version.
+     */
+    MutationBlockPayloadSchema: {
+      /** Name */
+      name: string;
+      /** Statement */
+      statement: string;
+      /** Description */
+      description: string;
+      effect: components["schemas"]["MutationEffect"];
+      /** Parameters */
+      parameters: components["schemas"]["BlockParameterSchema"][];
+    };
+    /**
+     * MutationBlockPreviewResponse
+     * @description The publish gate: what blocks publication and what a publish would freeze.
+     */
+    MutationBlockPreviewResponse: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["MutationBlockPayloadSchema"];
+    };
+    /** MutationBlockVersionResponse */
+    MutationBlockVersionResponse: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      content: components["schemas"]["MutationBlockPayloadSchema"];
+    };
+    /**
+     * MutationEffect
+     * @description What a mutation perturbs when the runtime injects it.
+     *
+     *     Mutations are applied to the sandbox, never exposed as agent tools: an arm observes the
+     *     consequence and never the cause. The effect says which part of the sandbox moves.
+     * @enum {string}
+     */
+    MutationEffect: "entity_mutation" | "tool_fault" | "clock_shift" | "service_outage";
+    /**
+     * ObjectiveAssessment
+     * @description Who decides whether the objective was met.
+     * @enum {string}
+     */
+    ObjectiveAssessment: "deterministic" | "judge";
+    /** ObjectiveBlockDraftResponse */
+    ObjectiveBlockDraftResponse: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["ObjectiveBlockPayloadSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /**
+     * ObjectiveBlockPayloadSchema
+     * @description The whole authored content of an objective-block draft or published version.
+     */
+    ObjectiveBlockPayloadSchema: {
+      /** Name */
+      name: string;
+      /** Statement */
+      statement: string;
+      /** Description */
+      description: string;
+      assessment: components["schemas"]["ObjectiveAssessment"];
+      evidence: components["schemas"]["ObjectiveEvidence"];
+      /** Parameters */
+      parameters: components["schemas"]["BlockParameterSchema"][];
+    };
+    /**
+     * ObjectiveBlockPreviewResponse
+     * @description The publish gate: what blocks publication and what a publish would freeze.
+     */
+    ObjectiveBlockPreviewResponse: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["ObjectiveBlockPayloadSchema"];
+    };
+    /** ObjectiveBlockVersionResponse */
+    ObjectiveBlockVersionResponse: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      content: components["schemas"]["ObjectiveBlockPayloadSchema"];
+    };
+    /**
+     * ObjectiveEvidence
+     * @description What the assessment reads.
+     * @enum {string}
+     */
+    ObjectiveEvidence: "event" | "policy" | "state" | "forbidden" | "dimension";
     /** OptionSchema */
     OptionSchema: {
       /** Key */
@@ -1728,6 +2165,14 @@ export interface components {
     /** ReplaceCustomerProfileDraftRequest */
     ReplaceCustomerProfileDraftRequest: {
       payload: components["schemas"]["CustomerProfilePayloadSchema"];
+    };
+    /** ReplaceMutationBlockDraftRequest */
+    ReplaceMutationBlockDraftRequest: {
+      payload: components["schemas"]["MutationBlockPayloadSchema"];
+    };
+    /** ReplaceObjectiveBlockDraftRequest */
+    ReplaceObjectiveBlockDraftRequest: {
+      payload: components["schemas"]["ObjectiveBlockPayloadSchema"];
     };
     /** ReplaceOrderFulfilmentSchema */
     ReplaceOrderFulfilmentSchema: {
@@ -5138,6 +5583,688 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["TicketVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listObjectiveBlocks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BlockListResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createObjectiveBlock: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateBlockRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ObjectiveBlockDraftResponse"];
+        };
+      };
+      /** @description Another block in this library already answers to that name */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getObjectiveBlockDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ObjectiveBlockDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceObjectiveBlockDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceObjectiveBlockDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ObjectiveBlockDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another block in this library already answers to that name */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewObjectiveBlockDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ObjectiveBlockPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listObjectiveBlockVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BlockVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishObjectiveBlock: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ObjectiveBlockVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  getObjectiveBlockVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ObjectiveBlockVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listMutationBlocks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BlockListResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createMutationBlock: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateBlockRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MutationBlockDraftResponse"];
+        };
+      };
+      /** @description Another block in this library already answers to that name */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getMutationBlockDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MutationBlockDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceMutationBlockDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceMutationBlockDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MutationBlockDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another block in this library already answers to that name */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewMutationBlockDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MutationBlockPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listMutationBlockVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BlockVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishMutationBlock: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MutationBlockVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  getMutationBlockVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable block identifier. */
+        block_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MutationBlockVersionResponse"];
         };
       };
       /** @description The definition is not found */

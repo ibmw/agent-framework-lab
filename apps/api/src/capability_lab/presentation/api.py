@@ -14,6 +14,17 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from capability_lab.application.blocks import (
+    BlockNameExistsError,
+    MutationBlockNotFoundError,
+    MutationBlockNotPublishableError,
+    MutationBlockService,
+    MutationBlockVersionNotFoundError,
+    ObjectiveBlockNotFoundError,
+    ObjectiveBlockNotPublishableError,
+    ObjectiveBlockService,
+    ObjectiveBlockVersionNotFoundError,
+)
 from capability_lab.application.conversations import (
     AgentExecutionError,
     AgentFrameworkNotFoundError,
@@ -92,6 +103,7 @@ from capability_lab.application.tickets import (
     TicketService,
     TicketVersionNotFoundError,
 )
+from capability_lab.domain.blocks import BlockConfigurationError
 from capability_lab.domain.customer_profile import CustomerProfileConfigurationError
 from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
@@ -127,12 +139,15 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemySessionRepository,
     SqlAlchemyShopDirectory,
     customer_profile_repository,
+    mutation_block_repository,
+    objective_block_repository,
     shop_repository,
     support_identity_repository,
     ticket_repository,
 )
 from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
 from capability_lab.presentation.base import ErrorResponse, StrictApiModel, ValidationIssue
+from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlockRoutes
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
 from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.orders import OrderRoutes
@@ -834,6 +849,8 @@ _NOT_PUBLISHABLE_CODES: dict[type[DefinitionNotPublishableError], str] = {
     CustomerProfileNotPublishableError: "customer_profile_not_publishable",
     SupportIdentityNotPublishableError: "support_identity_not_publishable",
     TicketNotPublishableError: "ticket_not_publishable",
+    ObjectiveBlockNotPublishableError: "objective_block_not_publishable",
+    MutationBlockNotPublishableError: "mutation_block_not_publishable",
 }
 
 
@@ -948,6 +965,45 @@ async def _order_transition_handler(request: Request, error: Exception) -> JSONR
 async def _order_configuration_handler(request: Request, error: Exception) -> JSONResponse:
     return _error_response(
         request, status_code=422, code="order_configuration_error", message=str(error)
+    )
+
+
+async def _objective_block_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="objective_block_not_found", message=str(error)
+    )
+
+
+async def _objective_block_version_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="objective_block_version_not_found", message=str(error)
+    )
+
+
+async def _mutation_block_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="mutation_block_not_found", message=str(error)
+    )
+
+
+async def _mutation_block_version_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="mutation_block_version_not_found", message=str(error)
+    )
+
+
+async def _block_name_exists_handler(request: Request, error: Exception) -> JSONResponse:
+    """A block's name is how a scenario binds it, so the library keeps it unique."""
+    return _error_response(request, status_code=409, code="block_name_exists", message=str(error))
+
+
+async def _block_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=422, code="block_configuration_error", message=str(error)
     )
 
 
@@ -1125,6 +1181,18 @@ def create_app(
     application.add_exception_handler(OrderSelectionError, _order_selection_handler)
     application.add_exception_handler(OrderTransitionError, _order_transition_handler)
     application.add_exception_handler(OrderFixtureConfigurationError, _order_configuration_handler)
+    application.add_exception_handler(
+        ObjectiveBlockNotFoundError, _objective_block_not_found_handler
+    )
+    application.add_exception_handler(
+        ObjectiveBlockVersionNotFoundError, _objective_block_version_not_found_handler
+    )
+    application.add_exception_handler(MutationBlockNotFoundError, _mutation_block_not_found_handler)
+    application.add_exception_handler(
+        MutationBlockVersionNotFoundError, _mutation_block_version_not_found_handler
+    )
+    application.add_exception_handler(BlockNameExistsError, _block_name_exists_handler)
+    application.add_exception_handler(BlockConfigurationError, _block_configuration_handler)
     application.add_exception_handler(TicketNotFoundError, _ticket_not_found_handler)
     application.add_exception_handler(TicketVersionNotFoundError, _ticket_version_not_found_handler)
     application.add_exception_handler(TicketReferenceExistsError, _ticket_reference_exists_handler)
@@ -1183,6 +1251,14 @@ def create_app(
     def support_identity_service() -> Generator[SupportIdentityService, None, None]:
         with session_scope(factory) as session:
             yield SupportIdentityService(support_identity_repository(session), clock)
+
+    def objective_block_service() -> Generator[ObjectiveBlockService, None, None]:
+        with session_scope(factory) as session:
+            yield ObjectiveBlockService(objective_block_repository(session), clock)
+
+    def mutation_block_service() -> Generator[MutationBlockService, None, None]:
+        with session_scope(factory) as session:
+            yield MutationBlockService(mutation_block_repository(session), clock)
 
     def order_service() -> Generator[OrderFixtureService, None, None]:
         with session_scope(factory) as session:
@@ -1709,6 +1785,8 @@ def create_app(
     CustomerProfileRoutes(customer_profile_service).register(router)
     SupportIdentityRoutes(support_identity_service).register(router)
     TicketRoutes(ticket_service).register(router)
+    ObjectiveBlockRoutes(objective_block_service).register(router)
+    MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)
     return application
 

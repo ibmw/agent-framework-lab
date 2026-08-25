@@ -125,5 +125,25 @@ export type TicketOrderSchema = components["schemas"]["TicketOrderSchema"];
 export type TicketReferenceSchema = components["schemas"]["TicketReferenceSchema"];
 export type TicketShopResourcesSchema = components["schemas"]["TicketShopResourcesSchema"];
 export type CreateTicketRequest = components["schemas"]["CreateTicketRequest"];
+export type BlockListResponse = components["schemas"]["BlockListResponse"];
+export type BlockSummarySchema = components["schemas"]["BlockSummarySchema"];
+export type BlockParameterSchema = components["schemas"]["BlockParameterSchema"];
+export type BlockParameterKind = components["schemas"]["BlockParameterKind"];
+export type CreateBlockRequest = components["schemas"]["CreateBlockRequest"];
+export type ObjectiveAssessment = components["schemas"]["ObjectiveAssessment"];
+export type ObjectiveEvidence = components["schemas"]["ObjectiveEvidence"];
+export type MutationEffect = components["schemas"]["MutationEffect"];
+export type ObjectiveBlockDraftResponse = components["schemas"]["ObjectiveBlockDraftResponse"];
+export type ObjectiveBlockVersionResponse = components["schemas"]["ObjectiveBlockVersionResponse"];
+export type ObjectiveBlockPreviewResponse = components["schemas"]["ObjectiveBlockPreviewResponse"];
+export type ObjectiveBlockPayloadSchema = components["schemas"]["ObjectiveBlockPayloadSchema"];
+export type ReplaceObjectiveBlockDraftRequest =
+  components["schemas"]["ReplaceObjectiveBlockDraftRequest"];
+export type MutationBlockDraftResponse = components["schemas"]["MutationBlockDraftResponse"];
+export type MutationBlockVersionResponse = components["schemas"]["MutationBlockVersionResponse"];
+export type MutationBlockPreviewResponse = components["schemas"]["MutationBlockPreviewResponse"];
+export type MutationBlockPayloadSchema = components["schemas"]["MutationBlockPayloadSchema"];
+export type ReplaceMutationBlockDraftRequest =
+  components["schemas"]["ReplaceMutationBlockDraftRequest"];
 export type ReplaceTicketDraftRequest = components["schemas"]["ReplaceTicketDraftRequest"];
 export type SupportChannel = components["schemas"]["SupportChannel"];
