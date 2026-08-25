@@ -652,6 +652,111 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/scenarios": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List one shop's scenarios */
+    get: operations["listScenarios"];
+    put?: never;
+    /** Build a scenario on one of this shop's tickets */
+    post: operations["createScenario"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/scenarios/{scenario_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable scenario draft */
+    get: operations["getScenarioDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceScenarioDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/scenarios/{scenario_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft and resolve the state publishing it would freeze */
+    get: operations["previewScenarioDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/scenarios/{scenario_id}/resources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the same-shop objects and library templates a scenario may bind */
+    get: operations["getScenarioResources"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/scenarios/{scenario_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a scenario's published versions */
+    get: operations["listScenarioVersions"];
+    put?: never;
+    /** Freeze the draft, pinning its shop, ticket, and template versions */
+    post: operations["publishScenario"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/scenarios/{scenario_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published scenario version */
+    get: operations["getScenarioVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/objective-blocks": {
     parameters: {
       query?: never;
@@ -1054,6 +1159,61 @@ export interface components {
       /** Versions */
       versions: components["schemas"]["DefinitionVersionSummarySchema"][];
     };
+    /**
+     * BoundMutationSchema
+     * @description One mutation template bound to this shop's objects. Its moment is a binding.
+     */
+    BoundMutationSchema: {
+      /** Id */
+      id: string;
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Bindings */
+      bindings: components["schemas"]["ScenarioBindingSchema"][];
+    };
+    /**
+     * BoundObjectiveSchema
+     * @description One objective template bound to this shop's objects, with its severity.
+     *
+     *     `severity` is a field rather than a binding because every objective answers it, including
+     *     templates that declare no parameter at all. A template that declares a `severity`
+     *     parameter is resolved from this field, so binding it explicitly is refused rather than
+     *     silently allowed to disagree.
+     */
+    BoundObjectiveSchema: {
+      /** Id */
+      id: string;
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      severity: components["schemas"]["ObjectiveSeverity"];
+      /** Bindings */
+      bindings: components["schemas"]["ScenarioBindingSchema"][];
+    };
+    /**
+     * CompletionConditionsSchema
+     * @description What "done" means, and the cap that guarantees a run reaches it or stops.
+     */
+    CompletionConditionsSchema: {
+      /** Statement */
+      statement: string;
+      /**
+       * Max Turns
+       * @description The hard turn cap that guarantees a run terminates; both arms share it.
+       */
+      max_turns: number;
+    };
+    /** ContextDocumentSchema */
+    ContextDocumentSchema: {
+      kind: components["schemas"]["ShopDocumentKind"];
+      /** Document Id */
+      document_id: string;
+    };
     /** ConversationListResponse */
     ConversationListResponse: {
       /** Conversations */
@@ -1187,6 +1347,19 @@ export interface components {
        * @description RFC 3339 instant with an explicit UTC offset.
        */
       placed_at: string;
+    };
+    /**
+     * CreateScenarioRequest
+     * @description A scenario is created on a ticket; its context documents pre-fill from that ticket.
+     */
+    CreateScenarioRequest: {
+      /** Name */
+      name: string;
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
     };
     /** CreateShopRequest */
     CreateShopRequest: {
@@ -1438,6 +1611,19 @@ export interface components {
      * @enum {string}
      */
     DefinitionIssueSeverity: "error" | "warning";
+    /**
+     * DefinitionType
+     * @enum {string}
+     */
+    DefinitionType:
+      | "shop"
+      | "customer_profile"
+      | "support_identity"
+      | "ticket"
+      | "scenario"
+      | "objective_block"
+      | "mutation_block"
+      | "agent_configuration";
     /**
      * DefinitionValidationErrorResponse
      * @description A publish refusal that carries the exact publish-gate findings.
@@ -1817,6 +2003,16 @@ export interface components {
      * @enum {string}
      */
     ObjectiveEvidence: "event" | "policy" | "state" | "forbidden" | "dimension";
+    /**
+     * ObjectiveSeverity
+     * @description What a missed objective does to the run.
+     *
+     *     A read-check is the motivating case: reading the right document is a means, not the end,
+     *     so a scenario decides per binding whether missing it fails the objective or only warns.
+     *     The read/no-read event is recorded evidence either way.
+     * @enum {string}
+     */
+    ObjectiveSeverity: "required" | "expected";
     /** OptionSchema */
     OptionSchema: {
       /** Key */
@@ -2054,6 +2250,20 @@ export interface components {
       traits: string[];
     };
     /**
+     * PinnedTemplateSchema
+     * @description One template a published scenario version froze, at the exact version it composed.
+     */
+    PinnedTemplateSchema: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      definition_type: components["schemas"]["DefinitionType"];
+      /** Version */
+      version: number;
+    };
+    /**
      * PolicyKind
      * @enum {string}
      */
@@ -2217,6 +2427,10 @@ export interface components {
       /** Events */
       events: components["schemas"]["OrderEventInputSchema"][];
     };
+    /** ReplaceScenarioDraftRequest */
+    ReplaceScenarioDraftRequest: {
+      payload: components["schemas"]["ScenarioPayloadSchema"];
+    };
     /** ReplaceShopDraftRequest */
     ReplaceShopDraftRequest: {
       payload: components["schemas"]["ShopPayloadSchema"];
@@ -2229,6 +2443,46 @@ export interface components {
     ReplaceTicketDraftRequest: {
       payload: components["schemas"]["TicketPayloadSchema"];
     };
+    /** ResolvedDocumentSchema */
+    ResolvedDocumentSchema: {
+      kind: components["schemas"]["ShopDocumentKind"];
+      /** Document Id */
+      document_id: string;
+      /** Title */
+      title: string | null;
+      /** Resolved */
+      resolved: boolean;
+    };
+    /** ResolvedEntitySchema */
+    ResolvedEntitySchema: {
+      kind: components["schemas"]["ScenarioEntityKind"];
+      /** Identifier */
+      identifier: string;
+      /** Label */
+      label: string | null;
+      /** Detail */
+      detail: string | null;
+      /** Resolved */
+      resolved: boolean;
+    };
+    /**
+     * ResolvedTemplateSchema
+     * @description One composed template and the version publishing this draft would pin it at.
+     */
+    ResolvedTemplateSchema: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Name */
+      name: string;
+      definition_type: components["schemas"]["DefinitionType"];
+      /** Version */
+      version: number | null;
+      /** Instance Count */
+      instance_count: number;
+    };
     /** ReviewSchema */
     ReviewSchema: {
       /** Id */
@@ -2239,6 +2493,134 @@ export interface components {
       rating: number;
       /** Body */
       body: string;
+    };
+    /**
+     * ScenarioBindingSchema
+     * @description One template parameter and the value this scenario supplies for it.
+     */
+    ScenarioBindingSchema: {
+      /** Parameter */
+      parameter: string;
+      /**
+       * Value
+       * @description A literal, or a reference the scenario's own shop resolves: `policy:address-change`, `order:<id>`, `product:<handle>`, or `order:<id>#shipping_address`.
+       */
+      value: string;
+    };
+    /**
+     * ScenarioBlockOptionSchema
+     * @description One library template the editor can bind, with the parameters it declares.
+     */
+    ScenarioBlockOptionSchema: {
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Name */
+      name: string;
+      /** Statement */
+      statement: string;
+      /** Description */
+      description: string;
+      /** Type Label */
+      type_label: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Parameters */
+      parameters: components["schemas"]["BlockParameterSchema"][];
+    };
+    /**
+     * ScenarioContentSchema
+     * @description A scenario as the API returns it, with the derived evidence a client must not author.
+     */
+    ScenarioContentSchema: {
+      /** Name */
+      name: string;
+      /** Context Documents */
+      context_documents: components["schemas"]["ContextDocumentSchema"][];
+      /** Objectives */
+      objectives: components["schemas"]["BoundObjectiveSchema"][];
+      /** Mutations */
+      mutations: components["schemas"]["BoundMutationSchema"][];
+      /**
+       * Hidden Facts
+       * @description Operator-only prose. Never shown to the support agent, logged, or traced.
+       */
+      hidden_facts: string;
+      completion: components["schemas"]["CompletionConditionsSchema"];
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /** Objective Count */
+      objective_count: number;
+      /** Mutation Count */
+      mutation_count: number;
+    };
+    /** ScenarioCustomerOptionSchema */
+    ScenarioCustomerOptionSchema: {
+      /**
+       * Profile Id
+       * Format: uuid
+       */
+      profile_id: string;
+      /** Display Name */
+      display_name: string;
+      /** Reference Value */
+      reference_value: string;
+    };
+    /** ScenarioDocumentOptionSchema */
+    ScenarioDocumentOptionSchema: {
+      kind: components["schemas"]["ShopDocumentKind"];
+      /** Document Id */
+      document_id: string;
+      /** Title */
+      title: string;
+      /**
+       * Reference Value
+       * @description The value a document binding takes, such as `policy:address-change`.
+       */
+      reference_value: string;
+    };
+    /** ScenarioDraftResponse */
+    ScenarioDraftResponse: {
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["ScenarioContentSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /**
+     * ScenarioEntityKind
+     * @description The kinds of shop object an entity or data binding can name.
+     *
+     *     Closed on purpose: a binding is resolved by the runtime, so a kind it cannot look up
+     *     would be a value nothing could ever answer for.
+     * @enum {string}
+     */
+    ScenarioEntityKind: "order" | "customer" | "product";
+    /** ScenarioListResponse */
+    ScenarioListResponse: {
+      /** Scenarios */
+      scenarios: components["schemas"]["ScenarioSummarySchema"][];
     };
     /** ScenarioMetadataResponse */
     ScenarioMetadataResponse: {
@@ -2258,6 +2640,76 @@ export interface components {
        */
       created_at: string;
     };
+    /** ScenarioOrderOptionSchema */
+    ScenarioOrderOptionSchema: {
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /** Reference */
+      reference: string;
+      payment_status: components["schemas"]["PaymentStatus"];
+      fulfilment_status: components["schemas"]["FulfilmentStatus"];
+      /** Total Amount */
+      total_amount: string;
+      /** Currency */
+      currency: string;
+      /** Shipping Label */
+      shipping_label: string | null;
+      /**
+       * Reference Value
+       * @description The value an entity binding takes: `order:<id>`.
+       */
+      reference_value: string;
+    };
+    /**
+     * ScenarioPayloadSchema
+     * @description The whole authored content of a scenario draft or published version.
+     */
+    ScenarioPayloadSchema: {
+      /** Name */
+      name: string;
+      /** Context Documents */
+      context_documents: components["schemas"]["ContextDocumentSchema"][];
+      /** Objectives */
+      objectives: components["schemas"]["BoundObjectiveSchema"][];
+      /** Mutations */
+      mutations: components["schemas"]["BoundMutationSchema"][];
+      /**
+       * Hidden Facts
+       * @description Operator-only prose. Never shown to the support agent, logged, or traced.
+       */
+      hidden_facts: string;
+      completion: components["schemas"]["CompletionConditionsSchema"];
+    };
+    /**
+     * ScenarioPreviewResponse
+     * @description The publish gate and the resolved state, which an author reads side by side.
+     */
+    ScenarioPreviewResponse: {
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["ScenarioContentSchema"];
+      resolution: components["schemas"]["ScenarioResolutionSchema"];
+    };
     /** ScenarioReferenceResponse */
     ScenarioReferenceResponse: {
       /** Id */
@@ -2266,6 +2718,138 @@ export interface components {
       version: string;
       /** Policy Set Version */
       policy_set_version: string;
+    };
+    /**
+     * ScenarioResolutionSchema
+     * @description The complete starting state publishing this draft would freeze.
+     */
+    ScenarioResolutionSchema: {
+      /** Shop Name */
+      shop_name: string;
+      /** Shop Version */
+      shop_version: number | null;
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /** Ticket Reference */
+      ticket_reference: string;
+      /** Ticket Subject */
+      ticket_subject: string;
+      /** Ticket Version */
+      ticket_version: number | null;
+      /** Customer Profile Id */
+      customer_profile_id: string | null;
+      /** Customer Display Name */
+      customer_display_name: string;
+      /** Customer Profile Version */
+      customer_profile_version: number | null;
+      /** Documents */
+      documents: components["schemas"]["ResolvedDocumentSchema"][];
+      /** Entities */
+      entities: components["schemas"]["ResolvedEntitySchema"][];
+      /** Templates */
+      templates: components["schemas"]["ResolvedTemplateSchema"][];
+      /** Objective Count */
+      objective_count: number;
+      /** Mutation Count */
+      mutation_count: number;
+      /** Max Turns */
+      max_turns: number;
+    };
+    /**
+     * ScenarioResourcesSchema
+     * @description Exactly what this scenario may name, so a picker cannot offer a publish-gate error.
+     */
+    ScenarioResourcesSchema: {
+      /** Documents */
+      documents: components["schemas"]["ScenarioDocumentOptionSchema"][];
+      /** Orders */
+      orders: components["schemas"]["ScenarioOrderOptionSchema"][];
+      /** Product Handles */
+      product_handles: string[];
+      /** Customers */
+      customers: components["schemas"]["ScenarioCustomerOptionSchema"][];
+      /** Objective Blocks */
+      objective_blocks: components["schemas"]["ScenarioBlockOptionSchema"][];
+      /** Mutation Blocks */
+      mutation_blocks: components["schemas"]["ScenarioBlockOptionSchema"][];
+    };
+    /** ScenarioSummarySchema */
+    ScenarioSummarySchema: {
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Name */
+      name: string;
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /** Ticket Reference */
+      ticket_reference: string;
+      /** Ticket Subject */
+      ticket_subject: string;
+      /** Customer Display Name */
+      customer_display_name: string;
+      /** Objective Count */
+      objective_count: number;
+      /** Mutation Count */
+      mutation_count: number;
+      /** Context Document Count */
+      context_document_count: number;
+      /** Max Turns */
+      max_turns: number;
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+    };
+    /** ScenarioVersionListResponse */
+    ScenarioVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
+    };
+    /**
+     * ScenarioVersionResponse
+     * @description One frozen version, with every version it pinned.
+     */
+    ScenarioVersionResponse: {
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      /** Shop Version */
+      shop_version: number;
+      /** Ticket Version */
+      ticket_version: number;
+      /** Templates */
+      templates: components["schemas"]["PinnedTemplateSchema"][];
+      content: components["schemas"]["ScenarioContentSchema"];
     };
     /** SendConversationMessageRequest */
     SendConversationMessageRequest: {
@@ -2321,6 +2905,17 @@ export interface components {
       /** Default Tone Of Voice Id */
       default_tone_of_voice_id: string | null;
     };
+    /**
+     * ShopDocumentKind
+     * @description Which of the shop's document collections a reference points into.
+     *
+     *     One enumeration for every resource that names a shop document: a ticket suggests one,
+     *     a scenario includes one as context, and an objective binds one as a read-check. The
+     *     three answer different questions about the same three collections, and a second copy
+     *     of the set would eventually disagree with this one about what a document can be.
+     * @enum {string}
+     */
+    ShopDocumentKind: "policy" | "support_guideline" | "faq_entry";
     /** ShopDraftResponse */
     ShopDraftResponse: {
       /**
@@ -2507,15 +3102,9 @@ export interface components {
       /** Order Ids */
       order_ids: string[];
     };
-    /**
-     * SuggestedDocumentKind
-     * @description Which of the shop's document collections a suggestion points into.
-     * @enum {string}
-     */
-    SuggestedDocumentKind: "policy" | "support_guideline" | "faq_entry";
     /** SuggestedDocumentSchema */
     SuggestedDocumentSchema: {
-      kind: components["schemas"]["SuggestedDocumentKind"];
+      kind: components["schemas"]["ShopDocumentKind"];
       /** Document Id */
       document_id: string;
     };
@@ -5583,6 +6172,426 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["TicketVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listScenarios: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioListResponse"];
+        };
+      };
+      /** @description The definition or the shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createScenario: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateScenarioRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioDraftResponse"];
+        };
+      };
+      /** @description The definition or the shop is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another scenario in this shop already answers to that name */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid scenario content, or a ticket this shop does not hold */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getScenarioDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceScenarioDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceScenarioDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another scenario in this shop already answers to that name */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid scenario content, or a ticket this shop does not hold */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewScenarioDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getScenarioResources: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioResourcesSchema"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listScenarioVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishScenario: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors, or one of the definitions it would pin has no published version */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getScenarioVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScenarioVersionResponse"];
         };
       };
       /** @description The definition is not found */

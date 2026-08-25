@@ -2301,6 +2301,403 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios:
+    get:
+      summary: List one shop's scenarios
+      operationId: listScenarios
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioListResponse'
+        '404':
+          description: The definition or the shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Build a scenario on one of this shop's tickets
+      operationId: createScenario
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScenarioRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioDraftResponse'
+        '404':
+          description: The definition or the shop is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another scenario in this shop already answers to that name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid scenario content, or a ticket this shop does not hold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios/{scenario_id}/draft:
+    get:
+      summary: Retrieve the mutable scenario draft
+      operationId: getScenarioDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceScenarioDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceScenarioDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another scenario in this shop already answers to that name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid scenario content, or a ticket this shop does not hold
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios/{scenario_id}/draft/preview:
+    get:
+      summary: Validate the draft and resolve the state publishing it would freeze
+      operationId: previewScenarioDraft
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios/{scenario_id}/resources:
+    get:
+      summary: Read the same-shop objects and library templates a scenario may bind
+      operationId: getScenarioResources
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioResourcesSchema'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios/{scenario_id}/versions:
+    post:
+      summary: Freeze the draft, pinning its shop, ticket, and template versions
+      operationId: publishScenario
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors, or one of the definitions
+            it would pin has no published version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: List a scenario's published versions
+      operationId: listScenarioVersions
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios/{scenario_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published scenario version
+      operationId: getScenarioVersion
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/objective-blocks:
     get:
       summary: List the shared objective-block library with version provenance
@@ -3289,6 +3686,111 @@ components:
       required:
       - versions
       title: BlockVersionListResponse
+    BoundMutationSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        bindings:
+          items:
+            $ref: '#/components/schemas/ScenarioBindingSchema'
+          type: array
+          maxItems: 8
+          title: Bindings
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - block_id
+      - bindings
+      title: BoundMutationSchema
+      description: One mutation template bound to this shop's objects. Its moment
+        is a binding.
+    BoundObjectiveSchema:
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Id
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        severity:
+          $ref: '#/components/schemas/ObjectiveSeverity'
+        bindings:
+          items:
+            $ref: '#/components/schemas/ScenarioBindingSchema'
+          type: array
+          maxItems: 8
+          title: Bindings
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - block_id
+      - severity
+      - bindings
+      title: BoundObjectiveSchema
+      description: 'One objective template bound to this shop''s objects, with its
+        severity.
+
+
+        `severity` is a field rather than a binding because every objective answers
+        it, including
+
+        templates that declare no parameter at all. A template that declares a `severity`
+
+        parameter is resolved from this field, so binding it explicitly is refused
+        rather than
+
+        silently allowed to disagree.'
+    CompletionConditionsSchema:
+      properties:
+        statement:
+          type: string
+          maxLength: 4000
+          title: Statement
+        max_turns:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Turns
+          description: The hard turn cap that guarantees a run terminates; both arms
+            share it.
+      additionalProperties: false
+      type: object
+      required:
+      - statement
+      - max_turns
+      title: CompletionConditionsSchema
+      description: What "done" means, and the cap that guarantees a run reaches it
+        or stops.
+    ContextDocumentSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/ShopDocumentKind'
+        document_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Document Id
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - document_id
+      title: ContextDocumentSchema
     ConversationListResponse:
       properties:
         conversations:
@@ -3509,6 +4011,25 @@ components:
       title: CreateOrderRequest
       description: 'The order''s identity: a reference, the customer it belongs to,
         and when it happened.'
+    CreateScenarioRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - ticket_id
+      title: CreateScenarioRequest
+      description: A scenario is created on a ticket; its context documents pre-fill
+        from that ticket.
     CreateShopRequest:
       properties:
         identity:
@@ -3983,6 +4504,18 @@ components:
       - error
       - warning
       title: DefinitionIssueSeverity
+    DefinitionType:
+      type: string
+      enum:
+      - shop
+      - customer_profile
+      - support_identity
+      - ticket
+      - scenario
+      - objective_block
+      - mutation_block
+      - agent_configuration
+      title: DefinitionType
     DefinitionValidationErrorResponse:
       properties:
         code:
@@ -4708,6 +5241,22 @@ components:
       - dimension
       title: ObjectiveEvidence
       description: What the assessment reads.
+    ObjectiveSeverity:
+      type: string
+      enum:
+      - required
+      - expected
+      title: ObjectiveSeverity
+      description: 'What a missed objective does to the run.
+
+
+        A read-check is the motivating case: reading the right document is a means,
+        not the end,
+
+        so a scenario decides per binding whether missing it fails the objective or
+        only warns.
+
+        The read/no-read event is recorded evidence either way.'
     OptionSchema:
       properties:
         key:
@@ -5162,6 +5711,26 @@ components:
       title: PersonaSchema
       description: Operator- and simulator-facing behavior; never part of a support
         agent's prompt.
+    PinnedTemplateSchema:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        definition_type:
+          $ref: '#/components/schemas/DefinitionType'
+        version:
+          type: integer
+          title: Version
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - definition_type
+      - version
+      title: PinnedTemplateSchema
+      description: One template a published scenario version froze, at the exact version
+        it composed.
     PolicyKind:
       type: string
       enum:
@@ -5532,6 +6101,15 @@ components:
       title: ReplaceOrderRequest
       description: The whole order as selections. The customer is fixed at creation
         and never edited.
+    ReplaceScenarioDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ScenarioPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceScenarioDraftRequest
     ReplaceShopDraftRequest:
       properties:
         payload:
@@ -5559,6 +6137,88 @@ components:
       required:
       - payload
       title: ReplaceTicketDraftRequest
+    ResolvedDocumentSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/ShopDocumentKind'
+        document_id:
+          type: string
+          title: Document Id
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        resolved:
+          type: boolean
+          title: Resolved
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - document_id
+      - title
+      - resolved
+      title: ResolvedDocumentSchema
+    ResolvedEntitySchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/ScenarioEntityKind'
+        identifier:
+          type: string
+          title: Identifier
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Detail
+        resolved:
+          type: boolean
+          title: Resolved
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - identifier
+      - label
+      - detail
+      - resolved
+      title: ResolvedEntitySchema
+    ResolvedTemplateSchema:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        name:
+          type: string
+          title: Name
+        definition_type:
+          $ref: '#/components/schemas/DefinitionType'
+        version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Version
+        instance_count:
+          type: integer
+          title: Instance Count
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - name
+      - definition_type
+      - version
+      - instance_count
+      title: ResolvedTemplateSchema
+      description: One composed template and the version publishing this draft would
+        pin it at.
     ReviewSchema:
       properties:
         id:
@@ -5590,6 +6250,227 @@ components:
       - rating
       - body
       title: ReviewSchema
+    ScenarioBindingSchema:
+      properties:
+        parameter:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$
+          title: Parameter
+        value:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Value
+          description: 'A literal, or a reference the scenario''s own shop resolves:
+            `policy:address-change`, `order:<id>`, `product:<handle>`, or `order:<id>#shipping_address`.'
+      additionalProperties: false
+      type: object
+      required:
+      - parameter
+      - value
+      title: ScenarioBindingSchema
+      description: One template parameter and the value this scenario supplies for
+        it.
+    ScenarioBlockOptionSchema:
+      properties:
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        name:
+          type: string
+          title: Name
+        statement:
+          type: string
+          title: Statement
+        description:
+          type: string
+          title: Description
+        type_label:
+          type: string
+          title: Type Label
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        parameters:
+          items:
+            $ref: '#/components/schemas/BlockParameterSchema'
+          type: array
+          title: Parameters
+      additionalProperties: false
+      type: object
+      required:
+      - block_id
+      - name
+      - statement
+      - description
+      - type_label
+      - latest_published_version
+      - parameters
+      title: ScenarioBlockOptionSchema
+      description: One library template the editor can bind, with the parameters it
+        declares.
+    ScenarioContentSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        context_documents:
+          items:
+            $ref: '#/components/schemas/ContextDocumentSchema'
+          type: array
+          maxItems: 12
+          title: Context Documents
+        objectives:
+          items:
+            $ref: '#/components/schemas/BoundObjectiveSchema'
+          type: array
+          maxItems: 24
+          title: Objectives
+        mutations:
+          items:
+            $ref: '#/components/schemas/BoundMutationSchema'
+          type: array
+          maxItems: 8
+          title: Mutations
+        hidden_facts:
+          type: string
+          maxLength: 4000
+          title: Hidden Facts
+          description: Operator-only prose. Never shown to the support agent, logged,
+            or traced.
+        completion:
+          $ref: '#/components/schemas/CompletionConditionsSchema'
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        objective_count:
+          type: integer
+          title: Objective Count
+        mutation_count:
+          type: integer
+          title: Mutation Count
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - context_documents
+      - objectives
+      - mutations
+      - hidden_facts
+      - completion
+      - ticket_id
+      - objective_count
+      - mutation_count
+      title: ScenarioContentSchema
+      description: A scenario as the API returns it, with the derived evidence a client
+        must not author.
+    ScenarioCustomerOptionSchema:
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+          title: Profile Id
+        display_name:
+          type: string
+          title: Display Name
+        reference_value:
+          type: string
+          title: Reference Value
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - display_name
+      - reference_value
+      title: ScenarioCustomerOptionSchema
+    ScenarioDocumentOptionSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/ShopDocumentKind'
+        document_id:
+          type: string
+          title: Document Id
+        title:
+          type: string
+          title: Title
+        reference_value:
+          type: string
+          title: Reference Value
+          description: The value a document binding takes, such as `policy:address-change`.
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - document_id
+      - title
+      - reference_value
+      title: ScenarioDocumentOptionSchema
+    ScenarioDraftResponse:
+      properties:
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/ScenarioContentSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - scenario_id
+      - shop_id
+      - content
+      - created_at
+      - updated_at
+      title: ScenarioDraftResponse
+    ScenarioEntityKind:
+      type: string
+      enum:
+      - order
+      - customer
+      - product
+      title: ScenarioEntityKind
+      description: 'The kinds of shop object an entity or data binding can name.
+
+
+        Closed on purpose: a binding is resolved by the runtime, so a kind it cannot
+        look up
+
+        would be a value nothing could ever answer for.'
+    ScenarioListResponse:
+      properties:
+        scenarios:
+          items:
+            $ref: '#/components/schemas/ScenarioSummarySchema'
+          type: array
+          title: Scenarios
+      additionalProperties: false
+      type: object
+      required:
+      - scenarios
+      title: ScenarioListResponse
     ScenarioMetadataResponse:
       properties:
         scenario_id:
@@ -5621,6 +6502,143 @@ components:
       - seed
       - created_at
       title: ScenarioMetadataResponse
+    ScenarioOrderOptionSchema:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        reference:
+          type: string
+          title: Reference
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        fulfilment_status:
+          $ref: '#/components/schemas/FulfilmentStatus'
+        total_amount:
+          type: string
+          title: Total Amount
+        currency:
+          type: string
+          title: Currency
+        shipping_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Shipping Label
+        reference_value:
+          type: string
+          title: Reference Value
+          description: 'The value an entity binding takes: `order:<id>`.'
+      additionalProperties: false
+      type: object
+      required:
+      - order_id
+      - reference
+      - payment_status
+      - fulfilment_status
+      - total_amount
+      - currency
+      - shipping_label
+      - reference_value
+      title: ScenarioOrderOptionSchema
+    ScenarioPayloadSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        context_documents:
+          items:
+            $ref: '#/components/schemas/ContextDocumentSchema'
+          type: array
+          maxItems: 12
+          title: Context Documents
+        objectives:
+          items:
+            $ref: '#/components/schemas/BoundObjectiveSchema'
+          type: array
+          maxItems: 24
+          title: Objectives
+        mutations:
+          items:
+            $ref: '#/components/schemas/BoundMutationSchema'
+          type: array
+          maxItems: 8
+          title: Mutations
+        hidden_facts:
+          type: string
+          maxLength: 4000
+          title: Hidden Facts
+          description: Operator-only prose. Never shown to the support agent, logged,
+            or traced.
+        completion:
+          $ref: '#/components/schemas/CompletionConditionsSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - context_documents
+      - objectives
+      - mutations
+      - hidden_facts
+      - completion
+      title: ScenarioPayloadSchema
+      description: The whole authored content of a scenario draft or published version.
+    ScenarioPreviewResponse:
+      properties:
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/ScenarioContentSchema'
+        resolution:
+          $ref: '#/components/schemas/ScenarioResolutionSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - scenario_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      - resolution
+      title: ScenarioPreviewResponse
+      description: The publish gate and the resolved state, which an author reads
+        side by side.
     ScenarioReferenceResponse:
       properties:
         id:
@@ -5639,6 +6657,258 @@ components:
       - version
       - policy_set_version
       title: ScenarioReferenceResponse
+    ScenarioResolutionSchema:
+      properties:
+        shop_name:
+          type: string
+          title: Shop Name
+        shop_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Shop Version
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        ticket_reference:
+          type: string
+          title: Ticket Reference
+        ticket_subject:
+          type: string
+          title: Ticket Subject
+        ticket_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Ticket Version
+        customer_profile_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Customer Profile Id
+        customer_display_name:
+          type: string
+          title: Customer Display Name
+        customer_profile_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Customer Profile Version
+        documents:
+          items:
+            $ref: '#/components/schemas/ResolvedDocumentSchema'
+          type: array
+          title: Documents
+        entities:
+          items:
+            $ref: '#/components/schemas/ResolvedEntitySchema'
+          type: array
+          title: Entities
+        templates:
+          items:
+            $ref: '#/components/schemas/ResolvedTemplateSchema'
+          type: array
+          title: Templates
+        objective_count:
+          type: integer
+          title: Objective Count
+        mutation_count:
+          type: integer
+          title: Mutation Count
+        max_turns:
+          type: integer
+          title: Max Turns
+      additionalProperties: false
+      type: object
+      required:
+      - shop_name
+      - shop_version
+      - ticket_id
+      - ticket_reference
+      - ticket_subject
+      - ticket_version
+      - customer_profile_id
+      - customer_display_name
+      - customer_profile_version
+      - documents
+      - entities
+      - templates
+      - objective_count
+      - mutation_count
+      - max_turns
+      title: ScenarioResolutionSchema
+      description: The complete starting state publishing this draft would freeze.
+    ScenarioResourcesSchema:
+      properties:
+        documents:
+          items:
+            $ref: '#/components/schemas/ScenarioDocumentOptionSchema'
+          type: array
+          title: Documents
+        orders:
+          items:
+            $ref: '#/components/schemas/ScenarioOrderOptionSchema'
+          type: array
+          title: Orders
+        product_handles:
+          items:
+            type: string
+          type: array
+          title: Product Handles
+        customers:
+          items:
+            $ref: '#/components/schemas/ScenarioCustomerOptionSchema'
+          type: array
+          title: Customers
+        objective_blocks:
+          items:
+            $ref: '#/components/schemas/ScenarioBlockOptionSchema'
+          type: array
+          title: Objective Blocks
+        mutation_blocks:
+          items:
+            $ref: '#/components/schemas/ScenarioBlockOptionSchema'
+          type: array
+          title: Mutation Blocks
+      additionalProperties: false
+      type: object
+      required:
+      - documents
+      - orders
+      - product_handles
+      - customers
+      - objective_blocks
+      - mutation_blocks
+      title: ScenarioResourcesSchema
+      description: Exactly what this scenario may name, so a picker cannot offer a
+        publish-gate error.
+    ScenarioSummarySchema:
+      properties:
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        name:
+          type: string
+          title: Name
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        ticket_reference:
+          type: string
+          title: Ticket Reference
+        ticket_subject:
+          type: string
+          title: Ticket Subject
+        customer_display_name:
+          type: string
+          title: Customer Display Name
+        objective_count:
+          type: integer
+          title: Objective Count
+        mutation_count:
+          type: integer
+          title: Mutation Count
+        context_document_count:
+          type: integer
+          title: Context Document Count
+        max_turns:
+          type: integer
+          title: Max Turns
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+      additionalProperties: false
+      type: object
+      required:
+      - scenario_id
+      - name
+      - ticket_id
+      - ticket_reference
+      - ticket_subject
+      - customer_display_name
+      - objective_count
+      - mutation_count
+      - context_document_count
+      - max_turns
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      title: ScenarioSummarySchema
+    ScenarioVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: ScenarioVersionListResponse
+    ScenarioVersionResponse:
+      properties:
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        shop_version:
+          type: integer
+          title: Shop Version
+        ticket_version:
+          type: integer
+          title: Ticket Version
+        templates:
+          items:
+            $ref: '#/components/schemas/PinnedTemplateSchema'
+          type: array
+          title: Templates
+        content:
+          $ref: '#/components/schemas/ScenarioContentSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - scenario_id
+      - shop_id
+      - version
+      - content_fingerprint
+      - published_at
+      - shop_version
+      - ticket_version
+      - templates
+      - content
+      title: ScenarioVersionResponse
+      description: One frozen version, with every version it pinned.
     SendConversationMessageRequest:
       properties:
         message:
@@ -5760,6 +7030,27 @@ components:
       - default_tone_of_voice_id
       title: ShopContentSchema
       description: A shop payload as the API returns it, with derived read-only evidence.
+    ShopDocumentKind:
+      type: string
+      enum:
+      - policy
+      - support_guideline
+      - faq_entry
+      title: ShopDocumentKind
+      description: 'Which of the shop''s document collections a reference points into.
+
+
+        One enumeration for every resource that names a shop document: a ticket suggests
+        one,
+
+        a scenario includes one as context, and an objective binds one as a read-check.
+        The
+
+        three answer different questions about the same three collections, and a second
+        copy
+
+        of the set would eventually disagree with this one about what a document can
+        be.'
     ShopDraftResponse:
       properties:
         shop_id:
@@ -6136,18 +7427,10 @@ components:
       - product_ids
       - order_ids
       title: StructuredSupportResultResponse
-    SuggestedDocumentKind:
-      type: string
-      enum:
-      - policy
-      - support_guideline
-      - faq_entry
-      title: SuggestedDocumentKind
-      description: Which of the shop's document collections a suggestion points into.
     SuggestedDocumentSchema:
       properties:
         kind:
-          $ref: '#/components/schemas/SuggestedDocumentKind'
+          $ref: '#/components/schemas/ShopDocumentKind'
         document_id:
           type: string
           maxLength: 64

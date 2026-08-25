@@ -82,6 +82,22 @@ from capability_lab.application.scenario_generation import (
     create_retail_profile_kernel,
 )
 from capability_lab.application.scenario_registry import ScenarioNotFoundError
+from capability_lab.application.scenarios import (
+    ScenarioNameExistsError,
+    ScenarioNotPublishableError,
+    ScenarioService,
+    ScenarioTicketChangeError,
+    ScenarioTicketNotInShopError,
+)
+from capability_lab.application.scenarios import (
+    # Aliased: the POC's `scenario_registry` still owns the unqualified names, and the two
+    # resources are unrelated — one is a hard-coded generated scenario, the other the
+    # authored definition. They are renamed here rather than in the module they belong to.
+    ScenarioNotFoundError as ScenarioDefinitionNotFoundError,
+)
+from capability_lab.application.scenarios import (
+    ScenarioVersionNotFoundError as ScenarioDefinitionVersionNotFoundError,
+)
 from capability_lab.application.shops import (
     ShopNotFoundError,
     ShopNotPublishableError,
@@ -111,6 +127,7 @@ from capability_lab.domain.order_fixture import (
     OrderFixtureConfigurationError,
     OrderTransitionError,
 )
+from capability_lab.domain.scenario import ScenarioConfigurationError
 from capability_lab.domain.shop import ShopConfigurationError
 from capability_lab.domain.support_identity import SupportIdentityConfigurationError
 from capability_lab.domain.ticket import TicketConfigurationError
@@ -141,6 +158,7 @@ from capability_lab.infrastructure.repositories import (
     customer_profile_repository,
     mutation_block_repository,
     objective_block_repository,
+    scenario_repository,
     shop_repository,
     support_identity_repository,
     ticket_repository,
@@ -151,6 +169,7 @@ from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlo
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
 from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.orders import OrderRoutes
+from capability_lab.presentation.scenarios import ScenarioRoutes
 from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.support_identities import SupportIdentityRoutes
 from capability_lab.presentation.tickets import TicketRoutes
@@ -851,6 +870,7 @@ _NOT_PUBLISHABLE_CODES: dict[type[DefinitionNotPublishableError], str] = {
     TicketNotPublishableError: "ticket_not_publishable",
     ObjectiveBlockNotPublishableError: "objective_block_not_publishable",
     MutationBlockNotPublishableError: "mutation_block_not_publishable",
+    ScenarioNotPublishableError: "scenario_not_publishable",
 }
 
 
@@ -1036,6 +1056,40 @@ async def _ticket_configuration_handler(request: Request, error: Exception) -> J
     )
 
 
+async def _scenario_definition_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(request, status_code=404, code="scenario_not_found", message=str(error))
+
+
+async def _scenario_definition_version_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="scenario_version_not_found", message=str(error)
+    )
+
+
+async def _scenario_name_exists_handler(request: Request, error: Exception) -> JSONResponse:
+    """The scenario index is the one place a human picks a recipe by reading it."""
+    return _error_response(
+        request, status_code=409, code="scenario_name_exists", message=str(error)
+    )
+
+
+async def _scenario_ticket_handler(request: Request, error: Exception) -> JSONResponse:
+    """A scenario named a ticket this shop does not hold, or tried to move to another."""
+    return _error_response(
+        request, status_code=422, code="scenario_ticket_error", message=str(error)
+    )
+
+
+async def _scenario_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=422, code="scenario_configuration_error", message=str(error)
+    )
+
+
 async def _unpublished_reference_handler(request: Request, error: Exception) -> JSONResponse:
     """Publishing pins exact versions, so an unpublished target stops the publication."""
     return _error_response(
@@ -1199,6 +1253,16 @@ def create_app(
     application.add_exception_handler(TicketCustomerNotInShopError, _ticket_customer_handler)
     application.add_exception_handler(TicketCustomerChangeError, _ticket_customer_handler)
     application.add_exception_handler(TicketConfigurationError, _ticket_configuration_handler)
+    application.add_exception_handler(
+        ScenarioDefinitionNotFoundError, _scenario_definition_not_found_handler
+    )
+    application.add_exception_handler(
+        ScenarioDefinitionVersionNotFoundError, _scenario_definition_version_not_found_handler
+    )
+    application.add_exception_handler(ScenarioNameExistsError, _scenario_name_exists_handler)
+    application.add_exception_handler(ScenarioTicketNotInShopError, _scenario_ticket_handler)
+    application.add_exception_handler(ScenarioTicketChangeError, _scenario_ticket_handler)
+    application.add_exception_handler(ScenarioConfigurationError, _scenario_configuration_handler)
     application.add_exception_handler(UnpublishedReferenceError, _unpublished_reference_handler)
     application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
@@ -1277,6 +1341,21 @@ def create_app(
                 shop_repository(session),
                 customer_profile_repository(session),
                 SqlAlchemyOrderFixtureRepository(session),
+                SqlAlchemyDefinitionShopAttachmentRepository(session),
+                SqlAlchemyPublishedVersionDirectory(session),
+                clock,
+            )
+
+    def scenario_service() -> Generator[ScenarioService, None, None]:
+        with session_scope(factory) as session:
+            yield ScenarioService(
+                scenario_repository(session),
+                shop_repository(session),
+                ticket_repository(session),
+                customer_profile_repository(session),
+                SqlAlchemyOrderFixtureRepository(session),
+                objective_block_repository(session),
+                mutation_block_repository(session),
                 SqlAlchemyDefinitionShopAttachmentRepository(session),
                 SqlAlchemyPublishedVersionDirectory(session),
                 clock,
@@ -1785,6 +1864,7 @@ def create_app(
     CustomerProfileRoutes(customer_profile_service).register(router)
     SupportIdentityRoutes(support_identity_service).register(router)
     TicketRoutes(ticket_service).register(router)
+    ScenarioRoutes(scenario_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)
