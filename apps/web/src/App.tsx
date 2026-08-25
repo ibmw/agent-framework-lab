@@ -7,6 +7,8 @@ import { OrderEditorPage } from "./routes/OrderEditorPage";
 import { OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
+import { ScenarioEditorPage } from "./routes/ScenarioEditorPage";
+import { ScenariosPage } from "./routes/ScenariosPage";
 import { ShopHomePage } from "./routes/ShopHomePage";
 import {
   PoliciesAndFaqPage,
@@ -36,6 +38,8 @@ export function App() {
         <Route path="tickets" element={<TicketsPage />} />
         <Route path="tickets/:ticketId" element={<TicketsPage />} />
         <Route path="customers/:profileId" element={<CustomerEditorPage />} />
+        <Route path="scenarios" element={<ScenariosPage />} />
+        <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
         <Route path="objective-blocks" element={<ObjectiveBlocksPage />} />
         <Route path="objective-blocks/:blockId" element={<ObjectiveBlockEditorPage />} />
         <Route path="mutation-blocks" element={<MutationBlocksPage />} />

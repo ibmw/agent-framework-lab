@@ -1,6 +1,6 @@
 import type {
   ReplaceTicketDraftRequest,
-  SuggestedDocumentKind,
+  ShopDocumentKind,
   SupportChannel,
   TicketAuthor,
   TicketContentSchema,
@@ -39,7 +39,7 @@ const AUTHOR_LABELS: Record<TicketAuthor, string> = {
   support_agent: "Past support agent",
 };
 
-const DOCUMENT_LABELS: Record<SuggestedDocumentKind, string> = {
+const DOCUMENT_LABELS: Record<ShopDocumentKind, string> = {
   policy: "policy",
   support_guideline: "guideline",
   faq_entry: "FAQ",
@@ -61,7 +61,7 @@ export function authorLabel(author: TicketAuthor): string {
   return AUTHOR_LABELS[author];
 }
 
-export function documentKindLabel(kind: SuggestedDocumentKind): string {
+export function documentKindLabel(kind: ShopDocumentKind): string {
   return DOCUMENT_LABELS[kind];
 }
 
@@ -116,7 +116,7 @@ export function toTicketRequest(content: TicketContentSchema): ReplaceTicketDraf
 /** Every document a shop currently offers, as one flat list for the suggestion picker. */
 export function documentOptions(
   resources: TicketShopResourcesSchema,
-): { kind: SuggestedDocumentKind; document_id: string }[] {
+): { kind: ShopDocumentKind; document_id: string }[] {
   return [
     ...resources.policy_ids.map((id) => ({ kind: "policy" as const, document_id: id })),
     ...resources.support_guideline_ids.map((id) => ({

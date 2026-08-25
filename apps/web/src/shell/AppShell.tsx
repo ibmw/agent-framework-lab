@@ -56,10 +56,14 @@ function studioSections(shopId: string): NavSection[] {
         { label: "Tickets", to: `${base}/tickets`, icon: <MessageSquare size={15} /> },
         {
           label: "Scenarios",
+          to: `${base}/scenarios`,
           icon: <ClipboardList size={15} />,
-          milestone: "Milestone 2",
           children: [
-            { label: "All scenarios", icon: <ClipboardList size={15} />, milestone: "Milestone 2" },
+            {
+              label: "All scenarios",
+              to: `${base}/scenarios`,
+              icon: <ClipboardList size={15} />,
+            },
             {
               label: "Objective blocks",
               to: `${base}/objective-blocks`,

@@ -1,5 +1,5 @@
 import type {
-  SuggestedDocumentKind,
+  ShopDocumentKind,
   SupportChannel,
   TicketAuthor,
   TicketContentSchema,
@@ -693,7 +693,7 @@ function ContextPanel({
     setTag("");
   }
 
-  function toggleDocument(kind: SuggestedDocumentKind, documentId: string) {
+  function toggleDocument(kind: ShopDocumentKind, documentId: string) {
     const present = content.suggested_documents.some(
       (entry) => entry.kind === kind && entry.document_id === documentId,
     );

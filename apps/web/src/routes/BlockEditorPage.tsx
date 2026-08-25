@@ -279,9 +279,9 @@ function BlockEditor<
           </Card>
           <Card title="Used by">
             <p className="text-[13px] text-admin-muted">
-              Scenario usage arrives with the scenario editor. A published scenario pins the exact
-              template version it composed, so editing here always happens in a new draft and never
-              reaches a scenario that already froze this block.
+              A published scenario pins the exact template version it composed, so editing here
+              always happens in a new draft and never reaches a scenario that already froze this
+              block. A cross-shop usage roll-up arrives with the experiment surfaces that need it.
             </p>
           </Card>
         </div>

@@ -326,10 +326,7 @@ describe("block libraries", () => {
     await screen.findByRole("heading", { name: "Objective blocks" });
     expect(screen.getByRole("link", { name: "Objective blocks" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Mutation blocks" })).toBeVisible();
-    // The scenario editor itself is still ahead of this slice, so its two entries stay inert.
-    expect(
-      screen.getAllByTitle("Arrives with Milestone 2").map((entry) => entry.textContent),
-    ).toEqual(["Scenariossoon", "All scenariossoon"]);
+    expect(screen.getByRole("link", { name: "All scenarios" })).toBeVisible();
   });
 });
 
