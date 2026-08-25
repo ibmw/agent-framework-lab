@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from hashlib import sha256
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import (
     ColumnElement,
+    CursorResult,
     Integer,
     and_,
     delete,
@@ -49,6 +50,10 @@ from capability_lab.application.ports import (
     ToolActivity,
 )
 from capability_lab.application.sandbox_materialization import SandboxSnapshotRecord
+from capability_lab.application.sandboxes import (
+    SandboxRecord,
+    SandboxRevisionConflictError,
+)
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioSummary,
@@ -99,6 +104,7 @@ from capability_lab.infrastructure.models import (
     OrderModel,
     PersonaModel,
     ProductModel,
+    SandboxModel,
     SandboxSnapshotModel,
 )
 from capability_lab.infrastructure.sql_types import UtcDateTime
@@ -1764,4 +1770,104 @@ class SqlAlchemySandboxSnapshotRepository:
             sandbox_fingerprint=model.sandbox_fingerprint,
             document=cast("dict[str, CanonicalValue]", model.document),
             created_at=model.created_at,
+        )
+
+
+class SqlAlchemySandboxRepository:
+    """Store one row per arm; the isolation between two arms is that they are two rows.
+
+    A clone never reads back into the snapshot's document, so a write here cannot be seen
+    from the arm beside it or from the starting state both were taken from.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, shop_id: UUID, sandbox_id: UUID) -> SandboxRecord | None:
+        model = self._session.get(SandboxModel, str(sandbox_id))
+        if model is None or model.shop_id != str(shop_id):
+            return None
+        return self._record(model)
+
+    def list_for_snapshot(self, shop_id: UUID, snapshot_id: UUID) -> tuple[SandboxRecord, ...]:
+        models = self._session.scalars(
+            select(SandboxModel)
+            .where(
+                SandboxModel.shop_id == str(shop_id),
+                SandboxModel.snapshot_id == str(snapshot_id),
+            )
+            .order_by(SandboxModel.created_at, SandboxModel.sandbox_id)
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def save(self, record: SandboxRecord) -> SandboxRecord:
+        self._session.add(
+            SandboxModel(
+                sandbox_id=str(record.sandbox_id),
+                shop_id=str(record.shop_id),
+                snapshot_id=str(record.snapshot_id),
+                label=record.label,
+                revision=record.revision,
+                snapshot_fingerprint=record.snapshot_fingerprint,
+                state_fingerprint=record.state_fingerprint,
+                document=cast("dict[str, object]", record.document),
+                created_at=record.created_at,
+                updated_at=record.updated_at,
+            )
+        )
+        self._session.flush()
+        return record
+
+    def update(self, record: SandboxRecord, *, expected_revision: int) -> SandboxRecord:
+        """Write the next revision only while the arm is still where the writer left it.
+
+        The revision predicate lives in the statement rather than in a prior read: the
+        service's read-then-write can be overtaken between the two, and only the store can
+        decide which writer wins.
+
+        Executed through the session rather than the connection so the ORM synchronizes any
+        instance of this row already loaded here. Through the connection the UPDATE bypasses
+        the identity map, and a later read in the same unit of work would answer with
+        pre-update attributes for as long as something held that instance alive — freshness
+        by garbage collection rather than by contract.
+        """
+        result = cast(
+            "CursorResult[Any]",
+            self._session.execute(
+                update(SandboxModel)
+                .where(
+                    SandboxModel.sandbox_id == str(record.sandbox_id),
+                    SandboxModel.shop_id == str(record.shop_id),
+                    SandboxModel.revision == expected_revision,
+                )
+                .values(
+                    revision=record.revision,
+                    state_fingerprint=record.state_fingerprint,
+                    document=cast("dict[str, object]", record.document),
+                    updated_at=record.updated_at,
+                )
+            ),
+        )
+        if result.rowcount != 1:
+            # The re-read runs inside this transaction, so a writer that overtook us may not
+            # be visible from here. Only report a revision this one can actually see.
+            current = self.get(record.shop_id, record.sandbox_id)
+            raise SandboxRevisionConflictError(
+                expected_revision, None if current is None else current.revision
+            )
+        return record
+
+    @staticmethod
+    def _record(model: SandboxModel) -> SandboxRecord:
+        return SandboxRecord(
+            sandbox_id=UUID(model.sandbox_id),
+            shop_id=UUID(model.shop_id),
+            snapshot_id=UUID(model.snapshot_id),
+            label=model.label,
+            revision=model.revision,
+            snapshot_fingerprint=model.snapshot_fingerprint,
+            state_fingerprint=model.state_fingerprint,
+            document=cast("dict[str, CanonicalValue]", model.document),
+            created_at=model.created_at,
+            updated_at=model.updated_at,
         )

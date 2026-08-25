@@ -318,3 +318,35 @@ class SandboxSnapshotModel(Base):
     sandbox_fingerprint: Mapped[str] = mapped_column(String(64))
     document: Mapped[dict[str, object]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class SandboxModel(Base):
+    """One arm's mutable clone of a snapshot, stored as its `sandbox-state-v1` document.
+
+    Every clone owns its row and its own copy of the state: the isolation between two arms
+    is this table having two rows rather than one shared one. `snapshot_fingerprint` and
+    `state_fingerprint` are written from the document — the first read out of it, the second
+    the hash of it — never as a second source of truth.
+
+    There is deliberately **no** unique constraint over `state_fingerprint`: two arms of one
+    experiment start from the same bytes on purpose, which is the opposite of the rule
+    `sandbox_snapshots` holds. `revision` is the optimistic-concurrency token an update
+    predicates on.
+    """
+
+    __tablename__ = "sandboxes"
+    __table_args__ = (
+        CheckConstraint("revision >= 0", name="ck_sandboxes_revision_non_negative"),
+        Index("ix_sandboxes_snapshot", "shop_id", "snapshot_id"),
+    )
+
+    sandbox_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    shop_id: Mapped[str] = mapped_column(String(36))
+    snapshot_id: Mapped[str] = mapped_column(String(36))
+    label: Mapped[str] = mapped_column(String(200))
+    revision: Mapped[int] = mapped_column(Integer)
+    snapshot_fingerprint: Mapped[str] = mapped_column(String(64))
+    state_fingerprint: Mapped[str] = mapped_column(String(64))
+    document: Mapped[dict[str, object]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime())

@@ -32,6 +32,9 @@ DEFINITION_TABLES = {
     # what a published scenario version freezes those orders into.
     "shop_order_fixtures",
     "sandbox_snapshots",
+    # And so are the arms cloned from a snapshot: mutable run state, but state that only
+    # exists because the target authoring model above produced it.
+    "sandboxes",
 }
 POC_TABLES = {
     "action_proposals",
@@ -476,3 +479,53 @@ def test_model_metadata_matches_migrated_schema(
     with create_engine(database_url).connect() as connection:
         context = MigrationContext.configure(connection)
         assert compare_metadata(context, Base.metadata) == []
+
+
+@pytest.mark.migration
+def test_two_arms_may_hold_the_same_starting_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The opposite of the snapshot rule: two clones sharing bytes is the point, not a
+    duplicate to collapse. What the table does refuse is a negative revision."""
+    database_url = f"sqlite:///{tmp_path / 'sandboxes.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO sandboxes (
+            sandbox_id, shop_id, snapshot_id, label, revision,
+            snapshot_fingerprint, state_fingerprint, document, created_at, updated_at
+        ) VALUES (
+            :sandbox_id, :shop_id, :snapshot_id, :label, :revision,
+            :fingerprint, :fingerprint, '{}',
+            '2026-08-25 12:00:00.000000', '2026-08-25 12:00:00.000000'
+        )
+        """
+    )
+    row = {
+        "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac011",
+        "snapshot_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac012",
+        "fingerprint": "f" * 64,
+        "revision": 0,
+    }
+    with engine.begin() as connection:
+        connection.execute(
+            insert,
+            {**row, "sandbox_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac013", "label": "Arm A"},
+        )
+        connection.execute(
+            insert,
+            {**row, "sandbox_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac014", "label": "Arm B"},
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                **row,
+                "sandbox_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac015",
+                "label": "Arm C",
+                "revision": -1,
+            },
+        )
