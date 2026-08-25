@@ -2698,6 +2698,150 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios/{scenario_id}/versions/{version}/snapshots:
+    post:
+      summary: Freeze one published scenario version into canonical starting state
+      description: 'Idempotent by fingerprint: the same recipe, seed, and orders return
+        the snapshot that already holds them, while an order edited in between produces
+        a new one.'
+      operationId: materializeSandboxSnapshot
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterializeSnapshotRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxSnapshotResponse'
+        '404':
+          description: The shop or the scenario version is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The frozen recipe no longer resolves to starting state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
+  /api/v1/shops/{shop_id}/scenarios/{scenario_id}/snapshots:
+    get:
+      summary: List the snapshots materialized from one scenario
+      operationId: listSandboxSnapshots
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: scenario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable scenario identifier inside one shop.
+          title: Scenario Id
+        description: Stable scenario identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxSnapshotListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/snapshots/{snapshot_id}:
+    get:
+      summary: Retrieve one immutable sandbox snapshot
+      operationId: getSandboxSnapshot
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: snapshot_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable sandbox snapshot identifier inside one shop.
+          title: Snapshot Id
+        description: Stable sandbox snapshot identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxSnapshotResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/objective-blocks:
     get:
       summary: List the shared objective-block library with version provenance
@@ -4885,6 +5029,20 @@ components:
       - silver
       - gold
       title: LoyaltyTier
+    MaterializeSnapshotRequest:
+      properties:
+        seed:
+          type: integer
+          maximum: 4294967295.0
+          minimum: 0.0
+          title: Seed
+          description: The deterministic seed this starting state is fingerprinted
+            with.
+      additionalProperties: false
+      type: object
+      required:
+      - seed
+      title: MaterializeSnapshotRequest
     MediaReferenceSchema:
       properties:
         reference:
@@ -6250,6 +6408,248 @@ components:
       - rating
       - body
       title: ReviewSchema
+    SandboxInteractionSchema:
+      properties:
+        origin_kind:
+          $ref: '#/components/schemas/TicketOriginKind'
+        product_handle:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Handle
+        order_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Order Id
+        channel:
+          $ref: '#/components/schemas/SupportChannel'
+        ticket_reference:
+          type: string
+          title: Ticket Reference
+      additionalProperties: false
+      type: object
+      required:
+      - origin_kind
+      - product_handle
+      - order_id
+      - channel
+      - ticket_reference
+      title: SandboxInteractionSchema
+      description: 'The minimal resource reference the incident started from.
+
+
+        An identifier and nothing else: an arm resolves "this product" or "this order"
+        through
+
+        tools against the sandbox, so the starting state never embeds the resource.'
+    SandboxOrderSchema:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        reference:
+          type: string
+          title: Reference
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatus'
+        fulfilment_status:
+          $ref: '#/components/schemas/FulfilmentStatus'
+        total_amount:
+          type: string
+          title: Total Amount
+        currency:
+          $ref: '#/components/schemas/Currency'
+        item_count:
+          type: integer
+          title: Item Count
+        shipping_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Shipping Label
+      additionalProperties: false
+      type: object
+      required:
+      - order_id
+      - reference
+      - payment_status
+      - fulfilment_status
+      - total_amount
+      - currency
+      - item_count
+      - shipping_label
+      title: SandboxOrderSchema
+      description: 'One frozen order, as the snapshot copied it.
+
+
+        A readable projection of the canonical `order-fixture-v1` document, whose
+        exact bytes are
+
+        what `sandbox_fingerprint` covers.'
+    SandboxPinSchema:
+      properties:
+        definition_type:
+          $ref: '#/components/schemas/DefinitionType'
+        definition_id:
+          type: string
+          format: uuid
+          title: Definition Id
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+      additionalProperties: false
+      type: object
+      required:
+      - definition_type
+      - definition_id
+      - version
+      - content_fingerprint
+      title: SandboxPinSchema
+      description: One immutable input this snapshot recorded rather than copied.
+    SandboxSnapshotListResponse:
+      properties:
+        snapshots:
+          items:
+            $ref: '#/components/schemas/SandboxSnapshotSummarySchema'
+          type: array
+          title: Snapshots
+      additionalProperties: false
+      type: object
+      required:
+      - snapshots
+      title: SandboxSnapshotListResponse
+    SandboxSnapshotResponse:
+      properties:
+        snapshot_id:
+          type: string
+          format: uuid
+          title: Snapshot Id
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        scenario_version:
+          type: integer
+          title: Scenario Version
+        seed:
+          type: integer
+          title: Seed
+        sandbox_fingerprint:
+          type: string
+          title: Sandbox Fingerprint
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        order_count:
+          type: integer
+          title: Order Count
+        origin_kind:
+          $ref: '#/components/schemas/TicketOriginKind'
+        ticket_reference:
+          type: string
+          title: Ticket Reference
+        created_at:
+          type: string
+          title: Created At
+        pins:
+          items:
+            $ref: '#/components/schemas/SandboxPinSchema'
+          type: array
+          title: Pins
+        state:
+          $ref: '#/components/schemas/SandboxStateSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - snapshot_id
+      - scenario_id
+      - scenario_version
+      - seed
+      - sandbox_fingerprint
+      - canonical_schema_version
+      - order_count
+      - origin_kind
+      - ticket_reference
+      - created_at
+      - pins
+      - state
+      title: SandboxSnapshotResponse
+      description: 'One snapshot in full: what it pinned, and what it copied.'
+    SandboxSnapshotSummarySchema:
+      properties:
+        snapshot_id:
+          type: string
+          format: uuid
+          title: Snapshot Id
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        scenario_version:
+          type: integer
+          title: Scenario Version
+        seed:
+          type: integer
+          title: Seed
+        sandbox_fingerprint:
+          type: string
+          title: Sandbox Fingerprint
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        order_count:
+          type: integer
+          title: Order Count
+        origin_kind:
+          $ref: '#/components/schemas/TicketOriginKind'
+        ticket_reference:
+          type: string
+          title: Ticket Reference
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - snapshot_id
+      - scenario_id
+      - scenario_version
+      - seed
+      - sandbox_fingerprint
+      - canonical_schema_version
+      - order_count
+      - origin_kind
+      - ticket_reference
+      - created_at
+      title: SandboxSnapshotSummarySchema
+      description: One row of a scenario version's snapshot history.
+    SandboxStateSchema:
+      properties:
+        customer_profile_id:
+          type: string
+          format: uuid
+          title: Customer Profile Id
+        interaction:
+          $ref: '#/components/schemas/SandboxInteractionSchema'
+        orders:
+          items:
+            $ref: '#/components/schemas/SandboxOrderSchema'
+          type: array
+          title: Orders
+      additionalProperties: false
+      type: object
+      required:
+      - customer_profile_id
+      - interaction
+      - orders
+      title: SandboxStateSchema
+      description: What the snapshot copied, because no published version pinned it.
     ScenarioBindingSchema:
       properties:
         parameter:

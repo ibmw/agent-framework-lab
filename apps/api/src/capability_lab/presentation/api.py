@@ -67,6 +67,11 @@ from capability_lab.application.order_fixtures import (
 )
 from capability_lab.application.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from capability_lab.application.ports import Clock, ConversationTurn, OrderWriteConflictError
+from capability_lab.application.sandbox_materialization import (
+    SandboxNotMaterializableError,
+    SandboxSnapshotNotFoundError,
+    SandboxSnapshotService,
+)
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioDeletedError,
@@ -152,6 +157,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyPublishedVersionDirectory,
+    SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
     SqlAlchemyShopDirectory,
@@ -171,6 +177,7 @@ from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
 from capability_lab.presentation.shops import ShopRoutes
+from capability_lab.presentation.snapshots import SandboxSnapshotRoutes
 from capability_lab.presentation.support_identities import SupportIdentityRoutes
 from capability_lab.presentation.tickets import TicketRoutes
 
@@ -899,6 +906,36 @@ async def _not_publishable_handler(request: Request, error: Exception) -> JSONRe
     )
 
 
+async def _sandbox_snapshot_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="sandbox_snapshot_not_found", message=str(error)
+    )
+
+
+async def _sandbox_not_materializable_handler(request: Request, error: Exception) -> JSONResponse:
+    """Refuse the freeze with the findings that explain it, exactly as a publish refusal does.
+
+    A snapshot is refused for the same reasons a publication is — a reference nothing answers
+    — so an operator reads one shape of finding whichever gate refused them.
+    """
+    issues = (
+        [DefinitionIssueSchema.from_domain(issue).model_dump() for issue in error.validation.issues]
+        if isinstance(error, SandboxNotMaterializableError)
+        else []
+    )
+    request_id = _request_id(request)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": "sandbox_not_materializable",
+            "message": str(error),
+            "request_id": request_id,
+            "issues": issues,
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
 async def _missing_draft_handler(request: Request, error: Exception) -> JSONResponse:
     """Reference resolution asked for a draft that does not exist.
 
@@ -1263,6 +1300,12 @@ def create_app(
     application.add_exception_handler(ScenarioTicketNotInShopError, _scenario_ticket_handler)
     application.add_exception_handler(ScenarioTicketChangeError, _scenario_ticket_handler)
     application.add_exception_handler(ScenarioConfigurationError, _scenario_configuration_handler)
+    application.add_exception_handler(
+        SandboxSnapshotNotFoundError, _sandbox_snapshot_not_found_handler
+    )
+    application.add_exception_handler(
+        SandboxNotMaterializableError, _sandbox_not_materializable_handler
+    )
     application.add_exception_handler(UnpublishedReferenceError, _unpublished_reference_handler)
     application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
@@ -1357,6 +1400,20 @@ def create_app(
                 objective_block_repository(session),
                 mutation_block_repository(session),
                 SqlAlchemyDefinitionShopAttachmentRepository(session),
+                SqlAlchemyPublishedVersionDirectory(session),
+                clock,
+            )
+
+    def sandbox_snapshot_service() -> Generator[SandboxSnapshotService, None, None]:
+        with session_scope(factory) as session:
+            yield SandboxSnapshotService(
+                SqlAlchemySandboxSnapshotRepository(session),
+                scenario_repository(session),
+                shop_repository(session),
+                ticket_repository(session),
+                SqlAlchemyOrderFixtureRepository(session),
+                objective_block_repository(session),
+                mutation_block_repository(session),
                 SqlAlchemyPublishedVersionDirectory(session),
                 clock,
             )
@@ -1865,6 +1922,7 @@ def create_app(
     SupportIdentityRoutes(support_identity_service).register(router)
     TicketRoutes(ticket_service).register(router)
     ScenarioRoutes(scenario_service).register(router)
+    SandboxSnapshotRoutes(sandbox_snapshot_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)

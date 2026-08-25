@@ -757,6 +757,60 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/scenarios/{scenario_id}/versions/{version}/snapshots": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Freeze one published scenario version into canonical starting state
+     * @description Idempotent by fingerprint: the same recipe, seed, and orders return the snapshot that already holds them, while an order edited in between produces a new one.
+     */
+    post: operations["materializeSandboxSnapshot"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/scenarios/{scenario_id}/snapshots": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the snapshots materialized from one scenario */
+    get: operations["listSandboxSnapshots"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/snapshots/{snapshot_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable sandbox snapshot */
+    get: operations["getSandboxSnapshot"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/objective-blocks": {
     parameters: {
       query?: never;
@@ -1800,6 +1854,14 @@ export interface components {
      * @enum {string}
      */
     LoyaltyTier: "none" | "silver" | "gold";
+    /** MaterializeSnapshotRequest */
+    MaterializeSnapshotRequest: {
+      /**
+       * Seed
+       * @description The deterministic seed this starting state is fingerprinted with.
+       */
+      seed: number;
+    };
     /** MediaReferenceSchema */
     MediaReferenceSchema: {
       /**
@@ -2493,6 +2555,148 @@ export interface components {
       rating: number;
       /** Body */
       body: string;
+    };
+    /**
+     * SandboxInteractionSchema
+     * @description The minimal resource reference the incident started from.
+     *
+     *     An identifier and nothing else: an arm resolves "this product" or "this order" through
+     *     tools against the sandbox, so the starting state never embeds the resource.
+     */
+    SandboxInteractionSchema: {
+      origin_kind: components["schemas"]["TicketOriginKind"];
+      /** Product Handle */
+      product_handle: string | null;
+      /** Order Id */
+      order_id: string | null;
+      channel: components["schemas"]["SupportChannel"];
+      /** Ticket Reference */
+      ticket_reference: string;
+    };
+    /**
+     * SandboxOrderSchema
+     * @description One frozen order, as the snapshot copied it.
+     *
+     *     A readable projection of the canonical `order-fixture-v1` document, whose exact bytes are
+     *     what `sandbox_fingerprint` covers.
+     */
+    SandboxOrderSchema: {
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /** Reference */
+      reference: string;
+      payment_status: components["schemas"]["PaymentStatus"];
+      fulfilment_status: components["schemas"]["FulfilmentStatus"];
+      /** Total Amount */
+      total_amount: string;
+      currency: components["schemas"]["Currency"];
+      /** Item Count */
+      item_count: number;
+      /** Shipping Label */
+      shipping_label: string | null;
+    };
+    /**
+     * SandboxPinSchema
+     * @description One immutable input this snapshot recorded rather than copied.
+     */
+    SandboxPinSchema: {
+      definition_type: components["schemas"]["DefinitionType"];
+      /**
+       * Definition Id
+       * Format: uuid
+       */
+      definition_id: string;
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+    };
+    /** SandboxSnapshotListResponse */
+    SandboxSnapshotListResponse: {
+      /** Snapshots */
+      snapshots: components["schemas"]["SandboxSnapshotSummarySchema"][];
+    };
+    /**
+     * SandboxSnapshotResponse
+     * @description One snapshot in full: what it pinned, and what it copied.
+     */
+    SandboxSnapshotResponse: {
+      /**
+       * Snapshot Id
+       * Format: uuid
+       */
+      snapshot_id: string;
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: number;
+      /** Seed */
+      seed: number;
+      /** Sandbox Fingerprint */
+      sandbox_fingerprint: string;
+      /** Canonical Schema Version */
+      canonical_schema_version: string;
+      /** Order Count */
+      order_count: number;
+      origin_kind: components["schemas"]["TicketOriginKind"];
+      /** Ticket Reference */
+      ticket_reference: string;
+      /** Created At */
+      created_at: string;
+      /** Pins */
+      pins: components["schemas"]["SandboxPinSchema"][];
+      state: components["schemas"]["SandboxStateSchema"];
+    };
+    /**
+     * SandboxSnapshotSummarySchema
+     * @description One row of a scenario version's snapshot history.
+     */
+    SandboxSnapshotSummarySchema: {
+      /**
+       * Snapshot Id
+       * Format: uuid
+       */
+      snapshot_id: string;
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: number;
+      /** Seed */
+      seed: number;
+      /** Sandbox Fingerprint */
+      sandbox_fingerprint: string;
+      /** Canonical Schema Version */
+      canonical_schema_version: string;
+      /** Order Count */
+      order_count: number;
+      origin_kind: components["schemas"]["TicketOriginKind"];
+      /** Ticket Reference */
+      ticket_reference: string;
+      /** Created At */
+      created_at: string;
+    };
+    /**
+     * SandboxStateSchema
+     * @description What the snapshot copied, because no published version pinned it.
+     */
+    SandboxStateSchema: {
+      /**
+       * Customer Profile Id
+       * Format: uuid
+       */
+      customer_profile_id: string;
+      interaction: components["schemas"]["SandboxInteractionSchema"];
+      /** Orders */
+      orders: components["schemas"]["SandboxOrderSchema"][];
     };
     /**
      * ScenarioBindingSchema
@@ -6592,6 +6796,141 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ScenarioVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  materializeSandboxSnapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MaterializeSnapshotRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SandboxSnapshotResponse"];
+        };
+      };
+      /** @description The shop or the scenario version is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The frozen recipe no longer resolves to starting state */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  listSandboxSnapshots: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable scenario identifier inside one shop. */
+        scenario_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SandboxSnapshotListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getSandboxSnapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable sandbox snapshot identifier inside one shop. */
+        snapshot_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SandboxSnapshotResponse"];
         };
       };
       /** @description The definition is not found */

@@ -2,90 +2,21 @@
 
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any
 from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
 
 from api_factories import (
+    GUIDELINE_REFERENCE,
+    POLICY_REFERENCE,
     api_client,
-    make_customer,
-    make_order,
+    create_scenario,
     make_shop,
-    make_ticket,
-    publish_prerequisites,
-    ticket_body,
+    publish_everything,
+    scenario_body,
+    seed_lab,
 )
-
-POLICY_REFERENCE = "policy:address-change"
-GUIDELINE_REFERENCE = "support_guideline:escalation"
-
-OBJECTIVE_TEMPLATE: dict[str, Any] = {
-    "name": "read-required-document",
-    "statement": "Read document",
-    "description": "Passes when the arm reads the bound document through its tool.",
-    "assessment": "deterministic",
-    "evidence": "event",
-    "parameters": [
-        {
-            "name": "doc_ref",
-            "kind": "document_reference",
-            "description": "The shop document the arm has to read.",
-            "required": True,
-            "default": None,
-        },
-        {
-            "name": "severity",
-            "kind": "severity",
-            "description": "Whether missing the read fails the objective.",
-            "required": True,
-            "default": "required",
-        },
-    ],
-}
-
-MUTATION_TEMPLATE: dict[str, Any] = {
-    "name": "concurrent-entity-mutation",
-    "statement": "Concurrent mutation of",
-    "description": "Mutates the bound entity out of band, bumping the version an arm holds.",
-    "effect": "entity_mutation",
-    "parameters": [
-        {
-            "name": "entity_ref",
-            "kind": "entity_reference",
-            "description": "The order that moves under the arm.",
-            "required": True,
-            "default": None,
-        },
-        {
-            "name": "timing",
-            "kind": "timing",
-            "description": "When the runtime injects the mutation.",
-            "required": True,
-            "default": "after_first_read",
-        },
-    ],
-}
-
-
-async def make_block(client: AsyncClient, collection: str, payload: dict[str, Any]) -> str:
-    created = await client.post(f"/api/v1/{collection}", json={"name": payload["name"]})
-    assert created.status_code == 201, created.text
-    block_id = str(created.json()["block_id"])
-    saved = await client.put(f"/api/v1/{collection}/{block_id}/draft", json={"payload": payload})
-    assert saved.status_code == 200, saved.text
-    return block_id
-
-
-async def publish_ticket(client: AsyncClient, shop_id: str, ticket_id: str, order_id: str) -> None:
-    saved = await client.put(
-        f"/api/v1/shops/{shop_id}/tickets/{ticket_id}/draft",
-        json={"payload": ticket_body(order_id)},
-    )
-    assert saved.status_code == 200, saved.text
-    published = await client.post(f"/api/v1/shops/{shop_id}/tickets/{ticket_id}/versions")
-    assert published.status_code == 201, published.text
 
 
 @pytest.fixture
@@ -96,76 +27,7 @@ async def client(tmp_path: Path) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest.fixture
 async def lab(client: AsyncClient) -> dict[str, str]:
-    """One publishable shop, ticket, and template in each library."""
-    shop_id = await make_shop(client)
-    profile_id = await make_customer(client, shop_id)
-    order_id = await make_order(client, shop_id, profile_id)
-    ticket_id = await make_ticket(client, shop_id, profile_id)
-    await client.put(
-        f"/api/v1/shops/{shop_id}/tickets/{ticket_id}/draft",
-        json={"payload": ticket_body(order_id)},
-    )
-    return {
-        "shop_id": shop_id,
-        "profile_id": profile_id,
-        "order_id": order_id,
-        "ticket_id": ticket_id,
-        "objective_block_id": await make_block(client, "objective-blocks", OBJECTIVE_TEMPLATE),
-        "mutation_block_id": await make_block(client, "mutation-blocks", MUTATION_TEMPLATE),
-    }
-
-
-def scenario_body(lab: dict[str, str], **overrides: Any) -> dict[str, Any]:
-    """The wrong-address recipe, bound to this workspace's shop objects."""
-    body: dict[str, Any] = {
-        "name": "Wrong shipping address",
-        "context_documents": [{"kind": "policy", "document_id": "address-change"}],
-        "objectives": [
-            {
-                "id": "read-address-change-policy",
-                "block_id": lab["objective_block_id"],
-                "severity": "required",
-                "bindings": [{"parameter": "doc_ref", "value": POLICY_REFERENCE}],
-            }
-        ],
-        "mutations": [
-            {
-                "id": "order-moves-under-the-arm",
-                "block_id": lab["mutation_block_id"],
-                "bindings": [
-                    {"parameter": "entity_ref", "value": f"order:{lab['order_id']}"},
-                    {"parameter": "timing", "value": "after_first_read"},
-                ],
-            }
-        ],
-        "hidden_facts": "Maya confirms the Lyon address only if asked.",
-        "completion": {
-            "statement": "The order ships to the confirmed address.",
-            "max_turns": 12,
-        },
-    }
-    body.update(overrides)
-    return body
-
-
-async def create_scenario(client: AsyncClient, lab: dict[str, str]) -> str:
-    created = await client.post(
-        f"/api/v1/shops/{lab['shop_id']}/scenarios",
-        json={"name": "Wrong shipping address", "ticket_id": lab["ticket_id"]},
-    )
-    assert created.status_code == 201, created.text
-    return str(created.json()["scenario_id"])
-
-
-async def publish_everything(client: AsyncClient, lab: dict[str, str]) -> None:
-    await publish_prerequisites(client, lab["shop_id"], lab["profile_id"])
-    await publish_ticket(client, lab["shop_id"], lab["ticket_id"], lab["order_id"])
-    for collection, key in (
-        ("objective-blocks", "objective_block_id"),
-        ("mutation-blocks", "mutation_block_id"),
-    ):
-        published = await client.post(f"/api/v1/{collection}/{lab[key]}/versions")
-        assert published.status_code == 201, published.text
+    return await seed_lab(client)
 
 
 # -- creation and reading --------------------------------------------------

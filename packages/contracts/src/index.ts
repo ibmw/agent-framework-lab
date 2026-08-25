@@ -173,3 +173,14 @@ export type ObjectiveSeverity = components["schemas"]["ObjectiveSeverity"];
 export type ScenarioEntityKind = components["schemas"]["ScenarioEntityKind"];
 export type CreateScenarioRequest = components["schemas"]["CreateScenarioRequest"];
 export type ReplaceScenarioDraftRequest = components["schemas"]["ReplaceScenarioDraftRequest"];
+
+export type SandboxSnapshotResponse = components["schemas"]["SandboxSnapshotResponse"];
+export type SandboxSnapshotListResponse = components["schemas"]["SandboxSnapshotListResponse"];
+export type SandboxSnapshotSummarySchema = components["schemas"]["SandboxSnapshotSummarySchema"];
+export type SandboxStateSchema = components["schemas"]["SandboxStateSchema"];
+export type SandboxInteractionSchema = components["schemas"]["SandboxInteractionSchema"];
+export type SandboxOrderSchema = components["schemas"]["SandboxOrderSchema"];
+export type SandboxPinSchema = components["schemas"]["SandboxPinSchema"];
+export type MaterializeSnapshotRequest = components["schemas"]["MaterializeSnapshotRequest"];
+export type DefinitionValidationErrorResponse =
+  components["schemas"]["DefinitionValidationErrorResponse"];
