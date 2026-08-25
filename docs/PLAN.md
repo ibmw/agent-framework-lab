@@ -46,7 +46,8 @@ and mutation-block libraries a scenario composes (ADR 0017), and then the scenar
 composition editor, which binds those templates to same-shop objects and pins every version a
 publication freezes (ADR 0018), and then the canonical sandbox snapshot that turns a published
 recipe into starting state by pinning what is immutable and copying the order fixtures nothing
-pinned (ADR 0019). The POC's conversation, persona, and order-action HTTP contracts
+pinned (ADR 0019), and then the independently mutable clone each experiment arm works in
+(ADR 0020). The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
 
@@ -288,7 +289,7 @@ instance.
 - [x] Build a scenario editor with validation and a resolved-state preview.
 - [x] Support product-page and order-page origins using minimal resource references.
 - [x] Materialize the paid-order/wrong-shipping-address scenario into a canonical snapshot.
-- [ ] Clone a snapshot into independently mutable sandbox state.
+- [x] Clone a snapshot into independently mutable sandbox state.
 - [ ] Add versioned read tools for interaction context, catalog, customer, order, and support
   knowledge.
 - [ ] Add a safe address-change proposal/action with authorization, confirmation, idempotency, and
@@ -342,6 +343,15 @@ sandbox holds, the minimal interaction reference that carries a product-page or 
 into the runtime, and the publish gate re-run against the world as it is now. It also splits
 `resolve_sandbox_inputs` out of the experiment resolution, because a snapshot is materialized before
 any agent configuration is chosen.
+
+Clone evidence (no frame; the arms live on the snapshot page under the shell's resource
+conventions): an operator clones one frozen snapshot into two arms, reads back the one current-state
+fingerprint they share, and a change applied inside one arm moves that arm alone — never the arm
+beside it and never the snapshot both were taken from. ADR 0020 records the `sandbox-state-v1`
+document, the rule that a clone copies the state and pins the snapshot, the two fingerprints that say
+where an arm started and where it is, the write seam a run's tools mutate through and why no public
+write endpoint exists until there is an actor to authorize, the optimistic-concurrency token the store
+decides, and the decision that cloning is deliberately not idempotent where materializing is.
 
 Order evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came

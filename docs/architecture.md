@@ -133,6 +133,13 @@ version and **copies** only what none of them pinned — the shop's order fixtur
 authored after the recipe is frozen. Its identity is the resulting `sandbox-v2` fingerprint, so the
 same recipe over a moved order is a different snapshot rather than an overwritten one (ADR 0019).
 
+Cloning applies the same rule one level up: a snapshot is itself immutable, so a clone **pins** it by
+fingerprint and **copies** the mutable state inside it into a `sandbox-state-v1` document of its own
+(ADR 0020). Every clone of one snapshot therefore starts at the same current-state fingerprint, and
+diverges from its sibling only when something writes. Cloning is deliberately not idempotent where
+materializing is: the same starting state frozen twice is one snapshot, while the same snapshot cloned
+twice is two arms. A sandbox write is guarded by the arm's revision, and the store decides the race.
+
 ```text
 published definitions
         │
@@ -166,7 +173,9 @@ shop-independent definition is a separate, unversioned relation in `definition_s
 never a pinned reference and never part of a fingerprint. Not every authored resource is a
 definition: an order fixture is shop-scoped authored state with no version of its own, stored as one
 canonical document with a content fingerprint so a published scenario can freeze a copy of it
-(ADR 0015). Experiments and judge executions are
+(ADR 0015). A snapshot's clones live in `sandboxes`, one row per arm, each holding its own copy of the
+frozen state; the isolation between arms is that layout rather than a rule something must remember
+(ADR 0020). Experiments and judge executions are
 append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
 never changes the published definitions or canonical starting snapshot.
 

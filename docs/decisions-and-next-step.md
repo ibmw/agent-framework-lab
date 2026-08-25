@@ -69,8 +69,9 @@ SDK immediately.
   was removed by ADR 0013 in favour of the Studio shell. The underlying conversation and persona
   HTTP contracts remain published POC behavior, not the target historical record.
 - The minimal customer/product/order canonical schema in ADR 0007 remains valid for POC replay but
-  is not the target commerce schema. The target snapshot format is `sandbox-v2` (ADR 0019); a
-  further change to what it freezes requires another canonical schema version.
+  is not the target commerce schema. The target snapshot format is `sandbox-v2` (ADR 0019) and the
+  mutable clone an arm works in is `sandbox-state-v1` (ADR 0020); a further change to what either
+  holds requires another canonical schema version.
 - The M2 provider/model policy remains a historical POC policy. Target agent and judge configuration
   will be versioned authorable definitions.
 
@@ -108,11 +109,12 @@ SDK immediately.
    shop-level under ADR 0012 rather than joining the support identity.
 5. Milestone 2 is under way. The order editor with frozen address copies (ADR 0015), versioned
    tickets (ADR 0016), the objective and mutation block libraries (ADR 0017), the scenario recipe
-   and its composition editor (ADR 0018), and the canonical sandbox snapshot a published version
-   materializes into (ADR 0019) are delivered.
-6. The next implementation task is the rest of `docs/PLAN.md` Milestone 2: cloning a snapshot into
-   independently mutable arms, the versioned read tools that resolve its interaction reference, and
-   the safe address-change action.
+   and its composition editor (ADR 0018), the canonical sandbox snapshot a published version
+   materializes into (ADR 0019), and the independently mutable clone each arm works in (ADR 0020)
+   are delivered.
+6. The next implementation task is the rest of `docs/PLAN.md` Milestone 2: the versioned read tools
+   that resolve a sandbox's interaction reference, and the safe address-change action — the first
+   public writer through the clone's write seam.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
