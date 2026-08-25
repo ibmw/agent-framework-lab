@@ -52,6 +52,7 @@ from capability_lab.application.scenario_generation import (
     GeneratedScenarioSummary,
     PersonaLibraryFilter,
 )
+from capability_lab.application.scenarios import SCENARIO_CODEC
 from capability_lab.application.shops import SHOP_CODEC
 from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
 from capability_lab.application.tickets import TICKET_CODEC
@@ -75,6 +76,7 @@ from capability_lab.domain.entities import (
     ScenarioDefinition,
     ScenarioMetadata,
 )
+from capability_lab.domain.scenario import ScenarioPayload
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import TicketPayload
@@ -1439,6 +1441,10 @@ def mutation_block_repository(
     session: Session,
 ) -> SqlAlchemyDefinitionRepository[MutationBlockPayload]:
     return SqlAlchemyDefinitionRepository(session, MUTATION_BLOCK_CODEC)
+
+
+def scenario_repository(session: Session) -> SqlAlchemyDefinitionRepository[ScenarioPayload]:
+    return SqlAlchemyDefinitionRepository(session, SCENARIO_CODEC)
 
 
 class SqlAlchemyPublishedVersionDirectory:

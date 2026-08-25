@@ -48,7 +48,7 @@ from capability_lab.domain.definitions import (
     validation_of,
 )
 from capability_lab.domain.entities import DomainError
-from capability_lab.domain.shop import SupportChannel
+from capability_lab.domain.shop import ShopDocumentKind, SupportChannel
 
 MAX_TICKET_HISTORY = 40
 MAX_TICKET_TAGS = 12
@@ -109,12 +109,9 @@ ORIGIN_PRODUCT_KINDS: frozenset[TicketOriginKind] = frozenset({TicketOriginKind.
 ORIGIN_ORDER_KINDS: frozenset[TicketOriginKind] = frozenset({TicketOriginKind.ORDER_PAGE})
 
 
-class SuggestedDocumentKind(StrEnum):
-    """Which of the shop's document collections a suggestion points into."""
-
-    POLICY = "policy"
-    SUPPORT_GUIDELINE = "support_guideline"
-    FAQ_ENTRY = "faq_entry"
+# A suggestion points into the same three collections a scenario's context documents and a
+# read-check's binding do, so the set lives with the shop that owns them (ADR 0018).
+SuggestedDocumentKind = ShopDocumentKind
 
 
 @dataclass(frozen=True, slots=True)

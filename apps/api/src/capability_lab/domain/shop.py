@@ -139,6 +139,20 @@ class SupportChannel(StrEnum):
     PHONE = "phone"
 
 
+class ShopDocumentKind(StrEnum):
+    """Which of the shop's document collections a reference points into.
+
+    One enumeration for every resource that names a shop document: a ticket suggests one,
+    a scenario includes one as context, and an objective binds one as a read-check. The
+    three answer different questions about the same three collections, and a second copy
+    of the set would eventually disagree with this one about what a document can be.
+    """
+
+    POLICY = "policy"
+    SUPPORT_GUIDELINE = "support_guideline"
+    FAQ_ENTRY = "faq_entry"
+
+
 @dataclass(frozen=True, slots=True)
 class OptionDefinition:
     """A named product option such as size or color and its ordered values."""
