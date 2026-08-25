@@ -22,6 +22,7 @@ MAX_LABEL_LENGTH = 200
 MAX_SLUG_LENGTH = 64
 
 _SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+_IDENTIFIER_PATTERN = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*")
 _LOCALE_PATTERN = re.compile(r"[a-z]{2}(?:-[A-Z]{2})?")
 _EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+")
 _PHONE_PATTERN = re.compile(r"\+?[0-9][0-9 ()./-]{4,30}")
@@ -36,6 +37,20 @@ CANONICAL_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 def require_slug(value: object, field_name: str, *, error: type[DomainError]) -> str:
     if not isinstance(value, str) or _SLUG_PATTERN.fullmatch(value) is None:
         raise error(f"{field_name} must be a lowercase kebab-case identifier")
+    if len(value) > MAX_SLUG_LENGTH:
+        raise error(f"{field_name} must contain at most {MAX_SLUG_LENGTH} characters")
+    return value
+
+
+def require_identifier(value: object, field_name: str, *, error: type[DomainError]) -> str:
+    """A snake_case name a machine binds by, such as a block parameter's `doc_ref`.
+
+    Deliberately not `require_slug`: a slug is a kebab-case key a human reads in a URL,
+    while these names are looked up by the runtime when it resolves a binding, so they
+    follow the identifier spelling the rest of the codebase uses for named values.
+    """
+    if not isinstance(value, str) or _IDENTIFIER_PATTERN.fullmatch(value) is None:
+        raise error(f"{field_name} must be a lowercase snake_case identifier")
     if len(value) > MAX_SLUG_LENGTH:
         raise error(f"{field_name} must contain at most {MAX_SLUG_LENGTH} characters")
     return value

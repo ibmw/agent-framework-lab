@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from capability_lab.application.blocks import MUTATION_BLOCK_CODEC, OBJECTIVE_BLOCK_CODEC
 from capability_lab.application.canonical_state import fingerprint_initial_state
 from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
 from capability_lab.application.customer_profiles import CUSTOMER_PROFILE_CODEC
@@ -54,6 +55,7 @@ from capability_lab.application.scenario_generation import (
 from capability_lab.application.shops import SHOP_CODEC
 from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
 from capability_lab.application.tickets import TICKET_CODEC
+from capability_lab.domain.blocks import MutationBlockPayload, ObjectiveBlockPayload
 from capability_lab.domain.customer_profile import CustomerProfilePayload
 from capability_lab.domain.definitions import (
     DefinitionDraft,
@@ -1425,6 +1427,18 @@ def support_identity_repository(
 
 def ticket_repository(session: Session) -> SqlAlchemyDefinitionRepository[TicketPayload]:
     return SqlAlchemyDefinitionRepository(session, TICKET_CODEC)
+
+
+def objective_block_repository(
+    session: Session,
+) -> SqlAlchemyDefinitionRepository[ObjectiveBlockPayload]:
+    return SqlAlchemyDefinitionRepository(session, OBJECTIVE_BLOCK_CODEC)
+
+
+def mutation_block_repository(
+    session: Session,
+) -> SqlAlchemyDefinitionRepository[MutationBlockPayload]:
+    return SqlAlchemyDefinitionRepository(session, MUTATION_BLOCK_CODEC)
 
 
 class SqlAlchemyPublishedVersionDirectory:
