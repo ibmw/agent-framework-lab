@@ -41,7 +41,8 @@ the versioned shop and catalog (ADR 0013). Slice 3 added versioned customer prof
 identities on a shared authoring lifecycle (ADR 0014). Milestone 2 has begun with shop-scoped order
 fixtures: typed status axes, derived totals, authored events, and selection-only line items and
 shipping addresses (ADR 0015), followed by versioned tickets — the first shop-scoped definition,
-pinning its shop and customer-profile versions at publication (ADR 0016). The POC's conversation,
+pinning its shop and customer-profile versions at publication (ADR 0016), and then the shared
+objective- and mutation-block libraries a scenario composes (ADR 0017). The POC's conversation,
 persona, and order-action HTTP contracts remain published and tested but have no UI consumer until
 the Milestone 2–4 surfaces are built on the new shell.
 
@@ -276,10 +277,10 @@ instance.
   stored as a frozen, source-labeled copy.
 - [x] Define versioned tickets: channel, origin references, prior conversation, and the triggering
   first message every arm receives.
+- [x] Define the shared objective/mutation block libraries: parameterized templates, draft/published
+  versions, and same-shop binding validation.
 - [ ] Define the scenario recipe on top of a published ticket: hidden facts, context documents,
   composed objective and mutation blocks, and completion conditions.
-- [ ] Define the shared objective/mutation block libraries: parameterized templates, draft/published
-  versions, and same-shop binding validation.
 - [ ] Build a scenario editor with validation and a resolved-state preview.
 - [ ] Support product-page and order-page origins using minimal resource references.
 - [ ] Materialize the paid-order/wrong-shipping-address scenario into a canonical snapshot.
@@ -304,7 +305,16 @@ references. The scenario recipe is deliberately deferred to the slice that also 
 libraries and the scenario editor, because a scenario payload is mostly block bindings whose shape
 those libraries fix.
 
-Order-fixture evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
+Block-library evidence (frames 4a and 4b): an author publishes the `read-required-document`
+objective and the `concurrent-entity-mutation` fault, and a mutation refuses to publish until it says
+when it fires. ADR 0017 records the `objective-block-payload-v1` and `mutation-block-payload-v1`
+schemas, the typed parameter model whose kind decides what a scenario must bind inside its own shop,
+the rule that a template may never default a reference, the timing rules that separate a scheduled
+mutation from a goal-based objective, and the assessment/evidence pairing. The libraries landed
+**before** the scenario recipe deliberately: a scenario payload is mostly block bindings, so the
+templates had to fix that shape first. ADR 0016 deferred the recipe to "the slice that also delivers
+the block libraries and the scenario editor"; ADR 0017 splits that slice, delivering the libraries on
+their own so each stays reviewable. an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came
 from. ADR 0015 records the `order-fixture-v1` schema, the decision that an order is shop-scoped
 authored state rather than a definition, the forward-only status graph, the selection-only write
