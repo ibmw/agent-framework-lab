@@ -41,10 +41,12 @@ the versioned shop and catalog (ADR 0013). Slice 3 added versioned customer prof
 identities on a shared authoring lifecycle (ADR 0014). Milestone 2 has begun with shop-scoped order
 fixtures: typed status axes, derived totals, authored events, and selection-only line items and
 shipping addresses (ADR 0015), followed by versioned tickets — the first shop-scoped definition,
-pinning its shop and customer-profile versions at publication (ADR 0016), and then the shared
-objective- and mutation-block libraries a scenario composes (ADR 0017). The POC's conversation,
-persona, and order-action HTTP contracts remain published and tested but have no UI consumer until
-the Milestone 2–4 surfaces are built on the new shell.
+pinning its shop and customer-profile versions at publication (ADR 0016), then the shared objective-
+and mutation-block libraries a scenario composes (ADR 0017), and then the scenario recipe and its
+composition editor, which binds those templates to same-shop objects and pins every version a
+publication freezes (ADR 0018). The POC's conversation, persona, and order-action HTTP contracts
+remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
+the new shell.
 
 The POC does not implement the target Scenario Studio, published agent configurations, paired
 experiment runner, participant-driver port, LLM judge, experiment-first history, or target
@@ -279,9 +281,9 @@ instance.
   first message every arm receives.
 - [x] Define the shared objective/mutation block libraries: parameterized templates, draft/published
   versions, and same-shop binding validation.
-- [ ] Define the scenario recipe on top of a published ticket: hidden facts, context documents,
+- [x] Define the scenario recipe on top of a published ticket: hidden facts, context documents,
   composed objective and mutation blocks, and completion conditions.
-- [ ] Build a scenario editor with validation and a resolved-state preview.
+- [x] Build a scenario editor with validation and a resolved-state preview.
 - [ ] Support product-page and order-page origins using minimal resource references.
 - [ ] Materialize the paid-order/wrong-shipping-address scenario into a canonical snapshot.
 - [ ] Clone a snapshot into independently mutable sandbox state.
@@ -314,7 +316,21 @@ mutation from a goal-based objective, and the assessment/evidence pairing. The l
 **before** the scenario recipe deliberately: a scenario payload is mostly block bindings, so the
 templates had to fix that shape first. ADR 0016 deferred the recipe to "the slice that also delivers
 the block libraries and the scenario editor"; ADR 0017 splits that slice, delivering the libraries on
-their own so each stays reviewable. an author builds the paid, unfulfilled order that ships to
+their own so each stays reviewable.
+
+Scenario evidence (frame 4): an author composes the wrong-address recipe on the published ticket —
+the context document the incident turns on, a read-check bound to that document, and a concurrent
+mutation bound to the stale-address order — reads the resolved starting state beside the publish
+gate, and publishes; the frozen version keeps the shop, ticket, and template versions it pinned while
+every draft around it moves on. ADR 0018 records the `scenario-payload-v1` schema, the reference
+grammar a binding resolves through and the rules that keep every one of them inside the scenario's
+own shop and its ticket's customer, the decision that an objective's severity is the instance's
+rather than a binding, the multi-target pin that freezes one version per composed template however many
+times it is bound, and the resolved-state preview that travels with the publish gate because the two
+answer one question together. It also extracts `ShopDocumentKind` so a ticket's suggestion, a
+scenario's context entry, and a read-check's binding name the shop's document collections once.
+
+Order evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came
 from. ADR 0015 records the `order-fixture-v1` schema, the decision that an order is shop-scoped
 authored state rather than a definition, the forward-only status graph, the selection-only write
