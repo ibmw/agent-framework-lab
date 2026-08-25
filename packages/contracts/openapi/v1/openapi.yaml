@@ -2842,6 +2842,140 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/snapshots/{snapshot_id}/sandboxes:
+    post:
+      summary: Clone one snapshot into an independently mutable sandbox
+      description: 'Deliberately not idempotent: freezing the same starting state
+        twice is one snapshot, while cloning it twice is two arms. Every clone of
+        a snapshot starts at the same state fingerprint and moves independently afterwards.'
+      operationId: cloneSandbox
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: snapshot_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable sandbox snapshot identifier inside one shop.
+          title: Snapshot Id
+        description: Stable sandbox snapshot identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneSandboxRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxResponse'
+        '404':
+          description: The shop or the snapshot is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The arm was not given a usable label
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: List the sandboxes cloned from one snapshot
+      operationId: listSandboxes
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: snapshot_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable sandbox snapshot identifier inside one shop.
+          title: Snapshot Id
+        description: Stable sandbox snapshot identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/sandboxes/{sandbox_id}:
+    get:
+      summary: Retrieve one arm's mutable sandbox
+      operationId: getSandbox
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: sandbox_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable sandbox identifier inside one shop.
+          title: Sandbox Id
+        description: Stable sandbox identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/objective-blocks:
     get:
       summary: List the shared objective-block library with version provenance
@@ -3898,6 +4032,19 @@ components:
         rather than
 
         silently allowed to disagree.'
+    CloneSandboxRequest:
+      properties:
+        label:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Label
+          description: How an operator tells this arm from the one beside it.
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      title: CloneSandboxRequest
     CompletionConditionsSchema:
       properties:
         statement:
@@ -6444,6 +6591,18 @@ components:
         through
 
         tools against the sandbox, so the starting state never embeds the resource.'
+    SandboxListResponse:
+      properties:
+        sandboxes:
+          items:
+            $ref: '#/components/schemas/SandboxSummarySchema'
+          type: array
+          title: Sandboxes
+      additionalProperties: false
+      type: object
+      required:
+      - sandboxes
+      title: SandboxListResponse
     SandboxOrderSchema:
       properties:
         order_id:
@@ -6512,6 +6671,60 @@ components:
       - content_fingerprint
       title: SandboxPinSchema
       description: One immutable input this snapshot recorded rather than copied.
+    SandboxResponse:
+      properties:
+        sandbox_id:
+          type: string
+          format: uuid
+          title: Sandbox Id
+        snapshot_id:
+          type: string
+          format: uuid
+          title: Snapshot Id
+        label:
+          type: string
+          title: Label
+        revision:
+          type: integer
+          title: Revision
+        snapshot_fingerprint:
+          type: string
+          title: Snapshot Fingerprint
+        state_fingerprint:
+          type: string
+          title: State Fingerprint
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+        state:
+          $ref: '#/components/schemas/SandboxStateSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - sandbox_id
+      - snapshot_id
+      - label
+      - revision
+      - snapshot_fingerprint
+      - state_fingerprint
+      - canonical_schema_version
+      - created_at
+      - updated_at
+      - state
+      title: SandboxResponse
+      description: 'One arm in full, including the commerce world it currently holds.
+
+
+        The state is the same projection a snapshot answers with, so an operator reads
+        a clone
+
+        and the starting state it came from field by field rather than in two shapes.'
     SandboxSnapshotListResponse:
       properties:
         snapshots:
@@ -6650,6 +6863,52 @@ components:
       - orders
       title: SandboxStateSchema
       description: What the snapshot copied, because no published version pinned it.
+    SandboxSummarySchema:
+      properties:
+        sandbox_id:
+          type: string
+          format: uuid
+          title: Sandbox Id
+        snapshot_id:
+          type: string
+          format: uuid
+          title: Snapshot Id
+        label:
+          type: string
+          title: Label
+        revision:
+          type: integer
+          title: Revision
+        snapshot_fingerprint:
+          type: string
+          title: Snapshot Fingerprint
+        state_fingerprint:
+          type: string
+          title: State Fingerprint
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - sandbox_id
+      - snapshot_id
+      - label
+      - revision
+      - snapshot_fingerprint
+      - state_fingerprint
+      - canonical_schema_version
+      - created_at
+      - updated_at
+      title: SandboxSummarySchema
+      description: 'One arm of a snapshot: where it started, where it is, and how
+        far it has moved.'
     ScenarioBindingSchema:
       properties:
         parameter:

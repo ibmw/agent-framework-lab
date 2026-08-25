@@ -811,6 +811,44 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/snapshots/{snapshot_id}/sandboxes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the sandboxes cloned from one snapshot */
+    get: operations["listSandboxes"];
+    put?: never;
+    /**
+     * Clone one snapshot into an independently mutable sandbox
+     * @description Deliberately not idempotent: freezing the same starting state twice is one snapshot, while cloning it twice is two arms. Every clone of a snapshot starts at the same state fingerprint and moves independently afterwards.
+     */
+    post: operations["cloneSandbox"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/sandboxes/{sandbox_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one arm's mutable sandbox */
+    get: operations["getSandbox"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/objective-blocks": {
     parameters: {
       query?: never;
@@ -1248,6 +1286,14 @@ export interface components {
       severity: components["schemas"]["ObjectiveSeverity"];
       /** Bindings */
       bindings: components["schemas"]["ScenarioBindingSchema"][];
+    };
+    /** CloneSandboxRequest */
+    CloneSandboxRequest: {
+      /**
+       * Label
+       * @description How an operator tells this arm from the one beside it.
+       */
+      label: string;
     };
     /**
      * CompletionConditionsSchema
@@ -2573,6 +2619,11 @@ export interface components {
       /** Ticket Reference */
       ticket_reference: string;
     };
+    /** SandboxListResponse */
+    SandboxListResponse: {
+      /** Sandboxes */
+      sandboxes: components["schemas"]["SandboxSummarySchema"][];
+    };
     /**
      * SandboxOrderSchema
      * @description One frozen order, as the snapshot copied it.
@@ -2613,6 +2664,40 @@ export interface components {
       version: number;
       /** Content Fingerprint */
       content_fingerprint: string;
+    };
+    /**
+     * SandboxResponse
+     * @description One arm in full, including the commerce world it currently holds.
+     *
+     *     The state is the same projection a snapshot answers with, so an operator reads a clone
+     *     and the starting state it came from field by field rather than in two shapes.
+     */
+    SandboxResponse: {
+      /**
+       * Sandbox Id
+       * Format: uuid
+       */
+      sandbox_id: string;
+      /**
+       * Snapshot Id
+       * Format: uuid
+       */
+      snapshot_id: string;
+      /** Label */
+      label: string;
+      /** Revision */
+      revision: number;
+      /** Snapshot Fingerprint */
+      snapshot_fingerprint: string;
+      /** State Fingerprint */
+      state_fingerprint: string;
+      /** Canonical Schema Version */
+      canonical_schema_version: string;
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+      state: components["schemas"]["SandboxStateSchema"];
     };
     /** SandboxSnapshotListResponse */
     SandboxSnapshotListResponse: {
@@ -2697,6 +2782,36 @@ export interface components {
       interaction: components["schemas"]["SandboxInteractionSchema"];
       /** Orders */
       orders: components["schemas"]["SandboxOrderSchema"][];
+    };
+    /**
+     * SandboxSummarySchema
+     * @description One arm of a snapshot: where it started, where it is, and how far it has moved.
+     */
+    SandboxSummarySchema: {
+      /**
+       * Sandbox Id
+       * Format: uuid
+       */
+      sandbox_id: string;
+      /**
+       * Snapshot Id
+       * Format: uuid
+       */
+      snapshot_id: string;
+      /** Label */
+      label: string;
+      /** Revision */
+      revision: number;
+      /** Snapshot Fingerprint */
+      snapshot_fingerprint: string;
+      /** State Fingerprint */
+      state_fingerprint: string;
+      /** Canonical Schema Version */
+      canonical_schema_version: string;
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
     };
     /**
      * ScenarioBindingSchema
@@ -6931,6 +7046,139 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SandboxSnapshotResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listSandboxes: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable sandbox snapshot identifier inside one shop. */
+        snapshot_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SandboxListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  cloneSandbox: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable sandbox snapshot identifier inside one shop. */
+        snapshot_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CloneSandboxRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SandboxResponse"];
+        };
+      };
+      /** @description The shop or the snapshot is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The arm was not given a usable label */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getSandbox: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable sandbox identifier inside one shop. */
+        sandbox_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SandboxResponse"];
         };
       };
       /** @description The definition is not found */

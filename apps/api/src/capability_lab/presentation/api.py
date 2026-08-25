@@ -72,6 +72,11 @@ from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotNotFoundError,
     SandboxSnapshotService,
 )
+from capability_lab.application.sandboxes import (
+    SandboxLabelError,
+    SandboxNotFoundError,
+    SandboxService,
+)
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioDeletedError,
@@ -157,6 +162,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyPublishedVersionDirectory,
+    SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
@@ -175,6 +181,7 @@ from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlo
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
 from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.orders import OrderRoutes
+from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
 from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.snapshots import SandboxSnapshotRoutes
@@ -912,6 +919,16 @@ async def _sandbox_snapshot_not_found_handler(request: Request, error: Exception
     )
 
 
+async def _sandbox_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(request, status_code=404, code="sandbox_not_found", message=str(error))
+
+
+async def _sandbox_label_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=422, code="sandbox_label_invalid", message=str(error)
+    )
+
+
 async def _sandbox_not_materializable_handler(request: Request, error: Exception) -> JSONResponse:
     """Refuse the freeze with the findings that explain it, exactly as a publish refusal does.
 
@@ -1306,6 +1323,8 @@ def create_app(
     application.add_exception_handler(
         SandboxNotMaterializableError, _sandbox_not_materializable_handler
     )
+    application.add_exception_handler(SandboxNotFoundError, _sandbox_not_found_handler)
+    application.add_exception_handler(SandboxLabelError, _sandbox_label_handler)
     application.add_exception_handler(UnpublishedReferenceError, _unpublished_reference_handler)
     application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
@@ -1415,6 +1434,14 @@ def create_app(
                 objective_block_repository(session),
                 mutation_block_repository(session),
                 SqlAlchemyPublishedVersionDirectory(session),
+                clock,
+            )
+
+    def sandbox_service() -> Generator[SandboxService, None, None]:
+        with session_scope(factory) as session:
+            yield SandboxService(
+                SqlAlchemySandboxRepository(session),
+                SqlAlchemySandboxSnapshotRepository(session),
                 clock,
             )
 
@@ -1923,6 +1950,7 @@ def create_app(
     TicketRoutes(ticket_service).register(router)
     ScenarioRoutes(scenario_service).register(router)
     SandboxSnapshotRoutes(sandbox_snapshot_service).register(router)
+    SandboxRoutes(sandbox_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)

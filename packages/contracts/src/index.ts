@@ -176,6 +176,10 @@ export type ReplaceScenarioDraftRequest = components["schemas"]["ReplaceScenario
 
 export type SandboxSnapshotResponse = components["schemas"]["SandboxSnapshotResponse"];
 export type SandboxSnapshotListResponse = components["schemas"]["SandboxSnapshotListResponse"];
+export type SandboxResponse = components["schemas"]["SandboxResponse"];
+export type SandboxSummarySchema = components["schemas"]["SandboxSummarySchema"];
+export type SandboxListResponse = components["schemas"]["SandboxListResponse"];
+export type CloneSandboxRequest = components["schemas"]["CloneSandboxRequest"];
 export type SandboxSnapshotSummarySchema = components["schemas"]["SandboxSnapshotSummarySchema"];
 export type SandboxStateSchema = components["schemas"]["SandboxStateSchema"];
 export type SandboxInteractionSchema = components["schemas"]["SandboxInteractionSchema"];
