@@ -3,10 +3,12 @@ import type {
   DefinitionVersionSummarySchema,
   SandboxSnapshotResponse,
   SandboxSnapshotSummarySchema,
+  SandboxSummarySchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError, LabApiError } from "../api/client";
+import { cloneSandbox, listSandboxes } from "../api/sandboxes";
 import { getScenarioDraft, listScenarioVersions } from "../api/scenarios";
 import {
   getSandboxSnapshot,
@@ -32,6 +34,7 @@ import {
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "The starting states of this scenario are unavailable.";
+const ARMS_UNAVAILABLE = "The arms cloned from this snapshot are unavailable.";
 const DEFAULT_SEED = 20260825;
 /** The contract's own bound, declared here so the field refuses before the server has to. */
 const MAX_SEED = 2 ** 32 - 1;
@@ -148,7 +151,8 @@ export function SnapshotsPage() {
               Back to the recipe
             </Link>{" "}
             · a snapshot pins every published version it reaches and copies the orders nothing
-            pinned, then fingerprints the two together.
+            pinned, then fingerprints the two together. Each arm of an experiment runs in its own
+            clone of one snapshot.
           </>
         }
       />
@@ -266,7 +270,16 @@ export function SnapshotsPage() {
               </p>
             </Card>
           ) : (
-            <SnapshotDetail snapshot={selected} />
+            <>
+              <SnapshotDetail snapshot={selected} />
+              {/* Keyed on the snapshot so switching selection starts a clean panel rather
+                  than carrying one snapshot's draft label or error onto another's arms. */}
+              <SandboxArms
+                key={selected.snapshot_id}
+                shopId={shopId}
+                snapshotId={selected.snapshot_id}
+              />
+            </>
           )}
         </div>
       </div>
@@ -365,5 +378,111 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
         )}
       </Card>
     </>
+  );
+}
+
+/**
+ * The arms cloned from one snapshot.
+ *
+ * A snapshot is starting state shared by every arm and never moves; a sandbox is the copy one
+ * arm works in. So the two fingerprints beside each other are the whole point: the snapshot
+ * fingerprint says where an arm started, and the state fingerprint says where it is now.
+ * Clones of one snapshot answer with the same pair until one of them writes.
+ */
+function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: string }) {
+  const [arms, setArms] = useState<SandboxSummarySchema[]>([]);
+  const [label, setLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listSandboxes(shopId, snapshotId, controller.signal)
+      .then((listed) => setArms(listed.sandboxes))
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(describeApiError(cause, ARMS_UNAVAILABLE));
+        }
+      });
+    return () => controller.abort();
+  }, [shopId, snapshotId]);
+
+  const clone = async (event: FormEvent) => {
+    event.preventDefault();
+    if (label.trim() === "") {
+      setError("Name the arm so it can be told from the one beside it.");
+      return;
+    }
+    setWorking(true);
+    setError(null);
+    try {
+      // The response is the arm, so it is appended rather than refetched. A failed reload
+      // would otherwise be reported as a failed clone, after the arm already exists.
+      const created = await cloneSandbox(shopId, snapshotId, { label: label.trim() });
+      setArms((current) => [...current, created]);
+      setLabel("");
+    } catch (cause: unknown) {
+      setError(describeApiError(cause, "This snapshot could not be cloned."));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <Card
+      title="Sandbox arms"
+      footer={
+        <p className="text-xs text-admin-muted">
+          Every arm starts at the same state fingerprint because it starts from the same bytes. A
+          write inside one arm moves only that arm — never the snapshot, never the other.
+        </p>
+      }
+    >
+      {error ? (
+        <p role="alert" className="text-[13px] text-lab-error">
+          {error}
+        </p>
+      ) : null}
+      <form className="flex flex-wrap items-end gap-3" onSubmit={clone}>
+        <label className={fieldLabelClasses}>
+          Arm label
+          <input
+            className={fieldControlClasses}
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+          />
+        </label>
+        <button className={accentButtonClasses} type="submit" disabled={working}>
+          {working ? "Cloning…" : "Clone sandbox"}
+        </button>
+      </form>
+
+      {arms.length === 0 ? (
+        <p className="text-[13px] text-admin-muted">
+          No arm has been cloned from this starting state yet.
+        </p>
+      ) : (
+        <table className="w-full border-collapse text-[13px]">
+          <thead>
+            <tr>
+              <th className={tableHeadClasses}>Arm</th>
+              <th className={tableHeadClasses}>Revision</th>
+              <th className={tableHeadClasses}>Current state</th>
+            </tr>
+          </thead>
+          <tbody>
+            {arms.map((arm) => (
+              <tr key={arm.sandbox_id}>
+                <td className={tableCellClasses}>{arm.label}</td>
+                <td className={tableCellClasses}>r{arm.revision}</td>
+                <td className={tableCellClasses}>
+                  <Fingerprint value={arm.state_fingerprint} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
   );
 }

@@ -312,6 +312,20 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await page.getByRole("button", { name: "Materialize snapshot" }).click();
   await expect(card(page, "Snapshots").getByRole("row")).toHaveCount(2);
 
+  // A snapshot is shared starting state; an arm works in its own clone of it. Two arms of one
+  // snapshot therefore begin at the same current-state fingerprint.
+  const armsCard = card(page, "Sandbox arms");
+  await armsCard.getByLabel("Arm label", { exact: true }).fill("Arm A");
+  await armsCard.getByRole("button", { name: "Clone sandbox" }).click();
+  await expect(armsCard.getByText("Arm A")).toBeVisible();
+  await armsCard.getByLabel("Arm label", { exact: true }).fill("Arm B");
+  await armsCard.getByRole("button", { name: "Clone sandbox" }).click();
+  await expect(armsCard.getByText("Arm B")).toBeVisible();
+
+  const armFingerprints = await armsCard.locator("tbody code").allTextContents();
+  expect(armFingerprints).toHaveLength(2);
+  expect(armFingerprints[0]).toBe(armFingerprints[1]);
+
   // The frozen version keeps what it froze while the draft moves on.
   await page.getByRole("link", { name: "Back to the recipe" }).click();
   const turnCap = card(page, "Completion").getByLabel("Turn cap", { exact: true });

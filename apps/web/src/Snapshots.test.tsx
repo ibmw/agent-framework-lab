@@ -1,6 +1,8 @@
 import type {
+  SandboxListResponse,
   SandboxSnapshotListResponse,
   SandboxSnapshotResponse,
+  SandboxSummarySchema,
   ScenarioContentSchema,
   ScenarioDraftResponse,
   ScenarioVersionListResponse,
@@ -112,8 +114,28 @@ const VERSIONS: ScenarioVersionListResponse = {
   ],
 };
 
+const STATE_FINGERPRINT = "f".repeat(64);
+
+function arm(label: string, sandboxId: string, revision = 0): SandboxSummarySchema {
+  return {
+    sandbox_id: sandboxId,
+    snapshot_id: SNAPSHOT_ID,
+    label,
+    revision,
+    snapshot_fingerprint: FINGERPRINT,
+    // Two arms of one snapshot start from the same bytes, so they hash the same until one
+    // of them writes. The revision is what says which one has.
+    state_fingerprint: revision === 0 ? STATE_FINGERPRINT : "9".repeat(64),
+    canonical_schema_version: "sandbox-state-v1",
+    created_at: "2026-08-25T12:30:00+00:00",
+    updated_at: "2026-08-25T12:30:00+00:00",
+  };
+}
+
 let stored: SandboxSnapshotListResponse = { snapshots: [] };
 let materialized: Record<string, unknown>[] = [];
+let arms: SandboxListResponse = { sandboxes: [] };
+let cloned: Record<string, unknown>[] = [];
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -156,6 +178,16 @@ const server = setupServer(
     HttpResponse.json(stored),
   ),
   http.get(`*/api/v1/shops/${SHOP_ID}/snapshots/${SNAPSHOT_ID}`, () => HttpResponse.json(SNAPSHOT)),
+  http.get(`*/api/v1/shops/${SHOP_ID}/snapshots/${SNAPSHOT_ID}/sandboxes`, () =>
+    HttpResponse.json(arms),
+  ),
+  http.post(`*/api/v1/shops/${SHOP_ID}/snapshots/${SNAPSHOT_ID}/sandboxes`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    cloned.push(body);
+    const created = arm(String(body.label), `a${cloned.length}`.padEnd(36, "0"));
+    arms = { sandboxes: [...arms.sandboxes, created] };
+    return HttpResponse.json({ ...created, state: SNAPSHOT.state }, { status: 201 });
+  }),
   http.post(
     `*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version/snapshots`,
     async ({ request, params }) => {
@@ -172,6 +204,8 @@ afterEach(() => {
   server.resetHandlers();
   stored = { snapshots: [] };
   materialized = [];
+  arms = { sandboxes: [] };
+  cloned = [];
 });
 afterAll(() => server.close());
 
@@ -290,5 +324,89 @@ describe("starting states", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Enter the seed/);
     expect(materialized).toHaveLength(0);
+  });
+});
+
+describe("sandbox arms", () => {
+  it("clones a snapshot into arms that start from the same fingerprint", async () => {
+    const user = userEvent.setup();
+    stored = { snapshots: [SNAPSHOT] };
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    expect(
+      within(panel).getByText("No arm has been cloned from this starting state yet."),
+    ).toBeVisible();
+
+    await user.type(within(panel).getByLabelText("Arm label"), "Arm A");
+    await user.click(within(panel).getByRole("button", { name: "Clone sandbox" }));
+    await waitFor(() => expect(cloned).toHaveLength(1));
+
+    await user.type(within(panel).getByLabelText("Arm label"), "Arm B");
+    await user.click(within(panel).getByRole("button", { name: "Clone sandbox" }));
+
+    await waitFor(() => expect(within(panel).getAllByRole("row")).toHaveLength(3));
+    expect(cloned).toEqual([{ label: "Arm A" }, { label: "Arm B" }]);
+    expect(within(panel).getByText("Arm A")).toBeVisible();
+    expect(within(panel).getByText("Arm B")).toBeVisible();
+    // Same starting state, so the same current-state fingerprint until one of them writes.
+    expect(within(panel).getAllByTitle(STATE_FINGERPRINT)).toHaveLength(2);
+  });
+
+  it("shows an arm that has moved apart from the one beside it", async () => {
+    const user = userEvent.setup();
+    stored = { snapshots: [SNAPSHOT] };
+    arms = {
+      sandboxes: [arm("Arm A", "a1".padEnd(36, "0"), 1), arm("Arm B", "a2".padEnd(36, "0"))],
+    };
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    await waitFor(() => expect(within(panel).getByText("r1")).toBeVisible());
+    expect(within(panel).getByText("r0")).toBeVisible();
+    expect(within(panel).getAllByTitle(STATE_FINGERPRINT)).toHaveLength(1);
+  });
+
+  it("keeps a successful clone successful when the list cannot be refetched", async () => {
+    const user = userEvent.setup();
+    stored = { snapshots: [SNAPSHOT] };
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    await within(panel).findByText("No arm has been cloned from this starting state yet.");
+
+    // The arm is created by the POST; a listing that fails afterwards must not be reported
+    // as a clone that failed.
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/snapshots/${SNAPSHOT_ID}/sandboxes`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "unavailable", request_id: "req-2" },
+          { status: 500 },
+        ),
+      ),
+    );
+    await user.type(within(panel).getByLabelText("Arm label"), "Arm A");
+    await user.click(within(panel).getByRole("button", { name: "Clone sandbox" }));
+
+    expect(await within(panel).findByText("Arm A")).toBeVisible();
+    expect(within(panel).queryByRole("alert")).toBeNull();
+  });
+
+  it("refuses to clone an arm with no label", async () => {
+    const user = userEvent.setup();
+    stored = { snapshots: [SNAPSHOT] };
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    await user.click(within(panel).getByRole("button", { name: "Clone sandbox" }));
+
+    expect(
+      await within(panel).findByText("Name the arm so it can be told from the one beside it."),
+    ).toBeVisible();
+    expect(cloned).toHaveLength(0);
   });
 });
