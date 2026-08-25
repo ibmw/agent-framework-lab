@@ -12,8 +12,10 @@ import {
   Settings,
   Shapes,
   Tag,
+  Target,
   UserCog,
   Users,
+  Zap,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -29,6 +31,12 @@ interface NavEntry {
   exact?: boolean;
   /** Sections whose slice has not landed yet stay visible but inert. */
   milestone?: string;
+  /**
+   * Nested entries, indented under their parent. Only Scenarios has them: the two block
+   * libraries live under it because a scenario is what composes them, even though the
+   * libraries themselves are shared across shops.
+   */
+  children?: NavEntry[];
 }
 
 interface NavSection {
@@ -46,7 +54,24 @@ function studioSections(shopId: string): NavSection[] {
         { label: "Orders", to: `${base}/orders`, icon: <Boxes size={15} /> },
         { label: "Customers", to: `${base}/customers`, icon: <Users size={15} /> },
         { label: "Tickets", to: `${base}/tickets`, icon: <MessageSquare size={15} /> },
-        { label: "Scenarios", icon: <ClipboardList size={15} />, milestone: "Milestone 2" },
+        {
+          label: "Scenarios",
+          icon: <ClipboardList size={15} />,
+          milestone: "Milestone 2",
+          children: [
+            { label: "All scenarios", icon: <ClipboardList size={15} />, milestone: "Milestone 2" },
+            {
+              label: "Objective blocks",
+              to: `${base}/objective-blocks`,
+              icon: <Target size={15} />,
+            },
+            {
+              label: "Mutation blocks",
+              to: `${base}/mutation-blocks`,
+              icon: <Zap size={15} />,
+            },
+          ],
+        },
       ],
     },
     {
@@ -85,13 +110,26 @@ function studioSections(shopId: string): NavSection[] {
 const entryClasses =
   "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-admin-ink-soft transition hover:bg-admin-border/50";
 
-function SidebarEntry({ entry, collapsed }: { entry: NavEntry; collapsed: boolean }) {
+function SidebarEntry({
+  entry,
+  collapsed,
+  nested = false,
+}: {
+  entry: NavEntry;
+  collapsed: boolean;
+  /** Indent only while the rail is expanded; a collapsed rail has no room for a hierarchy. */
+  nested?: boolean;
+}) {
   const label = collapsed ? (
     <span className="sr-only">{entry.label}</span>
   ) : (
     <span>{entry.label}</span>
   );
-  const layout = collapsed ? `${entryClasses} justify-center` : entryClasses;
+  const layout = collapsed
+    ? `${entryClasses} justify-center`
+    : nested
+      ? `${entryClasses} ml-3.5 border-l border-admin-border pl-3`
+      : entryClasses;
 
   if (!entry.to) {
     return (
@@ -196,7 +234,17 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
                     <div className="mx-2 my-2 h-px bg-admin-border" />
                   ) : null}
                   {section.entries.map((entry) => (
-                    <SidebarEntry key={entry.label} entry={entry} collapsed={collapsed} />
+                    <div key={entry.label} className="grid gap-0.5">
+                      <SidebarEntry entry={entry} collapsed={collapsed} />
+                      {entry.children?.map((child) => (
+                        <SidebarEntry
+                          key={child.label}
+                          entry={child}
+                          collapsed={collapsed}
+                          nested={!collapsed}
+                        />
+                      ))}
+                    </div>
                   ))}
                 </div>
               ))}

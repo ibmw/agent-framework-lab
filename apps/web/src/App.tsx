@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { MutationBlockEditorPage, ObjectiveBlockEditorPage } from "./routes/BlockEditorPage";
+import { MutationBlocksPage, ObjectiveBlocksPage } from "./routes/BlockLibraryPage";
 import { CustomerEditorPage } from "./routes/CustomerEditorPage";
 import { CustomersPage } from "./routes/CustomersPage";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
@@ -34,6 +36,10 @@ export function App() {
         <Route path="tickets" element={<TicketsPage />} />
         <Route path="tickets/:ticketId" element={<TicketsPage />} />
         <Route path="customers/:profileId" element={<CustomerEditorPage />} />
+        <Route path="objective-blocks" element={<ObjectiveBlocksPage />} />
+        <Route path="objective-blocks/:blockId" element={<ObjectiveBlockEditorPage />} />
+        <Route path="mutation-blocks" element={<MutationBlocksPage />} />
+        <Route path="mutation-blocks/:blockId" element={<MutationBlockEditorPage />} />
         <Route path="support-identities" element={<SupportIdentitiesPage />} />
         <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
         <Route path="setup/identity" element={<ShopIdentityPage />} />
