@@ -18,6 +18,7 @@ import {
 } from "./routes/ShopSetupPages";
 import { ShopsPage } from "./routes/ShopsPage";
 import { ShopVersionPage } from "./routes/ShopVersionPage";
+import { SnapshotsPage } from "./routes/SnapshotsPage";
 import { SupportIdentitiesPage } from "./routes/SupportIdentitiesPage";
 import { SupportIdentityEditorPage } from "./routes/SupportIdentityEditorPage";
 import { TicketsPage } from "./routes/TicketsPage";
@@ -40,6 +41,7 @@ export function App() {
         <Route path="customers/:profileId" element={<CustomerEditorPage />} />
         <Route path="scenarios" element={<ScenariosPage />} />
         <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
+        <Route path="scenarios/:scenarioId/snapshots" element={<SnapshotsPage />} />
         <Route path="objective-blocks" element={<ObjectiveBlocksPage />} />
         <Route path="objective-blocks/:blockId" element={<ObjectiveBlockEditorPage />} />
         <Route path="mutation-blocks" element={<MutationBlocksPage />} />

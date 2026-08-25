@@ -5,6 +5,7 @@ import type {
   ScenarioListResponse,
   ScenarioPreviewResponse,
   ScenarioResourcesSchema,
+  ScenarioVersionListResponse,
   ScenarioVersionResponse,
 } from "@agent-lab/contracts";
 import { apiPath, JSON_HEADERS, read } from "./client";
@@ -87,5 +88,15 @@ export async function publishScenario(
 ): Promise<ScenarioVersionResponse> {
   return read<ScenarioVersionResponse>(
     await fetch(scenarioPath(shopId, scenarioId, "/versions"), { method: "POST" }),
+  );
+}
+
+export async function listScenarioVersions(
+  shopId: string,
+  scenarioId: string,
+  signal?: AbortSignal,
+): Promise<ScenarioVersionListResponse> {
+  return read<ScenarioVersionListResponse>(
+    await fetch(scenarioPath(shopId, scenarioId, "/versions"), { signal }),
   );
 }

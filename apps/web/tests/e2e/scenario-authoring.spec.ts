@@ -3,9 +3,10 @@ import { expect, type Page, test } from "@playwright/test";
 /**
  * Milestone 2 scenario acceptance evidence: an author composes the wrong-address recipe on a
  * published ticket — the context document the incident turns on, a read-check bound to that
- * document, a fault bound to the stale-address order — and publishes it. The frozen version
- * then pins the shop, ticket, and template versions it composed, and keeps them while every
- * draft around it moves on.
+ * document, a fault bound to the stale-address order — publishes it, and freezes that version
+ * into canonical starting state. The frozen version pins the shop, ticket, and template
+ * versions it composed and keeps them while every draft around it moves on; the snapshot then
+ * records those pins and copies the order fixture nothing pinned.
  *
  * The journey builds the whole chain because a scenario is the first definition that composes
  * all of them: nothing here can be stubbed without stubbing the thing under test.
@@ -292,8 +293,29 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByRole("status")).toContainText("Published version 1");
 
+  // A published version is a recipe, not starting state: freezing it settles the orders it
+  // only names, and the snapshot separates what it pinned from what it had to copy.
+  await page.getByRole("link", { name: "Freeze it into starting state" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: /starting states/ })).toBeVisible();
+  await expect(page.getByLabel("Scenario version")).toHaveValue("1");
+  await page.getByRole("button", { name: "Materialize snapshot" }).click();
+
+  const pins = card(page, "Pinned versions");
+  await expect(pins.getByText("shop")).toBeVisible();
+  await expect(pins.getByText("ticket")).toBeVisible();
+  await expect(pins.getByText("scenario")).toBeVisible();
+  const copied = card(page, "Copied orders");
+  await expect(copied.getByText("NS-10482")).toBeVisible();
+  await expect(copied.getByText(/Bordeaux/)).toBeVisible();
+
+  // Freezing the same version, seed, and orders is the same starting state, not a second one.
+  await page.getByRole("button", { name: "Materialize snapshot" }).click();
+  await expect(card(page, "Snapshots").getByRole("row")).toHaveCount(2);
+
   // The frozen version keeps what it froze while the draft moves on.
-  await completion.getByLabel("Turn cap", { exact: true }).fill("20");
+  await page.getByRole("link", { name: "Back to the recipe" }).click();
+  const turnCap = card(page, "Completion").getByLabel("Turn cap", { exact: true });
+  await turnCap.fill("20");
   await saveDraft(page);
   await expect(page.getByText("v1 published")).toBeVisible();
   await expect(page.getByText("Draft v2 in progress")).toBeVisible();

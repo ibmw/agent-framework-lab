@@ -195,7 +195,11 @@ export function ScenarioEditorPage() {
                 {" "}
                 · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
               </>
-            ) : null}
+            ) : null}{" "}
+            ·{" "}
+            <Link className="font-semibold text-lab-ink" to="snapshots">
+              Starting states
+            </Link>
           </>
         }
         actions={
@@ -248,7 +252,11 @@ export function ScenarioEditorPage() {
       {publishedVersion !== null ? (
         <p role="status" className="mb-4 text-[13px] text-lab-success">
           Published version {publishedVersion}. It keeps the ticket and template versions it pinned,
-          whatever the library does next.
+          whatever the library does next.{" "}
+          <Link className="font-semibold text-lab-ink" to="snapshots">
+            Freeze it into starting state
+          </Link>{" "}
+          to settle the orders it only names.
         </p>
       ) : null}
 
