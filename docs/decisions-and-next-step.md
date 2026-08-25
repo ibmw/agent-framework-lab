@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-08-24
+Status: current — 2026-08-25
 
 ## Authoritative direction
 
@@ -69,8 +69,8 @@ SDK immediately.
   was removed by ADR 0013 in favour of the Studio shell. The underlying conversation and persona
   HTTP contracts remain published POC behavior, not the target historical record.
 - The minimal customer/product/order canonical schema in ADR 0007 remains valid for POC replay but
-  is not the target commerce schema. A target snapshot format requires a new canonical schema
-  version and ADR amendment or replacement.
+  is not the target commerce schema. The target snapshot format is `sandbox-v2` (ADR 0019); a
+  further change to what it freezes requires another canonical schema version.
 - The M2 provider/model policy remains a historical POC policy. Target agent and judge configuration
   will be versioned authorable definitions.
 
@@ -106,9 +106,13 @@ SDK immediately.
    list without making the profile shop-scoped, and the extraction of the shared draft/published
    authoring lifecycle that every shop-independent definition now uses. Tone of voice stays
    shop-level under ADR 0012 rather than joining the support identity.
-5. The next implementation task is `docs/PLAN.md` Milestone 2: the order editor with frozen
-   address copies, versioned tickets, the objective and mutation block libraries, and the scenario
-   editor, materializing the wrong-shipping-address sandbox.
+5. Milestone 2 is under way. The order editor with frozen address copies (ADR 0015), versioned
+   tickets (ADR 0016), the objective and mutation block libraries (ADR 0017), the scenario recipe
+   and its composition editor (ADR 0018), and the canonical sandbox snapshot a published version
+   materializes into (ADR 0019) are delivered.
+6. The next implementation task is the rest of `docs/PLAN.md` Milestone 2: cloning a snapshot into
+   independently mutable arms, the versioned read tools that resolve its interaction reference, and
+   the safe address-change action.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

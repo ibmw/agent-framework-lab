@@ -44,7 +44,9 @@ shipping addresses (ADR 0015), followed by versioned tickets — the first shop-
 pinning its shop and customer-profile versions at publication (ADR 0016), then the shared objective-
 and mutation-block libraries a scenario composes (ADR 0017), and then the scenario recipe and its
 composition editor, which binds those templates to same-shop objects and pins every version a
-publication freezes (ADR 0018). The POC's conversation, persona, and order-action HTTP contracts
+publication freezes (ADR 0018), and then the canonical sandbox snapshot that turns a published
+recipe into starting state by pinning what is immutable and copying the order fixtures nothing
+pinned (ADR 0019). The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
 
@@ -284,8 +286,8 @@ instance.
 - [x] Define the scenario recipe on top of a published ticket: hidden facts, context documents,
   composed objective and mutation blocks, and completion conditions.
 - [x] Build a scenario editor with validation and a resolved-state preview.
-- [ ] Support product-page and order-page origins using minimal resource references.
-- [ ] Materialize the paid-order/wrong-shipping-address scenario into a canonical snapshot.
+- [x] Support product-page and order-page origins using minimal resource references.
+- [x] Materialize the paid-order/wrong-shipping-address scenario into a canonical snapshot.
 - [ ] Clone a snapshot into independently mutable sandbox state.
 - [ ] Add versioned read tools for interaction context, catalog, customer, order, and support
   knowledge.
@@ -329,6 +331,17 @@ rather than a binding, the multi-target pin that freezes one version per compose
 times it is bound, and the resolved-state preview that travels with the publish gate because the two
 answer one question together. It also extracts `ShopDocumentKind` so a ticket's suggestion, a
 scenario's context entry, and a read-check's binding name the shop's document collections once.
+
+Snapshot evidence (no frame; the page follows the shell's resource conventions): an author freezes a
+published wrong-address version into canonical starting state, reads the versions it pinned beside
+the order fixtures it had to copy, and freezes it again to the same snapshot — while an order edited
+in between produces a new one. ADR 0019 records the `sandbox-v2` envelope, the rule that a snapshot
+pins what is already immutable and copies only what no published version pinned, the decision that a
+snapshot is identified by its fingerprint rather than by its inputs, the whole-customer order set a
+sandbox holds, the minimal interaction reference that carries a product-page or order-page origin
+into the runtime, and the publish gate re-run against the world as it is now. It also splits
+`resolve_sandbox_inputs` out of the experiment resolution, because a snapshot is materialized before
+any agent configuration is chosen.
 
 Order evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came

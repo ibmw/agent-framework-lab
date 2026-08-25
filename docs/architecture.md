@@ -127,6 +127,12 @@ An experiment binds one published scenario to one or two published agent configu
 it resolves all referenced versions and creates one canonical sandbox snapshot. Each arm receives
 an independently mutable clone with the same starting-state fingerprint.
 
+A snapshot is materialized from a published scenario version and a seed, and can be created before
+any agent configuration is chosen. It **pins** every input that is already an immutable published
+version and **copies** only what none of them pinned — the shop's order fixtures, which keep being
+authored after the recipe is frozen. Its identity is the resulting `sandbox-v2` fingerprint, so the
+same recipe over a moved order is a different snapshot rather than an overwritten one (ADR 0019).
+
 ```text
 published definitions
         │
