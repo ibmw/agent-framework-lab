@@ -97,6 +97,17 @@ class DocumentReader:
     def reader(self, key: str) -> DocumentReader:
         return DocumentReader(self._document.get(key), f"{self._path}.{key}")
 
+    def embedded(self, key: str) -> object:
+        """The raw nested value, for handing an embedded document to the codec that owns it.
+
+        The sandbox envelope embeds whole `order-fixture-v1` documents (ADR 0019); their
+        codec reads from its own root, so it takes the value rather than a reader.
+        """
+        value = self._document.get(key)
+        if not isinstance(value, Mapping):
+            raise CanonicalSerializationError(f"{self._path}.{key} must be an object")
+        return cast("Mapping[str, object]", value)
+
     def optional_reader(self, key: str) -> DocumentReader | None:
         """A nested object that the schema allows to be explicitly null."""
         if self._document.get(key) is None:

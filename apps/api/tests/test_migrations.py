@@ -28,8 +28,10 @@ DEFINITION_TABLES = {
     "definition_versions",
     "definition_shop_attachments",
     # Orders are not definitions, but they are target authoring state and share the
-    # definition tables' migration fate rather than the POC's.
+    # definition tables' migration fate rather than the POC's. So is a snapshot, which is
+    # what a published scenario version freezes those orders into.
     "shop_order_fixtures",
+    "sandbox_snapshots",
 }
 POC_TABLES = {
     "action_proposals",
@@ -318,6 +320,49 @@ def test_order_references_are_unique_inside_one_shop(
                 "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac009",
                 "order_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac00a",
                 "reference": "NS-10482",
+            },
+        )
+
+
+@pytest.mark.migration
+def test_identical_starting_state_is_one_snapshot_per_shop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fingerprint identifies starting state, so a shop never holds it twice."""
+    database_url = f"sqlite:///{tmp_path / 'snapshots.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO sandbox_snapshots (
+            snapshot_id, shop_id, scenario_id, scenario_version, seed,
+            sandbox_fingerprint, document, created_at
+        ) VALUES (
+            :snapshot_id, :shop_id, :scenario_id, 1, 1234,
+            :fingerprint, '{}', '2026-08-25 12:00:00.000000'
+        )
+        """
+    )
+    row = {
+        "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac00b",
+        "scenario_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac00c",
+        "fingerprint": "e" * 64,
+    }
+    with engine.begin() as connection:
+        connection.execute(insert, {**row, "snapshot_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac00d"})
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "snapshot_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac00e"})
+
+    # The same starting state authored in another shop is another shop's snapshot.
+    with engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                **row,
+                "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac00f",
+                "snapshot_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac010",
             },
         )
 

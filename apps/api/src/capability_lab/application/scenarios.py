@@ -366,7 +366,7 @@ class ScenarioService(DefinitionAuthoringService[ScenarioPayload]):
             # author never reads a clean gate and then gets a refusal on the click.
             shop_published=self._latest_published(shop_definition_id(shop_id)) is not None,
             ticket_customer_profile_id=customer_id,
-            document_ids=_document_ids(shop),
+            document_ids=shop_document_ids(shop),
             product_handles=frozenset(product.handle for product in shop.products),
             shop_order_ids=frozenset(order.order_id for order in orders),
             customer_order_ids=frozenset(
@@ -383,7 +383,7 @@ class ScenarioService(DefinitionAuthoringService[ScenarioPayload]):
 
     def _objective_templates(self) -> dict[UUID, BlockTemplate]:
         return {
-            listing.definition_id: _template(
+            listing.definition_id: block_template(
                 listing.payload, listing.latest_published_version is not None
             )
             for listing in self._objective_blocks.list_definitions()
@@ -391,7 +391,7 @@ class ScenarioService(DefinitionAuthoringService[ScenarioPayload]):
 
     def _mutation_templates(self) -> dict[UUID, BlockTemplate]:
         return {
-            listing.definition_id: _template(
+            listing.definition_id: block_template(
                 listing.payload, listing.latest_published_version is not None
             )
             for listing in self._mutation_blocks.list_definitions()
@@ -668,7 +668,7 @@ class ScenarioService(DefinitionAuthoringService[ScenarioPayload]):
                 )
 
 
-def _template(payload: BlockPayload, published: bool) -> BlockTemplate:
+def block_template(payload: BlockPayload, published: bool) -> BlockTemplate:
     return BlockTemplate(name=payload.name, parameters=payload.parameters, published=published)
 
 
@@ -686,7 +686,7 @@ def _block_option(
     )
 
 
-def _document_ids(shop: ShopPayload) -> dict[ShopDocumentKind, frozenset[str]]:
+def shop_document_ids(shop: ShopPayload) -> dict[ShopDocumentKind, frozenset[str]]:
     return {
         ShopDocumentKind.POLICY: frozenset(policy.id for policy in shop.policies),
         ShopDocumentKind.SUPPORT_GUIDELINE: frozenset(

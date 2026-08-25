@@ -289,3 +289,32 @@ class OrderFixtureModel(Base):
     payload: Mapped[dict[str, object]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class SandboxSnapshotModel(Base):
+    """One immutable sandbox snapshot, stored as its canonical `sandbox-v2` document.
+
+    Written once and never updated: the document *is* the snapshot, and the columns beside
+    it exist so a shop's snapshots can be found by scenario or recognized by fingerprint.
+    They are written from the document by the repository, never as a second source of truth.
+
+    The fingerprint is unique per shop rather than globally: identical starting state in two
+    shops is two snapshots, because each belongs to the shop whose objects it froze.
+    """
+
+    __tablename__ = "sandbox_snapshots"
+    __table_args__ = (
+        CheckConstraint("scenario_version >= 1", name="ck_sandbox_snapshots_version_positive"),
+        CheckConstraint("seed >= 0", name="ck_sandbox_snapshots_seed_non_negative"),
+        UniqueConstraint("shop_id", "sandbox_fingerprint", name="uq_sandbox_snapshots_fingerprint"),
+        Index("ix_sandbox_snapshots_scenario", "shop_id", "scenario_id", "scenario_version"),
+    )
+
+    snapshot_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    shop_id: Mapped[str] = mapped_column(String(36))
+    scenario_id: Mapped[str] = mapped_column(String(36))
+    scenario_version: Mapped[int] = mapped_column(Integer)
+    seed: Mapped[int] = mapped_column(BigInteger)
+    sandbox_fingerprint: Mapped[str] = mapped_column(String(64))
+    document: Mapped[dict[str, object]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())

@@ -41,10 +41,19 @@ class ConflictingReferenceVersionsError(DefinitionResolutionError):
     """Raised when a resolution closure pins two versions of the same definition."""
 
 
-class DefinitionRepository(Protocol):
-    def get_draft(self, definition: DefinitionId) -> DefinitionDraft | None: ...
+class PublishedVersionReader(Protocol):
+    """Reading one published version's provenance, without its payload codec.
+
+    A resolution walks a closure that spans definition *types* — a scenario reaches its
+    ticket, its shop, its customer profile, and both libraries — so it reads version rows
+    rather than decoding five different payload documents.
+    """
 
     def get_published(self, ref: VersionRef) -> PublishedDefinitionVersion | None: ...
+
+
+class DefinitionRepository(PublishedVersionReader, Protocol):
+    def get_draft(self, definition: DefinitionId) -> DefinitionDraft | None: ...
 
     def latest_published_version(self, definition: DefinitionId) -> int | None: ...
 
@@ -129,6 +138,20 @@ class ArmResolution:
 
 
 @dataclass(frozen=True, slots=True)
+class SandboxResolution:
+    """The shared half of a resolution: what both arms start from, and nothing else.
+
+    A snapshot is materialized from a scenario alone, before any agent configuration is
+    chosen, so this is resolvable on its own. An experiment resolution carries the same
+    three fields and the arms beside them.
+    """
+
+    sandbox_inputs: tuple[ResolvedDefinition, ...]
+    seed: int
+    tool_contract_versions: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ExperimentResolution:
     """Every input needed to explain an experiment, split by fingerprint relevance."""
 
@@ -148,7 +171,7 @@ def _resolved(published: PublishedDefinitionVersion) -> ResolvedDefinition:
 
 
 def _resolve_closure(
-    repository: DefinitionRepository, root: VersionRef
+    repository: PublishedVersionReader, root: VersionRef
 ) -> tuple[ResolvedDefinition, ...]:
     # The allowed-reference type graph is acyclic, so a visited set only deduplicates
     # diamonds; it cannot mask a cycle built from valid domain objects.
@@ -206,6 +229,33 @@ def _require_root_type(ref: VersionRef, expected: DefinitionType, role: str) -> 
         )
 
 
+def resolve_sandbox_inputs(
+    repository: PublishedVersionReader,
+    *,
+    scenario: VersionRef,
+    seed: int,
+    tool_contract_versions: Mapping[str, str],
+) -> SandboxResolution:
+    """Resolve the shared starting inputs one scenario version freezes.
+
+    Materializing a snapshot happens before an experiment exists, so this half resolves on
+    its own; `resolve_experiment_inputs` adds the arms to exactly this result.
+    """
+    _require_root_type(scenario, DefinitionType.SCENARIO, "a sandbox scenario")
+    _require_seed(seed)
+    for name, version in tool_contract_versions.items():
+        if not name or name != name.strip() or not version or version != version.strip():
+            raise DefinitionResolutionError(
+                "tool contract names and versions must be non-empty strings "
+                "without surrounding whitespace"
+            )
+    return SandboxResolution(
+        sandbox_inputs=_resolve_closure(repository, scenario),
+        seed=seed,
+        tool_contract_versions=tuple(sorted(tool_contract_versions.items())),
+    )
+
+
 def resolve_experiment_inputs(
     repository: DefinitionRepository,
     *,
@@ -216,16 +266,14 @@ def resolve_experiment_inputs(
     participant_driver: ParticipantDriverType,
 ) -> ExperimentResolution:
     """Resolve one experiment's complete behaviorally relevant input set."""
-    _require_root_type(scenario, DefinitionType.SCENARIO, "an experiment scenario")
     if not 1 <= len(agent_configurations) <= 2:
         raise DefinitionResolutionError("an experiment requires one or two agent configurations")
-    _require_seed(seed)
-    for name, version in tool_contract_versions.items():
-        if not name or name != name.strip() or not version or version != version.strip():
-            raise DefinitionResolutionError(
-                "tool contract names and versions must be non-empty strings "
-                "without surrounding whitespace"
-            )
+    sandbox = resolve_sandbox_inputs(
+        repository,
+        scenario=scenario,
+        seed=seed,
+        tool_contract_versions=tool_contract_versions,
+    )
 
     arms: list[ArmResolution] = []
     for arm_root in agent_configurations:
@@ -248,9 +296,9 @@ def resolve_experiment_inputs(
         )
 
     return ExperimentResolution(
-        sandbox_inputs=_resolve_closure(repository, scenario),
+        sandbox_inputs=sandbox.sandbox_inputs,
         arms=tuple(arms),
-        seed=seed,
-        tool_contract_versions=tuple(sorted(tool_contract_versions.items())),
+        seed=sandbox.seed,
+        tool_contract_versions=sandbox.tool_contract_versions,
         participant_driver=participant_driver,
     )

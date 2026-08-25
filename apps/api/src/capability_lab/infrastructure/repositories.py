@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from capability_lab.application.blocks import MUTATION_BLOCK_CODEC, OBJECTIVE_BLOCK_CODEC
+from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.application.canonical_state import fingerprint_initial_state
 from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
 from capability_lab.application.customer_profiles import CUSTOMER_PROFILE_CODEC
@@ -47,6 +48,7 @@ from capability_lab.application.ports import (
     StructuredSupportResult,
     ToolActivity,
 )
+from capability_lab.application.sandbox_materialization import SandboxSnapshotRecord
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioSummary,
@@ -97,6 +99,7 @@ from capability_lab.infrastructure.models import (
     OrderModel,
     PersonaModel,
     ProductModel,
+    SandboxSnapshotModel,
 )
 from capability_lab.infrastructure.sql_types import UtcDateTime
 
@@ -1448,15 +1451,25 @@ def scenario_repository(session: Session) -> SqlAlchemyDefinitionRepository[Scen
 
 
 class SqlAlchemyPublishedVersionDirectory:
-    """The latest published version of any definition, read without its payload codec.
+    """Published versions of any definition, read without their payload codecs.
 
     Publishing a shop-scoped definition pins its shop and its references, which are other
-    definition types entirely. Only the version provenance is needed, so this reads the
-    version row directly instead of decoding three different payload documents.
+    definition types entirely, and resolving a sandbox walks that whole closure. Only the
+    version provenance is needed either way, so this reads version rows directly instead of
+    decoding five different payload documents.
     """
 
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def get_published(self, ref: VersionRef) -> PublishedDefinitionVersion | None:
+        model = self._session.get(
+            DefinitionVersionModel,
+            (ref.definition.definition_type.value, str(ref.definition.id), ref.version),
+        )
+        if model is None:
+            return None
+        return _published_version(model, ref.definition)
 
     def latest_published(self, definition: DefinitionId) -> PublishedDefinitionVersion | None:
         model = self._session.scalars(
@@ -1660,4 +1673,95 @@ class SqlAlchemyOrderFixtureRepository:
             payload=order_fixture_from_document(model.payload),
             created_at=model.created_at,
             updated_at=model.updated_at,
+        )
+
+
+class SqlAlchemySandboxSnapshotRepository:
+    """Store canonical `sandbox-v2` documents; a snapshot is written once, never updated.
+
+    Immutability is the point of a snapshot, so there is no update path at all: a shop that
+    already holds this fingerprint already holds this starting state, and the service hands
+    the existing record back instead of writing a second row for the same bytes.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, shop_id: UUID, snapshot_id: UUID) -> SandboxSnapshotRecord | None:
+        model = self._session.get(SandboxSnapshotModel, str(snapshot_id))
+        if model is None or model.shop_id != str(shop_id):
+            return None
+        return self._record(model)
+
+    def find_by_fingerprint(
+        self, shop_id: UUID, sandbox_fingerprint: str
+    ) -> SandboxSnapshotRecord | None:
+        model = self._session.scalars(
+            select(SandboxSnapshotModel).where(
+                SandboxSnapshotModel.shop_id == str(shop_id),
+                SandboxSnapshotModel.sandbox_fingerprint == sandbox_fingerprint,
+            )
+        ).first()
+        return None if model is None else self._record(model)
+
+    def list_for_scenario(
+        self, shop_id: UUID, scenario_id: UUID
+    ) -> tuple[SandboxSnapshotRecord, ...]:
+        models = self._session.scalars(
+            select(SandboxSnapshotModel)
+            .where(
+                SandboxSnapshotModel.shop_id == str(shop_id),
+                SandboxSnapshotModel.scenario_id == str(scenario_id),
+            )
+            .order_by(
+                SandboxSnapshotModel.created_at.desc(),
+                SandboxSnapshotModel.snapshot_id,
+            )
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def save(self, record: SandboxSnapshotRecord) -> SandboxSnapshotRecord:
+        self._session.add(
+            SandboxSnapshotModel(
+                snapshot_id=str(record.snapshot_id),
+                shop_id=str(record.shop_id),
+                scenario_id=str(record.scenario_id),
+                scenario_version=record.scenario_version,
+                seed=record.seed,
+                sandbox_fingerprint=record.sandbox_fingerprint,
+                document=cast("dict[str, object]", record.document),
+                created_at=record.created_at,
+            )
+        )
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            # Two writers can miss the same fingerprint lookup and both insert. The unique
+            # constraint is the last word, and the loser wants the winner's row rather than
+            # a 500: identical starting state is one snapshot, whoever wrote it. The insert
+            # is the first write of this unit of work, so the losing writer can restart its
+            # transaction and read the now-committed winner, as the generation idempotency
+            # claim does above.
+            if "sandbox_fingerprint" not in str(error.orig):
+                raise
+            self._session.rollback()
+            winner = self.find_by_fingerprint(record.shop_id, record.sandbox_fingerprint)
+            if winner is None:
+                raise PersistedScenarioIntegrityError(
+                    "a sandbox snapshot was refused as a duplicate but cannot be resolved"
+                ) from error
+            return winner
+        return record
+
+    @staticmethod
+    def _record(model: SandboxSnapshotModel) -> SandboxSnapshotRecord:
+        return SandboxSnapshotRecord(
+            snapshot_id=UUID(model.snapshot_id),
+            shop_id=UUID(model.shop_id),
+            scenario_id=UUID(model.scenario_id),
+            scenario_version=model.scenario_version,
+            seed=model.seed,
+            sandbox_fingerprint=model.sandbox_fingerprint,
+            document=cast("dict[str, CanonicalValue]", model.document),
+            created_at=model.created_at,
         )
