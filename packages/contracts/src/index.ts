@@ -186,5 +186,14 @@ export type SandboxInteractionSchema = components["schemas"]["SandboxInteraction
 export type SandboxOrderSchema = components["schemas"]["SandboxOrderSchema"];
 export type SandboxPinSchema = components["schemas"]["SandboxPinSchema"];
 export type MaterializeSnapshotRequest = components["schemas"]["MaterializeSnapshotRequest"];
+
+export type ToolContractListResponse = components["schemas"]["ToolContractListResponse"];
+export type ToolContractSchema = components["schemas"]["ToolContractSchema"];
+export type ToolArgumentSchema = components["schemas"]["ToolArgumentSchema"];
+export type ToolArgumentKind = components["schemas"]["ToolArgumentKind"];
+export type ToolCallRequest = components["schemas"]["ToolCallRequest"];
+export type ToolCallResponse = components["schemas"]["ToolCallResponse"];
+export type ToolOutcome = components["schemas"]["ToolOutcome"];
+export type ToolRefusalSchema = components["schemas"]["ToolRefusalSchema"];
 export type DefinitionValidationErrorResponse =
   components["schemas"]["DefinitionValidationErrorResponse"];

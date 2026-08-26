@@ -849,6 +849,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/tools": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List the versioned read tools an experiment arm can be given
+     * @description The tool set a sandbox snapshot is fingerprinted against. A tool is versioned individually, so this list carries a version per name rather than one for the set.
+     */
+    get: operations["listToolContracts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/sandboxes/{sandbox_id}/tool-calls": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Run one versioned read tool against one arm's sandbox
+     * @description Reads the arm's own state and the exact published versions its snapshot pinned. A tool that understands the call and declines it answers with outcome 'refused' and HTTP 200; only a call that could not run at all is an HTTP error.
+     */
+    post: operations["callSandboxTool"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/objective-blocks": {
     parameters: {
       query?: never;
@@ -3938,6 +3978,120 @@ export interface components {
       result: {
         [key: string]: unknown;
       };
+    };
+    /**
+     * ToolArgumentKind
+     * @description How one argument's text is checked before a handler ever sees it.
+     * @enum {string}
+     */
+    ToolArgumentKind: "text" | "uuid" | "enum";
+    /**
+     * ToolArgumentSchema
+     * @description One argument a tool accepts, in the lab's own typed vocabulary.
+     *
+     *     Deliberately not JSON Schema: a framework adapter derives whatever dialect its SDK wants
+     *     from this table, and the Studio renders a field from the same description.
+     */
+    ToolArgumentSchema: {
+      /** Name */
+      name: string;
+      kind: components["schemas"]["ToolArgumentKind"];
+      /** Description */
+      description: string;
+      /** Required */
+      required: boolean;
+      /** Choices */
+      choices: string[];
+    };
+    /** ToolCallRequest */
+    ToolCallRequest: {
+      /**
+       * Tool
+       * @description The published tool name to run.
+       */
+      tool: string;
+      /**
+       * Version
+       * @description The version of that tool this caller expects.
+       */
+      version: string;
+      /**
+       * Arguments
+       * @description The arguments this call fills, by name. A null or blank value is read as an argument the caller chose not to answer.
+       */
+      arguments?: {
+        [key: string]: string | null;
+      };
+    };
+    /**
+     * ToolCallResponse
+     * @description One tool result, and where the arm stood when it answered.
+     *
+     *     `data` is the tool's own `tool-result-v1` payload, whose shape is that tool's versioned
+     *     contract. `sandbox_revision` is provenance rather than part of the answer: it is the
+     *     token the first writer of this milestone will present back when it changes what it read.
+     */
+    ToolCallResponse: {
+      /** Canonical Schema Version */
+      canonical_schema_version: string;
+      /** Tool */
+      tool: string;
+      /** Version */
+      version: string;
+      /** Arguments */
+      arguments: {
+        [key: string]: string;
+      };
+      outcome: components["schemas"]["ToolOutcome"];
+      /** Data */
+      data: {
+        [key: string]: unknown;
+      } | null;
+      refusal: components["schemas"]["ToolRefusalSchema"] | null;
+      /** Sandbox Revision */
+      sandbox_revision: number;
+      /** State Fingerprint */
+      state_fingerprint: string;
+    };
+    /** ToolContractListResponse */
+    ToolContractListResponse: {
+      /** Tools */
+      tools: components["schemas"]["ToolContractSchema"][];
+    };
+    /**
+     * ToolContractSchema
+     * @description One published read tool.
+     */
+    ToolContractSchema: {
+      /** Name */
+      name: string;
+      /** Version */
+      version: string;
+      /** Summary */
+      summary: string;
+      /** Arguments */
+      arguments: components["schemas"]["ToolArgumentSchema"][];
+    };
+    /**
+     * ToolOutcome
+     * @description The three answers a tool call can end with, kept apart on purpose.
+     * @enum {string}
+     */
+    ToolOutcome: "success" | "refused" | "failed";
+    /**
+     * ToolRefusalCode
+     * @description Why a tool declined, in a vocabulary an agent can branch on.
+     * @enum {string}
+     */
+    ToolRefusalCode: "invalid_arguments" | "not_found";
+    /**
+     * ToolRefusalSchema
+     * @description Why the tool declined, in a vocabulary a caller can branch on.
+     */
+    ToolRefusalSchema: {
+      code: components["schemas"]["ToolRefusalCode"];
+      /** Message */
+      message: string;
     };
     /** ValidationIssue */
     ValidationIssue: {
@@ -7179,6 +7333,73 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SandboxResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listToolContracts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ToolContractListResponse"];
+        };
+      };
+    };
+  };
+  callSandboxTool: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable sandbox identifier inside one shop. */
+        sandbox_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ToolCallRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ToolCallResponse"];
         };
       };
       /** @description The definition is not found */

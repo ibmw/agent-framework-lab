@@ -72,6 +72,10 @@ from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotNotFoundError,
     SandboxSnapshotService,
 )
+from capability_lab.application.sandbox_tools import (
+    SandboxToolService,
+    ToolNotFoundError,
+)
 from capability_lab.application.sandboxes import (
     SandboxLabelError,
     SandboxNotFoundError,
@@ -187,6 +191,7 @@ from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.snapshots import SandboxSnapshotRoutes
 from capability_lab.presentation.support_identities import SupportIdentityRoutes
 from capability_lab.presentation.tickets import TicketRoutes
+from capability_lab.presentation.tools import SandboxToolRoutes
 
 API_TITLE = "Agent Framework Capability Lab API"
 API_VERSION = "1.0.0"
@@ -923,6 +928,11 @@ async def _sandbox_not_found_handler(request: Request, error: Exception) -> JSON
     return _error_response(request, status_code=404, code="sandbox_not_found", message=str(error))
 
 
+async def _tool_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    """An unknown tool name is a contract mistake, never a refusal the agent should see."""
+    return _error_response(request, status_code=404, code="tool_not_found", message=str(error))
+
+
 async def _sandbox_label_handler(request: Request, error: Exception) -> JSONResponse:
     return _error_response(
         request, status_code=422, code="sandbox_label_invalid", message=str(error)
@@ -1325,6 +1335,7 @@ def create_app(
     )
     application.add_exception_handler(SandboxNotFoundError, _sandbox_not_found_handler)
     application.add_exception_handler(SandboxLabelError, _sandbox_label_handler)
+    application.add_exception_handler(ToolNotFoundError, _tool_not_found_handler)
     application.add_exception_handler(UnpublishedReferenceError, _unpublished_reference_handler)
     application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
@@ -1443,6 +1454,16 @@ def create_app(
                 SqlAlchemySandboxRepository(session),
                 SqlAlchemySandboxSnapshotRepository(session),
                 clock,
+            )
+
+    def sandbox_tool_service() -> Generator[SandboxToolService, None, None]:
+        with session_scope(factory) as session:
+            yield SandboxToolService(
+                SqlAlchemySandboxRepository(session),
+                SqlAlchemySandboxSnapshotRepository(session),
+                shop_repository(session),
+                ticket_repository(session),
+                customer_profile_repository(session),
             )
 
     def order_action_service() -> Generator[OrderActionService, None, None]:
@@ -1951,6 +1972,7 @@ def create_app(
     ScenarioRoutes(scenario_service).register(router)
     SandboxSnapshotRoutes(sandbox_snapshot_service).register(router)
     SandboxRoutes(sandbox_service).register(router)
+    SandboxToolRoutes(sandbox_tool_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)

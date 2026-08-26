@@ -135,7 +135,7 @@ async def test_an_unknown_snapshot_cannot_be_cloned(
 async def test_a_sandbox_has_no_public_write_operation(
     client: AsyncClient, lab: dict[str, str]
 ) -> None:
-    """The tools and the safe address-change action are the writers, and both arrive later."""
+    """The read tools do not write, and the safe address-change action arrives later."""
     snapshot = await frozen_snapshot(client, lab)
     created = (await clone(client, lab, snapshot["snapshot_id"])).json()
 

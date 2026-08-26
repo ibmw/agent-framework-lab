@@ -2976,6 +2976,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/tools:
+    get:
+      summary: List the versioned read tools an experiment arm can be given
+      description: The tool set a sandbox snapshot is fingerprinted against. A tool
+        is versioned individually, so this list carries a version per name rather
+        than one for the set.
+      operationId: listToolContracts
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolContractListResponse'
+  /api/v1/shops/{shop_id}/sandboxes/{sandbox_id}/tool-calls:
+    post:
+      summary: Run one versioned read tool against one arm's sandbox
+      description: Reads the arm's own state and the exact published versions its
+        snapshot pinned. A tool that understands the call and declines it answers
+        with outcome 'refused' and HTTP 200; only a call that could not run at all
+        is an HTTP error.
+      operationId: callSandboxTool
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: sandbox_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable sandbox identifier inside one shop.
+          title: Sandbox Id
+        description: Stable sandbox identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCallResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/objective-blocks:
     get:
       summary: List the shared objective-block library with version provenance
@@ -9073,6 +9139,203 @@ components:
       - outcome
       - result
       title: ToolActivityResponse
+    ToolArgumentKind:
+      type: string
+      enum:
+      - text
+      - uuid
+      - enum
+      title: ToolArgumentKind
+      description: How one argument's text is checked before a handler ever sees it.
+    ToolArgumentSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        kind:
+          $ref: '#/components/schemas/ToolArgumentKind'
+        description:
+          type: string
+          title: Description
+        required:
+          type: boolean
+          title: Required
+        choices:
+          items:
+            type: string
+          type: array
+          title: Choices
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - kind
+      - description
+      - required
+      - choices
+      title: ToolArgumentSchema
+      description: 'One argument a tool accepts, in the lab''s own typed vocabulary.
+
+
+        Deliberately not JSON Schema: a framework adapter derives whatever dialect
+        its SDK wants
+
+        from this table, and the Studio renders a field from the same description.'
+    ToolCallRequest:
+      properties:
+        tool:
+          type: string
+          minLength: 1
+          title: Tool
+          description: The published tool name to run.
+        version:
+          type: string
+          minLength: 1
+          title: Version
+          description: The version of that tool this caller expects.
+        arguments:
+          additionalProperties:
+            anyOf:
+            - type: string
+              maxLength: 500
+            - type: 'null'
+          propertyNames:
+            maxLength: 64
+          type: object
+          maxProperties: 16
+          title: Arguments
+          description: The arguments this call fills, by name. A null or blank value
+            is read as an argument the caller chose not to answer.
+      additionalProperties: false
+      type: object
+      required:
+      - tool
+      - version
+      title: ToolCallRequest
+    ToolCallResponse:
+      properties:
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        tool:
+          type: string
+          title: Tool
+        version:
+          type: string
+          title: Version
+        arguments:
+          additionalProperties:
+            type: string
+          type: object
+          title: Arguments
+        outcome:
+          $ref: '#/components/schemas/ToolOutcome'
+        data:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Data
+        refusal:
+          anyOf:
+          - $ref: '#/components/schemas/ToolRefusalSchema'
+          - type: 'null'
+        sandbox_revision:
+          type: integer
+          title: Sandbox Revision
+        state_fingerprint:
+          type: string
+          title: State Fingerprint
+      additionalProperties: false
+      type: object
+      required:
+      - canonical_schema_version
+      - tool
+      - version
+      - arguments
+      - outcome
+      - data
+      - refusal
+      - sandbox_revision
+      - state_fingerprint
+      title: ToolCallResponse
+      description: 'One tool result, and where the arm stood when it answered.
+
+
+        `data` is the tool''s own `tool-result-v1` payload, whose shape is that tool''s
+        versioned
+
+        contract. `sandbox_revision` is provenance rather than part of the answer:
+        it is the
+
+        token the first writer of this milestone will present back when it changes
+        what it read.'
+    ToolContractListResponse:
+      properties:
+        tools:
+          items:
+            $ref: '#/components/schemas/ToolContractSchema'
+          type: array
+          title: Tools
+      additionalProperties: false
+      type: object
+      required:
+      - tools
+      title: ToolContractListResponse
+    ToolContractSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        version:
+          type: string
+          title: Version
+        summary:
+          type: string
+          title: Summary
+        arguments:
+          items:
+            $ref: '#/components/schemas/ToolArgumentSchema'
+          type: array
+          title: Arguments
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - version
+      - summary
+      - arguments
+      title: ToolContractSchema
+      description: One published read tool.
+    ToolOutcome:
+      type: string
+      enum:
+      - success
+      - refused
+      - failed
+      title: ToolOutcome
+      description: The three answers a tool call can end with, kept apart on purpose.
+    ToolRefusalCode:
+      type: string
+      enum:
+      - invalid_arguments
+      - not_found
+      title: ToolRefusalCode
+      description: Why a tool declined, in a vocabulary an agent can branch on.
+    ToolRefusalSchema:
+      properties:
+        code:
+          $ref: '#/components/schemas/ToolRefusalCode'
+        message:
+          type: string
+          title: Message
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      title: ToolRefusalSchema
+      description: Why the tool declined, in a vocabulary a caller can branch on.
     ValidationIssue:
       properties:
         location:

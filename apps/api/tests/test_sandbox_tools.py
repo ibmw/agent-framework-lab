@@ -42,6 +42,7 @@ from capability_lab.infrastructure.database import (
     create_session_factory,
     session_scope,
 )
+from capability_lab.presentation.tools import ToolCallResponse
 from definition_factories import persona
 from shop_factories import publishable_shop
 from workspace_factories import (
@@ -507,6 +508,33 @@ def test_a_broken_handler_fails_the_call_without_describing_itself(
     assert ORDER_LIST in caplog.text
     assert "RuntimeError" in caplog.text
     assert "secret" not in caplog.text
+
+
+def test_the_response_envelope_is_the_canonical_document_plus_its_provenance(
+    session: Session, arm: SandboxRecord
+) -> None:
+    """The two renderings of one result must not drift apart.
+
+    `ToolResult.document` is what Milestone 5 will hash; `ToolCallResponse` is what a client
+    reads. They describe the same answer, so a field added to one and forgotten in the other
+    is a silent divergence between the evidence and the contract — this is the test that
+    fails when that happens.
+    """
+    execution = build_tools(session).execute(
+        arm.shop_id,
+        arm.sandbox_id,
+        ToolCall(
+            tool=ORDER_DETAIL,
+            version=READ_TOOL_VERSION,
+            arguments={"order_reference": ORDER_REFERENCE},
+        ),
+    )
+
+    assert ToolCallResponse.from_execution(execution).model_dump(mode="json") == {
+        **execution.result.document,
+        "sandbox_revision": execution.revision,
+        "state_fingerprint": execution.state_fingerprint,
+    }
 
 
 def moved_to_lyon(order: OrderFixturePayload) -> OrderFixturePayload:
