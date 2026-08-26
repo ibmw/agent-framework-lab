@@ -7,6 +7,7 @@ it through this module rather than by importing one another, so no suite depends
 suite's internals.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -22,6 +23,12 @@ from capability_lab.application.order_fixtures import (
     OrderFixtureService,
     OrderLineSelection,
 )
+from capability_lab.application.sandbox_materialization import (
+    SandboxSnapshotRecord,
+    SandboxSnapshotService,
+)
+from capability_lab.application.sandbox_tools import SandboxToolService, ToolHandler
+from capability_lab.application.sandboxes import SandboxRecord, SandboxService
 from capability_lab.application.scenarios import ScenarioService
 from capability_lab.application.shops import ShopService
 from capability_lab.application.tickets import TicketService
@@ -42,6 +49,8 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyPublishedVersionDirectory,
+    SqlAlchemySandboxRepository,
+    SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyShopDirectory,
     customer_profile_repository,
     mutation_block_repository,
@@ -53,6 +62,8 @@ from capability_lab.infrastructure.repositories import (
 from definition_factories import address, customer_identity, publishable_profile
 from shop_factories import identity, publishable_shop
 from ticket_factories import message
+
+SEED = 20260825
 
 POLICY_REFERENCE = "policy:shipping"
 GUIDELINE_REFERENCE = "support_guideline:escalation"
@@ -98,6 +109,41 @@ def build_tickets(session: Session) -> TicketService:
         SqlAlchemyDefinitionShopAttachmentRepository(session),
         SqlAlchemyPublishedVersionDirectory(session),
         AdvancingClock(),
+    )
+
+
+def build_snapshots(session: Session) -> SandboxSnapshotService:
+    return SandboxSnapshotService(
+        SqlAlchemySandboxSnapshotRepository(session),
+        scenario_repository(session),
+        shop_repository(session),
+        ticket_repository(session),
+        SqlAlchemyOrderFixtureRepository(session),
+        objective_block_repository(session),
+        mutation_block_repository(session),
+        SqlAlchemyPublishedVersionDirectory(session),
+        AdvancingClock(),
+    )
+
+
+def build_sandboxes(session: Session) -> SandboxService:
+    return SandboxService(
+        SqlAlchemySandboxRepository(session),
+        SqlAlchemySandboxSnapshotRepository(session),
+        AdvancingClock(),
+    )
+
+
+def build_tools(
+    session: Session, handlers: Mapping[str, ToolHandler] | None = None
+) -> SandboxToolService:
+    return SandboxToolService(
+        SqlAlchemySandboxRepository(session),
+        SqlAlchemySandboxSnapshotRepository(session),
+        shop_repository(session),
+        ticket_repository(session),
+        customer_profile_repository(session),
+        handlers,
     )
 
 
@@ -311,3 +357,19 @@ def author(workspace: Workspace, **overrides: object) -> UUID:
         workspace.shop_id, scenario_id, publishable_payload(workspace, **overrides)
     )
     return scenario_id
+
+
+def frozen_starting_state(session: Session, workspace: Workspace) -> SandboxSnapshotRecord:
+    """Publish the wrong-address recipe and freeze it, as the snapshot slice does."""
+    publish_prerequisites(workspace)
+    scenario_id = author(workspace)
+    version = workspace.scenarios.publish_scenario(workspace.shop_id, scenario_id)
+    return build_snapshots(session).materialize(
+        workspace.shop_id, scenario_id, version.published.version, seed=SEED
+    )
+
+
+def cloned_arm(session: Session, workspace: Workspace, label: str = "Arm A") -> SandboxRecord:
+    """One arm of the frozen wrong-address starting state."""
+    snapshot = frozen_starting_state(session, workspace)
+    return build_sandboxes(session).clone(workspace.shop_id, snapshot.snapshot_id, label)

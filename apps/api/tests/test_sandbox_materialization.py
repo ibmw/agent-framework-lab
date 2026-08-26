@@ -17,6 +17,7 @@ from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotService,
 )
 from capability_lab.application.sandbox_snapshot import SANDBOX_CANONICAL_SCHEMA_VERSION
+from capability_lab.application.sandbox_tool_contracts import READ_TOOL_CONTRACT_VERSIONS
 from capability_lab.application.scenarios import ScenarioVersionNotFoundError
 from capability_lab.domain.definitions import DefinitionType
 from capability_lab.domain.order_fixture import FulfilmentStatus, PaymentStatus
@@ -123,6 +124,24 @@ def test_a_snapshot_pins_what_is_immutable_and_copies_what_is_not(
     assert frozen.payment.status is PaymentStatus.PAID
     assert frozen.shipping_address is not None
     assert frozen.shipping_address.city == "Bordeaux"
+
+
+def test_a_snapshot_records_the_tool_set_its_arms_can_interrogate_it_through(
+    session: Session, workspace: Workspace
+) -> None:
+    """The tool contracts are starting state, not runtime (ADR 0021).
+
+    An arm that can read the shop's policies begins in a different world from one that
+    cannot, so the published tool set is fingerprinted with the pins and the orders.
+    """
+    scenario_id, version = publish_scenario(workspace)
+
+    record = build_snapshots(session).materialize(
+        workspace.shop_id, scenario_id, version, seed=SEED
+    )
+
+    assert record.document["tool_contracts"] == dict(READ_TOOL_CONTRACT_VERSIONS)
+    assert record.document["tool_contracts"] != {}
 
 
 def test_the_whole_customers_order_history_enters_the_sandbox(
