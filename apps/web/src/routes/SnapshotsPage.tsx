@@ -15,6 +15,7 @@ import {
   listSandboxSnapshots,
   materializeSandboxSnapshot,
 } from "../api/snapshots";
+import { SandboxToolConsole } from "../components/SandboxToolConsole";
 import {
   Card,
   Fingerprint,
@@ -392,6 +393,7 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
 function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: string }) {
   const [arms, setArms] = useState<SandboxSummarySchema[]>([]);
   const [label, setLabel] = useState("");
+  const [inspected, setInspected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
@@ -428,61 +430,79 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
     }
   };
 
-  return (
-    <Card
-      title="Sandbox arms"
-      footer={
-        <p className="text-xs text-admin-muted">
-          Every arm starts at the same state fingerprint because it starts from the same bytes. A
-          write inside one arm moves only that arm — never the snapshot, never the other.
-        </p>
-      }
-    >
-      {error ? (
-        <p role="alert" className="text-[13px] text-lab-error">
-          {error}
-        </p>
-      ) : null}
-      <form className="flex flex-wrap items-end gap-3" onSubmit={clone}>
-        <label className={fieldLabelClasses}>
-          Arm label
-          <input
-            className={fieldControlClasses}
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-          />
-        </label>
-        <button className={accentButtonClasses} type="submit" disabled={working}>
-          {working ? "Cloning…" : "Clone sandbox"}
-        </button>
-      </form>
+  const selected = arms.find((arm) => arm.sandbox_id === inspected) ?? null;
 
-      {arms.length === 0 ? (
-        <p className="text-[13px] text-admin-muted">
-          No arm has been cloned from this starting state yet.
-        </p>
-      ) : (
-        <table className="w-full border-collapse text-[13px]">
-          <thead>
-            <tr>
-              <th className={tableHeadClasses}>Arm</th>
-              <th className={tableHeadClasses}>Revision</th>
-              <th className={tableHeadClasses}>Current state</th>
-            </tr>
-          </thead>
-          <tbody>
-            {arms.map((arm) => (
-              <tr key={arm.sandbox_id}>
-                <td className={tableCellClasses}>{arm.label}</td>
-                <td className={tableCellClasses}>r{arm.revision}</td>
-                <td className={tableCellClasses}>
-                  <Fingerprint value={arm.state_fingerprint} />
-                </td>
+  return (
+    <>
+      <Card
+        title="Sandbox arms"
+        footer={
+          <p className="text-xs text-admin-muted">
+            Every arm starts at the same state fingerprint because it starts from the same bytes. A
+            write inside one arm moves only that arm — never the snapshot, never the other.
+          </p>
+        }
+      >
+        {error ? (
+          <p role="alert" className="text-[13px] text-lab-error">
+            {error}
+          </p>
+        ) : null}
+        <form className="flex flex-wrap items-end gap-3" onSubmit={clone}>
+          <label className={fieldLabelClasses}>
+            Arm label
+            <input
+              className={fieldControlClasses}
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+            />
+          </label>
+          <button className={accentButtonClasses} type="submit" disabled={working}>
+            {working ? "Cloning…" : "Clone sandbox"}
+          </button>
+        </form>
+
+        {arms.length === 0 ? (
+          <p className="text-[13px] text-admin-muted">
+            No arm has been cloned from this starting state yet.
+          </p>
+        ) : (
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr>
+                <th className={tableHeadClasses}>Arm</th>
+                <th className={tableHeadClasses}>Revision</th>
+                <th className={tableHeadClasses}>Current state</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {arms.map((arm) => (
+                <tr key={arm.sandbox_id}>
+                  <td className={tableCellClasses}>
+                    <button
+                      className="text-left font-semibold text-lab-ink underline-offset-2 hover:underline"
+                      type="button"
+                      aria-pressed={arm.sandbox_id === inspected}
+                      onClick={() => setInspected(arm.sandbox_id)}
+                    >
+                      {arm.label}
+                    </button>
+                  </td>
+                  <td className={tableCellClasses}>r{arm.revision}</td>
+                  <td className={tableCellClasses}>
+                    <Fingerprint value={arm.state_fingerprint} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+      {/* Keyed on the arm so switching selection starts a clean console rather than
+        carrying one arm's arguments or result onto another's. */}
+      {selected === null ? null : (
+        <SandboxToolConsole key={selected.sandbox_id} shopId={shopId} arm={selected} />
       )}
-    </Card>
+    </>
   );
 }

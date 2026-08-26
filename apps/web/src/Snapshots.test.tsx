@@ -9,6 +9,8 @@ import type {
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
+  ToolCallResponse,
+  ToolContractListResponse,
 } from "@agent-lab/contracts";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -132,13 +134,70 @@ function arm(label: string, sandboxId: string, revision = 0): SandboxSummarySche
   };
 }
 
+const TOOLS: ToolContractListResponse = {
+  tools: [
+    {
+      name: "interaction.read_context",
+      version: "v1",
+      summary: "Where this conversation started and the ticket thread it belongs to.",
+      arguments: [],
+    },
+    {
+      name: "support.read_document",
+      version: "v1",
+      summary: "Read one policy, support guideline, or FAQ entry in full.",
+      arguments: [
+        {
+          name: "kind",
+          kind: "enum",
+          description: "The collection the document lives in.",
+          required: true,
+          choices: ["policy", "support_guideline", "faq_entry"],
+        },
+      ],
+    },
+    {
+      name: "orders.read_order",
+      version: "v1",
+      summary: "Read one order in full.",
+      arguments: [
+        {
+          name: "order_reference",
+          kind: "text",
+          description: "The reference the customer quotes, such as NS-10482.",
+          required: false,
+          choices: [],
+        },
+      ],
+    },
+  ],
+};
+
+const ORDER_RESULT: ToolCallResponse = {
+  canonical_schema_version: "tool-result-v1",
+  tool: "orders.read_order",
+  version: "v1",
+  arguments: { order_reference: "NS-10482" },
+  outcome: "success",
+  data: { reference: "NS-10482", shipping_address: { city: "Bordeaux" } },
+  refusal: null,
+  sandbox_revision: 0,
+  state_fingerprint: STATE_FINGERPRINT,
+};
+
 let stored: SandboxSnapshotListResponse = { snapshots: [] };
+let calls: Record<string, unknown>[] = [];
 let materialized: Record<string, unknown>[] = [];
 let arms: SandboxListResponse = { sandboxes: [] };
 let cloned: Record<string, unknown>[] = [];
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
+  http.get("*/api/v1/tools", () => HttpResponse.json(TOOLS)),
+  http.post(`*/api/v1/shops/${SHOP_ID}/sandboxes/:sandboxId/tool-calls`, async ({ request }) => {
+    calls.push((await request.json()) as Record<string, unknown>);
+    return HttpResponse.json(ORDER_RESULT);
+  }),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
       shop_id: SHOP_ID,
@@ -206,6 +265,7 @@ afterEach(() => {
   materialized = [];
   arms = { sandboxes: [] };
   cloned = [];
+  calls = [];
 });
 afterAll(() => server.close());
 
@@ -408,5 +468,106 @@ describe("sandbox arms", () => {
       await within(panel).findByText("Name the arm so it can be told from the one beside it."),
     ).toBeVisible();
     expect(cloned).toHaveLength(0);
+  });
+});
+
+describe("read tools", () => {
+  async function openArm(user: ReturnType<typeof userEvent.setup>) {
+    stored = { snapshots: [SNAPSHOT] };
+    arms = { sandboxes: [arm("Arm A", "a1".padEnd(36, "0"))] };
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    await user.click(await within(panel).findByRole("button", { name: "Arm A" }));
+    return screen.findByRole("region", { name: "Read tools · Arm A" });
+  }
+
+  it("asks the arm the way the agent will ask it", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "orders.read_order");
+    await user.type(within(console).getByLabelText("order_reference"), "NS-10482");
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({
+      tool: "orders.read_order",
+      version: "v1",
+      arguments: { order_reference: "NS-10482" },
+    });
+    // The answer is the arm's own state, read at the revision the arm currently holds.
+    const result = await within(console).findByRole("region", {
+      name: "orders.read_order result",
+    });
+    expect(within(result).getByText(/Bordeaux/)).toBeVisible();
+    expect(within(console).getByText(/read at revision r0/)).toBeVisible();
+  });
+
+  it("shows a refusal as an answer the agent could act on", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/sandboxes/:sandboxId/tool-calls`, () =>
+        HttpResponse.json({
+          ...ORDER_RESULT,
+          arguments: { order_reference: "NS-00000" },
+          outcome: "refused",
+          data: null,
+          refusal: { code: "not_found", message: "this customer holds no order 'NS-00000'" },
+        } satisfies ToolCallResponse),
+      ),
+    );
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "orders.read_order");
+    await user.type(within(console).getByLabelText("order_reference"), "NS-00000");
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+
+    expect(
+      await within(console).findByText("this customer holds no order 'NS-00000'"),
+    ).toBeVisible();
+    expect(within(console).getByText("refused")).toBeVisible();
+    // A refusal is not an error: the console does not report the call as having failed.
+    expect(within(console).queryByRole("alert")).toBeNull();
+  });
+
+  it("asks a required enum to be chosen rather than offering to leave it open", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "support.read_document");
+
+    const kind = within(console).getByLabelText("kind (required)");
+    // A blank required enum is a call the tool will refuse, so it must not read as "any".
+    expect(within(kind).getByRole("option", { name: "Choose…" })).toBeInTheDocument();
+    expect(within(kind).queryByRole("option", { name: "Any" })).toBeNull();
+  });
+
+  it("never shows one tool's result under another tool's form", async () => {
+    const user = userEvent.setup();
+    // Held on an object so the call below is typed by the declaration rather than narrowed
+    // to the initial null: the only assignment happens inside the handler's closure.
+    const pending: { release: (() => void) | null } = { release: null };
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/sandboxes/:sandboxId/tool-calls`, async () => {
+        await new Promise<void>((resolve) => {
+          pending.release = resolve;
+        });
+        return HttpResponse.json(ORDER_RESULT);
+      }),
+    );
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "orders.read_order");
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+    // The operator moves on while the call is still in flight.
+    await user.selectOptions(within(console).getByLabelText("Tool"), "support.read_document");
+    await waitFor(() => expect(pending.release).not.toBeNull());
+    pending.release?.();
+
+    await waitFor(() =>
+      expect(within(console).getByLabelText("kind (required)")).toBeInTheDocument(),
+    );
+    expect(within(console).queryByRole("region", { name: "orders.read_order result" })).toBeNull();
   });
 });
