@@ -47,7 +47,8 @@ composition editor, which binds those templates to same-shop objects and pins ev
 publication freezes (ADR 0018), and then the canonical sandbox snapshot that turns a published
 recipe into starting state by pinning what is immutable and copying the order fixtures nothing
 pinned (ADR 0019), and then the independently mutable clone each experiment arm works in
-(ADR 0020). The POC's conversation, persona, and order-action HTTP contracts
+(ADR 0020), and then the versioned read tools an arm interrogates that clone through (ADR 0021).
+The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
 
@@ -290,7 +291,7 @@ instance.
 - [x] Support product-page and order-page origins using minimal resource references.
 - [x] Materialize the paid-order/wrong-shipping-address scenario into a canonical snapshot.
 - [x] Clone a snapshot into independently mutable sandbox state.
-- [ ] Add versioned read tools for interaction context, catalog, customer, order, and support
+- [x] Add versioned read tools for interaction context, catalog, customer, order, and support
   knowledge.
 - [ ] Add a safe address-change proposal/action with authorization, confirmation, idempotency, and
   optimistic concurrency.
@@ -352,6 +353,17 @@ document, the rule that a clone copies the state and pins the snapshot, the two 
 where an arm started and where it is, the write seam a run's tools mutate through and why no public
 write endpoint exists until there is an actor to authorize, the optimistic-concurrency token the store
 decides, and the decision that cloning is deliberately not idempotent where materializing is.
+
+Read-tool evidence (no frame; the console follows the shell's resource conventions beside the arms
+it reads): an operator selects one arm, reads the interaction the incident opened from, follows the
+identifier it carries to the order that ships to the stale address, reads the shipping policy the
+incident turns on — and gets a refusal, not an error, for an order reference the customer never had.
+ADR 0021 records the eight published tool contracts, the `tool-result-v1` envelope, the rule that a
+tool never serves a `CUSTOMER_ONLY` field while serving `SENSITIVE` ones in full, the decision that a
+refusal is a value and an unknown tool name is not, the string-only argument table a framework
+adapter later derives its schema from, and the entry of the tool versions into the sandbox
+fingerprint — which makes a snapshot frozen after this slice a different starting state from one
+frozen before it, correctly and without a migration.
 
 Order evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came
