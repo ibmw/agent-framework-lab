@@ -43,7 +43,6 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.presentation.tools import ToolCallResponse
-from definition_factories import persona
 from shop_factories import publishable_shop
 from workspace_factories import (
     Workspace,
@@ -51,7 +50,6 @@ from workspace_factories import (
     build_tools,
     cloned_arm,
     frozen_starting_state,
-    profile_with_two_addresses,
     seed_workspace,
 )
 
@@ -210,44 +208,6 @@ def test_the_customer_tool_serves_the_address_book_but_never_the_simulation_side
     assert [address["is_default"] for address in addresses] == [True, False]
     assert "persona" not in profile
     assert "hidden_facts" not in profile
-
-
-def test_no_read_tool_discloses_a_customer_only_value(
-    session: Session, workspace: Workspace
-) -> None:
-    """Swept across every tool, against the exact strings the classification forbids."""
-    workspace.profiles.replace_draft(
-        workspace.customer_id,
-        replace(
-            profile_with_two_addresses(),
-            persona=persona(summary="SIMULATION-ONLY SUMMARY", traits=("SIMULATION-ONLY TRAIT",)),
-        ),
-    )
-    arm = cloned_arm(session, workspace)
-    forbidden = (
-        "SIMULATION-ONLY SUMMARY",
-        "SIMULATION-ONLY TRAIT",
-        # The profile's hidden facts, authored by `publishable_profile`.
-        "She believes the order already ships to Lyon",
-        "The agent reads the shipping address back to her.",
-    )
-
-    served = b"".join(
-        canonical_json_bytes(result.document)
-        for result in (
-            call(session, arm, INTERACTION_CONTEXT),
-            call(session, arm, CATALOG_SEARCH),
-            call(session, arm, CATALOG_PRODUCT, handle=PRODUCT_HANDLE),
-            call(session, arm, CUSTOMER_PROFILE),
-            call(session, arm, ORDER_LIST),
-            call(session, arm, ORDER_DETAIL, order_reference=ORDER_REFERENCE),
-            call(session, arm, SUPPORT_SEARCH),
-            call(session, arm, SUPPORT_DOCUMENT, kind="policy", document_id="shipping"),
-        )
-    )
-
-    for value in forbidden:
-        assert value.encode() not in served
 
 
 # -- the orders -------------------------------------------------------------

@@ -17,6 +17,7 @@ from api_factories import (
     scenario_body,
     seed_lab,
 )
+from capability_lab.application.sandbox_tool_contracts import SANDBOX_TOOL_CONTRACTS
 
 SEED = 20260825
 ORDER_REFERENCE = "NS-10482"
@@ -114,6 +115,41 @@ async def test_the_published_tool_set_says_what_each_tool_accepts(client: AsyncC
             "choices": [],
         },
     ]
+
+
+async def test_the_listing_publishes_every_declared_tool_argument_for_argument(
+    client: AsyncClient,
+) -> None:
+    """What Milestone 3 will generate a framework's JSON Schema from, checked as a whole.
+
+    The test above states the published set the way a contract test should — by restating
+    it, so a change shows up in a diff. This one states the other half: that the listing is
+    the declaration table rendered, with no tool, argument, or choice list dropped on the way
+    out. An adapter that generated its schema from a truncated argument list would offer a
+    model a tool it cannot call correctly.
+    """
+    response = await client.get("/api/v1/tools")
+
+    assert response.status_code == 200, response.text
+    published = {tool["name"]: tool for tool in response.json()["tools"]}
+    assert published.keys() == {contract.name for contract in SANDBOX_TOOL_CONTRACTS}
+
+    for contract in SANDBOX_TOOL_CONTRACTS:
+        tool = published[contract.name]
+        assert tool["version"] == contract.version
+        assert tool["summary"] == contract.summary
+        assert tool["effect"] == contract.effect.value
+        assert [entry["name"] for entry in tool["arguments"]] == [
+            argument.name for argument in contract.arguments
+        ]
+        for entry, argument in zip(tool["arguments"], contract.arguments, strict=True):
+            assert entry == {
+                "name": argument.name,
+                "kind": argument.kind.value,
+                "description": argument.description,
+                "required": argument.required,
+                "choices": list(argument.choices),
+            }
 
 
 async def test_a_tool_answers_from_the_arms_own_state_and_says_where_that_arm_stood(
