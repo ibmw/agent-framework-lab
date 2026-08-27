@@ -116,18 +116,23 @@ SDK immediately.
    list without making the profile shop-scoped, and the extraction of the shared draft/published
    authoring lifecycle that every shop-independent definition now uses. Tone of voice stays
    shop-level under ADR 0012 rather than joining the support identity.
-5. Milestone 2 is under way. The order editor with frozen address copies (ADR 0015), versioned
+5. Milestone 2 is complete. The order editor with frozen address copies (ADR 0015), versioned
    tickets (ADR 0016), the objective and mutation block libraries (ADR 0017), the scenario recipe
    and its composition editor (ADR 0018), the canonical sandbox snapshot a published version
    materializes into (ADR 0019), the independently mutable clone each arm works in (ADR 0020), the
-   versioned read tools an arm interrogates that clone through (ADR 0021), and the safe address
-   change it may actually make (ADR 0022) are delivered.
-6. One outcome of `docs/PLAN.md` Milestone 2 remains open: proving deterministic generation,
-   canonical serialization, and tool behavior together, as an integration pass across what the
-   slices above each proved in isolation. After it, Milestone 3 begins with versioned agent
-   configurations and the participant-driver port — which is also where a support identity stops
-   being chosen by an operator and starts being resolved from a published configuration, and where
-   a tool's declared effect is what an adapter routes on.
+   versioned read tools an arm interrogates that clone through (ADR 0021), the safe address change
+   it may actually make (ADR 0022), and the evidence that holds them together (ADR 0023) are
+   delivered.
+6. ADR 0023 adds two standing constraints rather than behavior. The canonical serializer and the
+   `sandbox-v2` and `sandbox-state-v1` envelopes now have recorded fingerprints, so changing any of
+   them means deliberately answering whether every starting state frozen before that change is a
+   different one — the answer is sometimes yes, and must never be silent. And the tool suites sweep
+   `SANDBOX_TOOL_CONTRACTS` through a sample-call table checked against it, so a tool published
+   without a call in `tool_call_factories.py` fails a test instead of quietly leaving every sweep.
+7. Next is Milestone 3: versioned agent configurations and the participant-driver port — which is
+   also where a support identity stops being chosen by an operator and starts being resolved from a
+   published configuration, where a tool's declared effect is what an adapter routes on, and where
+   the string-only argument table becomes the JSON Schema an adapter offers a model.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

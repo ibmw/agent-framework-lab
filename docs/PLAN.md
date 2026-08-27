@@ -47,8 +47,10 @@ composition editor, which binds those templates to same-shop objects and pins ev
 publication freezes (ADR 0018), and then the canonical sandbox snapshot that turns a published
 recipe into starting state by pinning what is immutable and copying the order fixtures nothing
 pinned (ADR 0019), and then the independently mutable clone each experiment arm works in
-(ADR 0020), and then the versioned read tools an arm interrogates that clone through (ADR 0021), and then the
-safe address change an arm may actually make (ADR 0022).
+(ADR 0020), and then the versioned read tools an arm interrogates that clone through (ADR 0021), and
+then the safe address change an arm may actually make (ADR 0022), and finally the evidence that
+holds all of it: recorded fingerprints for the canonical envelopes and a conformance sweep driven by
+the tool registry rather than by a list (ADR 0023), which completes the milestone.
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -296,7 +298,7 @@ instance.
   knowledge.
 - [x] Add a safe address-change proposal/action with authorization, confirmation, idempotency, and
   optimistic concurrency.
-- [ ] Prove deterministic generation, canonical serialization, and tool behavior with unit and
+- [x] Prove deterministic generation, canonical serialization, and tool behavior with unit and
   integration tests.
 
 Frames: 2 · Orders, 2b · Order editor, 3 · Tickets — helpdesk view, 4 · Scenario editor — composed
@@ -378,6 +380,21 @@ the decision that a stale write is a refusal rather than a 409 because the world
 agent is something the agent must recover from, and the declared `effect` that keeps a read handler
 structurally unable to move an arm. It also enters the write tools into the sandbox fingerprint, for
 the same reason and with the same absence of a migration as ADR 0021.
+
+Conformance evidence (no frame; this outcome is a test slice with no production code change): the
+canonical serializer writes one recorded byte string and the wrong-address starting state hashes to
+one recorded fingerprint, so a change to either is a deliberate answer to "is every snapshot frozen
+before now a different starting state" rather than a silent one; a snapshot whose stored row is
+deleted between two freezes is recomputed to the same document rather than recognized; and every
+published tool — not a list of the ones somebody sampled — answers a valid call with a canonical
+document, leaves the arm where it stood if it reads, refuses an argument it does not declare without
+having moved the arm on the way, enforces the arguments it calls required, runs under an actor if it
+writes, and serves no `CUSTOMER_ONLY` value. ADR 0023 records the goldens and the rule that a golden
+owns its inputs, the difference between a fingerprint that is recomputable and one that is merely
+recognizable, the sample-call table checked against the contract registry so a new tool joins every
+sweep the day it is declared, the non-emptiness checks that keep a parameterized sweep from passing
+vacuously, and the argument-for-argument check that the published listing is the declaration table
+rendered.
 
 Order evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came

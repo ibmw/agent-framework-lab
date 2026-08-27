@@ -15,6 +15,14 @@ external dependency. Playwright reuses the local server when it already responds
 isolated instance. Initialize synthetic generators from the recorded generation context, and use
 factory-boy to express relevant variants rather than hide asserted values.
 
+Two shapes of test carry more weight than their size suggests, and both are load-bearing (ADR 0023).
+**Recorded fingerprints** pin the canonical serializer's bytes and the `sandbox-v2` and
+`sandbox-state-v1` envelopes of one fixed, locally owned starting state; when one fails, answer
+whether every starting state frozen before the change is now a different one before touching the
+constant. **Registry-driven sweeps** parameterize over the published contract set rather than over a
+list of names, with a sample-call table asserted to cover that set exactly and every sweep asserted
+to be non-empty, so a newly published tool joins every shared invariant on the day it is declared.
+
 Required agent-adapter suites use an injected deterministic test double and make no live-model call.
 Provider smoke tests are optional, explicitly marked, credential-gated, and separate from
 reproducible capability evidence in CI.
