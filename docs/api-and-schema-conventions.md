@@ -19,4 +19,9 @@ diff.
 
 Agent tools are versioned contracts as well. Their names include a domain namespace, their schemas
 have documented versions, and their results distinguish domain success, refusal, and technical
-failure. A data-modifying tool must accept an idempotency key and verifiable prior confirmation.
+failure. A data-modifying tool must accept an idempotency key and verifiable prior confirmation. One
+value may serve as both when the lab issues it: a confirmation that is the hash of the proposed
+change names exactly one change and can be applied exactly once, and a key the caller chose could
+collapse two different changes into one (ADR 0022). A tool call reports its own outcome in the
+result: a refusal — including a write refused because the world moved under it — answers 200 with
+`outcome: "refused"`, and the HTTP status says only whether the tool ran.

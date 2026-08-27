@@ -47,7 +47,8 @@ composition editor, which binds those templates to same-shop objects and pins ev
 publication freezes (ADR 0018), and then the canonical sandbox snapshot that turns a published
 recipe into starting state by pinning what is immutable and copying the order fixtures nothing
 pinned (ADR 0019), and then the independently mutable clone each experiment arm works in
-(ADR 0020), and then the versioned read tools an arm interrogates that clone through (ADR 0021).
+(ADR 0020), and then the versioned read tools an arm interrogates that clone through (ADR 0021), and then the
+safe address change an arm may actually make (ADR 0022).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -293,7 +294,7 @@ instance.
 - [x] Clone a snapshot into independently mutable sandbox state.
 - [x] Add versioned read tools for interaction context, catalog, customer, order, and support
   knowledge.
-- [ ] Add a safe address-change proposal/action with authorization, confirmation, idempotency, and
+- [x] Add a safe address-change proposal/action with authorization, confirmation, idempotency, and
   optimistic concurrency.
 - [ ] Prove deterministic generation, canonical serialization, and tool behavior with unit and
   integration tests.
@@ -364,6 +365,19 @@ refusal is a value and an unknown tool name is not, the string-only argument tab
 adapter later derives its schema from, and the entry of the tool versions into the sandbox
 fingerprint — which makes a snapshot frozen after this slice a different starting state from one
 frozen before it, correctly and without a migration.
+
+Address-change evidence (no frame; the write lives in the console beside the arms it moves): an
+operator reads the order that ships to the stale address, proposes redirecting it to the customer's
+current entry under a support identity permitted to make that change, applies the confirmation the
+proposal answered with — and the arm beside it still ships to the old address. ADR 0022 records the
+two write tools and why the mutation is split into a proposal and an application, the confirmation
+that names a change by its content and so serves as the consent binding and the idempotency key at
+once, the actor that travels in the call envelope because an agent that could name its own actor
+would be choosing its own permissions, the revision a proposal carries from the read into the write,
+the decision that a stale write is a refusal rather than a 409 because the world moving under an
+agent is something the agent must recover from, and the declared `effect` that keeps a read handler
+structurally unable to move an arm. It also enters the write tools into the sandbox fingerprint, for
+the same reason and with the same absence of a migration as ADR 0021.
 
 Order evidence (frames 2 and 2b): an author builds the paid, unfulfilled order that ships to
 the customer's stale address, and the frozen copy survives an edit to the address-book entry it came

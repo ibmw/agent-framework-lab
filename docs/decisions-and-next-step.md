@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-08-25
+Status: current — 2026-08-27
 
 ## Authoritative direction
 
@@ -71,11 +71,16 @@ SDK immediately.
 - ADR 0010's persona library and conversation history are superseded as navigation: their frontend
   was removed by ADR 0013 in favour of the Studio shell. The underlying conversation and persona
   HTTP contracts remain published POC behavior, not the target historical record.
+- ADR 0009's order-cancellation proposal/confirmation protocol remains implemented POC behavior on
+  the persona-first conversation contracts. The target modifying-tool protocol is the propose/apply
+  pair over a sandbox arm, whose confirmation is the hash of the change and therefore serves as both
+  the consent binding and the idempotency key (ADR 0022).
 - The minimal customer/product/order canonical schema in ADR 0007 remains valid for POC replay but
   is not the target commerce schema. The target snapshot format is `sandbox-v2` (ADR 0019), the
-  mutable clone an arm works in is `sandbox-state-v1` (ADR 0020), and what a tool answers with is
-  `tool-result-v1` (ADR 0021); a further change to what any of them holds requires another canonical
-  schema version.
+  mutable clone an arm works in is `sandbox-state-v1` (ADR 0020), what a tool answers with is
+  `tool-result-v1` (ADR 0021), and what a confirmation is the hash of is
+  `address-change-proposal-v1` (ADR 0022); a further change to what any of them holds requires
+  another canonical schema version.
 - The M2 provider/model policy remains a historical POC policy. Target agent and judge configuration
   will be versioned authorable definitions.
 
@@ -114,11 +119,15 @@ SDK immediately.
 5. Milestone 2 is under way. The order editor with frozen address copies (ADR 0015), versioned
    tickets (ADR 0016), the objective and mutation block libraries (ADR 0017), the scenario recipe
    and its composition editor (ADR 0018), the canonical sandbox snapshot a published version
-   materializes into (ADR 0019), the independently mutable clone each arm works in (ADR 0020), and
-   the versioned read tools an arm interrogates that clone through (ADR 0021) are delivered.
-6. The next implementation task is the rest of `docs/PLAN.md` Milestone 2: the safe address-change
-   action — the first public writer through the clone's write seam, and the first operation with an
-   authorization rule and a confirmation to enforce.
+   materializes into (ADR 0019), the independently mutable clone each arm works in (ADR 0020), the
+   versioned read tools an arm interrogates that clone through (ADR 0021), and the safe address
+   change it may actually make (ADR 0022) are delivered.
+6. One outcome of `docs/PLAN.md` Milestone 2 remains open: proving deterministic generation,
+   canonical serialization, and tool behavior together, as an integration pass across what the
+   slices above each proved in isolation. After it, Milestone 3 begins with versioned agent
+   configurations and the participant-driver port — which is also where a support identity stops
+   being chosen by an operator and starts being resolved from a published configuration, and where
+   a tool's declared effect is what an adapter routes on.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

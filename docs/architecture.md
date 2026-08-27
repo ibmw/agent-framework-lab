@@ -107,7 +107,7 @@ Detailed support knowledge is normally retrieved through policy/FAQ tools. Non-n
 and commerce rules remain backend invariants. Every modifying tool uses explicit proposal and
 confirmation semantics where required, idempotency, and optimistic concurrency.
 
-A read tool is scoped to one arm: it is given that arm's own mutable state and the exact published
+A tool is scoped to one arm: it is given that arm's own mutable state and the exact published
 versions its snapshot pinned, and never a shop, a definition, or a version as an argument (ADR 0021).
 A tool result distinguishes success, a refusal the agent can act on, and a technical failure that
 carries no explanation; argument mistakes are refusals, because in a run the arguments are model
@@ -115,6 +115,15 @@ output. No tool serves a `CUSTOMER_ONLY` field — the persona and the hidden fa
 customer, not the support agent — while `SENSITIVE` synthetic personal data is served in full and
 still never logged or traced. The published tool set is part of a snapshot's identity, so it enters
 the starting-state fingerprint rather than belonging to the runtime that calls it.
+
+Each contract declares its `effect`. A write is proposed before it is applied, and the confirmation a
+proposal answers with names the change by its content — which makes it both the consent binding and
+the idempotency key, so the change applies exactly once and a repeat returns the first result. The
+acting support identity travels in the call envelope rather than among the arguments, because
+arguments are model output and an agent that could name its own actor would be choosing its own
+permissions; its granted permissions are what authorize the write. A proposal carries the revision it
+was computed at into the write, so an arm that moved in between is refused — as a refusal the agent
+can recover from, not a transport error (ADR 0022).
 
 ## Framework and participant neutrality
 
