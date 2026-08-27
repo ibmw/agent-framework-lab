@@ -857,7 +857,7 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * List the versioned read tools an experiment arm can be given
+     * List the versioned tools an experiment arm can be given
      * @description The tool set a sandbox snapshot is fingerprinted against. A tool is versioned individually, so this list carries a version per name rather than one for the set.
      */
     get: operations["listToolContracts"];
@@ -879,8 +879,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Run one versioned read tool against one arm's sandbox
-     * @description Reads the arm's own state and the exact published versions its snapshot pinned. A tool that understands the call and declines it answers with outcome 'refused' and HTTP 200; only a call that could not run at all is an HTTP error.
+     * Run one versioned tool against one arm's sandbox
+     * @description Reads the arm's own state and the exact published versions its snapshot pinned, and — for a tool whose effect is 'write' — changes that arm and no other. A tool that understands the call and declines it answers with outcome 'refused' and HTTP 200, including when the arm moved after the change was proposed; only a call that could not run at all is an HTTP error.
      */
     post: operations["callSandboxTool"];
     delete?: never;
@@ -3980,6 +3980,19 @@ export interface components {
       };
     };
     /**
+     * ToolActorSchema
+     * @description The published support-identity version whose authority the call runs under.
+     */
+    ToolActorSchema: {
+      /**
+       * Support Identity Id
+       * Format: uuid
+       */
+      support_identity_id: string;
+      /** Version */
+      version: number;
+    };
+    /**
      * ToolArgumentKind
      * @description How one argument's text is checked before a handler ever sees it.
      * @enum {string}
@@ -4022,14 +4035,18 @@ export interface components {
       arguments?: {
         [key: string]: string | null;
       };
+      /** @description Whose authority this call runs under. Required by a tool whose effect is 'write'; accepted and not yet consulted by a read. Deliberately outside the arguments: an agent that could name its own actor would be choosing its own permissions. */
+      actor?: components["schemas"]["ToolActorSchema"] | null;
     };
     /**
      * ToolCallResponse
      * @description One tool result, and where the arm stood when it answered.
      *
      *     `data` is the tool's own `tool-result-v1` payload, whose shape is that tool's versioned
-     *     contract. `sandbox_revision` is provenance rather than part of the answer: it is the
-     *     token the first writer of this milestone will present back when it changes what it read.
+     *     contract. `sandbox_revision` and `state_fingerprint` are provenance rather than part of
+     *     the answer, and they describe where the arm stood when the call *started*: for a read
+     *     that is simply where it was, and for a write it is the world the change was computed
+     *     against. A caller that needs the arm's new position reads the arm.
      */
     ToolCallResponse: {
       /** Canonical Schema Version */
@@ -4060,7 +4077,12 @@ export interface components {
     };
     /**
      * ToolContractSchema
-     * @description One published read tool.
+     * @description One published tool.
+     *
+     *     `effect` is what tells a caller the two kinds apart before it calls either: a write needs
+     *     an actor, and — for the one write published here — has to be proposed before it can be
+     *     applied. An adapter reads it to route the two differently instead of keeping a list of
+     *     tool names it knows to be dangerous.
      */
     ToolContractSchema: {
       /** Name */
@@ -4069,9 +4091,21 @@ export interface components {
       version: string;
       /** Summary */
       summary: string;
+      effect: components["schemas"]["ToolEffect"];
       /** Arguments */
       arguments: components["schemas"]["ToolArgumentSchema"][];
     };
+    /**
+     * ToolEffect
+     * @description Whether running a tool can move the arm it runs against.
+     *
+     *     Declared rather than inferred from the name, because it decides three things a caller
+     *     must not have to guess: whether the call needs an authorized actor, whether a framework
+     *     adapter has to route it through a confirmation step, and whether two identical calls
+     *     against an unmoved arm are guaranteed to answer with identical bytes.
+     * @enum {string}
+     */
+    ToolEffect: "read" | "write";
     /**
      * ToolOutcome
      * @description The three answers a tool call can end with, kept apart on purpose.
@@ -4081,9 +4115,18 @@ export interface components {
     /**
      * ToolRefusalCode
      * @description Why a tool declined, in a vocabulary an agent can branch on.
+     *
+     *     Declared beside the contracts rather than beside the handlers because a refusal code is
+     *     published API: an adapter branches on it, and an evaluation reads it back as evidence.
      * @enum {string}
      */
-    ToolRefusalCode: "invalid_arguments" | "not_found";
+    ToolRefusalCode:
+      | "invalid_arguments"
+      | "not_found"
+      | "not_permitted"
+      | "not_allowed"
+      | "not_confirmed"
+      | "conflict";
     /**
      * ToolRefusalSchema
      * @description Why the tool declined, in a vocabulary a caller can branch on.

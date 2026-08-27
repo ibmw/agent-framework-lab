@@ -67,6 +67,7 @@ from capability_lab.application.order_fixtures import (
 )
 from capability_lab.application.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from capability_lab.application.ports import Clock, ConversationTurn, OrderWriteConflictError
+from capability_lab.application.sandbox_actions import SandboxActionService
 from capability_lab.application.sandbox_materialization import (
     SandboxNotMaterializableError,
     SandboxSnapshotNotFoundError,
@@ -74,6 +75,7 @@ from capability_lab.application.sandbox_materialization import (
 )
 from capability_lab.application.sandbox_tools import (
     SandboxToolService,
+    ToolActorRequiredError,
     ToolNotFoundError,
 )
 from capability_lab.application.sandboxes import (
@@ -166,6 +168,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyPublishedVersionDirectory,
+    SqlAlchemySandboxActionProposalRepository,
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyScenarioGenerationIdempotencyRepository,
@@ -933,6 +936,16 @@ async def _tool_not_found_handler(request: Request, error: Exception) -> JSONRes
     return _error_response(request, status_code=404, code="tool_not_found", message=str(error))
 
 
+async def _tool_actor_required_handler(request: Request, error: Exception) -> JSONResponse:
+    """A write offered with nobody acting is the caller's mistake, not the agent's.
+
+    422 rather than a refusal for the same reason an unknown tool name is a 404: the actor is
+    not model output, so getting it wrong is a client that built the call badly rather than an
+    agent asking something the world declines.
+    """
+    return _error_response(request, status_code=422, code="tool_actor_required", message=str(error))
+
+
 async def _sandbox_label_handler(request: Request, error: Exception) -> JSONResponse:
     return _error_response(
         request, status_code=422, code="sandbox_label_invalid", message=str(error)
@@ -1336,6 +1349,7 @@ def create_app(
     application.add_exception_handler(SandboxNotFoundError, _sandbox_not_found_handler)
     application.add_exception_handler(SandboxLabelError, _sandbox_label_handler)
     application.add_exception_handler(ToolNotFoundError, _tool_not_found_handler)
+    application.add_exception_handler(ToolActorRequiredError, _tool_actor_required_handler)
     application.add_exception_handler(UnpublishedReferenceError, _unpublished_reference_handler)
     application.add_exception_handler(MissingDraftError, _missing_draft_handler)
     application.add_exception_handler(DefinitionLifecycleError, _definition_lifecycle_handler)
@@ -1464,6 +1478,16 @@ def create_app(
                 shop_repository(session),
                 ticket_repository(session),
                 customer_profile_repository(session),
+                support_identity_repository(session),
+                SandboxActionService(
+                    SandboxService(
+                        SqlAlchemySandboxRepository(session),
+                        SqlAlchemySandboxSnapshotRepository(session),
+                        clock,
+                    ),
+                    SqlAlchemySandboxActionProposalRepository(session),
+                    clock,
+                ),
             )
 
     def order_action_service() -> Generator[OrderActionService, None, None]:

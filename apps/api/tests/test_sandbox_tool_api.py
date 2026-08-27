@@ -1,4 +1,4 @@
-"""Public contract for the versioned read tools an arm interrogates its sandbox through."""
+"""Public contract for the versioned tools an arm reads and changes its sandbox through."""
 
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -9,8 +9,10 @@ import pytest
 from httpx import AsyncClient
 
 from api_factories import (
+    SUPPORT_IDENTITY,
     api_client,
     create_scenario,
+    make_identity,
     publish_everything,
     scenario_body,
     seed_lab,
@@ -87,8 +89,15 @@ async def test_the_published_tool_set_says_what_each_tool_accepts(client: AsyncC
         "orders.read_order",
         "support.search_knowledge",
         "support.read_document",
+        "orders.propose_address_change",
+        "orders.apply_address_change",
     }
     assert {tool["version"] for tool in tools.values()} == {"v1"}
+    # The one thing a caller must know before calling: which tools can move the arm.
+    assert {name for name, tool in tools.items() if tool["effect"] == "write"} == {
+        "orders.propose_address_change",
+        "orders.apply_address_change",
+    }
     assert tools["support.read_document"]["arguments"] == [
         {
             "name": "kind",
@@ -189,7 +198,220 @@ async def test_the_customer_tool_never_serves_the_simulation_side_of_the_profile
     assert response.status_code == 200, response.text
     profile = response.json()["data"]
     assert profile["identity"]["email"] == "maya.laurent@example.org"
-    assert [entry["id"] for entry in profile["addresses"]] == ["bordeaux-previous-flat"]
+    assert [entry["id"] for entry in profile["addresses"]] == [
+        "home",
+        "bordeaux-previous-flat",
+        "office",
+    ]
     assert "persona" not in profile
     assert "hidden_facts" not in profile
     assert "Direct and mildly anxious" not in response.text
+
+
+# -- the safe address change ------------------------------------------------
+
+
+async def write(
+    client: AsyncClient,
+    lab: dict[str, str],
+    arm: dict[str, Any],
+    tool: str,
+    actor: dict[str, Any] | None,
+    **arguments: str | None,
+):
+    return await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/sandboxes/{arm['sandbox_id']}/tool-calls",
+        json={"tool": tool, "version": "v1", "arguments": arguments, "actor": actor},
+    )
+
+
+async def test_a_change_is_proposed_and_then_applied_over_the_contract(
+    client: AsyncClient, lab: dict[str, str], arm: dict[str, Any]
+) -> None:
+    actor = await make_identity(client)
+
+    proposed = await write(
+        client,
+        lab,
+        arm,
+        "orders.propose_address_change",
+        actor,
+        order_reference=ORDER_REFERENCE,
+        address_id="home",
+    )
+    assert proposed.status_code == 200, proposed.text
+    proposal = proposed.json()["data"]
+    assert proposal["applied"] is False
+    assert proposal["current_address"]["city"] == "Bordeaux"
+    assert proposal["proposed_address"]["city"] == "Lyon"
+    # The proposal changed nothing: the arm is still where it was cloned.
+    assert proposed.json()["sandbox_revision"] == arm["revision"]
+
+    applied = await write(
+        client,
+        lab,
+        arm,
+        "orders.apply_address_change",
+        actor,
+        confirmation=proposal["confirmation"],
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["data"]["shipping_address"]["city"] == "Lyon"
+
+    moved = await client.get(f"/api/v1/shops/{lab['shop_id']}/sandboxes/{arm['sandbox_id']}")
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["revision"] == 1
+    assert moved.json()["state_fingerprint"] != arm["state_fingerprint"]
+
+
+async def test_applying_the_same_confirmation_twice_moves_the_arm_once(
+    client: AsyncClient, lab: dict[str, str], arm: dict[str, Any]
+) -> None:
+    actor = await make_identity(client)
+    proposed = await write(
+        client,
+        lab,
+        arm,
+        "orders.propose_address_change",
+        actor,
+        order_reference=ORDER_REFERENCE,
+        address_id="home",
+    )
+    confirmation = proposed.json()["data"]["confirmation"]
+
+    first = await write(
+        client, lab, arm, "orders.apply_address_change", actor, confirmation=confirmation
+    )
+    second = await write(
+        client, lab, arm, "orders.apply_address_change", actor, confirmation=confirmation
+    )
+
+    assert first.json()["data"] == second.json()["data"]
+    moved = await client.get(f"/api/v1/shops/{lab['shop_id']}/sandboxes/{arm['sandbox_id']}")
+    assert moved.json()["revision"] == 1
+
+
+async def test_an_identity_without_the_permission_is_refused_rather_than_forbidden(
+    client: AsyncClient, lab: dict[str, str], arm: dict[str, Any]
+) -> None:
+    """The tool ran and declined, so the agent reads a refusal rather than a transport error."""
+    reader = await make_identity(
+        client, {**SUPPORT_IDENTITY, "permissions": ["read_orders", "read_policies"]}
+    )
+
+    response = await write(
+        client,
+        lab,
+        arm,
+        "orders.propose_address_change",
+        reader,
+        order_reference=ORDER_REFERENCE,
+        address_id="home",
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["outcome"] == "refused"
+    assert response.json()["refusal"]["code"] == "not_permitted"
+
+
+async def test_a_write_with_nobody_acting_is_refused_by_the_contract(
+    client: AsyncClient, lab: dict[str, str], arm: dict[str, Any]
+) -> None:
+    response = await write(
+        client,
+        lab,
+        arm,
+        "orders.propose_address_change",
+        None,
+        order_reference=ORDER_REFERENCE,
+        address_id="home",
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "tool_actor_required"
+
+
+async def test_a_change_that_is_no_longer_a_change_is_refused(
+    client: AsyncClient, lab: dict[str, str], arm: dict[str, Any]
+) -> None:
+    actor = await make_identity(client)
+    proposed = await write(
+        client,
+        lab,
+        arm,
+        "orders.propose_address_change",
+        actor,
+        order_reference=ORDER_REFERENCE,
+        address_id="home",
+    )
+    applied = await write(
+        client,
+        lab,
+        arm,
+        "orders.apply_address_change",
+        actor,
+        confirmation=proposed.json()["data"]["confirmation"],
+    )
+    assert applied.status_code == 200, applied.text
+
+    again = await write(
+        client,
+        lab,
+        arm,
+        "orders.propose_address_change",
+        actor,
+        order_reference=ORDER_REFERENCE,
+        address_id="home",
+    )
+
+    assert again.status_code == 200
+    assert again.json()["outcome"] == "refused"
+    # Where it already ships is not a change to make.
+    assert again.json()["refusal"]["code"] == "not_allowed"
+
+
+async def test_a_change_proposed_against_a_world_that_has_moved_is_refused_at_200(
+    client: AsyncClient, lab: dict[str, str], arm: dict[str, Any]
+) -> None:
+    """A stale write is the world moving under the agent, not the transport failing.
+
+    The convention answers a stale command with 409; a tool call does not, because the HTTP
+    status says whether the tool ran and the outcome says what it concluded (ADR 0022).
+    """
+    actor = await make_identity(client)
+
+    async def propose(address_id: str) -> str:
+        response = await write(
+            client,
+            lab,
+            arm,
+            "orders.propose_address_change",
+            actor,
+            order_reference=ORDER_REFERENCE,
+            address_id=address_id,
+        )
+        assert response.status_code == 200, response.text
+        return str(response.json()["data"]["confirmation"])
+
+    # Two competing changes, both worked out against revision 0.
+    to_home = await propose("home")
+    to_office = await propose("office")
+
+    applied = await write(
+        client, lab, arm, "orders.apply_address_change", actor, confirmation=to_office
+    )
+    assert applied.status_code == 200, applied.text
+
+    stale = await write(
+        client, lab, arm, "orders.apply_address_change", actor, confirmation=to_home
+    )
+
+    assert stale.status_code == 200
+    body = stale.json()
+    assert body["outcome"] == "refused"
+    assert body["refusal"]["code"] == "conflict"
+    # Refused, not applied: the arm is where the winning write left it.
+    moved = await client.get(f"/api/v1/shops/{lab['shop_id']}/sandboxes/{arm['sandbox_id']}")
+    assert moved.json()["revision"] == 1
+    order = await run(client, lab, arm, "orders.read_order", order_reference=ORDER_REFERENCE)
+    assert order.json()["data"]["shipping_address"]["city"] == "Paris"

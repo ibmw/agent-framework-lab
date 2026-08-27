@@ -2978,7 +2978,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
   /api/v1/tools:
     get:
-      summary: List the versioned read tools an experiment arm can be given
+      summary: List the versioned tools an experiment arm can be given
       description: The tool set a sandbox snapshot is fingerprinted against. A tool
         is versioned individually, so this list carries a version per name rather
         than one for the set.
@@ -2992,11 +2992,12 @@ paths:
                 $ref: '#/components/schemas/ToolContractListResponse'
   /api/v1/shops/{shop_id}/sandboxes/{sandbox_id}/tool-calls:
     post:
-      summary: Run one versioned read tool against one arm's sandbox
+      summary: Run one versioned tool against one arm's sandbox
       description: Reads the arm's own state and the exact published versions its
-        snapshot pinned. A tool that understands the call and declines it answers
-        with outcome 'refused' and HTTP 200; only a call that could not run at all
-        is an HTTP error.
+        snapshot pinned, and — for a tool whose effect is 'write' — changes that arm
+        and no other. A tool that understands the call and declines it answers with
+        outcome 'refused' and HTTP 200, including when the arm moved after the change
+        was proposed; only a call that could not run at all is an HTTP error.
       operationId: callSandboxTool
       parameters:
       - name: shop_id
@@ -9139,6 +9140,24 @@ components:
       - outcome
       - result
       title: ToolActivityResponse
+    ToolActorSchema:
+      properties:
+        support_identity_id:
+          type: string
+          format: uuid
+          title: Support Identity Id
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+      additionalProperties: false
+      type: object
+      required:
+      - support_identity_id
+      - version
+      title: ToolActorSchema
+      description: The published support-identity version whose authority the call
+        runs under.
     ToolArgumentKind:
       type: string
       enum:
@@ -9206,6 +9225,14 @@ components:
           title: Arguments
           description: The arguments this call fills, by name. A null or blank value
             is read as an argument the caller chose not to answer.
+        actor:
+          anyOf:
+          - $ref: '#/components/schemas/ToolActorSchema'
+          - type: 'null'
+          description: 'Whose authority this call runs under. Required by a tool whose
+            effect is ''write''; accepted and not yet consulted by a read. Deliberately
+            outside the arguments: an agent that could name its own actor would be
+            choosing its own permissions.'
       additionalProperties: false
       type: object
       required:
@@ -9265,11 +9292,16 @@ components:
         `data` is the tool''s own `tool-result-v1` payload, whose shape is that tool''s
         versioned
 
-        contract. `sandbox_revision` is provenance rather than part of the answer:
-        it is the
+        contract. `sandbox_revision` and `state_fingerprint` are provenance rather
+        than part of
 
-        token the first writer of this milestone will present back when it changes
-        what it read.'
+        the answer, and they describe where the arm stood when the call *started*:
+        for a read
+
+        that is simply where it was, and for a write it is the world the change was
+        computed
+
+        against. A caller that needs the arm''s new position reads the arm.'
     ToolContractListResponse:
       properties:
         tools:
@@ -9293,6 +9325,8 @@ components:
         summary:
           type: string
           title: Summary
+        effect:
+          $ref: '#/components/schemas/ToolEffect'
         arguments:
           items:
             $ref: '#/components/schemas/ToolArgumentSchema'
@@ -9304,9 +9338,41 @@ components:
       - name
       - version
       - summary
+      - effect
       - arguments
       title: ToolContractSchema
-      description: One published read tool.
+      description: 'One published tool.
+
+
+        `effect` is what tells a caller the two kinds apart before it calls either:
+        a write needs
+
+        an actor, and — for the one write published here — has to be proposed before
+        it can be
+
+        applied. An adapter reads it to route the two differently instead of keeping
+        a list of
+
+        tool names it knows to be dangerous.'
+    ToolEffect:
+      type: string
+      enum:
+      - read
+      - write
+      title: ToolEffect
+      description: 'Whether running a tool can move the arm it runs against.
+
+
+        Declared rather than inferred from the name, because it decides three things
+        a caller
+
+        must not have to guess: whether the call needs an authorized actor, whether
+        a framework
+
+        adapter has to route it through a confirmation step, and whether two identical
+        calls
+
+        against an unmoved arm are guaranteed to answer with identical bytes.'
     ToolOutcome:
       type: string
       enum:
@@ -9320,8 +9386,19 @@ components:
       enum:
       - invalid_arguments
       - not_found
+      - not_permitted
+      - not_allowed
+      - not_confirmed
+      - conflict
       title: ToolRefusalCode
-      description: Why a tool declined, in a vocabulary an agent can branch on.
+      description: 'Why a tool declined, in a vocabulary an agent can branch on.
+
+
+        Declared beside the contracts rather than beside the handlers because a refusal
+        code is
+
+        published API: an adapter branches on it, and an evaluation reads it back
+        as evidence.'
     ToolRefusalSchema:
       properties:
         code:

@@ -71,7 +71,54 @@ BORDEAUX: dict[str, Any] = {
     "city": "Bordeaux",
     "region": None,
     "country": "FR",
+    "is_default": False,
+}
+
+# The address the customer actually lives at now. The wrong-address incident needs both:
+# without somewhere correct to move to, there is no change for an agent to propose.
+LYON: dict[str, Any] = {
+    "id": "home",
+    "label": "Home",
+    "recipient": "Maya Laurent",
+    "line1": "18 rue des Écoles",
+    "line2": None,
+    "postal_code": "69005",
+    "city": "Lyon",
+    "region": None,
+    "country": "FR",
     "is_default": True,
+}
+
+# A third entry, so a test can propose two competing changes against one arm and reach a
+# genuine revision conflict instead of the "nothing to change" refusal.
+PARIS: dict[str, Any] = {
+    "id": "office",
+    "label": "Office",
+    "recipient": "Maya Laurent",
+    "line1": "3 rue de Valois",
+    "line2": None,
+    "postal_code": "75001",
+    "city": "Paris",
+    "region": None,
+    "country": "FR",
+    "is_default": False,
+}
+
+SUPPORT_IDENTITY: dict[str, Any] = {
+    "role": {
+        "name": "Northstar tier 1",
+        "title": "Customer support representative",
+        "description": "Handles order and delivery questions before escalation.",
+    },
+    "permissions": ["read_orders", "read_policies", "change_shipping_address"],
+    "guidance": [
+        {
+            "id": "confirm-before-changing",
+            "title": "Confirm before changing an order",
+            "body": "Read the current shipping address back before proposing any change.",
+        }
+    ],
+    "escalation": {"escalate_to": "Tier 2 support", "conditions": []},
 }
 
 PROFILE: dict[str, Any] = {
@@ -90,7 +137,7 @@ PROFILE: dict[str, Any] = {
         "notes": "",
     },
     "persona": {"summary": "Direct and mildly anxious.", "traits": ["direct"]},
-    "addresses": [BORDEAUX],
+    "addresses": [LYON, BORDEAUX, PARIS],
     "background": [],
     "hidden_facts": [],
 }
@@ -229,6 +276,27 @@ async def make_order(client: AsyncClient, shop_id: str, profile_id: str) -> str:
     )
     assert response.status_code == 200, response.text
     return order_id
+
+
+async def make_identity(
+    client: AsyncClient, payload: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """A published support identity, ready to be named as the actor of a write.
+
+    Support identities are shop-independent (ADR 0014), so this takes no shop: what a write
+    authorizes against is the granted permissions, not where the identity was authored.
+    """
+    body = SUPPORT_IDENTITY if payload is None else payload
+    created = await client.post("/api/v1/support-identities", json={"role": body["role"]})
+    assert created.status_code == 201, created.text
+    identity_id = str(created.json()["identity_id"])
+    saved = await client.put(
+        f"/api/v1/support-identities/{identity_id}/draft", json={"payload": body}
+    )
+    assert saved.status_code == 200, saved.text
+    published = await client.post(f"/api/v1/support-identities/{identity_id}/versions")
+    assert published.status_code == 201, published.text
+    return {"support_identity_id": identity_id, "version": published.json()["version"]}
 
 
 async def make_ticket(client: AsyncClient, shop_id: str, profile_id: str) -> str:
