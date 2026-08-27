@@ -1,11 +1,14 @@
 import type {
   SandboxSummarySchema,
+  SupportIdentitySummarySchema,
   ToolArgumentSchema,
+  ToolCallRequest,
   ToolCallResponse,
   ToolContractSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { describeApiError } from "../api/client";
+import { listSupportIdentities } from "../api/supportIdentities";
 import { callSandboxTool, listToolContracts } from "../api/tools";
 import {
   accentButtonClasses,
@@ -16,6 +19,9 @@ import {
 import { Card, Fingerprint } from "./WorkspaceChrome";
 
 const CONTRACTS_UNAVAILABLE = "The published tool set is unavailable.";
+const IDENTITIES_UNAVAILABLE = "The published support identities are unavailable.";
+/** The tool an apply confirms, so a proposal result can offer the second step directly. */
+const ADDRESS_CHANGE_APPLY = "orders.apply_address_change";
 
 /**
  * What one arm's agent would be able to see, asked the way the agent will ask it.
@@ -27,11 +33,33 @@ const CONTRACTS_UNAVAILABLE = "The published tool set is unavailable.";
  * all reachable — and that the persona and the hidden facts are not — before any agent is
  * pointed at it.
  *
- * There is no write control, because every tool published here is a read.
+ * A write tool adds two things a read does not need, and both are visible here on purpose.
+ * It runs under a published support identity, chosen beside the tool rather than typed into an
+ * argument, because an agent that could name its own actor would be choosing its own
+ * permissions. And it is proposed before it is applied, so the operator sees the change as the
+ * agent will: two steps, with the confirmation binding the second to exactly the first.
  */
-export function SandboxToolConsole({ shopId, arm }: { shopId: string; arm: SandboxSummarySchema }) {
+export function SandboxToolConsole({
+  shopId,
+  arm,
+  onArmMoved,
+}: {
+  shopId: string;
+  arm: SandboxSummarySchema;
+  onArmMoved?: () => void;
+}) {
   const [contracts, setContracts] = useState<ToolContractSchema[]>([]);
+  const [identities, setIdentities] = useState<SupportIdentitySummarySchema[]>([]);
+  /**
+   * Kept apart from `error`, which belongs to the call the operator just made.
+   *
+   * Identities are fetched on mount whether or not a write is ever selected, so a failure
+   * there written into the shared slot would tell someone running a read that their read
+   * broke. It is surfaced only where it actually blocks something.
+   */
+  const [identityError, setIdentityError] = useState<string | null>(null);
   const [selected, setSelected] = useState("");
+  const [acting, setActing] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ToolCallResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +88,29 @@ export function SandboxToolConsole({ shopId, arm }: { shopId: string; arm: Sandb
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    listSupportIdentities(controller.signal)
+      .then((listed) => {
+        // Only a published version can act: a write authorizes against frozen permissions,
+        // never against a draft that can grant itself another one a moment later.
+        // Only a published version can act: a write authorizes against frozen permissions,
+        // never against a draft that can grant itself another one a moment later.
+        setIdentities(
+          listed.identities.filter((identity) => identity.latest_published_version !== null),
+        );
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setIdentityError(describeApiError(cause, IDENTITIES_UNAVAILABLE));
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
   const contract = contracts.find((candidate) => candidate.name === selected) ?? null;
+  const writes = contract?.effect === "write";
+  const identity = identities.find((candidate) => candidate.identity_id === acting) ?? null;
 
   const choose = (name: string) => {
     current.current += 1;
@@ -72,23 +122,20 @@ export function SandboxToolConsole({ shopId, arm }: { shopId: string; arm: Sandb
     setError(null);
   };
 
-  const run = async (event: FormEvent) => {
-    event.preventDefault();
-    if (contract === null) {
-      return;
-    }
+  const send = async (command: ToolCallRequest, moves: boolean) => {
     current.current += 1;
     const token = current.current;
     setWorking(true);
     setError(null);
     try {
-      const answered = await callSandboxTool(shopId, arm.sandbox_id, {
-        tool: contract.name,
-        version: contract.version,
-        arguments: values,
-      });
+      const answered = await callSandboxTool(shopId, arm.sandbox_id, command);
       if (token === current.current) {
         setResult(answered);
+      }
+      // The arms table shows a revision and a fingerprint, and a successful write has just
+      // moved both. Told rather than refetched here: the console does not own that list.
+      if (moves && answered.outcome === "success") {
+        onArmMoved?.();
       }
     } catch (cause: unknown) {
       if (token === current.current) {
@@ -102,14 +149,60 @@ export function SandboxToolConsole({ shopId, arm }: { shopId: string; arm: Sandb
     }
   };
 
+  const actor = () =>
+    identity === null || identity.latest_published_version === null
+      ? null
+      : { support_identity_id: identity.identity_id, version: identity.latest_published_version };
+
+  const run = async (event: FormEvent) => {
+    event.preventDefault();
+    if (contract === null) {
+      return;
+    }
+    if (writes && actor() === null) {
+      // Refused here rather than at the server, which answers this as an error: a write with
+      // nobody acting is a call the console should not have been able to build.
+      setError("Choose the published support identity this change is made under.");
+      return;
+    }
+    await send(
+      {
+        tool: contract.name,
+        version: contract.version,
+        arguments: values,
+        actor: writes ? actor() : null,
+      },
+      writes,
+    );
+  };
+
+  const applyProposal = async (confirmation: string) => {
+    const apply = contracts.find((candidate) => candidate.name === ADDRESS_CHANGE_APPLY);
+    if (apply === undefined || actor() === null) {
+      return;
+    }
+    await send(
+      {
+        tool: apply.name,
+        version: apply.version,
+        // The confirmation is the whole of the second step: it names the change, so nothing
+        // the operator could retype comes between the proposal and what is applied.
+        arguments: { confirmation },
+        actor: actor(),
+      },
+      true,
+    );
+  };
+
   return (
     <Card
-      title={`Read tools · ${arm.label}`}
+      title={`Tools · ${arm.label}`}
       footer={
         <p className="text-xs text-admin-muted">
-          Every tool here reads this arm's own state and the exact versions its snapshot pinned. The
-          customer's persona and hidden facts are never served: they drive the simulated customer,
-          not the support agent.
+          Every tool here works on this arm's own state and the exact versions its snapshot pinned.
+          The customer's persona and hidden facts are never served: they drive the simulated
+          customer, not the support agent. A write changes this arm and no other, and only under an
+          identity permitted to make it.
         </p>
       }
     >
@@ -123,6 +216,9 @@ export function SandboxToolConsole({ shopId, arm }: { shopId: string; arm: Sandb
         <label className={fieldLabelClasses}>
           Tool
           <select
+            // The label wraps the control, so its text picks up every option; the explicit
+            // name is what keeps the select addressable by "Tool" alone.
+            aria-label="Tool"
             className={fieldControlClasses}
             value={selected}
             onChange={(event) => choose(event.target.value)}
@@ -130,10 +226,42 @@ export function SandboxToolConsole({ shopId, arm }: { shopId: string; arm: Sandb
             {contracts.map((candidate) => (
               <option key={candidate.name} value={candidate.name}>
                 {candidate.name} · {candidate.version}
+                {candidate.effect === "write" ? " · write" : ""}
               </option>
             ))}
           </select>
         </label>
+
+        {!writes ? null : (
+          <div className={fieldLabelClasses}>
+            {/* The description sits outside the label, as the argument fields do: inside it,
+                it would become part of the control's accessible name. */}
+            <label htmlFor="tool-actor">Acting support identity</label>
+            <select
+              id="tool-actor"
+              className={fieldControlClasses}
+              value={acting}
+              onChange={(event) => setActing(event.target.value)}
+            >
+              <option value="">Choose…</option>
+              {identities.map((candidate) => (
+                <option key={candidate.identity_id} value={candidate.identity_id}>
+                  {candidate.name} · v{candidate.latest_published_version}
+                </option>
+              ))}
+            </select>
+            <span className="font-normal text-admin-muted">
+              A write is authorized against this identity's permissions. It sits beside the tool
+              rather than among its arguments, because an agent that could name its own actor would
+              be choosing its own permissions.
+            </span>
+            {identityError === null ? null : (
+              <span role="alert" className="font-normal text-lab-error">
+                {identityError}
+              </span>
+            )}
+          </div>
+        )}
 
         {contract === null ? null : (
           <>
@@ -157,7 +285,9 @@ export function SandboxToolConsole({ shopId, arm }: { shopId: string; arm: Sandb
         )}
       </form>
 
-      {result === null ? null : <ToolResult result={result} />}
+      {result === null ? null : (
+        <ToolResult result={result} onApply={working ? undefined : applyProposal} />
+      )}
     </Card>
   );
 }
@@ -211,9 +341,18 @@ function ArgumentField({
  * The three outcomes kept apart, because they mean different things about who was wrong.
  *
  * A refusal is the tool declining a question it understood — the agent's to recover from. A
- * failure is the lab breaking, and it carries no explanation on purpose.
+ * failure is the lab breaking, and it carries no explanation on purpose. A stale write arrives
+ * here as a refusal too, and that is the point: the world moved under the agent, which is
+ * something to notice and retry rather than a failure of the lab.
  */
-function ToolResult({ result }: { result: ToolCallResponse }) {
+function ToolResult({
+  result,
+  onApply,
+}: {
+  result: ToolCallResponse;
+  onApply?: (confirmation: string) => void;
+}) {
+  const confirmation = proposedConfirmation(result);
   return (
     <div className="grid gap-2">
       <p className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -233,6 +372,20 @@ function ToolResult({ result }: { result: ToolCallResponse }) {
           The tool could not be completed. This is the lab's fault, not the agent's.
         </p>
       ) : null}
+      {confirmation === null || onApply === undefined ? null : (
+        <div>
+          {/* Two visible steps, as the agent will take them. The button carries the
+              confirmation the proposal answered with, so what is applied is exactly what
+              was proposed rather than anything retyped in between. */}
+          <button
+            className={accentButtonClasses}
+            type="button"
+            onClick={() => onApply(confirmation)}
+          >
+            Apply this change
+          </button>
+        </div>
+      )}
       {result.data === null ? null : (
         <section aria-label={`${result.tool} result`}>
           <pre
@@ -244,4 +397,18 @@ function ToolResult({ result }: { result: ToolCallResponse }) {
       )}
     </div>
   );
+}
+
+/**
+ * The confirmation of a proposal that has not been applied yet, or nothing.
+ *
+ * Read off the result rather than off the tool name: `applied` is stated in the document
+ * precisely so a proposal and the result of applying it are told apart by one field.
+ */
+function proposedConfirmation(result: ToolCallResponse): string | null {
+  if (result.outcome !== "success" || result.data === null) {
+    return null;
+  }
+  const { confirmation, applied } = result.data;
+  return typeof confirmation === "string" && applied === false ? confirmation : null;
 }

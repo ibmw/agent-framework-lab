@@ -102,6 +102,14 @@ async function buildIncident(page: Page, unique: string) {
   await addAddress.getByLabel("City", { exact: true }).fill("Bordeaux");
   await addAddress.getByLabel("Country", { exact: true }).fill("FR");
   await addAddress.getByRole("button", { name: "Add address" }).click();
+  // Where Maya actually lives now. The incident needs both: without somewhere correct to
+  // move to, there is no change for an agent to propose.
+  await addAddress.getByLabel("Label", { exact: true }).fill("Home");
+  await addAddress.getByLabel("Street", { exact: true }).fill("18 rue des Ecoles");
+  await addAddress.getByLabel("Postal code", { exact: true }).fill("69005");
+  await addAddress.getByLabel("City", { exact: true }).fill("Lyon");
+  await addAddress.getByLabel("Country", { exact: true }).fill("FR");
+  await addAddress.getByRole("button", { name: "Add address" }).click();
   await card(page, "Behavioral persona")
     .getByLabel("Summary", { exact: true })
     .fill("Direct, mildly anxious under uncertainty; wants quick, concrete answers.");
@@ -156,6 +164,28 @@ async function buildIncident(page: Page, unique: string) {
   await expect(page.getByRole("status")).toContainText(
     "A scenario built on this ticket freezes this exact version",
   );
+}
+
+/** The published identity a write runs under: it may read orders, and change where one ships. */
+async function publishSupportIdentity(page: Page, name: string) {
+  await openSection(page, "Support identities", "Support identities");
+  const newIdentity = card(page, "New support identity");
+  await newIdentity.getByLabel("Name", { exact: true }).fill(name);
+  await newIdentity
+    .getByLabel("Role title", { exact: true })
+    .fill("Customer support representative");
+  await newIdentity.getByRole("button", { name: "Create identity" }).click();
+  await page.getByRole("link", { name }).click();
+
+  const permissions = card(page, "Permissions");
+  // `change shipping address` acts on an order, so publishing refuses it without
+  // `read orders`: a mutation the identity cannot first read would be unauditable.
+  await permissions.getByLabel("read orders", { exact: true }).check();
+  await permissions.getByLabel("read policies", { exact: true }).check();
+  await permissions.getByLabel("change shipping address", { exact: true }).check();
+  await saveDraft(page);
+  await page.getByRole("button", { name: "Publish v1" }).click();
+  await expect(page.getByText(/Published version 1/)).toBeVisible();
 }
 
 /** The two templates the recipe composes, both published so a scenario can pin them. */
@@ -219,14 +249,21 @@ async function publishTemplates(page: Page, objective: string, mutation: string)
 }
 
 test("an author composes and publishes the wrong-address scenario", async ({ page }) => {
+  // The longest journey in the suite by design: it builds the shop, the customer, the order,
+  // the ticket, the identity, and both templates before the scenario it is about exists at
+  // all, then carries that scenario through to a change applied inside one arm. Nothing here
+  // can be stubbed without stubbing the thing under test, so it is given the room instead.
+  test.slow();
   const unique = Date.now().toString(36);
   // The block libraries are cross-shop and the suite runs fully parallel, so the template
   // names carry this journey's own prefix: two specs starting in the same millisecond would
   // otherwise race for one name and each end up editing the other's block.
   const objective = `scenario-read-required-document-${unique}`;
   const mutation = `scenario-concurrent-entity-mutation-${unique}`;
+  const identity = `scenario-tier-1-${unique}`;
 
   await buildIncident(page, unique);
+  await publishSupportIdentity(page, identity);
   await publishTemplates(page, objective, mutation);
 
   // The recipe itself, built on the ticket and never moving off it.
@@ -325,6 +362,52 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   const armFingerprints = await armsCard.locator("tbody code").allTextContents();
   expect(armFingerprints).toHaveLength(2);
   expect(armFingerprints[0]).toBe(armFingerprints[1]);
+
+  // The one commerce mutation an arm may make, taken the way the agent will take it: read
+  // the order, propose the change under an identity permitted to make it, then apply the
+  // confirmation that proposal answered with.
+  await armsCard.getByRole("button", { name: "Arm A" }).click();
+  const tools = card(page, "Tools · Arm A");
+  await tools.getByLabel("Tool", { exact: true }).selectOption("orders.read_order");
+  await tools.getByLabel("order_reference", { exact: true }).fill("NS-10482");
+  await tools.getByRole("button", { name: "Run tool" }).click();
+  await expect(tools.getByRole("region", { name: "orders.read_order result" })).toContainText(
+    "Bordeaux",
+  );
+
+  await tools.getByLabel("Tool", { exact: true }).selectOption("orders.propose_address_change");
+  await tools.getByLabel("Acting support identity", { exact: true }).selectOption({
+    label: `${identity} · v1`,
+  });
+  await tools.getByLabel("order_reference", { exact: true }).fill("NS-10482");
+  await tools.getByLabel("address_id (required)", { exact: true }).fill("home");
+  await tools.getByRole("button", { name: "Run tool" }).click();
+  const proposal = tools.getByRole("region", { name: "orders.propose_address_change result" });
+  await expect(proposal).toContainText("Bordeaux");
+  await expect(proposal).toContainText("Lyon");
+  // Proposing moved nothing: both arms are still where they were cloned.
+  await expect(armsCard.getByText("r0")).toHaveCount(2);
+
+  await tools.getByRole("button", { name: "Apply this change" }).click();
+  await expect(
+    tools.getByRole("region", { name: "orders.apply_address_change result" }),
+  ).toContainText("Lyon");
+
+  // One arm moved, and only that arm. The revisions and the fingerprints both say so.
+  await expect(armsCard.getByText("r1")).toHaveCount(1);
+  await expect(armsCard.getByText("r0")).toHaveCount(1);
+  const afterWrite = await armsCard.locator("tbody code").allTextContents();
+  expect(afterWrite[0]).not.toBe(afterWrite[1]);
+
+  // And the arm beside it still reads the address the incident is about.
+  await armsCard.getByRole("button", { name: "Arm B" }).click();
+  const otherArm = card(page, "Tools · Arm B");
+  await otherArm.getByLabel("Tool", { exact: true }).selectOption("orders.read_order");
+  await otherArm.getByLabel("order_reference", { exact: true }).fill("NS-10482");
+  await otherArm.getByRole("button", { name: "Run tool" }).click();
+  await expect(otherArm.getByRole("region", { name: "orders.read_order result" })).toContainText(
+    "Bordeaux",
+  );
 
   // The frozen version keeps what it froze while the draft moves on.
   await page.getByRole("link", { name: "Back to the recipe" }).click();

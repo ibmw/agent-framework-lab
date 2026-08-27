@@ -397,17 +397,23 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      const listed = await listSandboxes(shopId, snapshotId, signal);
+      setArms(listed.sandboxes);
+    },
+    [shopId, snapshotId],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
-    listSandboxes(shopId, snapshotId, controller.signal)
-      .then((listed) => setArms(listed.sandboxes))
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(describeApiError(cause, ARMS_UNAVAILABLE));
-        }
-      });
+    load(controller.signal).catch((cause: unknown) => {
+      if (!controller.signal.aborted) {
+        setError(describeApiError(cause, ARMS_UNAVAILABLE));
+      }
+    });
     return () => controller.abort();
-  }, [shopId, snapshotId]);
+  }, [load]);
 
   const clone = async (event: FormEvent) => {
     event.preventDefault();
@@ -501,7 +507,16 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
       {/* Keyed on the arm so switching selection starts a clean console rather than
         carrying one arm's arguments or result onto another's. */}
       {selected === null ? null : (
-        <SandboxToolConsole key={selected.sandbox_id} shopId={shopId} arm={selected} />
+        <SandboxToolConsole
+          key={selected.sandbox_id}
+          shopId={shopId}
+          arm={selected}
+          // A write moved the arm, so the revision and fingerprint above are stale. Reloaded
+          // on being told rather than polled: the console does not own this list.
+          onArmMoved={() => {
+            load().catch((cause: unknown) => setError(describeApiError(cause, ARMS_UNAVAILABLE)));
+          }}
+        />
       )}
     </>
   );

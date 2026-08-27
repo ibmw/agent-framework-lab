@@ -9,6 +9,7 @@ import type {
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
+  SupportIdentityListResponse,
   ToolCallResponse,
   ToolContractListResponse,
 } from "@agent-lab/contracts";
@@ -26,6 +27,7 @@ const TICKET_ID = "6b0f9c1e-49d1-4c9f-8b0c-1f6d1c2f9a01";
 const ORDER_ID = "2f8c2b60-9d3d-4a77-9f31-1c7f0f3c9a42";
 const PROFILE_ID = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac101";
 const SNAPSHOT_ID = "7d8e9f0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a";
+const IDENTITY_ID = "8e9f0a1b-2c3d-4e5f-8a6b-7c8d9e0f1a2b";
 const FINGERPRINT = "a".repeat(64);
 
 const SHOP_CONTENT: ShopDraftResponse["content"] = {
@@ -140,12 +142,14 @@ const TOOLS: ToolContractListResponse = {
       name: "interaction.read_context",
       version: "v1",
       summary: "Where this conversation started and the ticket thread it belongs to.",
+      effect: "read",
       arguments: [],
     },
     {
       name: "support.read_document",
       version: "v1",
       summary: "Read one policy, support guideline, or FAQ entry in full.",
+      effect: "read",
       arguments: [
         {
           name: "kind",
@@ -160,6 +164,7 @@ const TOOLS: ToolContractListResponse = {
       name: "orders.read_order",
       version: "v1",
       summary: "Read one order in full.",
+      effect: "read",
       arguments: [
         {
           name: "order_reference",
@@ -170,7 +175,102 @@ const TOOLS: ToolContractListResponse = {
         },
       ],
     },
+    {
+      name: "orders.propose_address_change",
+      version: "v1",
+      summary: "Work out what changing an order's shipping address would do.",
+      effect: "write",
+      arguments: [
+        {
+          name: "order_reference",
+          kind: "text",
+          description: "The reference the customer quotes, such as NS-10482.",
+          required: false,
+          choices: [],
+        },
+        {
+          name: "address_id",
+          kind: "text",
+          description: "The address-book entry to ship to.",
+          required: true,
+          choices: [],
+        },
+      ],
+    },
+    {
+      name: "orders.apply_address_change",
+      version: "v1",
+      summary: "Apply a proposed shipping-address change, once.",
+      effect: "write",
+      arguments: [
+        {
+          name: "confirmation",
+          kind: "text",
+          description: "The confirmation the proposal answered with.",
+          required: true,
+          choices: [],
+        },
+      ],
+    },
   ],
+};
+
+const IDENTITIES: SupportIdentityListResponse = {
+  identities: [
+    {
+      identity_id: IDENTITY_ID,
+      name: "Northstar tier 1",
+      title: "Customer support representative",
+      permission_count: 3,
+      guidance_count: 1,
+      updated_at: "2026-08-25T12:00:00+00:00",
+      latest_published_version: 2,
+      published_version_count: 2,
+    },
+    {
+      // Never published, so it can never act: a write authorizes against frozen permissions.
+      identity_id: "b".repeat(36),
+      name: "Draft trainee",
+      title: "Trainee",
+      permission_count: 1,
+      guidance_count: 0,
+      updated_at: "2026-08-25T12:00:00+00:00",
+      latest_published_version: null,
+      published_version_count: 0,
+    },
+  ],
+};
+
+const CONFIRMATION = "e".repeat(64);
+
+const PROPOSAL: ToolCallResponse = {
+  canonical_schema_version: "tool-result-v1",
+  tool: "orders.propose_address_change",
+  version: "v1",
+  arguments: { order_reference: "NS-10482", address_id: "home" },
+  outcome: "success",
+  data: {
+    confirmation: CONFIRMATION,
+    applied: false,
+    order_reference: "NS-10482",
+    current_address: { city: "Bordeaux" },
+    proposed_address: { city: "Lyon" },
+  },
+  refusal: null,
+  sandbox_revision: 0,
+  state_fingerprint: STATE_FINGERPRINT,
+};
+
+const APPLIED: ToolCallResponse = {
+  ...PROPOSAL,
+  tool: "orders.apply_address_change",
+  arguments: { confirmation: CONFIRMATION },
+  data: {
+    confirmation: CONFIRMATION,
+    applied: true,
+    order_reference: "NS-10482",
+    shipping_address: { city: "Lyon" },
+  },
 };
 
 const ORDER_RESULT: ToolCallResponse = {
@@ -194,8 +294,17 @@ let cloned: Record<string, unknown>[] = [];
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get("*/api/v1/tools", () => HttpResponse.json(TOOLS)),
+  http.get("*/api/v1/support-identities", () => HttpResponse.json(IDENTITIES)),
   http.post(`*/api/v1/shops/${SHOP_ID}/sandboxes/:sandboxId/tool-calls`, async ({ request }) => {
-    calls.push((await request.json()) as Record<string, unknown>);
+    const body = (await request.json()) as Record<string, unknown>;
+    calls.push(body);
+    if (body.tool === "orders.propose_address_change") {
+      return HttpResponse.json(PROPOSAL);
+    }
+    if (body.tool === "orders.apply_address_change") {
+      arms = { sandboxes: arms.sandboxes.map((entry) => arm(entry.label, entry.sandbox_id, 1)) };
+      return HttpResponse.json(APPLIED);
+    }
     return HttpResponse.json(ORDER_RESULT);
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
@@ -471,7 +580,7 @@ describe("sandbox arms", () => {
   });
 });
 
-describe("read tools", () => {
+describe("tools", () => {
   async function openArm(user: ReturnType<typeof userEvent.setup>) {
     stored = { snapshots: [SNAPSHOT] };
     arms = { sandboxes: [arm("Arm A", "a1".padEnd(36, "0"))] };
@@ -479,7 +588,7 @@ describe("read tools", () => {
     await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
     const panel = await screen.findByRole("region", { name: "Sandbox arms" });
     await user.click(await within(panel).findByRole("button", { name: "Arm A" }));
-    return screen.findByRole("region", { name: "Read tools · Arm A" });
+    return screen.findByRole("region", { name: "Tools · Arm A" });
   }
 
   it("asks the arm the way the agent will ask it", async () => {
@@ -491,10 +600,12 @@ describe("read tools", () => {
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
 
     await waitFor(() => expect(calls).toHaveLength(1));
+    // A read carries no actor: every read here is over the arm's own customer.
     expect(calls[0]).toEqual({
       tool: "orders.read_order",
       version: "v1",
       arguments: { order_reference: "NS-10482" },
+      actor: null,
     });
     // The answer is the arm's own state, read at the revision the arm currently holds.
     const result = await within(console).findByRole("region", {
@@ -569,5 +680,160 @@ describe("read tools", () => {
       expect(within(console).getByLabelText("kind (required)")).toBeInTheDocument(),
     );
     expect(within(console).queryByRole("region", { name: "orders.read_order result" })).toBeNull();
+  });
+});
+
+describe("the safe address change", () => {
+  async function openArm(user: ReturnType<typeof userEvent.setup>) {
+    stored = { snapshots: [SNAPSHOT] };
+    arms = { sandboxes: [arm("Arm A", "a1".padEnd(36, "0"))] };
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    await user.click(await within(panel).findByRole("button", { name: "Arm A" }));
+    return screen.findByRole("region", { name: "Tools · Arm A" });
+  }
+
+  async function propose(user: ReturnType<typeof userEvent.setup>, console: HTMLElement) {
+    await user.selectOptions(
+      within(console).getByLabelText("Tool"),
+      "orders.propose_address_change",
+    );
+    // Chosen, never defaulted: nothing acts until the operator says who is acting.
+    await user.selectOptions(
+      within(console).getByLabelText("Acting support identity"),
+      IDENTITY_ID,
+    );
+    await user.type(within(console).getByLabelText("order_reference"), "NS-10482");
+    await user.type(within(console).getByLabelText("address_id (required)"), "home");
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+  }
+
+  it("runs a write under a published identity, chosen beside the tool", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await propose(user, console);
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({
+      tool: "orders.propose_address_change",
+      version: "v1",
+      arguments: { order_reference: "NS-10482", address_id: "home" },
+      // The actor travels beside the arguments, never among them.
+      actor: { support_identity_id: IDENTITY_ID, version: 2 },
+    });
+  });
+
+  it("makes no write until the operator says who is acting", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await user.selectOptions(
+      within(console).getByLabelText("Tool"),
+      "orders.propose_address_change",
+    );
+    await user.type(within(console).getByLabelText("address_id (required)"), "home");
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+
+    // Refused here rather than at the server, which answers a missing actor as an error.
+    expect(await within(console).findByRole("alert")).toHaveTextContent(
+      /Choose the published support identity/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("offers only identities that have a published version to act under", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await user.selectOptions(
+      within(console).getByLabelText("Tool"),
+      "orders.propose_address_change",
+    );
+
+    const actor = within(console).getByLabelText("Acting support identity");
+    expect(
+      within(actor).getByRole("option", { name: "Northstar tier 1 · v2" }),
+    ).toBeInTheDocument();
+    // A draft can grant itself another permission a moment later, so it can never act.
+    expect(within(actor).queryByRole("option", { name: /Draft trainee/ })).toBeNull();
+  });
+
+  it("asks no identity of a read tool", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "orders.read_order");
+
+    expect(within(console).queryByLabelText("Acting support identity")).toBeNull();
+  });
+
+  it("applies exactly what was proposed, and moves the arm the table shows", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+    await propose(user, console);
+
+    // Two visible steps, as the agent takes them.
+    await user.click(await within(console).findByRole("button", { name: "Apply this change" }));
+
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1]).toEqual({
+      tool: "orders.apply_address_change",
+      version: "v1",
+      // The confirmation the proposal answered with, and nothing an operator retyped.
+      arguments: { confirmation: CONFIRMATION },
+      actor: { support_identity_id: IDENTITY_ID, version: 2 },
+    });
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    await waitFor(() => expect(within(panel).getByText("r1")).toBeVisible());
+  });
+
+  it("offers no second application of a change already applied", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+    await propose(user, console);
+    await user.click(await within(console).findByRole("button", { name: "Apply this change" }));
+
+    await waitFor(() => expect(calls).toHaveLength(2));
+    // The result says `applied`, so the console reads the change as done rather than
+    // offering the step again.
+    await waitFor(() =>
+      expect(within(console).queryByRole("button", { name: "Apply this change" })).toBeNull(),
+    );
+  });
+
+  it("shows a stale write as a refusal the agent could recover from", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/sandboxes/:sandboxId/tool-calls`, () =>
+        HttpResponse.json({
+          ...PROPOSAL,
+          tool: "orders.apply_address_change",
+          arguments: { confirmation: CONFIRMATION },
+          outcome: "refused",
+          data: null,
+          refusal: {
+            code: "conflict",
+            message: "this arm has changed since the change was proposed",
+          },
+        } satisfies ToolCallResponse),
+      ),
+    );
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "orders.apply_address_change");
+    await user.selectOptions(
+      within(console).getByLabelText("Acting support identity"),
+      IDENTITY_ID,
+    );
+    await user.type(within(console).getByLabelText("confirmation (required)"), CONFIRMATION);
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+
+    expect(
+      await within(console).findByText("this arm has changed since the change was proposed"),
+    ).toBeVisible();
+    // A conflict is the world moving, not the lab breaking.
+    expect(within(console).queryByRole("alert")).toBeNull();
   });
 });
