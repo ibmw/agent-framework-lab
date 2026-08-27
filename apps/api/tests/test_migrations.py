@@ -33,8 +33,10 @@ DEFINITION_TABLES = {
     "shop_order_fixtures",
     "sandbox_snapshots",
     # And so are the arms cloned from a snapshot: mutable run state, but state that only
-    # exists because the target authoring model above produced it.
+    # exists because the target authoring model above produced it — along with the changes
+    # proposed against those arms.
     "sandboxes",
+    "sandbox_action_proposals",
 }
 POC_TABLES = {
     "action_proposals",
@@ -529,3 +531,53 @@ def test_two_arms_may_hold_the_same_starting_state(
                 "revision": -1,
             },
         )
+
+
+@pytest.mark.migration
+def test_a_proposal_is_open_or_closed_and_never_half_of_each(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The three applied columns are written together; the table refuses a half-closed row."""
+    database_url = f"sqlite:///{tmp_path / 'proposals.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO sandbox_action_proposals (
+            sandbox_id, confirmation, shop_id, tool, version, order_id, address_id,
+            expected_revision, proposal, created_at, applied_at, applied_revision, result
+        ) VALUES (
+            :sandbox_id, :confirmation, :shop_id, 'orders.propose_address_change', 'v1',
+            :order_id, 'home', :expected_revision, '{}', '2026-08-26 12:00:00.000000',
+            :applied_at, :applied_revision, :result
+        )
+        """
+    )
+    row = {
+        "sandbox_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac013",
+        "shop_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac011",
+        "order_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac012",
+        "expected_revision": 0,
+        "applied_at": None,
+        "applied_revision": None,
+        "result": None,
+    }
+    with engine.begin() as connection:
+        connection.execute(insert, {**row, "confirmation": "a" * 64})
+
+    # Applied, but with no result to replay: a row nothing could answer an idempotent
+    # retry from.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                **row,
+                "confirmation": "b" * 64,
+                "applied_at": "2026-08-26 12:00:01.000000",
+                "applied_revision": 1,
+            },
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "confirmation": "c" * 64, "expected_revision": -1})

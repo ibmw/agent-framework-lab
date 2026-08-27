@@ -19,10 +19,10 @@ from capability_lab.application.sandbox_tool_contracts import (
     ORDER_DETAIL,
     ORDER_LIST,
     READ_TOOL_CONTRACTS,
-    READ_TOOL_VERSION,
     SUPPORT_DOCUMENT,
     SUPPORT_SEARCH,
     TOOL_RESULT_CANONICAL_SCHEMA_VERSION,
+    TOOL_VERSION,
 )
 from capability_lab.application.sandbox_tools import (
     SandboxToolContext,
@@ -86,7 +86,7 @@ def call(
     execution = build_tools(session).execute(
         arm.shop_id,
         arm.sandbox_id,
-        ToolCall(tool=tool, version=READ_TOOL_VERSION, arguments=arguments),
+        ToolCall(tool=tool, version=TOOL_VERSION, arguments=arguments),
     )
     return execution.result
 
@@ -431,7 +431,7 @@ def test_reading_a_sandbox_of_another_shop_is_not_found(
         build_tools(session).execute(
             uuid4(),
             arm.sandbox_id,
-            ToolCall(tool=ORDER_LIST, version=READ_TOOL_VERSION),
+            ToolCall(tool=ORDER_LIST, version=TOOL_VERSION),
         )
 
 
@@ -456,7 +456,7 @@ def test_the_execution_reports_where_the_arm_stood_when_it_answered(
     session: Session, arm: SandboxRecord
 ) -> None:
     execution = build_tools(session).execute(
-        arm.shop_id, arm.sandbox_id, ToolCall(tool=ORDER_LIST, version=READ_TOOL_VERSION)
+        arm.shop_id, arm.sandbox_id, ToolCall(tool=ORDER_LIST, version=TOOL_VERSION)
     )
 
     assert execution.revision == 0
@@ -465,7 +465,7 @@ def test_the_execution_reports_where_the_arm_stood_when_it_answered(
 
 @pytest.mark.parametrize(
     ("tool", "version"),
-    [("orders.read_everything", READ_TOOL_VERSION), (ORDER_LIST, "v99")],
+    [("orders.read_everything", TOOL_VERSION), (ORDER_LIST, "v99")],
 )
 def test_an_unpublished_tool_or_version_is_a_contract_error_not_a_refusal(
     session: Session, arm: SandboxRecord, tool: str, version: str
@@ -498,7 +498,7 @@ def test_a_broken_handler_fails_the_call_without_describing_itself(
 
     with caplog.at_level(logging.ERROR):
         result = service.execute(
-            arm.shop_id, arm.sandbox_id, ToolCall(tool=ORDER_LIST, version=READ_TOOL_VERSION)
+            arm.shop_id, arm.sandbox_id, ToolCall(tool=ORDER_LIST, version=TOOL_VERSION)
         ).result
 
     assert result.outcome is ToolOutcome.FAILED
@@ -525,7 +525,7 @@ def test_the_response_envelope_is_the_canonical_document_plus_its_provenance(
         arm.sandbox_id,
         ToolCall(
             tool=ORDER_DETAIL,
-            version=READ_TOOL_VERSION,
+            version=TOOL_VERSION,
             arguments={"order_reference": ORDER_REFERENCE},
         ),
     )

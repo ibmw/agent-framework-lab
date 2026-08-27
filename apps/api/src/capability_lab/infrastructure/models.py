@@ -350,3 +350,45 @@ class SandboxModel(Base):
     document: Mapped[dict[str, object]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class SandboxActionProposalModel(Base):
+    """One proposed change to one arm, and the single result of applying it.
+
+    The primary key is the arm plus the confirmation, and both halves are load-bearing. The
+    confirmation is the hash of the change, so two arms proposing the same change against the
+    same state mint the same name — comparable evidence, deliberately. Keying it by arm as
+    well is what keeps them isolated all the same: a name minted in one arm is not a proposal
+    in the arm beside it.
+
+    `applied_at`, `applied_revision`, and `result` are written together or not at all: a row
+    is open or closed, never half of each. The check constraint says so rather than leaving it
+    to the one code path that writes them.
+    """
+
+    __tablename__ = "sandbox_action_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "expected_revision >= 0", name="ck_sandbox_action_proposals_revision_non_negative"
+        ),
+        CheckConstraint(
+            "(applied_at IS NULL) = (result IS NULL) "
+            "AND (applied_at IS NULL) = (applied_revision IS NULL)",
+            name="ck_sandbox_action_proposals_applied_together",
+        ),
+        Index("ix_sandbox_action_proposals_sandbox", "sandbox_id", "created_at"),
+    )
+
+    sandbox_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    confirmation: Mapped[str] = mapped_column(String(64), primary_key=True)
+    shop_id: Mapped[str] = mapped_column(String(36))
+    tool: Mapped[str] = mapped_column(String(120))
+    version: Mapped[str] = mapped_column(String(20))
+    order_id: Mapped[str] = mapped_column(String(36))
+    address_id: Mapped[str] = mapped_column(String(64))
+    expected_revision: Mapped[int] = mapped_column(Integer)
+    proposal: Mapped[dict[str, object]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    applied_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    applied_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    result: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)

@@ -1,9 +1,10 @@
-"""Running one versioned read tool against the sandbox one arm works in.
+"""Running one versioned tool against the sandbox one arm works in.
 
 An arm is given a customer's message and a minimal resource reference, and everything else
 it learns it has to ask for (ADR 0011's tool-first rule). This module is where those
 questions are answered: eight read tools over one arm's own state and the published versions
-its snapshot pinned.
+its snapshot pinned, and the dispatch that hands a write tool to the service that owns the
+one commerce mutation an arm may make.
 
 Three decisions shape the module.
 
@@ -23,11 +24,13 @@ last one means the lab broke rather than the agent misbehaved.
 
 **A tool result is canonical.** Every handler answers with a `CanonicalValue` document, so
 the same call against the same state produces the same bytes. Milestone 5's evidence is what
-that is for; this slice only has to make it true.
+that is for; this module only has to make it true.
 
-There is still no writer here. The safe address-change action is the next outcome of this
-milestone, and it is the caller that will present a revision through
-`SandboxService.apply_order_change`.
+The read handlers here are pure: a state in, a document out, no way to move an arm even by
+mistake. A write is a different shape — it needs the arm's record, the actor's authority, and
+the seam it writes through — and lives in `sandbox_actions`. Which shape runs is decided by
+the contract's declared effect rather than by a handler knowing what kind it is, so a read
+tool is never handed a writer (ADR 0022).
 """
 
 from __future__ import annotations
@@ -50,10 +53,12 @@ from capability_lab.application.definition_resolution import (
     MissingReferenceVersionError,
     ResolvedDefinition,
 )
+from capability_lab.application.sandbox_actions import SandboxActionService, ToolActor
 from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotNotFoundError,
     SandboxSnapshotRepository,
 )
+from capability_lab.application.sandbox_tool_context import SandboxToolContext, resolve_order
 from capability_lab.application.sandbox_tool_contracts import (
     CATALOG_PRODUCT,
     CATALOG_SEARCH,
@@ -62,6 +67,7 @@ from capability_lab.application.sandbox_tool_contracts import (
     ORDER_DETAIL,
     ORDER_LIST,
     READ_TOOL_CONTRACTS,
+    SANDBOX_TOOL_CONTRACTS,
     SUPPORT_DOCUMENT,
     SUPPORT_SEARCH,
     TOOL_RESULT_CANONICAL_SCHEMA_VERSION,
@@ -69,6 +75,10 @@ from capability_lab.application.sandbox_tool_contracts import (
     ToolArgumentKind,
     ToolContract,
     ToolContractError,
+    ToolEffect,
+    ToolRefusal,
+    ToolRefusalCode,
+    ToolRefusedError,
 )
 from capability_lab.application.sandbox_tool_views import (
     customer_profile,
@@ -86,16 +96,22 @@ from capability_lab.application.sandboxes import (
     SandboxRecord,
     SandboxRepository,
 )
+from capability_lab.application.support_identities import (
+    SupportIdentityVersionNotFoundError,
+    support_identity_definition_id,
+)
 from capability_lab.domain.customer_profile import CustomerProfilePayload
 from capability_lab.domain.definitions import DefinitionType, VersionRef
-from capability_lab.domain.sandbox import SandboxState
 from capability_lab.domain.shop import ShopDocumentKind, ShopPayload
+from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import TicketPayload
 
 __all__ = [
     "MAX_SEARCH_RESULTS",
     "SandboxToolContext",
     "SandboxToolService",
+    "ToolActor",
+    "ToolActorRequiredError",
     "ToolCall",
     "ToolExecution",
     "ToolNotFoundError",
@@ -134,42 +150,31 @@ class ToolOutcome(StrEnum):
     """The tool could not run. This is the lab's fault, never the agent's."""
 
 
-class ToolRefusalCode(StrEnum):
-    """Why a tool declined, in a vocabulary an agent can branch on."""
+class ToolActorRequiredError(DefinitionResolutionError):
+    """Raised when a write tool is called with nobody acting.
 
-    INVALID_ARGUMENTS = "invalid_arguments"
-    """The call did not fill the contract: a missing, unknown, or unusable argument."""
-
-    NOT_FOUND = "not_found"
-    """Nothing in this arm's world answers to what the call named."""
-
-
-@dataclass(frozen=True, slots=True)
-class ToolRefusal:
-    code: ToolRefusalCode
-    message: str
-
-
-class ToolRefusedError(Exception):
-    """Internal control flow: a handler declining, turned into a refused result.
-
-    Never raised across the service boundary. It exists so a handler can say "no" from
-    wherever it discovers there is nothing to answer with, instead of threading a result
-    type through every lookup.
+    An error rather than a refusal, by the same rule that makes an unknown tool name one:
+    the actor is not model output. A call that reaches here came from a client that offered
+    a write tool without saying whose authority it runs under, which is the lab's mistake to
+    see and fix, not a question about the world for the agent to reason about.
     """
-
-    def __init__(self, code: ToolRefusalCode, message: str) -> None:
-        super().__init__(message)
-        self.refusal = ToolRefusal(code=code, message=message)
 
 
 @dataclass(frozen=True, slots=True)
 class ToolCall:
-    """One request to run a tool: which one, at which version, with what arguments."""
+    """One request to run a tool: which one, at which version, with what arguments.
+
+    `actor` sits beside the arguments rather than among them. Arguments are what a model
+    fills in; the actor is whose authority the call runs under, and a model that could name
+    it would be choosing its own permissions. A write tool requires one. A read tool accepts
+    one and does not yet consult it: every read published here is over the arm's own
+    customer, and per-tool read authorization arrives with agent configurations (ADR 0021).
+    """
 
     tool: str
     version: str
     arguments: Mapping[str, str | None] = field(default_factory=lambda: MappingProxyType({}))
+    actor: ToolActor | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,22 +263,6 @@ class ToolExecution:
     state_fingerprint: str
 
 
-@dataclass(frozen=True, slots=True)
-class SandboxToolContext:
-    """Everything a read tool may see: one arm's state and the versions behind it.
-
-    The state is the arm's own mutable copy; the shop, the ticket, and the customer profile
-    are the exact published versions the snapshot pinned, never the drafts they have since
-    become. That is what makes a historical run explainable: the same arm answers the same
-    way however far the authoring surface has moved on.
-    """
-
-    state: SandboxState
-    shop: ShopPayload
-    ticket: TicketPayload
-    customer: CustomerProfilePayload
-
-
 type ToolHandler = Callable[[SandboxToolContext, Mapping[str, str]], dict[str, CanonicalValue]]
 
 
@@ -343,33 +332,7 @@ def _list_orders(
 def _read_order(
     context: SandboxToolContext, arguments: Mapping[str, str]
 ) -> dict[str, CanonicalValue]:
-    reference = arguments.get("order_reference")
-    identifier = arguments.get("order_id")
-    if (reference is None) == (identifier is None):
-        raise ToolRefusedError(
-            ToolRefusalCode.INVALID_ARGUMENTS,
-            "name the order either by 'order_reference' or by 'order_id', not by both "
-            "and not by neither",
-        )
-    if identifier is not None:
-        order = context.state.order(UUID(identifier))
-        named = identifier
-    else:
-        order = next(
-            (
-                candidate
-                for candidate in context.state.orders
-                if candidate.payload.reference == reference
-            ),
-            None,
-        )
-        named = str(reference)
-    if order is None:
-        # A sandbox holds one customer's whole order set, so "not one of theirs" and "no
-        # such order" are the same answer here; there is no other customer to refuse on
-        # behalf of.
-        raise ToolRefusedError(ToolRefusalCode.NOT_FOUND, f"this customer holds no order {named!r}")
-    return order_detail(order)
+    return order_detail(resolve_order(context.state, arguments))
 
 
 def _search_knowledge(
@@ -432,6 +395,17 @@ def _require_complete_registry() -> None:
         raise ToolContractError(
             f"the read tool registry disagrees with the published contracts: {difference}"
         )
+    misdeclared = sorted(
+        contract.name
+        for contract in SANDBOX_TOOL_CONTRACTS
+        if (contract.effect is ToolEffect.READ) != (contract.name in READ_TOOL_HANDLERS)
+    )
+    if misdeclared:
+        # A write answered by a pure read handler would be a published mutation that changes
+        # nothing, and a read routed to the writer would need an actor no reader is given.
+        raise ToolContractError(
+            f"these tools are declared with an effect nothing implements: {misdeclared}"
+        )
 
 
 _require_complete_registry()
@@ -489,7 +463,7 @@ def _checked(contract: ToolContract, argument: ToolArgument, value: str) -> str:
 
 
 class SandboxToolService:
-    """Publish the read-tool contracts and run one of them against one arm."""
+    """Publish the tool contracts and run one of them against one arm."""
 
     def __init__(
         self,
@@ -498,6 +472,8 @@ class SandboxToolService:
         shops: DefinitionRepository[ShopPayload],
         tickets: DefinitionRepository[TicketPayload],
         customer_profiles: DefinitionRepository[CustomerProfilePayload],
+        support_identities: DefinitionRepository[SupportIdentityPayload],
+        actions: SandboxActionService,
         handlers: Mapping[str, ToolHandler] | None = None,
     ) -> None:
         self._sandboxes = sandboxes
@@ -505,14 +481,22 @@ class SandboxToolService:
         self._shops = shops
         self._tickets = tickets
         self._customer_profiles = customer_profiles
+        self._support_identities = support_identities
+        self._actions = actions
         self._handlers = READ_TOOL_HANDLERS if handlers is None else handlers
 
     def contracts(self) -> tuple[ToolContract, ...]:
-        """The published read-tool set, in the order it is declared."""
-        return READ_TOOL_CONTRACTS
+        """The published tool set, reads first, in the order it is declared."""
+        return SANDBOX_TOOL_CONTRACTS
 
     def execute(self, shop_id: UUID, sandbox_id: UUID, call: ToolCall) -> ToolExecution:
-        """Run one tool against one arm and report where that arm stood."""
+        """Run one tool against one arm and report where that arm stood.
+
+        The revision reported is the one the arm held *before* the call. For a read that is
+        simply where it was; for a write it is what the change was computed against, which
+        is the more useful of the two — the arm's new position is the response's to state,
+        and a caller that needs it reads the arm.
+        """
         contract = self._contract(call)
         record = self._record(shop_id, sandbox_id)
         # What the caller sent, until parsing says what the handler actually saw.
@@ -520,7 +504,7 @@ class SandboxToolService:
         try:
             arguments = parse_arguments(contract, call.arguments)
             context = self._context(record)
-            data = self._handlers[contract.name](context, arguments)
+            data = self._run(contract, context, record, call, arguments)
         except ToolRefusedError as refused:
             return self._executed(ToolResult.refused(contract, arguments, refused.refusal), record)
         except DefinitionResolutionError:
@@ -540,15 +524,56 @@ class SandboxToolService:
             # nothing can promise an arbitrary exception's text carries none. This is the
             # same discipline the sanitized spans already keep, where an error is recorded
             # as `error.type` and never as what it said.
-            _logger.error("read tool %s failed with %s", contract.name, type(error).__name__)
+            _logger.error("tool %s failed with %s", contract.name, type(error).__name__)
             return self._executed(ToolResult.failed(contract, arguments), record)
         return self._executed(ToolResult.succeeded(contract, arguments, data), record)
 
+    # -- dispatch --------------------------------------------------------------
+
+    def _run(
+        self,
+        contract: ToolContract,
+        context: SandboxToolContext,
+        record: SandboxRecord,
+        call: ToolCall,
+        arguments: dict[str, str],
+    ) -> dict[str, CanonicalValue]:
+        """Send the call to the shape its contract declares, and to no other.
+
+        A read handler is pure and is given a context; a write is given the arm, the actor,
+        and the seam. Deciding from the declared effect rather than from the handler map is
+        what keeps a published mutation from being answered by something that cannot mutate.
+        """
+        if contract.effect is ToolEffect.READ:
+            return self._handlers[contract.name](context, arguments)
+        return self._actions.execute(
+            contract, context, record, self._actor(contract, call), arguments
+        )
+
     # -- resolution ------------------------------------------------------------
+
+    def _actor(self, contract: ToolContract, call: ToolCall) -> SupportIdentityPayload:
+        """Resolve whose authority a write runs under, from the published version it names."""
+        actor = call.actor
+        if actor is None:
+            raise ToolActorRequiredError(
+                f"{contract.name} changes this arm and must name the support identity acting"
+            )
+        ref = VersionRef(
+            definition=support_identity_definition_id(actor.support_identity_id),
+            version=actor.version,
+        )
+        record = self._support_identities.get_version(ref)
+        if record is None:
+            raise SupportIdentityVersionNotFoundError(
+                f"support identity {actor.support_identity_id} has no published version "
+                f"{actor.version}"
+            )
+        return record.payload
 
     def _contract(self, call: ToolCall) -> ToolContract:
         contract = next(
-            (candidate for candidate in READ_TOOL_CONTRACTS if candidate.name == call.tool), None
+            (candidate for candidate in SANDBOX_TOOL_CONTRACTS if candidate.name == call.tool), None
         )
         if contract is None:
             raise ToolNotFoundError(f"this lab publishes no tool named {call.tool!r}")

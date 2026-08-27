@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from hashlib import sha256
 from typing import Any, cast
@@ -48,6 +49,10 @@ from capability_lab.application.ports import (
     OrderWriteConflictError,
     StructuredSupportResult,
     ToolActivity,
+)
+from capability_lab.application.sandbox_actions import (
+    ActionProposalRecord,
+    ProposalAlreadyAppliedError,
 )
 from capability_lab.application.sandbox_materialization import SandboxSnapshotRecord
 from capability_lab.application.sandboxes import (
@@ -104,6 +109,7 @@ from capability_lab.infrastructure.models import (
     OrderModel,
     PersonaModel,
     ProductModel,
+    SandboxActionProposalModel,
     SandboxModel,
     SandboxSnapshotModel,
 )
@@ -1870,4 +1876,159 @@ class SqlAlchemySandboxRepository:
             document=cast("dict[str, CanonicalValue]", model.document),
             created_at=model.created_at,
             updated_at=model.updated_at,
+        )
+
+
+class SqlAlchemySandboxActionProposalRepository:
+    """Store proposed changes per arm, and close each one against a single application.
+
+    The row is both the consent record and the idempotency record. `save` upserts on the
+    confirmation, because the confirmation is the hash of the change: a second proposal of the
+    same change against a byte-identical world computes the key that is already there.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, sandbox_id: UUID, confirmation: str) -> ActionProposalRecord | None:
+        model = self._session.get(
+            SandboxActionProposalModel,
+            {"sandbox_id": str(sandbox_id), "confirmation": confirmation},
+        )
+        return None if model is None else self._record(model)
+
+    def save(self, record: ActionProposalRecord) -> ActionProposalRecord:
+        existing = self.get(record.sandbox_id, record.confirmation)
+        if existing is not None:
+            return self._reconciled(existing, record)
+        try:
+            self._session.add(
+                SandboxActionProposalModel(
+                    sandbox_id=str(record.sandbox_id),
+                    confirmation=record.confirmation,
+                    shop_id=str(record.shop_id),
+                    tool=record.tool,
+                    version=record.version,
+                    order_id=str(record.order_id),
+                    address_id=record.address_id,
+                    expected_revision=record.expected_revision,
+                    proposal=cast("dict[str, object]", record.proposal),
+                    created_at=record.created_at,
+                )
+            )
+            self._session.flush()
+        except IntegrityError as error:
+            # Two proposals of the same change racing: the read above found nothing for both,
+            # and the primary key let only one of them in. The loser has not lost anything —
+            # the row that won says exactly what its own proposal said — so it reads the
+            # winner rather than reporting the lab as broken, which is what an uncaught
+            # IntegrityError would become.
+            #
+            # Recording a proposal is the only write in a propose call, so the rollback the
+            # session needs to recover from a failed flush cannot discard earlier work.
+            self._session.rollback()
+            winner = self.get(record.sandbox_id, record.confirmation)
+            if winner is None:
+                raise PersistedDefinitionIntegrityError(
+                    "a proposal was refused as a duplicate but cannot be read back"
+                ) from error
+            return self._reconciled(winner, record)
+        return record
+
+    def _reconciled(
+        self, existing: ActionProposalRecord, proposed: ActionProposalRecord
+    ) -> ActionProposalRecord:
+        """Return the recorded proposal, moved to the revision it was just computed against.
+
+        An identical confirmation is proof that the world is byte-identical: the hash covers
+        the order, the address-book entry, and the arm's whole state (ADR 0022). What it does
+        *not* cover is the revision, which counts writes rather than describing state — so an
+        arm that changed and changed back sits at a higher revision with the fingerprint it
+        had before.
+
+        Without this the proposal recorded at the old revision could never be applied: the
+        write would lose to the revision guard forever, and the refusal would tell the agent
+        to propose again, which mints the same confirmation and finds the same stale row. The
+        change is legitimate and the world is the one it was computed in; only the counter has
+        moved, so the counter is what is refreshed.
+
+        An applied row keeps everything it recorded, including its revision. It is history:
+        the result it holds is what a replay must answer with, and re-opening it against a
+        newer revision would offer a second application of a change that already happened.
+        (A state that recurs *after* an apply would have to un-write the order event the apply
+        appended, which nothing in the lab can do.)
+        """
+        if existing.applied or existing.expected_revision == proposed.expected_revision:
+            return existing
+        outcome = cast(
+            "CursorResult[Any]",
+            self._session.execute(
+                update(SandboxActionProposalModel)
+                .where(
+                    SandboxActionProposalModel.sandbox_id == str(existing.sandbox_id),
+                    SandboxActionProposalModel.confirmation == existing.confirmation,
+                    SandboxActionProposalModel.applied_at.is_(None),
+                )
+                .values(expected_revision=proposed.expected_revision)
+            ),
+        )
+        if outcome.rowcount != 1:
+            # Applied between the read and the refresh. The recorded result is the answer.
+            return self.get(existing.sandbox_id, existing.confirmation) or existing
+        return replace(existing, expected_revision=proposed.expected_revision)
+
+    def mark_applied(
+        self,
+        record: ActionProposalRecord,
+        *,
+        applied_at: datetime,
+        applied_revision: int,
+        result: dict[str, CanonicalValue],
+    ) -> ActionProposalRecord:
+        """Close the proposal, and only while it is still open.
+
+        The still-open predicate lives in the statement for the same reason the sandbox's
+        revision does (ADR 0020): the service's read-then-write can be overtaken between the
+        two, and only the statement can decide which of two applies wrote the result.
+        """
+        outcome = cast(
+            "CursorResult[Any]",
+            self._session.execute(
+                update(SandboxActionProposalModel)
+                .where(
+                    SandboxActionProposalModel.sandbox_id == str(record.sandbox_id),
+                    SandboxActionProposalModel.confirmation == record.confirmation,
+                    SandboxActionProposalModel.applied_at.is_(None),
+                )
+                .values(
+                    applied_at=applied_at,
+                    applied_revision=applied_revision,
+                    result=cast("dict[str, object]", result),
+                )
+            ),
+        )
+        if outcome.rowcount != 1:
+            raise ProposalAlreadyAppliedError(
+                f"proposal {record.confirmation} has already been applied to this arm"
+            )
+        return replace(
+            record, applied_at=applied_at, applied_revision=applied_revision, result=result
+        )
+
+    @staticmethod
+    def _record(model: SandboxActionProposalModel) -> ActionProposalRecord:
+        return ActionProposalRecord(
+            sandbox_id=UUID(model.sandbox_id),
+            shop_id=UUID(model.shop_id),
+            confirmation=model.confirmation,
+            tool=model.tool,
+            version=model.version,
+            order_id=UUID(model.order_id),
+            address_id=model.address_id,
+            expected_revision=model.expected_revision,
+            proposal=cast("dict[str, CanonicalValue]", model.proposal),
+            created_at=model.created_at,
+            applied_at=model.applied_at,
+            applied_revision=model.applied_revision,
+            result=cast("dict[str, CanonicalValue] | None", model.result),
         )

@@ -23,6 +23,7 @@ from capability_lab.application.order_fixtures import (
     OrderFixtureService,
     OrderLineSelection,
 )
+from capability_lab.application.sandbox_actions import SandboxActionService, ToolActor
 from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotRecord,
     SandboxSnapshotService,
@@ -31,6 +32,7 @@ from capability_lab.application.sandbox_tools import SandboxToolService, ToolHan
 from capability_lab.application.sandboxes import SandboxRecord, SandboxService
 from capability_lab.application.scenarios import ScenarioService
 from capability_lab.application.shops import ShopService
+from capability_lab.application.support_identities import SupportIdentityService
 from capability_lab.application.tickets import TicketService
 from capability_lab.domain.blocks import ObjectiveSeverity
 from capability_lab.domain.customer_profile import CustomerProfilePayload
@@ -44,11 +46,13 @@ from capability_lab.domain.scenario import (
     ScenarioPayload,
 )
 from capability_lab.domain.shop import ShopDocumentKind, SupportChannel
+from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import SuggestedDocument
 from capability_lab.infrastructure.repositories import (
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyPublishedVersionDirectory,
+    SqlAlchemySandboxActionProposalRepository,
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyShopDirectory,
@@ -57,9 +61,16 @@ from capability_lab.infrastructure.repositories import (
     objective_block_repository,
     scenario_repository,
     shop_repository,
+    support_identity_repository,
     ticket_repository,
 )
-from definition_factories import address, customer_identity, publishable_profile
+from definition_factories import (
+    address,
+    customer_identity,
+    publishable_identity,
+    publishable_profile,
+    support_role,
+)
 from shop_factories import identity, publishable_shop
 from ticket_factories import message
 
@@ -134,6 +145,14 @@ def build_sandboxes(session: Session) -> SandboxService:
     )
 
 
+def build_actions(session: Session) -> SandboxActionService:
+    return SandboxActionService(
+        build_sandboxes(session),
+        SqlAlchemySandboxActionProposalRepository(session),
+        AdvancingClock(),
+    )
+
+
 def build_tools(
     session: Session, handlers: Mapping[str, ToolHandler] | None = None
 ) -> SandboxToolService:
@@ -143,8 +162,26 @@ def build_tools(
         shop_repository(session),
         ticket_repository(session),
         customer_profile_repository(session),
+        support_identity_repository(session),
+        build_actions(session),
         handlers,
     )
+
+
+def published_identity(
+    session: Session, payload: SupportIdentityPayload | None = None
+) -> ToolActor:
+    """A published support identity a write tool can run under.
+
+    Support identities are shop-independent (ADR 0014), so this needs no workspace: what a
+    write authorizes against is the identity's granted permissions, not where it was authored.
+    """
+    identities = SupportIdentityService(support_identity_repository(session), AdvancingClock())
+    created = identities.create_identity(support_role())
+    identity_id = created.definition.id
+    identities.replace_draft(identity_id, publishable_identity() if payload is None else payload)
+    published = identities.publish(identity_id)
+    return ToolActor(support_identity_id=identity_id, version=published.published.version)
 
 
 def profile_with_two_addresses() -> CustomerProfilePayload:

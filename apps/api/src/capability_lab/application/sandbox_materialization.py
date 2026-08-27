@@ -48,7 +48,7 @@ from capability_lab.application.sandbox_snapshot import (
     fingerprint_sandbox_snapshot,
     sandbox_snapshot_from_document,
 )
-from capability_lab.application.sandbox_tool_contracts import READ_TOOL_CONTRACT_VERSIONS
+from capability_lab.application.sandbox_tool_contracts import TOOL_CONTRACT_VERSIONS
 from capability_lab.application.scenarios import (
     ScenarioVersionNotFoundError,
     block_template,
@@ -81,12 +81,14 @@ from capability_lab.domain.ticket import (
     validate_ticket,
 )
 
-# The read tools an arm interrogates its starting state through (ADR 0021). They are part of
-# the starting state's identity, not of the runtime that calls them: an arm that can read the
-# shop's policies begins in a different world from one that cannot, so the tool set a snapshot
-# was frozen against belongs in its fingerprint. The declarations are imported rather than
-# restated, so a tool cannot be published at a version the fingerprint does not know about.
-SANDBOX_TOOL_CONTRACT_VERSIONS: Mapping[str, str] = READ_TOOL_CONTRACT_VERSIONS
+# The tools an arm interrogates and changes its starting state through (ADR 0021, ADR 0022).
+# They are part of the starting state's identity, not of the runtime that calls them: an arm
+# that can read the shop's policies begins in a different world from one that cannot, and an
+# arm that can redirect an order begins in a different world again — so the tool set a
+# snapshot was frozen against belongs in its fingerprint. The declarations are imported rather
+# than restated, so a tool cannot be published at a version the fingerprint does not know
+# about.
+SANDBOX_TOOL_CONTRACT_VERSIONS: Mapping[str, str] = TOOL_CONTRACT_VERSIONS
 
 
 class SandboxSnapshotNotFoundError(DefinitionResolutionError):

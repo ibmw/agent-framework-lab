@@ -30,6 +30,7 @@ from capability_lab.application.definition_resolution import DefinitionResolutio
 from capability_lab.application.order_fixture_payload import order_fixture_content_fingerprint
 from capability_lab.application.ports import Clock
 from capability_lab.application.shops import ShopNotFoundError
+from capability_lab.domain.address_change import freeze_address
 from capability_lab.domain.customer_profile import AddressEntry, CustomerProfilePayload
 from capability_lab.domain.definitions import (
     DefinitionId,
@@ -443,18 +444,10 @@ class OrderFixtureService:
         if frozen is not None and frozen.source_address_id == address_id:
             return frozen
         entry = self._address_entry(previous.customer_profile_id, address_id)
-        return FrozenShippingAddress(
-            source_address_id=entry.id,
-            source_label=entry.label,
-            selected_at=canonical_timestamp(self._clock.now()),
-            recipient=entry.recipient,
-            line1=entry.line1,
-            postal_code=entry.postal_code,
-            city=entry.city,
-            country=entry.country,
-            line2=entry.line2,
-            region=entry.region,
-        )
+        # The same copy rule the run-time address change obeys: one function makes every
+        # frozen copy, so an order authored here and an order redirected by an agent
+        # cannot end up holding two shapes of the same thing.
+        return freeze_address(entry, canonical_timestamp(self._clock.now()))
 
     @staticmethod
     def _materialize_events(events: tuple[OrderEventDraft, ...]) -> tuple[OrderEvent, ...]:

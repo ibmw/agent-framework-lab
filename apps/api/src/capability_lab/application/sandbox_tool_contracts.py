@@ -1,4 +1,4 @@
-"""What the versioned read tools are, declared apart from what they do.
+"""What the versioned tools are, declared apart from what they do.
 
 A tool contract is a public, versioned contract in its own right (`docs/api-and-schema-
 conventions.md`): its name carries a domain namespace, its schema has a documented version,
@@ -12,6 +12,12 @@ waiting for this slice; a tool set that changes what an arm can see changes the 
 state an experiment is explained by, so the versions belong in the hash. Keeping them here
 means the materializer reads a declaration rather than importing the handlers, their
 repositories, and the sandbox they run against.
+
+Each contract declares its `effect`. A read answers a question and can be repeated; a write
+moves the arm, needs an authorized actor, and — for the one write this milestone publishes —
+has to be proposed before it can be applied. Declaring it rather than inferring it from the
+name is what lets a framework adapter route the two kinds differently without a list of
+special cases.
 
 Every argument is text. The lab has no numeric or nested tool argument yet, and a
 string-only argument space keeps the canonical serialization of a call trivial and leaves
@@ -27,6 +33,8 @@ from enum import StrEnum
 from types import MappingProxyType
 
 __all__ = [
+    "ADDRESS_CHANGE_APPLY",
+    "ADDRESS_CHANGE_PROPOSE",
     "CATALOG_PRODUCT",
     "CATALOG_SEARCH",
     "CUSTOMER_PROFILE",
@@ -34,20 +42,26 @@ __all__ = [
     "ORDER_DETAIL",
     "ORDER_LIST",
     "READ_TOOL_CONTRACTS",
-    "READ_TOOL_CONTRACT_VERSIONS",
-    "READ_TOOL_VERSION",
+    "SANDBOX_TOOL_CONTRACTS",
     "SUPPORT_DOCUMENT",
     "SUPPORT_SEARCH",
+    "TOOL_CONTRACT_VERSIONS",
     "TOOL_RESULT_CANONICAL_SCHEMA_VERSION",
+    "TOOL_VERSION",
+    "WRITE_TOOL_CONTRACTS",
     "ToolArgument",
     "ToolArgumentKind",
     "ToolContract",
     "ToolContractError",
+    "ToolEffect",
+    "ToolRefusal",
+    "ToolRefusalCode",
+    "ToolRefusedError",
 ]
 
 TOOL_RESULT_CANONICAL_SCHEMA_VERSION = "tool-result-v1"
 
-READ_TOOL_VERSION = "v1"
+TOOL_VERSION = "v1"
 """The version every tool in this first contract set carries.
 
 One version for the whole set is not a rule — a tool is versioned individually, and the
@@ -62,10 +76,73 @@ ORDER_LIST = "orders.list_orders"
 ORDER_DETAIL = "orders.read_order"
 SUPPORT_SEARCH = "support.search_knowledge"
 SUPPORT_DOCUMENT = "support.read_document"
+ADDRESS_CHANGE_PROPOSE = "orders.propose_address_change"
+ADDRESS_CHANGE_APPLY = "orders.apply_address_change"
 
 
 class ToolContractError(ValueError):
     """Raised when a tool contract is declared in a shape no caller could use."""
+
+
+class ToolEffect(StrEnum):
+    """Whether running a tool can move the arm it runs against.
+
+    Declared rather than inferred from the name, because it decides three things a caller
+    must not have to guess: whether the call needs an authorized actor, whether a framework
+    adapter has to route it through a confirmation step, and whether two identical calls
+    against an unmoved arm are guaranteed to answer with identical bytes.
+    """
+
+    READ = "read"
+    """Answers a question. Repeating it against an unmoved arm repeats the same bytes."""
+
+    WRITE = "write"
+    """Changes the arm. Requires an actor whose permissions allow it."""
+
+
+class ToolRefusalCode(StrEnum):
+    """Why a tool declined, in a vocabulary an agent can branch on.
+
+    Declared beside the contracts rather than beside the handlers because a refusal code is
+    published API: an adapter branches on it, and an evaluation reads it back as evidence.
+    """
+
+    INVALID_ARGUMENTS = "invalid_arguments"
+    """The call did not fill the contract: a missing, unknown, or unusable argument."""
+
+    NOT_FOUND = "not_found"
+    """Nothing in this arm's world answers to what the call named."""
+
+    NOT_PERMITTED = "not_permitted"
+    """The acting support identity is not authorized to do this."""
+
+    NOT_ALLOWED = "not_allowed"
+    """The world permits nobody to do this to this order, whoever asked."""
+
+    NOT_CONFIRMED = "not_confirmed"
+    """The change was never proposed, so nothing consented to exactly this command."""
+
+    CONFLICT = "conflict"
+    """The arm moved after the change was proposed; it was computed against a stale world."""
+
+
+@dataclass(frozen=True, slots=True)
+class ToolRefusal:
+    code: ToolRefusalCode
+    message: str
+
+
+class ToolRefusedError(Exception):
+    """Internal control flow: a handler declining, turned into a refused result.
+
+    Never raised across the service boundary. It exists so a handler can say "no" from
+    wherever it discovers there is nothing to answer with, instead of threading a result
+    type through every lookup.
+    """
+
+    def __init__(self, code: ToolRefusalCode, message: str) -> None:
+        super().__init__(message)
+        self.refusal = ToolRefusal(code=code, message=message)
 
 
 class ToolArgumentKind(StrEnum):
@@ -110,11 +187,12 @@ class ToolArgument:
 
 @dataclass(frozen=True, slots=True)
 class ToolContract:
-    """One versioned read tool: what it is called, and what it can be asked."""
+    """One versioned tool: what it is called, what it may do, and what it can be asked."""
 
     name: str
     version: str
     summary: str
+    effect: ToolEffect = ToolEffect.READ
     arguments: tuple[ToolArgument, ...] = ()
 
     def __post_init__(self) -> None:
@@ -136,7 +214,37 @@ class ToolContract:
 
 
 def _read(name: str, summary: str, *arguments: ToolArgument) -> ToolContract:
-    return ToolContract(name=name, version=READ_TOOL_VERSION, summary=summary, arguments=arguments)
+    return ToolContract(
+        name=name,
+        version=TOOL_VERSION,
+        summary=summary,
+        effect=ToolEffect.READ,
+        arguments=arguments,
+    )
+
+
+def _write(name: str, summary: str, *arguments: ToolArgument) -> ToolContract:
+    return ToolContract(
+        name=name,
+        version=TOOL_VERSION,
+        summary=summary,
+        effect=ToolEffect.WRITE,
+        arguments=arguments,
+    )
+
+
+# The order a write tool acts on, named the way `orders.read_order` accepts it, so an agent
+# quotes the same identifier to read an order and to change it.
+_ORDER_REFERENCE = ToolArgument(
+    name="order_reference",
+    kind=ToolArgumentKind.TEXT,
+    description="The reference the customer quotes, such as NS-10482.",
+)
+_ORDER_ID = ToolArgument(
+    name="order_id",
+    kind=ToolArgumentKind.UUID,
+    description="The identifier the interaction context carries, when it names an order.",
+)
 
 
 # The first contract set: one tool per question the wrong-address incident makes an arm ask,
@@ -174,16 +282,8 @@ READ_TOOL_CONTRACTS: tuple[ToolContract, ...] = (
     _read(
         ORDER_DETAIL,
         "Read one order in full: lines, totals, payment, fulfilment, address, and events.",
-        ToolArgument(
-            name="order_reference",
-            kind=ToolArgumentKind.TEXT,
-            description="The reference the customer quotes, such as NS-10482.",
-        ),
-        ToolArgument(
-            name="order_id",
-            kind=ToolArgumentKind.UUID,
-            description="The identifier the interaction context carries, when it names an order.",
-        ),
+        _ORDER_REFERENCE,
+        _ORDER_ID,
     ),
     _read(
         SUPPORT_SEARCH,
@@ -220,14 +320,51 @@ READ_TOOL_CONTRACTS: tuple[ToolContract, ...] = (
 )
 
 
+# The one commerce mutation an arm may make, published as two tools rather than one.
+#
+# Splitting propose from apply is the whole safety model. A proposal resolves the change,
+# refuses everything the world does not allow, and names the result by its content; nothing
+# moves. Applying presents that name back, which is the "verifiable prior confirmation"
+# `docs/api-and-schema-conventions.md` requires of a data-modifying tool — and, because the
+# name is issued by the lab and can be applied once, the idempotency key it requires too.
+WRITE_TOOL_CONTRACTS: tuple[ToolContract, ...] = (
+    _write(
+        ADDRESS_CHANGE_PROPOSE,
+        "Work out what changing an order's shipping address would do, and confirm nothing.",
+        _ORDER_REFERENCE,
+        _ORDER_ID,
+        ToolArgument(
+            name="address_id",
+            kind=ToolArgumentKind.TEXT,
+            description=(
+                "The address-book entry to ship to, as customer.read_profile reports its ID."
+            ),
+            required=True,
+        ),
+    ),
+    _write(
+        ADDRESS_CHANGE_APPLY,
+        "Apply a proposed shipping-address change, once, to the order it was proposed for.",
+        ToolArgument(
+            name="confirmation",
+            kind=ToolArgumentKind.TEXT,
+            description="The confirmation the proposal answered with.",
+            required=True,
+        ),
+    ),
+)
+
+SANDBOX_TOOL_CONTRACTS: tuple[ToolContract, ...] = READ_TOOL_CONTRACTS + WRITE_TOOL_CONTRACTS
+
+
 def _versions() -> Mapping[str, str]:
-    versions = {contract.name: contract.version for contract in READ_TOOL_CONTRACTS}
-    if len(versions) != len(READ_TOOL_CONTRACTS):
+    versions = {contract.name: contract.version for contract in SANDBOX_TOOL_CONTRACTS}
+    if len(versions) != len(SANDBOX_TOOL_CONTRACTS):
         raise ToolContractError("two tool contracts share one name")
     return MappingProxyType(versions)
 
 
-READ_TOOL_CONTRACT_VERSIONS: Mapping[str, str] = _versions()
+TOOL_CONTRACT_VERSIONS: Mapping[str, str] = _versions()
 """The name-to-version map a sandbox snapshot fingerprints itself against.
 
 Wiring this in changes the fingerprint of every starting state materialized from now on,
@@ -235,4 +372,8 @@ and that is the correct answer rather than a migration: a snapshot *is* its fing
 (ADR 0019), and starting state an arm can interrogate through eight tools is not the
 starting state an arm could interrogate through none. Snapshots frozen before this slice
 remain readable and remain identified by what they froze.
+
+The same reasoning admits the write tools: an arm that can redirect an order begins in a
+different world from one that can only look at it, so adding them moves the fingerprint
+again, deliberately and without a migration.
 """

@@ -17,7 +17,7 @@ from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotService,
 )
 from capability_lab.application.sandbox_snapshot import SANDBOX_CANONICAL_SCHEMA_VERSION
-from capability_lab.application.sandbox_tool_contracts import READ_TOOL_CONTRACT_VERSIONS
+from capability_lab.application.sandbox_tool_contracts import TOOL_CONTRACT_VERSIONS
 from capability_lab.application.scenarios import ScenarioVersionNotFoundError
 from capability_lab.domain.definitions import DefinitionType
 from capability_lab.domain.order_fixture import FulfilmentStatus, PaymentStatus
@@ -140,7 +140,7 @@ def test_a_snapshot_records_the_tool_set_its_arms_can_interrogate_it_through(
         workspace.shop_id, scenario_id, version, seed=SEED
     )
 
-    assert record.document["tool_contracts"] == dict(READ_TOOL_CONTRACT_VERSIONS)
+    assert record.document["tool_contracts"] == dict(TOOL_CONTRACT_VERSIONS)
     assert record.document["tool_contracts"] != {}
 
 

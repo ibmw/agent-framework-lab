@@ -24,8 +24,8 @@ from decimal import Decimal
 from uuid import UUID
 
 from capability_lab.application.canonical_json import CanonicalValue
-from capability_lab.domain.customer_profile import CustomerProfilePayload
-from capability_lab.domain.order_fixture import OrderFixturePayload
+from capability_lab.domain.customer_profile import AddressEntry, CustomerProfilePayload
+from capability_lab.domain.order_fixture import FrozenShippingAddress
 from capability_lab.domain.sandbox import SandboxOrder, SandboxState
 from capability_lab.domain.scenario import DocumentReference
 from capability_lab.domain.shop import Money, Product, ShopDocumentKind, ShopPayload
@@ -261,7 +261,7 @@ def order_detail(order: SandboxOrder) -> dict[str, CanonicalValue]:
             "method_name": payload.fulfilment.method_name,
             "shipped_at": payload.fulfilment.shipped_at,
         },
-        "shipping_address": _shipping_address(payload),
+        "shipping_address": frozen_address(payload.shipping_address),
         "events": [
             {
                 "id": event.id,
@@ -285,8 +285,8 @@ def _rating(product: Product) -> dict[str, CanonicalValue]:
     }
 
 
-def _shipping_address(payload: OrderFixturePayload) -> CanonicalValue:
-    address = payload.shipping_address
+def frozen_address(address: FrozenShippingAddress | None) -> CanonicalValue:
+    """The copy an order ships to, or nothing when it has none."""
     if address is None:
         return None
     return {
@@ -300,6 +300,28 @@ def _shipping_address(payload: OrderFixturePayload) -> CanonicalValue:
         "city": address.city,
         "region": address.region,
         "country": address.country,
+    }
+
+
+def proposed_address(entry: AddressEntry) -> dict[str, CanonicalValue]:
+    """An address-book entry rendered as the copy an order *would* ship to.
+
+    The same keys as `frozen_address`, so a proposal is read against the current address
+    field by field rather than in two shapes. `selected_at` is null because a proposal has
+    selected nothing yet — which is also what keeps the document free of a clock, and so
+    repeatable: proposing the same change twice against an unmoved arm answers identically.
+    """
+    return {
+        "source_address_id": entry.id,
+        "source_label": entry.label,
+        "selected_at": None,
+        "recipient": entry.recipient,
+        "line1": entry.line1,
+        "line2": entry.line2,
+        "postal_code": entry.postal_code,
+        "city": entry.city,
+        "region": entry.region,
+        "country": entry.country,
     }
 
 
