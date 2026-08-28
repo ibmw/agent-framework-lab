@@ -1,5 +1,6 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import {
+  Bot,
   Boxes,
   ChevronLeft,
   ChevronRight,
@@ -101,8 +102,8 @@ function studioSections(shopId: string): NavSection[] {
         },
         {
           label: "Agent configurations",
-          icon: <Shapes size={15} />,
-          milestone: "Milestone 3",
+          to: `${base}/agent-configurations`,
+          icon: <Bot size={15} />,
         },
         { label: "Bench", icon: <Play size={15} />, milestone: "Milestone 4" },
         { label: "History", icon: <Clock size={15} />, milestone: "Milestone 5" },
