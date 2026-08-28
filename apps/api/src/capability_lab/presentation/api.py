@@ -14,6 +14,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from capability_lab.application.agent_configurations import (
+    AgentConfigurationNotFoundError,
+    AgentConfigurationNotPublishableError,
+    AgentConfigurationService,
+    AgentConfigurationVersionNotFoundError,
+)
 from capability_lab.application.blocks import (
     BlockNameExistsError,
     MutationBlockNotFoundError,
@@ -135,6 +141,7 @@ from capability_lab.application.tickets import (
     TicketService,
     TicketVersionNotFoundError,
 )
+from capability_lab.domain.agent_configuration import AgentConfigurationError
 from capability_lab.domain.blocks import BlockConfigurationError
 from capability_lab.domain.customer_profile import CustomerProfileConfigurationError
 from capability_lab.domain.definitions import DefinitionLifecycleError
@@ -174,6 +181,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
     SqlAlchemyShopDirectory,
+    agent_configuration_repository,
     customer_profile_repository,
     mutation_block_repository,
     objective_block_repository,
@@ -183,6 +191,7 @@ from capability_lab.infrastructure.repositories import (
     ticket_repository,
 )
 from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
+from capability_lab.presentation.agent_configurations import AgentConfigurationRoutes
 from capability_lab.presentation.base import ErrorResponse, StrictApiModel, ValidationIssue
 from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlockRoutes
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
@@ -893,6 +902,7 @@ _NOT_PUBLISHABLE_CODES: dict[type[DefinitionNotPublishableError], str] = {
     ObjectiveBlockNotPublishableError: "objective_block_not_publishable",
     MutationBlockNotPublishableError: "mutation_block_not_publishable",
     ScenarioNotPublishableError: "scenario_not_publishable",
+    AgentConfigurationNotPublishableError: "agent_configuration_not_publishable",
 }
 
 
@@ -1029,6 +1039,32 @@ async def _support_identity_configuration_handler(
 ) -> JSONResponse:
     return _error_response(
         request, status_code=422, code="support_identity_configuration_error", message=str(error)
+    )
+
+
+async def _agent_configuration_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="agent_configuration_not_found", message=str(error)
+    )
+
+
+async def _agent_configuration_version_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=404,
+        code="agent_configuration_version_not_found",
+        message=str(error),
+    )
+
+
+async def _agent_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    """A structural configuration invariant the contract cannot express in a field schema."""
+    return _error_response(
+        request, status_code=422, code="agent_configuration_error", message=str(error)
     )
 
 
@@ -1305,6 +1341,13 @@ def create_app(
         SupportIdentityConfigurationError, _support_identity_configuration_handler
     )
     application.add_exception_handler(
+        AgentConfigurationNotFoundError, _agent_configuration_not_found_handler
+    )
+    application.add_exception_handler(
+        AgentConfigurationVersionNotFoundError, _agent_configuration_version_not_found_handler
+    )
+    application.add_exception_handler(AgentConfigurationError, _agent_configuration_handler)
+    application.add_exception_handler(
         PublishedVersionExistsError, _published_version_exists_handler
     )
     application.add_exception_handler(OrderFixtureNotFoundError, _order_not_found_handler)
@@ -1402,6 +1445,16 @@ def create_app(
     def support_identity_service() -> Generator[SupportIdentityService, None, None]:
         with session_scope(factory) as session:
             yield SupportIdentityService(support_identity_repository(session), clock)
+
+    def agent_configuration_service() -> Generator[AgentConfigurationService, None, None]:
+        with session_scope(factory) as session:
+            yield AgentConfigurationService(
+                agent_configuration_repository(session),
+                support_identity_repository(session),
+                shop_repository(session),
+                SqlAlchemyPublishedVersionDirectory(session),
+                clock,
+            )
 
     def objective_block_service() -> Generator[ObjectiveBlockService, None, None]:
         with session_scope(factory) as session:
@@ -1992,6 +2045,7 @@ def create_app(
     OrderRoutes(order_service).register(router)
     CustomerProfileRoutes(customer_profile_service).register(router)
     SupportIdentityRoutes(support_identity_service).register(router)
+    AgentConfigurationRoutes(agent_configuration_service).register(router)
     TicketRoutes(ticket_service).register(router)
     ScenarioRoutes(scenario_service).register(router)
     SandboxSnapshotRoutes(sandbox_snapshot_service).register(router)

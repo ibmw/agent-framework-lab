@@ -1902,6 +1902,296 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/agent-configurations:
+    get:
+      summary: List agent configurations with their published-version provenance
+      operationId: listAgentConfigurations
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationListResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create an agent configuration and its first draft
+      operationId: createAgentConfiguration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentConfigurationRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/agent-configurations/resources:
+    get:
+      summary: Read the frameworks, tools, variables, identities and preview shops
+      operationId: readAgentConfigurationResources
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationResourcesResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/agent-configurations/{configuration_id}/draft:
+    get:
+      summary: Retrieve the mutable agent-configuration draft
+      operationId: getAgentConfigurationDraft
+      parameters:
+      - name: configuration_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable agent-configuration identifier.
+          title: Configuration Id
+        description: Stable agent-configuration identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceAgentConfigurationDraft
+      parameters:
+      - name: configuration_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable agent-configuration identifier.
+          title: Configuration Id
+        description: Stable agent-configuration identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceAgentConfigurationDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/agent-configurations/{configuration_id}/draft/preview:
+    get:
+      summary: Validate the draft and resolve what a run would inject
+      operationId: previewAgentConfigurationDraft
+      parameters:
+      - name: configuration_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable agent-configuration identifier.
+          title: Configuration Id
+        description: Stable agent-configuration identifier.
+      - name: preview_shop_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Resolve the prompt's variables against this shop's latest version.
+          title: Preview Shop Id
+        description: Resolve the prompt's variables against this shop's latest version.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/agent-configurations/{configuration_id}/versions:
+    post:
+      summary: Freeze the draft into the next immutable published version
+      operationId: publishAgentConfiguration
+      parameters:
+      - name: configuration_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable agent-configuration identifier.
+          title: Configuration Id
+        description: Stable agent-configuration identifier.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
+    get:
+      summary: List a configuration's published versions
+      operationId: listAgentConfigurationVersions
+      parameters:
+      - name: configuration_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable agent-configuration identifier.
+          title: Configuration Id
+        description: Stable agent-configuration identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/agent-configurations/{configuration_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published agent-configuration version
+      operationId: getAgentConfigurationVersion
+      parameters:
+      - name: configuration_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable agent-configuration identifier.
+          title: Configuration Id
+        description: Stable agent-configuration identifier.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentConfigurationVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/tickets:
     get:
       summary: List one shop's tickets
@@ -3761,6 +4051,388 @@ components:
       - country
       - is_default
       title: AddressSchema
+    AgentArchitecture:
+      type: string
+      enum:
+      - single_agent
+      title: AgentArchitecture
+      description: 'How the framework is asked to organize the work.
+
+
+        One member until a second is proven end to end. Milestone 6 decides whether
+        the first
+
+        controlled comparison changes framework or architecture; adding the member
+        before there
+
+        is an implementation behind it would let an author publish a configuration
+        nothing can
+
+        run.'
+    AgentCapability:
+      type: string
+      enum:
+      - tool_calls
+      - conversation_memory
+      - durable_memory
+      - session_resume
+      - structured_output
+      - tracing
+      title: AgentCapability
+    AgentConfigurationDraftResponse:
+      properties:
+        configuration_id:
+          type: string
+          format: uuid
+          title: Configuration Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/AgentConfigurationPayloadSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - configuration_id
+      - content
+      - created_at
+      - updated_at
+      title: AgentConfigurationDraftResponse
+    AgentConfigurationListResponse:
+      properties:
+        configurations:
+          items:
+            $ref: '#/components/schemas/AgentConfigurationSummarySchema'
+          type: array
+          title: Configurations
+      additionalProperties: false
+      type: object
+      required:
+      - configurations
+      title: AgentConfigurationListResponse
+    AgentConfigurationPayloadSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+        framework_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Framework Id
+        architecture:
+          $ref: '#/components/schemas/AgentArchitecture'
+        support_identity_id:
+          type: string
+          format: uuid
+          title: Support Identity Id
+        prompt:
+          type: string
+          maxLength: 20000
+          title: Prompt
+        tone_of_voice:
+          $ref: '#/components/schemas/ToneOfVoiceSelectionSchema'
+        tools:
+          items:
+            type: string
+            maxLength: 100
+            minLength: 1
+          type: array
+          title: Tools
+        memory:
+          $ref: '#/components/schemas/MemoryMode'
+        model:
+          $ref: '#/components/schemas/ModelSettingsSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - description
+      - framework_id
+      - architecture
+      - support_identity_id
+      - prompt
+      - tone_of_voice
+      - tools
+      - memory
+      - model
+      title: AgentConfigurationPayloadSchema
+      description: The whole authored content of a configuration draft or published
+        version.
+    AgentConfigurationPreviewResponse:
+      properties:
+        configuration_id:
+          type: string
+          format: uuid
+          title: Configuration Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/AgentConfigurationPayloadSchema'
+        resolution:
+          $ref: '#/components/schemas/AgentConfigurationResolutionSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - configuration_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      - resolution
+      title: AgentConfigurationPreviewResponse
+      description: The publish gate and the resolved context, which an author reads
+        side by side.
+    AgentConfigurationResolutionSchema:
+      properties:
+        framework_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Framework Label
+        shop_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Shop Id
+        shop_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Shop Name
+        shop_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Shop Version
+        support_identity_id:
+          type: string
+          format: uuid
+          title: Support Identity Id
+        support_identity_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Support Identity Name
+        support_identity_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Support Identity Version
+        tone_of_voice_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tone Of Voice Label
+        tone_of_voice_resolved:
+          type: boolean
+          title: Tone Of Voice Resolved
+        variables:
+          items:
+            $ref: '#/components/schemas/ResolvedVariableSchema'
+          type: array
+          title: Variables
+        tools:
+          items:
+            $ref: '#/components/schemas/ResolvedToolBindingSchema'
+          type: array
+          title: Tools
+      additionalProperties: false
+      type: object
+      required:
+      - framework_label
+      - shop_id
+      - shop_name
+      - shop_version
+      - support_identity_id
+      - support_identity_name
+      - support_identity_version
+      - tone_of_voice_label
+      - tone_of_voice_resolved
+      - variables
+      - tools
+      title: AgentConfigurationResolutionSchema
+      description: What a run would inject, read beside the publish gate.
+    AgentConfigurationResourcesResponse:
+      properties:
+        frameworks:
+          items:
+            $ref: '#/components/schemas/ProvenFrameworkSchema'
+          type: array
+          title: Frameworks
+        tools:
+          items:
+            $ref: '#/components/schemas/capability_lab__presentation__agent_configurations__ToolContractSchema'
+          type: array
+          title: Tools
+        variables:
+          items:
+            $ref: '#/components/schemas/PromptVariableSchema'
+          type: array
+          title: Variables
+        support_identities:
+          items:
+            $ref: '#/components/schemas/SupportIdentityOptionSchema'
+          type: array
+          title: Support Identities
+        preview_shops:
+          items:
+            $ref: '#/components/schemas/PreviewShopOptionSchema'
+          type: array
+          title: Preview Shops
+      additionalProperties: false
+      type: object
+      required:
+      - frameworks
+      - tools
+      - variables
+      - support_identities
+      - preview_shops
+      title: AgentConfigurationResourcesResponse
+      description: Exactly what a configuration may name, so a picker cannot offer
+        a gate error.
+    AgentConfigurationSummarySchema:
+      properties:
+        configuration_id:
+          type: string
+          format: uuid
+          title: Configuration Id
+        name:
+          type: string
+          title: Name
+        framework_id:
+          type: string
+          title: Framework Id
+        framework_label:
+          type: string
+          title: Framework Label
+        model_id:
+          type: string
+          title: Model Id
+        support_identity_id:
+          type: string
+          format: uuid
+          title: Support Identity Id
+        tool_count:
+          type: integer
+          title: Tool Count
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+      additionalProperties: false
+      type: object
+      required:
+      - configuration_id
+      - name
+      - framework_id
+      - framework_label
+      - model_id
+      - support_identity_id
+      - tool_count
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      title: AgentConfigurationSummarySchema
+    AgentConfigurationVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: AgentConfigurationVersionListResponse
+    AgentConfigurationVersionResponse:
+      properties:
+        configuration_id:
+          type: string
+          format: uuid
+          title: Configuration Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        support_identity_version:
+          type: integer
+          title: Support Identity Version
+        content:
+          $ref: '#/components/schemas/AgentConfigurationPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - configuration_id
+      - version
+      - content_fingerprint
+      - published_at
+      - support_identity_version
+      - content
+      title: AgentConfigurationVersionResponse
     AgentFrameworkListResponse:
       properties:
         frameworks:
@@ -4304,6 +4976,23 @@ components:
       - trace_id
       - created_at
       title: ConversationTurnResponse
+    CreateAgentConfigurationRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        support_identity_id:
+          type: string
+          format: uuid
+          title: Support Identity Id
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - support_identity_id
+      title: CreateAgentConfigurationRequest
     CreateBlockRequest:
       properties:
         name:
@@ -5276,6 +5965,45 @@ components:
       - reference
       - alt_text
       title: MediaReferenceSchema
+    MemoryMode:
+      type: string
+      enum:
+      - none
+      - conversation
+      - durable
+      title: MemoryMode
+      description: How much of a run the agent is allowed to remember.
+    ModelSettingsSchema:
+      properties:
+        provider:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Provider
+        model_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Model Id
+        temperature:
+          type: string
+          pattern: ^\d(?:\.\d{1,2})?$
+          title: Temperature
+          description: Exact decimal sampling temperature; never a binary float.
+        max_tool_rounds:
+          type: integer
+          maximum: 50.0
+          minimum: 1.0
+          title: Max Tool Rounds
+      additionalProperties: false
+      type: object
+      required:
+      - provider
+      - model_id
+      - temperature
+      - max_tool_rounds
+      title: ModelSettingsSchema
     MoneySchema:
       properties:
         amount:
@@ -6141,6 +6869,27 @@ components:
       - kind
       - body
       title: PolicySchema
+    PreviewShopOptionSchema:
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        name:
+          type: string
+          title: Name
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+      additionalProperties: false
+      type: object
+      required:
+      - shop_id
+      - name
+      - latest_published_version
+      title: PreviewShopOptionSchema
     ProductResponse:
       properties:
         id:
@@ -6307,6 +7056,35 @@ components:
       - ratings
       title: ProductViewSchema
       description: A product as the API returns it, including its derived rating evidence.
+    PromptVariableGroup:
+      type: string
+      enum:
+      - shop
+      - support_identity
+      - interaction
+      title: PromptVariableGroup
+      description: The three sources a prompt variable could name.
+    PromptVariableSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        group:
+          $ref: '#/components/schemas/PromptVariableGroup'
+        description:
+          type: string
+          title: Description
+        injectable:
+          type: boolean
+          title: Injectable
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - group
+      - description
+      - injectable
+      title: PromptVariableSchema
     ProposeOrderActionRequest:
       properties:
         action_type:
@@ -6328,6 +7106,50 @@ components:
       - order_id
       - expected_version
       title: ProposeOrderActionRequest
+    ProvenFrameworkSchema:
+      properties:
+        framework_id:
+          type: string
+          title: Framework Id
+        label:
+          type: string
+          title: Label
+        summary:
+          type: string
+          title: Summary
+        architectures:
+          items:
+            $ref: '#/components/schemas/AgentArchitecture'
+          type: array
+          title: Architectures
+        providers:
+          items:
+            type: string
+          type: array
+          title: Providers
+        models:
+          items:
+            type: string
+          type: array
+          title: Models
+        capabilities:
+          items:
+            $ref: '#/components/schemas/AgentCapability'
+          type: array
+          title: Capabilities
+      additionalProperties: false
+      type: object
+      required:
+      - framework_id
+      - label
+      - summary
+      - architectures
+      - providers
+      - models
+      - capabilities
+      title: ProvenFrameworkSchema
+      description: One framework the lab has proven, and the envelope it was proven
+        inside.
     RatingSummarySchema:
       properties:
         review_count:
@@ -6345,6 +7167,15 @@ components:
       - review_count
       - average_rating
       title: RatingSummarySchema
+    ReplaceAgentConfigurationDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/AgentConfigurationPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceAgentConfigurationDraftRequest
     ReplaceCustomerProfileDraftRequest:
       properties:
         payload:
@@ -6591,6 +7422,78 @@ components:
       title: ResolvedTemplateSchema
       description: One composed template and the version publishing this draft would
         pin it at.
+    ResolvedToolBindingSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        version:
+          type: string
+          title: Version
+        summary:
+          type: string
+          title: Summary
+        effect:
+          $ref: '#/components/schemas/ToolEffect'
+        required_permission:
+          anyOf:
+          - $ref: '#/components/schemas/SupportPermission'
+          - type: 'null'
+        enabled:
+          type: boolean
+          title: Enabled
+        permitted:
+          type: boolean
+          title: Permitted
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - version
+      - summary
+      - effect
+      - required_permission
+      - enabled
+      - permitted
+      title: ResolvedToolBindingSchema
+    ResolvedVariableSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        group:
+          $ref: '#/components/schemas/PromptVariableGroup'
+        description:
+          type: string
+          title: Description
+        injectable:
+          type: boolean
+          title: Injectable
+        used:
+          type: boolean
+          title: Used
+        value:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Value
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - group
+      - description
+      - injectable
+      - used
+      - value
+      title: ResolvedVariableSchema
+      description: 'One variable, whether the prompt names it, and what a run would
+        inject.
+
+
+        A `null` value is a variable the chosen preview context cannot resolve — including
+
+        every non-injectable one, which resolves to nothing anywhere by design.'
     ReviewSchema:
       properties:
         id:
@@ -8240,6 +9143,37 @@ components:
       required:
       - identities
       title: SupportIdentityListResponse
+    SupportIdentityOptionSchema:
+      properties:
+        identity_id:
+          type: string
+          format: uuid
+          title: Identity Id
+        name:
+          type: string
+          title: Name
+        title:
+          type: string
+          title: Title
+        permissions:
+          items:
+            $ref: '#/components/schemas/SupportPermission'
+          type: array
+          title: Permissions
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+      additionalProperties: false
+      type: object
+      required:
+      - identity_id
+      - name
+      - title
+      - permissions
+      - latest_published_version
+      title: SupportIdentityOptionSchema
     SupportIdentityPayloadSchema:
       properties:
         role:
@@ -9117,6 +10051,27 @@ components:
       - guidance
       - is_default
       title: ToneOfVoiceSchema
+    ToneOfVoiceSelectionSchema:
+      properties:
+        source:
+          $ref: '#/components/schemas/ToneOfVoiceSource'
+        guideline_id:
+          type: string
+          maxLength: 64
+          title: Guideline Id
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - source
+      title: ToneOfVoiceSelectionSchema
+    ToneOfVoiceSource:
+      type: string
+      enum:
+      - shop_default
+      - override
+      title: ToneOfVoiceSource
+      description: Where the agent's tone comes from when a shop resolves the configuration.
     ToolActivityResponse:
       properties:
         tool_name:
@@ -9306,7 +10261,7 @@ components:
       properties:
         tools:
           items:
-            $ref: '#/components/schemas/ToolContractSchema'
+            $ref: '#/components/schemas/capability_lab__presentation__tools__ToolContractSchema'
           type: array
           title: Tools
       additionalProperties: false
@@ -9314,46 +10269,6 @@ components:
       required:
       - tools
       title: ToolContractListResponse
-    ToolContractSchema:
-      properties:
-        name:
-          type: string
-          title: Name
-        version:
-          type: string
-          title: Version
-        summary:
-          type: string
-          title: Summary
-        effect:
-          $ref: '#/components/schemas/ToolEffect'
-        arguments:
-          items:
-            $ref: '#/components/schemas/ToolArgumentSchema'
-          type: array
-          title: Arguments
-      additionalProperties: false
-      type: object
-      required:
-      - name
-      - version
-      - summary
-      - effect
-      - arguments
-      title: ToolContractSchema
-      description: 'One published tool.
-
-
-        `effect` is what tells a caller the two kinds apart before it calls either:
-        a write needs
-
-        an actor, and — for the one write published here — has to be proposed before
-        it can be
-
-        applied. An adapter reads it to route the two differently instead of keeping
-        a list of
-
-        tool names it knows to be dangerous.'
     ToolEffect:
       type: string
       enum:
@@ -9491,3 +10406,71 @@ components:
       - stock_quantity
       - price
       title: VariantSchema
+    capability_lab__presentation__agent_configurations__ToolContractSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        version:
+          type: string
+          title: Version
+        summary:
+          type: string
+          title: Summary
+        effect:
+          $ref: '#/components/schemas/ToolEffect'
+        required_permission:
+          anyOf:
+          - $ref: '#/components/schemas/SupportPermission'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - version
+      - summary
+      - effect
+      - required_permission
+      title: ToolContractSchema
+      description: One published tool a configuration may enable, and what enabling
+        it requires.
+    capability_lab__presentation__tools__ToolContractSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        version:
+          type: string
+          title: Version
+        summary:
+          type: string
+          title: Summary
+        effect:
+          $ref: '#/components/schemas/ToolEffect'
+        arguments:
+          items:
+            $ref: '#/components/schemas/ToolArgumentSchema'
+          type: array
+          title: Arguments
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - version
+      - summary
+      - effect
+      - arguments
+      title: ToolContractSchema
+      description: 'One published tool.
+
+
+        `effect` is what tells a caller the two kinds apart before it calls either:
+        a write needs
+
+        an actor, and — for the one write published here — has to be proposed before
+        it can be
+
+        applied. An adapter reads it to route the two differently instead of keeping
+        a list of
+
+        tool names it knows to be dangerous.'

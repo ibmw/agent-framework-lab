@@ -547,6 +547,111 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/agent-configurations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List agent configurations with their published-version provenance */
+    get: operations["listAgentConfigurations"];
+    put?: never;
+    /** Create an agent configuration and its first draft */
+    post: operations["createAgentConfiguration"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-configurations/resources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the frameworks, tools, variables, identities and preview shops */
+    get: operations["readAgentConfigurationResources"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-configurations/{configuration_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable agent-configuration draft */
+    get: operations["getAgentConfigurationDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceAgentConfigurationDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-configurations/{configuration_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Validate the draft and resolve what a run would inject */
+    get: operations["previewAgentConfigurationDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-configurations/{configuration_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a configuration's published versions */
+    get: operations["listAgentConfigurationVersions"];
+    put?: never;
+    /** Freeze the draft into the next immutable published version */
+    post: operations["publishAgentConfiguration"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agent-configurations/{configuration_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published agent-configuration version */
+    get: operations["getAgentConfigurationVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/tickets": {
     parameters: {
       query?: never;
@@ -1160,6 +1265,208 @@ export interface components {
       /** Is Default */
       is_default: boolean;
     };
+    /**
+     * AgentArchitecture
+     * @description How the framework is asked to organize the work.
+     *
+     *     One member until a second is proven end to end. Milestone 6 decides whether the first
+     *     controlled comparison changes framework or architecture; adding the member before there
+     *     is an implementation behind it would let an author publish a configuration nothing can
+     *     run.
+     * @enum {string}
+     */
+    AgentArchitecture: "single_agent";
+    /**
+     * AgentCapability
+     * @enum {string}
+     */
+    AgentCapability:
+      | "tool_calls"
+      | "conversation_memory"
+      | "durable_memory"
+      | "session_resume"
+      | "structured_output"
+      | "tracing";
+    /** AgentConfigurationDraftResponse */
+    AgentConfigurationDraftResponse: {
+      /**
+       * Configuration Id
+       * Format: uuid
+       */
+      configuration_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["AgentConfigurationPayloadSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /** AgentConfigurationListResponse */
+    AgentConfigurationListResponse: {
+      /** Configurations */
+      configurations: components["schemas"]["AgentConfigurationSummarySchema"][];
+    };
+    /**
+     * AgentConfigurationPayloadSchema
+     * @description The whole authored content of a configuration draft or published version.
+     */
+    AgentConfigurationPayloadSchema: {
+      /** Name */
+      name: string;
+      /** Description */
+      description: string;
+      /** Framework Id */
+      framework_id: string;
+      architecture: components["schemas"]["AgentArchitecture"];
+      /**
+       * Support Identity Id
+       * Format: uuid
+       */
+      support_identity_id: string;
+      /** Prompt */
+      prompt: string;
+      tone_of_voice: components["schemas"]["ToneOfVoiceSelectionSchema"];
+      /** Tools */
+      tools: string[];
+      memory: components["schemas"]["MemoryMode"];
+      model: components["schemas"]["ModelSettingsSchema"];
+    };
+    /**
+     * AgentConfigurationPreviewResponse
+     * @description The publish gate and the resolved context, which an author reads side by side.
+     */
+    AgentConfigurationPreviewResponse: {
+      /**
+       * Configuration Id
+       * Format: uuid
+       */
+      configuration_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["AgentConfigurationPayloadSchema"];
+      resolution: components["schemas"]["AgentConfigurationResolutionSchema"];
+    };
+    /**
+     * AgentConfigurationResolutionSchema
+     * @description What a run would inject, read beside the publish gate.
+     */
+    AgentConfigurationResolutionSchema: {
+      /** Framework Label */
+      framework_label: string | null;
+      /** Shop Id */
+      shop_id: string | null;
+      /** Shop Name */
+      shop_name: string | null;
+      /** Shop Version */
+      shop_version: number | null;
+      /**
+       * Support Identity Id
+       * Format: uuid
+       */
+      support_identity_id: string;
+      /** Support Identity Name */
+      support_identity_name: string | null;
+      /** Support Identity Version */
+      support_identity_version: number | null;
+      /** Tone Of Voice Label */
+      tone_of_voice_label: string | null;
+      /** Tone Of Voice Resolved */
+      tone_of_voice_resolved: boolean;
+      /** Variables */
+      variables: components["schemas"]["ResolvedVariableSchema"][];
+      /** Tools */
+      tools: components["schemas"]["ResolvedToolBindingSchema"][];
+    };
+    /**
+     * AgentConfigurationResourcesResponse
+     * @description Exactly what a configuration may name, so a picker cannot offer a gate error.
+     */
+    AgentConfigurationResourcesResponse: {
+      /** Frameworks */
+      frameworks: components["schemas"]["ProvenFrameworkSchema"][];
+      /** Tools */
+      tools: components["schemas"]["capability_lab__presentation__agent_configurations__ToolContractSchema"][];
+      /** Variables */
+      variables: components["schemas"]["PromptVariableSchema"][];
+      /** Support Identities */
+      support_identities: components["schemas"]["SupportIdentityOptionSchema"][];
+      /** Preview Shops */
+      preview_shops: components["schemas"]["PreviewShopOptionSchema"][];
+    };
+    /** AgentConfigurationSummarySchema */
+    AgentConfigurationSummarySchema: {
+      /**
+       * Configuration Id
+       * Format: uuid
+       */
+      configuration_id: string;
+      /** Name */
+      name: string;
+      /** Framework Id */
+      framework_id: string;
+      /** Framework Label */
+      framework_label: string;
+      /** Model Id */
+      model_id: string;
+      /**
+       * Support Identity Id
+       * Format: uuid
+       */
+      support_identity_id: string;
+      /** Tool Count */
+      tool_count: number;
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+    };
+    /** AgentConfigurationVersionListResponse */
+    AgentConfigurationVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
+    };
+    /** AgentConfigurationVersionResponse */
+    AgentConfigurationVersionResponse: {
+      /**
+       * Configuration Id
+       * Format: uuid
+       */
+      configuration_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      /** Support Identity Version */
+      support_identity_version: number;
+      content: components["schemas"]["AgentConfigurationPayloadSchema"];
+    };
     /** AgentFrameworkListResponse */
     AgentFrameworkListResponse: {
       /** Frameworks */
@@ -1446,6 +1753,16 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+    };
+    /** CreateAgentConfigurationRequest */
+    CreateAgentConfigurationRequest: {
+      /** Name */
+      name: string;
+      /**
+       * Support Identity Id
+       * Format: uuid
+       */
+      support_identity_id: string;
     };
     /**
      * CreateBlockRequest
@@ -1958,6 +2275,26 @@ export interface components {
       /** Alt Text */
       alt_text: string;
     };
+    /**
+     * MemoryMode
+     * @description How much of a run the agent is allowed to remember.
+     * @enum {string}
+     */
+    MemoryMode: "none" | "conversation" | "durable";
+    /** ModelSettingsSchema */
+    ModelSettingsSchema: {
+      /** Provider */
+      provider: string;
+      /** Model Id */
+      model_id: string;
+      /**
+       * Temperature
+       * @description Exact decimal sampling temperature; never a binary float.
+       */
+      temperature: string;
+      /** Max Tool Rounds */
+      max_tool_rounds: number;
+    };
     /** MoneySchema */
     MoneySchema: {
       /**
@@ -2426,6 +2763,18 @@ export interface components {
       /** Body */
       body: string;
     };
+    /** PreviewShopOptionSchema */
+    PreviewShopOptionSchema: {
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /** Name */
+      name: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+    };
     /** ProductResponse */
     ProductResponse: {
       /**
@@ -2495,6 +2844,22 @@ export interface components {
       reviews: components["schemas"]["ReviewSchema"][];
       ratings: components["schemas"]["RatingSummarySchema"];
     };
+    /**
+     * PromptVariableGroup
+     * @description The three sources a prompt variable could name.
+     * @enum {string}
+     */
+    PromptVariableGroup: "shop" | "support_identity" | "interaction";
+    /** PromptVariableSchema */
+    PromptVariableSchema: {
+      /** Name */
+      name: string;
+      group: components["schemas"]["PromptVariableGroup"];
+      /** Description */
+      description: string;
+      /** Injectable */
+      injectable: boolean;
+    };
     /** ProposeOrderActionRequest */
     ProposeOrderActionRequest: {
       /**
@@ -2510,6 +2875,26 @@ export interface components {
       /** Expected Version */
       expected_version: number;
     };
+    /**
+     * ProvenFrameworkSchema
+     * @description One framework the lab has proven, and the envelope it was proven inside.
+     */
+    ProvenFrameworkSchema: {
+      /** Framework Id */
+      framework_id: string;
+      /** Label */
+      label: string;
+      /** Summary */
+      summary: string;
+      /** Architectures */
+      architectures: components["schemas"]["AgentArchitecture"][];
+      /** Providers */
+      providers: string[];
+      /** Models */
+      models: string[];
+      /** Capabilities */
+      capabilities: components["schemas"]["AgentCapability"][];
+    };
     /** RatingSummarySchema */
     RatingSummarySchema: {
       /** Review Count */
@@ -2519,6 +2904,10 @@ export interface components {
        * @description Derived from the product's reviews; never authored directly.
        */
       average_rating: string | null;
+    };
+    /** ReplaceAgentConfigurationDraftRequest */
+    ReplaceAgentConfigurationDraftRequest: {
+      payload: components["schemas"]["AgentConfigurationPayloadSchema"];
     };
     /** ReplaceCustomerProfileDraftRequest */
     ReplaceCustomerProfileDraftRequest: {
@@ -2630,6 +3019,41 @@ export interface components {
       version: number | null;
       /** Instance Count */
       instance_count: number;
+    };
+    /** ResolvedToolBindingSchema */
+    ResolvedToolBindingSchema: {
+      /** Name */
+      name: string;
+      /** Version */
+      version: string;
+      /** Summary */
+      summary: string;
+      effect: components["schemas"]["ToolEffect"];
+      required_permission: components["schemas"]["SupportPermission"] | null;
+      /** Enabled */
+      enabled: boolean;
+      /** Permitted */
+      permitted: boolean;
+    };
+    /**
+     * ResolvedVariableSchema
+     * @description One variable, whether the prompt names it, and what a run would inject.
+     *
+     *     A `null` value is a variable the chosen preview context cannot resolve — including
+     *     every non-injectable one, which resolves to nothing anywhere by design.
+     */
+    ResolvedVariableSchema: {
+      /** Name */
+      name: string;
+      group: components["schemas"]["PromptVariableGroup"];
+      /** Description */
+      description: string;
+      /** Injectable */
+      injectable: boolean;
+      /** Used */
+      used: boolean;
+      /** Value */
+      value: string | null;
     };
     /** ReviewSchema */
     ReviewSchema: {
@@ -3505,6 +3929,22 @@ export interface components {
       /** Identities */
       identities: components["schemas"]["SupportIdentitySummarySchema"][];
     };
+    /** SupportIdentityOptionSchema */
+    SupportIdentityOptionSchema: {
+      /**
+       * Identity Id
+       * Format: uuid
+       */
+      identity_id: string;
+      /** Name */
+      name: string;
+      /** Title */
+      title: string;
+      /** Permissions */
+      permissions: components["schemas"]["SupportPermission"][];
+      /** Latest Published Version */
+      latest_published_version: number | null;
+    };
     /**
      * SupportIdentityPayloadSchema
      * @description The whole authored content of a support-identity draft or published version.
@@ -3966,6 +4406,21 @@ export interface components {
       /** Is Default */
       is_default: boolean;
     };
+    /** ToneOfVoiceSelectionSchema */
+    ToneOfVoiceSelectionSchema: {
+      source: components["schemas"]["ToneOfVoiceSource"];
+      /**
+       * Guideline Id
+       * @default
+       */
+      guideline_id: string;
+    };
+    /**
+     * ToneOfVoiceSource
+     * @description Where the agent's tone comes from when a shop resolves the configuration.
+     * @enum {string}
+     */
+    ToneOfVoiceSource: "shop_default" | "override";
     /** ToolActivityResponse */
     ToolActivityResponse: {
       /** Tool Name */
@@ -4073,27 +4528,7 @@ export interface components {
     /** ToolContractListResponse */
     ToolContractListResponse: {
       /** Tools */
-      tools: components["schemas"]["ToolContractSchema"][];
-    };
-    /**
-     * ToolContractSchema
-     * @description One published tool.
-     *
-     *     `effect` is what tells a caller the two kinds apart before it calls either: a write needs
-     *     an actor, and — for the one write published here — has to be proposed before it can be
-     *     applied. An adapter reads it to route the two differently instead of keeping a list of
-     *     tool names it knows to be dangerous.
-     */
-    ToolContractSchema: {
-      /** Name */
-      name: string;
-      /** Version */
-      version: string;
-      /** Summary */
-      summary: string;
-      effect: components["schemas"]["ToolEffect"];
-      /** Arguments */
-      arguments: components["schemas"]["ToolArgumentSchema"][];
+      tools: components["schemas"]["capability_lab__presentation__tools__ToolContractSchema"][];
     };
     /**
      * ToolEffect
@@ -4168,6 +4603,40 @@ export interface components {
       stock_quantity: number;
       /** @description Null while a draft variant is still unpriced. */
       price: components["schemas"]["MoneySchema"] | null;
+    };
+    /**
+     * ToolContractSchema
+     * @description One published tool a configuration may enable, and what enabling it requires.
+     */
+    capability_lab__presentation__agent_configurations__ToolContractSchema: {
+      /** Name */
+      name: string;
+      /** Version */
+      version: string;
+      /** Summary */
+      summary: string;
+      effect: components["schemas"]["ToolEffect"];
+      required_permission: components["schemas"]["SupportPermission"] | null;
+    };
+    /**
+     * ToolContractSchema
+     * @description One published tool.
+     *
+     *     `effect` is what tells a caller the two kinds apart before it calls either: a write needs
+     *     an actor, and — for the one write published here — has to be proposed before it can be
+     *     applied. An adapter reads it to route the two differently instead of keeping a list of
+     *     tool names it knows to be dangerous.
+     */
+    capability_lab__presentation__tools__ToolContractSchema: {
+      /** Name */
+      name: string;
+      /** Version */
+      version: string;
+      /** Summary */
+      summary: string;
+      effect: components["schemas"]["ToolEffect"];
+      /** Arguments */
+      arguments: components["schemas"]["ToolArgumentSchema"][];
     };
   };
   responses: never;
@@ -6268,6 +6737,370 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SupportIdentityVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listAgentConfigurations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationListResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createAgentConfiguration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateAgentConfigurationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  readAgentConfigurationResources: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationResourcesResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getAgentConfigurationDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable agent-configuration identifier. */
+        configuration_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceAgentConfigurationDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable agent-configuration identifier. */
+        configuration_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceAgentConfigurationDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewAgentConfigurationDraft: {
+    parameters: {
+      query?: {
+        /** @description Resolve the prompt's variables against this shop's latest version. */
+        preview_shop_id?: string | null;
+      };
+      header?: never;
+      path: {
+        /** @description Stable agent-configuration identifier. */
+        configuration_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listAgentConfigurationVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable agent-configuration identifier. */
+        configuration_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishAgentConfiguration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable agent-configuration identifier. */
+        configuration_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  getAgentConfigurationVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable agent-configuration identifier. */
+        configuration_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentConfigurationVersionResponse"];
         };
       };
       /** @description The definition is not found */
