@@ -58,6 +58,7 @@ from capability_lab.application.sandbox_tool_contracts import (
     ToolContract,
     ToolEffect,
 )
+from capability_lab.application.support_identities import SupportIdentityNotFoundError
 from capability_lab.domain.agent_configuration import (
     PROMPT_VARIABLES,
     AgentConfigurationPayload,
@@ -291,7 +292,7 @@ class AgentConfigurationService(DefinitionAuthoringService[AgentConfigurationPay
                     )
                 )
 
-        identity = self._published_identity(payload.support_identity_id)
+        identity, _ = self._published_identity(payload.support_identity_id)
         if identity is None:
             issues.append(
                 issue_error(
@@ -315,17 +316,15 @@ class AgentConfigurationService(DefinitionAuthoringService[AgentConfigurationPay
                         f"tools.{tool_name}",
                     )
                 )
-        granted_writes = {
-            contract.required_permission
-            for contract in SANDBOX_TOOL_CONTRACTS
-            if contract.name in payload.enabled_tools and contract.effect is ToolEffect.WRITE
-        }
-        if identity.granted & _order_mutation_permissions() and not granted_writes:
+        # Per permission rather than once for all of them: an identity granted two write
+        # permissions with a tool for only one of them is half-configured, and a single
+        # warning keyed on "any write tool at all" would call that fine.
+        for permission in sorted(identity.granted & _write_tool_permissions() - _covered(payload)):
             issues.append(
                 issue_warning(
                     "permission_without_tool",
-                    f"{identity.role.title} may change an order, but this configuration "
-                    "enables no tool that could",
+                    f"{identity.role.title} is granted {permission.value}, but this "
+                    "configuration enables no tool that would use it",
                     "tools",
                 )
             )
@@ -405,10 +404,7 @@ class AgentConfigurationService(DefinitionAuthoringService[AgentConfigurationPay
     ) -> AgentConfigurationResolution:
         """Resolve every variable against a preview shop and the pinned identity."""
         shop, shop_version = self._published_shop(preview_shop_id)
-        identity = self._published_identity(payload.support_identity_id)
-        identity_version = self._latest_published(
-            support_identity_definition_id(payload.support_identity_id)
-        )
+        identity, identity_version = self._published_identity(payload.support_identity_id)
         guideline = _tone_of_voice(shop, payload.tone_of_voice)
         used = {token.name for token in payload.prompt_tokens}
         values = _variable_values(shop, identity, guideline)
@@ -453,16 +449,25 @@ class AgentConfigurationService(DefinitionAuthoringService[AgentConfigurationPay
     # -- reference reads --------------------------------------------------------
 
     def _require_identity(self, identity_id: UUID) -> None:
-        if self._identities.get_draft(support_identity_definition_id(identity_id)) is None:
-            raise AgentConfigurationNotFoundError(f"support identity {identity_id} does not exist")
+        """Refuse an identity that does not exist, naming the resource actually missing.
 
-    def _published_identity(self, identity_id: UUID) -> SupportIdentityPayload | None:
+        Deliberately not this service's own not-found error: creating a configuration
+        against an unknown identity involves no configuration at all, and a caller has to be
+        able to tell a stale identity from a stale configuration.
+        """
+        if self._identities.get_draft(support_identity_definition_id(identity_id)) is None:
+            raise SupportIdentityNotFoundError(f"support identity {identity_id} does not exist")
+
+    def _published_identity(
+        self, identity_id: UUID
+    ) -> tuple[SupportIdentityPayload | None, int | None]:
+        """The identity version a publication would pin, and the content it froze."""
         definition = support_identity_definition_id(identity_id)
         version = self._latest_published(definition)
         if version is None:
-            return None
+            return None, None
         record = self._identities.get_version(VersionRef(definition=definition, version=version))
-        return None if record is None else record.payload
+        return (None, None) if record is None else (record.payload, version)
 
     def _published_shop(self, shop_id: UUID | None) -> tuple[ShopPayload | None, int | None]:
         if shop_id is None:
@@ -480,11 +485,21 @@ def _framework_label(framework_id: str) -> str:
     return framework_id if framework is None else framework.label
 
 
-def _order_mutation_permissions() -> frozenset[SupportPermission]:
+def _write_tool_permissions() -> frozenset[SupportPermission]:
+    """Every permission some published write tool needs; a grant beyond these buys nothing."""
     return frozenset(
         contract.required_permission
         for contract in SANDBOX_TOOL_CONTRACTS
         if contract.required_permission is not None
+    )
+
+
+def _covered(payload: AgentConfigurationPayload) -> frozenset[SupportPermission]:
+    """The permissions this configuration's enabled tools would actually exercise."""
+    return frozenset(
+        contract.required_permission
+        for contract in SANDBOX_TOOL_CONTRACTS
+        if contract.name in payload.enabled_tools and contract.required_permission is not None
     )
 
 
@@ -526,11 +541,12 @@ def _variable_values(
     if guideline is not None:
         values["shop.tone_of_voice"] = guideline.name
     if identity is not None:
+        # A published identity resolves every one of its variables, including to empty text.
+        # "Resolves to nothing" has to keep meaning "the source is missing": a preview that
+        # said unresolvable while a run injected an empty string would be the worse of the
+        # two answers, and the runtime resolution has to make the same call.
         values["support_identity.role"] = identity.role.title
-        if identity.guidance:
-            values["support_identity.guidance"] = "; ".join(
-                note.title for note in identity.guidance
-            )
+        values["support_identity.guidance"] = "; ".join(note.title for note in identity.guidance)
         values["support_identity.permissions"] = ", ".join(
             permission.value for permission in identity.permissions
         )

@@ -19,6 +19,7 @@ import { App } from "./App";
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const IDENTITY_ID = "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
 const CONFIGURATION_ID = "1a2b3c4d-5e6f-4071-8293-a4b5c6d7e8f9";
+const OTHER_SHOP_ID = "8c7b6a59-4d3e-4f21-9807-6a5b4c3d2e1f";
 
 const PROMPT = "You are {{support_identity.role}} for {{shop.name}}. Greet {{customer.name}}.";
 
@@ -79,7 +80,24 @@ const RESOURCES: AgentConfigurationResourcesResponse = {
       capabilities: ["tool_calls", "conversation_memory"],
     },
   ],
-  tools: [],
+  tools: [
+    {
+      name: "orders.read_order",
+      version: "v1",
+      summary: "Read one order in full.",
+      effect: "read",
+      required_permission: null,
+      arguments: [],
+    },
+    {
+      name: "orders.propose_address_change",
+      version: "v1",
+      summary: "Work out what changing an order's shipping address would do.",
+      effect: "write",
+      required_permission: "change_shipping_address",
+      arguments: [],
+    },
+  ],
   variables: [],
   support_identities: [
     {
@@ -90,7 +108,10 @@ const RESOURCES: AgentConfigurationResourcesResponse = {
       latest_published_version: 1,
     },
   ],
-  preview_shops: [{ shop_id: SHOP_ID, name: "Northstar Outfitters", latest_published_version: 3 }],
+  preview_shops: [
+    { shop_id: SHOP_ID, name: "Northstar Outfitters", latest_published_version: 3 },
+    { shop_id: OTHER_SHOP_ID, name: "Southline Supply", latest_published_version: 1 },
+  ],
 };
 
 function preview(
@@ -255,8 +276,25 @@ const server = setupServer(
     } satisfies AgentConfigurationDraftResponse);
   }),
   http.get(`*/api/v1/agent-configurations/${CONFIGURATION_ID}/draft/preview`, ({ request }) => {
-    previewShopIds.push(new URL(request.url).searchParams.get("preview_shop_id"));
-    return HttpResponse.json({ ...currentPreview, content: currentConfiguration });
+    const shopId = new URL(request.url).searchParams.get("preview_shop_id");
+    previewShopIds.push(shopId);
+    const body = { ...currentPreview, content: currentConfiguration };
+    if (shopId !== OTHER_SHOP_ID) {
+      return HttpResponse.json(body);
+    }
+    // The other shop resolves the same variables to its own values.
+    return HttpResponse.json({
+      ...body,
+      resolution: {
+        ...body.resolution,
+        shop_id: OTHER_SHOP_ID,
+        shop_name: "Southline Supply",
+        shop_version: 1,
+        variables: body.resolution.variables.map((variable) =>
+          variable.name === "shop.name" ? { ...variable, value: "Southline Supply" } : variable,
+        ),
+      },
+    });
   }),
   http.post(`*/api/v1/agent-configurations/${CONFIGURATION_ID}/versions`, () => {
     currentPreview = preview({
@@ -344,6 +382,24 @@ describe("agent configuration workspace", () => {
     await waitFor(() => expect(prompt).toHaveValue("Answer for {{shop.locale}}"));
   });
 
+  it("inserts a variable mid-text and leaves the caret after the chip", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const prompt = await screen.findByLabelText("Prompt template");
+    await user.clear(prompt);
+    await user.type(prompt, "Answer for  today.");
+    const caret = "Answer for ".length;
+    (prompt as HTMLTextAreaElement).setSelectionRange(caret, caret);
+    await user.click(screen.getByRole("button", { name: "Insert shop.name" }));
+
+    await waitFor(() => expect(prompt).toHaveValue("Answer for {{shop.name}} today."));
+    // A second insert lands after the first rather than back at the top.
+    await waitFor(() =>
+      expect((prompt as HTMLTextAreaElement).selectionStart).toBe(caret + "{{shop.name}}".length),
+    );
+  });
+
   it("marks a write tool the support identity could never be authorized to use", async () => {
     renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
 
@@ -356,12 +412,41 @@ describe("agent configuration workspace", () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
 
+    const resolved = await screen.findByRole("region", { name: "Resolved prompt" });
     expect(await screen.findByText(/Northstar Outfitters v3 · Northstar tier 1 v1/)).toBeVisible();
-    await waitFor(() => expect(previewShopIds).toContain(SHOP_ID));
 
     // The gate preview is read without a shop; the resolution is the read that carries one.
+    await waitFor(() => expect(previewShopIds).toContain(SHOP_ID));
     expect(previewShopIds).toContain(null);
-    await user.selectOptions(screen.getByLabelText("Preview context"), SHOP_ID);
+
+    await user.selectOptions(screen.getByLabelText("Preview context"), OTHER_SHOP_ID);
+
+    expect(await within(resolved).findByText("shop.name: Southline Supply")).toBeVisible();
+    const promptCard = screen.getByRole("region", { name: "System prompt" });
+    expect(await within(promptCard).findByText(/Values:/)).toHaveTextContent("Southline Supply v1");
+  });
+
+  it("reports a failed save without discarding the draft", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put(`*/api/v1/agent-configurations/${CONFIGURATION_ID}/draft`, () =>
+        HttpResponse.json(
+          {
+            code: "agent_configuration_error",
+            message: "model temperature must be a decimal number",
+            request_id: "r",
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    await user.click(await screen.findByLabelText(/orders.propose_address_change/));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/must be a decimal number/);
+    expect(screen.getByLabelText(/orders.propose_address_change/)).toBeChecked();
   });
 
   it("saves the enabled tool set and then publishes the saved draft", async () => {

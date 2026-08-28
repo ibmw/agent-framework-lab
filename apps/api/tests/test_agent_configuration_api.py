@@ -82,8 +82,9 @@ async def test_naming_a_support_identity_that_does_not_exist_is_refused(
         CONFIGURATIONS, json={"name": "Frontline", "support_identity_id": str(uuid4())}
     )
 
+    # The missing resource is the identity, and no configuration was involved at all.
     assert response.status_code == 404
-    assert response.json()["code"] == "agent_configuration_not_found"
+    assert response.json()["code"] == "support_identity_not_found"
 
 
 async def test_the_temperature_travels_as_an_exact_decimal_string(client: AsyncClient) -> None:

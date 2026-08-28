@@ -15,7 +15,10 @@ from capability_lab.application.agent_configurations import (
     AgentConfigurationService,
 )
 from capability_lab.application.shops import ShopService
-from capability_lab.application.support_identities import SupportIdentityService
+from capability_lab.application.support_identities import (
+    SupportIdentityNotFoundError,
+    SupportIdentityService,
+)
 from capability_lab.domain.agent_configuration import AgentConfigurationPayload
 from capability_lab.domain.definitions import DefinitionType, DefinitionValidation
 from capability_lab.domain.support_identity import SupportPermission
@@ -115,7 +118,8 @@ def test_creating_a_configuration_derives_the_support_identity_reference(lab: La
 
 
 def test_a_configuration_cannot_name_a_support_identity_that_does_not_exist(lab: Lab) -> None:
-    with pytest.raises(AgentConfigurationNotFoundError, match="support identity"):
+    """The refusal names the identity, not the configuration that was never created."""
+    with pytest.raises(SupportIdentityNotFoundError, match="support identity"):
         lab.configurations.create_configuration("Frontline", uuid4())
 
 
@@ -187,10 +191,24 @@ def test_publication_refuses_a_write_the_identity_may_never_use(session: Session
 
 
 def test_an_identity_that_may_write_without_a_tool_that_could_is_only_a_warning(lab: Lab) -> None:
+    """One warning per uncovered permission, so a half-covered identity still warns."""
     validation = lab.configurations.preview_configuration(author(lab)).draft.validation
+    warnings = [issue for issue in validation.warnings if issue.code == "permission_without_tool"]
 
     assert validation.publishable
-    assert "permission_without_tool" in {issue.code for issue in validation.warnings}
+    assert len(warnings) == 1
+    assert SupportPermission.CHANGE_SHIPPING_ADDRESS.value in warnings[0].message
+
+
+def test_enabling_the_tool_a_granted_permission_pays_for_silences_the_warning(
+    session: Session,
+) -> None:
+    lab = seed_lab(session)
+    configuration_id = author(lab, tools=(*READ_TOOL_NAMES, WRITE_TOOL))
+    validation = lab.configurations.preview_configuration(configuration_id).draft.validation
+
+    assert validation.publishable
+    assert "permission_without_tool" not in {issue.code for issue in validation.issues}
 
 
 def test_publication_refuses_an_identity_with_no_published_version(session: Session) -> None:
@@ -220,6 +238,19 @@ def test_the_preview_resolves_every_variable_against_the_chosen_shop(lab: Lab) -
     assert values["shop.name"] == publishable_shop().identity.name
     assert values["shop.tone_of_voice"] == publishable_shop().tone_of_voice_guidelines[0].name
     assert values["support_identity.role"] == publishable_identity().role.title
+
+
+def test_a_published_identity_with_no_guidance_resolves_to_empty_text_not_to_nothing(
+    session: Session,
+) -> None:
+    """`None` has to keep meaning "the source is missing"; a run resolves the same way."""
+    lab = seed_lab(session)
+    lab.identities.replace_draft(lab.identity_id, publishable_identity(guidance=()))
+    lab.identities.publish(lab.identity_id)
+    values = resolved(lab, author(lab))
+
+    assert values["support_identity.guidance"] == ""
+    assert values["support_identity.role"] is not None
 
 
 def test_a_fact_an_agent_must_discover_resolves_to_nothing_even_in_a_preview(lab: Lab) -> None:

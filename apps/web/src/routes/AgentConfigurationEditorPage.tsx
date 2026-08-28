@@ -92,11 +92,19 @@ export function AgentConfigurationEditorPage() {
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
   const [contextError, setContextError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  // Every resolution — the effect's, and the ones a save or a publish fires — runs through
+  // one controller. A save resolving shop A followed immediately by a switch to shop B would
+  // otherwise let A's late answer overwrite B's, leaving the chips describing a shop the
+  // picker no longer shows.
+  const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     readAgentConfigurationResources(controller.signal)
-      .then(setResources)
+      .then((body) => {
+        setResources(body);
+        setContextError(null);
+      })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setContextError(describeApiError(cause, UNAVAILABLE));
@@ -105,24 +113,31 @@ export function AgentConfigurationEditorPage() {
     return () => controller.abort();
   }, []);
 
-  const resolve = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const body = await previewAgentConfigurationDraft(configurationId, previewShopId, signal);
+  const resolve = useCallback(async () => {
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
+    try {
+      const body = await previewAgentConfigurationDraft(
+        configurationId,
+        previewShopId,
+        controller.signal,
+      );
+      if (!controller.signal.aborted) {
         setResolution(body.resolution);
-      } catch (cause: unknown) {
-        if (!signal?.aborted) {
-          setContextError(describeApiError(cause, UNAVAILABLE));
-        }
+        // A transient failure must not pin its message over an editor that works again.
+        setContextError(null);
       }
-    },
-    [configurationId, previewShopId],
-  );
+    } catch (cause: unknown) {
+      if (!controller.signal.aborted) {
+        setContextError(describeApiError(cause, UNAVAILABLE));
+      }
+    }
+  }, [configurationId, previewShopId]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void resolve(controller.signal);
-    return () => controller.abort();
+    void resolve();
+    return () => inFlight.current?.abort();
   }, [resolve]);
 
   // A save or a publish changes what a run would inject, so the resolution follows both
@@ -175,6 +190,7 @@ export function AgentConfigurationEditorPage() {
   }
 
   const values = new Map((resolution?.variables ?? []).map((entry) => [entry.name, entry]));
+  const permitted = new Map((resolution?.tools ?? []).map((tool) => [tool.name, tool.permitted]));
   const enabled = new Set(content.tools);
 
   function toggleTool(name: string) {
@@ -425,7 +441,12 @@ export function AgentConfigurationEditorPage() {
 
           <Card title={`Tool bindings · ${content.tools.length} enabled`}>
             <ul className="grid gap-2">
-              {(resolution?.tools ?? []).map((tool) => (
+              {/*
+               * The published set, not the resolution: whether a tool is enabled is the
+               * draft's own answer, and a resolution that failed to load must not hide a
+               * binding the payload will still save. Only "permitted" needs the resolution.
+               */}
+              {(resources?.tools ?? []).map((tool) => (
                 <li key={tool.name} className="grid gap-0.5">
                   <label className="flex items-center gap-2 text-[13px]">
                     <input
@@ -438,7 +459,7 @@ export function AgentConfigurationEditorPage() {
                       <span aria-hidden>{tool.effect === "write" ? "✎" : "◎"}</span>
                       {tool.effect}
                     </span>
-                    {tool.required_permission && !tool.permitted ? (
+                    {tool.required_permission && permitted.get(tool.name) === false ? (
                       <span className="text-[11.5px] font-semibold text-lab-error">
                         needs {tool.required_permission.replace(/_/g, " ")}
                       </span>
@@ -495,25 +516,12 @@ export function AgentConfigurationEditorPage() {
                   }
                 />
               </label>
-              <label className={fieldLabelClasses}>
-                Max tool rounds
-                <input
-                  className={fieldControlClasses}
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={content.model.max_tool_rounds}
-                  onChange={(event) =>
-                    edit({
-                      ...content,
-                      model: {
-                        ...content.model,
-                        max_tool_rounds: Number(event.target.value),
-                      },
-                    })
-                  }
-                />
-              </label>
+              <ToolRoundsField
+                value={content.model.max_tool_rounds}
+                onChange={(rounds) =>
+                  edit({ ...content, model: { ...content.model, max_tool_rounds: rounds } })
+                }
+              />
             </div>
             <fieldset className="grid gap-2">
               <legend className="text-xs font-semibold text-admin-muted uppercase">Memory</legend>
@@ -586,6 +594,48 @@ export function AgentConfigurationEditorPage() {
   );
 }
 
+/**
+ * The tool-round limit, kept as text while it is being typed.
+ *
+ * Bound straight to the payload, clearing the field commits `Number("") === 0` — a value the
+ * domain refuses, so the next save answers 422 for something the author was in the middle of
+ * typing. The draft only sees a number the contract would accept.
+ */
+function ToolRoundsField({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (rounds: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  return (
+    <label className={fieldLabelClasses}>
+      Max tool rounds
+      <input
+        className={fieldControlClasses}
+        type="number"
+        min={1}
+        max={50}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          const rounds = Number(event.target.value);
+          if (Number.isInteger(rounds) && rounds >= 1 && rounds <= 50) {
+            onChange(rounds);
+          }
+        }}
+        onBlur={() => setText(String(value))}
+      />
+    </label>
+  );
+}
+
 function VariableGroup({
   label,
   variables,
@@ -598,7 +648,7 @@ function VariableGroup({
   if (variables.length === 0) {
     return null;
   }
-  const injectable = variables[0].injectable;
+  const injectable = variables.some((variable) => variable.injectable);
   return (
     <section className="grid gap-1.5">
       <h3 className="text-xs font-semibold text-admin-muted uppercase">{label}</h3>
