@@ -33,7 +33,7 @@ from capability_lab.application.agent_configurations import (
     SupportIdentityOption,
 )
 from capability_lab.application.ports import AgentCapability
-from capability_lab.application.sandbox_tool_contracts import ToolContract, ToolEffect
+from capability_lab.application.sandbox_tool_contracts import ToolEffect
 from capability_lab.domain.agent_configuration import (
     AgentArchitecture,
     AgentConfigurationError,
@@ -58,6 +58,7 @@ from capability_lab.presentation.definitions import (
     PublishFailureResponses,
     Slug,
 )
+from capability_lab.presentation.tools import ToolContractSchema
 
 ConfigurationIdPath = Annotated[UUID, Path(description="Stable agent-configuration identifier.")]
 PreviewShopQuery = Annotated[
@@ -263,26 +264,6 @@ class ProvenFrameworkSchema(StrictApiModel):
             providers=sorted(framework.providers),
             models=list(framework.models),
             capabilities=sorted(framework.capabilities),
-        )
-
-
-class ToolContractSchema(StrictApiModel):
-    """One published tool a configuration may enable, and what enabling it requires."""
-
-    name: str
-    version: str
-    summary: str
-    effect: ToolEffect
-    required_permission: SupportPermission | None
-
-    @classmethod
-    def from_domain(cls, contract: ToolContract) -> Self:
-        return cls(
-            name=contract.name,
-            version=contract.version,
-            summary=contract.summary,
-            effect=contract.effect,
-            required_permission=contract.required_permission,
         )
 
 

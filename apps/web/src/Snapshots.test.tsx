@@ -143,6 +143,7 @@ const TOOLS: ToolContractListResponse = {
       version: "v1",
       summary: "Where this conversation started and the ticket thread it belongs to.",
       effect: "read",
+      required_permission: null,
       arguments: [],
     },
     {
@@ -150,6 +151,7 @@ const TOOLS: ToolContractListResponse = {
       version: "v1",
       summary: "Read one policy, support guideline, or FAQ entry in full.",
       effect: "read",
+      required_permission: null,
       arguments: [
         {
           name: "kind",
@@ -165,6 +167,7 @@ const TOOLS: ToolContractListResponse = {
       version: "v1",
       summary: "Read one order in full.",
       effect: "read",
+      required_permission: null,
       arguments: [
         {
           name: "order_reference",
@@ -180,6 +183,7 @@ const TOOLS: ToolContractListResponse = {
       version: "v1",
       summary: "Work out what changing an order's shipping address would do.",
       effect: "write",
+      required_permission: "change_shipping_address",
       arguments: [
         {
           name: "order_reference",
@@ -202,6 +206,7 @@ const TOOLS: ToolContractListResponse = {
       version: "v1",
       summary: "Apply a proposed shipping-address change, once.",
       effect: "write",
+      required_permission: "change_shipping_address",
       arguments: [
         {
           name: "confirmation",

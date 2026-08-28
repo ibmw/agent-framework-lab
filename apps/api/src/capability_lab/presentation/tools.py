@@ -52,6 +52,7 @@ from capability_lab.application.sandbox_tools import (
     ToolExecution,
     ToolOutcome,
 )
+from capability_lab.domain.support_identity import SupportPermission
 from capability_lab.presentation.base import StrictApiModel
 from capability_lab.presentation.definitions import InvalidResponses, NotFoundResponses
 from capability_lab.presentation.sandboxes import SandboxIdPath
@@ -108,13 +109,16 @@ class ToolContractSchema(StrictApiModel):
     `effect` is what tells a caller the two kinds apart before it calls either: a write needs
     an actor, and — for the one write published here — has to be proposed before it can be
     applied. An adapter reads it to route the two differently instead of keeping a list of
-    tool names it knows to be dangerous.
+    tool names it knows to be dangerous. `required_permission` says which grant that actor
+    needs, so an agent configuration can be refused for enabling a tool its support identity
+    could never use.
     """
 
     name: str
     version: str
     summary: str
     effect: ToolEffect
+    required_permission: SupportPermission | None
     arguments: list[ToolArgumentSchema]
 
     @classmethod
@@ -124,6 +128,7 @@ class ToolContractSchema(StrictApiModel):
             version=contract.version,
             summary=contract.summary,
             effect=contract.effect,
+            required_permission=contract.required_permission,
             arguments=[ToolArgumentSchema.from_domain(argument) for argument in contract.arguments],
         )
 

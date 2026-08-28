@@ -1402,7 +1402,7 @@ export interface components {
       /** Frameworks */
       frameworks: components["schemas"]["ProvenFrameworkSchema"][];
       /** Tools */
-      tools: components["schemas"]["capability_lab__presentation__agent_configurations__ToolContractSchema"][];
+      tools: components["schemas"]["ToolContractSchema"][];
       /** Variables */
       variables: components["schemas"]["PromptVariableSchema"][];
       /** Support Identities */
@@ -4528,7 +4528,30 @@ export interface components {
     /** ToolContractListResponse */
     ToolContractListResponse: {
       /** Tools */
-      tools: components["schemas"]["capability_lab__presentation__tools__ToolContractSchema"][];
+      tools: components["schemas"]["ToolContractSchema"][];
+    };
+    /**
+     * ToolContractSchema
+     * @description One published tool.
+     *
+     *     `effect` is what tells a caller the two kinds apart before it calls either: a write needs
+     *     an actor, and — for the one write published here — has to be proposed before it can be
+     *     applied. An adapter reads it to route the two differently instead of keeping a list of
+     *     tool names it knows to be dangerous. `required_permission` says which grant that actor
+     *     needs, so an agent configuration can be refused for enabling a tool its support identity
+     *     could never use.
+     */
+    ToolContractSchema: {
+      /** Name */
+      name: string;
+      /** Version */
+      version: string;
+      /** Summary */
+      summary: string;
+      effect: components["schemas"]["ToolEffect"];
+      required_permission: components["schemas"]["SupportPermission"] | null;
+      /** Arguments */
+      arguments: components["schemas"]["ToolArgumentSchema"][];
     };
     /**
      * ToolEffect
@@ -4603,40 +4626,6 @@ export interface components {
       stock_quantity: number;
       /** @description Null while a draft variant is still unpriced. */
       price: components["schemas"]["MoneySchema"] | null;
-    };
-    /**
-     * ToolContractSchema
-     * @description One published tool a configuration may enable, and what enabling it requires.
-     */
-    capability_lab__presentation__agent_configurations__ToolContractSchema: {
-      /** Name */
-      name: string;
-      /** Version */
-      version: string;
-      /** Summary */
-      summary: string;
-      effect: components["schemas"]["ToolEffect"];
-      required_permission: components["schemas"]["SupportPermission"] | null;
-    };
-    /**
-     * ToolContractSchema
-     * @description One published tool.
-     *
-     *     `effect` is what tells a caller the two kinds apart before it calls either: a write needs
-     *     an actor, and — for the one write published here — has to be proposed before it can be
-     *     applied. An adapter reads it to route the two differently instead of keeping a list of
-     *     tool names it knows to be dangerous.
-     */
-    capability_lab__presentation__tools__ToolContractSchema: {
-      /** Name */
-      name: string;
-      /** Version */
-      version: string;
-      /** Summary */
-      summary: string;
-      effect: components["schemas"]["ToolEffect"];
-      /** Arguments */
-      arguments: components["schemas"]["ToolArgumentSchema"][];
     };
   };
   responses: never;

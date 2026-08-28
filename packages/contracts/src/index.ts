@@ -197,3 +197,36 @@ export type ToolOutcome = components["schemas"]["ToolOutcome"];
 export type ToolRefusalSchema = components["schemas"]["ToolRefusalSchema"];
 export type DefinitionValidationErrorResponse =
   components["schemas"]["DefinitionValidationErrorResponse"];
+
+export type AgentConfigurationListResponse =
+  components["schemas"]["AgentConfigurationListResponse"];
+export type AgentConfigurationSummarySchema =
+  components["schemas"]["AgentConfigurationSummarySchema"];
+export type AgentConfigurationDraftResponse =
+  components["schemas"]["AgentConfigurationDraftResponse"];
+export type AgentConfigurationVersionResponse =
+  components["schemas"]["AgentConfigurationVersionResponse"];
+export type AgentConfigurationVersionListResponse =
+  components["schemas"]["AgentConfigurationVersionListResponse"];
+export type AgentConfigurationPreviewResponse =
+  components["schemas"]["AgentConfigurationPreviewResponse"];
+export type AgentConfigurationPayloadSchema =
+  components["schemas"]["AgentConfigurationPayloadSchema"];
+export type AgentConfigurationResourcesResponse =
+  components["schemas"]["AgentConfigurationResourcesResponse"];
+export type AgentConfigurationResolutionSchema =
+  components["schemas"]["AgentConfigurationResolutionSchema"];
+export type CreateAgentConfigurationRequest =
+  components["schemas"]["CreateAgentConfigurationRequest"];
+export type ModelSettingsSchema = components["schemas"]["ModelSettingsSchema"];
+export type ToneOfVoiceSelectionSchema = components["schemas"]["ToneOfVoiceSelectionSchema"];
+export type ToneOfVoiceSource = components["schemas"]["ToneOfVoiceSource"];
+export type MemoryMode = components["schemas"]["MemoryMode"];
+export type AgentArchitecture = components["schemas"]["AgentArchitecture"];
+export type ProvenFrameworkSchema = components["schemas"]["ProvenFrameworkSchema"];
+export type PromptVariableSchema = components["schemas"]["PromptVariableSchema"];
+export type PromptVariableGroup = components["schemas"]["PromptVariableGroup"];
+export type ResolvedVariableSchema = components["schemas"]["ResolvedVariableSchema"];
+export type ResolvedToolBindingSchema = components["schemas"]["ResolvedToolBindingSchema"];
+export type SupportIdentityOptionSchema = components["schemas"]["SupportIdentityOptionSchema"];
+export type PreviewShopOptionSchema = components["schemas"]["PreviewShopOptionSchema"];

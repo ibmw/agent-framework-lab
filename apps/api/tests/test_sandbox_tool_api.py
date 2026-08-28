@@ -99,6 +99,12 @@ async def test_the_published_tool_set_says_what_each_tool_accepts(client: AsyncC
         "orders.propose_address_change",
         "orders.apply_address_change",
     }
+    # And which grant the acting identity needs before either of them will run.
+    assert {name for name, tool in tools.items() if tool["required_permission"] is not None} == {
+        "orders.propose_address_change",
+        "orders.apply_address_change",
+    }
+    assert tools["orders.apply_address_change"]["required_permission"] == "change_shipping_address"
     assert tools["support.read_document"]["arguments"] == [
         {
             "name": "kind",
@@ -139,6 +145,9 @@ async def test_the_listing_publishes_every_declared_tool_argument_for_argument(
         assert tool["version"] == contract.version
         assert tool["summary"] == contract.summary
         assert tool["effect"] == contract.effect.value
+        assert tool["required_permission"] == (
+            None if contract.required_permission is None else contract.required_permission.value
+        )
         assert [entry["name"] for entry in tool["arguments"]] == [
             argument.name for argument in contract.arguments
         ]

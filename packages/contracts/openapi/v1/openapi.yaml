@@ -4307,7 +4307,7 @@ components:
           title: Frameworks
         tools:
           items:
-            $ref: '#/components/schemas/capability_lab__presentation__agent_configurations__ToolContractSchema'
+            $ref: '#/components/schemas/ToolContractSchema'
           type: array
           title: Tools
         variables:
@@ -10261,7 +10261,7 @@ components:
       properties:
         tools:
           items:
-            $ref: '#/components/schemas/capability_lab__presentation__tools__ToolContractSchema'
+            $ref: '#/components/schemas/ToolContractSchema'
           type: array
           title: Tools
       additionalProperties: false
@@ -10269,6 +10269,57 @@ components:
       required:
       - tools
       title: ToolContractListResponse
+    ToolContractSchema:
+      properties:
+        name:
+          type: string
+          title: Name
+        version:
+          type: string
+          title: Version
+        summary:
+          type: string
+          title: Summary
+        effect:
+          $ref: '#/components/schemas/ToolEffect'
+        required_permission:
+          anyOf:
+          - $ref: '#/components/schemas/SupportPermission'
+          - type: 'null'
+        arguments:
+          items:
+            $ref: '#/components/schemas/ToolArgumentSchema'
+          type: array
+          title: Arguments
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - version
+      - summary
+      - effect
+      - required_permission
+      - arguments
+      title: ToolContractSchema
+      description: 'One published tool.
+
+
+        `effect` is what tells a caller the two kinds apart before it calls either:
+        a write needs
+
+        an actor, and — for the one write published here — has to be proposed before
+        it can be
+
+        applied. An adapter reads it to route the two differently instead of keeping
+        a list of
+
+        tool names it knows to be dangerous. `required_permission` says which grant
+        that actor
+
+        needs, so an agent configuration can be refused for enabling a tool its support
+        identity
+
+        could never use.'
     ToolEffect:
       type: string
       enum:
@@ -10406,71 +10457,3 @@ components:
       - stock_quantity
       - price
       title: VariantSchema
-    capability_lab__presentation__agent_configurations__ToolContractSchema:
-      properties:
-        name:
-          type: string
-          title: Name
-        version:
-          type: string
-          title: Version
-        summary:
-          type: string
-          title: Summary
-        effect:
-          $ref: '#/components/schemas/ToolEffect'
-        required_permission:
-          anyOf:
-          - $ref: '#/components/schemas/SupportPermission'
-          - type: 'null'
-      additionalProperties: false
-      type: object
-      required:
-      - name
-      - version
-      - summary
-      - effect
-      - required_permission
-      title: ToolContractSchema
-      description: One published tool a configuration may enable, and what enabling
-        it requires.
-    capability_lab__presentation__tools__ToolContractSchema:
-      properties:
-        name:
-          type: string
-          title: Name
-        version:
-          type: string
-          title: Version
-        summary:
-          type: string
-          title: Summary
-        effect:
-          $ref: '#/components/schemas/ToolEffect'
-        arguments:
-          items:
-            $ref: '#/components/schemas/ToolArgumentSchema'
-          type: array
-          title: Arguments
-      additionalProperties: false
-      type: object
-      required:
-      - name
-      - version
-      - summary
-      - effect
-      - arguments
-      title: ToolContractSchema
-      description: 'One published tool.
-
-
-        `effect` is what tells a caller the two kinds apart before it calls either:
-        a write needs
-
-        an actor, and — for the one write published here — has to be proposed before
-        it can be
-
-        applied. An adapter reads it to route the two differently instead of keeping
-        a list of
-
-        tool names it knows to be dangerous.'
