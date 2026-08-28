@@ -114,10 +114,15 @@ identity without `change_shipping_address` would be refused at its first call â€
 is a configuration mistake rather than agent behavior, and therefore evidence about nothing. The gate
 knows that before the run starts, so it says so. The mirror case is only a warning: an identity
 permitted to move an order, in a configuration with no tool that could, is a plausible deliberate
-choice.
+choice. That warning is raised **per uncovered permission** rather than once for the set, so an
+identity granted two write permissions with a tool for only one of them still says which half is
+unused â€” a single "any write tool at all" check would call that configuration finished.
 
 An unpublished support identity is reported as a gate error rather than left to explode inside
-`_pin`, so the author reads it in the preview beside everything else.
+`_pin`, so the author reads it in the preview beside everything else. A support identity that does
+not exist at all is refused with the identity's own not-found error rather than this service's:
+creating a configuration against an unknown identity involves no configuration, and a caller has to
+be able to tell a stale identity from a stale configuration.
 
 ### A write tool declares the permission it needs
 
@@ -144,6 +149,11 @@ travels with the gate for the reason ADR 0018 gave: the two answer one question 
 Resolution reads **published versions only**. Publishing pins the latest published version of every
 reference, so a preview computed from a draft would show an author values no experiment could ever
 see.
+
+A `None` value means the *source* is missing, never that the source is empty: a published identity
+with no guidance notes resolves `support_identity.guidance` to empty text. The runtime resolution has
+to make the same call, and a preview reading "unresolvable" while a run injected an empty string
+would be the worse of the two answers to have shipped.
 
 The preview shop is a query parameter rather than a path segment, and the resolved values never enter
 the payload. A configuration that stored what it resolved to would have quietly become a per-shop
@@ -205,7 +215,9 @@ the real section.
   adapters, the unproven framework, the unproven provider, the unexercised model warning, the memory
   mode no adapter has proven, and the two combinations that report nothing.
 - Service tests (`test_agent_configurations.py`) cover the read-only starting draft, the derived
-  support-identity reference and its moves, the identity that does not exist, the complete
+  support-identity reference and its moves, the identity that does not exist and the error naming
+  it, the uncovered write permission that warns and the enabled tool that silences it, the published
+  identity whose empty guidance resolves to empty text, the complete
   publication and the version it pins, the unrunnable framework, the unpublished tool, the write the
   identity may never use, the permission with no tool that warns, the unpublished identity, the
   preview resolving against a chosen shop and against none, the tool-discovered facts that resolve to
@@ -224,8 +236,10 @@ the real section.
   refusing an actor that lacks the permission it names.
 - Frontend tests (`AgentConfigurations.test.tsx`) cover the index's framework, model, and publication
   state, each variable rendered as a chip with its resolved value, the tool-discovered fact's reason
-  and its disabled insert control, insertion at the caret, the write marked unusable, the resolution
-  read with a shop where the gate is read without one, and the save-then-publish sequence.
+  and its disabled insert control, insertion at the end and mid-text with the caret left after the
+  chip, the write marked unusable, the resolution re-read against a second shop where the gate is
+  read without one, a refused save surfacing without discarding the draft, and the save-then-publish
+  sequence.
 - The Playwright journey (`agent-configuration.spec.ts`) is the slice's acceptance evidence: an
   author publishes a shop and a read-only identity, creates a configuration that can read every tool
   and move none, is refused for injecting a customer fact, is refused for enabling a write the
