@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-08-27
+Status: current — 2026-08-28
 
 ## Authoritative direction
 
@@ -129,10 +129,19 @@ SDK immediately.
    different one — the answer is sometimes yes, and must never be silent. And the tool suites sweep
    `SANDBOX_TOOL_CONTRACTS` through a sample-call table checked against it, so a tool published
    without a call in `tool_call_factories.py` fails a test instead of quietly leaving every sweep.
-7. Next is Milestone 3: versioned agent configurations and the participant-driver port — which is
-   also where a support identity stops being chosen by an operator and starts being resolved from a
-   published configuration, where a tool's declared effect is what an adapter routes on, and where
-   the string-only argument table becomes the JSON Schema an adapter offers a model.
+7. Milestone 3 Slice 1 is delivered: the agent configuration is a versioned definition (ADR 0024).
+   The framework, architecture, model, prompt template, tool bindings, memory, and support identity
+   an experiment runs on are published inputs rather than composition defaults, judged against a
+   declared catalog of what the lab has proven it can run. A prompt may name shop and
+   support-identity facts and may never name customer, order, or ticket facts, because discovering
+   those through tools is part of what an experiment compares. The permission a write tool needs is
+   now declared on its contract, so the runtime and the publish gate read one table.
+8. Next is Milestone 3 Slice 2: the participant-driver port and its human operator, plus resolved
+   configurations and participant events persisted without framework SDK types. It lands with the
+   Milestone 4 runner that calls it — which is also where a support identity stops being chosen by
+   an operator and starts being resolved from a published configuration, where a tool's declared
+   effect is what an adapter routes on, and where the string-only argument table becomes the JSON
+   Schema an adapter offers a model.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
