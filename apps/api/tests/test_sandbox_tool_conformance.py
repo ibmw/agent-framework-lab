@@ -41,13 +41,14 @@ from capability_lab.application.sandbox_tools import (
 )
 from capability_lab.application.sandboxes import SandboxRecord
 from capability_lab.domain.shop import ShopDocumentKind
+from capability_lab.domain.support_identity import READ_PERMISSIONS
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
     create_session_factory,
     session_scope,
 )
-from definition_factories import persona
+from definition_factories import persona, publishable_identity
 from tool_call_factories import SAMPLE_ARGUMENTS, sample_call, uncovered_tools
 from workspace_factories import (
     Workspace,
@@ -352,6 +353,50 @@ def test_the_effect_a_tool_declares_is_the_shape_it_is_run_as() -> None:
     assert all(contract.effect is ToolEffect.READ for contract in READ_TOOL_CONTRACTS)
     assert all(contract.effect is ToolEffect.WRITE for contract in WRITE_TOOL_CONTRACTS)
     assert READ_TOOL_CONTRACTS + WRITE_TOOL_CONTRACTS == SANDBOX_TOOL_CONTRACTS
+
+
+def test_every_write_names_the_permission_it_needs_and_no_read_does() -> None:
+    """The declaration two callers read: this runtime, and the configuration publish gate."""
+    assert all(contract.required_permission is not None for contract in WRITE_TOOL_CONTRACTS)
+    assert all(contract.required_permission is None for contract in READ_TOOL_CONTRACTS)
+
+
+@pytest.mark.parametrize("contract", WRITE_TOOL_CONTRACTS, ids=by_name)
+def test_every_write_tool_refuses_an_actor_without_the_permission_it_declares(
+    session: Session,
+    tools: SandboxToolService,
+    arm: SandboxRecord,
+    contract: ToolContract,
+) -> None:
+    """Swept from the declaration, so a second write is authorized the day it is declared."""
+    required = contract.required_permission
+    assert required is not None
+    unpermitted = published_identity(
+        session,
+        publishable_identity(
+            permissions=tuple(
+                permission for permission in READ_PERMISSIONS if permission is not required
+            )
+        ),
+    )
+
+    result = tools.execute(
+        arm.shop_id,
+        arm.sandbox_id,
+        ToolCall(
+            tool=contract.name,
+            version=contract.version,
+            # The tabulated arguments with the confirmation stand-in left unresolved:
+            # authorization is checked before anything is looked up, so an unpermitted
+            # actor never reaches the handler that would need a real one.
+            arguments=SAMPLE_ARGUMENTS[contract.name],
+            actor=unpermitted,
+        ),
+    ).result
+
+    assert result.outcome is ToolOutcome.REFUSED
+    assert result.refusal is not None
+    assert result.refusal.code is ToolRefusalCode.NOT_PERMITTED
 
 
 # -- what no tool may ever serve --------------------------------------------

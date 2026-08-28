@@ -15,6 +15,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from block_factories import publishable_mutation, publishable_objective
+from capability_lab.application.agent_configurations import AgentConfigurationService
 from capability_lab.application.blocks import MutationBlockService, ObjectiveBlockService
 from capability_lab.application.customer_profiles import CustomerProfileService
 from capability_lab.application.order_fixtures import (
@@ -56,6 +57,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyShopDirectory,
+    agent_configuration_repository,
     customer_profile_repository,
     mutation_block_repository,
     objective_block_repository,
@@ -107,6 +109,16 @@ def build_orders(session: Session) -> OrderFixtureService:
         shop_repository(session),
         customer_profile_repository(session),
         SqlAlchemyDefinitionShopAttachmentRepository(session),
+        AdvancingClock(),
+    )
+
+
+def build_agent_configurations(session: Session) -> AgentConfigurationService:
+    return AgentConfigurationService(
+        agent_configuration_repository(session),
+        support_identity_repository(session),
+        shop_repository(session),
+        SqlAlchemyPublishedVersionDirectory(session),
         AdvancingClock(),
     )
 

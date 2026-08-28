@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
 
+from capability_lab.domain.support_identity import SupportPermission
+
 __all__ = [
     "ADDRESS_CHANGE_APPLY",
     "ADDRESS_CHANGE_PROPOSE",
@@ -194,6 +196,12 @@ class ToolContract:
     summary: str
     effect: ToolEffect = ToolEffect.READ
     arguments: tuple[ToolArgument, ...] = ()
+    required_permission: SupportPermission | None = None
+    """The granted permission a write needs, declared beside the tool rather than known
+    only by its handler. Two callers ask this question and must agree: the runtime, which
+    refuses an unauthorized call, and the agent-configuration publish gate, which refuses a
+    configuration that enables a tool its support identity may never use. A read declares
+    none — ADR 0021 scopes a tool to one arm, so reading needs no permission to withhold."""
 
     def __post_init__(self) -> None:
         namespace, separator, verb = self.name.partition(".")
@@ -208,6 +216,10 @@ class ToolContract:
         names = [argument.name for argument in self.arguments]
         if len(set(names)) != len(names):
             raise ToolContractError(f"tool {self.name} declares one argument name twice")
+        if (self.effect is ToolEffect.WRITE) != (self.required_permission is not None):
+            raise ToolContractError(
+                f"tool {self.name} must name the permission it needs when, and only when, it writes"
+            )
 
     def argument(self, name: str) -> ToolArgument | None:
         return next((argument for argument in self.arguments if argument.name == name), None)
@@ -223,13 +235,19 @@ def _read(name: str, summary: str, *arguments: ToolArgument) -> ToolContract:
     )
 
 
-def _write(name: str, summary: str, *arguments: ToolArgument) -> ToolContract:
+def _write(
+    name: str,
+    summary: str,
+    permission: SupportPermission,
+    *arguments: ToolArgument,
+) -> ToolContract:
     return ToolContract(
         name=name,
         version=TOOL_VERSION,
         summary=summary,
         effect=ToolEffect.WRITE,
         arguments=arguments,
+        required_permission=permission,
     )
 
 
@@ -331,6 +349,7 @@ WRITE_TOOL_CONTRACTS: tuple[ToolContract, ...] = (
     _write(
         ADDRESS_CHANGE_PROPOSE,
         "Work out what changing an order's shipping address would do, and confirm nothing.",
+        SupportPermission.CHANGE_SHIPPING_ADDRESS,
         _ORDER_REFERENCE,
         _ORDER_ID,
         ToolArgument(
@@ -345,6 +364,7 @@ WRITE_TOOL_CONTRACTS: tuple[ToolContract, ...] = (
     _write(
         ADDRESS_CHANGE_APPLY,
         "Apply a proposed shipping-address change, once, to the order it was proposed for.",
+        SupportPermission.CHANGE_SHIPPING_ADDRESS,
         ToolArgument(
             name="confirmation",
             kind=ToolArgumentKind.TEXT,

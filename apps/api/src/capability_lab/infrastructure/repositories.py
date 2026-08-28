@@ -20,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from capability_lab.application.agent_configurations import AGENT_CONFIGURATION_CODEC
 from capability_lab.application.blocks import MUTATION_BLOCK_CODEC, OBJECTIVE_BLOCK_CODEC
 from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.application.canonical_state import fingerprint_initial_state
@@ -68,6 +69,7 @@ from capability_lab.application.scenarios import SCENARIO_CODEC
 from capability_lab.application.shops import SHOP_CODEC
 from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
 from capability_lab.application.tickets import TICKET_CODEC
+from capability_lab.domain.agent_configuration import AgentConfigurationPayload
 from capability_lab.domain.blocks import MutationBlockPayload, ObjectiveBlockPayload
 from capability_lab.domain.customer_profile import CustomerProfilePayload
 from capability_lab.domain.definitions import (
@@ -1460,6 +1462,12 @@ def mutation_block_repository(
 
 def scenario_repository(session: Session) -> SqlAlchemyDefinitionRepository[ScenarioPayload]:
     return SqlAlchemyDefinitionRepository(session, SCENARIO_CODEC)
+
+
+def agent_configuration_repository(
+    session: Session,
+) -> SqlAlchemyDefinitionRepository[AgentConfigurationPayload]:
+    return SqlAlchemyDefinitionRepository(session, AGENT_CONFIGURATION_CODEC)
 
 
 class SqlAlchemyPublishedVersionDirectory:

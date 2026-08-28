@@ -6,8 +6,8 @@ guarantees come out of that split, and each one is a different failure this modu
 
 - **Authorization.** Both steps check the acting support identity's granted permissions, so
   an agent whose identity cannot change an address cannot discover what changing it would
-  do either. This is where `SupportPermission.CHANGE_SHIPPING_ADDRESS` finally decides
-  something; until this slice no permission had a write to withhold (ADR 0021).
+  do either. The permission each write needs is declared on its contract, so this check and
+  the agent-configuration publish gate read one table rather than two literals.
 - **Confirmation.** A proposal is named by the hash of its own content. Applying without
   that name, or with a name that stands for a different change, is refused — the
   "verifiable prior confirmation" `docs/api-and-schema-conventions.md` requires of a
@@ -70,7 +70,7 @@ from capability_lab.domain.address_change import (
 )
 from capability_lab.domain.order_fixture import OrderFixturePayload
 from capability_lab.domain.sandbox import SandboxOrder
-from capability_lab.domain.support_identity import SupportIdentityPayload, SupportPermission
+from capability_lab.domain.support_identity import SupportIdentityPayload
 
 __all__ = [
     "ADDRESS_CHANGE_PROPOSAL_SCHEMA_VERSION",
@@ -262,7 +262,7 @@ class SandboxActionService:
         arguments: dict[str, str],
     ) -> dict[str, CanonicalValue]:
         """Run one write tool. Refusals raise `ToolRefusedError` and become results."""
-        self._require_permission(actor)
+        self._require_permission(contract, actor)
         if contract.name == ADDRESS_CHANGE_PROPOSE:
             return self._propose(context, record, arguments)
         if contract.name == ADDRESS_CHANGE_APPLY:
@@ -386,16 +386,24 @@ class SandboxActionService:
     # -- shared ----------------------------------------------------------------
 
     @staticmethod
-    def _require_permission(actor: SupportIdentityPayload) -> None:
+    def _require_permission(contract: ToolContract, actor: SupportIdentityPayload) -> None:
         """Authorize before resolving anything.
 
         Checked first on purpose: an identity that may not redirect an order must not learn
         from a refusal's wording whether the order exists or where it currently ships.
+
+        The permission comes from the contract rather than from a literal here, so the
+        runtime and the agent-configuration publish gate cannot disagree about what a tool
+        needs: a configuration is refused at publication for exactly the grant this refuses
+        at call time.
         """
-        if SupportPermission.CHANGE_SHIPPING_ADDRESS not in actor.granted:
+        required = contract.required_permission
+        if required is None:  # pragma: no cover - a write always declares one
+            raise ToolContractError(f"write tool {contract.name} declares no permission")
+        if required not in actor.granted:
             raise ToolRefusedError(
                 ToolRefusalCode.NOT_PERMITTED,
-                f"{actor.role.title} is not authorized to change a shipping address",
+                f"{actor.role.title} is not authorized to {required.value.replace('_', ' ')}",
             )
 
     @staticmethod
