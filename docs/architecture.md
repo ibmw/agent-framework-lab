@@ -33,7 +33,8 @@ Milestone 1 has begun replacing it: the definition lifecycle (ADR 0012), the ver
 extensible catalog with its publish gate (ADR 0013), versioned customer profiles and support
 identities on a shared authoring lifecycle (ADR 0014), shop-scoped order fixtures (ADR 0015),
 versioned tickets — the first shop-scoped definition, pinning its shop and customer versions at
-publication (ADR 0016) — the
+publication (ADR 0016), and versioned agent configurations, the first definition to describe the
+agent rather than the world it works in (ADR 0024) — the
 `definition_drafts`/`definition_versions`/`definition_shop_attachments`/`shop_order_fixtures` tables,
 and the Studio application shell are target code. The POC's persona-first frontend was removed with
 that shell; its HTTP contracts remain published and tested without a UI consumer.
@@ -130,6 +131,17 @@ can recover from, not a transport error (ADR 0022).
 The current `AgentAdapter` is an application port and remains useful evidence. The target port may
 evolve only when the experiment runner and a concrete second architecture prove new requirements.
 Agent SDK types never enter the domain, stored neutral event format, public API, or shared UI.
+
+What an agent *is* for one experiment is authored rather than composed: a published agent
+configuration carries the framework, architecture, model and runtime settings, system prompt, tool
+bindings, memory, and the support-identity version it adopts (ADR 0024). Its prompt is a template
+over a closed variable table — shop and support-identity facts resolve at experiment start, while
+customer, order, and ticket facts are declared as never injectable, because discovering them through
+tools is part of what an experiment compares. What an author may publish is judged against a declared
+catalog of what the lab has proven a framework can run, kept apart from the adapter registry so the
+gate does not change with the machine the Studio runs on; a permission a write tool needs is declared
+on the tool contract, so the runtime that refuses an unauthorized call and the gate that refuses a
+configuration enabling it read one table.
 
 Participant input has a separate application port. Its first implementation is the human operator;
 future LLM and scripted customer drivers use the same run protocol and remain independent of the

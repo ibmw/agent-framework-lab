@@ -50,7 +50,10 @@ pinned (ADR 0019), and then the independently mutable clone each experiment arm 
 (ADR 0020), and then the versioned read tools an arm interrogates that clone through (ADR 0021), and
 then the safe address change an arm may actually make (ADR 0022), and finally the evidence that
 holds all of it: recorded fingerprints for the canonical envelopes and a conformance sweep driven by
-the tool registry rather than by a list (ADR 0023), which completes the milestone.
+the tool registry rather than by a list (ADR 0023), which completes the milestone. Milestone 3 has
+begun with the agent configuration: the support agent published as a versioned experiment input —
+framework, architecture, model, prompt template, tool bindings, memory, and the support identity it
+adopts — validated against what the lab has actually proven it can run (ADR 0024).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -417,19 +420,40 @@ order into a published scenario version arrives with the scenario outcome above.
 
 Make the support agent and customer-input mechanism reusable, versioned experiment inputs.
 
-### Outcomes
+### Slice 1 — Agent configuration definition and prompt editor
 
-- [ ] Add draft/published agent configurations covering framework, architecture, model, prompt,
+- [x] Add draft/published agent configurations covering framework, architecture, model, prompt,
   tools, memory, support identity, and runtime settings.
-- [ ] Validate requested configuration against proven adapter capabilities.
-- [ ] Evolve the agent port only for requirements proven by the target scenario.
-- [ ] Introduce a participant-driver port and human-operator implementation.
-- [ ] Persist resolved configurations and participant events without framework SDK types.
-- [ ] Keep deterministic adapter tests and optional live-model smoke tests separate.
+- [x] Validate requested configuration against proven adapter capabilities.
+- [x] Keep deterministic adapter tests and optional live-model smoke tests separate.
 
 Frames: 5 · Agent configuration — variables (markdown prompt editor with variable chips, grouped
 insert menu with the non-injectable group, preview context, and the LLM/runtime configuration
 card).
+
+Slice evidence: an author publishes a shop and a support identity, composes a shop-independent
+configuration on top of them, reads every `{{variable}}` in its prompt resolved against a chosen
+preview shop and the identity's published version, and publishes — after the gate has refused the
+two things a configuration must never carry: a fact the agent is meant to discover through tools,
+and a write its identity could never be authorized to make. The frozen version keeps the
+support-identity version it pinned while every draft around it moves on. ADR 0024 records the
+`agent-configuration-payload-v1` schema, the closed prompt-variable table and why customer, order,
+and ticket facts are declared in it but never injectable, the proven-capability catalog declared
+apart from the adapters so the gate stays testable offline, the gate rules that reach outside the
+payload, the permission a write tool now declares on its own contract so the runtime and the gate
+read one table, and the preview resolution that travels with the gate without ever entering the
+payload.
+
+### Slice 2 — Participant driver and resolved run inputs
+
+- [ ] Evolve the agent port only for requirements proven by the target scenario.
+- [ ] Introduce a participant-driver port and human-operator implementation.
+- [ ] Persist resolved configurations and participant events without framework SDK types.
+
+Frames: none new; the participant surface is the Milestone 4 bench.
+
+Sequencing: this slice is delivered against the Milestone 4 runner that calls it. A port designed
+before it has a caller would be shaped by a hypothetical one.
 
 ### Acceptance criteria
 
