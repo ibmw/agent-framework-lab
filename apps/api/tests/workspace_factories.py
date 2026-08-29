@@ -14,10 +14,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from agent_factories import publishable_configuration
 from block_factories import publishable_mutation, publishable_objective
 from capability_lab.application.agent_configurations import AgentConfigurationService
 from capability_lab.application.blocks import MutationBlockService, ObjectiveBlockService
 from capability_lab.application.customer_profiles import CustomerProfileService
+from capability_lab.application.experiments import ArmSelection, ExperimentService
 from capability_lab.application.order_fixtures import (
     OrderEdit,
     OrderEventDraft,
@@ -51,7 +53,10 @@ from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import SuggestedDocument
 from capability_lab.infrastructure.repositories import (
     SqlAlchemyDefinitionShopAttachmentRepository,
+    SqlAlchemyExperimentRepository,
+    SqlAlchemyExperimentRunRepository,
     SqlAlchemyOrderFixtureRepository,
+    SqlAlchemyParticipantTurnRepository,
     SqlAlchemyPublishedVersionDirectory,
     SqlAlchemySandboxActionProposalRepository,
     SqlAlchemySandboxRepository,
@@ -178,6 +183,43 @@ def build_tools(
         build_actions(session),
         handlers,
     )
+
+
+def build_experiments(session: Session) -> ExperimentService:
+    return ExperimentService(
+        SqlAlchemyExperimentRepository(session),
+        SqlAlchemyExperimentRunRepository(session),
+        SqlAlchemyParticipantTurnRepository(session),
+        build_snapshots(session),
+        build_sandboxes(session),
+        shop_repository(session),
+        ticket_repository(session),
+        agent_configuration_repository(session),
+        SqlAlchemyPublishedVersionDirectory(session),
+        AdvancingClock(),
+    )
+
+
+def published_configuration(
+    session: Session, actor: ToolActor | None = None, **overrides: object
+) -> ArmSelection:
+    """One published agent configuration, ready to be selected as an arm.
+
+    Publishes its own support identity unless one is handed in. Two arms that must differ in
+    exactly one dimension have to share theirs, because the identity a configuration adopts
+    is itself a comparison variable.
+    """
+    adopted = published_identity(session) if actor is None else actor
+    configurations = build_agent_configurations(session)
+    created = configurations.create_configuration(
+        "Frontline single agent", adopted.support_identity_id
+    )
+    configuration_id = created.definition.id
+    configurations.replace_configuration(
+        configuration_id, publishable_configuration(adopted.support_identity_id, **overrides)
+    )
+    published = configurations.publish(configuration_id)
+    return ArmSelection(configuration_id=configuration_id, version=published.published.version)
 
 
 def published_identity(

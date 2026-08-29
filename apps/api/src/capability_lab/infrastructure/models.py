@@ -392,3 +392,125 @@ class SandboxActionProposalModel(Base):
     applied_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     applied_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
     result: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+
+
+class ExperimentModel(Base):
+    """One immutable experiment, stored as its canonical `experiment-v1` document.
+
+    Written once and never updated: an experiment's inputs are what explain its result, so
+    there is no path that could edit them after a run has begun. The columns beside the
+    document exist so a shop's experiments can be listed and recognized by fingerprint, and
+    are written from the document by the repository rather than as a second source of truth.
+
+    There is deliberately **no** uniqueness over `resolution_fingerprint`: running the same
+    scenario against the same arms twice is two experiments, for the reason cloning a
+    snapshot twice is two arms (ADR 0020). Recognizing a repeat is what the fingerprint is
+    for; collapsing one would delete the second result.
+
+    `snapshot_id` carries no foreign key, deliberately. The snapshot is provenance recorded
+    inside the fingerprinted document; the column beside it exists so an experiment's arms can
+    be found without decoding, and `sandbox_snapshots` is already write-once, so a constraint
+    would guard a row nothing can delete. The same rule as `shop_id`, which no table
+    references either.
+    """
+
+    __tablename__ = "experiments"
+    __table_args__ = (
+        CheckConstraint("scenario_version >= 1", name="ck_experiments_version_positive"),
+        CheckConstraint("seed >= 0", name="ck_experiments_seed_non_negative"),
+        CheckConstraint(
+            "participant_driver IN ('human', 'llm', 'scripted')",
+            name="ck_experiments_participant_driver_valid",
+        ),
+        Index("ix_experiments_shop", "shop_id", "created_at"),
+    )
+
+    experiment_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    shop_id: Mapped[str] = mapped_column(String(36))
+    label: Mapped[str] = mapped_column(String(200))
+    scenario_id: Mapped[str] = mapped_column(String(36))
+    scenario_version: Mapped[int] = mapped_column(Integer)
+    seed: Mapped[int] = mapped_column(BigInteger)
+    snapshot_id: Mapped[str] = mapped_column(String(36))
+    sandbox_fingerprint: Mapped[str] = mapped_column(String(64))
+    resolution_fingerprint: Mapped[str] = mapped_column(String(64))
+    participant_driver: Mapped[str] = mapped_column(String(16))
+    document: Mapped[dict[str, object]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ExperimentRunModel(Base):
+    """One arm of one experiment, bound to the sandbox it works in.
+
+    The sandbox is referenced, not embedded: an arm's isolation is its own row in
+    `sandboxes` (ADR 0020), and duplicating any of that state here would give a run a second
+    world that could disagree with the one its tools move.
+
+    `position` is unique inside an experiment, so "arm A" means one arm however the rows are
+    ordered on the way out.
+    """
+
+    __tablename__ = "experiment_runs"
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="ck_experiment_runs_position_non_negative"),
+        CheckConstraint(
+            "agent_configuration_version >= 1",
+            name="ck_experiment_runs_configuration_version_positive",
+        ),
+        UniqueConstraint("experiment_id", "position", name="uq_experiment_runs_position"),
+        UniqueConstraint("sandbox_id", name="uq_experiment_runs_sandbox"),
+        Index("ix_experiment_runs_experiment", "experiment_id", "position"),
+    )
+
+    run_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.experiment_id"))
+    shop_id: Mapped[str] = mapped_column(String(36))
+    position: Mapped[int] = mapped_column(Integer)
+    label: Mapped[str] = mapped_column(String(200))
+    agent_configuration_id: Mapped[str] = mapped_column(String(36))
+    agent_configuration_version: Mapped[int] = mapped_column(Integer)
+    sandbox_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ParticipantTurnModel(Base):
+    """One customer turn as one run received it.
+
+    The primary key is the run plus the ordinal, which is what makes the stream append-only:
+    a turn cannot be renumbered onto another position and a run cannot receive two turns at
+    the same depth. `turn_id` is deliberately *not* unique — it is the composition the turn
+    belongs to, and a message the operator sent to both arms is one composition in two rows.
+    That is the divergence record: a `turn_id` held by one arm alone was written for that arm
+    alone.
+
+    `body` is synthetic customer content. It is stored, as the order fixtures beside it are,
+    and it is never logged or traced (`AGENTS.md`).
+
+    `experiment_id` is a query column rather than a second owner: the turn belongs to its run,
+    which is what the foreign key says, and this is how a whole experiment's threads are read
+    in one statement. The driver-matches-source constraint is written as a boolean equality,
+    which SQLite and PostgreSQL both accept; a third dialect would want `CASE`.
+    """
+
+    __tablename__ = "experiment_participant_turns"
+    __table_args__ = (
+        CheckConstraint("ordinal >= 0", name="ck_participant_turns_ordinal_non_negative"),
+        CheckConstraint(
+            "source IN ('trigger', 'participant')", name="ck_participant_turns_source_valid"
+        ),
+        CheckConstraint(
+            "(source = 'trigger') = (driver IS NULL)",
+            name="ck_participant_turns_driver_matches_source",
+        ),
+        Index("ix_participant_turns_experiment", "experiment_id", "created_at"),
+        Index("ix_participant_turns_composition", "experiment_id", "turn_id"),
+    )
+
+    run_id: Mapped[str] = mapped_column(ForeignKey("experiment_runs.run_id"), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(String(36))
+    turn_id: Mapped[str] = mapped_column(String(36))
+    source: Mapped[str] = mapped_column(String(16))
+    driver: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    body: Mapped[str] = mapped_column(String(4000))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())

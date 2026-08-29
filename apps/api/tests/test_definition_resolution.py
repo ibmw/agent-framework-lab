@@ -8,7 +8,6 @@ from capability_lab.application.definition_resolution import (
     DefinitionResolutionError,
     MissingDraftError,
     MissingReferenceVersionError,
-    ParticipantDriverType,
     PublishedVersionExistsError,
     UnpublishedReferenceError,
     publish_definition,
@@ -21,6 +20,7 @@ from capability_lab.domain.definitions import (
     PublishedDefinitionVersion,
     VersionRef,
 )
+from capability_lab.domain.experiment import ParticipantDriverType
 
 FINGERPRINT = "c" * 64
 TOOL_CONTRACTS = {"commerce.read_order": "v1", "commerce.change_address": "v1"}

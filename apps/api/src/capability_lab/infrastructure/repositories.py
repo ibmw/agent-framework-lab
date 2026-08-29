@@ -33,6 +33,11 @@ from capability_lab.application.definition_authoring import (
     PayloadCodec,
 )
 from capability_lab.application.definition_resolution import PublishedVersionExistsError
+from capability_lab.application.experiments import (
+    ExperimentRecord,
+    ParticipantTurnRecord,
+    RunRecord,
+)
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.order_fixture_payload import (
     order_fixture_content_fingerprint,
@@ -90,6 +95,11 @@ from capability_lab.domain.entities import (
     ScenarioDefinition,
     ScenarioMetadata,
 )
+from capability_lab.domain.experiment import (
+    ParticipantDriverType,
+    ParticipantTurn,
+    ParticipantTurnSource,
+)
 from capability_lab.domain.scenario import ScenarioPayload
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload
@@ -102,6 +112,8 @@ from capability_lab.infrastructure.models import (
     DefinitionDraftModel,
     DefinitionShopAttachmentModel,
     DefinitionVersionModel,
+    ExperimentModel,
+    ExperimentRunModel,
     GeneratedScenarioModel,
     GeneratedScenarioOrderModel,
     GeneratedScenarioProductModel,
@@ -109,6 +121,7 @@ from capability_lab.infrastructure.models import (
     MemoryRecordModel,
     OrderFixtureModel,
     OrderModel,
+    ParticipantTurnModel,
     PersonaModel,
     ProductModel,
     SandboxActionProposalModel,
@@ -2039,4 +2052,162 @@ class SqlAlchemySandboxActionProposalRepository:
             applied_at=model.applied_at,
             applied_revision=model.applied_revision,
             result=cast("dict[str, CanonicalValue] | None", model.result),
+        )
+
+
+class SqlAlchemyExperimentRepository:
+    """Store one experiment as the `experiment-v1` document it was fingerprinted from.
+
+    Write-once, like the snapshot repository beside it: there is no update path, because an
+    experiment's inputs are what explain its result and nothing may edit them after a run
+    has begun.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, shop_id: UUID, experiment_id: UUID) -> ExperimentRecord | None:
+        model = self._session.get(ExperimentModel, str(experiment_id))
+        if model is None or model.shop_id != str(shop_id):
+            return None
+        return self._record(model)
+
+    def list_for_shop(self, shop_id: UUID) -> tuple[ExperimentRecord, ...]:
+        models = self._session.scalars(
+            select(ExperimentModel)
+            .where(ExperimentModel.shop_id == str(shop_id))
+            # Newest first: an operator opening the bench is looking for what they just ran.
+            .order_by(ExperimentModel.created_at.desc(), ExperimentModel.experiment_id)
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def save(self, record: ExperimentRecord) -> ExperimentRecord:
+        self._session.add(
+            ExperimentModel(
+                experiment_id=str(record.experiment_id),
+                shop_id=str(record.shop_id),
+                label=record.label,
+                scenario_id=str(record.scenario_id),
+                scenario_version=record.scenario_version,
+                seed=record.seed,
+                snapshot_id=str(record.snapshot_id),
+                sandbox_fingerprint=record.sandbox_fingerprint,
+                resolution_fingerprint=record.resolution_fingerprint,
+                participant_driver=record.participant_driver.value,
+                document=cast("dict[str, object]", record.document),
+                created_at=record.created_at,
+            )
+        )
+        self._session.flush()
+        return record
+
+    @staticmethod
+    def _record(model: ExperimentModel) -> ExperimentRecord:
+        return ExperimentRecord(
+            experiment_id=UUID(model.experiment_id),
+            shop_id=UUID(model.shop_id),
+            label=model.label,
+            scenario_id=UUID(model.scenario_id),
+            scenario_version=model.scenario_version,
+            seed=model.seed,
+            snapshot_id=UUID(model.snapshot_id),
+            sandbox_fingerprint=model.sandbox_fingerprint,
+            resolution_fingerprint=model.resolution_fingerprint,
+            participant_driver=ParticipantDriverType(model.participant_driver),
+            document=cast("dict[str, CanonicalValue]", model.document),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyExperimentRunRepository:
+    """One row per arm, ordered by the position a comparison refers to them by."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[RunRecord, ...]:
+        models = self._session.scalars(
+            select(ExperimentRunModel)
+            .where(ExperimentRunModel.experiment_id == str(experiment_id))
+            .order_by(ExperimentRunModel.position)
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def save(self, record: RunRecord) -> RunRecord:
+        self._session.add(
+            ExperimentRunModel(
+                run_id=str(record.run_id),
+                experiment_id=str(record.experiment_id),
+                shop_id=str(record.shop_id),
+                position=record.position,
+                label=record.label,
+                agent_configuration_id=str(record.agent_configuration_id),
+                agent_configuration_version=record.agent_configuration_version,
+                sandbox_id=str(record.sandbox_id),
+                created_at=record.created_at,
+            )
+        )
+        self._session.flush()
+        return record
+
+    @staticmethod
+    def _record(model: ExperimentRunModel) -> RunRecord:
+        return RunRecord(
+            run_id=UUID(model.run_id),
+            experiment_id=UUID(model.experiment_id),
+            shop_id=UUID(model.shop_id),
+            position=model.position,
+            label=model.label,
+            agent_configuration_id=UUID(model.agent_configuration_id),
+            agent_configuration_version=model.agent_configuration_version,
+            sandbox_id=UUID(model.sandbox_id),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyParticipantTurnRepository:
+    """Append one turn per arm; the run-and-ordinal key is what makes the stream a stream."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[ParticipantTurnRecord, ...]:
+        models = self._session.scalars(
+            select(ParticipantTurnModel)
+            .where(ParticipantTurnModel.experiment_id == str(experiment_id))
+            # By run and then by depth rather than by time: two arms driven in one call share
+            # a timestamp, and a thread read in insertion order would interleave them.
+            .order_by(ParticipantTurnModel.run_id, ParticipantTurnModel.ordinal)
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def append(self, record: ParticipantTurnRecord) -> ParticipantTurnRecord:
+        self._session.add(
+            ParticipantTurnModel(
+                run_id=str(record.run_id),
+                ordinal=record.turn.ordinal,
+                experiment_id=str(record.experiment_id),
+                turn_id=str(record.turn.turn_id),
+                source=record.turn.source.value,
+                driver=None if record.turn.driver is None else record.turn.driver.value,
+                body=record.turn.body,
+                created_at=record.created_at,
+            )
+        )
+        self._session.flush()
+        return record
+
+    @staticmethod
+    def _record(model: ParticipantTurnModel) -> ParticipantTurnRecord:
+        return ParticipantTurnRecord(
+            run_id=UUID(model.run_id),
+            experiment_id=UUID(model.experiment_id),
+            turn=ParticipantTurn(
+                turn_id=UUID(model.turn_id),
+                ordinal=model.ordinal,
+                source=ParticipantTurnSource(model.source),
+                driver=None if model.driver is None else ParticipantDriverType(model.driver),
+                body=model.body,
+            ),
+            created_at=model.created_at,
         )

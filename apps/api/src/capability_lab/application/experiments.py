@@ -1,0 +1,786 @@
+"""Starting one experiment: two arms of one incident, and the turns that drive them.
+
+Everything this needs already exists. A published scenario version is a recipe (ADR 0018),
+materializing it is canonical starting state (ADR 0019), cloning it is one arm's own world
+(ADR 0020), and a published agent configuration is what an arm runs (ADR 0024). What was
+missing is the record that holds them together — and, until now, the caller that gives
+`resolve_experiment_inputs` a reason to exist. ADR 0012 wrote that resolution before there
+was anything to resolve for; this module is the thing it was written for.
+
+Four decisions shape it.
+
+**Starting is composed, never re-implemented.** `start` materializes through
+`SandboxSnapshotService` and clones through `SandboxService` rather than writing its own
+freeze and copy. Both already carry rules an experiment must not be able to sidestep — the
+publish gate re-run against today's orders, the fingerprint that identifies a snapshot, the
+per-arm row that *is* the isolation.
+
+**Both arms open with the scenario's trigger, not with a driver's.** The pinned ticket
+carries the first message every arm receives (ADR 0016). It is recorded as each run's turn
+zero with a source of its own, before any driver is consulted, so "the arms started from the
+same question" is a property of the starting state rather than of a driver behaving.
+
+**The gate reaches outside the payload, and it runs twice.** `preview` and `start` share one
+rule set, the way `SandboxSnapshotService` shares the authoring gate with the publication it
+re-judges. It answers the check ADR 0024 deferred to here — a tone-of-voice override is
+resolved against the shop the scenario pinned, which is the first moment a target shop
+exists — and it counts the dimensions along which the arms differ, because an experiment
+with two differences measures neither of them.
+
+**A turn is delivered per arm, and the composition that produced it is recorded.** The
+operator writes once and chooses which arms receive it; the arms that received one
+composition share its `turn_id`. That is the divergence evidence, and it is written at
+delivery because nothing later can reconstruct whether two identical sentences were one
+decision or two.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Protocol, cast
+from uuid import UUID, uuid4
+
+from capability_lab.application.agent_configurations import (
+    AgentConfigurationVersionNotFoundError,
+)
+from capability_lab.application.canonical_document import DocumentReader
+from capability_lab.application.canonical_json import CanonicalValue
+from capability_lab.application.definition_authoring import (
+    DefinitionRepository,
+    DefinitionVersionRecord,
+)
+from capability_lab.application.definition_resolution import (
+    ConflictingReferenceVersionsError,
+    DefinitionResolutionError,
+    ExperimentResolution,
+    MissingReferenceVersionError,
+    PublishedVersionReader,
+    ResolvedDefinition,
+    resolve_experiment_inputs,
+)
+from capability_lab.application.experiment_document import (
+    ExperimentDocument,
+    experiment_from_document,
+    fingerprint_experiment,
+)
+from capability_lab.application.participants import (
+    ParticipantDriver,
+    ParticipantRequest,
+)
+from capability_lab.application.ports import Clock
+from capability_lab.application.sandbox_materialization import (
+    SANDBOX_TOOL_CONTRACT_VERSIONS,
+    SandboxSnapshotRecord,
+    SandboxSnapshotService,
+)
+from capability_lab.application.sandboxes import SandboxRecord, SandboxService
+from capability_lab.application.scenarios import (
+    ScenarioVersionNotFoundError,
+    scenario_definition_id,
+)
+from capability_lab.domain.agent_configuration import (
+    AgentConfigurationPayload,
+    ToneOfVoiceSource,
+)
+from capability_lab.domain.content import require_label
+from capability_lab.domain.definitions import (
+    DefinitionId,
+    DefinitionIssue,
+    DefinitionType,
+    DefinitionValidation,
+    PublishedDefinitionVersion,
+    VersionRef,
+    issue_error,
+    issue_warning,
+    validation_of,
+)
+from capability_lab.domain.experiment import (
+    ComparisonVariable,
+    ExperimentConfigurationError,
+    ParticipantDriverType,
+    ParticipantTurn,
+    ParticipantTurnSource,
+    compare_configurations,
+)
+from capability_lab.domain.shop import ShopPayload
+from capability_lab.domain.ticket import TicketPayload
+
+__all__ = [
+    "ArmSelection",
+    "ExperimentDetail",
+    "ExperimentLabelError",
+    "ExperimentNotFoundError",
+    "ExperimentNotStartableError",
+    "ExperimentPreview",
+    "ExperimentRecord",
+    "ExperimentRepository",
+    "ExperimentRunNotFoundError",
+    "ExperimentRunRepository",
+    "ExperimentService",
+    "ParticipantDriverMismatchError",
+    "ParticipantTurnRecord",
+    "ParticipantTurnRepository",
+    "RunRecord",
+    "StartExperiment",
+]
+
+# Arm labels when the operator does not name them. The arm's position is what a comparison
+# refers to ("arm A resolved the order, arm B never read the policy"), so the default is the
+# position rather than the configuration's name, which two arms are allowed to share.
+ARM_LABELS = ("Arm A", "Arm B")
+MAX_ARMS = len(ARM_LABELS)
+
+
+class ExperimentNotFoundError(DefinitionResolutionError):
+    """Raised when an experiment identifier names nothing in this shop."""
+
+
+class ExperimentRunNotFoundError(DefinitionResolutionError):
+    """Raised when a run identifier names no arm of this experiment."""
+
+
+class ExperimentLabelError(DefinitionResolutionError):
+    """Raised when an experiment is started without a name an operator can find it by."""
+
+
+class ExperimentArmError(DefinitionResolutionError):
+    """Raised when the arms an experiment was asked for cannot be run against each other."""
+
+
+class ParticipantDriverMismatchError(DefinitionResolutionError):
+    """Raised when a turn is delivered by a driver the experiment did not record.
+
+    The participant driver is a recorded input, not a per-message choice: a run half typed
+    by a person and half generated by a simulator would carry one label for two things.
+    """
+
+
+class ExperimentNotStartableError(DefinitionResolutionError):
+    """Raised when the setup gate refuses the experiment it was asked to start."""
+
+    def __init__(self, validation: DefinitionValidation) -> None:
+        super().__init__("this experiment cannot be started")
+        self.validation = validation
+
+
+@dataclass(frozen=True, slots=True)
+class ArmSelection:
+    """One arm as the operator chose it: an exact published configuration version."""
+
+    configuration_id: UUID
+    version: int
+    label: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class StartExperiment:
+    """Everything an operator settles before an experiment exists."""
+
+    label: str
+    scenario_id: UUID
+    scenario_version: int
+    seed: int
+    arms: tuple[ArmSelection, ...]
+    participant_driver: ParticipantDriverType = ParticipantDriverType.HUMAN
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentRecord:
+    """One immutable experiment: its provenance columns and the document behind them.
+
+    The document is authoritative for the resolved inputs, exactly as a snapshot's is for
+    its starting state. The columns beside it exist so a shop's experiments can be listed
+    and recognized, never as a second source of truth.
+    """
+
+    experiment_id: UUID
+    shop_id: UUID
+    label: str
+    scenario_id: UUID
+    scenario_version: int
+    seed: int
+    snapshot_id: UUID
+    sandbox_fingerprint: str
+    resolution_fingerprint: str
+    participant_driver: ParticipantDriverType
+    document: dict[str, CanonicalValue]
+    created_at: datetime
+
+    def content(self, sandbox_inputs: tuple[ResolvedDefinition, ...]) -> ExperimentDocument:
+        """The stored envelope decoded, with the shared pins supplied from the snapshot."""
+        return experiment_from_document(self.document, sandbox_inputs=sandbox_inputs)
+
+    @property
+    def canonical_schema_version(self) -> str:
+        """The schema token this row's own document carries.
+
+        Read out of the document rather than from the build's constant, because the document
+        is what was fingerprinted. The day an `experiment-v2` exists, every experiment frozen
+        before it must keep saying `experiment-v1` — a row that reported the running build's
+        token would claim to be a document it is not.
+        """
+        return DocumentReader(self.document, "experiment").text("canonical_schema_version")
+
+
+@dataclass(frozen=True, slots=True)
+class RunRecord:
+    """One arm of one experiment: the configuration it runs and the sandbox it works in."""
+
+    run_id: UUID
+    experiment_id: UUID
+    shop_id: UUID
+    position: int
+    label: str
+    agent_configuration_id: UUID
+    agent_configuration_version: int
+    sandbox_id: UUID
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ParticipantTurnRecord:
+    """One customer turn as one run received it, with when it arrived."""
+
+    run_id: UUID
+    experiment_id: UUID
+    turn: ParticipantTurn
+    created_at: datetime
+
+
+class ExperimentRepository(Protocol):
+    """Immutable storage: an experiment is written once and never updated."""
+
+    def get(self, shop_id: UUID, experiment_id: UUID) -> ExperimentRecord | None: ...
+
+    def list_for_shop(self, shop_id: UUID) -> tuple[ExperimentRecord, ...]: ...
+
+    def save(self, record: ExperimentRecord) -> ExperimentRecord: ...
+
+
+class ExperimentRunRepository(Protocol):
+    """One row per arm, the way one sandbox row per arm is the isolation (ADR 0020)."""
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[RunRecord, ...]: ...
+
+    def save(self, record: RunRecord) -> RunRecord: ...
+
+
+class ParticipantTurnRepository(Protocol):
+    """Append-only per run; the ordinal is unique inside one run and never rewritten."""
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[ParticipantTurnRecord, ...]: ...
+
+    def append(self, record: ParticipantTurnRecord) -> ParticipantTurnRecord: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentPreview:
+    """What starting this experiment would produce, and what still refuses it."""
+
+    validation: DefinitionValidation
+    comparison: tuple[ComparisonVariable, ...]
+    arm_labels: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentDetail:
+    """One experiment in full: its record, its arms, and every turn they have received."""
+
+    record: ExperimentRecord
+    resolution: ExperimentResolution
+    comparison: tuple[ComparisonVariable, ...]
+    runs: tuple[RunRecord, ...]
+    sandboxes: tuple[SandboxRecord, ...]
+    turns: tuple[ParticipantTurnRecord, ...]
+
+
+class ExperimentService:
+    """Start experiments, read them back, and deliver the customer turns that drive them."""
+
+    def __init__(
+        self,
+        experiments: ExperimentRepository,
+        runs: ExperimentRunRepository,
+        turns: ParticipantTurnRepository,
+        snapshots: SandboxSnapshotService,
+        sandboxes: SandboxService,
+        shops: DefinitionRepository[ShopPayload],
+        tickets: DefinitionRepository[TicketPayload],
+        configurations: DefinitionRepository[AgentConfigurationPayload],
+        published_versions: PublishedVersionReader,
+        clock: Clock,
+    ) -> None:
+        self._experiments = experiments
+        self._runs = runs
+        self._turns = turns
+        self._snapshots = snapshots
+        self._sandboxes = sandboxes
+        self._shops = shops
+        self._tickets = tickets
+        self._configurations = configurations
+        self._published_versions = published_versions
+        self._clock = clock
+
+    # -- reading ---------------------------------------------------------------
+
+    def list_experiments(self, shop_id: UUID) -> tuple[ExperimentRecord, ...]:
+        return self._experiments.list_for_shop(shop_id)
+
+    def get_experiment(self, shop_id: UUID, experiment_id: UUID) -> ExperimentDetail:
+        record = self._experiments.get(shop_id, experiment_id)
+        if record is None:
+            raise ExperimentNotFoundError(f"experiment {experiment_id} is not in shop {shop_id}")
+        snapshot = self._snapshots.get_snapshot(shop_id, record.snapshot_id)
+        runs = self._runs.list_for_experiment(experiment_id)
+        return ExperimentDetail(
+            record=record,
+            resolution=record.content(snapshot.content.pins).resolution,
+            comparison=compare_configurations(tuple(self._arm_payload(run) for run in runs)),
+            runs=runs,
+            sandboxes=tuple(self._sandboxes.get_sandbox(shop_id, run.sandbox_id) for run in runs),
+            turns=self._turns.list_for_experiment(experiment_id),
+        )
+
+    # -- the setup gate --------------------------------------------------------
+
+    def preview(self, shop_id: UUID, command: StartExperiment) -> ExperimentPreview:
+        """Judge an experiment without starting it, with the rules `start` applies.
+
+        Deliberately materializes nothing. An operator comparing two configurations before
+        committing must not be freezing starting state on every keystroke, and the two
+        answers the setup screen needs — what differs, and what refuses — are both
+        answerable from the published versions alone.
+        """
+        arms = self._selected(command)
+        return ExperimentPreview(
+            validation=self._gate(shop_id, command, arms).validation,
+            comparison=compare_configurations(tuple(arm.payload for arm in arms)),
+            arm_labels=_arm_labels(command),
+        )
+
+    # -- starting --------------------------------------------------------------
+
+    def start(self, shop_id: UUID, command: StartExperiment) -> ExperimentDetail:
+        """Freeze the starting state, clone one arm per configuration, and open the thread.
+
+        Deliberately not idempotent, for the reason cloning is not (ADR 0020): the same
+        scenario run twice is two experiments, and collapsing them would delete the second
+        result rather than reuse the first.
+        """
+        try:
+            require_label(command.label, "experiment label", error=ExperimentConfigurationError)
+        except ExperimentConfigurationError as error:
+            raise ExperimentLabelError(str(error)) from error
+
+        arms = self._selected(command)
+        judged = self._gate(shop_id, command, arms)
+        if judged.validation.errors or judged.resolution is None:
+            raise ExperimentNotStartableError(judged.validation)
+
+        snapshot = self._snapshots.materialize(
+            shop_id, command.scenario_id, command.scenario_version, seed=command.seed
+        )
+        resolution = judged.resolution
+        comparison = compare_configurations(tuple(arm.payload for arm in arms))
+        fingerprint = fingerprint_experiment(
+            resolution,
+            sandbox_fingerprint=snapshot.sandbox_fingerprint,
+            comparison_variables=tuple(
+                variable.dimension for variable in comparison if variable.differs
+            ),
+        )
+
+        now = self._clock.now()
+        experiment_id = uuid4()
+        record = self._experiments.save(
+            ExperimentRecord(
+                experiment_id=experiment_id,
+                shop_id=shop_id,
+                label=command.label,
+                scenario_id=command.scenario_id,
+                scenario_version=command.scenario_version,
+                seed=command.seed,
+                snapshot_id=snapshot.snapshot_id,
+                sandbox_fingerprint=snapshot.sandbox_fingerprint,
+                resolution_fingerprint=fingerprint.resolution_fingerprint,
+                participant_driver=command.participant_driver,
+                document=_document_of(fingerprint.canonical_json),
+                created_at=now,
+            )
+        )
+
+        labels = _arm_labels(command)
+        runs = tuple(
+            self._runs.save(
+                RunRecord(
+                    run_id=uuid4(),
+                    experiment_id=experiment_id,
+                    shop_id=shop_id,
+                    position=position,
+                    label=labels[position],
+                    agent_configuration_id=arm.selection.configuration_id,
+                    agent_configuration_version=arm.selection.version,
+                    # Every arm is a clone of the one snapshot, which is what makes the two
+                    # provably equal at the start and independent afterwards.
+                    sandbox_id=self._sandboxes.clone(
+                        shop_id, snapshot.snapshot_id, labels[position]
+                    ).sandbox_id,
+                    created_at=now,
+                )
+            )
+            for position, arm in enumerate(arms)
+        )
+
+        self._open(record, runs, snapshot)
+        return self.get_experiment(shop_id, experiment_id)
+
+    # -- driving ---------------------------------------------------------------
+
+    def deliver_turn(
+        self,
+        shop_id: UUID,
+        experiment_id: UUID,
+        run_ids: tuple[UUID, ...],
+        driver: ParticipantDriver,
+    ) -> tuple[ParticipantTurnRecord, ...]:
+        """Ask the driver for one turn per named arm and record what it answered.
+
+        One call is one composition, however many arms it reaches, so every turn it writes
+        shares a `turn_id`. Two calls are two compositions even when the words match — which
+        is exactly the case a comparison must be able to tell apart.
+        """
+        record = self._experiments.get(shop_id, experiment_id)
+        if record is None:
+            raise ExperimentNotFoundError(f"experiment {experiment_id} is not in shop {shop_id}")
+        if driver.driver_type is not record.participant_driver:
+            raise ParticipantDriverMismatchError(
+                f"this experiment is driven by its {record.participant_driver} participant, "
+                f"not by a {driver.driver_type} one"
+            )
+
+        runs = {run.run_id: run for run in self._runs.list_for_experiment(experiment_id)}
+        targets: list[RunRecord] = []
+        for run_id in run_ids:
+            run = runs.get(run_id)
+            if run is None:
+                raise ExperimentRunNotFoundError(
+                    f"run {run_id} is not an arm of experiment {experiment_id}"
+                )
+            if run not in targets:
+                targets.append(run)
+        if not targets:
+            raise ExperimentRunNotFoundError("name at least one arm to deliver this turn to")
+
+        history = self._turns.list_for_experiment(experiment_id)
+        turn_id = uuid4()
+        now = self._clock.now()
+        delivered: list[ParticipantTurnRecord] = []
+        for run in targets:
+            seen = tuple(entry.turn for entry in history if entry.run_id == run.run_id)
+            body = driver.next_turn(
+                ParticipantRequest(
+                    run_id=run.run_id,
+                    arm_label=run.label,
+                    driver=record.participant_driver,
+                    turns=seen,
+                )
+            )
+            delivered.append(
+                self._turns.append(
+                    ParticipantTurnRecord(
+                        run_id=run.run_id,
+                        experiment_id=experiment_id,
+                        turn=ParticipantTurn(
+                            turn_id=turn_id,
+                            # The next position in *this* arm. Arms are allowed to be at
+                            # different depths — one may have been driven twice while the
+                            # other waited — so the ordinal is per run and never shared.
+                            ordinal=len(seen),
+                            source=ParticipantTurnSource.PARTICIPANT,
+                            driver=record.participant_driver,
+                            body=body,
+                        ),
+                        created_at=now,
+                    )
+                )
+            )
+        return tuple(delivered)
+
+    # -- internals -------------------------------------------------------------
+
+    def _open(
+        self,
+        record: ExperimentRecord,
+        runs: tuple[RunRecord, ...],
+        snapshot: SandboxSnapshotRecord,
+    ) -> None:
+        """Write the scenario's triggering message into every arm as turn zero.
+
+        One `turn_id` across the arms, because it *is* one composition — the author's, made
+        once when the ticket was published. Recording it per arm rather than once on the
+        experiment is what lets a later reading of one arm be a complete thread.
+        """
+        trigger = self._trigger(snapshot)
+        turn_id = uuid4()
+        for run in runs:
+            self._turns.append(
+                ParticipantTurnRecord(
+                    run_id=run.run_id,
+                    experiment_id=record.experiment_id,
+                    turn=ParticipantTurn(
+                        turn_id=turn_id,
+                        ordinal=0,
+                        source=ParticipantTurnSource.TRIGGER,
+                        driver=None,
+                        body=trigger,
+                    ),
+                    created_at=record.created_at,
+                )
+            )
+
+    def _trigger(self, snapshot: SandboxSnapshotRecord) -> str:
+        ticket = self._pinned(snapshot, DefinitionType.TICKET, self._tickets).payload
+        if ticket.trigger is None:  # pragma: no cover - the publish gate refuses this
+            raise MissingReferenceVersionError(
+                "the ticket this snapshot pinned carries no triggering message"
+            )
+        return ticket.trigger.body
+
+    def _gate(
+        self, shop_id: UUID, command: StartExperiment, arms: tuple[_SelectedArm, ...]
+    ) -> _Judged:
+        """Everything that refuses an experiment before it has a snapshot.
+
+        Only the questions the surrounding world answers. Whether the scenario version can
+        be frozen at all is `SandboxSnapshotService`'s gate, re-run against today's orders
+        (ADR 0019), and is deliberately not restated here: two copies of that rule set would
+        be two chances to disagree about the same starting state.
+
+        The resolution it computes travels back with the findings rather than being redone by
+        `start`. Resolving is what discovers a closure that disagrees with itself, so an
+        operator has to be able to read that in the preview instead of meeting it only once
+        they commit — and computing it twice would be two chances to disagree about the pins.
+        """
+        scenario = self._scenario_version(shop_id, command)
+        shop = self._pinned_shop(scenario)
+        resolution, resolution_issues = self._resolution(command, arms)
+        return _Judged(
+            validation=validation_of(
+                [*self._tone_issues(shop, arms), *_comparison_issues(arms), *resolution_issues]
+            ),
+            resolution=resolution,
+        )
+
+    def _tone_issues(
+        self, shop: ShopPayload, arms: tuple[_SelectedArm, ...]
+    ) -> tuple[DefinitionIssue, ...]:
+        """Resolve each arm's tone-of-voice override against the shop the scenario pinned.
+
+        The check ADR 0024 deferred to experiment setup, arriving where it said it would. A
+        configuration is shop-independent, so the publish gate could only warn that the
+        override names a guideline nobody had chosen a shop for yet; here the shop is known,
+        and an override it does not publish is an error rather than a warning — the arm
+        would run in a tone the target shop never authored.
+        """
+        published = frozenset(guideline.id for guideline in shop.tone_of_voice_guidelines)
+        return tuple(
+            issue_error(
+                "tone_override_unknown_in_shop",
+                f"{arm.payload.name} writes in tone-of-voice guideline "
+                f"'{arm.payload.tone_of_voice.guideline_id}', which this scenario's shop "
+                "does not publish",
+                f"arms[{position}].tone_of_voice",
+            )
+            for position, arm in enumerate(arms)
+            if arm.payload.tone_of_voice.source is ToneOfVoiceSource.OVERRIDE
+            and arm.payload.tone_of_voice.guideline_id not in published
+        )
+
+    def _resolution(
+        self, command: StartExperiment, arms: tuple[_SelectedArm, ...]
+    ) -> tuple[ExperimentResolution | None, tuple[DefinitionIssue, ...]]:
+        """Resolve every pin the experiment would freeze, or say why it cannot.
+
+        Reads published versions and materializes nothing, which is what lets the preview run
+        it too.
+        """
+        try:
+            return (
+                resolve_experiment_inputs(
+                    self._published_versions,
+                    scenario=VersionRef(
+                        definition=scenario_definition_id(command.scenario_id),
+                        version=command.scenario_version,
+                    ),
+                    agent_configurations=tuple(arm.ref for arm in arms),
+                    seed=command.seed,
+                    tool_contract_versions=SANDBOX_TOOL_CONTRACT_VERSIONS,
+                    participant_driver=command.participant_driver,
+                ),
+                (),
+            )
+        except ConflictingReferenceVersionsError as error:
+            # The same closure disagreement a snapshot reports as a finding, reaching an
+            # experiment through its arms instead. A finding rather than an exception for the
+            # reason ADR 0019 gave: starting again cannot fix it, so the author has to read it
+            # beside everything else that refuses this setup. `str(error)` already names the
+            # definition and both versions.
+            return None, (issue_error("experiment_conflicting_pin", str(error), "definitions"),)
+
+    def _selected(self, command: StartExperiment) -> tuple[_SelectedArm, ...]:
+        if not 1 <= len(command.arms) <= MAX_ARMS:
+            raise ExperimentArmError(
+                f"an experiment runs one or {MAX_ARMS} arms, not {len(command.arms)}"
+            )
+        return tuple(self._arm(selection) for selection in command.arms)
+
+    def _arm(self, selection: ArmSelection) -> _SelectedArm:
+        ref = VersionRef(
+            definition=DefinitionId(
+                definition_type=DefinitionType.AGENT_CONFIGURATION, id=selection.configuration_id
+            ),
+            version=selection.version,
+        )
+        record = self._configurations.get_version(ref)
+        if record is None:
+            # The configuration's own not-found error, for the reason ADR 0024 gave when it
+            # refused an unknown identity with the identity's: a caller has to be able to
+            # tell a stale arm from a stale experiment.
+            raise AgentConfigurationVersionNotFoundError(
+                f"agent configuration {selection.configuration_id} has no published version "
+                f"{selection.version}"
+            )
+        return _SelectedArm(selection=selection, ref=ref, payload=record.payload)
+
+    def _arm_payload(self, run: RunRecord) -> AgentConfigurationPayload:
+        return self._arm(
+            ArmSelection(
+                configuration_id=run.agent_configuration_id,
+                version=run.agent_configuration_version,
+            )
+        ).payload
+
+    def _scenario_version(
+        self, shop_id: UUID, command: StartExperiment
+    ) -> PublishedDefinitionVersion:
+        published = self._published_versions.get_published(
+            VersionRef(
+                definition=scenario_definition_id(command.scenario_id),
+                version=command.scenario_version,
+            )
+        )
+        if published is None or published.shop is None or published.shop.id != shop_id:
+            raise ScenarioVersionNotFoundError(
+                f"scenario {command.scenario_id} version {command.scenario_version} "
+                f"is not published in shop {shop_id}"
+            )
+        return published
+
+    def _pinned_shop(self, scenario: PublishedDefinitionVersion) -> ShopPayload:
+        ref = scenario.scope_ref
+        if ref is None:  # pragma: no cover - a scenario is shop-scoped by construction
+            raise MissingReferenceVersionError("this scenario version pins no shop")
+        record = self._shops.get_version(ref)
+        if record is None:
+            raise MissingReferenceVersionError(
+                f"shop {ref.definition.id} version {ref.version} is not resolvable"
+            )
+        return record.payload
+
+    def _pinned[PayloadT](
+        self,
+        snapshot: SandboxSnapshotRecord,
+        definition_type: DefinitionType,
+        repository: DefinitionRepository[PayloadT],
+    ) -> DefinitionVersionRecord[PayloadT]:
+        pin = next(
+            (
+                entry
+                for entry in snapshot.content.pins
+                if entry.definition.definition_type is definition_type
+            ),
+            None,
+        )
+        if pin is None:
+            raise MissingReferenceVersionError(f"this snapshot pins no {definition_type}")
+        record = repository.get_version(pin.ref)
+        if record is None:
+            raise MissingReferenceVersionError(
+                f"{definition_type} {pin.definition.id} version {pin.version} is not resolvable"
+            )
+        return record
+
+
+@dataclass(frozen=True, slots=True)
+class _Judged:
+    """One run of the setup gate: what it found, and the pins it resolved on the way.
+
+    `resolution` is `None` exactly when a finding says why it could not be computed, so a
+    caller that has checked for errors has a resolution.
+    """
+
+    validation: DefinitionValidation
+    resolution: ExperimentResolution | None
+
+
+@dataclass(frozen=True, slots=True)
+class _SelectedArm:
+    """One chosen arm, resolved to the published version it names."""
+
+    selection: ArmSelection
+    ref: VersionRef
+    payload: AgentConfigurationPayload
+
+
+def _arm_labels(command: StartExperiment) -> tuple[str, ...]:
+    """What each arm is called, defaulting to its position.
+
+    Two arms an operator cannot tell apart are refused. A comparison's whole output is "arm A
+    did this, arm B did that", so a name held by both arms would make every later reading of
+    the result ambiguous — and the arms' own sandboxes would be labelled identically too.
+    """
+    labels = tuple(
+        selection.label.strip() or ARM_LABELS[position]
+        for position, selection in enumerate(command.arms)
+    )
+    if len(set(labels)) != len(labels):
+        raise ExperimentArmError("each arm needs a name that tells it from the one beside it")
+    return labels
+
+
+def _comparison_issues(arms: tuple[_SelectedArm, ...]) -> tuple[DefinitionIssue, ...]:
+    """Warn when the arms differ along more than one dimension.
+
+    A warning rather than a refusal, deliberately. An experiment with two differences is
+    still worth running — it is often how a suspicion starts — but nothing it produces can
+    be attributed to either difference, so the count travels with the experiment instead of
+    being discovered when someone reads the result months later.
+    """
+    if len(arms) < 2:
+        return ()
+    differing = [
+        variable
+        for variable in compare_configurations(tuple(arm.payload for arm in arms))
+        if variable.differs
+    ]
+    if len(differing) < 2:
+        return ()
+    named = ", ".join(variable.dimension.value.replace("_", " ") for variable in differing)
+    return (
+        issue_warning(
+            "multiple_comparison_variables",
+            f"these arms differ in {len(differing)} dimensions ({named}), so a difference "
+            "in behavior cannot be attributed to any one of them",
+            "arms",
+        ),
+    )
+
+
+def _document_of(canonical_json: bytes) -> dict[str, CanonicalValue]:
+    """Re-read the bytes that were hashed, so the stored document is the fingerprinted one."""
+    document: object = json.loads(canonical_json)
+    if not isinstance(document, dict):  # pragma: no cover - canonical_json_bytes writes objects
+        raise DefinitionResolutionError("an experiment document must be an object")
+    return cast("dict[str, CanonicalValue]", document)

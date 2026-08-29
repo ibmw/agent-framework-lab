@@ -8,7 +8,6 @@ from capability_lab.application.canonical_json import CanonicalSerializationErro
 from capability_lab.application.definition_resolution import (
     ArmResolution,
     ExperimentResolution,
-    ParticipantDriverType,
     ResolvedDefinition,
 )
 from capability_lab.application.sandbox_snapshot import (
@@ -20,6 +19,7 @@ from capability_lab.application.sandbox_snapshot import (
     sandbox_state_from_document,
 )
 from capability_lab.domain.definitions import DefinitionId, DefinitionType
+from capability_lab.domain.experiment import ParticipantDriverType
 from capability_lab.domain.order_fixture import FulfilmentState, FulfilmentStatus
 from capability_lab.domain.sandbox import (
     SandboxInteraction,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Protocol
 
 from capability_lab.application.ports import Clock
@@ -15,6 +14,7 @@ from capability_lab.domain.definitions import (
     publish_draft,
 )
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
+from capability_lab.domain.experiment import ParticipantDriverType
 
 
 class DefinitionResolutionError(ValueError):
@@ -62,12 +62,6 @@ class DefinitionRepository(PublishedVersionReader, Protocol):
     def save_published(self, published: PublishedDefinitionVersion) -> None:
         """Persist a new published version; never overwrite an existing one."""
         ...
-
-
-class ParticipantDriverType(StrEnum):
-    HUMAN = "human"
-    LLM = "llm"
-    SCRIPTED = "scripted"
 
 
 def _latest_published(
@@ -257,7 +251,12 @@ def resolve_sandbox_inputs(
 
 
 def resolve_experiment_inputs(
-    repository: DefinitionRepository,
+    # A resolution reads published versions and nothing else, so it asks for the reader that
+    # says so. It was declared against the wider repository before it had a caller; the
+    # runner that now calls it holds the published-version directory, and narrowing the
+    # parameter is what keeps "a resolution never touches a draft" a signature rather than a
+    # convention.
+    repository: PublishedVersionReader,
     *,
     scenario: VersionRef,
     agent_configurations: tuple[VersionRef, ...],
