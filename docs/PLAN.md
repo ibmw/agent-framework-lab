@@ -53,14 +53,18 @@ holds all of it: recorded fingerprints for the canonical envelopes and a conform
 the tool registry rather than by a list (ADR 0023), which completes the milestone. Milestone 3 has
 begun with the agent configuration: the support agent published as a versioned experiment input —
 framework, architecture, model, prompt template, tool bindings, memory, and the support identity it
-adopts — validated against what the lab has actually proven it can run (ADR 0024).
+adopts — validated against what the lab has actually proven it can run (ADR 0024), and then the
+experiment that binds one published scenario version to one or two of those configurations,
+clones an arm per configuration from one canonical snapshot, opens both threads on the ticket's
+triggering message, and takes every later customer turn through a participant-driver port whose
+first implementation is the human operator (ADR 0025) — which also completes Milestone 4's
+experiment record, shared trigger, linked composer, and comparison-variable warning.
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
 
-The POC does not implement the target Scenario Studio, published agent configurations, paired
-experiment runner, participant-driver port, LLM judge, experiment-first history, or target
-wrong-address journey. Existing persona-first contracts and data may be replaced through cohesive
+The POC does not implement the target Scenario Studio, published agent configurations, executing
+experiment runner, LLM judge, experiment-first history, or target wrong-address journey. Existing persona-first contracts and data may be replaced through cohesive
 tested slices.
 
 ## Delivery rules
@@ -446,14 +450,29 @@ payload.
 
 ### Slice 2 — Participant driver and resolved run inputs
 
-- [ ] Evolve the agent port only for requirements proven by the target scenario.
-- [ ] Introduce a participant-driver port and human-operator implementation.
-- [ ] Persist resolved configurations and participant events without framework SDK types.
+- [x] Evolve the agent port only for requirements proven by the target scenario. Nothing here
+  proves one — no arm runs a model — so `AgentAdapter` is deliberately unchanged.
+- [x] Introduce a participant-driver port and human-operator implementation.
+- [x] Persist resolved configurations and participant events without framework SDK types.
 
-Frames: none new; the participant surface is the Milestone 4 bench.
+Frames: 7 · Experiment setup, and the participant half of 8 · Live bench (the two threads, the
+customer composer, and the provenance strip; the agent's side of each thread arrives with the
+runner that produces it).
 
-Sequencing: this slice is delivered against the Milestone 4 runner that calls it. A port designed
-before it has a caller would be shaped by a hypothetical one.
+Sequencing: this slice was delivered against the Milestone 4 runner that calls it, so it also
+completes that milestone's first two outcomes. A port designed before it has a caller would be
+shaped by a hypothetical one.
+
+Slice evidence: an operator publishes a scenario and two agent configurations, reads the
+comparison matrix before anything is frozen — one arm differing nowhere, two arms differing only
+in their prompt — starts the experiment, and finds both arms opening on the ticket's triggering
+message from one shared starting-state fingerprint; a message sent to both arms is one
+composition, and the same words sent to one arm alone are a second the record keeps apart.
+ADR 0025 records the `experiment-v1` envelope that pins the arms by content and the world by
+fingerprint, the one-method participant port and why the trigger does not travel through it, the
+composition identity that makes divergence readable rather than inferred, the setup gate that
+answers the tone-of-voice check ADR 0024 deferred to experiment setup, and the comparison matrix
+whose difference set enters the experiment's fingerprint.
 
 ### Acceptance criteria
 
@@ -471,13 +490,15 @@ behavior side by side.
 
 ### Outcomes
 
-- [ ] Create immutable experiment records and independently progressing runs.
-- [ ] Start both arms from one canonical snapshot and send the same trigger.
-- [ ] Add a linked customer composer that can split into arm-specific replies.
+- [x] Create immutable experiment records and independently progressing runs (ADR 0025, with
+  Milestone 3 Slice 2).
+- [x] Start both arms from one canonical snapshot and send the same trigger (ADR 0025).
+- [x] Add a linked customer composer that can split into arm-specific replies (ADR 0025).
 - [ ] Persist operator input divergence, assistant turns, tool events, confirmations, state changes,
-  failures, traces, and completion.
-- [ ] Warn when framework, architecture, model, prompt, or tools introduce multiple comparison
-  variables.
+  failures, traces, and completion. Operator input and its divergence are recorded (ADR 0025);
+  everything an agent produces waits on the executing runner.
+- [x] Warn when framework, architecture, model, prompt, or tools introduce multiple comparison
+  variables (ADR 0025).
 - [ ] Show normalized execution timelines and project-owned source locations where available.
 - [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
   essential Playwright journey.

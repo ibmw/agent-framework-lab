@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target architecture with an implemented POC baseline — 2026-08-23
+Status: target architecture with an implemented POC baseline — 2026-08-28
 
 Read `docs/product-direction.md` first. This document distinguishes principles that remain binding,
 the code that exists today, and the target boundaries that future slices must establish. Do not
@@ -35,9 +35,12 @@ identities on a shared authoring lifecycle (ADR 0014), shop-scoped order fixture
 versioned tickets — the first shop-scoped definition, pinning its shop and customer versions at
 publication (ADR 0016), and versioned agent configurations, the first definition to describe the
 agent rather than the world it works in (ADR 0024) — the
-`definition_drafts`/`definition_versions`/`definition_shop_attachments`/`shop_order_fixtures` tables,
-and the Studio application shell are target code. The POC's persona-first frontend was removed with
-that shell; its HTTP contracts remain published and tested without a UI consumer.
+`definition_drafts`/`definition_versions`/`definition_shop_attachments`/`shop_order_fixtures`
+tables, and the Studio application shell are target code. Beyond the definitions, the experiment
+that binds a published scenario version to one or two of those configurations, clones an arm per
+configuration, and takes its customer turns through a participant-driver port is target code too
+(ADR 0025). The POC's persona-first frontend was removed with that shell; its HTTP contracts
+remain published and tested without a UI consumer.
 
 ## Binding dependency rule
 
@@ -143,9 +146,17 @@ gate does not change with the machine the Studio runs on; a permission a write t
 on the tool contract, so the runtime that refuses an unauthorized call and the gate that refuses a
 configuration enabling it read one table.
 
-Participant input has a separate application port. Its first implementation is the human operator;
-future LLM and scripted customer drivers use the same run protocol and remain independent of the
-support-agent framework.
+Participant input has a separate application port, and its first implementation is the human
+operator (ADR 0025). The port has one method — the next customer turn in one arm — and is given
+that arm's own turn history and nothing else: not the agent's replies, not the sandbox state, not
+the arm beside it, because a simulator that could read the sandbox would answer questions the
+customer has no way to know the answer to. What only one implementation needs travels on the
+instance rather than in the request, so composition constructs a human driver with the operator's
+sentence where it will construct a simulator with a model client. The trigger deliberately does
+not travel through the port: the pinned ticket carries the first message every arm receives, and
+"both arms started from the same question" must be a property of the starting state rather than
+of a driver behaving. Future LLM and scripted drivers use the same protocol and remain
+independent of the support-agent framework.
 
 The LLM judge is also a separate port. It consumes a versioned, anonymized evaluation input and
 returns structured dimension-level evidence. A judge cannot mutate sandbox state or replace
@@ -183,9 +194,19 @@ resolve + validate ──> canonical sandbox snapshot + fingerprint
                   └──── normalized evidence ────> comparison
 ```
 
-The first message is equivalent across arms. Later human inputs may be linked or independent, and
-the persisted event stream records when inputs diverge. Tool writes in one arm never affect the
-other arm.
+The first message is equivalent across arms by construction: it is written into each arm from the
+ticket the snapshot pinned, before any driver is consulted. Later inputs may be linked or
+independent, and one delivery is one **composition** however many arms it reaches — so two arms
+sent the same words by two separate decisions read as divergence rather than as agreement, which
+no comparison of the bodies could recover afterwards. Turn ordinals are per arm: one arm may be
+driven twice while the other waits. Tool writes in one arm never affect the other arm.
+
+An experiment records its own resolved inputs in an `experiment-v1` document beside the
+snapshot's: the arm pins by content, the shared world by fingerprint, and the dimensions along
+which the arms differ. That difference set is part of the experiment's identity — two experiments
+over one scenario whose arms differ differently are not the same experiment — and an experiment
+whose arms differ along more than one dimension is warned about at setup rather than discovered
+months later, because nothing it produces can be attributed to either difference.
 
 Normalized run evidence includes participant and assistant turns, model usage, tool requests and
 results, proposals and confirmations, retries and failures, state changes, trace correlations, and
@@ -205,7 +226,10 @@ definition: an order fixture is shop-scoped authored state with no version of it
 canonical document with a content fingerprint so a published scenario can freeze a copy of it
 (ADR 0015). A snapshot's clones live in `sandboxes`, one row per arm, each holding its own copy of the
 frozen state; the isolation between arms is that layout rather than a rule something must remember
-(ADR 0020). Experiments and judge executions are
+(ADR 0020). An experiment is written once into `experiments` as its canonical document, with one
+row per arm in `experiment_runs` referencing the clone that arm works rather than embedding any of
+it, and an append-only `experiment_participant_turns` keyed by run and ordinal so a turn can never
+be renumbered onto another position (ADR 0025). Experiments and judge executions are
 append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
 never changes the published definitions or canonical starting snapshot.
 
