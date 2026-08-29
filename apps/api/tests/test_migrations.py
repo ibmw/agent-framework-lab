@@ -42,6 +42,10 @@ DEFINITION_TABLES = {
     "experiments",
     "experiment_runs",
     "experiment_participant_turns",
+    # And the evidence those arms produce: what each agent answered, and every tool call it
+    # made getting there.
+    "experiment_agent_turns",
+    "experiment_tool_events",
 }
 POC_TABLES = {
     "action_proposals",

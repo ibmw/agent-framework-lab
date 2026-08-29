@@ -39,6 +39,10 @@ from capability_lab.application.agent_configuration_payload import (
     agent_configuration_document,
     agent_configuration_from_document,
 )
+from capability_lab.application.agent_prompt import (
+    prompt_variable_values,
+    resolve_tone_of_voice,
+)
 from capability_lab.application.definition_authoring import (
     AuthoringErrors,
     DefinitionAuthoringService,
@@ -63,8 +67,6 @@ from capability_lab.domain.agent_configuration import (
     PROMPT_VARIABLES,
     AgentConfigurationPayload,
     PromptVariable,
-    ToneOfVoiceSelection,
-    ToneOfVoiceSource,
     agent_configuration_issues,
     summarize_agent_configuration_changes,
     validate_agent_configuration,
@@ -79,7 +81,7 @@ from capability_lab.domain.definitions import (
     issue_warning,
     validation_of,
 )
-from capability_lab.domain.shop import ShopPayload, ToneOfVoiceGuideline
+from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload, SupportPermission
 
 TOOL_CONTRACTS_BY_NAME = {contract.name: contract for contract in SANDBOX_TOOL_CONTRACTS}
@@ -405,9 +407,9 @@ class AgentConfigurationService(DefinitionAuthoringService[AgentConfigurationPay
         """Resolve every variable against a preview shop and the pinned identity."""
         shop, shop_version = self._published_shop(preview_shop_id)
         identity, identity_version = self._published_identity(payload.support_identity_id)
-        guideline = _tone_of_voice(shop, payload.tone_of_voice)
+        guideline = resolve_tone_of_voice(shop, payload.tone_of_voice)
         used = {token.name for token in payload.prompt_tokens}
-        values = _variable_values(shop, identity, guideline)
+        values = prompt_variable_values(shop, identity, guideline)
         granted: frozenset[SupportPermission] = (
             frozenset() if identity is None else identity.granted
         )
@@ -501,56 +503,6 @@ def _covered(payload: AgentConfigurationPayload) -> frozenset[SupportPermission]
         for contract in SANDBOX_TOOL_CONTRACTS
         if contract.name in payload.enabled_tools and contract.required_permission is not None
     )
-
-
-def _tone_of_voice(
-    shop: ShopPayload | None, selection: ToneOfVoiceSelection
-) -> ToneOfVoiceGuideline | None:
-    """The guideline the target shop resolves this selection to, if it has one."""
-    if shop is None:
-        return None
-    if selection.source is ToneOfVoiceSource.SHOP_DEFAULT:
-        return shop.default_tone_of_voice
-    return next(
-        (
-            guideline
-            for guideline in shop.tone_of_voice_guidelines
-            if guideline.id == selection.guideline_id
-        ),
-        None,
-    )
-
-
-def _variable_values(
-    shop: ShopPayload | None,
-    identity: SupportIdentityPayload | None,
-    guideline: ToneOfVoiceGuideline | None,
-) -> dict[str, str]:
-    """What each injectable variable resolves to; a missing source resolves to nothing.
-
-    The interaction group is deliberately absent: it has no value here by design, and
-    supplying one — even in a preview — would suggest a prompt could carry it.
-    """
-    values: dict[str, str] = {}
-    if shop is not None:
-        values["shop.name"] = shop.identity.name
-        values["shop.locale"] = shop.identity.locale
-        values["shop.currencies"] = ", ".join(
-            currency.value for currency in shop.identity.currencies
-        )
-    if guideline is not None:
-        values["shop.tone_of_voice"] = guideline.name
-    if identity is not None:
-        # A published identity resolves every one of its variables, including to empty text.
-        # "Resolves to nothing" has to keep meaning "the source is missing": a preview that
-        # said unresolvable while a run injected an empty string would be the worse of the
-        # two answers, and the runtime resolution has to make the same call.
-        values["support_identity.role"] = identity.role.title
-        values["support_identity.guidance"] = "; ".join(note.title for note in identity.guidance)
-        values["support_identity.permissions"] = ", ".join(
-            permission.value for permission in identity.permissions
-        )
-    return values
 
 
 __all__ = [

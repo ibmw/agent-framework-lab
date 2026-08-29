@@ -21,6 +21,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from capability_lab.application.agent_configurations import AGENT_CONFIGURATION_CODEC
+from capability_lab.application.agent_turns import (
+    AgentTurnRecord,
+    ToolEvent,
+    ToolEventRecord,
+)
 from capability_lab.application.blocks import MUTATION_BLOCK_CODEC, OBJECTIVE_BLOCK_CODEC
 from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.application.canonical_state import fingerprint_initial_state
@@ -61,6 +66,7 @@ from capability_lab.application.sandbox_actions import (
     ProposalAlreadyAppliedError,
 )
 from capability_lab.application.sandbox_materialization import SandboxSnapshotRecord
+from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import (
     SandboxRecord,
     SandboxRevisionConflictError,
@@ -75,6 +81,7 @@ from capability_lab.application.shops import SHOP_CODEC
 from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
 from capability_lab.application.tickets import TICKET_CODEC
 from capability_lab.domain.agent_configuration import AgentConfigurationPayload
+from capability_lab.domain.agent_turn import AgentTurn, AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.blocks import MutationBlockPayload, ObjectiveBlockPayload
 from capability_lab.domain.customer_profile import CustomerProfilePayload
 from capability_lab.domain.definitions import (
@@ -106,6 +113,7 @@ from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import TicketPayload
 from capability_lab.infrastructure.models import (
     ActionProposalModel,
+    AgentTurnModel,
     ConversationSessionModel,
     ConversationTurnModel,
     CustomerModel,
@@ -127,6 +135,7 @@ from capability_lab.infrastructure.models import (
     SandboxActionProposalModel,
     SandboxModel,
     SandboxSnapshotModel,
+    ToolEventModel,
 )
 from capability_lab.infrastructure.sql_types import UtcDateTime
 
@@ -2208,6 +2217,120 @@ class SqlAlchemyParticipantTurnRepository:
                 source=ParticipantTurnSource(model.source),
                 driver=None if model.driver is None else ParticipantDriverType(model.driver),
                 body=model.body,
+            ),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyAgentTurnRepository:
+    """Append one attempt per arm; the run, ordinal, and attempt key is the append-only rule."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[AgentTurnRecord, ...]:
+        models = self._session.scalars(
+            select(AgentTurnModel)
+            .where(AgentTurnModel.experiment_id == str(experiment_id))
+            # By run, then depth, then attempt: an arm's thread is read as a thread, and the
+            # retries of one question stay in the order they were made.
+            .order_by(AgentTurnModel.run_id, AgentTurnModel.ordinal, AgentTurnModel.attempt)
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def append(self, record: AgentTurnRecord) -> AgentTurnRecord:
+        turn = record.turn
+        self._session.add(
+            AgentTurnModel(
+                run_id=str(record.run_id),
+                ordinal=turn.ordinal,
+                attempt=turn.attempt,
+                experiment_id=str(record.experiment_id),
+                outcome=turn.outcome.value,
+                failure=None if turn.failure is None else turn.failure.value,
+                body=turn.body,
+                created_at=record.created_at,
+            )
+        )
+        self._session.flush()
+        return record
+
+    @staticmethod
+    def _record(model: AgentTurnModel) -> AgentTurnRecord:
+        return AgentTurnRecord(
+            run_id=UUID(model.run_id),
+            experiment_id=UUID(model.experiment_id),
+            turn=AgentTurn(
+                ordinal=model.ordinal,
+                attempt=model.attempt,
+                outcome=AgentTurnOutcome(model.outcome),
+                body=model.body,
+                failure=None if model.failure is None else AgentTurnFailure(model.failure),
+            ),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyToolEventRepository:
+    """Append one attempt's calls together, in the sequence the agent asked."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[ToolEventRecord, ...]:
+        models = self._session.scalars(
+            select(ToolEventModel)
+            .where(ToolEventModel.experiment_id == str(experiment_id))
+            .order_by(
+                ToolEventModel.run_id,
+                ToolEventModel.ordinal,
+                ToolEventModel.attempt,
+                ToolEventModel.sequence,
+            )
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def append_all(self, records: tuple[ToolEventRecord, ...]) -> tuple[ToolEventRecord, ...]:
+        for record in records:
+            event = record.event
+            self._session.add(
+                ToolEventModel(
+                    run_id=str(record.run_id),
+                    ordinal=event.ordinal,
+                    attempt=event.attempt,
+                    sequence=event.sequence,
+                    experiment_id=str(record.experiment_id),
+                    # Written from the document rather than decided again, the way an
+                    # experiment's provenance columns are.
+                    tool=event.tool,
+                    version=event.version,
+                    outcome=event.outcome.value,
+                    document=cast("dict[str, object]", event.document),
+                    revision_before=event.revision_before,
+                    revision_after=event.revision_after,
+                    state_fingerprint=event.state_fingerprint,
+                    created_at=record.created_at,
+                )
+            )
+        self._session.flush()
+        return records
+
+    @staticmethod
+    def _record(model: ToolEventModel) -> ToolEventRecord:
+        return ToolEventRecord(
+            run_id=UUID(model.run_id),
+            experiment_id=UUID(model.experiment_id),
+            event=ToolEvent(
+                ordinal=model.ordinal,
+                attempt=model.attempt,
+                sequence=model.sequence,
+                tool=model.tool,
+                version=model.version,
+                outcome=ToolOutcome(model.outcome),
+                document=cast("dict[str, CanonicalValue]", model.document),
+                revision_before=model.revision_before,
+                revision_after=model.revision_after,
+                state_fingerprint=model.state_fingerprint,
             ),
             created_at=model.created_at,
         )

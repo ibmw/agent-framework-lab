@@ -514,3 +514,93 @@ class ParticipantTurnModel(Base):
     driver: Mapped[str | None] = mapped_column(String(16), nullable=True)
     body: Mapped[str] = mapped_column(String(4000))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class AgentTurnModel(Base):
+    """One attempt at one arm's reply to one customer turn.
+
+    The primary key is the run, the customer turn being answered, and the attempt number.
+    That is what makes the stream append-only in the two ways it has to be: an arm can hold
+    only one answer per question, and a retry after a failure is a new row rather than an
+    overwrite of the evidence it is retrying.
+
+    The driver-matches-source shape of the participant table has an analogue here, written
+    the same way: an answered turn carries words and no failure code, a failed one carries a
+    code and no words. A failed attempt deliberately stores nothing the framework said —
+    nothing can promise an arbitrary exception's text is free of customer content.
+
+    `body` is synthetic content in a support thread. It is stored, as the participant turns
+    beside it are, and it is never logged or traced (`AGENTS.md`).
+    """
+
+    __tablename__ = "experiment_agent_turns"
+    __table_args__ = (
+        CheckConstraint("ordinal >= 0", name="ck_agent_turns_ordinal_non_negative"),
+        CheckConstraint("attempt >= 1", name="ck_agent_turns_attempt_positive"),
+        CheckConstraint("outcome IN ('answered', 'failed')", name="ck_agent_turns_outcome_valid"),
+        CheckConstraint(
+            "(outcome = 'failed') = (failure IS NOT NULL)",
+            name="ck_agent_turns_failure_matches_outcome",
+        ),
+        CheckConstraint(
+            "(outcome = 'answered') = (length(body) > 0)",
+            name="ck_agent_turns_body_matches_outcome",
+        ),
+        Index("ix_agent_turns_experiment", "experiment_id", "created_at"),
+    )
+
+    run_id: Mapped[str] = mapped_column(ForeignKey("experiment_runs.run_id"), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attempt: Mapped[int] = mapped_column(Integer, primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(String(36))
+    outcome: Mapped[str] = mapped_column(String(16))
+    failure: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    body: Mapped[str] = mapped_column(String(4000))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ToolEventModel(Base):
+    """One tool call one attempt made, and what it did to the arm.
+
+    Keyed by the attempt that made it plus the sequence the agent asked in, so tool
+    selection and ordering are evidence rather than something reconstructed from timestamps
+    — two calls made inside one attempt share a moment.
+
+    `document` is the `tool-result-v1` envelope the tool answered with, stored whole and
+    authoritative; `tool`, `version`, and `outcome` are read out of it so a run's calls can
+    be listed and counted without decoding every row, exactly as an experiment's provenance
+    columns are read out of its document.
+
+    The two revisions are the state change, and they are the reason no separate state-change
+    table exists: a read leaves them equal, a write moves the arm by one, and the
+    confirmation that authorized the write is inside the document already.
+    """
+
+    __tablename__ = "experiment_tool_events"
+    __table_args__ = (
+        CheckConstraint("ordinal >= 0", name="ck_tool_events_ordinal_non_negative"),
+        CheckConstraint("attempt >= 1", name="ck_tool_events_attempt_positive"),
+        CheckConstraint("sequence >= 0", name="ck_tool_events_sequence_non_negative"),
+        CheckConstraint(
+            "outcome IN ('success', 'refused', 'failed')", name="ck_tool_events_outcome_valid"
+        ),
+        CheckConstraint(
+            "revision_after >= revision_before", name="ck_tool_events_revision_forward"
+        ),
+        Index("ix_tool_events_experiment", "experiment_id", "created_at"),
+        Index("ix_tool_events_attempt", "run_id", "ordinal", "attempt", "sequence"),
+    )
+
+    run_id: Mapped[str] = mapped_column(ForeignKey("experiment_runs.run_id"), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attempt: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(String(36))
+    tool: Mapped[str] = mapped_column(String(80))
+    version: Mapped[str] = mapped_column(String(16))
+    outcome: Mapped[str] = mapped_column(String(16))
+    document: Mapped[dict[str, object]] = mapped_column(JSON)
+    revision_before: Mapped[int] = mapped_column(Integer)
+    revision_after: Mapped[int] = mapped_column(Integer)
+    state_fingerprint: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
