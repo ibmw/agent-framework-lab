@@ -3333,6 +3333,218 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments:
+    post:
+      summary: 'Start one experiment: freeze the starting state and clone its arms'
+      description: 'Resolves every published version the experiment names, freezes
+        the scenario version into a canonical snapshot, clones one independently mutable
+        arm per agent configuration, and opens each arm''s thread with the ticket''s
+        triggering message. Deliberately not idempotent: the same scenario run twice
+        is two experiments.'
+      operationId: startExperiment
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartExperimentRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentResponse'
+        '404':
+          description: The shop, scenario version, or arm is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The setup gate refuses this experiment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentValidationErrorResponse'
+    get:
+      summary: List a shop's experiments, most recently started first
+      operationId: listExperiments
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/preview:
+    post:
+      summary: Judge an experiment's setup without starting it
+      description: The same gate `startExperiment` applies, plus the dimension-by-dimension
+        comparison of the chosen arms. Materializes nothing and stores nothing, and
+        does not need the name the experiment will be started under.
+      operationId: previewExperiment
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartExperimentRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}:
+    get:
+      summary: Retrieve one experiment, its arms, and every turn they received
+      operationId: getExperiment
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns:
+    post:
+      summary: Deliver one customer turn to one or both arms
+      description: One call is one composition however many arms it reaches, so the
+        turns it writes share a composition identifier. Two calls are two compositions
+        even when the words match, which is what makes divergent replies readable
+        later.
+      operationId: deliverParticipantTurn
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParticipantTurnRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantTurnListResponse'
+        '404':
+          description: The experiment or one of the named arms is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The driver has no turn to deliver, or does not drive this experiment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/objective-blocks:
     get:
       summary: List the shared objective-block library with version provenance
@@ -4476,6 +4688,32 @@ components:
       - model_id
       - capabilities
       title: AgentFrameworkResponse
+    ArmSelectionSchema:
+      properties:
+        configuration_id:
+          type: string
+          format: uuid
+          title: Configuration Id
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+          description: Immutable published version number.
+        label:
+          type: string
+          maxLength: 200
+          title: Label
+          description: How an operator tells this arm from the one beside it. Defaults
+            to the arm's position, because that is what a comparison refers to.
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - configuration_id
+      - version
+      title: ArmSelectionSchema
+      description: 'One arm: an exact published agent-configuration version, optionally
+        named.'
     AttachCustomerProfileRequest:
       properties:
         shop_id:
@@ -4784,6 +5022,48 @@ components:
       required:
       - label
       title: CloneSandboxRequest
+    ComparisonDimension:
+      type: string
+      enum:
+      - framework
+      - architecture
+      - model
+      - prompt
+      - tools
+      - support_identity
+      - tone_of_voice
+      title: ComparisonDimension
+      description: 'The axes along which two agent configurations can differ.
+
+
+        Exactly the inputs an experiment is allowed to attribute a difference in behavior
+        to.
+
+        Anything an arm discovers at run time is deliberately absent: both arms work
+        the same
+
+        starting state, so the world is not a comparison variable (ADR 0019, ADR 0020).'
+    ComparisonVariableSchema:
+      properties:
+        dimension:
+          $ref: '#/components/schemas/ComparisonDimension'
+        values:
+          items:
+            type: string
+          type: array
+          title: Values
+        differs:
+          type: boolean
+          title: Differs
+      additionalProperties: false
+      type: object
+      required:
+      - dimension
+      - values
+      - differs
+      title: ComparisonVariableSchema
+      description: 'One dimension of the setup matrix: what each arm holds, and whether
+        they disagree.'
     CompletionConditionsSchema:
       properties:
         statement:
@@ -5657,6 +5937,278 @@ components:
       - escalate_to
       - conditions
       title: EscalationPolicySchema
+    ExperimentListResponse:
+      properties:
+        experiments:
+          items:
+            $ref: '#/components/schemas/ExperimentSummarySchema'
+          type: array
+          title: Experiments
+      additionalProperties: false
+      type: object
+      required:
+      - experiments
+      title: ExperimentListResponse
+    ExperimentPreviewResponse:
+      properties:
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        comparison:
+          items:
+            $ref: '#/components/schemas/ComparisonVariableSchema'
+          type: array
+          title: Comparison
+        arm_labels:
+          items:
+            type: string
+          type: array
+          title: Arm Labels
+      additionalProperties: false
+      type: object
+      required:
+      - issues
+      - comparison
+      - arm_labels
+      title: ExperimentPreviewResponse
+      description: The setup gate and the comparison matrix, computed without starting
+        anything.
+    ExperimentResponse:
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        label:
+          type: string
+          title: Label
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        scenario_version:
+          type: integer
+          title: Scenario Version
+        seed:
+          type: integer
+          title: Seed
+        snapshot_id:
+          type: string
+          format: uuid
+          title: Snapshot Id
+        sandbox_fingerprint:
+          type: string
+          title: Sandbox Fingerprint
+        resolution_fingerprint:
+          type: string
+          title: Resolution Fingerprint
+        participant_driver:
+          $ref: '#/components/schemas/ParticipantDriverType'
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        created_at:
+          type: string
+          title: Created At
+        sandbox_inputs:
+          items:
+            $ref: '#/components/schemas/ResolvedDefinitionSchema'
+          type: array
+          title: Sandbox Inputs
+        arm_inputs:
+          items:
+            items:
+              $ref: '#/components/schemas/ResolvedDefinitionSchema'
+            type: array
+          type: array
+          title: Arm Inputs
+        tool_contracts:
+          additionalProperties:
+            type: string
+          type: object
+          title: Tool Contracts
+        comparison:
+          items:
+            $ref: '#/components/schemas/ComparisonVariableSchema'
+          type: array
+          title: Comparison
+        runs:
+          items:
+            $ref: '#/components/schemas/ExperimentRunSchema'
+          type: array
+          title: Runs
+        turns:
+          items:
+            $ref: '#/components/schemas/ParticipantTurnSchema'
+          type: array
+          title: Turns
+      additionalProperties: false
+      type: object
+      required:
+      - experiment_id
+      - label
+      - scenario_id
+      - scenario_version
+      - seed
+      - snapshot_id
+      - sandbox_fingerprint
+      - resolution_fingerprint
+      - participant_driver
+      - canonical_schema_version
+      - created_at
+      - sandbox_inputs
+      - arm_inputs
+      - tool_contracts
+      - comparison
+      - runs
+      - turns
+      title: ExperimentResponse
+      description: 'One experiment in full: the versions it pinned, its arms, and
+        their threads.'
+    ExperimentRunSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        position:
+          type: integer
+          title: Position
+        label:
+          type: string
+          title: Label
+        agent_configuration_id:
+          type: string
+          format: uuid
+          title: Agent Configuration Id
+        agent_configuration_version:
+          type: integer
+          title: Agent Configuration Version
+        sandbox_id:
+          type: string
+          format: uuid
+          title: Sandbox Id
+        revision:
+          type: integer
+          title: Revision
+        snapshot_fingerprint:
+          type: string
+          title: Snapshot Fingerprint
+        state_fingerprint:
+          type: string
+          title: State Fingerprint
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - position
+      - label
+      - agent_configuration_id
+      - agent_configuration_version
+      - sandbox_id
+      - revision
+      - snapshot_fingerprint
+      - state_fingerprint
+      title: ExperimentRunSchema
+      description: 'One arm: what it runs, where it works, and how far its world has
+        moved.
+
+
+        The two fingerprints are the arm''s own, read off the sandbox rather than
+        restated:
+
+        `snapshot_fingerprint` is where it started and agrees with every sibling arm
+        forever;
+
+        `state_fingerprint` is where it is now and stops agreeing the moment something
+        writes.'
+    ExperimentSummarySchema:
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        label:
+          type: string
+          title: Label
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        scenario_version:
+          type: integer
+          title: Scenario Version
+        seed:
+          type: integer
+          title: Seed
+        snapshot_id:
+          type: string
+          format: uuid
+          title: Snapshot Id
+        sandbox_fingerprint:
+          type: string
+          title: Sandbox Fingerprint
+        resolution_fingerprint:
+          type: string
+          title: Resolution Fingerprint
+        participant_driver:
+          $ref: '#/components/schemas/ParticipantDriverType'
+        canonical_schema_version:
+          type: string
+          title: Canonical Schema Version
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - experiment_id
+      - label
+      - scenario_id
+      - scenario_version
+      - seed
+      - snapshot_id
+      - sandbox_fingerprint
+      - resolution_fingerprint
+      - participant_driver
+      - canonical_schema_version
+      - created_at
+      title: ExperimentSummarySchema
+      description: One row of the bench's experiment list.
+    ExperimentValidationErrorResponse:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        request_id:
+          type: string
+          title: Request Id
+        details:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ValidationIssue'
+            type: array
+          - type: 'null'
+          title: Details
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      - request_id
+      - issues
+      title: ExperimentValidationErrorResponse
+      description: A start refusal that carries the exact setup-gate findings.
     FaqEntrySchema:
       properties:
         id:
@@ -6719,6 +7271,130 @@ components:
       - updated_at
       title: OrderSummarySchema
       description: One row of the Studio's order index.
+    ParticipantDriverType:
+      type: string
+      enum:
+      - human
+      - llm
+      - scripted
+      title: ParticipantDriverType
+      description: 'Where a run''s customer turns come from.
+
+
+        Declared as a closed set from the start (ADR 0012) although only `HUMAN` has
+        an
+
+        implementation: the type is recorded on every experiment as part of what explains
+        a
+
+        result, and a run driven by a future simulator must be distinguishable from
+        one a person
+
+        typed — including in comparisons made before that simulator existed.'
+    ParticipantTurnListResponse:
+      properties:
+        turns:
+          items:
+            $ref: '#/components/schemas/ParticipantTurnSchema'
+          type: array
+          title: Turns
+      additionalProperties: false
+      type: object
+      required:
+      - turns
+      title: ParticipantTurnListResponse
+    ParticipantTurnRequest:
+      properties:
+        run_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 2
+          minItems: 1
+          title: Run Ids
+          description: The arms this composition is delivered to. Naming both is a
+            linked turn; naming one is a reply that arm alone received.
+        message:
+          type: string
+          maxLength: 4000
+          title: Message
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - run_ids
+      title: ParticipantTurnRequest
+      description: 'One composition and the arms it reaches.
+
+
+        `message` is what a human operator wrote. It is optional in the schema and
+        required by
+
+        the driver that needs it, deliberately: the field belongs to the human implementation,
+
+        and a future generating driver will refuse a request that carries one rather
+        than having
+
+        the contract change shape underneath it.'
+    ParticipantTurnSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        turn_id:
+          type: string
+          format: uuid
+          title: Turn Id
+        ordinal:
+          type: integer
+          title: Ordinal
+        source:
+          $ref: '#/components/schemas/ParticipantTurnSource'
+        driver:
+          anyOf:
+          - $ref: '#/components/schemas/ParticipantDriverType'
+          - type: 'null'
+        body:
+          type: string
+          title: Body
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - turn_id
+      - ordinal
+      - source
+      - driver
+      - body
+      - created_at
+      title: ParticipantTurnSchema
+      description: One customer turn as one arm received it.
+    ParticipantTurnSource:
+      type: string
+      enum:
+      - trigger
+      - participant
+      title: ParticipantTurnSource
+      description: 'Who produced one customer turn.
+
+
+        Two values rather than one because they answer to different authorities. The
+        trigger is
+
+        frozen in the ticket the snapshot pinned, so it is identical in every arm
+        by
+
+        construction and reproducible from the starting state alone. A participant
+        turn is
+
+        produced during the run by whatever driver the experiment named, and is therefore
+
+        evidence rather than starting state.'
     PaymentMethodKind:
       type: string
       enum:
@@ -7340,6 +8016,30 @@ components:
       required:
       - payload
       title: ReplaceTicketDraftRequest
+    ResolvedDefinitionSchema:
+      properties:
+        definition_type:
+          type: string
+          title: Definition Type
+        definition_id:
+          type: string
+          format: uuid
+          title: Definition Id
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+      additionalProperties: false
+      type: object
+      required:
+      - definition_type
+      - definition_id
+      - version
+      - content_fingerprint
+      title: ResolvedDefinitionSchema
+      description: One exact published version this experiment pinned.
     ResolvedDocumentSchema:
       properties:
         kind:
@@ -9027,6 +9727,64 @@ components:
       - seed
       - framework_id
       title: StartConversationRequest
+    StartExperimentRequest:
+      properties:
+        label:
+          type: string
+          maxLength: 200
+          title: Label
+          description: How an operator finds this experiment again. Required to start
+            one; a preview judges the setup and does not need it.
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        scenario_version:
+          type: integer
+          minimum: 1.0
+          title: Scenario Version
+          description: Immutable published version number.
+        seed:
+          type: integer
+          maximum: 4294967295.0
+          minimum: 0.0
+          title: Seed
+          description: The seed the starting state is frozen and fingerprinted with.
+        arms:
+          items:
+            $ref: '#/components/schemas/ArmSelectionSchema'
+          type: array
+          maxItems: 2
+          minItems: 1
+          title: Arms
+        participant_driver:
+          $ref: '#/components/schemas/ParticipantDriverType'
+          default: human
+      additionalProperties: false
+      type: object
+      required:
+      - label
+      - scenario_id
+      - scenario_version
+      - seed
+      - arms
+      title: StartExperimentRequest
+      description: 'One setup, judged by `previewExperiment` and run by `startExperiment`.
+
+
+        One shape rather than two, so a preview judges the request a start would make
+        rather than
+
+        something adjacent to it. The name is the single field the two operations
+        read
+
+        differently: starting requires one, and previewing does not, because an operator
+        compares
+
+        two configurations before deciding what to call the experiment. The rule therefore
+        lives
+
+        in the service that starts it rather than being half here and half there.'
     StructuredSupportResultResponse:
       properties:
         summary:

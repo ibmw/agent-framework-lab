@@ -994,6 +994,84 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a shop's experiments, most recently started first */
+    get: operations["listExperiments"];
+    put?: never;
+    /**
+     * Start one experiment: freeze the starting state and clone its arms
+     * @description Resolves every published version the experiment names, freezes the scenario version into a canonical snapshot, clones one independently mutable arm per agent configuration, and opens each arm's thread with the ticket's triggering message. Deliberately not idempotent: the same scenario run twice is two experiments.
+     */
+    post: operations["startExperiment"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/experiments/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Judge an experiment's setup without starting it
+     * @description The same gate `startExperiment` applies, plus the dimension-by-dimension comparison of the chosen arms. Materializes nothing and stores nothing, and does not need the name the experiment will be started under.
+     */
+    post: operations["previewExperiment"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one experiment, its arms, and every turn they received */
+    get: operations["getExperiment"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Deliver one customer turn to one or both arms
+     * @description One call is one composition however many arms it reaches, so the turns it writes share a composition identifier. Two calls are two compositions even when the words match, which is what makes divergent replies readable later.
+     */
+    post: operations["deliverParticipantTurn"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/objective-blocks": {
     parameters: {
       query?: never;
@@ -1485,6 +1563,28 @@ export interface components {
       /** Unavailability Reason */
       unavailability_reason?: string | null;
     };
+    /**
+     * ArmSelectionSchema
+     * @description One arm: an exact published agent-configuration version, optionally named.
+     */
+    ArmSelectionSchema: {
+      /**
+       * Configuration Id
+       * Format: uuid
+       */
+      configuration_id: string;
+      /**
+       * Version
+       * @description Immutable published version number.
+       */
+      version: number;
+      /**
+       * Label
+       * @description How an operator tells this arm from the one beside it. Defaults to the arm's position, because that is what a comparison refers to.
+       * @default
+       */
+      label: string;
+    };
     /** AttachCustomerProfileRequest */
     AttachCustomerProfileRequest: {
       /**
@@ -1641,6 +1741,34 @@ export interface components {
        * @description How an operator tells this arm from the one beside it.
        */
       label: string;
+    };
+    /**
+     * ComparisonDimension
+     * @description The axes along which two agent configurations can differ.
+     *
+     *     Exactly the inputs an experiment is allowed to attribute a difference in behavior to.
+     *     Anything an arm discovers at run time is deliberately absent: both arms work the same
+     *     starting state, so the world is not a comparison variable (ADR 0019, ADR 0020).
+     * @enum {string}
+     */
+    ComparisonDimension:
+      | "framework"
+      | "architecture"
+      | "model"
+      | "prompt"
+      | "tools"
+      | "support_identity"
+      | "tone_of_voice";
+    /**
+     * ComparisonVariableSchema
+     * @description One dimension of the setup matrix: what each arm holds, and whether they disagree.
+     */
+    ComparisonVariableSchema: {
+      dimension: components["schemas"]["ComparisonDimension"];
+      /** Values */
+      values: string[];
+      /** Differs */
+      differs: boolean;
     };
     /**
      * CompletionConditionsSchema
@@ -2123,6 +2251,162 @@ export interface components {
       escalate_to: string;
       /** Conditions */
       conditions: string[];
+    };
+    /** ExperimentListResponse */
+    ExperimentListResponse: {
+      /** Experiments */
+      experiments: components["schemas"]["ExperimentSummarySchema"][];
+    };
+    /**
+     * ExperimentPreviewResponse
+     * @description The setup gate and the comparison matrix, computed without starting anything.
+     */
+    ExperimentPreviewResponse: {
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Comparison */
+      comparison: components["schemas"]["ComparisonVariableSchema"][];
+      /** Arm Labels */
+      arm_labels: string[];
+    };
+    /**
+     * ExperimentResponse
+     * @description One experiment in full: the versions it pinned, its arms, and their threads.
+     */
+    ExperimentResponse: {
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /** Label */
+      label: string;
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: number;
+      /** Seed */
+      seed: number;
+      /**
+       * Snapshot Id
+       * Format: uuid
+       */
+      snapshot_id: string;
+      /** Sandbox Fingerprint */
+      sandbox_fingerprint: string;
+      /** Resolution Fingerprint */
+      resolution_fingerprint: string;
+      participant_driver: components["schemas"]["ParticipantDriverType"];
+      /** Canonical Schema Version */
+      canonical_schema_version: string;
+      /** Created At */
+      created_at: string;
+      /** Sandbox Inputs */
+      sandbox_inputs: components["schemas"]["ResolvedDefinitionSchema"][];
+      /** Arm Inputs */
+      arm_inputs: components["schemas"]["ResolvedDefinitionSchema"][][];
+      /** Tool Contracts */
+      tool_contracts: {
+        [key: string]: string;
+      };
+      /** Comparison */
+      comparison: components["schemas"]["ComparisonVariableSchema"][];
+      /** Runs */
+      runs: components["schemas"]["ExperimentRunSchema"][];
+      /** Turns */
+      turns: components["schemas"]["ParticipantTurnSchema"][];
+    };
+    /**
+     * ExperimentRunSchema
+     * @description One arm: what it runs, where it works, and how far its world has moved.
+     *
+     *     The two fingerprints are the arm's own, read off the sandbox rather than restated:
+     *     `snapshot_fingerprint` is where it started and agrees with every sibling arm forever;
+     *     `state_fingerprint` is where it is now and stops agreeing the moment something writes.
+     */
+    ExperimentRunSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /** Position */
+      position: number;
+      /** Label */
+      label: string;
+      /**
+       * Agent Configuration Id
+       * Format: uuid
+       */
+      agent_configuration_id: string;
+      /** Agent Configuration Version */
+      agent_configuration_version: number;
+      /**
+       * Sandbox Id
+       * Format: uuid
+       */
+      sandbox_id: string;
+      /** Revision */
+      revision: number;
+      /** Snapshot Fingerprint */
+      snapshot_fingerprint: string;
+      /** State Fingerprint */
+      state_fingerprint: string;
+    };
+    /**
+     * ExperimentSummarySchema
+     * @description One row of the bench's experiment list.
+     */
+    ExperimentSummarySchema: {
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /** Label */
+      label: string;
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: number;
+      /** Seed */
+      seed: number;
+      /**
+       * Snapshot Id
+       * Format: uuid
+       */
+      snapshot_id: string;
+      /** Sandbox Fingerprint */
+      sandbox_fingerprint: string;
+      /** Resolution Fingerprint */
+      resolution_fingerprint: string;
+      participant_driver: components["schemas"]["ParticipantDriverType"];
+      /** Canonical Schema Version */
+      canonical_schema_version: string;
+      /** Created At */
+      created_at: string;
+    };
+    /**
+     * ExperimentValidationErrorResponse
+     * @description A start refusal that carries the exact setup-gate findings.
+     */
+    ExperimentValidationErrorResponse: {
+      /** Code */
+      code: string;
+      /** Message */
+      message: string;
+      /** Request Id */
+      request_id: string;
+      /** Details */
+      details?: components["schemas"]["ValidationIssue"][] | null;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
     };
     /** FaqEntrySchema */
     FaqEntrySchema: {
@@ -2689,6 +2973,79 @@ export interface components {
       updated_at: string;
     };
     /**
+     * ParticipantDriverType
+     * @description Where a run's customer turns come from.
+     *
+     *     Declared as a closed set from the start (ADR 0012) although only `HUMAN` has an
+     *     implementation: the type is recorded on every experiment as part of what explains a
+     *     result, and a run driven by a future simulator must be distinguishable from one a person
+     *     typed — including in comparisons made before that simulator existed.
+     * @enum {string}
+     */
+    ParticipantDriverType: "human" | "llm" | "scripted";
+    /** ParticipantTurnListResponse */
+    ParticipantTurnListResponse: {
+      /** Turns */
+      turns: components["schemas"]["ParticipantTurnSchema"][];
+    };
+    /**
+     * ParticipantTurnRequest
+     * @description One composition and the arms it reaches.
+     *
+     *     `message` is what a human operator wrote. It is optional in the schema and required by
+     *     the driver that needs it, deliberately: the field belongs to the human implementation,
+     *     and a future generating driver will refuse a request that carries one rather than having
+     *     the contract change shape underneath it.
+     */
+    ParticipantTurnRequest: {
+      /**
+       * Run Ids
+       * @description The arms this composition is delivered to. Naming both is a linked turn; naming one is a reply that arm alone received.
+       */
+      run_ids: string[];
+      /**
+       * Message
+       * @default
+       */
+      message: string;
+    };
+    /**
+     * ParticipantTurnSchema
+     * @description One customer turn as one arm received it.
+     */
+    ParticipantTurnSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /**
+       * Turn Id
+       * Format: uuid
+       */
+      turn_id: string;
+      /** Ordinal */
+      ordinal: number;
+      source: components["schemas"]["ParticipantTurnSource"];
+      driver: components["schemas"]["ParticipantDriverType"] | null;
+      /** Body */
+      body: string;
+      /** Created At */
+      created_at: string;
+    };
+    /**
+     * ParticipantTurnSource
+     * @description Who produced one customer turn.
+     *
+     *     Two values rather than one because they answer to different authorities. The trigger is
+     *     frozen in the ticket the snapshot pinned, so it is identical in every arm by
+     *     construction and reproducible from the starting state alone. A participant turn is
+     *     produced during the run by whatever driver the experiment named, and is therefore
+     *     evidence rather than starting state.
+     * @enum {string}
+     */
+    ParticipantTurnSource: "trigger" | "participant";
+    /**
      * PaymentMethodKind
      * @enum {string}
      */
@@ -2979,6 +3336,23 @@ export interface components {
     /** ReplaceTicketDraftRequest */
     ReplaceTicketDraftRequest: {
       payload: components["schemas"]["TicketPayloadSchema"];
+    };
+    /**
+     * ResolvedDefinitionSchema
+     * @description One exact published version this experiment pinned.
+     */
+    ResolvedDefinitionSchema: {
+      /** Definition Type */
+      definition_type: string;
+      /**
+       * Definition Id
+       * Format: uuid
+       */
+      definition_id: string;
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
     };
     /** ResolvedDocumentSchema */
     ResolvedDocumentSchema: {
@@ -3870,6 +4244,42 @@ export interface components {
       seed: number;
       /** Framework Id */
       framework_id: string;
+    };
+    /**
+     * StartExperimentRequest
+     * @description One setup, judged by `previewExperiment` and run by `startExperiment`.
+     *
+     *     One shape rather than two, so a preview judges the request a start would make rather than
+     *     something adjacent to it. The name is the single field the two operations read
+     *     differently: starting requires one, and previewing does not, because an operator compares
+     *     two configurations before deciding what to call the experiment. The rule therefore lives
+     *     in the service that starts it rather than being half here and half there.
+     */
+    StartExperimentRequest: {
+      /**
+       * Label
+       * @description How an operator finds this experiment again. Required to start one; a preview judges the setup and does not need it.
+       */
+      label: string;
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /**
+       * Scenario Version
+       * @description Immutable published version number.
+       */
+      scenario_version: number;
+      /**
+       * Seed
+       * @description The seed the starting state is frozen and fingerprinted with.
+       */
+      seed: number;
+      /** Arms */
+      arms: components["schemas"]["ArmSelectionSchema"][];
+      /** @default human */
+      participant_driver: components["schemas"]["ParticipantDriverType"];
     };
     /** StructuredSupportResultResponse */
     StructuredSupportResultResponse: {
@@ -8277,6 +8687,227 @@ export interface operations {
         };
       };
       /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listExperiments: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  startExperiment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartExperimentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentResponse"];
+        };
+      };
+      /** @description The shop, scenario version, or arm is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The setup gate refuses this experiment */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  previewExperiment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartExperimentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getExperiment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  deliverParticipantTurn: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ParticipantTurnRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ParticipantTurnListResponse"];
+        };
+      };
+      /** @description The experiment or one of the named arms is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The driver has no turn to deliver, or does not drive this experiment */
       422: {
         headers: {
           [name: string]: unknown;

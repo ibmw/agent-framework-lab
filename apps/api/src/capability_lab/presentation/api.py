@@ -56,6 +56,15 @@ from capability_lab.application.definition_resolution import (
     PublishedVersionExistsError,
     UnpublishedReferenceError,
 )
+from capability_lab.application.experiments import (
+    ExperimentArmError,
+    ExperimentLabelError,
+    ExperimentNotFoundError,
+    ExperimentNotStartableError,
+    ExperimentRunNotFoundError,
+    ExperimentService,
+    ParticipantDriverMismatchError,
+)
 from capability_lab.application.order_actions import (
     ActionConfirmationError,
     ActionConflictError,
@@ -72,6 +81,7 @@ from capability_lab.application.order_fixtures import (
     OrderSelectionError,
 )
 from capability_lab.application.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
+from capability_lab.application.participants import ParticipantTurnUnavailableError
 from capability_lab.application.ports import Clock, ConversationTurn, OrderWriteConflictError
 from capability_lab.application.sandbox_actions import SandboxActionService
 from capability_lab.application.sandbox_materialization import (
@@ -146,6 +156,7 @@ from capability_lab.domain.blocks import BlockConfigurationError
 from capability_lab.domain.customer_profile import CustomerProfileConfigurationError
 from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
+from capability_lab.domain.experiment import ExperimentConfigurationError
 from capability_lab.domain.order_fixture import (
     OrderFixtureConfigurationError,
     OrderTransitionError,
@@ -162,6 +173,7 @@ from capability_lab.infrastructure.database import (
     create_session_factory,
     session_scope,
 )
+from capability_lab.infrastructure.participants.human import HumanParticipantDriver
 from capability_lab.infrastructure.repositories import (
     ConversationTurnConflictError,
     GeneratedScenarioConflictError,
@@ -171,9 +183,12 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyActionProposalRepository,
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
+    SqlAlchemyExperimentRepository,
+    SqlAlchemyExperimentRunRepository,
     SqlAlchemyGeneratedScenarioRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
+    SqlAlchemyParticipantTurnRepository,
     SqlAlchemyPublishedVersionDirectory,
     SqlAlchemySandboxActionProposalRepository,
     SqlAlchemySandboxRepository,
@@ -196,6 +211,7 @@ from capability_lab.presentation.base import ErrorResponse, StrictApiModel, Vali
 from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlockRoutes
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
 from capability_lab.presentation.definitions import DefinitionIssueSchema
+from capability_lab.presentation.experiments import ExperimentRoutes
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
@@ -986,6 +1002,90 @@ async def _sandbox_not_materializable_handler(request: Request, error: Exception
     )
 
 
+async def _experiment_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    """A turn or an experiment the domain will not build, whoever asked for it.
+
+    The backstop every other resource has. A human driver trims what the operator typed, but
+    a driver is a port: the next implementation may return a body this rule refuses, and that
+    has to reach the caller as a refusal rather than as a broken lab.
+    """
+    return _error_response(
+        request, status_code=422, code="experiment_configuration_error", message=str(error)
+    )
+
+
+async def _experiment_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="experiment_not_found", message=str(error)
+    )
+
+
+async def _experiment_run_not_found_handler(request: Request, error: Exception) -> JSONResponse:
+    """An arm this experiment does not have is a 404 on the arm, not on the experiment.
+
+    A client delivering a turn to the wrong run has to be able to tell that from an
+    experiment that is gone; collapsing the two would have it retry against a thread that
+    was never there.
+    """
+    return _error_response(
+        request, status_code=404, code="experiment_run_not_found", message=str(error)
+    )
+
+
+async def _experiment_setup_handler(request: Request, error: Exception) -> JSONResponse:
+    """The operator's setup is not runnable as stated, before any state has been frozen."""
+    return _error_response(
+        request, status_code=422, code="experiment_setup_invalid", message=str(error)
+    )
+
+
+async def _participant_turn_handler(request: Request, error: Exception) -> JSONResponse:
+    """The driver had nothing to deliver.
+
+    422 rather than a conflict: nothing raced. The request asked for a turn that does not
+    exist yet, and the run is exactly where it was.
+    """
+    return _error_response(
+        request, status_code=422, code="participant_turn_unavailable", message=str(error)
+    )
+
+
+async def _participant_driver_mismatch_handler(request: Request, error: Exception) -> JSONResponse:
+    """The driver offering this turn is not the one the experiment recorded.
+
+    Its own code rather than the unavailable one beside it: "write something first" and "you
+    are driving this run with the wrong participant" are different mistakes, and a client that
+    could not tell them apart would retry the second one forever.
+    """
+    return _error_response(
+        request, status_code=422, code="participant_driver_mismatch", message=str(error)
+    )
+
+
+async def _experiment_not_startable_handler(request: Request, error: Exception) -> JSONResponse:
+    """Refuse the start with the findings that explain it, as a publish refusal does.
+
+    Same shape as the materialization refusal beside it, and for the same reason: an
+    operator reads one kind of finding whichever gate refused them.
+    """
+    issues = (
+        [DefinitionIssueSchema.from_domain(issue).model_dump() for issue in error.validation.issues]
+        if isinstance(error, ExperimentNotStartableError)
+        else []
+    )
+    request_id = _request_id(request)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": "experiment_not_startable",
+            "message": str(error),
+            "request_id": request_id,
+            "issues": issues,
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
 async def _missing_draft_handler(request: Request, error: Exception) -> JSONResponse:
     """Reference resolution asked for a draft that does not exist.
 
@@ -1390,6 +1490,20 @@ def create_app(
         SandboxNotMaterializableError, _sandbox_not_materializable_handler
     )
     application.add_exception_handler(SandboxNotFoundError, _sandbox_not_found_handler)
+    application.add_exception_handler(ExperimentNotFoundError, _experiment_not_found_handler)
+    application.add_exception_handler(ExperimentRunNotFoundError, _experiment_run_not_found_handler)
+    application.add_exception_handler(ExperimentLabelError, _experiment_setup_handler)
+    application.add_exception_handler(ExperimentArmError, _experiment_setup_handler)
+    application.add_exception_handler(
+        ExperimentNotStartableError, _experiment_not_startable_handler
+    )
+    application.add_exception_handler(
+        ExperimentConfigurationError, _experiment_configuration_handler
+    )
+    application.add_exception_handler(
+        ParticipantDriverMismatchError, _participant_driver_mismatch_handler
+    )
+    application.add_exception_handler(ParticipantTurnUnavailableError, _participant_turn_handler)
     application.add_exception_handler(SandboxLabelError, _sandbox_label_handler)
     application.add_exception_handler(ToolNotFoundError, _tool_not_found_handler)
     application.add_exception_handler(ToolActorRequiredError, _tool_actor_required_handler)
@@ -1520,6 +1634,35 @@ def create_app(
             yield SandboxService(
                 SqlAlchemySandboxRepository(session),
                 SqlAlchemySandboxSnapshotRepository(session),
+                clock,
+            )
+
+    def experiment_service() -> Generator[ExperimentService, None, None]:
+        with session_scope(factory) as session:
+            yield ExperimentService(
+                SqlAlchemyExperimentRepository(session),
+                SqlAlchemyExperimentRunRepository(session),
+                SqlAlchemyParticipantTurnRepository(session),
+                SandboxSnapshotService(
+                    SqlAlchemySandboxSnapshotRepository(session),
+                    scenario_repository(session),
+                    shop_repository(session),
+                    ticket_repository(session),
+                    SqlAlchemyOrderFixtureRepository(session),
+                    objective_block_repository(session),
+                    mutation_block_repository(session),
+                    SqlAlchemyPublishedVersionDirectory(session),
+                    clock,
+                ),
+                SandboxService(
+                    SqlAlchemySandboxRepository(session),
+                    SqlAlchemySandboxSnapshotRepository(session),
+                    clock,
+                ),
+                shop_repository(session),
+                ticket_repository(session),
+                agent_configuration_repository(session),
+                SqlAlchemyPublishedVersionDirectory(session),
                 clock,
             )
 
@@ -2051,6 +2194,9 @@ def create_app(
     SandboxSnapshotRoutes(sandbox_snapshot_service).register(router)
     SandboxRoutes(sandbox_service).register(router)
     SandboxToolRoutes(sandbox_tool_service).register(router)
+    # The participant driver is composed per delivery, from the words the request carries:
+    # selecting it is composition's job, and its lifetime is one turn.
+    ExperimentRoutes(experiment_service, HumanParticipantDriver).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)
