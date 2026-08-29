@@ -136,12 +136,22 @@ SDK immediately.
    support-identity facts and may never name customer, order, or ticket facts, because discovering
    those through tools is part of what an experiment compares. The permission a write tool needs is
    now declared on its contract, so the runtime and the publish gate read one table.
-8. Next is Milestone 3 Slice 2: the participant-driver port and its human operator, plus resolved
-   configurations and participant events persisted without framework SDK types. It lands with the
-   Milestone 4 runner that calls it — which is also where a support identity stops being chosen by
-   an operator and starts being resolved from a published configuration, where a tool's declared
-   effect is what an adapter routes on, and where the string-only argument table becomes the JSON
-   Schema an adapter offers a model.
+8. Milestone 3 Slice 2 is delivered, together with the Milestone 4 runner it was sequenced against
+   (ADR 0025). An experiment binds a published scenario version to one or two published agent
+   configurations, freezes one canonical snapshot, clones an arm per configuration, and opens both
+   threads on the ticket's triggering message; every later customer turn arrives through a
+   participant-driver port whose first implementation is the human operator. One delivery is one
+   composition however many arms it reaches, so a reply sent to a single arm is divergence the
+   record keeps rather than something a later comparison of the bodies would have to guess at. The
+   setup gate answers the tone-of-voice check ADR 0012 placed at experiment setup and warns when
+   the arms differ along more than one dimension.
+9. Next is the rest of Milestone 4: executing an arm. That is where a support identity stops being
+   chosen by an operator and starts being resolved from the published configuration an arm runs,
+   where a tool's declared effect is what an adapter routes on, where the string-only argument
+   table becomes the JSON Schema an adapter offers a model, where the scenario's mutation blocks
+   fire on their bound timing, and where assistant turns, tool events, traces, and completion join
+   the participant turns already recorded. `AgentAdapter` is deliberately unchanged until that
+   runner proves a requirement for it.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
