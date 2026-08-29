@@ -105,7 +105,7 @@ function studioSections(shopId: string): NavSection[] {
           to: `${base}/agent-configurations`,
           icon: <Bot size={15} />,
         },
-        { label: "Bench", icon: <Play size={15} />, milestone: "Milestone 4" },
+        { label: "Bench", to: `${base}/bench`, icon: <Play size={15} /> },
         { label: "History", icon: <Clock size={15} />, milestone: "Milestone 5" },
       ],
     },
