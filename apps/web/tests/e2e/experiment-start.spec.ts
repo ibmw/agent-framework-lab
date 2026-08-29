@@ -1,15 +1,22 @@
 import { expect, type Page, test } from "@playwright/test";
 
 /**
- * Milestone 3 Slice 2 acceptance evidence: an operator starts one experiment on a published
- * scenario version with two published agent configurations, reads the comparison matrix
- * before anything is frozen, and finds both arms opening on the ticket's triggering message
- * from one shared starting state — then sends one message to both arms and one to a single
- * arm, and the record keeps them apart.
+ * The paired-experiment acceptance journey (ADR 0025, ADR 0026): an operator starts one
+ * experiment on a published scenario version with two published agent configurations, reads
+ * the comparison matrix before anything is frozen, and finds both arms opening on the
+ * ticket's triggering message from one shared starting state — then runs each arm's agent,
+ * watches one of them follow the incident to the order and redirect it while the arm beside
+ * it stays where it was, and sends one message to both arms and one to a single arm, which
+ * the record keeps apart.
  *
  * The journey builds the whole chain because an experiment is what composes all of it: the
  * scenario, the arms, and the participant are the three things it binds, and none of them
  * can be stubbed without stubbing the thing under test.
+ *
+ * Both arms run the deterministic control framework, which is what makes this an assertion
+ * rather than an observation: its behavior is a declared policy, so the reply, the tool
+ * calls, and the revision it moves the arm to are all things this test can name. A
+ * model-backed arm is exercised by the offline adapter tests and the opt-in live smoke test.
  */
 
 function card(page: Page, name: string) {
@@ -112,6 +119,11 @@ async function buildIncident(page: Page, unique: string) {
   await addAddress.getByLabel("City", { exact: true }).fill("Lyon");
   await addAddress.getByLabel("Country", { exact: true }).fill("FR");
   await addAddress.getByRole("button", { name: "Add address" }).click();
+  // Where she lives *now* is the default: the first entry authored becomes it, and the
+  // incident is exactly that the order still ships to the other one.
+  await card(page, "Address book")
+    .getByRole("button", { name: "Make Home the default address" })
+    .click();
   await card(page, "Behavioral persona")
     .getByLabel("Summary", { exact: true })
     .fill("Direct, mildly anxious under uncertainty; wants quick, concrete answers.");
@@ -250,7 +262,14 @@ async function publishTemplates(page: Page, objective: string, mutation: string)
   await expect(page.getByRole("status")).toContainText("Published version 1");
 }
 
-/** One published agent configuration, ready to be pinned as an arm. */
+/**
+ * One published agent configuration on the deterministic control framework, ready to be
+ * pinned as an arm.
+ *
+ * The write tools are enabled because the incident is a wrong address: an arm that could
+ * only read would have nothing to do about it, and the identity this adopts is already
+ * permitted to change one.
+ */
 async function publishConfiguration(page: Page, name: string, identity: string, prompt: string) {
   await openSection(page, "Agent configurations", "Agent configurations");
   const create = card(page, "New agent configuration");
@@ -261,6 +280,18 @@ async function publishConfiguration(page: Page, name: string, identity: string, 
   await create.getByRole("button", { name: "Create configuration" }).click();
   await page.getByRole("link", { name }).click();
   await page.getByLabel("Prompt template", { exact: true }).fill(prompt);
+
+  await page.getByLabel("Framework", { exact: true }).selectOption({ label: "Deterministic fake" });
+  const runtime = card(page, "LLM and runtime");
+  await runtime.getByLabel("Provider", { exact: true }).fill("fake");
+  await runtime.getByLabel("Model", { exact: true }).fill("deterministic");
+
+  // Not an exact label match: a binding's label is the tool name followed by its effect
+  // chip, which is what an author reads.
+  const tools = page.getByRole("region", { name: /Tool bindings/ });
+  await tools.getByLabel("orders.propose_address_change").check();
+  await tools.getByLabel("orders.apply_address_change").check();
+
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByText(/Published version 1/)).toBeVisible();
@@ -387,6 +418,23 @@ test("an operator starts a paired experiment and drives both arms", async ({ pag
   expect(armFingerprints).toHaveLength(2);
   expect(armFingerprints[0]).toBe(armFingerprints[1]);
 
+  // Arm A answers the trigger: it follows the interaction to the order, reads the customer,
+  // and redirects the order to the address on file — every step a recorded tool call.
+  await armA.getByRole("button", { name: "Run Arm A's agent" }).click();
+  await expect(armA.getByText(/I found order NS-10482/)).toBeVisible();
+  await expect(armA.getByText(/redirected it to 18 rue des Ecoles/)).toBeVisible();
+  await expect(armA.getByText(/interaction\.read_context → success/)).toBeVisible();
+  await expect(
+    armA.getByText(/orders\.apply_address_change → success · moved this arm/),
+  ).toBeVisible();
+
+  // And the arm beside it is exactly where it was: an action in one arm cannot alter the
+  // other, which is the whole claim a paired experiment rests on.
+  const changes = card(page, "State changes");
+  await expect(changes.getByText(/orders\.apply_address_change · r0 → r1/)).toBeVisible();
+  await expect(changes.getByText("nothing yet")).toBeVisible();
+  await expect(armB.getByText(/I found order NS-10482/)).toHaveCount(0);
+
   // One composition, both arms: the customer says the same thing to each.
   const composer = card(page, "Customer composer");
   await composer.getByRole("textbox", { name: "Message" }).fill("Any update on the address?");
@@ -394,6 +442,9 @@ test("an operator starts a paired experiment and drives both arms", async ({ pag
   await expect(armA.getByText("Any update on the address?")).toBeVisible();
   await expect(armB.getByText("Any update on the address?")).toBeVisible();
   await expect(page.getByText("this arm only")).toHaveCount(0);
+  // Sending advances the arms it reached, so arm B — which was never run on the trigger —
+  // answers the conversation as it now stands, with the trigger behind it.
+  await expect(armB.getByText(/I found order NS-10482/)).toBeVisible();
 
   // One composition, one arm: divergence, and the record says which arm heard it.
   await composer.getByRole("checkbox", { name: "Arm B" }).uncheck();

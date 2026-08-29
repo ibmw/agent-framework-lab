@@ -1,6 +1,7 @@
 import type {
   AgentConfigurationListResponse,
   AgentConfigurationVersionListResponse,
+  AgentTurnSchema,
   ComparisonVariableSchema,
   ExperimentListResponse,
   ExperimentPreviewResponse,
@@ -11,6 +12,7 @@ import type {
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
+  ToolEventSchema,
 } from "@agent-lab/contracts";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -161,7 +163,62 @@ function turn(
 
 const TRIGGER = "My parcel is going to the wrong address — I moved last month.";
 
-function experiment(turns: ParticipantTurnSchema[]): ExperimentResponse {
+const ANSWER = "I found order NS-10482. It ships to 9 quai des Chartrons, 33000 Bordeaux.";
+
+function agentTurn(
+  runId: string,
+  ordinal: number,
+  attempt = 1,
+  failure: AgentTurnSchema["failure"] = null,
+): AgentTurnSchema {
+  return {
+    run_id: runId,
+    ordinal,
+    attempt,
+    outcome: failure === null ? "answered" : "failed",
+    failure,
+    body: failure === null ? ANSWER : "",
+    created_at: "2026-08-28T10:00:30+00:00",
+  };
+}
+
+function toolEvent(
+  runId: string,
+  sequence: number,
+  tool: string,
+  moved = false,
+  ordinal = 0,
+  attempt = 1,
+): ToolEventSchema {
+  return {
+    run_id: runId,
+    ordinal,
+    attempt,
+    sequence,
+    tool,
+    version: "v1",
+    outcome: "success",
+    result: {
+      canonical_schema_version: "tool-result-v1",
+      tool,
+      version: "v1",
+      arguments: {},
+      outcome: "success",
+      data: {},
+      refusal: null,
+    },
+    revision_before: moved ? 0 : 0,
+    revision_after: moved ? 1 : 0,
+    state_fingerprint: STATE_FINGERPRINT,
+    created_at: "2026-08-28T10:00:30+00:00",
+  };
+}
+
+function experiment(
+  turns: ParticipantTurnSchema[],
+  agentTurns: AgentTurnSchema[] = [],
+  toolEvents: ToolEventSchema[] = [],
+): ExperimentResponse {
   return {
     experiment_id: EXPERIMENT_ID,
     label: "Wrong address — framework comparison",
@@ -210,6 +267,8 @@ function experiment(turns: ParticipantTurnSchema[]): ExperimentResponse {
       },
     ],
     turns,
+    agent_turns: agentTurns,
+    tool_events: toolEvents,
   };
 }
 
@@ -220,8 +279,12 @@ const OPENED: ParticipantTurnSchema[] = [
 
 let started: Record<string, unknown>[] = [];
 let delivered: Record<string, unknown>[] = [];
+let advanced: string[] = [];
 let turns: ParticipantTurnSchema[] = OPENED;
+let agentTurns: AgentTurnSchema[] = [];
+let toolEvents: ToolEventSchema[] = [];
 let startFails = false;
+let runtimeUnavailable = false;
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -280,10 +343,38 @@ const server = setupServer(
         { status: 422 },
       );
     }
-    return HttpResponse.json(experiment(turns), { status: 201 });
+    return HttpResponse.json(experiment(turns, agentTurns, toolEvents), { status: 201 });
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
-    HttpResponse.json(experiment(turns)),
+    HttpResponse.json(experiment(turns, agentTurns, toolEvents)),
+  ),
+  http.post(
+    `*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/runs/:runId/agent-turns`,
+    ({ params }) => {
+      const runId = String(params.runId);
+      advanced.push(runId);
+      if (runtimeUnavailable) {
+        return HttpResponse.json(
+          {
+            code: "agent_runtime_unavailable",
+            message: "no pydantic-ai runtime is available in this lab",
+            request_id: "req-2",
+          },
+          { status: 422 },
+        );
+      }
+      const ordinal = Math.max(
+        ...turns.filter((entry) => entry.run_id === runId).map((entry) => entry.ordinal),
+      );
+      const attempt =
+        agentTurns.filter((entry) => entry.run_id === runId && entry.ordinal === ordinal).length +
+        1;
+      const written = agentTurn(runId, ordinal, attempt);
+      const events = [toolEvent(runId, 0, "interaction.read_context", false, ordinal, attempt)];
+      agentTurns = [...agentTurns, written];
+      toolEvents = [...toolEvents, ...events];
+      return HttpResponse.json({ turn: written, tool_events: events }, { status: 201 });
+    },
   ),
   http.post(
     `*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/participant-turns`,
@@ -304,8 +395,12 @@ afterEach(() => {
   server.resetHandlers();
   started = [];
   delivered = [];
+  advanced = [];
   turns = OPENED;
+  agentTurns = [];
+  toolEvents = [];
   startFails = false;
+  runtimeUnavailable = false;
 });
 afterAll(() => server.close());
 
@@ -456,6 +551,71 @@ describe("live bench", () => {
     expect(delivered[0]).toEqual({ run_ids: [ARM_A], message: "Only arm A hears this." });
     const armA = await screen.findByRole("region", { name: "Arm A" });
     expect(await within(armA).findByText("this arm only")).toBeVisible();
+  });
+
+  it("runs the agent of every arm the composition reached", async () => {
+    const user = userEvent.setup();
+    renderBench();
+
+    await user.type(await screen.findByLabelText("Message"), "Any update?");
+    await user.click(screen.getByRole("button", { name: "Send as the customer" }));
+
+    await waitFor(() => expect(advanced).toEqual([ARM_A, ARM_B]));
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    expect(await within(armA).findByText(ANSWER)).toBeVisible();
+  });
+
+  it("shows what the agent called on its way to the reply", async () => {
+    const user = userEvent.setup();
+    renderBench();
+
+    await user.click(await screen.findByRole("button", { name: "Run Arm A's agent" }));
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    expect(await within(armA).findByText(/interaction\.read_context → success/)).toBeVisible();
+    // The arm beside it was not run: advancing is per arm.
+    expect(advanced).toEqual([ARM_A]);
+    const armB = screen.getByRole("region", { name: "Arm B" });
+    expect(within(armB).queryByText(ANSWER)).toBeNull();
+  });
+
+  it("keeps a failed attempt and offers to run the arm again", async () => {
+    const user = userEvent.setup();
+    agentTurns = [agentTurn(ARM_A, 0, 1, "model_provider")];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    expect(within(armA).getByText(/model provider rejected the request/)).toBeVisible();
+
+    await user.click(within(armA).getByRole("button", { name: "Try Arm A's agent again" }));
+
+    await waitFor(() => expect(advanced).toEqual([ARM_A]));
+    // The failure stays: it is evidence, and the retry sits beside it.
+    expect(within(armA).getByText(/model provider rejected the request/)).toBeVisible();
+    expect(await within(armA).findByText("attempt 2")).toBeVisible();
+  });
+
+  it("reports an arm this lab cannot run without recording a turn", async () => {
+    const user = userEvent.setup();
+    runtimeUnavailable = true;
+    renderBench();
+
+    await user.click(await screen.findByRole("button", { name: "Run Arm A's agent" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no pydantic-ai runtime/);
+    const armA = screen.getByRole("region", { name: "Arm A" });
+    expect(within(armA).queryByText(ANSWER)).toBeNull();
+  });
+
+  it("reads the arm a write moved apart from the one it did not", async () => {
+    agentTurns = [agentTurn(ARM_A, 0)];
+    toolEvents = [toolEvent(ARM_A, 0, "orders.apply_address_change", true)];
+    renderBench();
+
+    const changes = await screen.findByRole("region", { name: "State changes" });
+
+    expect(within(changes).getByText(/orders\.apply_address_change · r0 → r1/)).toBeVisible();
+    expect(within(changes).getByText("nothing yet")).toBeVisible();
   });
 
   it("reads both arms back to the one starting state they were cloned from", async () => {

@@ -4,6 +4,7 @@ import type {
   ExperimentResponse,
   ParticipantTurnListResponse,
   ParticipantTurnRequest,
+  RunTurnResponse,
   StartExperimentRequest,
 } from "@agent-lab/contracts";
 import { apiPath, JSON_HEADERS, read } from "./client";
@@ -75,5 +76,29 @@ export async function deliverParticipantTurn(
       headers: JSON_HEADERS,
       body: JSON.stringify(command),
     }),
+  );
+}
+
+/**
+ * Run one arm's agent against the customer turn it has not answered.
+ *
+ * One arm at a time and never a side effect of sending a message: the arms progress
+ * independently, and a model call is slow and costly enough that the operator decides when
+ * it happens. Idempotent over an answer — advancing an already-answered arm returns that
+ * answer and calls no model — and not over an attempt, so a failed turn can be retried.
+ */
+export async function advanceExperimentRun(
+  shopId: string,
+  experimentId: string,
+  runId: string,
+): Promise<RunTurnResponse> {
+  return read<RunTurnResponse>(
+    await fetch(
+      experimentsPath(
+        shopId,
+        `/${encodeURIComponent(experimentId)}/runs/${encodeURIComponent(runId)}/agent-turns`,
+      ),
+      { method: "POST", headers: JSON_HEADERS },
+    ),
   );
 }
