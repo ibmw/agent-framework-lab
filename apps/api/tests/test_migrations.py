@@ -35,9 +35,13 @@ DEFINITION_TABLES = {
     "sandbox_snapshots",
     # And so are the arms cloned from a snapshot: mutable run state, but state that only
     # exists because the target authoring model above produced it — along with the changes
-    # proposed against those arms.
+    # proposed against those arms, and the experiment that binds a scenario to the
+    # configurations its arms run.
     "sandboxes",
     "sandbox_action_proposals",
+    "experiments",
+    "experiment_runs",
+    "experiment_participant_turns",
 }
 POC_TABLES = {
     "action_proposals",
