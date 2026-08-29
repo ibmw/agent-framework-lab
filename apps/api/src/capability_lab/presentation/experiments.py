@@ -16,6 +16,13 @@ arm alone — and the response is the turns as each arm received them. A driver-
 is deliberately absent from the path: which driver runs is the experiment's recorded input,
 and composition selects the implementation (`docs/architecture.md`). What a human driver
 needs, it takes from the request body; a future simulator will take nothing from it.
+
+`POST /experiments/{id}/runs/{run_id}/agent-turns` is the agent half, and is deliberately a
+separate operation on one arm. Recording what the customer said and running a model are two
+acts: the arms progress independently, an advance is where a retry becomes expressible, and
+a model call is slow and costly enough that it must not be a side effect of typing. The
+request carries no body — everything the turn runs on is already pinned — and the response
+is the attempt plus the calls it made.
 """
 
 from collections.abc import Callable, Generator
@@ -25,7 +32,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Path
 from pydantic import Field
 
+from capability_lab.application.agent_turns import AgentTurnRecord, ToolEventRecord
 from capability_lab.application.definition_resolution import ResolvedDefinition
+from capability_lab.application.experiment_runs import ExperimentRunner, RunTurn
 from capability_lab.application.experiments import (
     MAX_ARMS,
     ArmSelection,
@@ -38,7 +47,9 @@ from capability_lab.application.experiments import (
     StartExperiment,
 )
 from capability_lab.application.participants import ParticipantDriver
+from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxRecord
+from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
 from capability_lab.domain.experiment import (
@@ -60,6 +71,7 @@ from capability_lab.presentation.shops import ShopIdPath
 ExperimentIdPath = Annotated[
     UUID, Path(description="Stable experiment identifier inside one shop.")
 ]
+RunIdPath = Annotated[UUID, Path(description="One arm of this experiment.")]
 
 
 class ArmSelectionSchema(StrictApiModel):
@@ -297,6 +309,98 @@ class ParticipantTurnSchema(StrictApiModel):
         )
 
 
+class ToolEventSchema(StrictApiModel):
+    """One tool call one attempt made, and what it did to the arm.
+
+    `result` is the `tool-result-v1` document the tool answered with, served whole rather
+    than summarized: it is the published envelope already (ADR 0021), and a client that read
+    a summary here would be reading a second description of evidence it can read directly.
+
+    `revision_before` and `revision_after` are the state change. They are equal for a read;
+    the one write this milestone publishes moves the arm by one, and the confirmation that
+    authorized it is inside `result`.
+    """
+
+    run_id: UUID
+    ordinal: int
+    attempt: int
+    sequence: int
+    tool: str
+    version: str
+    outcome: ToolOutcome
+    result: dict[str, Any]
+    revision_before: int
+    revision_after: int
+    state_fingerprint: str
+    created_at: str
+
+    @classmethod
+    def from_record(cls, record: ToolEventRecord) -> Self:
+        event = record.event
+        return cls(
+            run_id=record.run_id,
+            ordinal=event.ordinal,
+            attempt=event.attempt,
+            sequence=event.sequence,
+            tool=event.tool,
+            version=event.version,
+            outcome=event.outcome,
+            result=dict(event.document),
+            revision_before=event.revision_before,
+            revision_after=event.revision_after,
+            state_fingerprint=event.state_fingerprint,
+            created_at=record.created_at.isoformat(),
+        )
+
+
+class AgentTurnSchema(StrictApiModel):
+    """One attempt at one arm's reply.
+
+    `ordinal` is the customer turn being answered rather than a counter of its own, so a
+    client renders a thread by pairing the two streams on it instead of interleaving by
+    time. `attempt` counts retries: a failed attempt stays, and the next one sits beside it.
+
+    A failed attempt carries a `failure` code and no `body`. There is deliberately no
+    message: a framework's error text is not something the agent said, and it would read as
+    the reply everywhere a transcript is shown.
+    """
+
+    run_id: UUID
+    ordinal: int
+    attempt: int
+    outcome: AgentTurnOutcome
+    failure: AgentTurnFailure | None
+    body: str
+    created_at: str
+
+    @classmethod
+    def from_record(cls, record: AgentTurnRecord) -> Self:
+        turn = record.turn
+        return cls(
+            run_id=record.run_id,
+            ordinal=turn.ordinal,
+            attempt=turn.attempt,
+            outcome=turn.outcome,
+            failure=turn.failure,
+            body=turn.body,
+            created_at=record.created_at.isoformat(),
+        )
+
+
+class RunTurnResponse(StrictApiModel):
+    """What advancing one arm produced: the attempt, and the calls it made."""
+
+    turn: AgentTurnSchema
+    tool_events: list[ToolEventSchema]
+
+    @classmethod
+    def from_domain(cls, produced: RunTurn) -> Self:
+        return cls(
+            turn=AgentTurnSchema.from_record(produced.turn),
+            tool_events=[ToolEventSchema.from_record(event) for event in produced.tool_events],
+        )
+
+
 class ExperimentResponse(ExperimentSummarySchema):
     """One experiment in full: the versions it pinned, its arms, and their threads."""
 
@@ -306,6 +410,8 @@ class ExperimentResponse(ExperimentSummarySchema):
     comparison: list[ComparisonVariableSchema]
     runs: list[ExperimentRunSchema]
     turns: list[ParticipantTurnSchema]
+    agent_turns: list[AgentTurnSchema]
+    tool_events: list[ToolEventSchema]
 
     @classmethod
     def from_detail(cls, detail: ExperimentDetail) -> Self:
@@ -330,6 +436,8 @@ class ExperimentResponse(ExperimentSummarySchema):
                 for run in detail.runs
             ],
             turns=[ParticipantTurnSchema.from_record(turn) for turn in detail.turns],
+            agent_turns=[AgentTurnSchema.from_record(turn) for turn in detail.agent_turns],
+            tool_events=[ToolEventSchema.from_record(event) for event in detail.tool_events],
         )
 
 
@@ -362,12 +470,15 @@ class ExperimentRoutes:
         self,
         service: Callable[[], Generator[ExperimentService, None, None]],
         driver: Callable[[str], ParticipantDriver],
+        runner: Callable[[], Generator[ExperimentRunner, None, None]],
     ) -> None:
         self._service = service
         self._driver = driver
+        self._runner = runner
 
     def register(self, router: APIRouter) -> None:
         dependency = Depends(self._service)
+        runner_dependency = Depends(self._runner)
 
         def start_experiment(
             shop_id: ShopIdPath,
@@ -420,6 +531,14 @@ class ExperimentRoutes:
                     )
                 ]
             )
+
+        async def advance_run(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            run_id: RunIdPath,
+            runner: Annotated[ExperimentRunner, runner_dependency],
+        ) -> RunTurnResponse:
+            return RunTurnResponse.from_domain(await runner.advance(shop_id, experiment_id, run_id))
 
         router.add_api_route(
             "/shops/{shop_id}/experiments",
@@ -492,6 +611,36 @@ class ExperimentRoutes:
                     "model": ErrorResponse,
                     "description": "The driver has no turn to deliver, or does not drive this "
                     "experiment",
+                },
+            },
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns",
+            advance_run,
+            methods=["POST"],
+            status_code=201,
+            response_model=RunTurnResponse,
+            operation_id="advanceExperimentRun",
+            summary="Run this arm's agent against the customer turn it has not answered",
+            description=(
+                "Resolves the arm's pinned configuration, renders its prompt against the shop "
+                "and support-identity versions the experiment froze, and runs the framework "
+                "against this arm's own sandbox with exactly the tools the configuration "
+                "enables. Answers with the attempt and every tool call it made. Idempotent "
+                "over an answer and not over an attempt: an arm whose latest customer turn is "
+                "already answered returns that answer and calls no model, while one whose last "
+                "attempt failed makes a new attempt beside it. A framework failure is a "
+                "recorded turn and a 201, because it is evidence about the run; a framework "
+                "this lab cannot run at all is a 422, because it is not."
+            ),
+            responses={
+                404: {
+                    "model": ErrorResponse,
+                    "description": "The experiment or the named arm is not found",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "No runtime for this arm's framework is available here",
                 },
             },
         )

@@ -3545,6 +3545,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns:
+    post:
+      summary: Run this arm's agent against the customer turn it has not answered
+      description: 'Resolves the arm''s pinned configuration, renders its prompt against
+        the shop and support-identity versions the experiment froze, and runs the
+        framework against this arm''s own sandbox with exactly the tools the configuration
+        enables. Answers with the attempt and every tool call it made. Idempotent
+        over an answer and not over an attempt: an arm whose latest customer turn
+        is already answered returns that answer and calls no model, while one whose
+        last attempt failed makes a new attempt beside it. A framework failure is
+        a recorded turn and a 201, because it is evidence about the run; a framework
+        this lab cannot run at all is a 422, because it is not.'
+      operationId: advanceExperimentRun
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: One arm of this experiment.
+          title: Run Id
+        description: One arm of this experiment.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunTurnResponse'
+        '404':
+          description: The experiment or the named arm is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: No runtime for this arm's framework is available here
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/objective-blocks:
     get:
       summary: List the shared objective-block library with version provenance
@@ -4688,6 +4748,92 @@ components:
       - model_id
       - capabilities
       title: AgentFrameworkResponse
+    AgentTurnFailure:
+      type: string
+      enum:
+      - model_provider
+      - model_transient
+      - invalid_response
+      - framework
+      - tool_round_limit
+      title: AgentTurnFailure
+      description: 'Why an attempt failed, in a vocabulary a comparison can count.
+
+
+        Deliberately about *where* the attempt broke rather than what the message
+        said: a
+
+        provider''s error text is neither stable across models nor safe to store beside
+
+        synthetic customer content, and an experiment reading two arms needs the kinds
+        to line
+
+        up. The four execution kinds mirror the error taxonomy the POC''s conversation
+        runner
+
+        already answers with, so one failure means one thing across the lab.'
+    AgentTurnOutcome:
+      type: string
+      enum:
+      - answered
+      - failed
+      title: AgentTurnOutcome
+      description: The two ways an attempt at one reply can end.
+    AgentTurnSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        ordinal:
+          type: integer
+          title: Ordinal
+        attempt:
+          type: integer
+          title: Attempt
+        outcome:
+          $ref: '#/components/schemas/AgentTurnOutcome'
+        failure:
+          anyOf:
+          - $ref: '#/components/schemas/AgentTurnFailure'
+          - type: 'null'
+        body:
+          type: string
+          title: Body
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - ordinal
+      - attempt
+      - outcome
+      - failure
+      - body
+      - created_at
+      title: AgentTurnSchema
+      description: 'One attempt at one arm''s reply.
+
+
+        `ordinal` is the customer turn being answered rather than a counter of its
+        own, so a
+
+        client renders a thread by pairing the two streams on it instead of interleaving
+        by
+
+        time. `attempt` counts retries: a failed attempt stays, and the next one sits
+        beside it.
+
+
+        A failed attempt carries a `failure` code and no `body`. There is deliberately
+        no
+
+        message: a framework''s error text is not something the agent said, and it
+        would read as
+
+        the reply everywhere a transcript is shown.'
     ArmSelectionSchema:
       properties:
         configuration_id:
@@ -6044,6 +6190,16 @@ components:
             $ref: '#/components/schemas/ParticipantTurnSchema'
           type: array
           title: Turns
+        agent_turns:
+          items:
+            $ref: '#/components/schemas/AgentTurnSchema'
+          type: array
+          title: Agent Turns
+        tool_events:
+          items:
+            $ref: '#/components/schemas/ToolEventSchema'
+          type: array
+          title: Tool Events
       additionalProperties: false
       type: object
       required:
@@ -6064,6 +6220,8 @@ components:
       - comparison
       - runs
       - turns
+      - agent_turns
+      - tool_events
       title: ExperimentResponse
       description: 'One experiment in full: the versions it pinned, its arms, and
         their threads.'
@@ -8225,6 +8383,23 @@ components:
       - rating
       - body
       title: ReviewSchema
+    RunTurnResponse:
+      properties:
+        turn:
+          $ref: '#/components/schemas/AgentTurnSchema'
+        tool_events:
+          items:
+            $ref: '#/components/schemas/ToolEventSchema'
+          type: array
+          title: Tool Events
+      additionalProperties: false
+      type: object
+      required:
+      - turn
+      - tool_events
+      title: RunTurnResponse
+      description: 'What advancing one arm produced: the attempt, and the calls it
+        made.'
     SandboxInteractionSchema:
       properties:
         origin_kind:
@@ -11097,6 +11272,81 @@ components:
         calls
 
         against an unmoved arm are guaranteed to answer with identical bytes.'
+    ToolEventSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        ordinal:
+          type: integer
+          title: Ordinal
+        attempt:
+          type: integer
+          title: Attempt
+        sequence:
+          type: integer
+          title: Sequence
+        tool:
+          type: string
+          title: Tool
+        version:
+          type: string
+          title: Version
+        outcome:
+          $ref: '#/components/schemas/ToolOutcome'
+        result:
+          additionalProperties: true
+          type: object
+          title: Result
+        revision_before:
+          type: integer
+          title: Revision Before
+        revision_after:
+          type: integer
+          title: Revision After
+        state_fingerprint:
+          type: string
+          title: State Fingerprint
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - ordinal
+      - attempt
+      - sequence
+      - tool
+      - version
+      - outcome
+      - result
+      - revision_before
+      - revision_after
+      - state_fingerprint
+      - created_at
+      title: ToolEventSchema
+      description: 'One tool call one attempt made, and what it did to the arm.
+
+
+        `result` is the `tool-result-v1` document the tool answered with, served whole
+        rather
+
+        than summarized: it is the published envelope already (ADR 0021), and a client
+        that read
+
+        a summary here would be reading a second description of evidence it can read
+        directly.
+
+
+        `revision_before` and `revision_after` are the state change. They are equal
+        for a read;
+
+        the one write this milestone publishes moves the arm by one, and the confirmation
+        that
+
+        authorized it is inside `result`.'
     ToolOutcome:
       type: string
       enum:

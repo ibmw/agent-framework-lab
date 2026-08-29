@@ -45,6 +45,12 @@ from uuid import UUID, uuid4
 from capability_lab.application.agent_configurations import (
     AgentConfigurationVersionNotFoundError,
 )
+from capability_lab.application.agent_turns import (
+    AgentTurnRecord,
+    AgentTurnRepository,
+    ToolEventRecord,
+    ToolEventRepository,
+)
 from capability_lab.application.canonical_document import DocumentReader
 from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.application.definition_authoring import (
@@ -286,7 +292,12 @@ class ExperimentPreview:
 
 @dataclass(frozen=True, slots=True)
 class ExperimentDetail:
-    """One experiment in full: its record, its arms, and every turn they have received."""
+    """One experiment in full: its record, its arms, and both sides of their threads.
+
+    The customer turns and the agent's answers are read together rather than through two
+    operations: an arm's thread is one thing, and a client that had to stitch two listings
+    together could render an answer beside a question it does not belong to.
+    """
 
     record: ExperimentRecord
     resolution: ExperimentResolution
@@ -294,6 +305,8 @@ class ExperimentDetail:
     runs: tuple[RunRecord, ...]
     sandboxes: tuple[SandboxRecord, ...]
     turns: tuple[ParticipantTurnRecord, ...]
+    agent_turns: tuple[AgentTurnRecord, ...]
+    tool_events: tuple[ToolEventRecord, ...]
 
 
 class ExperimentService:
@@ -304,6 +317,8 @@ class ExperimentService:
         experiments: ExperimentRepository,
         runs: ExperimentRunRepository,
         turns: ParticipantTurnRepository,
+        agent_turns: AgentTurnRepository,
+        tool_events: ToolEventRepository,
         snapshots: SandboxSnapshotService,
         sandboxes: SandboxService,
         shops: DefinitionRepository[ShopPayload],
@@ -315,6 +330,8 @@ class ExperimentService:
         self._experiments = experiments
         self._runs = runs
         self._turns = turns
+        self._agent_turns = agent_turns
+        self._tool_events = tool_events
         self._snapshots = snapshots
         self._sandboxes = sandboxes
         self._shops = shops
@@ -341,6 +358,8 @@ class ExperimentService:
             runs=runs,
             sandboxes=tuple(self._sandboxes.get_sandbox(shop_id, run.sandbox_id) for run in runs),
             turns=self._turns.list_for_experiment(experiment_id),
+            agent_turns=self._agent_turns.list_for_experiment(experiment_id),
+            tool_events=self._tool_events.list_for_experiment(experiment_id),
         )
 
     # -- the setup gate --------------------------------------------------------

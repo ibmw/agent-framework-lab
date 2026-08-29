@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from capability_lab.application.agent_runtime import (
+    SupportAgentRuntime,
+    SupportAgentRuntimeRegistry,
+)
 from capability_lab.application.conversations import AgentRegistry, FrameworkDeclaration
 from capability_lab.application.ports import AgentAdapter
-from capability_lab.infrastructure.agents.fake import FakeAgentAdapter
-from capability_lab.infrastructure.agents.pydantic_ai import PydanticAiAgentAdapter
+from capability_lab.infrastructure.agents.fake import FakeAgentAdapter, FakeSupportAgentRuntime
+from capability_lab.infrastructure.agents.pydantic_ai import (
+    PydanticAiAgentAdapter,
+    PydanticAiSupportAgentRuntime,
+)
 from capability_lab.infrastructure.agents.pydantic_ai.adapter import create_openai_model
 from capability_lab.infrastructure.config import Settings
 from capability_lab.infrastructure.telemetry import SanitizedTracingAgentAdapter, Telemetry
@@ -61,3 +68,36 @@ def _declaration(adapter: AgentAdapter, *, model_id: str | None) -> FrameworkDec
         model_id=model_id,
         capabilities=tuple(sorted(capability.value for capability in adapter.capabilities())),
     )
+
+
+def create_support_agent_runtimes(settings: Settings) -> SupportAgentRuntimeRegistry:
+    """The frameworks this process can run an experiment arm with.
+
+    Deliberately a second registry rather than a method on the first. The POC's
+    `AgentRegistry` serves the persona-first conversation routes through `AgentAdapter`; an
+    arm runs through `SupportAgentRuntime` against its own sandbox. One registry holding two
+    unrelated ports would only make it look as though a framework registered for one were
+    available for the other.
+
+    The deterministic control arm is always here — an offline lab must still be able to run
+    an experiment — while the model-backed one appears only when this process is configured
+    to reach a provider. An arm the process cannot run is refused at the moment it is
+    advanced and never recorded as a failed turn, because a missing API key is a fact about
+    the machine rather than something the agent did.
+    """
+    control = FakeSupportAgentRuntime()
+    runtimes: dict[str, SupportAgentRuntime] = {control.framework_id: control}
+    if settings.environment == "test":
+        pydantic_runtime = PydanticAiSupportAgentRuntime.for_test()
+    elif settings.openai_api_key is not None:
+        api_key = settings.openai_api_key.get_secret_value()
+        # The model comes from each arm's published configuration, not from this process:
+        # what an experiment ran is an authored input (ADR 0024), and a runtime that
+        # substituted the environment's model would make two arms unexplainable.
+        pydantic_runtime = PydanticAiSupportAgentRuntime(
+            lambda model_id: create_openai_model(model_id, api_key)
+        )
+    else:
+        return SupportAgentRuntimeRegistry(runtimes)
+    runtimes[pydantic_runtime.framework_id] = pydantic_runtime
+    return SupportAgentRuntimeRegistry(runtimes)

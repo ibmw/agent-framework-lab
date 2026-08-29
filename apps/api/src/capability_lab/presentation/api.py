@@ -20,6 +20,10 @@ from capability_lab.application.agent_configurations import (
     AgentConfigurationService,
     AgentConfigurationVersionNotFoundError,
 )
+from capability_lab.application.agent_runtime import (
+    SupportAgentRuntimeRegistry,
+    SupportAgentUnavailableError,
+)
 from capability_lab.application.blocks import (
     BlockNameExistsError,
     MutationBlockNotFoundError,
@@ -56,6 +60,7 @@ from capability_lab.application.definition_resolution import (
     PublishedVersionExistsError,
     UnpublishedReferenceError,
 )
+from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiments import (
     ExperimentArmError,
     ExperimentLabelError,
@@ -165,7 +170,10 @@ from capability_lab.domain.scenario import ScenarioConfigurationError
 from capability_lab.domain.shop import ShopConfigurationError
 from capability_lab.domain.support_identity import SupportIdentityConfigurationError
 from capability_lab.domain.ticket import TicketConfigurationError
-from capability_lab.infrastructure.agents.registry import create_agent_registry
+from capability_lab.infrastructure.agents.registry import (
+    create_agent_registry,
+    create_support_agent_runtimes,
+)
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.config import Settings, get_settings
 from capability_lab.infrastructure.database import (
@@ -181,6 +189,7 @@ from capability_lab.infrastructure.repositories import (
     PersistedScenarioIntegrityError,
     SqlAlchemyActionDecisionIdempotencyRepository,
     SqlAlchemyActionProposalRepository,
+    SqlAlchemyAgentTurnRepository,
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentRepository,
@@ -196,6 +205,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyScenarioGenerationIdempotencyRepository,
     SqlAlchemySessionRepository,
     SqlAlchemyShopDirectory,
+    SqlAlchemyToolEventRepository,
     agent_configuration_repository,
     customer_profile_repository,
     mutation_block_repository,
@@ -1062,6 +1072,19 @@ async def _participant_driver_mismatch_handler(request: Request, error: Exceptio
     )
 
 
+async def _agent_runtime_unavailable_handler(request: Request, error: Exception) -> JSONResponse:
+    """This lab cannot run the framework this arm was published against.
+
+    422 and never a recorded turn. A missing provider key is a fact about the process, not
+    something the agent did, so writing it into the run's evidence would put the operator's
+    machine into a comparison — the same reason the proven-capability catalog is kept apart
+    from the adapter registry (ADR 0024).
+    """
+    return _error_response(
+        request, status_code=422, code="agent_runtime_unavailable", message=str(error)
+    )
+
+
 async def _experiment_not_startable_handler(request: Request, error: Exception) -> JSONResponse:
     """Refuse the start with the findings that explain it, as a publish refusal does.
 
@@ -1349,6 +1372,7 @@ def create_app(
     generation_kernel: ScenarioGenerationKernel | None = None,
     command_clock: Clock | None = None,
     agent_registry: AgentRegistry | None = None,
+    agent_runtimes: SupportAgentRuntimeRegistry | None = None,
     telemetry: Telemetry | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
@@ -1364,6 +1388,10 @@ def create_app(
         agents = create_agent_registry(settings, configured_telemetry)
     else:
         agents = agent_registry
+    # Composition selects which frameworks can run an arm, the way it selects which can serve
+    # a conversation (`docs/architecture.md`). A test that wants one arm to fail supplies its
+    # own registry here rather than reaching into the runner.
+    runtimes = agent_runtimes or create_support_agent_runtimes(settings)
 
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
@@ -1496,6 +1524,9 @@ def create_app(
     application.add_exception_handler(ExperimentArmError, _experiment_setup_handler)
     application.add_exception_handler(
         ExperimentNotStartableError, _experiment_not_startable_handler
+    )
+    application.add_exception_handler(
+        SupportAgentUnavailableError, _agent_runtime_unavailable_handler
     )
     application.add_exception_handler(
         ExperimentConfigurationError, _experiment_configuration_handler
@@ -1643,6 +1674,8 @@ def create_app(
                 SqlAlchemyExperimentRepository(session),
                 SqlAlchemyExperimentRunRepository(session),
                 SqlAlchemyParticipantTurnRepository(session),
+                SqlAlchemyAgentTurnRepository(session),
+                SqlAlchemyToolEventRepository(session),
                 SandboxSnapshotService(
                     SqlAlchemySandboxSnapshotRepository(session),
                     scenario_repository(session),
@@ -1663,6 +1696,50 @@ def create_app(
                 ticket_repository(session),
                 agent_configuration_repository(session),
                 SqlAlchemyPublishedVersionDirectory(session),
+                clock,
+            )
+
+    def experiment_runner() -> Generator[ExperimentRunner, None, None]:
+        with session_scope(factory) as session:
+            yield ExperimentRunner(
+                SqlAlchemyExperimentRepository(session),
+                SqlAlchemyExperimentRunRepository(session),
+                SqlAlchemyParticipantTurnRepository(session),
+                SqlAlchemyAgentTurnRepository(session),
+                SqlAlchemyToolEventRepository(session),
+                SandboxSnapshotService(
+                    SqlAlchemySandboxSnapshotRepository(session),
+                    scenario_repository(session),
+                    shop_repository(session),
+                    ticket_repository(session),
+                    SqlAlchemyOrderFixtureRepository(session),
+                    objective_block_repository(session),
+                    mutation_block_repository(session),
+                    SqlAlchemyPublishedVersionDirectory(session),
+                    clock,
+                ),
+                SqlAlchemySandboxRepository(session),
+                shop_repository(session),
+                support_identity_repository(session),
+                agent_configuration_repository(session),
+                SandboxToolService(
+                    SqlAlchemySandboxRepository(session),
+                    SqlAlchemySandboxSnapshotRepository(session),
+                    shop_repository(session),
+                    ticket_repository(session),
+                    customer_profile_repository(session),
+                    support_identity_repository(session),
+                    SandboxActionService(
+                        SandboxService(
+                            SqlAlchemySandboxRepository(session),
+                            SqlAlchemySandboxSnapshotRepository(session),
+                            clock,
+                        ),
+                        SqlAlchemySandboxActionProposalRepository(session),
+                        clock,
+                    ),
+                ),
+                runtimes,
                 clock,
             )
 
@@ -2196,7 +2273,7 @@ def create_app(
     SandboxToolRoutes(sandbox_tool_service).register(router)
     # The participant driver is composed per delivery, from the words the request carries:
     # selecting it is composition's job, and its lifetime is one turn.
-    ExperimentRoutes(experiment_service, HumanParticipantDriver).register(router)
+    ExperimentRoutes(experiment_service, HumanParticipantDriver, experiment_runner).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)

@@ -1072,6 +1072,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Run this arm's agent against the customer turn it has not answered
+     * @description Resolves the arm's pinned configuration, renders its prompt against the shop and support-identity versions the experiment froze, and runs the framework against this arm's own sandbox with exactly the tools the configuration enables. Answers with the attempt and every tool call it made. Idempotent over an answer and not over an attempt: an arm whose latest customer turn is already answered returns that answer and calls no model, while one whose last attempt failed makes a new attempt beside it. A framework failure is a recorded turn and a 201, because it is evidence about the run; a framework this lab cannot run at all is a 422, because it is not.
+     */
+    post: operations["advanceExperimentRun"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/objective-blocks": {
     parameters: {
       query?: never;
@@ -1562,6 +1582,58 @@ export interface components {
       capabilities: string[];
       /** Unavailability Reason */
       unavailability_reason?: string | null;
+    };
+    /**
+     * AgentTurnFailure
+     * @description Why an attempt failed, in a vocabulary a comparison can count.
+     *
+     *     Deliberately about *where* the attempt broke rather than what the message said: a
+     *     provider's error text is neither stable across models nor safe to store beside
+     *     synthetic customer content, and an experiment reading two arms needs the kinds to line
+     *     up. The four execution kinds mirror the error taxonomy the POC's conversation runner
+     *     already answers with, so one failure means one thing across the lab.
+     * @enum {string}
+     */
+    AgentTurnFailure:
+      | "model_provider"
+      | "model_transient"
+      | "invalid_response"
+      | "framework"
+      | "tool_round_limit";
+    /**
+     * AgentTurnOutcome
+     * @description The two ways an attempt at one reply can end.
+     * @enum {string}
+     */
+    AgentTurnOutcome: "answered" | "failed";
+    /**
+     * AgentTurnSchema
+     * @description One attempt at one arm's reply.
+     *
+     *     `ordinal` is the customer turn being answered rather than a counter of its own, so a
+     *     client renders a thread by pairing the two streams on it instead of interleaving by
+     *     time. `attempt` counts retries: a failed attempt stays, and the next one sits beside it.
+     *
+     *     A failed attempt carries a `failure` code and no `body`. There is deliberately no
+     *     message: a framework's error text is not something the agent said, and it would read as
+     *     the reply everywhere a transcript is shown.
+     */
+    AgentTurnSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /** Ordinal */
+      ordinal: number;
+      /** Attempt */
+      attempt: number;
+      outcome: components["schemas"]["AgentTurnOutcome"];
+      failure: components["schemas"]["AgentTurnFailure"] | null;
+      /** Body */
+      body: string;
+      /** Created At */
+      created_at: string;
     };
     /**
      * ArmSelectionSchema
@@ -2318,6 +2390,10 @@ export interface components {
       runs: components["schemas"]["ExperimentRunSchema"][];
       /** Turns */
       turns: components["schemas"]["ParticipantTurnSchema"][];
+      /** Agent Turns */
+      agent_turns: components["schemas"]["AgentTurnSchema"][];
+      /** Tool Events */
+      tool_events: components["schemas"]["ToolEventSchema"][];
     };
     /**
      * ExperimentRunSchema
@@ -3439,6 +3515,15 @@ export interface components {
       rating: number;
       /** Body */
       body: string;
+    };
+    /**
+     * RunTurnResponse
+     * @description What advancing one arm produced: the attempt, and the calls it made.
+     */
+    RunTurnResponse: {
+      turn: components["schemas"]["AgentTurnSchema"];
+      /** Tool Events */
+      tool_events: components["schemas"]["ToolEventSchema"][];
     };
     /**
      * SandboxInteractionSchema
@@ -4974,6 +5059,48 @@ export interface components {
      * @enum {string}
      */
     ToolEffect: "read" | "write";
+    /**
+     * ToolEventSchema
+     * @description One tool call one attempt made, and what it did to the arm.
+     *
+     *     `result` is the `tool-result-v1` document the tool answered with, served whole rather
+     *     than summarized: it is the published envelope already (ADR 0021), and a client that read
+     *     a summary here would be reading a second description of evidence it can read directly.
+     *
+     *     `revision_before` and `revision_after` are the state change. They are equal for a read;
+     *     the one write this milestone publishes moves the arm by one, and the confirmation that
+     *     authorized it is inside `result`.
+     */
+    ToolEventSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /** Ordinal */
+      ordinal: number;
+      /** Attempt */
+      attempt: number;
+      /** Sequence */
+      sequence: number;
+      /** Tool */
+      tool: string;
+      /** Version */
+      version: string;
+      outcome: components["schemas"]["ToolOutcome"];
+      /** Result */
+      result: {
+        [key: string]: unknown;
+      };
+      /** Revision Before */
+      revision_before: number;
+      /** Revision After */
+      revision_after: number;
+      /** State Fingerprint */
+      state_fingerprint: string;
+      /** Created At */
+      created_at: string;
+    };
     /**
      * ToolOutcome
      * @description The three answers a tool call can end with, kept apart on purpose.
@@ -8908,6 +9035,51 @@ export interface operations {
         };
       };
       /** @description The driver has no turn to deliver, or does not drive this experiment */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  advanceExperimentRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+        /** @description One arm of this experiment. */
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunTurnResponse"];
+        };
+      };
+      /** @description The experiment or the named arm is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description No runtime for this arm's framework is available here */
       422: {
         headers: {
           [name: string]: unknown;

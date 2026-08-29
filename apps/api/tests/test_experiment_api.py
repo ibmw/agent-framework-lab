@@ -16,6 +16,8 @@ from api_factories import (
     scenario_body,
     seed_lab,
 )
+from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
+from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
 
 SEED = 20260825
 CONFIGURATIONS = "/api/v1/agent-configurations"
@@ -366,6 +368,178 @@ async def test_an_arm_of_another_experiment_is_not_found(
         f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
         "/participant-turns",
         json={"run_ids": [str(uuid4())], "message": "Hello"},
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["code"] == "experiment_run_not_found"
+
+
+# -- advancing an arm ----------------------------------------------------------
+
+
+CONTROL_MODEL = {
+    "provider": "fake",
+    "model_id": "deterministic",
+    "temperature": "0.20",
+    "max_tool_rounds": 8,
+}
+EVERY_TOOL = [
+    "interaction.read_context",
+    "catalog.search_products",
+    "catalog.read_product",
+    "customer.read_profile",
+    "orders.list_orders",
+    "orders.read_order",
+    "support.search_knowledge",
+    "support.read_document",
+    "orders.propose_address_change",
+    "orders.apply_address_change",
+]
+
+
+async def control_arm(
+    client: AsyncClient, identity: dict[str, Any] | None = None, **overrides: Any
+) -> dict[str, Any]:
+    """An arm the offline lab can actually run: the deterministic control framework."""
+    return await published_configuration(
+        client,
+        identity,
+        framework_id="fake",
+        model=CONTROL_MODEL,
+        tools=EVERY_TOOL,
+        **overrides,
+    )
+
+
+async def control_experiment(client: AsyncClient, lab: dict[str, str]) -> dict[str, Any]:
+    scenario = await published_scenario(client, lab)
+    identity = await make_identity(client)
+    arms = (await control_arm(client, identity), await control_arm(client, identity))
+    return await start(client, lab, start_body(scenario, *arms))
+
+
+async def advance(
+    client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any], arm: int = 0
+) -> Any:
+    return await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        f"/runs/{experiment['runs'][arm]['run_id']}/agent-turns"
+    )
+
+
+async def test_advancing_an_arm_answers_with_the_turn_and_the_calls_it_made(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+
+    response = await advance(client, lab, experiment)
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["turn"]["ordinal"] == 0
+    assert body["turn"]["attempt"] == 1
+    assert body["turn"]["outcome"] == "answered"
+    assert body["turn"]["failure"] is None
+    assert [event["tool"] for event in body["tool_events"]] == [
+        "interaction.read_context",
+        "orders.read_order",
+        "customer.read_profile",
+        "orders.propose_address_change",
+        "orders.apply_address_change",
+    ]
+    assert body["tool_events"][0]["result"]["canonical_schema_version"] == "tool-result-v1"
+
+
+async def test_the_write_is_reported_as_the_state_change_it_is(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+
+    body = (await advance(client, lab, experiment)).json()
+
+    applied = body["tool_events"][-1]
+    assert applied["revision_after"] == applied["revision_before"] + 1
+    assert applied["result"]["data"]["applied"] is True
+    # And it moved this arm alone.
+    read = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+    assert [run["revision"] for run in read["runs"]] == [1, 0]
+    assert len({run["state_fingerprint"] for run in read["runs"]}) == 2
+
+
+async def test_an_experiment_reads_back_both_sides_of_its_threads(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    body = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+
+    assert len(body["turns"]) == 2
+    assert [turn["ordinal"] for turn in body["agent_turns"]] == [0]
+    assert body["agent_turns"][0]["run_id"] == experiment["runs"][0]["run_id"]
+    assert len(body["tool_events"]) == 5
+
+
+async def test_advancing_an_answered_arm_returns_the_same_turn(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """Idempotent over an answer: a second advance must not cost a second model call."""
+    experiment = await control_experiment(client, lab)
+
+    first = (await advance(client, lab, experiment)).json()
+    again = (await advance(client, lab, experiment)).json()
+
+    assert again["turn"] == first["turn"]
+    assert len(again["tool_events"]) == len(first["tool_events"])
+
+
+async def test_a_framework_this_lab_cannot_run_is_refused_before_anything_is_recorded(
+    tmp_path: Path,
+) -> None:
+    """A lab with no model provider configured can still run its control arm, and only that.
+
+    422 and no recorded turn: an arm this process cannot run is a fact about the process,
+    and writing it into the run's evidence would put the operator's machine into a
+    comparison.
+    """
+    control = FakeSupportAgentRuntime()
+    async with api_client(
+        tmp_path,
+        "offline-lab.db",
+        agent_runtimes=SupportAgentRuntimeRegistry({control.framework_id: control}),
+    ) as offline:
+        lab = await seed_lab(offline)
+        scenario = await published_scenario(offline, lab)
+        experiment = await start(
+            offline, lab, start_body(scenario, await published_configuration(offline))
+        )
+
+        response = await advance(offline, lab, experiment)
+
+        assert response.status_code == 422, response.text
+        assert response.json()["code"] == "agent_runtime_unavailable"
+        read = await offline.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+        assert read.json()["agent_turns"] == []
+
+
+async def test_an_arm_of_another_experiment_cannot_be_advanced(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+
+    response = await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        f"/runs/{uuid4()}/agent-turns"
     )
 
     assert response.status_code == 404, response.text

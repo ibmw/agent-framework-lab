@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 from agent_factories import publishable_configuration
 from block_factories import publishable_mutation, publishable_objective
 from capability_lab.application.agent_configurations import AgentConfigurationService
+from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
 from capability_lab.application.blocks import MutationBlockService, ObjectiveBlockService
 from capability_lab.application.customer_profiles import CustomerProfileService
+from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiments import ArmSelection, ExperimentService
 from capability_lab.application.order_fixtures import (
     OrderEdit,
@@ -51,7 +53,9 @@ from capability_lab.domain.scenario import (
 from capability_lab.domain.shop import ShopDocumentKind, SupportChannel
 from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import SuggestedDocument
+from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
 from capability_lab.infrastructure.repositories import (
+    SqlAlchemyAgentTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
@@ -62,6 +66,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
     SqlAlchemyShopDirectory,
+    SqlAlchemyToolEventRepository,
     agent_configuration_repository,
     customer_profile_repository,
     mutation_block_repository,
@@ -190,12 +195,40 @@ def build_experiments(session: Session) -> ExperimentService:
         SqlAlchemyExperimentRepository(session),
         SqlAlchemyExperimentRunRepository(session),
         SqlAlchemyParticipantTurnRepository(session),
+        SqlAlchemyAgentTurnRepository(session),
+        SqlAlchemyToolEventRepository(session),
         build_snapshots(session),
         build_sandboxes(session),
         shop_repository(session),
         ticket_repository(session),
         agent_configuration_repository(session),
         SqlAlchemyPublishedVersionDirectory(session),
+        AdvancingClock(),
+    )
+
+
+def build_runner(
+    session: Session, runtimes: SupportAgentRuntimeRegistry | None = None
+) -> ExperimentRunner:
+    """The runner that advances one arm, over the deterministic control runtime by default.
+
+    Composition selects which frameworks can run an arm, so a test that wants a failing or
+    model-backed arm hands its own registry in rather than reaching inside the runner.
+    """
+    control = FakeSupportAgentRuntime()
+    return ExperimentRunner(
+        SqlAlchemyExperimentRepository(session),
+        SqlAlchemyExperimentRunRepository(session),
+        SqlAlchemyParticipantTurnRepository(session),
+        SqlAlchemyAgentTurnRepository(session),
+        SqlAlchemyToolEventRepository(session),
+        build_snapshots(session),
+        SqlAlchemySandboxRepository(session),
+        shop_repository(session),
+        support_identity_repository(session),
+        agent_configuration_repository(session),
+        build_tools(session),
+        runtimes or SupportAgentRuntimeRegistry({control.framework_id: control}),
         AdvancingClock(),
     )
 

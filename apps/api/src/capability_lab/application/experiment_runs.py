@@ -1,0 +1,577 @@
+"""Advancing one arm: the agent answers the customer, and what it did is the record.
+
+ADR 0025 opened both threads and left them there — the trigger written into each arm, the
+operator able to add turns, and nothing on the other side. This is the other side. Asked to
+advance one arm, this module resolves what that arm runs, runs it against that arm's own
+sandbox, and writes down what happened.
+
+Five decisions shape it.
+
+**Advancing is explicit and per arm.** Delivering a customer turn records a customer turn;
+running an agent is a separate act, on one arm, because the arms progress independently
+(one may be advanced twice while the other waits) and because a model call is slow and
+costly enough that it must not be a side effect of typing. It is also what makes a retry
+expressible at all.
+
+**It is idempotent over an answer, not over an attempt.** Advancing an arm whose latest
+customer turn is already answered returns that answer and calls no model. Advancing one
+whose last attempt *failed* runs a new attempt, because a failure is evidence to keep and a
+retry is a thing an operator does — so the record grows rather than being overwritten.
+
+**Resolution comes from the pins, never from the latest.** The prompt is rendered against
+the shop version the snapshot froze and the support-identity version the experiment froze,
+not against whatever has been published since. An experiment is explained by the versions
+it pinned; reading a newer one here would make a run unexplainable the moment an author
+published again.
+
+**The tools are the configuration's, and the actor is its identity's.** An arm is offered
+exactly the tools its configuration enables, and every call runs under the support identity
+that configuration adopts — so an unauthorized write is refused by the same table the
+publish gate read (ADR 0022, ADR 0024), and the tool bindings become a comparison variable
+with teeth rather than a label.
+
+**Every call is recorded because of how it is made.** The runtime reaches the world through
+an invoker this module constructs; there is no other path. A tool event is therefore
+produced by the call rather than reported by an adapter, which is what keeps a framework's
+own event objects out of the evidence entirely.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Mapping
+from dataclasses import dataclass
+from uuid import UUID
+
+from capability_lab.application.agent_prompt import render_prompt
+from capability_lab.application.agent_runtime import (
+    AgentMessage,
+    AgentRole,
+    AgentToolBudgetExceededError,
+    AgentTurnRequest,
+    SandboxToolInvoker,
+    SupportAgentFrameworkError,
+    SupportAgentRuntime,
+    SupportAgentRuntimeError,
+    SupportAgentRuntimeRegistry,
+)
+from capability_lab.application.agent_turns import (
+    AgentTurnRecord,
+    AgentTurnRepository,
+    ToolEvent,
+    ToolEventRecord,
+    ToolEventRepository,
+)
+from capability_lab.application.canonical_json import CanonicalValue
+from capability_lab.application.definition_authoring import DefinitionRepository
+from capability_lab.application.definition_resolution import (
+    ArmResolution,
+    DefinitionResolutionError,
+    MissingReferenceVersionError,
+)
+from capability_lab.application.experiments import (
+    ExperimentNotFoundError,
+    ExperimentRecord,
+    ExperimentRepository,
+    ExperimentRunNotFoundError,
+    ExperimentRunRepository,
+    ParticipantTurnRepository,
+    RunRecord,
+)
+from capability_lab.application.ports import Clock
+from capability_lab.application.sandbox_actions import ToolActor
+from capability_lab.application.sandbox_materialization import (
+    SandboxSnapshotRecord,
+    SandboxSnapshotService,
+)
+from capability_lab.application.sandbox_tool_contracts import (
+    SANDBOX_TOOL_CONTRACTS,
+    ToolContract,
+)
+from capability_lab.application.sandbox_tools import (
+    SandboxToolService,
+    ToolCall,
+    ToolOutcome,
+)
+from capability_lab.application.sandboxes import SandboxRepository
+from capability_lab.domain.agent_configuration import AgentConfigurationPayload, MemoryMode
+from capability_lab.domain.agent_turn import (
+    MAX_AGENT_TURN_LENGTH,
+    AgentTurn,
+    AgentTurnFailure,
+    AgentTurnOutcome,
+)
+from capability_lab.domain.definitions import DefinitionType, VersionRef
+from capability_lab.domain.experiment import ParticipantTurn
+from capability_lab.domain.shop import ShopPayload
+from capability_lab.domain.support_identity import SupportIdentityPayload
+
+__all__ = ["ExperimentRunner", "RunTurn", "RunUnansweredError"]
+
+_logger = logging.getLogger(__name__)
+
+
+class RunUnansweredError(ExperimentRunNotFoundError):
+    """Raised when an arm is asked to advance and has received no customer turn at all.
+
+    Unreachable while starting an experiment writes the trigger into every arm (ADR 0025),
+    which is why it names the arm rather than the experiment: an arm with an empty thread is
+    an arm that was never opened.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class RunTurn:
+    """What one advance produced: the attempt, and the calls it made getting there."""
+
+    turn: AgentTurnRecord
+    tool_events: tuple[ToolEventRecord, ...]
+
+
+class ExperimentRunner:
+    """Run one arm's configured agent against that arm's sandbox, once."""
+
+    def __init__(
+        self,
+        experiments: ExperimentRepository,
+        runs: ExperimentRunRepository,
+        participant_turns: ParticipantTurnRepository,
+        agent_turns: AgentTurnRepository,
+        tool_events: ToolEventRepository,
+        snapshots: SandboxSnapshotService,
+        sandboxes: SandboxRepository,
+        shops: DefinitionRepository[ShopPayload],
+        support_identities: DefinitionRepository[SupportIdentityPayload],
+        configurations: DefinitionRepository[AgentConfigurationPayload],
+        tools: SandboxToolService,
+        runtimes: SupportAgentRuntimeRegistry,
+        clock: Clock,
+    ) -> None:
+        self._experiments = experiments
+        self._runs = runs
+        self._participant_turns = participant_turns
+        self._agent_turns = agent_turns
+        self._tool_events = tool_events
+        self._snapshots = snapshots
+        self._sandboxes = sandboxes
+        self._shops = shops
+        self._support_identities = support_identities
+        self._configurations = configurations
+        self._tools = tools
+        self._runtimes = runtimes
+        self._clock = clock
+
+    async def advance(self, shop_id: UUID, experiment_id: UUID, run_id: UUID) -> RunTurn:
+        """Answer this arm's latest customer turn, or return the answer it already has."""
+        record = self._experiments.get(shop_id, experiment_id)
+        if record is None:
+            raise ExperimentNotFoundError(f"experiment {experiment_id} is not in shop {shop_id}")
+        run = next(
+            (
+                candidate
+                for candidate in self._runs.list_for_experiment(experiment_id)
+                if candidate.run_id == run_id
+            ),
+            None,
+        )
+        if run is None:
+            raise ExperimentRunNotFoundError(
+                f"run {run_id} is not an arm of experiment {experiment_id}"
+            )
+
+        ordinal = self._latest_customer_turn(run).ordinal
+        attempts = tuple(
+            entry
+            for entry in self._agent_turns.list_for_experiment(experiment_id)
+            if entry.run_id == run_id and entry.turn.ordinal == ordinal
+        )
+        answered = next(
+            (entry for entry in attempts if entry.turn.outcome is AgentTurnOutcome.ANSWERED), None
+        )
+        if answered is not None:
+            # Already answered: return it and call nothing. Advancing twice must not cost a
+            # second model call, and an arm must never hold two replies to one question.
+            return RunTurn(turn=answered, tool_events=self._recorded(answered))
+        return await self._attempt(record, run, ordinal=ordinal, attempt=len(attempts) + 1)
+
+    # -- reading ---------------------------------------------------------------
+
+    def list_agent_turns(self, experiment_id: UUID) -> tuple[AgentTurnRecord, ...]:
+        return self._agent_turns.list_for_experiment(experiment_id)
+
+    def list_tool_events(self, experiment_id: UUID) -> tuple[ToolEventRecord, ...]:
+        return self._tool_events.list_for_experiment(experiment_id)
+
+    # -- one attempt -----------------------------------------------------------
+
+    async def _attempt(
+        self, record: ExperimentRecord, run: RunRecord, *, ordinal: int, attempt: int
+    ) -> RunTurn:
+        resolved = self._resolve(record, run)
+        runtime = self._runtimes.get(resolved.configuration.framework_id)
+        thread = tuple(
+            entry.turn
+            for entry in self._participant_turns.list_for_experiment(record.experiment_id)
+            if entry.run_id == run.run_id
+        )
+        invoker = _RecordingInvoker(
+            tools=self._tools,
+            sandboxes=self._sandboxes,
+            shop_id=run.shop_id,
+            sandbox_id=run.sandbox_id,
+            actor=resolved.actor,
+            contracts=resolved.tools,
+            budget=resolved.configuration.model.max_tool_rounds,
+        )
+        request = AgentTurnRequest(
+            run_id=run.run_id,
+            arm_label=run.label,
+            instructions=resolved.instructions,
+            model=resolved.configuration.model,
+            tools=resolved.tools,
+            history=self._history(resolved.configuration, run, thread, ordinal),
+            message=next(turn.body for turn in thread if turn.ordinal == ordinal),
+        )
+
+        turn = await self._answer(runtime, request, invoker, ordinal=ordinal, attempt=attempt)
+        now = self._clock.now()
+        written = self._agent_turns.append(
+            AgentTurnRecord(
+                run_id=run.run_id,
+                experiment_id=record.experiment_id,
+                turn=turn,
+                created_at=now,
+            )
+        )
+        # After the attempt, so a call can never reference a turn that is not there — and
+        # after a *failed* one too, because what the agent did before it broke is the most
+        # informative part of a failure.
+        events = self._tool_events.append_all(
+            tuple(
+                ToolEventRecord(
+                    run_id=run.run_id,
+                    experiment_id=record.experiment_id,
+                    event=event,
+                    created_at=now,
+                )
+                for event in invoker.events(ordinal=ordinal, attempt=attempt)
+            )
+        )
+        return RunTurn(turn=written, tool_events=events)
+
+    async def _answer(
+        self,
+        runtime: SupportAgentRuntime,
+        request: AgentTurnRequest,
+        invoker: _RecordingInvoker,
+        *,
+        ordinal: int,
+        attempt: int,
+    ) -> AgentTurn:
+        """Run the framework and turn whatever came back into one recordable attempt."""
+        try:
+            body = await runtime.answer(request, invoker)
+        except SupportAgentRuntimeError as error:
+            return self._failed(error.failure, ordinal=ordinal, attempt=attempt)
+        except DefinitionResolutionError:
+            # An arm whose snapshot or pins no longer resolve is a broken lab, not something
+            # the agent did, and ADR 0021 already refuses to answer that as a tool result.
+            # Recording it as a failed turn would put it in a comparison as this framework's
+            # behavior.
+            raise
+        except Exception as error:
+            # An adapter that raised something it never classified is the lab's integration
+            # breaking, not the model misbehaving. Logged by type alone, for the reason a
+            # failed tool result carries no message: nothing can promise an arbitrary
+            # exception's text is free of synthetic customer content (`AGENTS.md`).
+            _logger.error(
+                "agent runtime %s failed with %s", runtime.framework_id, type(error).__name__
+            )
+            return self._failed(AgentTurnFailure.FRAMEWORK, ordinal=ordinal, attempt=attempt)
+
+        reply = body.strip()
+        if not reply or len(reply) > MAX_AGENT_TURN_LENGTH:
+            # A model that said nothing, and one that said more than the thread can hold,
+            # are the same kind of finding: an answer the lab cannot record as the arm's
+            # reply. Truncating would put words in the agent's mouth that it can then be
+            # compared on.
+            return self._failed(AgentTurnFailure.INVALID_RESPONSE, ordinal=ordinal, attempt=attempt)
+        return AgentTurn(
+            ordinal=ordinal, attempt=attempt, outcome=AgentTurnOutcome.ANSWERED, body=reply
+        )
+
+    @staticmethod
+    def _failed(failure: AgentTurnFailure, *, ordinal: int, attempt: int) -> AgentTurn:
+        return AgentTurn(
+            ordinal=ordinal, attempt=attempt, outcome=AgentTurnOutcome.FAILED, failure=failure
+        )
+
+    # -- resolution ------------------------------------------------------------
+
+    def _resolve(self, record: ExperimentRecord, run: RunRecord) -> _ResolvedArm:
+        """What this arm runs, read from the versions the experiment pinned.
+
+        Deliberately not from the latest published anything. The snapshot holds the shop the
+        scenario froze and the experiment document holds the identity version each arm
+        froze; resolving either one afresh would make a historical run unexplainable as soon
+        as an author publishes again.
+        """
+        snapshot = self._snapshots.get_snapshot(run.shop_id, record.snapshot_id)
+        arm = self._arm_resolution(record, snapshot, run)
+        configuration = self._version(
+            self._configurations, arm.agent_configuration.ref, DefinitionType.AGENT_CONFIGURATION
+        )
+        identity_ref = self._identity_ref(arm, configuration)
+        identity = self._version(
+            self._support_identities, identity_ref, DefinitionType.SUPPORT_IDENTITY
+        )
+        shop = self._pinned_shop(snapshot)
+        return _ResolvedArm(
+            configuration=configuration,
+            instructions=render_prompt(configuration, shop, identity),
+            tools=tuple(
+                contract
+                for contract in SANDBOX_TOOL_CONTRACTS
+                if contract.name in configuration.enabled_tools
+            ),
+            actor=ToolActor(
+                support_identity_id=identity_ref.definition.id, version=identity_ref.version
+            ),
+        )
+
+    @staticmethod
+    def _arm_resolution(
+        record: ExperimentRecord, snapshot: SandboxSnapshotRecord, run: RunRecord
+    ) -> ArmResolution:
+        arms = record.content(snapshot.content.pins).resolution.arms
+        if run.position >= len(arms):  # pragma: no cover - one arm row per recorded arm
+            raise MissingReferenceVersionError(
+                f"experiment {record.experiment_id} records no inputs for arm {run.position}"
+            )
+        return arms[run.position]
+
+    @staticmethod
+    def _identity_ref(arm: ArmResolution, configuration: AgentConfigurationPayload) -> VersionRef:
+        """The pinned version of the identity this configuration adopts.
+
+        Matched by identity rather than taken as the closure's only entry: the arm's pins are
+        a closure, and a closure is allowed to grow another support identity the day a
+        configuration references two.
+        """
+        ref = next(
+            (
+                entry.ref
+                for entry in arm.support_identities
+                if entry.definition.id == configuration.support_identity_id
+            ),
+            None,
+        )
+        if ref is None:  # pragma: no cover - the setup gate resolved this closure
+            raise MissingReferenceVersionError(
+                f"this experiment pinned no version of support identity "
+                f"{configuration.support_identity_id}"
+            )
+        return ref
+
+    def _pinned_shop(self, snapshot: SandboxSnapshotRecord) -> ShopPayload:
+        pin = next(
+            (
+                entry
+                for entry in snapshot.content.pins
+                if entry.definition.definition_type is DefinitionType.SHOP
+            ),
+            None,
+        )
+        if pin is None:  # pragma: no cover - a snapshot is materialized from a shop's scenario
+            raise MissingReferenceVersionError("this snapshot pins no shop")
+        return self._version(self._shops, pin.ref, DefinitionType.SHOP)
+
+    @staticmethod
+    def _version[PayloadT](
+        repository: DefinitionRepository[PayloadT], ref: VersionRef, kind: DefinitionType
+    ) -> PayloadT:
+        version = repository.get_version(ref)
+        if version is None:
+            raise MissingReferenceVersionError(
+                f"{kind.value} {ref.definition.id} version {ref.version} is not resolvable"
+            )
+        return version.payload
+
+    # -- the thread ------------------------------------------------------------
+
+    def _latest_customer_turn(self, run: RunRecord) -> ParticipantTurn:
+        """The turn this arm answers next: the last one it received, not the first unanswered.
+
+        An operator may send a second message before running the agent on the first. A reply
+        to the older one would be a reply to a question the customer has already moved on
+        from, so the arm answers the conversation as it now stands and the earlier turn stays
+        in its history — unanswered, which is what actually happened.
+        """
+        turns = tuple(
+            entry.turn
+            for entry in self._participant_turns.list_for_experiment(run.experiment_id)
+            if entry.run_id == run.run_id
+        )
+        if not turns:  # pragma: no cover - starting an experiment opens every arm
+            raise RunUnansweredError(f"arm {run.label} has received no customer turn to answer")
+        return max(turns, key=lambda turn: turn.ordinal)
+
+    def _history(
+        self,
+        configuration: AgentConfigurationPayload,
+        run: RunRecord,
+        thread: tuple[ParticipantTurn, ...],
+        ordinal: int,
+    ) -> tuple[AgentMessage, ...]:
+        """This arm's thread before the turn being answered, as the configuration allows.
+
+        An empty history when the configuration keeps no conversation memory, which is a
+        comparison variable rather than a runtime detail — two arms differing only in memory
+        must actually differ. Failed attempts are absent: the agent never said them, and a
+        history that carried them would ask the model to continue from words it did not
+        write.
+        """
+        if configuration.memory is MemoryMode.NONE:
+            return ()
+        replies = {
+            entry.turn.ordinal: entry.turn.body
+            for entry in self._agent_turns.list_for_experiment(run.experiment_id)
+            if entry.run_id == run.run_id and entry.turn.outcome is AgentTurnOutcome.ANSWERED
+        }
+        messages: list[AgentMessage] = []
+        for turn in sorted(thread, key=lambda entry: entry.ordinal):
+            if turn.ordinal >= ordinal:
+                break
+            messages.append(AgentMessage(role=AgentRole.CUSTOMER, body=turn.body))
+            reply = replies.get(turn.ordinal)
+            if reply is not None:
+                messages.append(AgentMessage(role=AgentRole.AGENT, body=reply))
+        return tuple(messages)
+
+    def _recorded(self, turn: AgentTurnRecord) -> tuple[ToolEventRecord, ...]:
+        return tuple(
+            entry
+            for entry in self._tool_events.list_for_experiment(turn.experiment_id)
+            if entry.run_id == turn.run_id
+            and entry.event.ordinal == turn.turn.ordinal
+            and entry.event.attempt == turn.turn.attempt
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedArm:
+    """One arm's runtime inputs, resolved from what the experiment pinned."""
+
+    configuration: AgentConfigurationPayload
+    instructions: str
+    tools: tuple[ToolContract, ...]
+    actor: ToolActor
+
+
+class _RecordingInvoker(SandboxToolInvoker):
+    """The only path from a runtime to the world, and the thing that writes it down.
+
+    Bound to one arm, one actor, and one tool set at construction, so a runtime cannot widen
+    any of the three. It spends a budget rather than trusting a framework's own limit: the
+    tool-round setting is a published input of the configuration (ADR 0024), and an SDK's
+    usage limit would enforce it only for the SDKs that have one.
+
+    The limit is spent per **call**. A round that made three calls spent three — the
+    stricter reading, and the only one an evidence record can count, since a round is a
+    framework's idea of a model request and this records what the arm was asked.
+    """
+
+    def __init__(
+        self,
+        *,
+        tools: SandboxToolService,
+        sandboxes: SandboxRepository,
+        shop_id: UUID,
+        sandbox_id: UUID,
+        actor: ToolActor,
+        contracts: tuple[ToolContract, ...],
+        budget: int,
+    ) -> None:
+        self._tools = tools
+        self._sandboxes = sandboxes
+        self._shop_id = shop_id
+        self._sandbox_id = sandbox_id
+        self._actor = actor
+        self._contracts = contracts
+        self._budget = budget
+        self._spent = 0
+        self._calls: list[_Call] = []
+
+    def invoke(self, tool: str, arguments: Mapping[str, str]) -> dict[str, CanonicalValue]:
+        contract = next(
+            (candidate for candidate in self._contracts if candidate.name == tool), None
+        )
+        if contract is None:
+            # Not a refusal. A runtime is handed the tools it may offer, so a name that
+            # reaches here is an adapter offering something the configuration never enabled
+            # — the lab's mistake to see, exactly as an unknown tool name is (ADR 0021).
+            raise SupportAgentFrameworkError(f"this arm was never offered a tool named {tool!r}")
+        if self._spent >= self._budget:
+            raise AgentToolBudgetExceededError(
+                f"this configuration allows {self._budget} tool call(s) per turn"
+            )
+        self._spent += 1
+
+        execution = self._tools.execute(
+            self._shop_id,
+            self._sandbox_id,
+            # The version is the lab's, not the agent's: the tool contract set is a pinned
+            # input of the experiment, so an arm cannot ask for a different one. The actor
+            # travels on every call, read or write, because it is the arm's identity rather
+            # than a per-call choice; only a write consults it (ADR 0021).
+            ToolCall(
+                tool=contract.name,
+                version=contract.version,
+                arguments=dict(arguments),
+                actor=self._actor,
+            ),
+        )
+        after = self._sandboxes.get(self._shop_id, self._sandbox_id)
+        if after is None:  # pragma: no cover - the call just read this arm
+            raise SupportAgentFrameworkError("this arm disappeared while it was being run")
+        self._calls.append(
+            _Call(
+                contract=contract,
+                outcome=execution.result.outcome,
+                document=execution.result.document,
+                revision_before=execution.revision,
+                revision_after=after.revision,
+                state_fingerprint=after.state_fingerprint,
+            )
+        )
+        return execution.result.document
+
+    def events(self, *, ordinal: int, attempt: int) -> tuple[ToolEvent, ...]:
+        """The calls this attempt made, numbered in the order the agent asked."""
+        return tuple(
+            ToolEvent(
+                ordinal=ordinal,
+                attempt=attempt,
+                sequence=sequence,
+                tool=call.contract.name,
+                version=call.contract.version,
+                outcome=call.outcome,
+                document=call.document,
+                revision_before=call.revision_before,
+                revision_after=call.revision_after,
+                state_fingerprint=call.state_fingerprint,
+            )
+            for sequence, call in enumerate(self._calls)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _Call:
+    """One executed call, held until the attempt it belongs to has a row to hang it on."""
+
+    contract: ToolContract
+    outcome: ToolOutcome
+    document: dict[str, CanonicalValue]
+    revision_before: int
+    revision_after: int
+    state_fingerprint: str
