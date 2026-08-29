@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -67,6 +68,26 @@ def alembic_config(database_url: str, monkeypatch: pytest.MonkeyPatch) -> Config
 class FixedClock:
     def now(self) -> datetime:
         return datetime(2026, 8, 16, 12, 30, tzinfo=UTC)
+
+
+@pytest.mark.migration
+def test_migrating_leaves_the_application_loggers_it_found_alive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Configuring alembic's logging must not switch off the application's.
+
+    `logging.config.fileConfig` disables every existing logger unless told otherwise, and the
+    migration environment configures logging from `alembic.ini`. That is harmless for the CLI,
+    where migrating is all the process does, but this environment also runs in-process: a
+    session that migrates and then exercises the application would afterwards log nothing —
+    and a silent logger reports its own absence to no one.
+    """
+    logger = logging.getLogger("capability_lab.application.sandbox_tools")
+    assert not logger.disabled
+
+    command.upgrade(alembic_config(f"sqlite:///{tmp_path / 'logging.db'}", monkeypatch), "head")
+
+    assert not logger.disabled
 
 
 @pytest.mark.migration

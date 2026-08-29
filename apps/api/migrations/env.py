@@ -15,7 +15,12 @@ config.set_main_option(
 )
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers` defaults to true, which would switch off every logger the
+    # process had already created — including the application's own. That is harmless for the
+    # CLI, where migrating is all the process does, but this environment also runs in-process:
+    # a test session that migrates and then exercises the application, or any startup path
+    # that migrates before serving, would afterwards log nothing and give no sign of it.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = models.CustomerModel.metadata
 
