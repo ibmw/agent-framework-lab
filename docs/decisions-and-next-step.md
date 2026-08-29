@@ -145,13 +145,23 @@ SDK immediately.
    record keeps rather than something a later comparison of the bodies would have to guess at. The
    setup gate answers the tone-of-voice check ADR 0012 placed at experiment setup and warns when
    the arms differ along more than one dimension.
-9. Next is the rest of Milestone 4: executing an arm. That is where a support identity stops being
-   chosen by an operator and starts being resolved from the published configuration an arm runs,
-   where a tool's declared effect is what an adapter routes on, where the string-only argument
-   table becomes the JSON Schema an adapter offers a model, where the scenario's mutation blocks
-   fire on their bound timing, and where assistant turns, tool events, traces, and completion join
-   the participant turns already recorded. `AgentAdapter` is deliberately unchanged until that
-   runner proves a requirement for it.
+9. The runner that executes an arm is delivered (ADR 0026). Advancing an arm resolves its
+   published configuration against the versions the experiment pinned, renders the prompt, offers
+   exactly the tools that configuration enables, and runs the framework it names against that arm's
+   own sandbox — recording what it answered, every tool call it made, the confirmation and revision
+   each write carried, and the attempt in which it failed. It is a new `SupportAgentRuntime` port,
+   not a bent `AgentAdapter`: the POC's port hands an agent a pre-loaded support context, which is
+   the opposite of the tool-first rule an arm runs under. Two frameworks sit behind it — a declared
+   deterministic control policy that runs offline, and Pydantic AI deriving its tool schemas from
+   the published contract table. Evidence is a property of the call path: a runtime reaches the
+   world only through an invoker bound to one arm and one actor, and that invoker is what writes
+   the event.
+10. Next in Milestone 4 is the normalized execution timeline: traces, project-owned source
+   locations, and the scenario's mutation blocks firing on their bound timing — a change to the
+   *world* mid-run rather than to an agent's turn, which is why it belongs with the timeline that
+   shows when it happened. Completion follows it, judged against the scenario's completion
+   conditions with Milestone 5's evaluation rather than set by hand; nothing sets a run status
+   today, deliberately.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

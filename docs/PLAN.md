@@ -58,13 +58,19 @@ experiment that binds one published scenario version to one or two of those conf
 clones an arm per configuration from one canonical snapshot, opens both threads on the ticket's
 triggering message, and takes every later customer turn through a participant-driver port whose
 first implementation is the human operator (ADR 0025) — which also completes Milestone 4's
-experiment record, shared trigger, linked composer, and comparison-variable warning.
+experiment record, shared trigger, linked composer, and comparison-variable warning. Milestone 4
+has since gained the other half of those threads: advancing one arm runs its published
+configuration against that arm's own sandbox through a new framework-neutral runtime port, and
+records what it answered, every versioned tool call it made, the confirmation and revision each
+write carried, and the attempt in which it failed — with two frameworks behind that port, a
+declared deterministic control policy and Pydantic AI over the published tool contracts
+(ADR 0026).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
 
-The POC does not implement the target Scenario Studio, published agent configurations, executing
-experiment runner, LLM judge, experiment-first history, or target wrong-address journey. Existing persona-first contracts and data may be replaced through cohesive
+The POC does not implement the target Scenario Studio, published agent configurations, LLM judge,
+experiment-first history, or target wrong-address journey. Existing persona-first contracts and data may be replaced through cohesive
 tested slices.
 
 ## Delivery rules
@@ -451,7 +457,9 @@ payload.
 ### Slice 2 — Participant driver and resolved run inputs
 
 - [x] Evolve the agent port only for requirements proven by the target scenario. Nothing here
-  proves one — no arm runs a model — so `AgentAdapter` is deliberately unchanged.
+  proves one — no arm runs a model — so `AgentAdapter` is deliberately unchanged. (Milestone 4's
+  runner does prove one, and answers it with a separate `SupportAgentRuntime` port rather than by
+  bending this one: ADR 0026.)
 - [x] Introduce a participant-driver port and human-operator implementation.
 - [x] Persist resolved configurations and participant events without framework SDK types.
 
@@ -494,17 +502,33 @@ behavior side by side.
   Milestone 3 Slice 2).
 - [x] Start both arms from one canonical snapshot and send the same trigger (ADR 0025).
 - [x] Add a linked customer composer that can split into arm-specific replies (ADR 0025).
-- [ ] Persist operator input divergence, assistant turns, tool events, confirmations, state changes,
-  failures, traces, and completion. Operator input and its divergence are recorded (ADR 0025);
-  everything an agent produces waits on the executing runner.
+- [x] Persist operator input divergence, assistant turns, tool events, confirmations, state changes,
+  and failures (ADR 0025 for operator input; ADR 0026 for everything an agent produces). Traces
+  arrive with the timeline outcome below; completion is judged against the scenario's completion
+  conditions and belongs with Milestone 5's evaluation.
 - [x] Warn when framework, architecture, model, prompt, or tools introduce multiple comparison
   variables (ADR 0025).
 - [ ] Show normalized execution timelines and project-owned source locations where available.
 - [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
-  essential Playwright journey.
+  essential Playwright journey. Start, divergence, and independent action are covered (ADR 0025,
+  ADR 0026); resume and completion follow the outcomes they belong to.
 
 Frames: 7 · Experiment setup and 8 · Live bench (icon-only rail, ticket-thread chat UI, provenance
 chip strip, director's notes, objectives matrix).
+
+Runner evidence (frame 8, the agent half): an operator runs one arm's agent and watches it follow
+the incident from the interaction to the order, read the customer, and redirect the order to the
+address on file — every call a recorded event, the write visible as the revision it moved — while
+the arm beside it stays exactly where it was; a failed attempt is kept and the retry sits beside
+it. ADR 0026 records the `SupportAgentRuntime` port and why it is new rather than an evolution of
+the POC's `AgentAdapter`, the recording invoker that makes a tool event a property of the call path
+rather than of an adapter reporting, the advance operation that is idempotent over an answer and
+not over an attempt, the attempt as the unit a failure and a retry are recorded in, the failure
+classified rather than described, the confirmation and the state change that need no record of
+their own because the tool result and its revisions already carry them, the resolution that reads
+the versions the experiment pinned, and the two runtimes: the declared control policy that makes
+tool bindings a real comparison variable offline, and Pydantic AI deriving its tool schemas from
+the contract table the lab publishes.
 
 ### Acceptance criteria
 

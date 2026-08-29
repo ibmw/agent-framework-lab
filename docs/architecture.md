@@ -39,8 +39,10 @@ agent rather than the world it works in (ADR 0024) — the
 tables, and the Studio application shell are target code. Beyond the definitions, the experiment
 that binds a published scenario version to one or two of those configurations, clones an arm per
 configuration, and takes its customer turns through a participant-driver port is target code too
-(ADR 0025). The POC's persona-first frontend was removed with that shell; its HTTP contracts
-remain published and tested without a UI consumer.
+(ADR 0025), and the runner that advances one arm of that experiment through a framework-neutral
+support-agent port, recording what it answered and every versioned tool call it made (ADR 0026).
+The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
+and tested without a UI consumer.
 
 ## Binding dependency rule
 
@@ -131,9 +133,16 @@ can recover from, not a transport error (ADR 0022).
 
 ## Framework and participant neutrality
 
-The current `AgentAdapter` is an application port and remains useful evidence. The target port may
-evolve only when the experiment runner and a concrete second architecture prove new requirements.
-Agent SDK types never enter the domain, stored neutral event format, public API, or shared UI.
+The current `AgentAdapter` is an application port and remains useful evidence, and still serves the
+POC's conversation routes unchanged. The experiment runner proved requirements it cannot express —
+an arm runs a *published* configuration, reaches the world only through the versioned tools that
+configuration enables, and acts under the support identity it adopts — so the target runtime is a
+separate `SupportAgentRuntime` port rather than a bent version of the old one (ADR 0026). A runtime
+is handed an invoker bound to one arm, one actor, one tool set, and one tool budget; it is the only
+path to the world and it is what writes the tool event, so a framework's own event objects have
+nowhere to leak. A runtime chooses a tool, never a version: the tool contract set is a pinned input
+of the experiment. Agent SDK types never enter the domain, stored neutral event format, public API,
+or shared UI.
 
 What an agent *is* for one experiment is authored rather than composed: a published agent
 configuration carries the framework, architecture, model and runtime settings, system prompt, tool
@@ -208,6 +217,17 @@ over one scenario whose arms differ differently are not the same experiment — 
 whose arms differ along more than one dimension is warned about at setup rather than discovered
 months later, because nothing it produces can be attributed to either difference.
 
+An arm is advanced explicitly and one at a time, because the arms progress independently and a
+model call must not be a side effect of recording what the customer said. Advancing is idempotent
+over an *answer* and not over an *attempt*: an arm whose latest customer turn is answered returns
+that answer and calls no model, while one whose last attempt failed makes a new attempt beside it —
+a failure is evidence, and a retry is a thing an operator does. An assistant turn is addressed to
+the customer turn it answers rather than carrying a counter of its own, and an arm answers the
+conversation as it now stands rather than the oldest question it has not replied to. A failure is
+recorded as a code from a closed table and never as what the framework said; a framework this
+process cannot run at all is refused rather than recorded, because that is a fact about the machine
+(ADR 0026).
+
 Normalized run evidence includes participant and assistant turns, model usage, tool requests and
 results, proposals and confirmations, retries and failures, state changes, trace correlations, and
 completion status. Project-owned source symbols may be attached to execution events for the code
@@ -229,7 +249,12 @@ frozen state; the isolation between arms is that layout rather than a rule somet
 (ADR 0020). An experiment is written once into `experiments` as its canonical document, with one
 row per arm in `experiment_runs` referencing the clone that arm works rather than embedding any of
 it, and an append-only `experiment_participant_turns` keyed by run and ordinal so a turn can never
-be renumbered onto another position (ADR 0025). Experiments and judge executions are
+be renumbered onto another position (ADR 0025). What the agent produced is append-only beside it:
+`experiment_agent_turns` keyed by run, answered ordinal, and attempt, and `experiment_tool_events`
+keyed by that attempt plus the sequence the agent asked in, each holding the published
+`tool-result-v1` document whole. There is deliberately no separate confirmation or state-change
+table: the confirmation is inside the result the proposal answered with, and the state change is
+the pair of revisions the event carries (ADR 0026). Experiments and judge executions are
 append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
 never changes the published definitions or canonical starting snapshot.
 
