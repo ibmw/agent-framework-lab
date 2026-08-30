@@ -17,7 +17,12 @@ description: Implement or review Python backend changes in Agent Framework Capab
    avoid secrets or sensitive content in errors/logs.
 7. Add the fastest behavior-focused tests, plus integration tests for HTTP, persistence or
    migrations.
-8. Run targeted pytest, then `uv run ruff check .`, `uv run ruff format --check .`,
+8. Keep tests parallel-safe: the suite runs under pytest-xdist (`-n auto`). Give every test its
+   own database — in-memory `sqlite://` via the autouse `isolated_settings` fixture, or a file
+   under pytest's `tmp_path` (see `tests/api_factories.py`). Use `monkeypatch` for env vars,
+   never `os.environ` directly; use function-scoped fixtures only (no session/module scope);
+   never rely on fixed ports, shared files, or test ordering.
+9. Run targeted pytest, then `uv run ruff check .`, `uv run ruff format --check .`,
    `uv run pyright`, and relevant migration tests.
 
 Do not start or restart the API before checking port 8000 and confirming that a running instance

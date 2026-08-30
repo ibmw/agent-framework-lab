@@ -14,11 +14,11 @@ typecheck:
 	pnpm typecheck
 
 test:
-	uv run pytest -m "not migration and not live_model"
+	uv run pytest -n auto -m "not migration and not live_model"
 	pnpm test
 
 test-migrations:
-	uv run pytest -m migration
+	uv run pytest -n auto -m migration
 
 check-contracts:
 	pnpm --filter @agent-lab/contracts check:generated
