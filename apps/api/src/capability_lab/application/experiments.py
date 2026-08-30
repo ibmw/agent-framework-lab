@@ -114,6 +114,7 @@ from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.ticket import TicketPayload
 
 __all__ = [
+    "ArmRuntime",
     "ArmSelection",
     "ExperimentDetail",
     "ExperimentLabelError",
@@ -291,6 +292,21 @@ class ExperimentPreview:
 
 
 @dataclass(frozen=True, slots=True)
+class ArmRuntime:
+    """What one arm runs, read from the exact configuration version it pinned.
+
+    Alongside the comparison matrix rather than inside it: the matrix answers "do these arms
+    differ here", which is a question about the pair, while this answers "what does this arm
+    run", which a client needs for one arm on its own — to label it, and to say which
+    project-owned adapter produced its turns (ADR 0027).
+    """
+
+    run_id: UUID
+    framework_id: str
+    model_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class ExperimentDetail:
     """One experiment in full: its record, its arms, and both sides of their threads.
 
@@ -302,6 +318,7 @@ class ExperimentDetail:
     record: ExperimentRecord
     resolution: ExperimentResolution
     comparison: tuple[ComparisonVariable, ...]
+    arm_runtimes: tuple[ArmRuntime, ...]
     runs: tuple[RunRecord, ...]
     sandboxes: tuple[SandboxRecord, ...]
     turns: tuple[ParticipantTurnRecord, ...]
@@ -351,10 +368,21 @@ class ExperimentService:
             raise ExperimentNotFoundError(f"experiment {experiment_id} is not in shop {shop_id}")
         snapshot = self._snapshots.get_snapshot(shop_id, record.snapshot_id)
         runs = self._runs.list_for_experiment(experiment_id)
+        # Resolved once and read twice: the matrix compares the arms, and each arm's own
+        # framework and model label it.
+        payloads = tuple(self._arm_payload(run) for run in runs)
         return ExperimentDetail(
             record=record,
             resolution=record.content(snapshot.content.pins).resolution,
-            comparison=compare_configurations(tuple(self._arm_payload(run) for run in runs)),
+            comparison=compare_configurations(payloads),
+            arm_runtimes=tuple(
+                ArmRuntime(
+                    run_id=run.run_id,
+                    framework_id=payload.framework_id,
+                    model_id=payload.model.model_id,
+                )
+                for run, payload in zip(runs, payloads, strict=True)
+            ),
             runs=runs,
             sandboxes=tuple(self._sandboxes.get_sandbox(shop_id, run.sandbox_id) for run in runs),
             turns=self._turns.list_for_experiment(experiment_id),

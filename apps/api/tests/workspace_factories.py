@@ -208,12 +208,16 @@ def build_experiments(session: Session) -> ExperimentService:
 
 
 def build_runner(
-    session: Session, runtimes: SupportAgentRuntimeRegistry | None = None
+    session: Session,
+    runtimes: SupportAgentRuntimeRegistry | None = None,
+    handlers: Mapping[str, ToolHandler] | None = None,
 ) -> ExperimentRunner:
     """The runner that advances one arm, over the deterministic control runtime by default.
 
     Composition selects which frameworks can run an arm, so a test that wants a failing or
-    model-backed arm hands its own registry in rather than reaching inside the runner.
+    model-backed arm hands its own registry in rather than reaching inside the runner. The
+    same goes for a handler that breaks: a tool failure is the lab's own, and a test that
+    needs one supplies it here.
     """
     control = FakeSupportAgentRuntime()
     return ExperimentRunner(
@@ -227,7 +231,7 @@ def build_runner(
         shop_repository(session),
         support_identity_repository(session),
         agent_configuration_repository(session),
-        build_tools(session),
+        build_tools(session, handlers),
         runtimes or SupportAgentRuntimeRegistry({control.framework_id: control}),
         AdvancingClock(),
     )

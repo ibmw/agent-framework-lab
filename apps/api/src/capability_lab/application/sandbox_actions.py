@@ -32,9 +32,11 @@ lab breaking (ADR 0021's rule about who was wrong).
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from types import MappingProxyType
+from typing import ClassVar, Protocol
 from uuid import UUID
 
 from capability_lab.application.canonical_json import (
@@ -218,26 +220,17 @@ def confirmation_of(*, order_id: UUID, address_id: str, state_fingerprint: str) 
     )
 
 
-DISPATCHED_WRITE_TOOLS: frozenset[str] = frozenset({ADDRESS_CHANGE_PROPOSE, ADDRESS_CHANGE_APPLY})
-"""The write tools `SandboxActionService.execute` knows how to run."""
-
-
-def _require_complete_write_registry() -> None:
-    """A published write nothing dispatches is a mutation an agent can call and never make.
-
-    The mirror of the read side's registry check (`sandbox_tools`), and needed for the same
-    reason: that check pairs every read contract with a handler, so a newly declared *write*
-    passes it without anything having agreed to run it.
-    """
-    declared = frozenset(contract.name for contract in WRITE_TOOL_CONTRACTS)
-    if declared != DISPATCHED_WRITE_TOOLS:
-        difference = sorted(declared ^ DISPATCHED_WRITE_TOOLS)
-        raise ToolContractError(
-            f"the write tool dispatch disagrees with the published contracts: {difference}"
-        )
-
-
-_require_complete_write_registry()
+type WriteToolHandler = Callable[
+    [
+        "SandboxActionService",
+        SandboxToolContext,
+        SandboxRecord,
+        SupportIdentityPayload,
+        dict[str, str],
+    ],
+    dict[str, CanonicalValue],
+]
+"""One write tool's implementation: the service, the arm, who is acting, and the call."""
 
 
 class SandboxActionService:
@@ -263,16 +256,16 @@ class SandboxActionService:
     ) -> dict[str, CanonicalValue]:
         """Run one write tool. Refusals raise `ToolRefusedError` and become results."""
         self._require_permission(contract, actor)
-        if contract.name == ADDRESS_CHANGE_PROPOSE:
-            return self._propose(context, record, arguments)
-        if contract.name == ADDRESS_CHANGE_APPLY:
-            return self._apply(context, record, actor, arguments)
-        # Unreachable while the import-time check below holds. Kept because the alternative
-        # is a third write tool silently falling into the apply branch and dying on an
-        # argument it never declared — a published mutation reported as the lab breaking.
-        raise ToolContractError(  # pragma: no cover - the import-time check above prevents it
-            f"{contract.name} is a published write this service does not dispatch"
-        )
+        handler = self._HANDLERS.get(contract.name)
+        if handler is None:
+            # Unreachable while the import-time check below holds. Kept because the
+            # alternative is a third write tool falling into another one's branch and dying
+            # on an argument it never declared — a published mutation reported as the lab
+            # breaking.
+            raise ToolContractError(  # pragma: no cover - the check below prevents it
+                f"{contract.name} is a published write this service does not dispatch"
+            )
+        return handler(self, context, record, actor, arguments)
 
     # -- proposing -------------------------------------------------------------
 
@@ -280,8 +273,13 @@ class SandboxActionService:
         self,
         context: SandboxToolContext,
         record: SandboxRecord,
+        actor: SupportIdentityPayload,
         arguments: dict[str, str],
     ) -> dict[str, CanonicalValue]:
+        """Work out the change and name it. `actor` is the dispatch shape, not an input:
+        every write is handed the identity acting, and a proposal — which moves nothing —
+        consults it no further than the permission `execute` has already checked."""
+        del actor
         order = resolve_order(context.state, arguments)
         plan = self._plan(context, order, arguments["address_id"])
         confirmation = confirmation_of(
@@ -422,6 +420,44 @@ class SandboxActionService:
                 else ToolRefusalCode.NOT_ALLOWED,
                 refused.refusal.message,
             ) from refused
+
+    # -- the dispatch table ----------------------------------------------------
+
+    _HANDLERS: ClassVar[Mapping[str, WriteToolHandler]] = MappingProxyType(
+        {ADDRESS_CHANGE_PROPOSE: _propose, ADDRESS_CHANGE_APPLY: _apply}
+    )
+    """Which function answers each published write.
+
+    A table rather than a chain of name comparisons, for two reasons beyond dispatch. It is
+    the write half of the registry check below, the mirror of the read side's
+    (`sandbox_tools`). And it is what lets an experiment's timeline say where the code that
+    answered a call lives (ADR 0027) without a second, hand-maintained map that could name a
+    function this service does not actually run.
+    """
+
+    @classmethod
+    def handlers(cls) -> Mapping[str, WriteToolHandler]:
+        """The dispatch table, for the registry check and for locating a call's source."""
+        return cls._HANDLERS
+
+
+def _require_complete_write_registry() -> None:
+    """A published write nothing dispatches is a mutation an agent can call and never make.
+
+    The mirror of the read side's registry check (`sandbox_tools`), and needed for the same
+    reason: that check pairs every read contract with a handler, so a newly declared *write*
+    would pass it without anything having agreed to run it.
+    """
+    declared = frozenset(contract.name for contract in WRITE_TOOL_CONTRACTS)
+    dispatched = frozenset(SandboxActionService.handlers())
+    if declared != dispatched:
+        difference = sorted(declared ^ dispatched)
+        raise ToolContractError(
+            f"the write tool dispatch disagrees with the published contracts: {difference}"
+        )
+
+
+_require_complete_write_registry()
 
 
 def _proposal_document(confirmation: str, plan: AddressChangePlan) -> dict[str, CanonicalValue]:

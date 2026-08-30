@@ -108,6 +108,7 @@ from capability_lab.domain.ticket import TicketPayload
 
 __all__ = [
     "MAX_SEARCH_RESULTS",
+    "TOOL_HANDLERS",
     "SandboxToolContext",
     "SandboxToolService",
     "ToolActor",
@@ -386,6 +387,19 @@ READ_TOOL_HANDLERS: Mapping[str, ToolHandler] = {
 }
 
 
+TOOL_HANDLERS: Mapping[str, Callable[..., dict[str, CanonicalValue]]] = MappingProxyType(
+    {**READ_TOOL_HANDLERS, **SandboxActionService.handlers()}
+)
+"""Every published tool and the project-owned function that answers it.
+
+The reads here and the writes the action service dispatches, in one table, because a caller
+that wants to say *where* a recorded call ran should not have to know which half of the
+contract set it came from. Its only consumer is the experiment timeline (ADR 0027), which
+turns a function into a file and a line; nothing dispatches through it, so it can never
+disagree with what actually ran — it is assembled from the two tables that do.
+"""
+
+
 def _require_complete_registry() -> None:
     """A declared tool with no handler is a published contract nothing answers."""
     declared = {contract.name for contract in READ_TOOL_CONTRACTS}
@@ -406,6 +420,13 @@ def _require_complete_registry() -> None:
         raise ToolContractError(
             f"these tools are declared with an effect nothing implements: {misdeclared}"
         )
+    unanswered = sorted(
+        contract.name for contract in SANDBOX_TOOL_CONTRACTS if contract.name not in TOOL_HANDLERS
+    )
+    if unanswered:  # pragma: no cover - the two checks above already cover the set
+        # Kept anyway: the merged table is what a timeline names a source location from, and
+        # a published tool missing from it would silently lose its location rather than fail.
+        raise ToolContractError(f"these published tools name no handler: {unanswered}")
 
 
 _require_complete_registry()
