@@ -1,5 +1,6 @@
 import type {
   AgentTurnSchema,
+  ArmStandingSchema,
   ExperimentResponse,
   ExperimentRunSchema,
   MutationEventSchema,
@@ -45,6 +46,12 @@ const FAILURES: Record<AgentTurnSchema["failure"] & string, string> = {
  * loop. Advancing is still its own request per arm: an arm whose agent failed can be run
  * again without re-sending the customer's words, and an arm the operator wants to hold back
  * simply is not advanced.
+ *
+ * Nothing about that loop lives in this page. An experiment is entirely in the record, so
+ * reopening one is a plain read: every thread comes back, and each arm says what it is
+ * waiting for because the backend computed it from the same rule the runner obeys
+ * (ADR 0029). An operator who left mid-incident finds the arm that never answered, not a
+ * bench that has forgotten it.
  */
 export function ExperimentBenchPage() {
   const { shopId } = useShopWorkspace();
@@ -198,9 +205,9 @@ export function ExperimentBenchPage() {
                   Configuration v{run.agent_configuration_version} · r{run.revision} ·{" "}
                   <Fingerprint value={run.state_fingerprint} />
                 </p>
+                <Standing standing={run.standing} />
                 <Thread experiment={experiment} run={run} divergent={divergent} />
                 <AdvanceControl
-                  experiment={experiment}
                   run={run}
                   working={working === run.run_id}
                   onAdvance={() => advance(run.run_id)}
@@ -342,6 +349,35 @@ function divergentTurnIds(experiment: ExperimentResponse): Set<string> {
   );
 }
 
+/**
+ * What this arm is waiting for, in the words the operator's next move is in.
+ *
+ * The first thing on the card because it is the first thing someone reopening a bench needs:
+ * two arms progress independently, so "which of these is mine to move" is not answerable by
+ * reading two transcripts. It is the server's reading rather than this page's — the same one
+ * the runner acts on, so the button below can never offer a run the backend would decline.
+ */
+function Standing({ standing }: { standing: ArmStandingSchema }) {
+  const waiting =
+    standing.awaiting === "customer"
+      ? "Waiting for the customer"
+      : standing.attempts === 0
+        ? "Waiting for the agent"
+        : `Attempt ${standing.attempts} produced no reply — waiting for a retry`;
+  return (
+    <p className="text-xs font-semibold text-admin-ink-soft">
+      {waiting} · turn {standing.ordinal}
+      {standing.unanswered.length > 0 ? (
+        <span className="font-normal text-admin-muted">
+          {" "}
+          · {standing.unanswered.length} earlier{" "}
+          {standing.unanswered.length === 1 ? "turn was" : "turns were"} never answered
+        </span>
+      ) : null}
+    </p>
+  );
+}
+
 /** One arm's thread: each customer turn followed by the attempts that answered it. */
 function Thread({
   experiment,
@@ -368,6 +404,11 @@ function Thread({
               faults={faultsFor(experiment, run, attempt)}
             />
           ))}
+          {passedOver(run, turn) ? (
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
+              No reply — the customer wrote again before this arm was run
+            </p>
+          ) : null}
         </li>
       ))}
     </ol>
@@ -458,24 +499,25 @@ function Attempt({
   );
 }
 
-/** Run the agent, or run it again — offered only when there is a turn to answer. */
+/**
+ * Run the agent, or run it again — offered exactly when the arm is waiting for one.
+ *
+ * The condition is the standing the backend served, not a rule this page keeps: an advance
+ * on an answered turn returns the reply it already has (ADR 0026), so a button drawn from a
+ * second reading of the same streams could invite a click that costs a request and changes
+ * nothing.
+ */
 function AdvanceControl({
-  experiment,
   run,
   working,
   onAdvance,
 }: {
-  experiment: ExperimentResponse;
   run: ExperimentRunSchema;
   working: boolean;
   onAdvance: () => void;
 }) {
-  const latest = latestOrdinal(experiment, run);
-  if (latest === null) {
-    return null;
-  }
-  const attempts = attemptsFor(experiment, run, latest);
-  if (attempts.some((attempt) => attempt.outcome === "answered")) {
+  const { awaiting, attempts } = run.standing;
+  if (awaiting !== "agent") {
     return null;
   }
   return (
@@ -484,11 +526,9 @@ function AdvanceControl({
       type="button"
       disabled={working}
       onClick={onAdvance}
-      aria-label={
-        attempts.length === 0 ? `Run ${run.label}'s agent` : `Try ${run.label}'s agent again`
-      }
+      aria-label={attempts === 0 ? `Run ${run.label}'s agent` : `Try ${run.label}'s agent again`}
     >
-      {working ? "Running…" : attempts.length === 0 ? "Run the agent" : "Try again"}
+      {working ? "Running…" : attempts === 0 ? "Run the agent" : "Try again"}
     </button>
   );
 }
@@ -611,9 +651,16 @@ function interleave(
   return [...ordered, ...faults.filter((fault) => fault.after_calls >= events.length)];
 }
 
-function latestOrdinal(experiment: ExperimentResponse, run: ExperimentRunSchema): number | null {
-  const ordinals = experiment.turns
-    .filter((turn) => turn.run_id === run.run_id)
-    .map((turn) => turn.ordinal);
-  return ordinals.length === 0 ? null : Math.max(...ordinals);
+/**
+ * Whether this arm moved past a customer turn without ever answering it.
+ *
+ * A membership test against the ordinals the standing names, not a rule this page keeps: an
+ * operator may send a second message before running the agent on the first, and the arm then
+ * answers the conversation as it stands rather than the question the customer moved on from
+ * (ADR 0026). Which turns those were is the backend's reading — deriving it here again would
+ * be the second reading the standing exists to remove, and would be free to disagree with the
+ * sentence printed above the same thread.
+ */
+function passedOver(run: ExperimentRunSchema, turn: ParticipantTurnSchema): boolean {
+  return run.standing.unanswered.includes(turn.ordinal);
 }

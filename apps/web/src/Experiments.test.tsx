@@ -2,6 +2,7 @@ import type {
   AgentConfigurationListResponse,
   AgentConfigurationVersionListResponse,
   AgentTurnSchema,
+  ArmStandingSchema,
   ComparisonVariableSchema,
   ExperimentListResponse,
   ExperimentPreviewResponse,
@@ -242,6 +243,34 @@ function mutationEvent(
   };
 }
 
+/**
+ * What the backend would report this arm is waiting for, derived the way it derives it.
+ *
+ * Computed from the same turns the fixture hands the page rather than pinned per test: a
+ * standing that disagreed with the thread beside it would let a test assert a button the
+ * real bench would never draw.
+ */
+function standing(
+  runId: string,
+  turns: ParticipantTurnSchema[],
+  agentTurns: AgentTurnSchema[],
+): ArmStandingSchema {
+  const received = turns.filter((entry) => entry.run_id === runId);
+  const attempts = agentTurns.filter((entry) => entry.run_id === runId);
+  const answered = new Set(
+    attempts.filter((entry) => entry.outcome === "answered").map((entry) => entry.ordinal),
+  );
+  const ordinal = Math.max(...received.map((entry) => entry.ordinal));
+  return {
+    awaiting: answered.has(ordinal) ? "customer" : "agent",
+    ordinal,
+    attempts: attempts.filter((entry) => entry.ordinal === ordinal).length,
+    unanswered: received
+      .filter((entry) => entry.ordinal < ordinal && !answered.has(entry.ordinal))
+      .map((entry) => entry.ordinal),
+  };
+}
+
 function experiment(
   turns: ParticipantTurnSchema[],
   agentTurns: AgentTurnSchema[] = [],
@@ -284,6 +313,7 @@ function experiment(
         revision: 0,
         snapshot_fingerprint: SANDBOX_FINGERPRINT,
         state_fingerprint: STATE_FINGERPRINT,
+        standing: standing(ARM_A, turns, agentTurns),
       },
       {
         run_id: ARM_B,
@@ -297,6 +327,7 @@ function experiment(
         revision: 0,
         snapshot_fingerprint: SANDBOX_FINGERPRINT,
         state_fingerprint: STATE_FINGERPRINT,
+        standing: standing(ARM_B, turns, agentTurns),
       },
     ],
     turns,
@@ -788,6 +819,48 @@ describe("live bench", () => {
 
     expect(within(changes).getByText(/orders\.apply_address_change · r0 → r1/)).toBeVisible();
     expect(within(changes).getByText("nothing yet")).toBeVisible();
+  });
+
+  it("says what each arm is waiting for", async () => {
+    agentTurns = [agentTurn(ARM_A, 0)];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    const armB = screen.getByRole("region", { name: "Arm B" });
+
+    expect(within(armA).getByText(/Waiting for the customer · turn 0/)).toBeVisible();
+    expect(within(armB).getByText(/Waiting for the agent · turn 0/)).toBeVisible();
+    // The answered arm is offered nothing: advancing it would return the reply it has.
+    expect(within(armA).queryByRole("button", { name: /Arm A's agent/ })).toBeNull();
+    expect(within(armB).getByRole("button", { name: "Run Arm B's agent" })).toBeVisible();
+  });
+
+  it("says an arm whose attempt failed is waiting for a retry", async () => {
+    agentTurns = [agentTurn(ARM_A, 0, 1, "model_transient")];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+
+    expect(
+      within(armA).getByText(/Attempt 1 produced no reply — waiting for a retry/),
+    ).toBeVisible();
+    expect(within(armA).getByRole("button", { name: "Try Arm A's agent again" })).toBeVisible();
+  });
+
+  it("reopens an experiment where it stood, including the question an arm never answered", async () => {
+    // The record of an operator who sent a second message before running arm A's agent, and
+    // then left: arm A stands on turn 1 with turn 0 behind it, unanswered.
+    turns = [...OPENED, turn(ARM_A, 1, "reply-1", "Any update?")];
+    agentTurns = [agentTurn(ARM_A, 1)];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+
+    expect(within(armA).getByText(TRIGGER)).toBeVisible();
+    expect(within(armA).getByText(/1 earlier turn was never answered/)).toBeVisible();
+    expect(
+      within(armA).getByText(/No reply — the customer wrote again before this arm was run/),
+    ).toBeVisible();
   });
 
   it("reads both arms back to the one starting state they were cloned from", async () => {

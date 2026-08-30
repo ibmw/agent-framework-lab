@@ -1,13 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
 
 /**
- * The paired-experiment acceptance journey (ADR 0025, ADR 0026): an operator starts one
- * experiment on a published scenario version with two published agent configurations, reads
- * the comparison matrix before anything is frozen, and finds both arms opening on the
+ * The paired-experiment acceptance journey (ADR 0025, ADR 0026, ADR 0029): an operator starts
+ * one experiment on a published scenario version with two published agent configurations,
+ * reads the comparison matrix before anything is frozen, and finds both arms opening on the
  * ticket's triggering message from one shared starting state — then runs each arm's agent,
  * watches one of them follow the incident to the order and redirect it while the arm beside
- * it stays where it was, and sends one message to both arms and one to a single arm, which
- * the record keeps apart.
+ * it stays where it was, leaves the bench and comes back to find it exactly where it stood,
+ * and sends one message to both arms and one to a single arm, which the record keeps apart.
  *
  * The journey builds the whole chain because an experiment is what composes all of it: the
  * scenario, the arms, and the participant are the three things it binds, and none of them
@@ -344,7 +344,9 @@ async function chooseArm(page: Page, position: number, configuration: string) {
   await arm.getByRole("combobox", { name: "Published version" }).selectOption("1");
 }
 
-test("an operator starts a paired experiment and drives both arms", async ({ page }) => {
+test("an operator starts a paired experiment, drives both arms, and comes back to it", async ({
+  page,
+}) => {
   // The same shape as the scenario journey and for the same reason: an experiment binds the
   // whole chain, so the chain has to exist before the thing under test does.
   test.slow();
@@ -440,6 +442,30 @@ test("an operator starts a paired experiment and drives both arms", async ({ pag
   await expect(changes.getByText(/orders\.apply_address_change · r1 → r2/)).toBeVisible();
   await expect(changes.getByText("nothing yet")).toBeVisible();
   await expect(armB.getByText(/I found order NS-10482/)).toHaveCount(0);
+
+  // Each arm says what it is waiting for, which is the only difference an operator can act
+  // on: arm A has answered and owes nothing, arm B has never been run.
+  await expect(armA.getByText("Waiting for the customer · turn 0")).toBeVisible();
+  await expect(armB.getByText("Waiting for the agent · turn 0")).toBeVisible();
+
+  // Resume. An experiment is entirely in the record, so coming back to one is an ordinary
+  // read — the operator reloads the browser, leaves for the bench index, and returns through
+  // the shop's experiment list to find both threads exactly where they stood.
+  await page.reload();
+  await page.getByRole("link", { name: "Back to the bench" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "New experiment" })).toBeVisible();
+  await card(page, "Recent experiments")
+    .getByRole("button", { name: `Prompt comparison ${unique}` })
+    .click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
+  ).toBeVisible();
+  await expect(armA.getByText(/I found order NS-10482/)).toBeVisible();
+  await expect(armA.getByText("scenario fault · moved this arm")).toBeVisible();
+  await expect(armA.getByText("Waiting for the customer · turn 0")).toBeVisible();
+  // And the arm that was left owing a reply is still the one the bench offers to run.
+  await expect(armB.getByRole("button", { name: "Run Arm B's agent" })).toBeVisible();
 
   // One composition, both arms: the customer says the same thing to each.
   const composer = card(page, "Customer composer");
