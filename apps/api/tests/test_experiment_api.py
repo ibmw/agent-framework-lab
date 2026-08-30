@@ -707,3 +707,60 @@ async def test_an_arm_reports_the_framework_and_model_its_configuration_pinned(
 
     assert [run["framework_id"] for run in experiment["runs"]] == ["fake", "fake"]
     assert {run["model_id"] for run in experiment["runs"]} == {CONTROL_MODEL["model_id"]}
+
+
+async def test_every_arm_says_what_it_is_waiting_for(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """A freshly started experiment owes two answers and has skipped nothing."""
+    experiment = await control_experiment(client, lab)
+
+    assert [run["standing"] for run in experiment["runs"]] == [
+        {"awaiting": "agent", "ordinal": 0, "attempts": 0, "unanswered": []},
+        {"awaiting": "agent", "ordinal": 0, "attempts": 0, "unanswered": []},
+    ]
+
+
+async def test_an_experiment_reopened_after_one_arm_ran_says_which_arm_is_still_owed(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The resume read: one arm answered, the arm beside it still waiting on its agent."""
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    body = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+
+    assert [run["standing"]["awaiting"] for run in body["runs"]] == ["customer", "agent"]
+    assert body["runs"][0]["standing"]["attempts"] == 1
+
+
+async def test_a_turn_sent_before_the_agent_ran_leaves_the_earlier_one_unanswered(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The arm now stands on turn 1, and its standing reports the question it passed over."""
+    experiment = await control_experiment(client, lab)
+    await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        "/participant-turns",
+        json={
+            "run_ids": [experiment["runs"][0]["run_id"]],
+            "message": "Yes, the Lyon address please.",
+        },
+    )
+
+    body = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+
+    assert body["runs"][0]["standing"] == {
+        "awaiting": "agent",
+        "ordinal": 1,
+        "attempts": 0,
+        "unanswered": [0],
+    }

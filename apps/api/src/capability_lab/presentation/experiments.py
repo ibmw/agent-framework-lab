@@ -65,6 +65,8 @@ from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
 from capability_lab.domain.experiment import (
     MAX_PARTICIPANT_TURN_LENGTH,
+    ArmAwaiting,
+    ArmStanding,
     ComparisonDimension,
     ComparisonVariable,
     ParticipantDriverType,
@@ -263,8 +265,36 @@ class ExperimentSummarySchema(StrictApiModel):
         )
 
 
+class ArmStandingSchema(StrictApiModel):
+    """What one arm is waiting for, and where in its thread it is waiting.
+
+    Served rather than left to the client because the runner reads the same rule to decide
+    what an advance does (ADR 0029): a client that derived it again would be free to offer a
+    button for something the backend would answer differently.
+    """
+
+    awaiting: ArmAwaiting
+    ordinal: int
+    attempts: int
+    unanswered: list[int]
+    """The earlier turns this arm never answered, in order — the ordinals, not a count.
+
+    A client labels those turns in the thread it is already drawing, so it needs to know
+    which ones they are; deriving that from a count means reading the two streams again,
+    which is the second derivation this object exists to remove."""
+
+    @classmethod
+    def from_domain(cls, standing: ArmStanding) -> Self:
+        return cls(
+            awaiting=standing.awaiting,
+            ordinal=standing.ordinal,
+            attempts=standing.attempts,
+            unanswered=list(standing.unanswered),
+        )
+
+
 class ExperimentRunSchema(StrictApiModel):
-    """One arm: what it runs, where it works, and how far its world has moved.
+    """One arm: what it runs, where it works, how far its world has moved, and what next.
 
     The two fingerprints are the arm's own, read off the sandbox rather than restated:
     `snapshot_fingerprint` is where it started and agrees with every sibling arm forever;
@@ -282,9 +312,16 @@ class ExperimentRunSchema(StrictApiModel):
     revision: int
     snapshot_fingerprint: str
     state_fingerprint: str
+    standing: ArmStandingSchema
 
     @classmethod
-    def from_records(cls, run: RunRecord, sandbox: SandboxRecord, runtime: ArmRuntime) -> Self:
+    def from_records(
+        cls,
+        run: RunRecord,
+        sandbox: SandboxRecord,
+        runtime: ArmRuntime,
+        standing: ArmStanding,
+    ) -> Self:
         return cls(
             run_id=run.run_id,
             position=run.position,
@@ -299,6 +336,7 @@ class ExperimentRunSchema(StrictApiModel):
             revision=sandbox.revision,
             snapshot_fingerprint=sandbox.snapshot_fingerprint,
             state_fingerprint=sandbox.state_fingerprint,
+            standing=ArmStandingSchema.from_domain(standing),
         )
 
 
@@ -510,8 +548,10 @@ class ExperimentResponse(ExperimentSummarySchema):
                 ComparisonVariableSchema.from_domain(variable) for variable in detail.comparison
             ],
             runs=[
-                ExperimentRunSchema.from_records(run, sandboxes[run.sandbox_id], runtime)
-                for run, runtime in zip(detail.runs, detail.arm_runtimes, strict=True)
+                ExperimentRunSchema.from_records(run, sandboxes[run.sandbox_id], runtime, standing)
+                for run, runtime, standing in zip(
+                    detail.runs, detail.arm_runtimes, detail.standings, strict=True
+                )
             ],
             turns=[ParticipantTurnSchema.from_record(turn) for turn in detail.turns],
             agent_turns=[AgentTurnSchema.from_record(turn) for turn in detail.agent_turns],

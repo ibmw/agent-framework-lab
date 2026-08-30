@@ -11,14 +11,17 @@ from capability_lab.domain.agent_configuration import (
     ToneOfVoiceSelection,
     ToneOfVoiceSource,
 )
+from capability_lab.domain.agent_turn import AgentTurn, AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.experiment import (
     MAX_PARTICIPANT_TURN_LENGTH,
+    ArmAwaiting,
     ComparisonDimension,
     ExperimentConfigurationError,
     ParticipantDriverType,
     ParticipantTurn,
     ParticipantTurnSource,
     compare_configurations,
+    stand_arm,
 )
 
 
@@ -69,6 +72,81 @@ def test_a_turn_carries_words() -> None:
 def test_a_turn_is_bounded_like_the_thread_it_joins() -> None:
     with pytest.raises(ExperimentConfigurationError, match="at most"):
         turn(body="a" * (MAX_PARTICIPANT_TURN_LENGTH + 1))
+
+
+def answered(ordinal: int, attempt: int = 1) -> AgentTurn:
+    return AgentTurn(
+        ordinal=ordinal,
+        attempt=attempt,
+        outcome=AgentTurnOutcome.ANSWERED,
+        body="I can redirect that order.",
+    )
+
+
+def failed(ordinal: int, attempt: int = 1) -> AgentTurn:
+    return AgentTurn(
+        ordinal=ordinal,
+        attempt=attempt,
+        outcome=AgentTurnOutcome.FAILED,
+        failure=AgentTurnFailure.MODEL_TRANSIENT,
+    )
+
+
+def opened() -> ParticipantTurn:
+    return turn(ordinal=0, source=ParticipantTurnSource.TRIGGER, driver=None)
+
+
+def test_an_arm_that_has_only_been_opened_waits_for_its_agent() -> None:
+    standing = stand_arm((opened(),), ())
+
+    assert standing.awaiting is ArmAwaiting.AGENT
+    assert standing.ordinal == 0
+    assert standing.attempts == 0
+    assert standing.unanswered == ()
+
+
+def test_an_answered_arm_waits_for_the_customer() -> None:
+    standing = stand_arm((opened(),), (answered(0),))
+
+    assert standing.awaiting is ArmAwaiting.CUSTOMER
+    assert standing.ordinal == 0
+
+
+def test_a_failed_attempt_leaves_the_arm_waiting_for_its_agent_with_the_attempt_counted() -> None:
+    """A retry is a thing an operator does, so the arm still owes an answer (ADR 0026)."""
+    standing = stand_arm((opened(),), (failed(0), failed(0, attempt=2)))
+
+    assert standing.awaiting is ArmAwaiting.AGENT
+    assert standing.attempts == 2
+
+
+def test_the_arm_stands_on_the_last_turn_it_received_not_the_first_it_never_answered() -> None:
+    """The customer moved on, and the arm answers the conversation as it stands."""
+    standing = stand_arm((opened(), turn(ordinal=1)), ())
+
+    assert standing.ordinal == 1
+    assert standing.attempts == 0
+    assert standing.unanswered == (0,)
+
+
+def test_a_turn_the_arm_passed_over_stays_counted_after_the_next_one_is_answered() -> None:
+    standing = stand_arm((opened(), turn(ordinal=1)), (answered(1),))
+
+    assert standing.awaiting is ArmAwaiting.CUSTOMER
+    assert standing.unanswered == (0,)
+
+
+def test_an_attempt_at_an_older_turn_is_not_an_attempt_at_this_one() -> None:
+    standing = stand_arm((opened(), turn(ordinal=1)), (failed(0),))
+
+    assert standing.ordinal == 1
+    assert standing.attempts == 0
+    assert standing.unanswered == (0,)
+
+
+def test_an_arm_that_was_never_opened_has_no_standing() -> None:
+    with pytest.raises(ExperimentConfigurationError, match="no customer turn"):
+        stand_arm((), ())
 
 
 def test_two_identical_configurations_differ_nowhere() -> None:

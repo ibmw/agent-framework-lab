@@ -1656,6 +1656,18 @@ export interface components {
       created_at: string;
     };
     /**
+     * ArmAwaiting
+     * @description What one arm is waiting for, which is the only thing an operator can act on.
+     *
+     *     Two values rather than a run status, because these are the two moves the bench offers:
+     *     run the agent, or write the customer's next message. A third value for "this arm is
+     *     finished" would be a completion claim, and completion is judged against the scenario's
+     *     conditions by an evaluation that does not exist yet (`docs/PLAN.md` Milestone 5) — a
+     *     status set by hand here would be answering that question with a guess.
+     * @enum {string}
+     */
+    ArmAwaiting: "agent" | "customer";
+    /**
      * ArmSelectionSchema
      * @description One arm: an exact published agent-configuration version, optionally named.
      */
@@ -1676,6 +1688,23 @@ export interface components {
        * @default
        */
       label: string;
+    };
+    /**
+     * ArmStandingSchema
+     * @description What one arm is waiting for, and where in its thread it is waiting.
+     *
+     *     Served rather than left to the client because the runner reads the same rule to decide
+     *     what an advance does (ADR 0029): a client that derived it again would be free to offer a
+     *     button for something the backend would answer differently.
+     */
+    ArmStandingSchema: {
+      awaiting: components["schemas"]["ArmAwaiting"];
+      /** Ordinal */
+      ordinal: number;
+      /** Attempts */
+      attempts: number;
+      /** Unanswered */
+      unanswered: number[];
     };
     /** AttachCustomerProfileRequest */
     AttachCustomerProfileRequest: {
@@ -2419,7 +2448,7 @@ export interface components {
     };
     /**
      * ExperimentRunSchema
-     * @description One arm: what it runs, where it works, and how far its world has moved.
+     * @description One arm: what it runs, where it works, how far its world has moved, and what next.
      *
      *     The two fingerprints are the arm's own, read off the sandbox rather than restated:
      *     `snapshot_fingerprint` is where it started and agrees with every sibling arm forever;
@@ -2457,6 +2486,7 @@ export interface components {
       snapshot_fingerprint: string;
       /** State Fingerprint */
       state_fingerprint: string;
+      standing: components["schemas"]["ArmStandingSchema"];
     };
     /**
      * ExperimentSummarySchema

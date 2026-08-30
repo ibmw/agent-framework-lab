@@ -1,6 +1,8 @@
-"""Advancing one arm: what the agent answered, what it called, and what it moved (ADR 0026)."""
+"""Advancing one arm: what the agent answered, what it called, what it moved, and where it
+now stands (ADR 0026, ADR 0028, ADR 0029)."""
 
 from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -41,6 +43,7 @@ from capability_lab.application.sandboxes import SandboxNotFoundError
 from capability_lab.domain.agent_configuration import MemoryMode, ModelSettings
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.blocks import MutationEffect
+from capability_lab.domain.experiment import ArmAwaiting
 from capability_lab.domain.scenario import BoundMutation, ScenarioBinding
 from capability_lab.infrastructure.database import (
     Base,
@@ -516,6 +519,141 @@ async def test_an_experiment_of_another_shop_is_not_advanced(
 
     with pytest.raises(ExperimentNotFoundError):
         await build_runner(session).advance(uuid4(), run.experiment_id, run.run_id)
+
+
+# -- resume --------------------------------------------------------------------
+
+
+@contextmanager
+def reopened(tmp_path: Path) -> Generator[Session, None, None]:
+    """A second session on the same database, as a process that was restarted sees it.
+
+    Resume has no mechanism of its own: an experiment is entirely in the record, so picking
+    one up is an ordinary read. What this proves is that claim — nothing an arm needs in
+    order to keep going was held by the session that ran it.
+    """
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'runs.db'}")
+    with session_scope(create_session_factory(engine)) as fresh:
+        yield fresh
+
+
+def standings(
+    detail: ExperimentDetail,
+) -> dict[str, tuple[ArmAwaiting, int, int, tuple[int, ...]]]:
+    return {
+        run.label: (
+            standing.awaiting,
+            standing.ordinal,
+            standing.attempts,
+            standing.unanswered,
+        )
+        for run, standing in zip(detail.runs, detail.standings, strict=True)
+    }
+
+
+@pytest.mark.asyncio
+async def test_an_opened_arm_waits_for_its_agent_and_an_answered_one_for_the_customer(
+    session: Session, workspace: Workspace
+) -> None:
+    detail = start(session, workspace, control_arm(session), control_arm(session))
+    assert standings(detail) == {
+        "Arm A": (ArmAwaiting.AGENT, 0, 0, ()),
+        "Arm B": (ArmAwaiting.AGENT, 0, 0, ()),
+    }
+
+    await advance(session, detail, position=0)
+
+    assert standings(
+        build_experiments(session).get_experiment(
+            detail.record.shop_id, detail.record.experiment_id
+        )
+    ) == {
+        "Arm A": (ArmAwaiting.CUSTOMER, 0, 1, ()),
+        "Arm B": (ArmAwaiting.AGENT, 0, 0, ()),
+    }
+
+
+@pytest.mark.asyncio
+async def test_an_arm_whose_attempt_failed_still_owes_an_answer_and_counts_the_attempt(
+    session: Session, workspace: Workspace
+) -> None:
+    """The retry the bench offers is this standing, not a second reading of the same rows."""
+    detail = start(session, workspace, control_arm(session))
+
+    await advance(session, detail, runtimes=_registry(_FailingRuntime()))
+
+    recorded = build_experiments(session).get_experiment(
+        detail.record.shop_id, detail.record.experiment_id
+    )
+    assert standings(recorded) == {"Arm A": (ArmAwaiting.AGENT, 0, 1, ())}
+
+
+@pytest.mark.asyncio
+async def test_a_turn_the_arm_passed_over_is_reported_where_an_operator_reads_it(
+    session: Session, workspace: Workspace
+) -> None:
+    """A skipped question is deliberate (ADR 0026), so the standing says it happened."""
+    detail = start(session, workspace, control_arm(session))
+    _say(session, detail, "Yes, the Lyon address please.")
+
+    await advance(session, detail)
+
+    recorded = build_experiments(session).get_experiment(
+        detail.record.shop_id, detail.record.experiment_id
+    )
+    assert standings(recorded) == {"Arm A": (ArmAwaiting.CUSTOMER, 1, 1, (0,))}
+
+
+@pytest.mark.asyncio
+async def test_an_experiment_left_mid_incident_is_picked_up_from_the_record_alone(
+    session: Session, workspace: Workspace, tmp_path: Path
+) -> None:
+    """One arm answered, one never run, then the process goes away.
+
+    What comes back is both threads as they stood and one arm still owing an answer — and
+    advancing it in the new process answers the turn it was left on rather than starting over.
+    """
+    detail = start(session, workspace, control_arm(session), control_arm(session))
+    await advance(session, detail, position=0)
+    session.commit()
+
+    with reopened(tmp_path) as fresh:
+        resumed = build_experiments(fresh).get_experiment(
+            detail.record.shop_id, detail.record.experiment_id
+        )
+        assert standings(resumed) == {
+            "Arm A": (ArmAwaiting.CUSTOMER, 0, 1, ()),
+            "Arm B": (ArmAwaiting.AGENT, 0, 0, ()),
+        }
+        assert [turn.turn.ordinal for turn in resumed.turns] == [0, 0]
+        assert len(resumed.tool_events) == 5
+
+        produced = await advance(fresh, resumed, position=1)
+
+        assert produced.turn.turn.ordinal == 0
+        assert produced.turn.turn.attempt == 1
+        assert produced.turn.turn.outcome is AgentTurnOutcome.ANSWERED
+
+
+@pytest.mark.asyncio
+async def test_a_failed_attempt_is_retried_rather_than_repeated_after_a_restart(
+    session: Session, workspace: Workspace, tmp_path: Path
+) -> None:
+    """The attempt counter is in the record, so the retry keeps the failure beside it."""
+    detail = start(session, workspace, control_arm(session))
+    await advance(session, detail, runtimes=_registry(_FailingRuntime()))
+    session.commit()
+
+    with reopened(tmp_path) as fresh:
+        resumed = build_experiments(fresh).get_experiment(
+            detail.record.shop_id, detail.record.experiment_id
+        )
+        assert standings(resumed) == {"Arm A": (ArmAwaiting.AGENT, 0, 1, ())}
+
+        produced = await advance(fresh, resumed)
+
+        assert produced.turn.turn.attempt == 2
+        assert produced.turn.turn.outcome is AgentTurnOutcome.ANSWERED
 
 
 # -- the scenario's faults -----------------------------------------------------

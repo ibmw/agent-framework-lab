@@ -114,7 +114,12 @@ from capability_lab.domain.agent_turn import (
     AgentTurnOutcome,
 )
 from capability_lab.domain.definitions import DefinitionType, VersionRef
-from capability_lab.domain.experiment import ParticipantTurn
+from capability_lab.domain.experiment import (
+    ArmAwaiting,
+    ArmStanding,
+    ParticipantTurn,
+    stand_arm,
+)
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload
 
@@ -204,28 +209,48 @@ class ExperimentRunner:
                 f"run {run_id} is not an arm of experiment {experiment_id}"
             )
 
-        ordinal = self._latest_customer_turn(run).ordinal
-        attempts = tuple(
-            entry
-            for entry in self._agent_turns.list_for_experiment(experiment_id)
-            if entry.run_id == run_id and entry.turn.ordinal == ordinal
-        )
-        answered = next(
-            (entry for entry in attempts if entry.turn.outcome is AgentTurnOutcome.ANSWERED), None
-        )
-        if answered is not None:
+        standing = self.standing(run)
+        if standing.awaiting is ArmAwaiting.CUSTOMER:
             # Already answered: return it and call nothing. Advancing twice must not cost a
             # second model call, and an arm must never hold two replies to one question. The
             # faults that fired during it come back too, because they are part of what that
             # answer was produced against.
+            answered = next(
+                entry
+                for entry in self._attempts(run, standing.ordinal)
+                if entry.turn.outcome is AgentTurnOutcome.ANSWERED
+            )
             return RunTurn(
                 turn=answered,
                 tool_events=self._recorded(answered),
                 mutation_events=self._recorded_mutations(answered),
             )
-        return await self._attempt(record, run, ordinal=ordinal, attempt=len(attempts) + 1)
+        return await self._attempt(
+            record, run, ordinal=standing.ordinal, attempt=standing.attempts + 1
+        )
 
     # -- reading ---------------------------------------------------------------
+
+    def standing(self, run: RunRecord) -> ArmStanding:
+        """Where this arm stands: the turn it is on, and whether anything answered it.
+
+        The one reading, shared with what a client is shown (ADR 0029), so an arm the bench
+        offers a "run the agent" button for is exactly an arm this method will run. The
+        alternative — the runner deciding for itself what to answer next — is two rules that
+        agree until the day one of them is edited.
+
+        An arm that answers the *last* turn it received rather than the first it never
+        answered is ADR 0026's decision, applied here through `stand_arm`: a reply to a
+        question the customer has already moved on from would be answering the wrong thread.
+        """
+        turns = tuple(
+            entry.turn
+            for entry in self._participant_turns.list_for_experiment(run.experiment_id)
+            if entry.run_id == run.run_id
+        )
+        if not turns:  # pragma: no cover - starting an experiment opens every arm
+            raise RunUnansweredError(f"arm {run.label} has received no customer turn to answer")
+        return stand_arm(turns, tuple(entry.turn for entry in self._attempts_of(run)))
 
     def list_agent_turns(self, experiment_id: UUID) -> tuple[AgentTurnRecord, ...]:
         return self._agent_turns.list_for_experiment(experiment_id)
@@ -235,6 +260,16 @@ class ExperimentRunner:
 
     def list_mutation_events(self, experiment_id: UUID) -> tuple[MutationEventRecord, ...]:
         return self._mutations.list_events(experiment_id)
+
+    def _attempts_of(self, run: RunRecord) -> tuple[AgentTurnRecord, ...]:
+        return tuple(
+            entry
+            for entry in self._agent_turns.list_for_experiment(run.experiment_id)
+            if entry.run_id == run.run_id
+        )
+
+    def _attempts(self, run: RunRecord, ordinal: int) -> tuple[AgentTurnRecord, ...]:
+        return tuple(entry for entry in self._attempts_of(run) if entry.turn.ordinal == ordinal)
 
     # -- one attempt -----------------------------------------------------------
 
@@ -482,23 +517,6 @@ class ExperimentRunner:
         return version.payload
 
     # -- the thread ------------------------------------------------------------
-
-    def _latest_customer_turn(self, run: RunRecord) -> ParticipantTurn:
-        """The turn this arm answers next: the last one it received, not the first unanswered.
-
-        An operator may send a second message before running the agent on the first. A reply
-        to the older one would be a reply to a question the customer has already moved on
-        from, so the arm answers the conversation as it now stands and the earlier turn stays
-        in its history — unanswered, which is what actually happened.
-        """
-        turns = tuple(
-            entry.turn
-            for entry in self._participant_turns.list_for_experiment(run.experiment_id)
-            if entry.run_id == run.run_id
-        )
-        if not turns:  # pragma: no cover - starting an experiment opens every arm
-            raise RunUnansweredError(f"arm {run.label} has received no customer turn to answer")
-        return max(turns, key=lambda turn: turn.ordinal)
 
     def _history(
         self,

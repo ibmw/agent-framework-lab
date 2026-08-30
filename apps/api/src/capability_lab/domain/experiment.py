@@ -6,7 +6,7 @@ canonical starting state (ADR 0019) and a clone is one arm's own copy of it (ADR
 so what this module adds is the record that ties them together and the turns that move
 them forward.
 
-Three rules live here rather than in the service that applies them.
+Four rules live here rather than in the service that applies them.
 
 **The trigger is the scenario's, not the participant's.** A published ticket carries the
 first message every arm receives (ADR 0016), and a comparison is only a comparison because
@@ -24,6 +24,12 @@ decisions did diverge, and the record must not flatten that into agreement.
 experiment whose arms differ in more than one dimension can still be run, but what it
 measures is no longer attributable, so the difference set is computed once here and
 recorded on the experiment for every later reading of it.
+
+**Where an arm stands is read, never stored.** An experiment an operator comes back to has
+to say what it is waiting for, and the two streams already answer it: the last customer turn
+the arm received, and whether any attempt at it produced a reply. `stand_arm` is that
+reading, in one place, so the runner deciding what to do next and the bench drawing the
+button agree by construction rather than by both remembering the same rule.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from functools import partial
 from uuid import UUID
 
 from capability_lab.domain.agent_configuration import AgentConfigurationPayload
+from capability_lab.domain.agent_turn import AgentTurn, AgentTurnOutcome
 from capability_lab.domain.content import (
     require_instance,
     require_non_negative_int,
@@ -43,6 +50,8 @@ from capability_lab.domain.entities import DomainError
 
 __all__ = [
     "MAX_PARTICIPANT_TURN_LENGTH",
+    "ArmAwaiting",
+    "ArmStanding",
     "ComparisonDimension",
     "ComparisonVariable",
     "ExperimentConfigurationError",
@@ -50,6 +59,7 @@ __all__ = [
     "ParticipantTurn",
     "ParticipantTurnSource",
     "compare_configurations",
+    "stand_arm",
 ]
 
 # A customer turn is a chat message, not a document. The ticket thread's own bodies are
@@ -144,6 +154,84 @@ class ParticipantTurn:
             ParticipantDriverType,
             "a driven turn must name the participant driver that produced it",
         )
+
+
+class ArmAwaiting(StrEnum):
+    """What one arm is waiting for, which is the only thing an operator can act on.
+
+    Two values rather than a run status, because these are the two moves the bench offers:
+    run the agent, or write the customer's next message. A third value for "this arm is
+    finished" would be a completion claim, and completion is judged against the scenario's
+    conditions by an evaluation that does not exist yet (`docs/PLAN.md` Milestone 5) — a
+    status set by hand here would be answering that question with a guess.
+    """
+
+    AGENT = "agent"
+    """The arm's latest customer turn has no reply. Advancing it is what happens next."""
+
+    CUSTOMER = "customer"
+    """The latest customer turn is answered. Nothing moves until the customer writes."""
+
+
+@dataclass(frozen=True, slots=True)
+class ArmStanding:
+    """Where one arm stands, read off its two streams.
+
+    `ordinal` is the customer turn the arm is on and `attempts` is how many times its agent
+    has tried to answer *that* turn, the successful one included. Read while the arm awaits
+    its agent — the only state anything acts on it in — that means zero for a turn nobody has
+    run and one per failure otherwise, which is the difference between "run the agent" and
+    "try again". Read while it awaits the customer it counts the attempt that answered, which
+    is a true statement about the turn rather than a number anyone needs.
+
+    `unanswered` names the earlier turns this arm never answered. An operator may send a
+    second message before running the agent on the first, and the arm then answers the
+    conversation as it now stands rather than the question the customer moved on from
+    (ADR 0026) — so the skipped turn is a real part of the record, and one an operator coming
+    back to a bench would otherwise have to spot by reading the thread for a gap.
+
+    The ordinals rather than how many of them there are, because a client has to label the
+    turns themselves. Handed a count, it would work out *which* turns those were by reading
+    the two streams again — the second derivation this type exists to remove. How many there
+    are is the length of it.
+    """
+
+    awaiting: ArmAwaiting
+    ordinal: int
+    attempts: int
+    unanswered: tuple[int, ...]
+
+
+def stand_arm(turns: tuple[ParticipantTurn, ...], attempts: tuple[AgentTurn, ...]) -> ArmStanding:
+    """Read one arm's standing from the customer turns it received and the replies it tried.
+
+    Both streams as this arm holds them — a caller that passed another arm's turns would be
+    describing a thread that never existed, which is why neither is filtered here.
+
+    An arm with no turns has no standing rather than a neutral one: starting an experiment
+    writes the trigger into every arm (ADR 0025), so an empty thread is an arm that was never
+    opened, and reporting it as "waiting for the customer" would hide that.
+    """
+    if not turns:
+        raise ExperimentConfigurationError(
+            "an arm that has received no customer turn has no standing"
+        )
+    answered = frozenset(
+        attempt.ordinal for attempt in attempts if attempt.outcome is AgentTurnOutcome.ANSWERED
+    )
+    latest = max(turn.ordinal for turn in turns)
+    return ArmStanding(
+        awaiting=ArmAwaiting.CUSTOMER if latest in answered else ArmAwaiting.AGENT,
+        ordinal=latest,
+        attempts=sum(1 for attempt in attempts if attempt.ordinal == latest),
+        unanswered=tuple(
+            sorted(
+                turn.ordinal
+                for turn in turns
+                if turn.ordinal < latest and turn.ordinal not in answered
+            )
+        ),
+    )
 
 
 class ComparisonDimension(StrEnum):

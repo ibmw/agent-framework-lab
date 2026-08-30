@@ -105,12 +105,14 @@ from capability_lab.domain.definitions import (
     validation_of,
 )
 from capability_lab.domain.experiment import (
+    ArmStanding,
     ComparisonVariable,
     ExperimentConfigurationError,
     ParticipantDriverType,
     ParticipantTurn,
     ParticipantTurnSource,
     compare_configurations,
+    stand_arm,
 )
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.ticket import TicketPayload
@@ -315,12 +317,18 @@ class ExperimentDetail:
     The customer turns and the agent's answers are read together rather than through two
     operations: an arm's thread is one thing, and a client that had to stitch two listings
     together could render an answer beside a question it does not belong to.
+
+    `standings` is that same pair read once more, as the one thing an operator opening this
+    experiment cold needs before anything else: what each arm is waiting for. It travels
+    beside the streams rather than being left to the client, because the runner reads the
+    identical rule to decide what an advance does (ADR 0029).
     """
 
     record: ExperimentRecord
     resolution: ExperimentResolution
     comparison: tuple[ComparisonVariable, ...]
     arm_runtimes: tuple[ArmRuntime, ...]
+    standings: tuple[ArmStanding, ...]
     runs: tuple[RunRecord, ...]
     sandboxes: tuple[SandboxRecord, ...]
     turns: tuple[ParticipantTurnRecord, ...]
@@ -376,6 +384,8 @@ class ExperimentService:
         # Resolved once and read twice: the matrix compares the arms, and each arm's own
         # framework and model label it.
         payloads = tuple(self._arm_payload(run) for run in runs)
+        turns = self._turns.list_for_experiment(experiment_id)
+        agent_turns = self._agent_turns.list_for_experiment(experiment_id)
         return ExperimentDetail(
             record=record,
             resolution=record.content(snapshot.content.pins).resolution,
@@ -388,10 +398,11 @@ class ExperimentService:
                 )
                 for run, payload in zip(runs, payloads, strict=True)
             ),
+            standings=tuple(_standing(run, turns, agent_turns) for run in runs),
             runs=runs,
             sandboxes=tuple(self._sandboxes.get_sandbox(shop_id, run.sandbox_id) for run in runs),
-            turns=self._turns.list_for_experiment(experiment_id),
-            agent_turns=self._agent_turns.list_for_experiment(experiment_id),
+            turns=turns,
+            agent_turns=agent_turns,
             tool_events=self._tool_events.list_for_experiment(experiment_id),
             mutation_events=self._mutations.list_events(experiment_id),
         )
@@ -794,6 +805,23 @@ class _SelectedArm:
     selection: ArmSelection
     ref: VersionRef
     payload: AgentConfigurationPayload
+
+
+def _standing(
+    run: RunRecord,
+    turns: tuple[ParticipantTurnRecord, ...],
+    agent_turns: tuple[AgentTurnRecord, ...],
+) -> ArmStanding:
+    """One arm's standing, cut out of the experiment's two streams.
+
+    The listings arrive whole and are narrowed here rather than re-queried per arm: an
+    experiment holds at most two arms, and reading the same rows twice would be two chances
+    to answer from two different moments.
+    """
+    return stand_arm(
+        tuple(entry.turn for entry in turns if entry.run_id == run.run_id),
+        tuple(entry.turn for entry in agent_turns if entry.run_id == run.run_id),
+    )
 
 
 def _arm_labels(command: StartExperiment) -> tuple[str, ...]:
