@@ -2,6 +2,7 @@ import type {
   ExperimentListResponse,
   ExperimentPreviewResponse,
   ExperimentResponse,
+  ExperimentTimelineResponse,
   ParticipantTurnListResponse,
   ParticipantTurnRequest,
   RunTurnResponse,
@@ -27,6 +28,26 @@ export async function getExperiment(
 ): Promise<ExperimentResponse> {
   return read<ExperimentResponse>(
     await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}`), { signal }),
+  );
+}
+
+/**
+ * Read one experiment's execution as one normalized, framework-neutral stream.
+ *
+ * Separate from `getExperiment` because it answers a different question: the experiment is
+ * the threads and what they were run against, and this is what happened and where the
+ * project's own code ran. It deliberately carries no message body — the thread already has
+ * those — so a client renders words from one and order from the other.
+ */
+export async function getExperimentTimeline(
+  shopId: string,
+  experimentId: string,
+  signal?: AbortSignal,
+): Promise<ExperimentTimelineResponse> {
+  return read<ExperimentTimelineResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/timeline`), {
+      signal,
+    }),
   );
 }
 

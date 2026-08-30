@@ -169,6 +169,14 @@ export function ExperimentBenchPage() {
             {formatTimestamp(experiment.created_at)}
           </>
         }
+        actions={
+          <Link
+            className={outlineButtonClasses}
+            to={`/shops/${shopId}/bench/${experimentId}/timeline`}
+          >
+            Execution timeline
+          </Link>
+        }
       />
 
       {error ? (
@@ -182,6 +190,9 @@ export function ExperimentBenchPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             {experiment.runs.map((run) => (
               <Card key={run.run_id} title={run.label}>
+                <p className="text-xs text-admin-muted">
+                  {run.framework_id} · {run.model_id}
+                </p>
                 <p className="text-xs text-admin-muted">
                   Configuration v{run.agent_configuration_version} · r{run.revision} ·{" "}
                   <Fingerprint value={run.state_fingerprint} />

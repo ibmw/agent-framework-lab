@@ -1,0 +1,343 @@
+import type {
+  ExperimentResponse,
+  ExperimentRunSchema,
+  ExperimentTimelineResponse,
+  SourceLocationSchema,
+  TimelineCategory,
+  TimelineEntrySchema,
+} from "@agent-lab/contracts";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { describeApiError } from "../api/client";
+import { getExperiment, getExperimentTimeline } from "../api/experiments";
+import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { outlineButtonClasses, subtleButtonClasses } from "../lib/ui";
+import { useShopWorkspace } from "../shell/ShopWorkspace";
+
+const UNAVAILABLE = "This experiment's timeline is unavailable.";
+
+/** The lenses of frame 9a, in the order the frame offers them. */
+const LENSES: { category: TimelineCategory; label: string }[] = [
+  { category: "customer", label: "Customer" },
+  { category: "model", label: "Model" },
+  { category: "tool", label: "Tools" },
+  { category: "state", label: "State" },
+  { category: "refusal", label: "Refusals" },
+  { category: "error", label: "Errors" },
+];
+
+/** Why an attempt ended without a reply, in words an operator can act on. */
+const FAILURES: Record<string, string> = {
+  model_provider: "the model provider rejected the request",
+  model_transient: "the model provider was briefly unavailable",
+  invalid_response: "the model answered in a shape the lab cannot record",
+  framework: "the framework could not execute this turn",
+  tool_round_limit: "the agent used every tool call this configuration allows",
+};
+
+/**
+ * The execution timeline (frame 9a).
+ *
+ * One ordered, framework-neutral stream for the whole experiment: the trigger both arms
+ * opened on, every customer composition and the arms it reached, each arm's attempts, and
+ * every tool call with what it did to that arm. The backend normalizes it — a framework's
+ * own events have no route to this page — so what is rendered here is the lab's vocabulary
+ * and nothing else.
+ *
+ * It carries no message body on purpose, which is why every row is a description built from
+ * structural facts rather than an echo of what anyone said. The thread on the bench is where
+ * the words live; this is where the order and the code paths do.
+ */
+export function ExperimentTimelinePage() {
+  const { shopId } = useShopWorkspace();
+  const { experimentId = "" } = useParams();
+  const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
+  const [timeline, setTimeline] = useState<ExperimentTimelineResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [lenses, setLenses] = useState<TimelineCategory[]>([]);
+
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      // Two reads because they answer two questions: the experiment names its arms and what
+      // they were run against, the timeline says what happened.
+      const [record, stream] = await Promise.all([
+        getExperiment(shopId, experimentId, signal),
+        getExperimentTimeline(shopId, experimentId, signal),
+      ]);
+      setExperiment(record);
+      setTimeline(stream);
+    },
+    [shopId, experimentId],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    load(controller.signal).catch((cause: unknown) => {
+      if (!controller.signal.aborted) {
+        setError(describeApiError(cause, UNAVAILABLE));
+      }
+    });
+    return () => controller.abort();
+  }, [load]);
+
+  if (experiment === null || timeline === null) {
+    return (
+      <>
+        <PageHeader title="Execution timeline" />
+        {error ? (
+          <p role="alert" className="text-[13px] text-lab-error">
+            {error}
+          </p>
+        ) : (
+          <p className="text-sm text-admin-muted">Loading timeline…</p>
+        )}
+      </>
+    );
+  }
+
+  const shown =
+    lenses.length === 0
+      ? timeline.entries
+      : timeline.entries.filter((entry) =>
+          entry.categories.some((category) => lenses.includes(category)),
+        );
+
+  return (
+    <>
+      <PageHeader
+        title={experiment.label}
+        description={
+          <>
+            <Link
+              className="font-semibold text-lab-ink"
+              to={`/shops/${shopId}/bench/${experimentId}`}
+            >
+              Back to the live bench
+            </Link>{" "}
+            · scenario v{experiment.scenario_version} · seed {experiment.seed}
+          </>
+        }
+      />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid min-w-0 content-start gap-4">
+          <Card
+            title="Execution timeline"
+            footer={
+              <p className="text-xs text-admin-muted">
+                Normalized events: a framework's own payloads never enter this stream, and no
+                message body does either. What was said is on the bench; this is what happened.
+              </p>
+            }
+          >
+            <Lenses selected={lenses} onChange={setLenses} />
+            {shown.length === 0 ? (
+              <p className="text-[13px] text-admin-muted">No event matches this lens yet.</p>
+            ) : (
+              <ol className="grid gap-2">
+                {shown.map((entry) => (
+                  <Row key={entryKey(entry)} entry={entry} experiment={experiment} />
+                ))}
+              </ol>
+            )}
+          </Card>
+        </div>
+
+        <div className="grid content-start gap-4">
+          <CodePaths entries={timeline.entries} />
+
+          <Card
+            title="Arms"
+            footer={
+              <p className="text-xs text-admin-muted">
+                Each arm ran the framework and model its published configuration named, not
+                whichever this lab happens to be configured for now.
+              </p>
+            }
+          >
+            <ul className="grid gap-2 text-[13px]">
+              {experiment.runs.map((run) => (
+                <li key={run.run_id} className="grid gap-0.5">
+                  <span className="font-semibold text-lab-ink">{run.label}</span>
+                  <span className="text-xs text-admin-muted">
+                    {run.framework_id} · {run.model_id}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** The category filter: nothing selected means every event, as the frame's "All events" is. */
+function Lenses({
+  selected,
+  onChange,
+}: {
+  selected: TimelineCategory[];
+  onChange: (next: TimelineCategory[]) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button
+        className={`${subtleButtonClasses} ${selected.length === 0 ? "bg-admin-canvas text-admin-ink" : ""}`}
+        type="button"
+        aria-pressed={selected.length === 0}
+        onClick={() => onChange([])}
+      >
+        All events
+      </button>
+      {LENSES.map((lens) => {
+        const active = selected.includes(lens.category);
+        return (
+          <button
+            key={lens.category}
+            className={`${subtleButtonClasses} ${active ? "bg-admin-canvas text-admin-ink" : ""}`}
+            type="button"
+            aria-pressed={active}
+            onClick={() =>
+              onChange(
+                active
+                  ? selected.filter((category) => category !== lens.category)
+                  : [...selected, lens.category],
+              )
+            }
+          >
+            {lens.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One event: which arms it belongs to, what it was, and where the lab's code ran. */
+function Row({
+  entry,
+  experiment,
+}: {
+  entry: TimelineEntrySchema;
+  experiment: ExperimentResponse;
+}) {
+  const arms = entry.run_ids.map((runId) => labelOf(experiment.runs, runId));
+  const split = entry.kind === "customer_turn" && entry.run_ids.length < experiment.runs.length;
+  return (
+    <li className="grid gap-1 border-b border-admin-border/60 pb-2 last:border-b-0">
+      <p className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
+        <span>{arms.join(" · ")}</span>
+        {split ? (
+          <span className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px] normal-case`}>
+            this arm only
+          </span>
+        ) : null}
+      </p>
+      <p className="text-[13px] leading-relaxed text-admin-ink">{describe(entry)}</p>
+      {entry.source ? <Source location={entry.source} /> : null}
+    </li>
+  );
+}
+
+function Source({ location }: { location: SourceLocationSchema }) {
+  return (
+    <p className="font-mono text-[11px] text-admin-muted">
+      {location.path}:{location.line} · {location.symbol}
+    </p>
+  );
+}
+
+/**
+ * Every project-owned location this experiment executed, with how often it was reached.
+ *
+ * Derived from the stream rather than fetched: the locations are already on the events that
+ * reached them, so a separate listing could only ever disagree with the timeline beside it.
+ */
+function CodePaths({ entries }: { entries: TimelineEntrySchema[] }) {
+  const counted = new Map<string, { location: SourceLocationSchema; calls: number }>();
+  for (const entry of entries) {
+    if (entry.source === null) {
+      continue;
+    }
+    const key = `${entry.source.path}:${entry.source.symbol}`;
+    const seen = counted.get(key);
+    counted.set(key, { location: entry.source, calls: (seen?.calls ?? 0) + 1 });
+  }
+  const paths = [...counted.values()].sort((left, right) => right.calls - left.calls);
+  return (
+    <Card
+      title="Executed project code"
+      footer={
+        <p className="text-xs text-admin-muted">
+          Resolved from the recorded events, never from a map kept by hand. A framework's own
+          internals are deliberately absent: they are not this project's to explain.
+        </p>
+      }
+    >
+      {paths.length === 0 ? (
+        <p className="text-[13px] text-admin-muted">Nothing has run yet.</p>
+      ) : (
+        <ul className="grid gap-2 text-[13px]">
+          {paths.map(({ location, calls }) => (
+            <li key={`${location.path}:${location.symbol}`} className="grid gap-0.5">
+              <span className="font-semibold text-lab-ink">{location.symbol}</span>
+              <span className="font-mono text-[11px] text-admin-muted">
+                {location.path}:{location.line} · {calls} {calls === 1 ? "call" : "calls"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * One event in words, built from what the record says rather than from what anyone wrote.
+ *
+ * Every branch reads structural fields only. That is what keeps the promise the endpoint
+ * makes: a page that had to echo a message here would have needed one in the contract.
+ */
+function describe(entry: TimelineEntrySchema): string {
+  if (entry.kind === "trigger") {
+    return "The ticket's triggering message opened every arm.";
+  }
+  if (entry.kind === "customer_turn") {
+    return "The customer sent a message.";
+  }
+  if (entry.kind === "agent_turn") {
+    const attempt = entry.attempt === null ? "" : ` (attempt ${entry.attempt})`;
+    if (entry.turn_outcome === "answered") {
+      return `The agent replied${attempt}.`;
+    }
+    return `The attempt produced no reply${attempt}: ${
+      FAILURES[entry.failure ?? "framework"] ?? "the framework could not execute this turn"
+    }.`;
+  }
+  const moved =
+    entry.revision_after !== null &&
+    entry.revision_before !== null &&
+    entry.revision_after > entry.revision_before
+      ? ` · moved this arm r${entry.revision_before} → r${entry.revision_after}`
+      : "";
+  // One entry shape serves four kinds, so every field below is optional in the contract even
+  // though a tool call always fills them. Falling back keeps a malformed entry readable
+  // instead of rendering the word "null" at an operator, which is what the branches above do.
+  const call = [entry.tool, entry.tool_version].filter(Boolean).join(" ");
+  return `${call || "an unnamed tool call"} → ${entry.tool_outcome ?? "no recorded outcome"}${moved}`;
+}
+
+function labelOf(runs: ExperimentRunSchema[], runId: string): string {
+  return runs.find((run) => run.run_id === runId)?.label ?? "Unknown arm";
+}
+
+function entryKey(entry: TimelineEntrySchema): string {
+  return [
+    entry.step,
+    entry.kind,
+    entry.run_ids.join("+"),
+    entry.attempt ?? "-",
+    entry.sequence ?? "-",
+  ].join(":");
+}

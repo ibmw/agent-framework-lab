@@ -6,12 +6,14 @@ import type {
   ExperimentListResponse,
   ExperimentPreviewResponse,
   ExperimentResponse,
+  ExperimentTimelineResponse,
   ParticipantTurnSchema,
   ScenarioListResponse,
   ScenarioVersionListResponse,
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
+  TimelineEntrySchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -249,6 +251,8 @@ function experiment(
         label: "Arm A",
         agent_configuration_id: ATLAS_ID,
         agent_configuration_version: 1,
+        framework_id: "fake",
+        model_id: "deterministic",
         sandbox_id: "aaaaaaaa-1111-4222-8333-444444444444",
         revision: 0,
         snapshot_fingerprint: SANDBOX_FINGERPRINT,
@@ -260,6 +264,8 @@ function experiment(
         label: "Arm B",
         agent_configuration_id: BEACON_ID,
         agent_configuration_version: 1,
+        framework_id: "fake",
+        model_id: "deterministic",
         sandbox_id: "bbbbbbbb-1111-4222-8333-444444444444",
         revision: 0,
         snapshot_fingerprint: SANDBOX_FINGERPRINT,
@@ -276,6 +282,76 @@ const OPENED: ParticipantTurnSchema[] = [
   turn(ARM_A, 0, "trigger-0", TRIGGER, "trigger"),
   turn(ARM_B, 0, "trigger-0", TRIGGER, "trigger"),
 ];
+
+function timelineEntry(
+  overrides: Partial<TimelineEntrySchema> & Pick<TimelineEntrySchema, "kind" | "step" | "run_ids">,
+): TimelineEntrySchema {
+  return {
+    categories: ["customer"],
+    occurred_at: "2026-08-28T10:00:00+00:00",
+    composition_id: null,
+    ordinal: null,
+    attempt: null,
+    sequence: null,
+    tool: null,
+    tool_version: null,
+    tool_outcome: null,
+    turn_outcome: null,
+    failure: null,
+    revision_before: null,
+    revision_after: null,
+    source: null,
+    ...overrides,
+  };
+}
+
+const TIMELINE: ExperimentTimelineResponse = {
+  experiment_id: EXPERIMENT_ID,
+  entries: [
+    timelineEntry({ kind: "trigger", step: 0, run_ids: [ARM_A, ARM_B] }),
+    timelineEntry({
+      kind: "tool_call",
+      step: 0,
+      run_ids: [ARM_A],
+      categories: ["tool", "state"],
+      ordinal: 0,
+      attempt: 1,
+      sequence: 0,
+      tool: "orders.apply_address_change",
+      tool_version: "v1",
+      tool_outcome: "success",
+      revision_before: 0,
+      revision_after: 1,
+      source: {
+        module: "capability_lab.application.sandbox_actions",
+        path: "capability_lab/application/sandbox_actions.py",
+        symbol: "SandboxActionService._apply",
+        line: 311,
+      },
+    }),
+    timelineEntry({
+      kind: "agent_turn",
+      step: 0,
+      run_ids: [ARM_A],
+      categories: ["model"],
+      ordinal: 0,
+      attempt: 1,
+      turn_outcome: "answered",
+      source: {
+        module: "capability_lab.infrastructure.agents.fake.runtime",
+        path: "capability_lab/infrastructure/agents/fake/runtime.py",
+        symbol: "FakeSupportAgentRuntime.answer",
+        line: 42,
+      },
+    }),
+    timelineEntry({
+      kind: "customer_turn",
+      step: 1,
+      run_ids: [ARM_B],
+      composition_id: "composition-1",
+    }),
+  ],
+};
 
 let started: Record<string, unknown>[] = [];
 let delivered: Record<string, unknown>[] = [];
@@ -348,6 +424,9 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
     HttpResponse.json(experiment(turns, agentTurns, toolEvents)),
   ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
+    HttpResponse.json(TIMELINE),
+  ),
   http.post(
     `*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/runs/:runId/agent-turns`,
     ({ params }) => {
@@ -407,6 +486,14 @@ afterAll(() => server.close());
 function renderSetup() {
   return render(
     <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench`]}>
+      <App />
+    </MemoryRouter>,
+  );
+}
+
+function renderTimeline() {
+  return render(
+    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/timeline`]}>
       <App />
     </MemoryRouter>,
   );
@@ -626,5 +713,70 @@ describe("live bench", () => {
     expect(within(provenance).getByTitle(SANDBOX_FINGERPRINT)).toBeVisible();
     expect(within(provenance).getByTitle(RESOLUTION_FINGERPRINT)).toBeVisible();
     expect(within(provenance).getByText(/human operator/)).toBeVisible();
+  });
+});
+
+describe("execution timeline", () => {
+  it("reads both arms' execution as one ordered stream", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const rows = within(stream).getAllByRole("listitem");
+
+    expect(rows[0]).toHaveTextContent("Arm A · Arm B");
+    expect(rows[0]).toHaveTextContent(/triggering message opened every arm/);
+    expect(rows[1]).toHaveTextContent(/orders\.apply_address_change v1 → success/);
+    expect(rows[1]).toHaveTextContent("moved this arm r0 → r1");
+    expect(rows[2]).toHaveTextContent("The agent replied (attempt 1).");
+  });
+
+  it("marks the composition only one arm received", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+
+    const split = within(stream).getAllByRole("listitem")[3];
+    expect(split).toHaveTextContent("Arm B");
+    expect(within(split).getByText("this arm only")).toBeVisible();
+  });
+
+  it("names the project-owned code each event ran through", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+
+    expect(
+      within(stream).getByText(/capability_lab\/application\/sandbox_actions\.py:311/),
+    ).toBeVisible();
+    const paths = await screen.findByRole("region", { name: "Executed project code" });
+    const applied = within(paths).getByText("SandboxActionService._apply").closest("li");
+    expect(applied).toHaveTextContent("sandbox_actions.py:311 · 1 call");
+  });
+
+  it("narrows the stream to one lens and back", async () => {
+    const user = userEvent.setup();
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    await user.click(within(stream).getByRole("button", { name: "State" }));
+
+    expect(within(stream).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(stream).getAllByRole("listitem")[0]).toHaveTextContent(
+      /orders\.apply_address_change/,
+    );
+
+    await user.click(within(stream).getByRole("button", { name: "All events" }));
+    expect(within(stream).getAllByRole("listitem")).toHaveLength(4);
+  });
+
+  it("is reachable from the bench and leads back to it", async () => {
+    const user = userEvent.setup();
+    renderBench();
+
+    await user.click(await screen.findByRole("link", { name: "Execution timeline" }));
+
+    expect(await screen.findByRole("region", { name: "Execution timeline" })).toBeVisible();
+    await user.click(screen.getByRole("link", { name: "Back to the live bench" }));
+    expect(await screen.findByRole("region", { name: "Customer composer" })).toBeVisible();
   });
 });

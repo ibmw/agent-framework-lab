@@ -7,6 +7,7 @@ import { CustomerEditorPage } from "./routes/CustomerEditorPage";
 import { CustomersPage } from "./routes/CustomersPage";
 import { ExperimentBenchPage } from "./routes/ExperimentBenchPage";
 import { ExperimentSetupPage } from "./routes/ExperimentSetupPage";
+import { ExperimentTimelinePage } from "./routes/ExperimentTimelinePage";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
 import { OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
@@ -45,6 +46,7 @@ export function App() {
         <Route path="customers/:profileId" element={<CustomerEditorPage />} />
         <Route path="bench" element={<ExperimentSetupPage />} />
         <Route path="bench/:experimentId" element={<ExperimentBenchPage />} />
+        <Route path="bench/:experimentId/timeline" element={<ExperimentTimelinePage />} />
         <Route path="scenarios" element={<ScenariosPage />} />
         <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
         <Route path="scenarios/:scenarioId/snapshots" element={<SnapshotsPage />} />

@@ -457,4 +457,26 @@ test("an operator starts a paired experiment and drives both arms", async ({ pag
   // An empty composition is a run that has not been driven, not a customer who said nothing.
   await composer.getByRole("button", { name: "Send as the customer" }).click();
   await expect(page.getByRole("alert")).toContainText("Write the customer's next message");
+
+  // The same incident read as one normalized stream: the arms interleaved on the messages
+  // they share, every call in the order it was asked, and the project's own code behind it.
+  await page.getByRole("link", { name: "Execution timeline" }).click();
+  const stream = card(page, "Execution timeline");
+  await expect(stream.getByText(/triggering message opened every arm/)).toBeVisible();
+  await expect(stream.getByText("this arm only")).toBeVisible();
+
+  // Narrowed to what moved a world: one write per arm, each in its own, and nothing else.
+  await stream.getByRole("button", { name: "State" }).click();
+  await expect(stream.getByRole("listitem")).toHaveCount(2);
+  await expect(
+    stream.getByText(/orders\.apply_address_change v1 → success · moved this arm r0 → r1/),
+  ).toHaveCount(2);
+  await stream.getByRole("button", { name: "All events" }).click();
+
+  // And every event points at the lab's own code — resolved from the record, never a map.
+  const paths = card(page, "Executed project code");
+  const applied = paths.getByRole("listitem").filter({ hasText: "SandboxActionService._apply" });
+  await expect(applied).toHaveText(
+    /capability_lab\/application\/sandbox_actions\.py:\d+ · 2 calls/,
+  );
 });
