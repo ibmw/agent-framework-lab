@@ -574,3 +574,91 @@ async def test_an_experiment_of_another_shop_is_not_found(
 
     assert response.status_code == 404, response.text
     assert response.json()["code"] == "experiment_not_found"
+
+
+# -- the execution timeline ----------------------------------------------------
+
+
+async def timeline(client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any]) -> Any:
+    return await client.get(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/timeline"
+    )
+
+
+async def test_the_timeline_reports_one_arm_s_execution_in_the_order_it_happened(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    response = await timeline(client, lab, experiment)
+
+    assert response.status_code == 200, response.text
+    entries = response.json()["entries"]
+    assert [entry["kind"] for entry in entries] == [
+        "trigger",
+        *["tool_call"] * 5,
+        "agent_turn",
+    ]
+    assert entries[0]["run_ids"] == [run["run_id"] for run in experiment["runs"]]
+    applied = entries[5]
+    assert applied["tool"] == "orders.apply_address_change"
+    assert applied["categories"] == ["tool", "state"]
+    assert applied["revision_after"] == applied["revision_before"] + 1
+
+
+async def test_every_entry_names_the_project_owned_code_that_ran_it(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """Resolved from the recorded event, and never a path outside this project."""
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    entries = (await timeline(client, lab, experiment)).json()["entries"]
+
+    located = [entry for entry in entries if entry["kind"] != "trigger"]
+    assert located
+    for entry in located:
+        assert entry["source"] is not None, entry["kind"]
+        assert entry["source"]["path"].startswith("capability_lab/")
+        assert entry["source"]["line"] > 0
+
+
+async def test_the_timeline_carries_no_message_body(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """What was said is the thread's; this stream is what happened.
+
+    Checked against the response rather than the projection, because the contract is what a
+    judge, an export, and a future evaluation will actually read.
+    """
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    rendered = (await timeline(client, lab, experiment)).text
+
+    assert "NS-10482" not in rendered
+    assert "Lyon" not in rendered
+
+
+async def test_a_timeline_for_an_experiment_of_another_shop_is_not_found(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await client.get(
+        f"/api/v1/shops/{uuid4()}/experiments/{experiment['experiment_id']}/timeline"
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["code"] == "experiment_not_found"
+
+
+async def test_an_arm_reports_the_framework_and_model_its_configuration_pinned(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """Read from the version the arm pinned, not from what this process can run today."""
+    experiment = await control_experiment(client, lab)
+
+    assert [run["framework_id"] for run in experiment["runs"]] == ["fake", "fake"]
+    assert {run["model_id"] for run in experiment["runs"]} == {CONTROL_MODEL["model_id"]}

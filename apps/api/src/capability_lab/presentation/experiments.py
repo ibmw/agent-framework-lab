@@ -35,8 +35,16 @@ from pydantic import Field
 from capability_lab.application.agent_turns import AgentTurnRecord, ToolEventRecord
 from capability_lab.application.definition_resolution import ResolvedDefinition
 from capability_lab.application.experiment_runs import ExperimentRunner, RunTurn
+from capability_lab.application.experiment_timeline import (
+    ExperimentTimeline,
+    ExperimentTimelineService,
+    TimelineCategory,
+    TimelineEntry,
+    TimelineEntryKind,
+)
 from capability_lab.application.experiments import (
     MAX_ARMS,
+    ArmRuntime,
     ArmSelection,
     ExperimentDetail,
     ExperimentPreview,
@@ -49,6 +57,7 @@ from capability_lab.application.experiments import (
 from capability_lab.application.participants import ParticipantDriver
 from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxRecord
+from capability_lab.application.source_locations import SourceLocation
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
@@ -265,19 +274,25 @@ class ExperimentRunSchema(StrictApiModel):
     label: str
     agent_configuration_id: UUID
     agent_configuration_version: int
+    framework_id: str
+    model_id: str
     sandbox_id: UUID
     revision: int
     snapshot_fingerprint: str
     state_fingerprint: str
 
     @classmethod
-    def from_records(cls, run: RunRecord, sandbox: SandboxRecord) -> Self:
+    def from_records(cls, run: RunRecord, sandbox: SandboxRecord, runtime: ArmRuntime) -> Self:
         return cls(
             run_id=run.run_id,
             position=run.position,
             label=run.label,
             agent_configuration_id=run.agent_configuration_id,
             agent_configuration_version=run.agent_configuration_version,
+            # Read from the configuration version this arm pinned, not from anything the
+            # process is currently able to run: what an arm ran is a recorded input.
+            framework_id=runtime.framework_id,
+            model_id=runtime.model_id,
             sandbox_id=run.sandbox_id,
             revision=sandbox.revision,
             snapshot_fingerprint=sandbox.snapshot_fingerprint,
@@ -432,12 +447,109 @@ class ExperimentResponse(ExperimentSummarySchema):
                 ComparisonVariableSchema.from_domain(variable) for variable in detail.comparison
             ],
             runs=[
-                ExperimentRunSchema.from_records(run, sandboxes[run.sandbox_id])
-                for run in detail.runs
+                ExperimentRunSchema.from_records(run, sandboxes[run.sandbox_id], runtime)
+                for run, runtime in zip(detail.runs, detail.arm_runtimes, strict=True)
             ],
             turns=[ParticipantTurnSchema.from_record(turn) for turn in detail.turns],
             agent_turns=[AgentTurnSchema.from_record(turn) for turn in detail.agent_turns],
             tool_events=[ToolEventSchema.from_record(event) for event in detail.tool_events],
+        )
+
+
+class SourceLocationSchema(StrictApiModel):
+    """One place in this project's own source.
+
+    `path` is relative to the import root, never absolute: an absolute path is a fact about
+    the machine that answered rather than about the code, and the same experiment read from
+    two checkouts would otherwise report two different locations for identical work.
+    """
+
+    module: str
+    path: str
+    symbol: str
+    line: int
+
+    @classmethod
+    def from_domain(cls, location: SourceLocation) -> Self:
+        return cls(
+            module=location.module,
+            path=location.path,
+            symbol=location.symbol,
+            line=location.line,
+        )
+
+
+class TimelineEntrySchema(StrictApiModel):
+    """One normalized event in an experiment's execution.
+
+    Deliberately carries no message, reply, or tool argument. The thread `getExperiment`
+    serves is where what was said belongs; this stream says what happened, so it can be
+    filtered, counted, and later handed to an evaluation without carrying synthetic customer
+    content along with it.
+
+    `step` is the customer composition this entry belongs to and is the one coordinate both
+    arms share — `ordinal` counts one arm's own turns, and two arms driven to different
+    depths hold different ordinals for the same message.
+
+    `source` is where the project's own code that ran this lives, and is absent whenever it
+    is not the project's to point at: a framework's internals, an adapter this process does
+    not have, or a tool this build no longer publishes.
+    """
+
+    step: int
+    kind: TimelineEntryKind
+    categories: list[TimelineCategory]
+    run_ids: list[UUID]
+    occurred_at: str
+    composition_id: UUID | None
+    ordinal: int | None
+    attempt: int | None
+    sequence: int | None
+    tool: str | None
+    tool_version: str | None
+    tool_outcome: ToolOutcome | None
+    turn_outcome: AgentTurnOutcome | None
+    failure: AgentTurnFailure | None
+    revision_before: int | None
+    revision_after: int | None
+    source: SourceLocationSchema | None
+
+    @classmethod
+    def from_domain(cls, entry: TimelineEntry) -> Self:
+        return cls(
+            step=entry.step,
+            kind=entry.kind,
+            categories=list(entry.categories),
+            run_ids=list(entry.run_ids),
+            occurred_at=entry.occurred_at.isoformat(),
+            composition_id=entry.composition_id,
+            ordinal=entry.ordinal,
+            attempt=entry.attempt,
+            sequence=entry.sequence,
+            tool=entry.tool,
+            tool_version=entry.tool_version,
+            tool_outcome=entry.tool_outcome,
+            turn_outcome=entry.turn_outcome,
+            failure=entry.failure,
+            revision_before=entry.revision_before,
+            revision_after=entry.revision_after,
+            source=(
+                None if entry.source is None else SourceLocationSchema.from_domain(entry.source)
+            ),
+        )
+
+
+class ExperimentTimelineResponse(StrictApiModel):
+    """One experiment's execution as one ordered, framework-neutral stream."""
+
+    experiment_id: UUID
+    entries: list[TimelineEntrySchema]
+
+    @classmethod
+    def from_domain(cls, timeline: ExperimentTimeline) -> Self:
+        return cls(
+            experiment_id=timeline.experiment_id,
+            entries=[TimelineEntrySchema.from_domain(entry) for entry in timeline.entries],
         )
 
 
@@ -471,14 +583,17 @@ class ExperimentRoutes:
         service: Callable[[], Generator[ExperimentService, None, None]],
         driver: Callable[[str], ParticipantDriver],
         runner: Callable[[], Generator[ExperimentRunner, None, None]],
+        timeline: Callable[[], Generator[ExperimentTimelineService, None, None]],
     ) -> None:
         self._service = service
         self._driver = driver
         self._runner = runner
+        self._timeline = timeline
 
     def register(self, router: APIRouter) -> None:
         dependency = Depends(self._service)
         runner_dependency = Depends(self._runner)
+        timeline_dependency = Depends(self._timeline)
 
         def start_experiment(
             shop_id: ShopIdPath,
@@ -531,6 +646,13 @@ class ExperimentRoutes:
                     )
                 ]
             )
+
+        def get_experiment_timeline(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            timeline: Annotated[ExperimentTimelineService, timeline_dependency],
+        ) -> ExperimentTimelineResponse:
+            return ExperimentTimelineResponse.from_domain(timeline.timeline(shop_id, experiment_id))
 
         async def advance_run(
             shop_id: ShopIdPath,
@@ -587,6 +709,24 @@ class ExperimentRoutes:
             response_model=ExperimentResponse,
             operation_id="getExperiment",
             summary="Retrieve one experiment, its arms, and every turn they received",
+            responses=NotFoundResponses | InvalidResponses,
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/timeline",
+            get_experiment_timeline,
+            methods=["GET"],
+            response_model=ExperimentTimelineResponse,
+            operation_id="getExperimentTimeline",
+            summary="Read this experiment's execution as one normalized stream",
+            description=(
+                "Both arms' customer turns, agent attempts, and tool calls in one ordered, "
+                "framework-neutral stream, each entry carrying the project-owned source "
+                "location of the code that ran it where this build can resolve one. Projected "
+                "from the records `getExperiment` serves rather than stored beside them, so "
+                "the timeline can never describe an experiment differently from its threads. "
+                "Deliberately carries no message body: what was said is the thread's, and "
+                "what happened is this."
+            ),
             responses=NotFoundResponses | InvalidResponses,
         )
         router.add_api_route(

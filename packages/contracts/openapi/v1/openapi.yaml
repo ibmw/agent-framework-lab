@@ -3493,6 +3493,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/timeline:
+    get:
+      summary: Read this experiment's execution as one normalized stream
+      description: 'Both arms'' customer turns, agent attempts, and tool calls in
+        one ordered, framework-neutral stream, each entry carrying the project-owned
+        source location of the code that ran it where this build can resolve one.
+        Projected from the records `getExperiment` serves rather than stored beside
+        them, so the timeline can never describe an experiment differently from its
+        threads. Deliberately carries no message body: what was said is the thread''s,
+        and what happened is this.'
+      operationId: getExperimentTimeline
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentTimelineResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns:
     post:
       summary: Deliver one customer turn to one or both arms
@@ -6244,6 +6293,12 @@ components:
         agent_configuration_version:
           type: integer
           title: Agent Configuration Version
+        framework_id:
+          type: string
+          title: Framework Id
+        model_id:
+          type: string
+          title: Model Id
         sandbox_id:
           type: string
           format: uuid
@@ -6265,6 +6320,8 @@ components:
       - label
       - agent_configuration_id
       - agent_configuration_version
+      - framework_id
+      - model_id
       - sandbox_id
       - revision
       - snapshot_fingerprint
@@ -6335,6 +6392,24 @@ components:
       - created_at
       title: ExperimentSummarySchema
       description: One row of the bench's experiment list.
+    ExperimentTimelineResponse:
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        entries:
+          items:
+            $ref: '#/components/schemas/TimelineEntrySchema'
+          type: array
+          title: Entries
+      additionalProperties: false
+      type: object
+      required:
+      - experiment_id
+      - entries
+      title: ExperimentTimelineResponse
+      description: One experiment's execution as one ordered, framework-neutral stream.
     ExperimentValidationErrorResponse:
       properties:
         code:
@@ -9870,6 +9945,39 @@ components:
       - published_at
       - content
       title: ShopVersionResponse
+    SourceLocationSchema:
+      properties:
+        module:
+          type: string
+          title: Module
+        path:
+          type: string
+          title: Path
+        symbol:
+          type: string
+          title: Symbol
+        line:
+          type: integer
+          title: Line
+      additionalProperties: false
+      type: object
+      required:
+      - module
+      - path
+      - symbol
+      - line
+      title: SourceLocationSchema
+      description: 'One place in this project''s own source.
+
+
+        `path` is relative to the import root, never absolute: an absolute path is
+        a fact about
+
+        the machine that answered rather than about the code, and the same experiment
+        read from
+
+        two checkouts would otherwise report two different locations for identical
+        work.'
     StartConversationRequest:
       properties:
         scenario_id:
@@ -10955,6 +11063,167 @@ components:
       title: TicketVersionResponse
       description: One frozen version, with the exact shop and customer versions it
         pinned.
+    TimelineCategory:
+      type: string
+      enum:
+      - customer
+      - model
+      - tool
+      - state
+      - refusal
+      - error
+      title: TimelineCategory
+      description: 'The lenses an operator filters this stream through.
+
+
+        An entry may carry several: a write that succeeded is a tool call *and* a
+        state change,
+
+        and a failed attempt is a model event *and* an error. Filtering is therefore
+        membership
+
+        rather than a single label, which is what lets "show me only what moved an
+        arm" and
+
+        "show me only what broke" both be honest questions about the same stream.'
+    TimelineEntryKind:
+      type: string
+      enum:
+      - trigger
+      - customer_turn
+      - agent_turn
+      - tool_call
+      title: TimelineEntryKind
+      description: What one entry is, in the lab's vocabulary rather than any framework's.
+    TimelineEntrySchema:
+      properties:
+        step:
+          type: integer
+          title: Step
+        kind:
+          $ref: '#/components/schemas/TimelineEntryKind'
+        categories:
+          items:
+            $ref: '#/components/schemas/TimelineCategory'
+          type: array
+          title: Categories
+        run_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Run Ids
+        occurred_at:
+          type: string
+          title: Occurred At
+        composition_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Composition Id
+        ordinal:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Ordinal
+        attempt:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt
+        sequence:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Sequence
+        tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool
+        tool_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool Version
+        tool_outcome:
+          anyOf:
+          - $ref: '#/components/schemas/ToolOutcome'
+          - type: 'null'
+        turn_outcome:
+          anyOf:
+          - $ref: '#/components/schemas/AgentTurnOutcome'
+          - type: 'null'
+        failure:
+          anyOf:
+          - $ref: '#/components/schemas/AgentTurnFailure'
+          - type: 'null'
+        revision_before:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Revision Before
+        revision_after:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Revision After
+        source:
+          anyOf:
+          - $ref: '#/components/schemas/SourceLocationSchema'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - step
+      - kind
+      - categories
+      - run_ids
+      - occurred_at
+      - composition_id
+      - ordinal
+      - attempt
+      - sequence
+      - tool
+      - tool_version
+      - tool_outcome
+      - turn_outcome
+      - failure
+      - revision_before
+      - revision_after
+      - source
+      title: TimelineEntrySchema
+      description: 'One normalized event in an experiment''s execution.
+
+
+        Deliberately carries no message, reply, or tool argument. The thread `getExperiment`
+
+        serves is where what was said belongs; this stream says what happened, so
+        it can be
+
+        filtered, counted, and later handed to an evaluation without carrying synthetic
+        customer
+
+        content along with it.
+
+
+        `step` is the customer composition this entry belongs to and is the one coordinate
+        both
+
+        arms share — `ordinal` counts one arm''s own turns, and two arms driven to
+        different
+
+        depths hold different ordinals for the same message.
+
+
+        `source` is where the project''s own code that ran this lives, and is absent
+        whenever it
+
+        is not the project''s to point at: a framework''s internals, an adapter this
+        process does
+
+        not have, or a tool this build no longer publishes.'
     ToneOfVoiceSchema:
       properties:
         id:

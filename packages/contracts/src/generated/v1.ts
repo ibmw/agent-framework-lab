@@ -1052,6 +1052,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/timeline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read this experiment's execution as one normalized stream
+     * @description Both arms' customer turns, agent attempts, and tool calls in one ordered, framework-neutral stream, each entry carrying the project-owned source location of the code that ran it where this build can resolve one. Projected from the records `getExperiment` serves rather than stored beside them, so the timeline can never describe an experiment differently from its threads. Deliberately carries no message body: what was said is the thread's, and what happened is this.
+     */
+    get: operations["getExperimentTimeline"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns": {
     parameters: {
       query?: never;
@@ -2420,6 +2440,10 @@ export interface components {
       agent_configuration_id: string;
       /** Agent Configuration Version */
       agent_configuration_version: number;
+      /** Framework Id */
+      framework_id: string;
+      /** Model Id */
+      model_id: string;
       /**
        * Sandbox Id
        * Format: uuid
@@ -2467,6 +2491,19 @@ export interface components {
       canonical_schema_version: string;
       /** Created At */
       created_at: string;
+    };
+    /**
+     * ExperimentTimelineResponse
+     * @description One experiment's execution as one ordered, framework-neutral stream.
+     */
+    ExperimentTimelineResponse: {
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /** Entries */
+      entries: components["schemas"]["TimelineEntrySchema"][];
     };
     /**
      * ExperimentValidationErrorResponse
@@ -4319,6 +4356,24 @@ export interface components {
       published_at: string;
       content: components["schemas"]["ShopContentSchema"];
     };
+    /**
+     * SourceLocationSchema
+     * @description One place in this project's own source.
+     *
+     *     `path` is relative to the import root, never absolute: an absolute path is a fact about
+     *     the machine that answered rather than about the code, and the same experiment read from
+     *     two checkouts would otherwise report two different locations for identical work.
+     */
+    SourceLocationSchema: {
+      /** Module */
+      module: string;
+      /** Path */
+      path: string;
+      /** Symbol */
+      symbol: string;
+      /** Line */
+      line: number;
+    };
     /** StartConversationRequest */
     StartConversationRequest: {
       /** Scenario Id */
@@ -4889,6 +4944,71 @@ export interface components {
       /** Customer Profile Version */
       customer_profile_version: number;
       content: components["schemas"]["TicketContentSchema"];
+    };
+    /**
+     * TimelineCategory
+     * @description The lenses an operator filters this stream through.
+     *
+     *     An entry may carry several: a write that succeeded is a tool call *and* a state change,
+     *     and a failed attempt is a model event *and* an error. Filtering is therefore membership
+     *     rather than a single label, which is what lets "show me only what moved an arm" and
+     *     "show me only what broke" both be honest questions about the same stream.
+     * @enum {string}
+     */
+    TimelineCategory: "customer" | "model" | "tool" | "state" | "refusal" | "error";
+    /**
+     * TimelineEntryKind
+     * @description What one entry is, in the lab's vocabulary rather than any framework's.
+     * @enum {string}
+     */
+    TimelineEntryKind: "trigger" | "customer_turn" | "agent_turn" | "tool_call";
+    /**
+     * TimelineEntrySchema
+     * @description One normalized event in an experiment's execution.
+     *
+     *     Deliberately carries no message, reply, or tool argument. The thread `getExperiment`
+     *     serves is where what was said belongs; this stream says what happened, so it can be
+     *     filtered, counted, and later handed to an evaluation without carrying synthetic customer
+     *     content along with it.
+     *
+     *     `step` is the customer composition this entry belongs to and is the one coordinate both
+     *     arms share — `ordinal` counts one arm's own turns, and two arms driven to different
+     *     depths hold different ordinals for the same message.
+     *
+     *     `source` is where the project's own code that ran this lives, and is absent whenever it
+     *     is not the project's to point at: a framework's internals, an adapter this process does
+     *     not have, or a tool this build no longer publishes.
+     */
+    TimelineEntrySchema: {
+      /** Step */
+      step: number;
+      kind: components["schemas"]["TimelineEntryKind"];
+      /** Categories */
+      categories: components["schemas"]["TimelineCategory"][];
+      /** Run Ids */
+      run_ids: string[];
+      /** Occurred At */
+      occurred_at: string;
+      /** Composition Id */
+      composition_id: string | null;
+      /** Ordinal */
+      ordinal: number | null;
+      /** Attempt */
+      attempt: number | null;
+      /** Sequence */
+      sequence: number | null;
+      /** Tool */
+      tool: string | null;
+      /** Tool Version */
+      tool_version: string | null;
+      tool_outcome: components["schemas"]["ToolOutcome"] | null;
+      turn_outcome: components["schemas"]["AgentTurnOutcome"] | null;
+      failure: components["schemas"]["AgentTurnFailure"] | null;
+      /** Revision Before */
+      revision_before: number | null;
+      /** Revision After */
+      revision_after: number | null;
+      source: components["schemas"]["SourceLocationSchema"] | null;
     };
     /** ToneOfVoiceSchema */
     ToneOfVoiceSchema: {
@@ -8976,6 +9096,49 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ExperimentResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getExperimentTimeline: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentTimelineResponse"];
         };
       };
       /** @description The definition is not found */

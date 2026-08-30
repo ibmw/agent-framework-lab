@@ -61,6 +61,7 @@ from capability_lab.application.definition_resolution import (
     UnpublishedReferenceError,
 )
 from capability_lab.application.experiment_runs import ExperimentRunner
+from capability_lab.application.experiment_timeline import ExperimentTimelineService
 from capability_lab.application.experiments import (
     ExperimentArmError,
     ExperimentLabelError,
@@ -1668,36 +1669,46 @@ def create_app(
                 clock,
             )
 
-    def experiment_service() -> Generator[ExperimentService, None, None]:
-        with session_scope(factory) as session:
-            yield ExperimentService(
-                SqlAlchemyExperimentRepository(session),
-                SqlAlchemyExperimentRunRepository(session),
-                SqlAlchemyParticipantTurnRepository(session),
-                SqlAlchemyAgentTurnRepository(session),
-                SqlAlchemyToolEventRepository(session),
-                SandboxSnapshotService(
-                    SqlAlchemySandboxSnapshotRepository(session),
-                    scenario_repository(session),
-                    shop_repository(session),
-                    ticket_repository(session),
-                    SqlAlchemyOrderFixtureRepository(session),
-                    objective_block_repository(session),
-                    mutation_block_repository(session),
-                    SqlAlchemyPublishedVersionDirectory(session),
-                    clock,
-                ),
-                SandboxService(
-                    SqlAlchemySandboxRepository(session),
-                    SqlAlchemySandboxSnapshotRepository(session),
-                    clock,
-                ),
+    def build_experiment_service(session: Session) -> ExperimentService:
+        """One construction, read by the experiment routes and by the timeline over them."""
+        return ExperimentService(
+            SqlAlchemyExperimentRepository(session),
+            SqlAlchemyExperimentRunRepository(session),
+            SqlAlchemyParticipantTurnRepository(session),
+            SqlAlchemyAgentTurnRepository(session),
+            SqlAlchemyToolEventRepository(session),
+            SandboxSnapshotService(
+                SqlAlchemySandboxSnapshotRepository(session),
+                scenario_repository(session),
                 shop_repository(session),
                 ticket_repository(session),
-                agent_configuration_repository(session),
+                SqlAlchemyOrderFixtureRepository(session),
+                objective_block_repository(session),
+                mutation_block_repository(session),
                 SqlAlchemyPublishedVersionDirectory(session),
                 clock,
-            )
+            ),
+            SandboxService(
+                SqlAlchemySandboxRepository(session),
+                SqlAlchemySandboxSnapshotRepository(session),
+                clock,
+            ),
+            shop_repository(session),
+            ticket_repository(session),
+            agent_configuration_repository(session),
+            SqlAlchemyPublishedVersionDirectory(session),
+            clock,
+        )
+
+    def experiment_service() -> Generator[ExperimentService, None, None]:
+        with session_scope(factory) as session:
+            yield build_experiment_service(session)
+
+    def experiment_timeline_service() -> Generator[ExperimentTimelineService, None, None]:
+        with session_scope(factory) as session:
+            # The same runtime registry the runner is given: an attempt's source location is
+            # the adapter that produced it, and only this process knows which are here.
+            yield ExperimentTimelineService(build_experiment_service(session), runtimes)
 
     def experiment_runner() -> Generator[ExperimentRunner, None, None]:
         with session_scope(factory) as session:
@@ -2273,7 +2284,9 @@ def create_app(
     SandboxToolRoutes(sandbox_tool_service).register(router)
     # The participant driver is composed per delivery, from the words the request carries:
     # selecting it is composition's job, and its lifetime is one turn.
-    ExperimentRoutes(experiment_service, HumanParticipantDriver, experiment_runner).register(router)
+    ExperimentRoutes(
+        experiment_service, HumanParticipantDriver, experiment_runner, experiment_timeline_service
+    ).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)
