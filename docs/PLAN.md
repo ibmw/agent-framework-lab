@@ -68,7 +68,9 @@ declared deterministic control policy and Pydantic AI over the published tool co
 framework-neutral stream, each entry carrying the project-owned file and line of the code that ran
 it where this build can resolve one (ADR 0027), and finally the scenario's own faults firing into a
 running arm at the moment the recipe bound them to — between two of the agent's calls, against a
-declared table of what this build can actually carry out, recorded once per arm (ADR 0028).
+declared table of what this build can actually carry out, recorded once per arm (ADR 0028), and finally the experiment an operator comes back to: each
+arm's standing read from its own record so a bench reopened cold says what it is waiting for,
+and the question an arm passed over reported rather than left to be noticed (ADR 0029).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -520,7 +522,8 @@ behavior side by side.
   record what each one moved (ADR 0028).
 - [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
   essential Playwright journey. Start, divergence, and independent action are covered (ADR 0025,
-  ADR 0026); resume and completion follow the outcomes they belong to.
+  ADR 0026) and resume is (ADR 0029); completion is judged against the scenario's completion
+  conditions and follows with Milestone 5's evaluation.
 
 Frames: 7 · Experiment setup and 8 · Live bench (icon-only rail, ticket-thread chat UI, provenance
 chip strip, director's notes, objectives matrix), plus 9a · Execution timeline and the source
@@ -554,6 +557,16 @@ made them different things, and the source location resolved from the tool regis
 from a hand-kept map — project-owned only, never stored, and allowed to be absent, which is what
 "where available" means. It also turns the write dispatch into the handler table that locates it,
 so the map that names a write's code is the one that ran it.
+
+Resume evidence (frame 8): an operator who ran one arm reloads the browser, leaves the bench, and
+returns to the experiment through the shop's list — finding both threads as they stood, the answered
+arm's reply with its calls and the fault that fired among them, and the arm that was never run still
+the one offered to run. ADR 0029 records that resume has no mechanism of its own because an
+experiment is entirely in the record, the arm standing derived rather than stored for the reason
+ADR 0026 refused a status, the two things an arm can wait for and the "completed" value deliberately
+left to Milestone 5's evaluation, the turn an arm passed over reported rather than implied, and the
+one reading the runner and the bench now share so a button never offers a run the backend would
+decline.
 
 Fault evidence (frames 8 and 9a, the scenario's own half): an operator runs an arm and watches the
 incident change under it — the order the recipe bound moves out of band at the moment it bound,

@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target architecture with an implemented POC baseline — 2026-08-29
+Status: target architecture with an implemented POC baseline — 2026-08-30
 
 Read `docs/product-direction.md` first. This document distinguishes principles that remain binding,
 the code that exists today, and the target boundaries that future slices must establish. Do not
@@ -44,7 +44,8 @@ support-agent port, recording what it answered and every versioned tool call it 
 and the normalized execution timeline that reads all of it back as one framework-neutral stream
 carrying the project's own file and line behind every entry (ADR 0027), and the scenario runtime
 that fires a recipe's bound faults into a running arm at the moment it named, on the same call path
-the tools travel (ADR 0028).
+the tools travel (ADR 0028), and the arm standing that makes an experiment resumable by reading
+where each arm waits out of its own record rather than storing a status beside it (ADR 0029).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -251,6 +252,15 @@ can actually inject is a declared table read by both the experiment setup gate a
 an experiment whose fault would never fire is refused rather than started. A firing is recorded
 once per arm with the revisions it moved, and reads back as a state change that is never a tool
 call: no agent asked for it, and none is told (ADR 0028).
+
+Because all of that is in the record, an experiment has no session and no resume operation: coming
+back to one is an ordinary read of it. Each arm reports a **standing** derived from its own two
+streams — whether it owes an answer or is waiting for the customer, the turn it stands on, how many
+attempts that turn has had, and how many earlier turns it never answered — computed once in the
+domain and read by both the runner and the client, so an offered advance is always one the backend
+would perform. It is never stored: a status column would be a second writer of a fact the streams
+already hold, and whether a run is *complete* is an evaluation question rather than a flag anyone
+sets (ADR 0029).
 
 ## Persistence, versioning, and extensibility
 

@@ -172,10 +172,14 @@ SDK immediately.
    experiment refused at setup when its recipe names anything else. A firing happens once per
    arm and both arms carry the identical schedule, so the fault is not a comparison variable —
    meeting it is.
-12. Next in Milestone 4 is the resume half of its last outcome, and traces belong with
-   Milestone 5's evaluation surfaces (frame 9b). Completion follows too, judged against the
-   scenario's completion conditions with Milestone 5's evaluation rather than set by hand;
-   nothing sets a run status today, deliberately.
+12. Resume is delivered (ADR 0029). An experiment is entirely in the record, so coming back to
+   one is an ordinary read — and each arm now says what it is waiting for, derived from its own
+   two streams rather than stored beside them, so the runner deciding what an advance does and
+   the bench drawing the button read one rule. A question an arm passed over, which ADR 0026
+   made deliberate, is reported rather than left looking like a gap.
+13. Next is Milestone 5. Traces belong with its evaluation surfaces (frame 9b), and completion
+   follows there too, judged against the scenario's completion conditions rather than set by
+   hand; nothing sets a run status today, deliberately.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
