@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-08-29
+Status: current — 2026-08-30
 
 ## Authoritative direction
 
@@ -164,11 +164,18 @@ SDK immediately.
    record: nothing is stored, because a second stored shape is a second chance to disagree with
    the first. It carries no message body, so the surface built to be filtered, counted, and later
    handed to an evaluation never repeats what anyone said.
-11. Next in Milestone 4 are traces and the scenario's mutation blocks firing on their bound
-   timing — a change to the *world* mid-run rather than to an agent's turn, which is why it
-   belongs with the timeline that now exists to show when it happened. Completion follows,
-   judged against the scenario's completion conditions with Milestone 5's evaluation rather than
-   set by hand; nothing sets a run status today, deliberately.
+11. The scenario's mutations now fire (ADR 0028). A published recipe's bound fault reaches the
+   arm it was authored for at the moment it named — between two of the agent's calls, because
+   that is where the world has to be able to move for the conflict ADR 0022 built to be
+   reachable at all. The lab declares what it can carry out rather than trying: one effect,
+   applied to a bound order, and two moments it can observe from the arm's own record, with an
+   experiment refused at setup when its recipe names anything else. A firing happens once per
+   arm and both arms carry the identical schedule, so the fault is not a comparison variable —
+   meeting it is.
+12. Next in Milestone 4 is the resume half of its last outcome, and traces belong with
+   Milestone 5's evaluation surfaces (frame 9b). Completion follows too, judged against the
+   scenario's completion conditions with Milestone 5's evaluation rather than set by hand;
+   nothing sets a run status today, deliberately.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

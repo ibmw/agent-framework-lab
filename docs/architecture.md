@@ -42,7 +42,9 @@ configuration, and takes its customer turns through a participant-driver port is
 (ADR 0025), and the runner that advances one arm of that experiment through a framework-neutral
 support-agent port, recording what it answered and every versioned tool call it made (ADR 0026),
 and the normalized execution timeline that reads all of it back as one framework-neutral stream
-carrying the project's own file and line behind every entry (ADR 0027).
+carrying the project's own file and line behind every entry (ADR 0027), and the scenario runtime
+that fires a recipe's bound faults into a running arm at the moment it named, on the same call path
+the tools travel (ADR 0028).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -241,6 +243,14 @@ the thread's, and what happened is the stream's. Project-owned source symbols ar
 execution events for the code evidence view, resolved from the tool registry and the runtime that
 produced the turn rather than stored or hand-maintained, and absent whenever the code is not this
 project's to point at; manually maintained pseudo-code is not authoritative evidence (ADR 0027).
+
+The scenario's own writes are evidence in the same stream. A bound mutation fires into one arm at
+the moment the recipe named, checked before a runtime starts and after every call it makes, so a
+fault can land between an agent's proposal and the write that would have applied it. What the lab
+can actually inject is a declared table read by both the experiment setup gate and the runtime, so
+an experiment whose fault would never fire is refused rather than started. A firing is recorded
+once per arm with the revisions it moved, and reads back as a state change that is never a tool
+call: no agent asked for it, and none is told (ADR 0028).
 
 ## Persistence, versioning, and extensibility
 

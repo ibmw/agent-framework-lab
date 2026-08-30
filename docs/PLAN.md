@@ -64,9 +64,11 @@ configuration against that arm's own sandbox through a new framework-neutral run
 records what it answered, every versioned tool call it made, the confirmation and revision each
 write carried, and the attempt in which it failed — with two frameworks behind that port, a
 declared deterministic control policy and Pydantic AI over the published tool contracts
-(ADR 0026), and finally the normalized execution timeline that reads all of it back as one
+(ADR 0026), then the normalized execution timeline that reads all of it back as one
 framework-neutral stream, each entry carrying the project-owned file and line of the code that ran
-it where this build can resolve one (ADR 0027).
+it where this build can resolve one (ADR 0027), and finally the scenario's own faults firing into a
+running arm at the moment the recipe bound them to — between two of the agent's calls, against a
+declared table of what this build can actually carry out, recorded once per arm (ADR 0028).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -505,7 +507,8 @@ behavior side by side.
 - [x] Start both arms from one canonical snapshot and send the same trigger (ADR 0025).
 - [x] Add a linked customer composer that can split into arm-specific replies (ADR 0025).
 - [x] Persist operator input divergence, assistant turns, tool events, confirmations, state changes,
-  and failures (ADR 0025 for operator input; ADR 0026 for everything an agent produces). Traces
+  and failures (ADR 0025 for operator input; ADR 0026 for everything an agent produces; ADR 0028
+  for the state changes the scenario itself makes). Traces
   arrive with the timeline outcome below; completion is judged against the scenario's completion
   conditions and belongs with Milestone 5's evaluation.
 - [x] Warn when framework, architecture, model, prompt, or tools introduce multiple comparison
@@ -513,6 +516,8 @@ behavior side by side.
 - [x] Show normalized execution timelines and project-owned source locations where available.
   Traces (frame 9b) arrive with Milestone 5's evaluation surfaces, and the code excerpt beside a
   location (frame 9c) with them (ADR 0027).
+- [x] Fire the scenario's bound mutation blocks into a running arm at their bound timing, and
+  record what each one moved (ADR 0028).
 - [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
   essential Playwright journey. Start, divergence, and independent action are covered (ADR 0025,
   ADR 0026); resume and completion follow the outcomes they belong to.
@@ -549,6 +554,17 @@ made them different things, and the source location resolved from the tool regis
 from a hand-kept map — project-owned only, never stored, and allowed to be absent, which is what
 "where available" means. It also turns the write dispatch into the handler table that locates it,
 so the map that names a write's code is the one that ran it.
+
+Fault evidence (frames 8 and 9a, the scenario's own half): an operator runs an arm and watches the
+incident change under it — the order the recipe bound moves out of band at the moment it bound,
+between two of the agent's calls, with the agent never told and the arm beside it untouched until
+its own advance reaches the same moment. ADR 0028 records the firing that happens on the call path
+rather than at a turn boundary and why the conflict ADR 0022 built needs it, the declared table of
+effects and moments this build can actually carry out and the setup gate that refuses an experiment
+whose fault would never fire, the moment decided from the arm's own record rather than from a clock,
+the single step along the fulfilment graph that makes the world stale without making the incident
+unwinnable, the once-per-arm key the store rather than the runtime enforces, and the timeline entry
+that is a state change and never a tool call because no agent asked for it.
 
 ### Acceptance criteria
 
