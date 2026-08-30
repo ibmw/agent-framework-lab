@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-08-28
+Status: current — 2026-08-29
 
 ## Authoritative direction
 
@@ -156,12 +156,19 @@ SDK immediately.
    the published contract table. Evidence is a property of the call path: a runtime reaches the
    world only through an invoker bound to one arm and one actor, and that invoker is what writes
    the event.
-10. Next in Milestone 4 is the normalized execution timeline: traces, project-owned source
-   locations, and the scenario's mutation blocks firing on their bound timing — a change to the
-   *world* mid-run rather than to an agent's turn, which is why it belongs with the timeline that
-   shows when it happened. Completion follows it, judged against the scenario's completion
-   conditions with Milestone 5's evaluation rather than set by hand; nothing sets a run status
-   today, deliberately.
+10. The normalized execution timeline is delivered (ADR 0027). One ordered, framework-neutral
+   stream reads an experiment's whole execution back — the compositions both arms share, each
+   arm's attempts, and every tool call with what it did to that arm — and every entry carries the
+   project-owned file and line of the code that ran it, resolved from the tool registry and the
+   runtime that produced the turn rather than from a map kept by hand. It is a projection, not a
+   record: nothing is stored, because a second stored shape is a second chance to disagree with
+   the first. It carries no message body, so the surface built to be filtered, counted, and later
+   handed to an evaluation never repeats what anyone said.
+11. Next in Milestone 4 are traces and the scenario's mutation blocks firing on their bound
+   timing — a change to the *world* mid-run rather than to an agent's turn, which is why it
+   belongs with the timeline that now exists to show when it happened. Completion follows,
+   judged against the scenario's completion conditions with Milestone 5's evaluation rather than
+   set by hand; nothing sets a run status today, deliberately.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

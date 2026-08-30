@@ -64,7 +64,9 @@ configuration against that arm's own sandbox through a new framework-neutral run
 records what it answered, every versioned tool call it made, the confirmation and revision each
 write carried, and the attempt in which it failed — with two frameworks behind that port, a
 declared deterministic control policy and Pydantic AI over the published tool contracts
-(ADR 0026).
+(ADR 0026), and finally the normalized execution timeline that reads all of it back as one
+framework-neutral stream, each entry carrying the project-owned file and line of the code that ran
+it where this build can resolve one (ADR 0027).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -508,13 +510,17 @@ behavior side by side.
   conditions and belongs with Milestone 5's evaluation.
 - [x] Warn when framework, architecture, model, prompt, or tools introduce multiple comparison
   variables (ADR 0025).
-- [ ] Show normalized execution timelines and project-owned source locations where available.
+- [x] Show normalized execution timelines and project-owned source locations where available.
+  Traces (frame 9b) arrive with Milestone 5's evaluation surfaces, and the code excerpt beside a
+  location (frame 9c) with them (ADR 0027).
 - [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
   essential Playwright journey. Start, divergence, and independent action are covered (ADR 0025,
   ADR 0026); resume and completion follow the outcomes they belong to.
 
 Frames: 7 · Experiment setup and 8 · Live bench (icon-only rail, ticket-thread chat UI, provenance
-chip strip, director's notes, objectives matrix).
+chip strip, director's notes, objectives matrix), plus 9a · Execution timeline and the source
+locations of 9c · Code paths, which this milestone's fifth outcome needs and Milestone 5 completes
+with the traces and the code excerpt beside them.
 
 Runner evidence (frame 8, the agent half): an operator runs one arm's agent and watches it follow
 the incident from the interaction to the order, read the customer, and redirect the order to the
@@ -529,6 +535,20 @@ their own because the tool result and its revisions already carry them, the reso
 the versions the experiment pinned, and the two runtimes: the declared control policy that makes
 tool bindings a real comparison variable offline, and Pydantic AI deriving its tool schemas from
 the contract table the lab publishes.
+
+Timeline evidence (frame 9a, and the location half of 9c): an operator who has driven both arms
+reads the incident as one stream — the opening both arms share, the reply only one of them heard,
+each arm's calls in the order it asked, and the one write per arm that moved a world — then
+narrows it to what changed something, and reads the project's own file and line behind every
+entry. ADR 0027 records the timeline as a projection rather than a record and why a second stored
+shape would be ADR 0026's refused confirmation record one level up, the composition as the
+coordinate two arms share where an ordinal counts only one arm's turns, the merge of each arm's
+ordinals that orders the stream without trusting a clock the runner reads once per attempt, the
+entry that carries no word anyone said, the refusal kept apart from the error because ADR 0021
+made them different things, and the source location resolved from the tool registry rather than
+from a hand-kept map — project-owned only, never stored, and allowed to be absent, which is what
+"where available" means. It also turns the write dispatch into the handler table that locates it,
+so the map that names a write's code is the one that ran it.
 
 ### Acceptance criteria
 
@@ -554,9 +574,10 @@ Turn completed runs into durable, searchable comparison evidence.
 - [ ] Preserve evaluator executions, notes, tags, state diffs, traces, replay, and fork provenance.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
-Frames: 9 · Experiment results — General tab, 9a · Execution timeline tab, 9b · Traces tab,
-9c · Code paths tab, and 10 · History. Together with the Milestone 4 frames this completes the
-18-frame authoritative set.
+Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
+tab, and 10 · History; 9a · Execution timeline and 9c's source locations arrived with Milestone 4's
+fifth outcome (ADR 0027) and are extended here rather than built again. Together with the
+Milestone 4 frames this completes the 18-frame authoritative set.
 
 ### Acceptance criteria
 

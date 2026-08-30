@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target architecture with an implemented POC baseline — 2026-08-28
+Status: target architecture with an implemented POC baseline — 2026-08-29
 
 Read `docs/product-direction.md` first. This document distinguishes principles that remain binding,
 the code that exists today, and the target boundaries that future slices must establish. Do not
@@ -40,7 +40,9 @@ tables, and the Studio application shell are target code. Beyond the definitions
 that binds a published scenario version to one or two of those configurations, clones an arm per
 configuration, and takes its customer turns through a participant-driver port is target code too
 (ADR 0025), and the runner that advances one arm of that experiment through a framework-neutral
-support-agent port, recording what it answered and every versioned tool call it made (ADR 0026).
+support-agent port, recording what it answered and every versioned tool call it made (ADR 0026),
+and the normalized execution timeline that reads all of it back as one framework-neutral stream
+carrying the project's own file and line behind every entry (ADR 0027).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -230,8 +232,15 @@ process cannot run at all is refused rather than recorded, because that is a fac
 
 Normalized run evidence includes participant and assistant turns, model usage, tool requests and
 results, proposals and confirmations, retries and failures, state changes, trace correlations, and
-completion status. Project-owned source symbols may be attached to execution events for the code
-evidence view; manually maintained pseudo-code is not authoritative evidence.
+completion status. It is read back as one ordered stream per experiment, projected from those
+records rather than stored beside them, so a client never interleaves three listings itself — which
+is where a framework's own idea of a step would otherwise re-enter, one consumer at a time. The
+stream is counted in **compositions** rather than in ordinals, because an ordinal counts one arm's
+turns and the arms may sit at different depths, and it carries no message body: what was said is
+the thread's, and what happened is the stream's. Project-owned source symbols are attached to
+execution events for the code evidence view, resolved from the tool registry and the runtime that
+produced the turn rather than stored or hand-maintained, and absent whenever the code is not this
+project's to point at; manually maintained pseudo-code is not authoritative evidence (ADR 0027).
 
 ## Persistence, versioning, and extensibility
 
