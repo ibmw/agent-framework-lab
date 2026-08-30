@@ -39,6 +39,7 @@ from capability_lab.domain.experiment import (
     ParticipantTurnSource,
 )
 from capability_lab.domain.order_fixture import FrozenShippingAddress, OrderFixturePayload
+from capability_lab.domain.scenario import BoundMutation, ScenarioBinding
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -72,18 +73,35 @@ def workspace(session: Session) -> Workspace:
     return seed_workspace(session)
 
 
-def published_scenario(workspace: Workspace) -> tuple[UUID, int]:
+def published_scenario(
+    workspace: Workspace, mutations: tuple[BoundMutation, ...] = ()
+) -> tuple[UUID, int]:
     """The wrong-address recipe, published and ready to be frozen."""
     publish_prerequisites(workspace)
-    scenario_id = author(workspace)
+    scenario_id = author(workspace, mutations=mutations)
     version = workspace.scenarios.publish_scenario(workspace.shop_id, scenario_id)
     return scenario_id, version.published.version
 
 
+def unobservable_fault(workspace: Workspace) -> BoundMutation:
+    """A fault bound to sandbox time, which no snapshot carries and no run can observe."""
+    return BoundMutation(
+        id="order-moves-under-the-arm",
+        block_id=workspace.mutation_block_id,
+        bindings=(
+            ScenarioBinding(parameter="entity_ref", value=f"order:{workspace.order_id}"),
+            ScenarioBinding(parameter="timing", value="at_offset:PT30M"),
+        ),
+    )
+
+
 def command(
-    workspace: Workspace, arms: tuple[ArmSelection, ...], **overrides: object
+    workspace: Workspace,
+    arms: tuple[ArmSelection, ...],
+    mutations: tuple[BoundMutation, ...] = (),
+    **overrides: object,
 ) -> StartExperiment:
-    scenario_id, version = published_scenario(workspace)
+    scenario_id, version = published_scenario(workspace, mutations)
     fields: dict[str, object] = {
         "label": "Framework comparison",
         "scenario_id": scenario_id,
@@ -290,6 +308,38 @@ def test_a_tone_override_the_shop_does_not_publish_refuses_the_start(
 
     codes = [issue.code for issue in refusal.value.validation.errors]
     assert codes == ["tone_override_unknown_in_shop"]
+
+
+def test_a_fault_this_build_cannot_carry_out_refuses_the_start(
+    session: Session, workspace: Workspace
+) -> None:
+    """A recipe may compose a fault no build injects yet; an experiment may not start on one.
+
+    Reading "the fault changed nothing" off a run that never faulted is the one conclusion an
+    experiment must never invite, so the refusal is here rather than at publication.
+    """
+    setup = command(
+        workspace, (published_configuration(session),), (unobservable_fault(workspace),)
+    )
+
+    with pytest.raises(ExperimentNotStartableError) as refusal:
+        build_experiments(session).start(workspace.shop_id, setup)
+
+    codes = [issue.code for issue in refusal.value.validation.errors]
+    assert codes == ["mutation_timing_not_observable"]
+
+
+def test_the_preview_reads_the_faults_it_would_have_to_carry_out(
+    session: Session, workspace: Workspace
+) -> None:
+    """The same gate `start` applies, so an operator meets the refusal before committing."""
+    setup = command(
+        workspace, (published_configuration(session),), (unobservable_fault(workspace),)
+    )
+
+    preview = build_experiments(session).preview(workspace.shop_id, setup)
+
+    assert [issue.code for issue in preview.validation.errors] == ["mutation_timing_not_observable"]
 
 
 def test_arms_differing_in_more_than_one_dimension_warn_but_still_run(

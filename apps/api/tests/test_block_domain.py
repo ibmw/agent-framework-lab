@@ -17,6 +17,8 @@ from capability_lab.domain.blocks import (
     BlockParameter,
     BlockParameterKind,
     MutationBlockPayload,
+    MutationTiming,
+    MutationTimingKind,
     ObjectiveAssessment,
     ObjectiveBlockPayload,
     ObjectiveEvidence,
@@ -25,6 +27,7 @@ from capability_lab.domain.blocks import (
     is_timing,
     new_mutation_block,
     new_objective_block,
+    parse_timing,
     shop_bound_parameters,
     summarize_mutation_block_changes,
     summarize_objective_block_changes,
@@ -251,6 +254,42 @@ def test_a_timing_names_a_moment_the_runtime_can_observe(value: str) -> None:
 )
 def test_a_timing_refuses_a_moment_the_runtime_cannot_place(value: str) -> None:
     assert not is_timing(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "kind"),
+    [
+        ("after_first_read", MutationTimingKind.AFTER_FIRST_READ),
+        ("at_turn:3", MutationTimingKind.AT_TURN),
+        ("at_offset:PT30S", MutationTimingKind.AT_OFFSET),
+    ],
+)
+def test_a_timing_is_parsed_into_the_form_a_runtime_branches_on(
+    value: str, kind: MutationTimingKind
+) -> None:
+    """One reading of the grammar, so the gate cannot accept what the runtime cannot place."""
+    parsed = parse_timing(value)
+
+    assert parsed is not None
+    assert parsed.kind is kind
+    assert parsed.value == value
+
+
+def test_a_turn_timing_carries_the_turn_it_names() -> None:
+    parsed = parse_timing("at_turn:12")
+
+    assert parsed is not None
+    assert parsed.turn == 12
+    assert parsed.offset is None
+
+
+def test_a_timing_the_grammar_refuses_parses_to_nothing() -> None:
+    assert parse_timing("eventually") is None
+
+
+def test_a_timing_cannot_claim_a_form_and_carry_another_s_value() -> None:
+    with pytest.raises(BlockConfigurationError):
+        MutationTiming(kind=MutationTimingKind.AFTER_FIRST_READ, turn=2)
 
 
 # -- bindings --------------------------------------------------------------

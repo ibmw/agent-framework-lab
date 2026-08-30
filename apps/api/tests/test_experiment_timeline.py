@@ -39,6 +39,8 @@ from capability_lab.application.sandbox_tool_contracts import (
 )
 from capability_lab.application.sandbox_tools import ToolHandler, ToolOutcome
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
+from capability_lab.domain.blocks import MutationEffect
+from capability_lab.domain.scenario import BoundMutation, ScenarioBinding
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
 from capability_lab.infrastructure.database import (
     Base,
@@ -60,6 +62,18 @@ from workspace_factories import (
 )
 
 WRITE_TOOL_NAMES = (ADDRESS_CHANGE_APPLY, ADDRESS_CHANGE_PROPOSE)
+
+
+def concurrent_fault(workspace: Workspace) -> BoundMutation:
+    """The frame-4 fault: this workspace's order moves once the arm has read it."""
+    return BoundMutation(
+        id="order-moves-under-the-arm",
+        block_id=workspace.mutation_block_id,
+        bindings=(
+            ScenarioBinding(parameter="entity_ref", value=f"order:{workspace.order_id}"),
+            ScenarioBinding(parameter="timing", value="after_first_read"),
+        ),
+    )
 
 
 @pytest.fixture
@@ -85,9 +99,14 @@ def control_arm(session: Session, **overrides: object) -> ArmSelection:
     return published_configuration(session, published_identity(session), **fields)
 
 
-def start(session: Session, workspace: Workspace, *arms: ArmSelection) -> ExperimentDetail:
+def start(
+    session: Session,
+    workspace: Workspace,
+    *arms: ArmSelection,
+    mutations: tuple[BoundMutation, ...] = (),
+) -> ExperimentDetail:
     publish_prerequisites(workspace)
-    scenario_id = author(workspace)
+    scenario_id = author(workspace, mutations=mutations)
     version = workspace.scenarios.publish_scenario(workspace.shop_id, scenario_id)
     return build_experiments(session).start(
         workspace.shop_id,
@@ -356,6 +375,69 @@ async def test_an_entry_carries_no_word_anyone_said(session: Session, workspace:
     for entry in timeline(session, detail):
         rendered = str(entry)
         assert not any(word in rendered for word in said), entry.kind
+
+
+# -- the scenario's own faults -------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_fault_sits_between_the_calls_it_fired_between(
+    session: Session, workspace: Workspace
+) -> None:
+    """Placed by the calls the attempt had made, so "the world moved here" is readable."""
+    detail = start(
+        session, workspace, control_arm(session), mutations=(concurrent_fault(workspace),)
+    )
+
+    await advance(session, detail)
+
+    entries = timeline(session, detail)
+    assert [entry.kind for entry in entries] == [
+        TimelineEntryKind.TRIGGER,
+        *[TimelineEntryKind.TOOL_CALL] * 2,
+        TimelineEntryKind.MUTATION,
+        *[TimelineEntryKind.TOOL_CALL] * 3,
+        TimelineEntryKind.AGENT_TURN,
+    ]
+    assert entries[2].tool == ORDER_DETAIL
+    assert entries[4].tool == CUSTOMER_PROFILE
+
+
+@pytest.mark.asyncio
+async def test_a_fault_is_a_state_change_and_neither_a_tool_call_nor_an_error(
+    session: Session, workspace: Workspace
+) -> None:
+    """Nothing selected it, and the incident working as authored is not something breaking."""
+    detail = start(
+        session, workspace, control_arm(session), mutations=(concurrent_fault(workspace),)
+    )
+
+    await advance(session, detail)
+
+    fired = of_kind(timeline(session, detail), TimelineEntryKind.MUTATION)[0]
+    assert fired.categories == (TimelineCategory.STATE,)
+    assert fired.mutation == "order-moves-under-the-arm"
+    assert fired.mutation_effect is MutationEffect.ENTITY_MUTATION
+    assert fired.tool is None
+    assert (fired.revision_before, fired.revision_after) == (0, 1)
+    assert fired.run_ids == (detail.runs[0].run_id,)
+
+
+@pytest.mark.asyncio
+async def test_a_fault_names_the_project_owned_code_that_performed_it(
+    session: Session, workspace: Workspace
+) -> None:
+    """Resolved from the applier table that ran, never from a map somebody keeps by hand."""
+    detail = start(
+        session, workspace, control_arm(session), mutations=(concurrent_fault(workspace),)
+    )
+
+    await advance(session, detail)
+
+    fired = of_kind(timeline(session, detail), TimelineEntryKind.MUTATION)[0]
+    assert fired.source is not None
+    assert fired.source.path == "capability_lab/domain/mutation.py"
+    assert fired.source.symbol == "advance_fulfilment"
 
 
 # -- where the code that ran it lives ------------------------------------------

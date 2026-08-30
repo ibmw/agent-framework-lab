@@ -1061,7 +1061,7 @@ export interface paths {
     };
     /**
      * Read this experiment's execution as one normalized stream
-     * @description Both arms' customer turns, agent attempts, and tool calls in one ordered, framework-neutral stream, each entry carrying the project-owned source location of the code that ran it where this build can resolve one. Projected from the records `getExperiment` serves rather than stored beside them, so the timeline can never describe an experiment differently from its threads. Deliberately carries no message body: what was said is the thread's, and what happened is this.
+     * @description Both arms' customer turns, agent attempts, tool calls, and the scenario faults that fired into them, in one ordered, framework-neutral stream, each entry carrying the project-owned source location of the code that ran it where this build can resolve one. Projected from the records `getExperiment` serves rather than stored beside them, so the timeline can never describe an experiment differently from its threads. Deliberately carries no message body: what was said is the thread's, and what happened is this.
      */
     get: operations["getExperimentTimeline"];
     put?: never;
@@ -1103,7 +1103,7 @@ export interface paths {
     put?: never;
     /**
      * Run this arm's agent against the customer turn it has not answered
-     * @description Resolves the arm's pinned configuration, renders its prompt against the shop and support-identity versions the experiment froze, and runs the framework against this arm's own sandbox with exactly the tools the configuration enables. Answers with the attempt and every tool call it made. Idempotent over an answer and not over an attempt: an arm whose latest customer turn is already answered returns that answer and calls no model, while one whose last attempt failed makes a new attempt beside it. A framework failure is a recorded turn and a 201, because it is evidence about the run; a framework this lab cannot run at all is a 422, because it is not.
+     * @description Resolves the arm's pinned configuration, renders its prompt against the shop and support-identity versions the experiment froze, and runs the framework against this arm's own sandbox with exactly the tools the configuration enables. Answers with the attempt, every tool call it made, and every scenario fault that fired into this arm while it worked. Idempotent over an answer and not over an attempt: an arm whose latest customer turn is already answered returns that answer and calls no model, while one whose last attempt failed makes a new attempt beside it. A framework failure is a recorded turn and a 201, because it is evidence about the run; a framework this lab cannot run at all is a 422, because it is not.
      */
     post: operations["advanceExperimentRun"];
     delete?: never;
@@ -2414,6 +2414,8 @@ export interface components {
       agent_turns: components["schemas"]["AgentTurnSchema"][];
       /** Tool Events */
       tool_events: components["schemas"]["ToolEventSchema"][];
+      /** Mutation Events */
+      mutation_events: components["schemas"]["MutationEventSchema"][];
     };
     /**
      * ExperimentRunSchema
@@ -2791,6 +2793,57 @@ export interface components {
      * @enum {string}
      */
     MutationEffect: "entity_mutation" | "tool_fault" | "clock_shift" | "service_outage";
+    /**
+     * MutationEventSchema
+     * @description One scenario fault that fired into one arm, and what it did to that arm.
+     *
+     *     No agent asked for this and no agent can see it (ADR 0017): it is the scenario's own
+     *     fault arriving at the moment the recipe bound it to. It is served because an *operator*
+     *     has to be able to explain what the arm met — a write refused as too late, with no visible
+     *     cause, is the one thing a fault must never look like.
+     *
+     *     `after_calls` is how many calls the attempt had already made when it fired, which is what
+     *     places it between two of the agent's calls rather than merely inside the same turn.
+     *
+     *     `revision_before` and `revision_after` are the state change, recorded the way a tool
+     *     event records one. There is no copy of what changed: the arm's own state is the world
+     *     afterwards, and a second description could disagree with it.
+     */
+    MutationEventSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /** Mutation Id */
+      mutation_id: string;
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Block Version */
+      block_version: number;
+      effect: components["schemas"]["MutationEffect"];
+      /** Timing */
+      timing: string;
+      /** Target */
+      target: string;
+      /** Ordinal */
+      ordinal: number;
+      /** Attempt */
+      attempt: number;
+      /** After Calls */
+      after_calls: number;
+      /** Revision Before */
+      revision_before: number;
+      /** Revision After */
+      revision_after: number;
+      /** State Fingerprint */
+      state_fingerprint: string;
+      /** Created At */
+      created_at: string;
+    };
     /**
      * ObjectiveAssessment
      * @description Who decides whether the objective was met.
@@ -3555,12 +3608,17 @@ export interface components {
     };
     /**
      * RunTurnResponse
-     * @description What advancing one arm produced: the attempt, and the calls it made.
+     * @description What advancing one arm produced: the attempt, its calls, and the faults it met.
+     *
+     *     `mutation_events` is empty for almost every advance and is the whole explanation when it
+     *     is not: the scenario moved this arm's world while the agent was working.
      */
     RunTurnResponse: {
       turn: components["schemas"]["AgentTurnSchema"];
       /** Tool Events */
       tool_events: components["schemas"]["ToolEventSchema"][];
+      /** Mutation Events */
+      mutation_events: components["schemas"]["MutationEventSchema"][];
     };
     /**
      * SandboxInteractionSchema
@@ -4961,7 +5019,7 @@ export interface components {
      * @description What one entry is, in the lab's vocabulary rather than any framework's.
      * @enum {string}
      */
-    TimelineEntryKind: "trigger" | "customer_turn" | "agent_turn" | "tool_call";
+    TimelineEntryKind: "trigger" | "customer_turn" | "agent_turn" | "tool_call" | "mutation";
     /**
      * TimelineEntrySchema
      * @description One normalized event in an experiment's execution.
@@ -5002,6 +5060,9 @@ export interface components {
       /** Tool Version */
       tool_version: string | null;
       tool_outcome: components["schemas"]["ToolOutcome"] | null;
+      /** Mutation */
+      mutation: string | null;
+      mutation_effect: components["schemas"]["MutationEffect"] | null;
       turn_outcome: components["schemas"]["AgentTurnOutcome"] | null;
       failure: components["schemas"]["AgentTurnFailure"] | null;
       /** Revision Before */

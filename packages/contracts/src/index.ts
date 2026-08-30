@@ -248,6 +248,7 @@ export type AgentTurnSchema = components["schemas"]["AgentTurnSchema"];
 export type AgentTurnOutcome = components["schemas"]["AgentTurnOutcome"];
 export type AgentTurnFailure = components["schemas"]["AgentTurnFailure"];
 export type ToolEventSchema = components["schemas"]["ToolEventSchema"];
+export type MutationEventSchema = components["schemas"]["MutationEventSchema"];
 export type RunTurnResponse = components["schemas"]["RunTurnResponse"];
 export type ExperimentTimelineResponse = components["schemas"]["ExperimentTimelineResponse"];
 export type TimelineEntrySchema = components["schemas"]["TimelineEntrySchema"];

@@ -46,6 +46,8 @@ DEFINITION_TABLES = {
     # made getting there.
     "experiment_agent_turns",
     "experiment_tool_events",
+    # And what the scenario itself did to those arms while they worked.
+    "experiment_mutation_events",
 }
 POC_TABLES = {
     "action_proposals",
@@ -126,6 +128,10 @@ def test_upgrade_empty_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     }
     assert {"ck_orders_status_valid", "ck_orders_version_positive"} <= {
         constraint["name"] for constraint in inspector.get_check_constraints("orders")
+    }
+    assert {"ck_mutation_events_revision_forward"} <= {
+        constraint["name"]
+        for constraint in inspector.get_check_constraints("experiment_mutation_events")
     }
     assert {"ck_generated_seed_range"} <= {
         constraint["name"] for constraint in inspector.get_check_constraints("generated_scenarios")

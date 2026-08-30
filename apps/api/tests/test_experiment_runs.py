@@ -40,6 +40,8 @@ from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxNotFoundError
 from capability_lab.domain.agent_configuration import MemoryMode, ModelSettings
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
+from capability_lab.domain.blocks import MutationEffect
+from capability_lab.domain.scenario import BoundMutation, ScenarioBinding
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -61,6 +63,22 @@ from workspace_factories import (
 )
 
 WRITE_TOOL_NAMES = (ADDRESS_CHANGE_APPLY, ADDRESS_CHANGE_PROPOSE)
+
+
+def mutation(
+    workspace: Workspace,
+    mutation_id: str = "order-moves-under-the-arm",
+    timing: str = "after_first_read",
+) -> BoundMutation:
+    """The frame-4 fault, bound to this workspace's order at the moment a test needs."""
+    return BoundMutation(
+        id=mutation_id,
+        block_id=workspace.mutation_block_id,
+        bindings=(
+            ScenarioBinding(parameter="entity_ref", value=f"order:{workspace.order_id}"),
+            ScenarioBinding(parameter="timing", value=timing),
+        ),
+    )
 
 
 @pytest.fixture
@@ -92,9 +110,14 @@ def control_arm(session: Session, **overrides: object) -> ArmSelection:
     return published_configuration(session, published_identity(session), **fields)
 
 
-def start(session: Session, workspace: Workspace, *arms: ArmSelection) -> ExperimentDetail:
+def start(
+    session: Session,
+    workspace: Workspace,
+    *arms: ArmSelection,
+    mutations: tuple[BoundMutation, ...] = (),
+) -> ExperimentDetail:
     publish_prerequisites(workspace)
-    scenario_id = author(workspace)
+    scenario_id = author(workspace, mutations=mutations)
     version = workspace.scenarios.publish_scenario(workspace.shop_id, scenario_id)
     return build_experiments(session).start(
         workspace.shop_id,
@@ -120,6 +143,15 @@ async def advance(
 
 def calls(produced: RunTurn) -> list[str]:
     return [event.event.tool for event in produced.tool_events]
+
+
+def fired(produced: RunTurn) -> list[str]:
+    return [event.event.mutation_id for event in produced.mutation_events]
+
+
+def revision(session: Session, detail: ExperimentDetail, position: int = 0) -> int:
+    run = detail.runs[position]
+    return build_sandboxes(session).get_sandbox(run.shop_id, run.sandbox_id).revision
 
 
 # -- the turn ------------------------------------------------------------------
@@ -484,6 +516,184 @@ async def test_an_experiment_of_another_shop_is_not_advanced(
 
     with pytest.raises(ExperimentNotFoundError):
         await build_runner(session).advance(uuid4(), run.experiment_id, run.run_id)
+
+
+# -- the scenario's faults -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_read_bound_fault_fires_between_the_calls_that_made_it_due(
+    session: Session, workspace: Workspace
+) -> None:
+    """The moment arrives inside the attempt, which is the whole point of firing on the path."""
+    detail = start(session, workspace, control_arm(session), mutations=(mutation(workspace),))
+
+    produced = await advance(session, detail)
+
+    assert fired(produced) == ["order-moves-under-the-arm"]
+    event = produced.mutation_events[0].event
+    assert event.effect is MutationEffect.ENTITY_MUTATION
+    assert event.timing == "after_first_read"
+    assert event.target == f"order:{workspace.order_id}"
+    assert event.ordinal == 0
+    assert event.attempt == 1
+    # Two calls had been made: the interaction context, then the read of the bound order.
+    assert event.after_calls == 2
+    assert calls(produced)[event.after_calls - 1] == ORDER_DETAIL
+    assert event.revision_after == event.revision_before + 1
+    assert event.moved_the_arm
+
+
+@pytest.mark.asyncio
+async def test_a_fault_moves_the_arm_it_fired_into_and_no_other(
+    session: Session, workspace: Workspace
+) -> None:
+    """The isolation an experiment rests on holds for the scenario's own writes too."""
+    detail = start(
+        session,
+        workspace,
+        control_arm(session),
+        control_arm(session),
+        mutations=(mutation(workspace),),
+    )
+
+    await advance(session, detail)
+
+    recorded = build_experiments(session).get_experiment(
+        detail.record.shop_id, detail.record.experiment_id
+    )
+    assert [event.run_id for event in recorded.mutation_events] == [detail.runs[0].run_id]
+    assert revision(session, detail, 1) == 0
+
+
+@pytest.mark.asyncio
+async def test_both_arms_meet_the_same_fault_in_their_own_world(
+    session: Session, workspace: Workspace
+) -> None:
+    """One schedule, two arms: the fault is not a comparison variable, meeting it is."""
+    detail = start(
+        session,
+        workspace,
+        control_arm(session),
+        control_arm(session),
+        mutations=(mutation(workspace),),
+    )
+
+    await advance(session, detail, position=0)
+    await advance(session, detail, position=1)
+
+    recorded = build_experiments(session).get_experiment(
+        detail.record.shop_id, detail.record.experiment_id
+    )
+    assert [event.event.mutation_id for event in recorded.mutation_events] == [
+        "order-moves-under-the-arm",
+        "order-moves-under-the-arm",
+    ]
+    assert {event.run_id for event in recorded.mutation_events} == {
+        run.run_id for run in detail.runs
+    }
+    assert {event.event.revision_before for event in recorded.mutation_events} == {0}
+
+
+@pytest.mark.asyncio
+async def test_a_fault_happens_to_an_arm_once_however_often_it_advances(
+    session: Session, workspace: Workspace
+) -> None:
+    """A world a fault has already happened to is a different world."""
+    detail = start(session, workspace, control_arm(session), mutations=(mutation(workspace),))
+    await advance(session, detail)
+
+    _say(session, detail, "Any news on the address?")
+    again = await advance(session, detail)
+
+    assert fired(again) == []
+    assert len(build_runner(session).list_mutation_events(detail.record.experiment_id)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_turn_bound_fault_fires_before_the_agent_asks_anything(
+    session: Session, workspace: Workspace
+) -> None:
+    """The agent opens its eyes on the world the fault left, not one call later."""
+    detail = start(
+        session,
+        workspace,
+        control_arm(session),
+        mutations=(mutation(workspace, timing="at_turn:1"),),
+    )
+    first = await advance(session, detail)
+    assert fired(first) == []
+
+    _say(session, detail, "Has it shipped yet?")
+    answered = await advance(session, detail)
+
+    assert fired(answered) == ["order-moves-under-the-arm"]
+    event = answered.mutation_events[0].event
+    assert event.ordinal == 1
+    assert event.after_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_a_fault_that_fired_into_a_failed_attempt_stays_fired(
+    session: Session, workspace: Workspace
+) -> None:
+    """The world moved; that the attempt then broke is a fact about the agent, not the world."""
+    detail = start(
+        session,
+        workspace,
+        control_arm(session),
+        mutations=(mutation(workspace, timing="at_turn:1"),),
+    )
+    await advance(session, detail)
+    _say(session, detail, "Has it shipped yet?")
+
+    failed = await advance(session, detail, runtimes=_registry(_FailingRuntime()))
+    retried = await advance(session, detail)
+
+    assert failed.turn.turn.outcome is AgentTurnOutcome.FAILED
+    assert fired(failed) == ["order-moves-under-the-arm"]
+    assert failed.mutation_events[0].event.attempt == 1
+    assert fired(retried) == []
+
+
+@pytest.mark.asyncio
+async def test_a_fault_whose_world_has_moved_past_it_records_nothing(
+    session: Session, workspace: Workspace
+) -> None:
+    """Three faults on one order: two steps exhaust the graph, and the third is not a firing."""
+    detail = start(
+        session,
+        workspace,
+        control_arm(session),
+        mutations=(
+            mutation(workspace, mutation_id="first-fault"),
+            mutation(workspace, mutation_id="second-fault"),
+            mutation(workspace, mutation_id="third-fault"),
+        ),
+    )
+
+    produced = await advance(session, detail)
+
+    assert fired(produced) == ["first-fault", "second-fault"]
+    assert revision(session, detail) == 2
+    # And the redirect the agent computed is now genuinely too late, which is the escalation
+    # the graph carries rather than anything the fault decided.
+    refused = [
+        event.event.tool
+        for event in produced.tool_events
+        if event.event.outcome is ToolOutcome.REFUSED
+    ]
+    assert ADDRESS_CHANGE_PROPOSE in refused
+
+
+@pytest.mark.asyncio
+async def test_a_recipe_with_no_fault_fires_none(session: Session, workspace: Workspace) -> None:
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail)
+
+    assert fired(produced) == []
+    assert revision(session, detail) == 1
 
 
 # -- helpers -------------------------------------------------------------------

@@ -54,11 +54,13 @@ from capability_lab.application.experiments import (
     RunRecord,
     StartExperiment,
 )
+from capability_lab.application.mutation_events import MutationEventRecord
 from capability_lab.application.participants import ParticipantDriver
 from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxRecord
 from capability_lab.application.source_locations import SourceLocation
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
+from capability_lab.domain.blocks import MutationEffect
 from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
 from capability_lab.domain.experiment import (
@@ -368,6 +370,58 @@ class ToolEventSchema(StrictApiModel):
         )
 
 
+class MutationEventSchema(StrictApiModel):
+    """One scenario fault that fired into one arm, and what it did to that arm.
+
+    No agent asked for this and no agent can see it (ADR 0017): it is the scenario's own
+    fault arriving at the moment the recipe bound it to. It is served because an *operator*
+    has to be able to explain what the arm met — a write refused as too late, with no visible
+    cause, is the one thing a fault must never look like.
+
+    `after_calls` is how many calls the attempt had already made when it fired, which is what
+    places it between two of the agent's calls rather than merely inside the same turn.
+
+    `revision_before` and `revision_after` are the state change, recorded the way a tool
+    event records one. There is no copy of what changed: the arm's own state is the world
+    afterwards, and a second description could disagree with it.
+    """
+
+    run_id: UUID
+    mutation_id: str
+    block_id: UUID
+    block_version: int
+    effect: MutationEffect
+    timing: str
+    target: str
+    ordinal: int
+    attempt: int
+    after_calls: int
+    revision_before: int
+    revision_after: int
+    state_fingerprint: str
+    created_at: str
+
+    @classmethod
+    def from_record(cls, record: MutationEventRecord) -> Self:
+        event = record.event
+        return cls(
+            run_id=record.run_id,
+            mutation_id=event.mutation_id,
+            block_id=event.block_id,
+            block_version=event.block_version,
+            effect=event.effect,
+            timing=event.timing,
+            target=event.target,
+            ordinal=event.ordinal,
+            attempt=event.attempt,
+            after_calls=event.after_calls,
+            revision_before=event.revision_before,
+            revision_after=event.revision_after,
+            state_fingerprint=event.state_fingerprint,
+            created_at=record.created_at.isoformat(),
+        )
+
+
 class AgentTurnSchema(StrictApiModel):
     """One attempt at one arm's reply.
 
@@ -403,16 +457,24 @@ class AgentTurnSchema(StrictApiModel):
 
 
 class RunTurnResponse(StrictApiModel):
-    """What advancing one arm produced: the attempt, and the calls it made."""
+    """What advancing one arm produced: the attempt, its calls, and the faults it met.
+
+    `mutation_events` is empty for almost every advance and is the whole explanation when it
+    is not: the scenario moved this arm's world while the agent was working.
+    """
 
     turn: AgentTurnSchema
     tool_events: list[ToolEventSchema]
+    mutation_events: list[MutationEventSchema]
 
     @classmethod
     def from_domain(cls, produced: RunTurn) -> Self:
         return cls(
             turn=AgentTurnSchema.from_record(produced.turn),
             tool_events=[ToolEventSchema.from_record(event) for event in produced.tool_events],
+            mutation_events=[
+                MutationEventSchema.from_record(event) for event in produced.mutation_events
+            ],
         )
 
 
@@ -427,6 +489,7 @@ class ExperimentResponse(ExperimentSummarySchema):
     turns: list[ParticipantTurnSchema]
     agent_turns: list[AgentTurnSchema]
     tool_events: list[ToolEventSchema]
+    mutation_events: list[MutationEventSchema]
 
     @classmethod
     def from_detail(cls, detail: ExperimentDetail) -> Self:
@@ -453,6 +516,9 @@ class ExperimentResponse(ExperimentSummarySchema):
             turns=[ParticipantTurnSchema.from_record(turn) for turn in detail.turns],
             agent_turns=[AgentTurnSchema.from_record(turn) for turn in detail.agent_turns],
             tool_events=[ToolEventSchema.from_record(event) for event in detail.tool_events],
+            mutation_events=[
+                MutationEventSchema.from_record(event) for event in detail.mutation_events
+            ],
         )
 
 
@@ -508,6 +574,8 @@ class TimelineEntrySchema(StrictApiModel):
     tool: str | None
     tool_version: str | None
     tool_outcome: ToolOutcome | None
+    mutation: str | None
+    mutation_effect: MutationEffect | None
     turn_outcome: AgentTurnOutcome | None
     failure: AgentTurnFailure | None
     revision_before: int | None
@@ -529,6 +597,8 @@ class TimelineEntrySchema(StrictApiModel):
             tool=entry.tool,
             tool_version=entry.tool_version,
             tool_outcome=entry.tool_outcome,
+            mutation=entry.mutation,
+            mutation_effect=entry.mutation_effect,
             turn_outcome=entry.turn_outcome,
             failure=entry.failure,
             revision_before=entry.revision_before,
@@ -719,8 +789,9 @@ class ExperimentRoutes:
             operation_id="getExperimentTimeline",
             summary="Read this experiment's execution as one normalized stream",
             description=(
-                "Both arms' customer turns, agent attempts, and tool calls in one ordered, "
-                "framework-neutral stream, each entry carrying the project-owned source "
+                "Both arms' customer turns, agent attempts, tool calls, and the scenario "
+                "faults that fired into them, in one ordered, framework-neutral stream, each "
+                "entry carrying the project-owned source "
                 "location of the code that ran it where this build can resolve one. Projected "
                 "from the records `getExperiment` serves rather than stored beside them, so "
                 "the timeline can never describe an experiment differently from its threads. "
@@ -766,7 +837,8 @@ class ExperimentRoutes:
                 "Resolves the arm's pinned configuration, renders its prompt against the shop "
                 "and support-identity versions the experiment froze, and runs the framework "
                 "against this arm's own sandbox with exactly the tools the configuration "
-                "enables. Answers with the attempt and every tool call it made. Idempotent "
+                "enables. Answers with the attempt, every tool call it made, and every "
+                "scenario fault that fired into this arm while it worked. Idempotent "
                 "over an answer and not over an attempt: an arm whose latest customer turn is "
                 "already answered returns that answer and calls no model, while one whose last "
                 "attempt failed makes a new attempt beside it. A framework failure is a "

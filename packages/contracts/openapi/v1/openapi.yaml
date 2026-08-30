@@ -3496,13 +3496,13 @@ paths:
   /api/v1/shops/{shop_id}/experiments/{experiment_id}/timeline:
     get:
       summary: Read this experiment's execution as one normalized stream
-      description: 'Both arms'' customer turns, agent attempts, and tool calls in
-        one ordered, framework-neutral stream, each entry carrying the project-owned
-        source location of the code that ran it where this build can resolve one.
-        Projected from the records `getExperiment` serves rather than stored beside
-        them, so the timeline can never describe an experiment differently from its
-        threads. Deliberately carries no message body: what was said is the thread''s,
-        and what happened is this.'
+      description: 'Both arms'' customer turns, agent attempts, tool calls, and the
+        scenario faults that fired into them, in one ordered, framework-neutral stream,
+        each entry carrying the project-owned source location of the code that ran
+        it where this build can resolve one. Projected from the records `getExperiment`
+        serves rather than stored beside them, so the timeline can never describe
+        an experiment differently from its threads. Deliberately carries no message
+        body: what was said is the thread''s, and what happened is this.'
       operationId: getExperimentTimeline
       parameters:
       - name: shop_id
@@ -3600,12 +3600,13 @@ paths:
       description: 'Resolves the arm''s pinned configuration, renders its prompt against
         the shop and support-identity versions the experiment froze, and runs the
         framework against this arm''s own sandbox with exactly the tools the configuration
-        enables. Answers with the attempt and every tool call it made. Idempotent
-        over an answer and not over an attempt: an arm whose latest customer turn
-        is already answered returns that answer and calls no model, while one whose
-        last attempt failed makes a new attempt beside it. A framework failure is
-        a recorded turn and a 201, because it is evidence about the run; a framework
-        this lab cannot run at all is a 422, because it is not.'
+        enables. Answers with the attempt, every tool call it made, and every scenario
+        fault that fired into this arm while it worked. Idempotent over an answer
+        and not over an attempt: an arm whose latest customer turn is already answered
+        returns that answer and calls no model, while one whose last attempt failed
+        makes a new attempt beside it. A framework failure is a recorded turn and
+        a 201, because it is evidence about the run; a framework this lab cannot run
+        at all is a 422, because it is not.'
       operationId: advanceExperimentRun
       parameters:
       - name: shop_id
@@ -6249,6 +6250,11 @@ components:
             $ref: '#/components/schemas/ToolEventSchema'
           type: array
           title: Tool Events
+        mutation_events:
+          items:
+            $ref: '#/components/schemas/MutationEventSchema'
+          type: array
+          title: Mutation Events
       additionalProperties: false
       type: object
       required:
@@ -6271,6 +6277,7 @@ components:
       - turns
       - agent_turns
       - tool_events
+      - mutation_events
       title: ExperimentResponse
       description: 'One experiment in full: the versions it pinned, its arms, and
         their threads.'
@@ -6963,6 +6970,99 @@ components:
 
         consequence and never the cause. The effect says which part of the sandbox
         moves.'
+    MutationEventSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        mutation_id:
+          type: string
+          title: Mutation Id
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        block_version:
+          type: integer
+          title: Block Version
+        effect:
+          $ref: '#/components/schemas/MutationEffect'
+        timing:
+          type: string
+          title: Timing
+        target:
+          type: string
+          title: Target
+        ordinal:
+          type: integer
+          title: Ordinal
+        attempt:
+          type: integer
+          title: Attempt
+        after_calls:
+          type: integer
+          title: After Calls
+        revision_before:
+          type: integer
+          title: Revision Before
+        revision_after:
+          type: integer
+          title: Revision After
+        state_fingerprint:
+          type: string
+          title: State Fingerprint
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - mutation_id
+      - block_id
+      - block_version
+      - effect
+      - timing
+      - target
+      - ordinal
+      - attempt
+      - after_calls
+      - revision_before
+      - revision_after
+      - state_fingerprint
+      - created_at
+      title: MutationEventSchema
+      description: 'One scenario fault that fired into one arm, and what it did to
+        that arm.
+
+
+        No agent asked for this and no agent can see it (ADR 0017): it is the scenario''s
+        own
+
+        fault arriving at the moment the recipe bound it to. It is served because
+        an *operator*
+
+        has to be able to explain what the arm met — a write refused as too late,
+        with no visible
+
+        cause, is the one thing a fault must never look like.
+
+
+        `after_calls` is how many calls the attempt had already made when it fired,
+        which is what
+
+        places it between two of the agent''s calls rather than merely inside the
+        same turn.
+
+
+        `revision_before` and `revision_after` are the state change, recorded the
+        way a tool
+
+        event records one. There is no copy of what changed: the arm''s own state
+        is the world
+
+        afterwards, and a second description could disagree with it.'
     ObjectiveAssessment:
       type: string
       enum:
@@ -8467,14 +8567,26 @@ components:
             $ref: '#/components/schemas/ToolEventSchema'
           type: array
           title: Tool Events
+        mutation_events:
+          items:
+            $ref: '#/components/schemas/MutationEventSchema'
+          type: array
+          title: Mutation Events
       additionalProperties: false
       type: object
       required:
       - turn
       - tool_events
+      - mutation_events
       title: RunTurnResponse
-      description: 'What advancing one arm produced: the attempt, and the calls it
-        made.'
+      description: 'What advancing one arm produced: the attempt, its calls, and the
+        faults it met.
+
+
+        `mutation_events` is empty for almost every advance and is the whole explanation
+        when it
+
+        is not: the scenario moved this arm''s world while the agent was working.'
     SandboxInteractionSchema:
       properties:
         origin_kind:
@@ -11093,6 +11205,7 @@ components:
       - customer_turn
       - agent_turn
       - tool_call
+      - mutation
       title: TimelineEntryKind
       description: What one entry is, in the lab's vocabulary rather than any framework's.
     TimelineEntrySchema:
@@ -11151,6 +11264,15 @@ components:
           anyOf:
           - $ref: '#/components/schemas/ToolOutcome'
           - type: 'null'
+        mutation:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mutation
+        mutation_effect:
+          anyOf:
+          - $ref: '#/components/schemas/MutationEffect'
+          - type: 'null'
         turn_outcome:
           anyOf:
           - $ref: '#/components/schemas/AgentTurnOutcome'
@@ -11188,6 +11310,8 @@ components:
       - tool
       - tool_version
       - tool_outcome
+      - mutation
+      - mutation_effect
       - turn_outcome
       - failure
       - revision_before

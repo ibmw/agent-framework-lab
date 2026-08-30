@@ -604,3 +604,51 @@ class ToolEventModel(Base):
     revision_after: Mapped[int] = mapped_column(Integer)
     state_fingerprint: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class MutationEventModel(Base):
+    """One scenario fault firing into one arm, and what it did to that arm.
+
+    Keyed by the arm and the bound mutation, which is the whole of the once-per-arm rule:
+    a fault that has happened to a world cannot happen to it again, and the store says so
+    rather than the runtime remembering to check (ADR 0028).
+
+    `after_calls` is how many calls the attempt had already made when the fault fired, so a
+    firing sits *between* two of the agent's calls rather than merely inside the same turn.
+    That is what makes the concurrency refusal readable: the agent proposed against a world,
+    the fault moved it, and the write no longer applied.
+
+    The two revisions are the state change, recorded exactly as a tool event records one. No
+    copy of the order and no description of the change: the arm's own state document is the
+    world afterwards, and a second description could disagree with it.
+    """
+
+    __tablename__ = "experiment_mutation_events"
+    __table_args__ = (
+        CheckConstraint("ordinal >= 0", name="ck_mutation_events_ordinal_non_negative"),
+        CheckConstraint("attempt >= 1", name="ck_mutation_events_attempt_positive"),
+        CheckConstraint("after_calls >= 0", name="ck_mutation_events_after_calls_non_negative"),
+        CheckConstraint("block_version >= 1", name="ck_mutation_events_block_version_positive"),
+        # A fault that left the arm where it was is not a firing, so it is never written.
+        CheckConstraint(
+            "revision_after > revision_before", name="ck_mutation_events_revision_forward"
+        ),
+        Index("ix_mutation_events_experiment", "experiment_id", "created_at"),
+        Index("ix_mutation_events_arm", "run_id", "ordinal", "attempt", "after_calls"),
+    )
+
+    run_id: Mapped[str] = mapped_column(ForeignKey("experiment_runs.run_id"), primary_key=True)
+    mutation_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(String(36))
+    block_id: Mapped[str] = mapped_column(String(36))
+    block_version: Mapped[int] = mapped_column(Integer)
+    effect: Mapped[str] = mapped_column(String(32))
+    timing: Mapped[str] = mapped_column(String(64))
+    target: Mapped[str] = mapped_column(String(128))
+    ordinal: Mapped[int] = mapped_column(Integer)
+    attempt: Mapped[int] = mapped_column(Integer)
+    after_calls: Mapped[int] = mapped_column(Integer)
+    revision_before: Mapped[int] = mapped_column(Integer)
+    revision_after: Mapped[int] = mapped_column(Integer)
+    state_fingerprint: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())

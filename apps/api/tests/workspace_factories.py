@@ -35,6 +35,7 @@ from capability_lab.application.sandbox_materialization import (
 )
 from capability_lab.application.sandbox_tools import SandboxToolService, ToolHandler
 from capability_lab.application.sandboxes import SandboxRecord, SandboxService
+from capability_lab.application.scenario_mutations import ScenarioMutationRuntime
 from capability_lab.application.scenarios import ScenarioService
 from capability_lab.application.shops import ShopService
 from capability_lab.application.support_identities import SupportIdentityService
@@ -59,6 +60,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
+    SqlAlchemyMutationEventRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyParticipantTurnRepository,
     SqlAlchemyPublishedVersionDirectory,
@@ -190,6 +192,17 @@ def build_tools(
     )
 
 
+def build_scenario_mutations(session: Session) -> ScenarioMutationRuntime:
+    """The fault schedule an experiment carries, over the arm it fires into."""
+    return ScenarioMutationRuntime(
+        scenario_repository(session),
+        mutation_block_repository(session),
+        build_sandboxes(session),
+        SqlAlchemyMutationEventRepository(session),
+        AdvancingClock(),
+    )
+
+
 def build_experiments(session: Session) -> ExperimentService:
     return ExperimentService(
         SqlAlchemyExperimentRepository(session),
@@ -202,6 +215,7 @@ def build_experiments(session: Session) -> ExperimentService:
         shop_repository(session),
         ticket_repository(session),
         agent_configuration_repository(session),
+        build_scenario_mutations(session),
         SqlAlchemyPublishedVersionDirectory(session),
         AdvancingClock(),
     )
@@ -232,6 +246,7 @@ def build_runner(
         support_identity_repository(session),
         agent_configuration_repository(session),
         build_tools(session, handlers),
+        build_scenario_mutations(session),
         runtimes or SupportAgentRuntimeRegistry({control.framework_id: control}),
         AdvancingClock(),
     )

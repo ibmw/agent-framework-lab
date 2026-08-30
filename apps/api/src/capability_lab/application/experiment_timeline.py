@@ -5,7 +5,7 @@ and ADR 0026 the agent's, each keyed the way its own writer needed. Read back, t
 streams a client has to interleave — and interleaving them is exactly where a framework's
 own vocabulary would creep back in. This module does it once, in the lab's words.
 
-Four decisions shape it.
+Six decisions shape it.
 
 **A timeline is a reading, not a record.** Nothing here is stored and no table is added: every
 entry is projected from the participant turns, agent turns, and tool events that are already
@@ -33,6 +33,13 @@ later handed to an evaluation.
 **A refusal is not an error.** They are separate categories because ADR 0021 made them
 separate things: a tool that declines is the world answering, and an agent that was correctly
 told no must not read as a broken lab.
+
+**A fault the scenario fired is an entry like any other.** It moved one arm's world without
+any agent asking, so it belongs in the stream that explains what the arm saw — placed by the
+number of calls the attempt had already made, which is what puts it between the proposal it
+invalidated and the write that was refused (ADR 0028). It is a state change and never a tool
+call: nothing selected it, and an operator filtering for what the agent did must not find it
+there.
 """
 
 from __future__ import annotations
@@ -55,9 +62,12 @@ from capability_lab.application.experiments import (
     ExperimentService,
     ParticipantTurnRecord,
 )
+from capability_lab.application.mutation_events import MutationEventRecord
 from capability_lab.application.sandbox_tools import TOOL_HANDLERS, ToolOutcome
+from capability_lab.application.scenario_mutations import MUTATION_APPLIERS
 from capability_lab.application.source_locations import SourceLocation, locate
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
+from capability_lab.domain.blocks import MutationEffect
 from capability_lab.domain.experiment import ParticipantTurnSource
 
 __all__ = [
@@ -93,6 +103,9 @@ class TimelineEntryKind(StrEnum):
 
     TOOL_CALL = "tool_call"
     """One published tool one attempt ran, and what it did to that arm."""
+
+    MUTATION = "mutation"
+    """One scenario fault firing into one arm, which no agent asked for and none can see."""
 
 
 class TimelineCategory(StrEnum):
@@ -137,6 +150,8 @@ class TimelineEntry:
     tool: str | None = None
     tool_version: str | None = None
     tool_outcome: ToolOutcome | None = None
+    mutation: str | None = None
+    mutation_effect: MutationEffect | None = None
     turn_outcome: AgentTurnOutcome | None = None
     failure: AgentTurnFailure | None = None
     revision_before: int | None = None
@@ -246,8 +261,31 @@ def build_timeline(
                     attempt=event.event.attempt,
                     phase=_CALLS,
                     sequence=event.event.sequence,
+                    slot=_ASKED,
                 ),
                 _tool_entry(event, step),
+            )
+        )
+    for fired in detail.mutation_events:
+        step = ordinals.get((fired.run_id, fired.event.ordinal))
+        if step is None:  # pragma: no cover - a fault fires into an arm that has a thread
+            continue
+        entries.append(
+            (
+                _Key(
+                    step=step,
+                    voice=_ARM,
+                    position=positions[fired.run_id],
+                    attempt=fired.event.attempt,
+                    phase=_CALLS,
+                    # A fault that fired after two calls sits before the third, which is what
+                    # `after_calls` counts. Sharing the call sequence and losing the tie is
+                    # how "the world moved between these two calls" is expressed with no
+                    # coordinate the record does not already carry.
+                    sequence=fired.event.after_calls,
+                    slot=_UNASKED,
+                ),
+                _mutation_entry(fired, step),
             )
         )
     return tuple(entry for _, entry in sorted(entries, key=lambda pair: pair[0]))
@@ -267,12 +305,15 @@ class _Key(NamedTuple):
     attempt: int = 0
     phase: int = 0
     sequence: int = 0
+    slot: int = 0
 
 
 # What the customer said opens its composition; the arms answer it in their own order.
 _CUSTOMER, _ARM = 0, 1
 # Inside one attempt, the calls happened before the reply that ended it.
 _CALLS, _REPLY = 0, 1
+# At one point in an attempt, what happened to the arm precedes what the agent asked next.
+_UNASKED, _ASKED = 0, 1
 
 
 def _steps(turns: Sequence[ParticipantTurnRecord]) -> Mapping[UUID, int]:
@@ -421,6 +462,31 @@ def _tool_entry(record: ToolEventRecord, step: int) -> TimelineEntry:
         revision_before=event.revision_before,
         revision_after=event.revision_after,
         source=locate(TOOL_HANDLERS.get(event.tool)),
+    )
+
+
+def _mutation_entry(record: MutationEventRecord, step: int) -> TimelineEntry:
+    """One fault firing, and the project-owned code that performed it.
+
+    A state change and nothing else. It is not a tool call — no agent selected it and none
+    can see it (ADR 0017) — and it is not an error: the scenario asked for exactly this, and
+    an operator filtering for what broke must not be shown the incident working as authored.
+    """
+    event = record.event
+    return TimelineEntry(
+        step=step,
+        kind=TimelineEntryKind.MUTATION,
+        categories=(TimelineCategory.STATE,),
+        run_ids=(record.run_id,),
+        occurred_at=record.created_at,
+        ordinal=event.ordinal,
+        attempt=event.attempt,
+        sequence=event.after_calls,
+        mutation=event.mutation_id,
+        mutation_effect=event.effect,
+        revision_before=event.revision_before,
+        revision_after=event.revision_after,
+        source=locate(MUTATION_APPLIERS.get(event.effect)),
     )
 
 

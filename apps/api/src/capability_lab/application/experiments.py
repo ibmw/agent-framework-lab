@@ -71,6 +71,7 @@ from capability_lab.application.experiment_document import (
     experiment_from_document,
     fingerprint_experiment,
 )
+from capability_lab.application.mutation_events import MutationEventRecord
 from capability_lab.application.participants import (
     ParticipantDriver,
     ParticipantRequest,
@@ -82,6 +83,7 @@ from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotService,
 )
 from capability_lab.application.sandboxes import SandboxRecord, SandboxService
+from capability_lab.application.scenario_mutations import ScenarioMutationRuntime
 from capability_lab.application.scenarios import (
     ScenarioVersionNotFoundError,
     scenario_definition_id,
@@ -324,6 +326,7 @@ class ExperimentDetail:
     turns: tuple[ParticipantTurnRecord, ...]
     agent_turns: tuple[AgentTurnRecord, ...]
     tool_events: tuple[ToolEventRecord, ...]
+    mutation_events: tuple[MutationEventRecord, ...]
 
 
 class ExperimentService:
@@ -341,6 +344,7 @@ class ExperimentService:
         shops: DefinitionRepository[ShopPayload],
         tickets: DefinitionRepository[TicketPayload],
         configurations: DefinitionRepository[AgentConfigurationPayload],
+        mutations: ScenarioMutationRuntime,
         published_versions: PublishedVersionReader,
         clock: Clock,
     ) -> None:
@@ -354,6 +358,7 @@ class ExperimentService:
         self._shops = shops
         self._tickets = tickets
         self._configurations = configurations
+        self._mutations = mutations
         self._published_versions = published_versions
         self._clock = clock
 
@@ -388,6 +393,7 @@ class ExperimentService:
             turns=self._turns.list_for_experiment(experiment_id),
             agent_turns=self._agent_turns.list_for_experiment(experiment_id),
             tool_events=self._tool_events.list_for_experiment(experiment_id),
+            mutation_events=self._mutations.list_events(experiment_id),
         )
 
     # -- the setup gate --------------------------------------------------------
@@ -615,7 +621,16 @@ class ExperimentService:
         resolution, resolution_issues = self._resolution(command, arms)
         return _Judged(
             validation=validation_of(
-                [*self._tone_issues(shop, arms), *_comparison_issues(arms), *resolution_issues]
+                [
+                    *self._tone_issues(shop, arms),
+                    # Whether the lab can actually carry out the faults this recipe composes
+                    # (ADR 0028). A publishing author may compose one no build injects yet;
+                    # an experiment that started with it would produce evidence reading
+                    # "the fault changed nothing", which is the one thing it must not mean.
+                    *self._mutations.issues(command.scenario_id, command.scenario_version),
+                    *_comparison_issues(arms),
+                    *resolution_issues,
+                ]
             ),
             resolution=resolution,
         )

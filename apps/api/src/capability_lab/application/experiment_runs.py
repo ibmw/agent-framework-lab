@@ -34,6 +34,12 @@ with teeth rather than a label.
 an invoker this module constructs; there is no other path. A tool event is therefore
 produced by the call rather than reported by an adapter, which is what keeps a framework's
 own event objects out of the evidence entirely.
+
+**The scenario's faults ride on that same path.** A mutation's moment can arrive between two
+of an agent's calls — that is the case ADR 0022 built the concurrency refusal for — so the
+schedule is asked before the runtime is started and again after every call the invoker makes
+(ADR 0028). It fires into this arm's sandbox alone, and the arm beside it stays exactly where
+it was until its own advance reaches the same moment.
 """
 
 from __future__ import annotations
@@ -78,6 +84,7 @@ from capability_lab.application.experiments import (
     ParticipantTurnRepository,
     RunRecord,
 )
+from capability_lab.application.mutation_events import MutationEventRecord
 from capability_lab.application.ports import Clock
 from capability_lab.application.sandbox_actions import ToolActor
 from capability_lab.application.sandbox_materialization import (
@@ -94,6 +101,11 @@ from capability_lab.application.sandbox_tools import (
     ToolOutcome,
 )
 from capability_lab.application.sandboxes import SandboxRepository
+from capability_lab.application.scenario_mutations import (
+    ArmMutations,
+    ScenarioMutationRuntime,
+    entities_read,
+)
 from capability_lab.domain.agent_configuration import AgentConfigurationPayload, MemoryMode
 from capability_lab.domain.agent_turn import (
     MAX_AGENT_TURN_LENGTH,
@@ -122,10 +134,21 @@ class RunUnansweredError(ExperimentRunNotFoundError):
 
 @dataclass(frozen=True, slots=True)
 class RunTurn:
-    """What one advance produced: the attempt, and the calls it made getting there."""
+    """What one advance produced: the attempt, the calls it made, and the faults it fired.
+
+    The mutations are here rather than left to a later read of the experiment because an
+    operator advancing an arm has to be able to see that the world moved under it. A refusal
+    with no visible cause is the one thing a fault must never look like.
+
+    "Produced" is exact: these are the faults that fired *in this attempt*, so a retry after
+    a failed attempt reports none — the fault fired during the advance that failed, and that
+    advance answered with it. The whole listing an arm has met is `getExperiment`'s, which is
+    what the bench reads after every advance.
+    """
 
     turn: AgentTurnRecord
     tool_events: tuple[ToolEventRecord, ...]
+    mutation_events: tuple[MutationEventRecord, ...] = ()
 
 
 class ExperimentRunner:
@@ -144,6 +167,7 @@ class ExperimentRunner:
         support_identities: DefinitionRepository[SupportIdentityPayload],
         configurations: DefinitionRepository[AgentConfigurationPayload],
         tools: SandboxToolService,
+        mutations: ScenarioMutationRuntime,
         runtimes: SupportAgentRuntimeRegistry,
         clock: Clock,
     ) -> None:
@@ -158,6 +182,7 @@ class ExperimentRunner:
         self._support_identities = support_identities
         self._configurations = configurations
         self._tools = tools
+        self._mutations = mutations
         self._runtimes = runtimes
         self._clock = clock
 
@@ -190,8 +215,14 @@ class ExperimentRunner:
         )
         if answered is not None:
             # Already answered: return it and call nothing. Advancing twice must not cost a
-            # second model call, and an arm must never hold two replies to one question.
-            return RunTurn(turn=answered, tool_events=self._recorded(answered))
+            # second model call, and an arm must never hold two replies to one question. The
+            # faults that fired during it come back too, because they are part of what that
+            # answer was produced against.
+            return RunTurn(
+                turn=answered,
+                tool_events=self._recorded(answered),
+                mutation_events=self._recorded_mutations(answered),
+            )
         return await self._attempt(record, run, ordinal=ordinal, attempt=len(attempts) + 1)
 
     # -- reading ---------------------------------------------------------------
@@ -201,6 +232,9 @@ class ExperimentRunner:
 
     def list_tool_events(self, experiment_id: UUID) -> tuple[ToolEventRecord, ...]:
         return self._tool_events.list_for_experiment(experiment_id)
+
+    def list_mutation_events(self, experiment_id: UUID) -> tuple[MutationEventRecord, ...]:
+        return self._mutations.list_events(experiment_id)
 
     # -- one attempt -----------------------------------------------------------
 
@@ -214,6 +248,10 @@ class ExperimentRunner:
             for entry in self._participant_turns.list_for_experiment(record.experiment_id)
             if entry.run_id == run.run_id
         )
+        mutations = self._scheduled(record, run, ordinal=ordinal, attempt=attempt)
+        # Before the runtime is started, so a fault bound to this turn is already in the
+        # world the agent opens its eyes on rather than arriving one call late.
+        mutations.fire_due()
         invoker = _RecordingInvoker(
             tools=self._tools,
             sandboxes=self._sandboxes,
@@ -222,6 +260,7 @@ class ExperimentRunner:
             actor=resolved.actor,
             contracts=resolved.tools,
             budget=resolved.configuration.model.max_tool_rounds,
+            mutations=mutations,
         )
         request = AgentTurnRequest(
             run_id=run.run_id,
@@ -257,7 +296,21 @@ class ExperimentRunner:
                 for event in invoker.events(ordinal=ordinal, attempt=attempt)
             )
         )
-        return RunTurn(turn=written, tool_events=events)
+        # The same moment as the attempt and its calls: a fault fired inside this attempt,
+        # and `after_calls` is what orders it among them. A clock read again here would
+        # order the record by how long the writing took.
+        fired = self._mutations.append_all(
+            tuple(
+                MutationEventRecord(
+                    run_id=run.run_id,
+                    experiment_id=record.experiment_id,
+                    event=event,
+                    created_at=now,
+                )
+                for event in mutations.events
+            )
+        )
+        return RunTurn(turn=written, tool_events=events, mutation_events=fired)
 
     async def _answer(
         self,
@@ -304,6 +357,37 @@ class ExperimentRunner:
     def _failed(failure: AgentTurnFailure, *, ordinal: int, attempt: int) -> AgentTurn:
         return AgentTurn(
             ordinal=ordinal, attempt=attempt, outcome=AgentTurnOutcome.FAILED, failure=failure
+        )
+
+    # -- the scenario's faults -------------------------------------------------
+
+    def _scheduled(
+        self, record: ExperimentRecord, run: RunRecord, *, ordinal: int, attempt: int
+    ) -> ArmMutations:
+        """This arm's fault schedule, with everything it has already met left out.
+
+        Read from the scenario version the experiment pinned, so both arms carry the same
+        schedule however far apart they have drifted (ADR 0028). What differs between them is
+        only what each has already done: which faults have fired into this arm, and whether
+        this arm has read the entity a fault is waiting on.
+        """
+        fired = frozenset(
+            entry.event.mutation_id
+            for entry in self._mutations.list_events(record.experiment_id)
+            if entry.run_id == run.run_id
+        )
+        read: set[UUID] = set()
+        for entry in self._tool_events.list_for_experiment(record.experiment_id):
+            if entry.run_id == run.run_id:
+                read.update(entities_read(entry.event.tool, entry.event.document))
+        return self._mutations.open(
+            schedule=self._mutations.schedule(record.scenario_id, record.scenario_version),
+            shop_id=run.shop_id,
+            sandbox_id=run.sandbox_id,
+            ordinal=ordinal,
+            attempt=attempt,
+            fired=fired,
+            read_entities=frozenset(read),
         )
 
     # -- resolution ------------------------------------------------------------
@@ -448,6 +532,15 @@ class ExperimentRunner:
                 messages.append(AgentMessage(role=AgentRole.AGENT, body=reply))
         return tuple(messages)
 
+    def _recorded_mutations(self, turn: AgentTurnRecord) -> tuple[MutationEventRecord, ...]:
+        return tuple(
+            entry
+            for entry in self._mutations.list_events(turn.experiment_id)
+            if entry.run_id == turn.run_id
+            and entry.event.ordinal == turn.turn.ordinal
+            and entry.event.attempt == turn.turn.attempt
+        )
+
     def _recorded(self, turn: AgentTurnRecord) -> tuple[ToolEventRecord, ...]:
         return tuple(
             entry
@@ -479,6 +572,11 @@ class _RecordingInvoker(SandboxToolInvoker):
     The limit is spent per **call**. A round that made three calls spent three — the
     stricter reading, and the only one an evidence record can count, since a round is a
     framework's idea of a model request and this records what the arm was asked.
+
+    It is also where the scenario's faults meet the run. Every call is followed by asking the
+    schedule whether the world should move now, which is what lets a fault land between a
+    proposal and the write that would have applied it (ADR 0028). The runtime cannot see the
+    difference: it asked a tool, and the next thing it asks answers about a world that moved.
     """
 
     def __init__(
@@ -491,6 +589,7 @@ class _RecordingInvoker(SandboxToolInvoker):
         actor: ToolActor,
         contracts: tuple[ToolContract, ...],
         budget: int,
+        mutations: ArmMutations,
     ) -> None:
         self._tools = tools
         self._sandboxes = sandboxes
@@ -499,6 +598,7 @@ class _RecordingInvoker(SandboxToolInvoker):
         self._actor = actor
         self._contracts = contracts
         self._budget = budget
+        self._mutations = mutations
         self._spent = 0
         self._calls: list[_Call] = []
 
@@ -544,6 +644,10 @@ class _RecordingInvoker(SandboxToolInvoker):
                 state_fingerprint=after.state_fingerprint,
             )
         )
+        # After the call is recorded, so a fault that fires now is recorded as having
+        # happened after it — and after the answer is computed, so what this call reports is
+        # the world the agent asked about rather than the one the fault left behind.
+        self._mutations.after_call(contract.name, execution.result.document)
         return execution.result.document
 
     def events(self, *, ordinal: int, attempt: int) -> tuple[ToolEvent, ...]:

@@ -450,6 +450,44 @@ async def test_advancing_an_arm_answers_with_the_turn_and_the_calls_it_made(
     assert body["tool_events"][0]["result"]["canonical_schema_version"] == "tool-result-v1"
 
 
+async def test_advancing_an_arm_answers_with_the_faults_that_fired_into_it(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """A refusal with no visible cause is the one thing a fault must never look like."""
+    experiment = await control_experiment(client, lab)
+
+    body = (await advance(client, lab, experiment)).json()
+
+    assert [event["mutation_id"] for event in body["mutation_events"]] == [
+        "order-moves-under-the-arm"
+    ]
+    fired = body["mutation_events"][0]
+    assert fired["run_id"] == experiment["runs"][0]["run_id"]
+    assert fired["effect"] == "entity_mutation"
+    assert fired["timing"] == "after_first_read"
+    assert fired["target"] == f"order:{lab['order_id']}"
+    assert fired["after_calls"] == 2
+    assert fired["revision_after"] == fired["revision_before"] + 1
+
+
+async def test_an_experiment_reads_back_the_faults_its_arms_have_met(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    read = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+
+    assert [event["run_id"] for event in read["mutation_events"]] == [
+        experiment["runs"][0]["run_id"]
+    ]
+    assert read["mutation_events"][0]["block_version"] == 1
+
+
 async def test_the_write_is_reported_as_the_state_change_it_is(
     client: AsyncClient, lab: dict[str, str]
 ) -> None:
@@ -466,7 +504,10 @@ async def test_the_write_is_reported_as_the_state_change_it_is(
             f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
         )
     ).json()
-    assert [run["revision"] for run in read["runs"]] == [1, 0]
+    # Two revisions on the advanced arm: the scenario's fault moved it once while the agent
+    # was reading, and the agent's own write moved it again. The arm beside it has neither,
+    # because a fault fires into the arm being advanced and no other.
+    assert [run["revision"] for run in read["runs"]] == [2, 0]
     assert len({run["state_fingerprint"] for run in read["runs"]}) == 2
 
 
@@ -595,13 +636,17 @@ async def test_the_timeline_reports_one_arm_s_execution_in_the_order_it_happened
 
     assert response.status_code == 200, response.text
     entries = response.json()["entries"]
+    # The fault sits where it fired: after the read that made it due, and before the call the
+    # agent asked next against the world it left behind.
     assert [entry["kind"] for entry in entries] == [
         "trigger",
-        *["tool_call"] * 5,
+        *["tool_call"] * 2,
+        "mutation",
+        *["tool_call"] * 3,
         "agent_turn",
     ]
     assert entries[0]["run_ids"] == [run["run_id"] for run in experiment["runs"]]
-    applied = entries[5]
+    applied = entries[6]
     assert applied["tool"] == "orders.apply_address_change"
     assert applied["categories"] == ["tool", "state"]
     assert applied["revision_after"] == applied["revision_before"] + 1

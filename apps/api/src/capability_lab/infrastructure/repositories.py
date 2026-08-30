@@ -43,6 +43,7 @@ from capability_lab.application.experiments import (
     ParticipantTurnRecord,
     RunRecord,
 )
+from capability_lab.application.mutation_events import MutationEvent, MutationEventRecord
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.order_fixture_payload import (
     order_fixture_content_fingerprint,
@@ -82,7 +83,11 @@ from capability_lab.application.support_identities import SUPPORT_IDENTITY_CODEC
 from capability_lab.application.tickets import TICKET_CODEC
 from capability_lab.domain.agent_configuration import AgentConfigurationPayload
 from capability_lab.domain.agent_turn import AgentTurn, AgentTurnFailure, AgentTurnOutcome
-from capability_lab.domain.blocks import MutationBlockPayload, ObjectiveBlockPayload
+from capability_lab.domain.blocks import (
+    MutationBlockPayload,
+    MutationEffect,
+    ObjectiveBlockPayload,
+)
 from capability_lab.domain.customer_profile import CustomerProfilePayload
 from capability_lab.domain.definitions import (
     DefinitionDraft,
@@ -127,6 +132,7 @@ from capability_lab.infrastructure.models import (
     GeneratedScenarioProductModel,
     IdempotencyRecordModel,
     MemoryRecordModel,
+    MutationEventModel,
     OrderFixtureModel,
     OrderModel,
     ParticipantTurnModel,
@@ -2328,6 +2334,80 @@ class SqlAlchemyToolEventRepository:
                 version=model.version,
                 outcome=ToolOutcome(model.outcome),
                 document=cast("dict[str, CanonicalValue]", model.document),
+                revision_before=model.revision_before,
+                revision_after=model.revision_after,
+                state_fingerprint=model.state_fingerprint,
+            ),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyMutationEventRepository:
+    """Append the faults one attempt fired, keyed by the arm they happened to."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[MutationEventRecord, ...]:
+        models = self._session.scalars(
+            select(MutationEventModel)
+            .where(MutationEventModel.experiment_id == str(experiment_id))
+            .order_by(
+                MutationEventModel.run_id,
+                MutationEventModel.ordinal,
+                MutationEventModel.attempt,
+                MutationEventModel.after_calls,
+                # Two faults due at the same moment share every coordinate above, and the
+                # revision each one moved from is the order they were actually applied in.
+                # Without it the tie falls to whatever order the rows come back in, and the
+                # timeline's stable sort would inherit a listing that can differ per read.
+                MutationEventModel.revision_before,
+            )
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def append_all(
+        self, records: tuple[MutationEventRecord, ...]
+    ) -> tuple[MutationEventRecord, ...]:
+        for record in records:
+            event = record.event
+            self._session.add(
+                MutationEventModel(
+                    run_id=str(record.run_id),
+                    mutation_id=event.mutation_id,
+                    experiment_id=str(record.experiment_id),
+                    block_id=str(event.block_id),
+                    block_version=event.block_version,
+                    effect=event.effect.value,
+                    timing=event.timing,
+                    target=event.target,
+                    ordinal=event.ordinal,
+                    attempt=event.attempt,
+                    after_calls=event.after_calls,
+                    revision_before=event.revision_before,
+                    revision_after=event.revision_after,
+                    state_fingerprint=event.state_fingerprint,
+                    created_at=record.created_at,
+                )
+            )
+        self._session.flush()
+        return records
+
+    @staticmethod
+    def _record(model: MutationEventModel) -> MutationEventRecord:
+        return MutationEventRecord(
+            run_id=UUID(model.run_id),
+            experiment_id=UUID(model.experiment_id),
+            event=MutationEvent(
+                mutation_id=model.mutation_id,
+                block_id=UUID(model.block_id),
+                block_version=model.block_version,
+                effect=MutationEffect(model.effect),
+                timing=model.timing,
+                target=model.target,
+                ordinal=model.ordinal,
+                attempt=model.attempt,
+                after_calls=model.after_calls,
                 revision_before=model.revision_before,
                 revision_after=model.revision_after,
                 state_fingerprint=model.state_fingerprint,

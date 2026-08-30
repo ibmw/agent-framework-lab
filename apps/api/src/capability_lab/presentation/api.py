@@ -119,6 +119,7 @@ from capability_lab.application.scenario_generation import (
     ScenarioGeneratorNotConfiguredError,
     create_retail_profile_kernel,
 )
+from capability_lab.application.scenario_mutations import ScenarioMutationRuntime
 from capability_lab.application.scenario_registry import ScenarioNotFoundError
 from capability_lab.application.scenarios import (
     ScenarioNameExistsError,
@@ -196,6 +197,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyGeneratedScenarioRepository,
+    SqlAlchemyMutationEventRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyParticipantTurnRepository,
@@ -1669,6 +1671,25 @@ def create_app(
                 clock,
             )
 
+    def build_scenario_mutations(session: Session) -> ScenarioMutationRuntime:
+        """The fault schedule a scenario carries, and the arm it fires into.
+
+        Built beside the experiment service rather than inside it: the setup gate asks it
+        what this build can run, the runner asks it to fire, and both readings have to come
+        from one table.
+        """
+        return ScenarioMutationRuntime(
+            scenario_repository(session),
+            mutation_block_repository(session),
+            SandboxService(
+                SqlAlchemySandboxRepository(session),
+                SqlAlchemySandboxSnapshotRepository(session),
+                clock,
+            ),
+            SqlAlchemyMutationEventRepository(session),
+            clock,
+        )
+
     def build_experiment_service(session: Session) -> ExperimentService:
         """One construction, read by the experiment routes and by the timeline over them."""
         return ExperimentService(
@@ -1696,6 +1717,7 @@ def create_app(
             shop_repository(session),
             ticket_repository(session),
             agent_configuration_repository(session),
+            build_scenario_mutations(session),
             SqlAlchemyPublishedVersionDirectory(session),
             clock,
         )
@@ -1750,6 +1772,7 @@ def create_app(
                         clock,
                     ),
                 ),
+                build_scenario_mutations(session),
                 runtimes,
                 clock,
             )

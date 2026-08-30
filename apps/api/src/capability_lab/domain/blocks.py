@@ -199,6 +199,7 @@ class MutationEffect(StrEnum):
 # no calendar arithmetic, so months and years — whose length depends on when they start —
 # would not have one answer.
 _DURATION_PATTERN = re.compile(r"P(?:(\d+)D)?(?:T(?=\d)(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?")
+_AT_TURN_PREFIX = "at_turn:"
 _AT_TURN_PATTERN = re.compile(r"at_turn:([1-9]\d*)")
 _AT_OFFSET_PREFIX = "at_offset:"
 AFTER_FIRST_READ = "after_first_read"
@@ -210,19 +211,81 @@ def is_duration(value: str) -> bool:
     return match is not None and any(group is not None for group in match.groups())
 
 
-def is_timing(value: str) -> bool:
-    """Whether a bound value names a moment on the run timeline.
+class MutationTimingKind(StrEnum):
+    """The three forms a bound moment takes, matching what a runtime can observe.
 
-    Three forms, matching what the runtime can actually observe: the first time the arm reads
-    the entity, a turn ordinal, and an offset from the run's start.
+    A closed set for the same reason `BlockParameterKind` is one: a scenario runtime decides
+    whether a mutation is due by branching on the kind, so a form that is not here can never
+    come due.
+    """
+
+    AFTER_FIRST_READ = "after_first_read"
+    """The first time this arm reads the entity the mutation is bound to."""
+
+    AT_TURN = "at_turn"
+    """A turn ordinal, counting the customer turns this arm has received.
+
+    The scenario's triggering message is turn zero and the grammar starts at one, so
+    `at_turn:1` is the first turn a participant drove rather than the message the ticket
+    froze. A fault bound to the opening would be part of the starting state, which is the
+    snapshot's job (ADR 0019) rather than a fault's.
+    """
+
+    AT_OFFSET = "at_offset"
+    """A span of sandbox time after the run started."""
+
+
+@dataclass(frozen=True, slots=True)
+class MutationTiming:
+    """One bound moment, read out of the literal a scenario wrote.
+
+    Parsed rather than matched again wherever it is needed. The grammar is authored text on
+    one side and a runtime decision on the other, and a second reading of the same string
+    somewhere else is how the two come apart.
+    """
+
+    kind: MutationTimingKind
+    turn: int | None = None
+    offset: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_instance(self.kind, MutationTimingKind, "a timing must name its form")
+        if (self.kind is MutationTimingKind.AT_TURN) != (self.turn is not None):
+            raise BlockConfigurationError("only a turn timing names a turn")
+        if (self.kind is MutationTimingKind.AT_OFFSET) != (self.offset is not None):
+            raise BlockConfigurationError("only an offset timing names a duration")
+
+    @property
+    def value(self) -> str:
+        """The literal a scenario binds, so a parse round-trips to what was authored."""
+        if self.kind is MutationTimingKind.AT_TURN:
+            return f"{_AT_TURN_PREFIX}{self.turn}"
+        if self.kind is MutationTimingKind.AT_OFFSET:
+            return f"{_AT_OFFSET_PREFIX}{self.offset}"
+        return AFTER_FIRST_READ
+
+
+def parse_timing(value: str) -> MutationTiming | None:
+    """Read a bound timing literal, or `None` when the value is not one.
+
+    The single reading of the grammar: `is_timing` is this function answering whether it
+    understood, so a publish gate cannot accept a form the runtime then fails to resolve.
     """
     if value == AFTER_FIRST_READ:
-        return True
-    if _AT_TURN_PATTERN.fullmatch(value) is not None:
-        return True
+        return MutationTiming(kind=MutationTimingKind.AFTER_FIRST_READ)
+    turn = _AT_TURN_PATTERN.fullmatch(value)
+    if turn is not None:
+        return MutationTiming(kind=MutationTimingKind.AT_TURN, turn=int(turn.group(1)))
     if value.startswith(_AT_OFFSET_PREFIX):
-        return is_duration(value.removeprefix(_AT_OFFSET_PREFIX))
-    return False
+        offset = value.removeprefix(_AT_OFFSET_PREFIX)
+        if is_duration(offset):
+            return MutationTiming(kind=MutationTimingKind.AT_OFFSET, offset=offset)
+    return None
+
+
+def is_timing(value: str) -> bool:
+    """Whether a bound value names a moment on the run timeline."""
+    return parse_timing(value) is not None
 
 
 def is_severity(value: str) -> bool:
