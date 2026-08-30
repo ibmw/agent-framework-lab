@@ -2,6 +2,7 @@ import type {
   AgentTurnSchema,
   ExperimentResponse,
   ExperimentRunSchema,
+  MutationEventSchema,
   ParticipantTurnSchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
@@ -364,6 +365,7 @@ function Thread({
               key={attempt.attempt}
               turn={attempt}
               events={eventsFor(experiment, run, attempt)}
+              faults={faultsFor(experiment, run, attempt)}
             />
           ))}
         </li>
@@ -395,8 +397,20 @@ function CustomerTurn({ turn, divergent }: { turn: ParticipantTurnSchema; diverg
  *
  * The tool strip comes first because that is the order it happened in, and because a failed
  * attempt's calls are the informative half of the failure.
+ *
+ * A scenario fault sits in that strip where it fired — after the call it followed — because
+ * the agent did not ask for it and cannot see it, and a refusal further along the strip with
+ * no visible cause is the one thing a fault must never look like.
  */
-function Attempt({ turn, events }: { turn: AgentTurnSchema; events: ToolEventSchema[] }) {
+function Attempt({
+  turn,
+  events,
+  faults,
+}: {
+  turn: AgentTurnSchema;
+  events: ToolEventSchema[];
+  faults: MutationEventSchema[];
+}) {
   return (
     <div className="grid gap-1">
       <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
@@ -407,18 +421,28 @@ function Attempt({ turn, events }: { turn: AgentTurnSchema; events: ToolEventSch
           </span>
         ) : null}
       </p>
-      {events.length > 0 ? (
+      {events.length > 0 || faults.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5">
-          {events.map((event) => (
-            <li
-              key={`${event.ordinal}:${event.attempt}:${event.sequence}`}
-              className={`${subtleButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}
-              title={`${event.tool} ${event.version} → ${event.outcome}`}
-            >
-              {event.tool} → {event.outcome}
-              {event.revision_after > event.revision_before ? " · moved this arm" : ""}
-            </li>
-          ))}
+          {interleave(events, faults).map((entry) =>
+            "tool" in entry ? (
+              <li
+                key={`call:${entry.ordinal}:${entry.attempt}:${entry.sequence}`}
+                className={`${subtleButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}
+                title={`${entry.tool} ${entry.version} → ${entry.outcome}`}
+              >
+                {entry.tool} → {entry.outcome}
+                {entry.revision_after > entry.revision_before ? " · moved this arm" : ""}
+              </li>
+            ) : (
+              <li
+                key={`fault:${entry.mutation_id}`}
+                className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}
+                title={`${entry.mutation_id} · ${entry.timing} · ${entry.target}`}
+              >
+                scenario fault · moved this arm
+              </li>
+            ),
+          )}
         </ul>
       ) : null}
       {turn.outcome === "answered" ? (
@@ -469,15 +493,26 @@ function AdvanceControl({
   );
 }
 
-/** What each arm's tools actually moved, which is where the two worlds came apart. */
+/**
+ * Everything that actually moved each arm, which is where the two worlds came apart.
+ *
+ * Both writers appear: the agent's tools, and the scenario's own faults. An operator reading
+ * two revisions apart has to be able to see which of the two moved them.
+ */
 function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
   return (
-    <Card title="State changes">
+    <Card
+      title="State changes"
+      footer={
+        <p className="text-xs text-admin-muted">
+          A scenario fault is the incident working as authored, not the arm misbehaving: it moves
+          the world at the moment the recipe bound it to, and the agent is never told.
+        </p>
+      }
+    >
       <ul className="grid gap-2 text-[13px]">
         {experiment.runs.map((run) => {
-          const moved = experiment.tool_events.filter(
-            (event) => event.run_id === run.run_id && event.revision_after > event.revision_before,
-          );
+          const moved = movers(experiment, run);
           return (
             <li key={run.run_id} className="grid gap-0.5">
               <span className="font-semibold text-lab-ink">{run.label}</span>
@@ -485,11 +520,9 @@ function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
                 <span className="text-xs text-admin-muted">nothing yet</span>
               ) : (
                 moved.map((event) => (
-                  <span
-                    key={`${event.ordinal}:${event.attempt}:${event.sequence}`}
-                    className="text-xs text-admin-muted"
-                  >
-                    {event.tool} · r{event.revision_before} → r{event.revision_after}
+                  <span key={moverKey(event)} className="text-xs text-admin-muted">
+                    {"tool" in event ? event.tool : `${event.mutation_id} · scenario fault`} · r
+                    {event.revision_before} → r{event.revision_after}
                   </span>
                 ))
               )}
@@ -499,6 +532,24 @@ function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
       </ul>
     </Card>
   );
+}
+
+/** Every recorded write into one arm, in the order the arm's revisions moved. */
+function movers(
+  experiment: ExperimentResponse,
+  run: ExperimentRunSchema,
+): (ToolEventSchema | MutationEventSchema)[] {
+  const wrote = [
+    ...experiment.tool_events.filter((event) => event.run_id === run.run_id),
+    ...experiment.mutation_events.filter((event) => event.run_id === run.run_id),
+  ].filter((event) => event.revision_after > event.revision_before);
+  return wrote.sort((left, right) => left.revision_before - right.revision_before);
+}
+
+function moverKey(event: ToolEventSchema | MutationEventSchema): string {
+  return "tool" in event
+    ? `call:${event.ordinal}:${event.attempt}:${event.sequence}`
+    : `fault:${event.mutation_id}`;
 }
 
 function attemptsFor(
@@ -524,6 +575,40 @@ function eventsFor(
         event.attempt === turn.attempt,
     )
     .sort((left, right) => left.sequence - right.sequence);
+}
+
+function faultsFor(
+  experiment: ExperimentResponse,
+  run: ExperimentRunSchema,
+  turn: AgentTurnSchema,
+): MutationEventSchema[] {
+  return experiment.mutation_events
+    .filter(
+      (event) =>
+        event.run_id === run.run_id &&
+        event.ordinal === turn.ordinal &&
+        event.attempt === turn.attempt,
+    )
+    .sort((left, right) => left.after_calls - right.after_calls);
+}
+
+/**
+ * The calls and the faults in the order the arm met them.
+ *
+ * A fault records how many calls had already been made when it fired, so it sits before the
+ * call of that sequence: the world moved, and then the agent asked its next question against
+ * what the fault left behind.
+ */
+function interleave(
+  events: ToolEventSchema[],
+  faults: MutationEventSchema[],
+): (ToolEventSchema | MutationEventSchema)[] {
+  const ordered: (ToolEventSchema | MutationEventSchema)[] = [];
+  for (const event of events) {
+    ordered.push(...faults.filter((fault) => fault.after_calls === event.sequence));
+    ordered.push(event);
+  }
+  return [...ordered, ...faults.filter((fault) => fault.after_calls >= events.length)];
 }
 
 function latestOrdinal(experiment: ExperimentResponse, run: ExperimentRunSchema): number | null {

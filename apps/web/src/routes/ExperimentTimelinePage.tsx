@@ -26,6 +26,20 @@ const LENSES: { category: TimelineCategory; label: string }[] = [
   { category: "error", label: "Errors" },
 ];
 
+/**
+ * What a scenario fault did, in the lab's words rather than the template's.
+ *
+ * The effect is the closed set the backend publishes, so this is a lookup rather than an
+ * echo of anything an author typed: a mutation template's own prose is authored text, and
+ * this stream is built to carry none.
+ */
+const EFFECTS: Record<string, string> = {
+  entity_mutation: "moved the order it is bound to, out of band",
+  tool_fault: "made a tool fail",
+  clock_shift: "moved sandbox time forward",
+  service_outage: "took a dependency offline",
+};
+
 /** Why an attempt ended without a reply, in words an operator can act on. */
 const FAILURES: Record<string, string> = {
   model_provider: "the model provider rejected the request",
@@ -233,6 +247,11 @@ function Row({
             this arm only
           </span>
         ) : null}
+        {entry.kind === "mutation" ? (
+          <span className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px] normal-case`}>
+            scenario fault
+          </span>
+        ) : null}
       </p>
       <p className="text-[13px] leading-relaxed text-admin-ink">{describe(entry)}</p>
       {entry.source ? <Source location={entry.source} /> : null}
@@ -306,6 +325,10 @@ function describe(entry: TimelineEntrySchema): string {
   if (entry.kind === "customer_turn") {
     return "The customer sent a message.";
   }
+  if (entry.kind === "mutation") {
+    const effect = EFFECTS[entry.mutation_effect ?? ""] ?? "changed this arm's world";
+    return `The scenario's ${entry.mutation ?? "fault"} fired: it ${effect}${movement(entry)}.`;
+  }
   if (entry.kind === "agent_turn") {
     const attempt = entry.attempt === null ? "" : ` (attempt ${entry.attempt})`;
     if (entry.turn_outcome === "answered") {
@@ -315,17 +338,20 @@ function describe(entry: TimelineEntrySchema): string {
       FAILURES[entry.failure ?? "framework"] ?? "the framework could not execute this turn"
     }.`;
   }
-  const moved =
-    entry.revision_after !== null &&
-    entry.revision_before !== null &&
-    entry.revision_after > entry.revision_before
-      ? ` · moved this arm r${entry.revision_before} → r${entry.revision_after}`
-      : "";
-  // One entry shape serves four kinds, so every field below is optional in the contract even
+  // One entry shape serves five kinds, so every field below is optional in the contract even
   // though a tool call always fills them. Falling back keeps a malformed entry readable
   // instead of rendering the word "null" at an operator, which is what the branches above do.
   const call = [entry.tool, entry.tool_version].filter(Boolean).join(" ");
-  return `${call || "an unnamed tool call"} → ${entry.tool_outcome ?? "no recorded outcome"}${moved}`;
+  return `${call || "an unnamed tool call"} → ${entry.tool_outcome ?? "no recorded outcome"}${movement(entry)}`;
+}
+
+/** The revisions an entry moved this arm through, or nothing when it moved none. */
+function movement(entry: TimelineEntrySchema): string {
+  return entry.revision_after !== null &&
+    entry.revision_before !== null &&
+    entry.revision_after > entry.revision_before
+    ? ` · moved this arm r${entry.revision_before} → r${entry.revision_after}`
+    : "";
 }
 
 function labelOf(runs: ExperimentRunSchema[], runId: string): string {

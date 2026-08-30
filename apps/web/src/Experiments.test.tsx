@@ -7,6 +7,7 @@ import type {
   ExperimentPreviewResponse,
   ExperimentResponse,
   ExperimentTimelineResponse,
+  MutationEventSchema,
   ParticipantTurnSchema,
   ScenarioListResponse,
   ScenarioVersionListResponse,
@@ -34,6 +35,7 @@ const ARM_B = "0b0b0b0b-1111-4222-8333-444444444444";
 const SANDBOX_FINGERPRINT = "a".repeat(64);
 const RESOLUTION_FINGERPRINT = "b".repeat(64);
 const STATE_FINGERPRINT = "c".repeat(64);
+const ORDER_ID = "4d5e6f7a-8b9c-4d0e-8f1a-2b3c4d5e6f7a";
 
 const SHOP_CONTENT: ShopDraftResponse["content"] = {
   identity: {
@@ -216,10 +218,35 @@ function toolEvent(
   };
 }
 
+function mutationEvent(
+  runId: string,
+  afterCalls: number,
+  ordinal = 0,
+  attempt = 1,
+): MutationEventSchema {
+  return {
+    run_id: runId,
+    mutation_id: "order-moves-under-the-arm",
+    block_id: "cccccccc-1111-4222-8333-444444444444",
+    block_version: 1,
+    effect: "entity_mutation",
+    timing: "after_first_read",
+    target: `order:${ORDER_ID}`,
+    ordinal,
+    attempt,
+    after_calls: afterCalls,
+    revision_before: 0,
+    revision_after: 1,
+    state_fingerprint: STATE_FINGERPRINT,
+    created_at: "2026-08-28T10:00:30+00:00",
+  };
+}
+
 function experiment(
   turns: ParticipantTurnSchema[],
   agentTurns: AgentTurnSchema[] = [],
   toolEvents: ToolEventSchema[] = [],
+  mutationEvents: MutationEventSchema[] = [],
 ): ExperimentResponse {
   return {
     experiment_id: EXPERIMENT_ID,
@@ -275,6 +302,7 @@ function experiment(
     turns,
     agent_turns: agentTurns,
     tool_events: toolEvents,
+    mutation_events: mutationEvents,
   };
 }
 
@@ -296,6 +324,8 @@ function timelineEntry(
     tool: null,
     tool_version: null,
     tool_outcome: null,
+    mutation: null,
+    mutation_effect: null,
     turn_outcome: null,
     failure: null,
     revision_before: null,
@@ -330,6 +360,25 @@ const TIMELINE: ExperimentTimelineResponse = {
       },
     }),
     timelineEntry({
+      kind: "mutation",
+      step: 0,
+      run_ids: [ARM_A],
+      categories: ["state"],
+      ordinal: 0,
+      attempt: 1,
+      sequence: 1,
+      mutation: "order-moves-under-the-arm",
+      mutation_effect: "entity_mutation",
+      revision_before: 1,
+      revision_after: 2,
+      source: {
+        module: "capability_lab.domain.mutation",
+        path: "capability_lab/domain/mutation.py",
+        symbol: "advance_fulfilment",
+        line: 117,
+      },
+    }),
+    timelineEntry({
       kind: "agent_turn",
       step: 0,
       run_ids: [ARM_A],
@@ -359,6 +408,7 @@ let advanced: string[] = [];
 let turns: ParticipantTurnSchema[] = OPENED;
 let agentTurns: AgentTurnSchema[] = [];
 let toolEvents: ToolEventSchema[] = [];
+let mutationEvents: MutationEventSchema[] = [];
 let startFails = false;
 let runtimeUnavailable = false;
 
@@ -419,10 +469,12 @@ const server = setupServer(
         { status: 422 },
       );
     }
-    return HttpResponse.json(experiment(turns, agentTurns, toolEvents), { status: 201 });
+    return HttpResponse.json(experiment(turns, agentTurns, toolEvents, mutationEvents), {
+      status: 201,
+    });
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
-    HttpResponse.json(experiment(turns, agentTurns, toolEvents)),
+    HttpResponse.json(experiment(turns, agentTurns, toolEvents, mutationEvents)),
   ),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
     HttpResponse.json(TIMELINE),
@@ -478,6 +530,7 @@ afterEach(() => {
   turns = OPENED;
   agentTurns = [];
   toolEvents = [];
+  mutationEvents = [];
   startFails = false;
   runtimeUnavailable = false;
 });
@@ -694,6 +747,38 @@ describe("live bench", () => {
     expect(within(armA).queryByText(ANSWER)).toBeNull();
   });
 
+  it("shows the scenario's fault where it fired, between the calls it landed between", async () => {
+    agentTurns = [agentTurn(ARM_A, 0)];
+    toolEvents = [
+      toolEvent(ARM_A, 0, "orders.read_order"),
+      toolEvent(ARM_A, 1, "orders.propose_address_change"),
+    ];
+    mutationEvents = [mutationEvent(ARM_A, 1)];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    // The first item is the turn itself; the rest are the strip, in the order it happened.
+    const strip = within(armA).getAllByRole("listitem").slice(1);
+
+    expect(strip.map((entry) => entry.textContent)).toEqual([
+      "orders.read_order → success",
+      "scenario fault · moved this arm",
+      "orders.propose_address_change → success",
+    ]);
+  });
+
+  it("names the fault as a writer beside the tools, so two revisions are explainable", async () => {
+    agentTurns = [agentTurn(ARM_A, 0)];
+    mutationEvents = [mutationEvent(ARM_A, 0)];
+    renderBench();
+
+    const changes = await screen.findByRole("region", { name: "State changes" });
+
+    expect(
+      within(changes).getByText(/order-moves-under-the-arm · scenario fault · r0 → r1/),
+    ).toBeVisible();
+  });
+
   it("reads the arm a write moved apart from the one it did not", async () => {
     agentTurns = [agentTurn(ARM_A, 0)];
     toolEvents = [toolEvent(ARM_A, 0, "orders.apply_address_change", true)];
@@ -727,7 +812,19 @@ describe("execution timeline", () => {
     expect(rows[0]).toHaveTextContent(/triggering message opened every arm/);
     expect(rows[1]).toHaveTextContent(/orders\.apply_address_change v1 → success/);
     expect(rows[1]).toHaveTextContent("moved this arm r0 → r1");
-    expect(rows[2]).toHaveTextContent("The agent replied (attempt 1).");
+    expect(rows[3]).toHaveTextContent("The agent replied (attempt 1).");
+  });
+
+  it("reads a scenario fault as the world moving, marked as the scenario's own", async () => {
+    renderTimeline();
+
+    const stream = await screen.findByRole("region", { name: "Execution timeline" });
+    const fault = within(stream).getAllByRole("listitem")[2];
+
+    expect(fault).toHaveTextContent(/order-moves-under-the-arm fired/);
+    expect(fault).toHaveTextContent(/moved the order it is bound to, out of band/);
+    expect(fault).toHaveTextContent("moved this arm r1 → r2");
+    expect(within(fault).getByText("scenario fault")).toBeVisible();
   });
 
   it("marks the composition only one arm received", async () => {
@@ -735,7 +832,7 @@ describe("execution timeline", () => {
 
     const stream = await screen.findByRole("region", { name: "Execution timeline" });
 
-    const split = within(stream).getAllByRole("listitem")[3];
+    const split = within(stream).getAllByRole("listitem")[4];
     expect(split).toHaveTextContent("Arm B");
     expect(within(split).getByText("this arm only")).toBeVisible();
   });
@@ -760,13 +857,15 @@ describe("execution timeline", () => {
     const stream = await screen.findByRole("region", { name: "Execution timeline" });
     await user.click(within(stream).getByRole("button", { name: "State" }));
 
-    expect(within(stream).getAllByRole("listitem")).toHaveLength(1);
-    expect(within(stream).getAllByRole("listitem")[0]).toHaveTextContent(
-      /orders\.apply_address_change/,
-    );
+    // Both writers: the agent's own and the scenario's. "What moved this arm" is one
+    // question, and an answer that showed only the agent's half would be a different one.
+    const moved = within(stream).getAllByRole("listitem");
+    expect(moved).toHaveLength(2);
+    expect(moved[0]).toHaveTextContent(/orders\.apply_address_change/);
+    expect(moved[1]).toHaveTextContent(/order-moves-under-the-arm/);
 
     await user.click(within(stream).getByRole("button", { name: "All events" }));
-    expect(within(stream).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(stream).getAllByRole("listitem")).toHaveLength(5);
   });
 
   it("is reachable from the bench and leads back to it", async () => {

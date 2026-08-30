@@ -428,10 +428,16 @@ test("an operator starts a paired experiment and drives both arms", async ({ pag
     armA.getByText(/orders\.apply_address_change → success · moved this arm/),
   ).toBeVisible();
 
-  // And the arm beside it is exactly where it was: an action in one arm cannot alter the
-  // other, which is the whole claim a paired experiment rests on.
+  // And the scenario's own fault fired in the middle of it: the recipe binds the order to
+  // move once this arm has read it, so the world changed while the agent was working and
+  // the agent was never told.
+  await expect(armA.getByText("scenario fault · moved this arm")).toBeVisible();
+
+  // The arm beside it is exactly where it was — the fault included: an action in one arm
+  // cannot alter the other, which is the whole claim a paired experiment rests on.
   const changes = card(page, "State changes");
-  await expect(changes.getByText(/orders\.apply_address_change · r0 → r1/)).toBeVisible();
+  await expect(changes.getByText(/scenario fault · r0 → r1/)).toBeVisible();
+  await expect(changes.getByText(/orders\.apply_address_change · r1 → r2/)).toBeVisible();
   await expect(changes.getByText("nothing yet")).toBeVisible();
   await expect(armB.getByText(/I found order NS-10482/)).toHaveCount(0);
 
@@ -465,11 +471,17 @@ test("an operator starts a paired experiment and drives both arms", async ({ pag
   await expect(stream.getByText(/triggering message opened every arm/)).toBeVisible();
   await expect(stream.getByText("this arm only")).toBeVisible();
 
-  // Narrowed to what moved a world: one write per arm, each in its own, and nothing else.
+  // Narrowed to what moved a world: per arm, the scenario's fault and the agent's write,
+  // each in its own arm and nothing else.
   await stream.getByRole("button", { name: "State" }).click();
-  await expect(stream.getByRole("listitem")).toHaveCount(2);
+  await expect(stream.getByRole("listitem")).toHaveCount(4);
   await expect(
-    stream.getByText(/orders\.apply_address_change v1 → success · moved this arm r0 → r1/),
+    stream.getByText(/orders\.apply_address_change v1 → success · moved this arm r1 → r2/),
+  ).toHaveCount(2);
+  await expect(
+    stream.getByText(
+      /fired: it moved the order it is bound to, out of band · moved this arm r0 → r1/,
+    ),
   ).toHaveCount(2);
   await stream.getByRole("button", { name: "All events" }).click();
 
@@ -479,4 +491,6 @@ test("an operator starts a paired experiment and drives both arms", async ({ pag
   await expect(applied).toHaveText(
     /capability_lab\/application\/sandbox_actions\.py:\d+ · 2 calls/,
   );
+  const faulted = paths.getByRole("listitem").filter({ hasText: "advance_fulfilment" });
+  await expect(faulted).toHaveText(/capability_lab\/domain\/mutation\.py:\d+ · 2 calls/);
 });
