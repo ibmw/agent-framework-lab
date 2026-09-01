@@ -326,9 +326,13 @@ async function publishScenario(page: Page, objective: string, mutation: string) 
     .getByLabel(`entity_ref of ${mutation}`, { exact: true })
     .selectOption({ label: "Order NS-10482 — paid, unfulfilled" });
 
-  await card(page, "Completion")
+  const completion = card(page, "Completion");
+  await completion
     .getByLabel("A resolved incident looks like", { exact: true })
     .fill("The order ships to the confirmed address and the customer acknowledges it.");
+  // Two driven turns, so this journey can reach the cap that settles an objective. A recipe
+  // an operator authors is longer; what is being proved is that the cap ends the arm.
+  await completion.getByLabel("Turn cap", { exact: true }).fill("2");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByRole("status")).toContainText("Published version 1");
@@ -467,6 +471,13 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // And the arm that was left owing a reply is still the one the bench offers to run.
   await expect(armB.getByRole("button", { name: "Run Arm B's agent" })).toBeVisible();
 
+  // The objectives matrix reads the same record: the control policy resolves the incident
+  // through the order and never opens a document, so the read-check is pending — a state the
+  // arm can still leave — and the judge's own row waits for a judge.
+  const objectivesMatrix = card(page, "Objectives");
+  await expect(objectivesMatrix.getByText("Read document")).toBeVisible();
+  await expect(objectivesMatrix.getByText(/ pending — /)).toHaveCount(2);
+
   // One composition, both arms: the customer says the same thing to each.
   const composer = card(page, "Customer composer");
   await composer.getByRole("textbox", { name: "Message" }).fill("Any update on the address?");
@@ -485,6 +496,17 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(armA.getByText("Only arm A hears this.")).toBeVisible();
   await expect(armB.getByText("Only arm A hears this.")).toHaveCount(0);
   await expect(armA.getByText("this arm only")).toBeVisible();
+
+  // Turn 2 was the last this scenario allows, and arm A answered it: the arm is completed,
+  // nothing offers to run or message it again, and what it never did is now a miss rather
+  // than something it might still do.
+  await expect(armA.getByText(/Completed — this arm has answered every turn/)).toBeVisible();
+  await expect(
+    objectivesMatrix.getByText(/ missed — support\.read_document never answered/),
+  ).toHaveCount(1);
+  await expect(objectivesMatrix.getByText(/ pending — /)).toHaveCount(1);
+  await expect(armA.getByRole("button", { name: /Arm A's agent/ })).toHaveCount(0);
+  await expect(composer.getByRole("checkbox", { name: /Arm A/ })).toBeDisabled();
 
   // An empty composition is a run that has not been driven, not a customer who said nothing.
   await composer.getByRole("button", { name: "Send as the customer" }).click();

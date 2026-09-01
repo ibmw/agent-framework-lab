@@ -1,16 +1,23 @@
 import type {
   AgentTurnSchema,
   ArmStandingSchema,
+  ExperimentEvaluationResponse,
   ExperimentResponse,
   ExperimentRunSchema,
   MutationEventSchema,
+  ObjectiveResultSchema,
   ParticipantTurnSchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { advanceExperimentRun, deliverParticipantTurn, getExperiment } from "../api/experiments";
+import {
+  advanceExperimentRun,
+  deliverParticipantTurn,
+  getExperiment,
+  getExperimentEvaluation,
+} from "../api/experiments";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -31,6 +38,15 @@ const FAILURES: Record<AgentTurnSchema["failure"] & string, string> = {
   invalid_response: "the model answered in a shape the lab cannot record",
   framework: "the framework could not execute this turn",
   tool_round_limit: "the agent used every tool call this configuration allows",
+};
+
+/** What each objective outcome looks like, and what the symbol means (frame 8). */
+const OUTCOMES: Record<ObjectiveResultSchema["outcome"], { mark: string; label: string }> = {
+  met: { mark: "\u2713", label: "met" },
+  missed: { mark: "\u2717", label: "missed" },
+  pending: { mark: "\u00b7", label: "pending" },
+  deferred: { mark: "judge", label: "a judge scores this after the run" },
+  undecidable: { mark: "\u2014", label: "no evidence this lab reads decides this" },
 };
 
 /**
@@ -57,6 +73,7 @@ export function ExperimentBenchPage() {
   const { shopId } = useShopWorkspace();
   const { experimentId = "" } = useParams();
   const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
+  const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
   const [message, setMessage] = useState("");
   const [targets, setTargets] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,11 +81,19 @@ export function ExperimentBenchPage() {
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      const record = await getExperiment(shopId, experimentId, signal);
+      // Together, because an objective is met by a call an arm has just made: reading the
+      // thread without the judgement beside it would show a write with no row that moved.
+      const [record, judged] = await Promise.all([
+        getExperiment(shopId, experimentId, signal),
+        getExperimentEvaluation(shopId, experimentId, signal),
+      ]);
       setExperiment(record);
+      setEvaluation(judged);
       // Default to a linked turn: the arms are meant to hear the same customer until the
-      // operator deliberately splits them.
-      setTargets((current) => current ?? record.runs.map((run) => run.run_id));
+      // operator deliberately splits them. An arm that has reached its scenario's turn cap
+      // drops out of the selection, because the backend would refuse the message.
+      const open = record.runs.filter(driveable).map((run) => run.run_id);
+      setTargets((current) => (current ?? open).filter((runId) => open.includes(runId)));
     },
     [shopId, experimentId],
   );
@@ -241,6 +266,7 @@ export function ExperimentBenchPage() {
                     <input
                       type="checkbox"
                       checked={targets?.includes(run.run_id) ?? false}
+                      disabled={!driveable(run)}
                       onChange={(event) =>
                         setTargets((current) => {
                           const selected = current ?? [];
@@ -251,10 +277,17 @@ export function ExperimentBenchPage() {
                       }
                     />
                     {run.label}
+                    {driveable(run) ? null : (
+                      <span className="text-xs text-admin-muted">— completed</span>
+                    )}
                   </label>
                 ))}
               </fieldset>
-              <button className={accentButtonClasses} type="submit" disabled={working !== null}>
+              <button
+                className={accentButtonClasses}
+                type="submit"
+                disabled={working !== null || !experiment.runs.some(driveable)}
+              >
                 {working !== null ? "Running…" : "Send as the customer"}
               </button>
             </form>
@@ -288,6 +321,8 @@ export function ExperimentBenchPage() {
               ))}
             </ul>
           </Card>
+
+          <Objectives experiment={experiment} evaluation={evaluation} />
 
           <StateChanges experiment={experiment} />
 
@@ -359,11 +394,13 @@ function divergentTurnIds(experiment: ExperimentResponse): Set<string> {
  */
 function Standing({ standing }: { standing: ArmStandingSchema }) {
   const waiting =
-    standing.awaiting === "customer"
-      ? "Waiting for the customer"
-      : standing.attempts === 0
-        ? "Waiting for the agent"
-        : `Attempt ${standing.attempts} produced no reply — waiting for a retry`;
+    standing.awaiting === "completed"
+      ? "Completed — this arm has answered every turn the scenario allows"
+      : standing.awaiting === "customer"
+        ? "Waiting for the customer"
+        : standing.attempts === 0
+          ? "Waiting for the agent"
+          : `Attempt ${standing.attempts} produced no reply — waiting for a retry`;
   return (
     <p className="text-xs font-semibold text-admin-ink-soft">
       {waiting} · turn {standing.ordinal}
@@ -530,6 +567,99 @@ function AdvanceControl({
     >
       {working ? "Running…" : attempts === 0 ? "Run the agent" : "Try again"}
     </button>
+  );
+}
+
+/**
+ * Whether this arm can still be driven, which is the standing and never a count kept here.
+ *
+ * An arm at its scenario's turn cap is refused by the backend, so a composer that offered it
+ * would invite a request that can only fail (ADR 0029, ADR 0030).
+ */
+function driveable(run: ExperimentRunSchema): boolean {
+  return run.standing.awaiting !== "completed";
+}
+
+/**
+ * The objectives matrix (frame 8): one row per objective, one column per arm.
+ *
+ * Rows come from the first arm because both arms are judged against one scenario's
+ * objectives, in the order the recipe composed them — which is the order the author decided
+ * is priority (ADR 0018).
+ *
+ * "Pending" is a real state and not a soft failure: deterministic evidence is monotone, so
+ * an arm that has not read the document yet may still read it. It becomes a miss when the
+ * arm reaches its turn cap and nothing more can happen.
+ */
+function Objectives({
+  experiment,
+  evaluation,
+}: {
+  experiment: ExperimentResponse;
+  evaluation: ExperimentEvaluationResponse | null;
+}) {
+  const arms = evaluation?.arms ?? [];
+  const rows = arms[0]?.objectives ?? [];
+  return (
+    <Card
+      title="Objectives"
+      footer={
+        <p className="text-xs text-admin-muted">
+          Evidence, not a score: a pending objective is one this arm can still meet, and a judge
+          scores its own rows after the run.
+        </p>
+      }
+    >
+      {rows.length === 0 ? (
+        <p className="text-[13px] text-admin-muted">This scenario composes no objectives.</p>
+      ) : (
+        <table className="w-full text-left text-[13px]">
+          <caption className="sr-only">
+            Every objective this scenario composed, and where each arm stands against it
+          </caption>
+          <thead>
+            <tr className="text-xs font-semibold text-admin-muted">
+              <th scope="col">Objective</th>
+              {experiment.runs.map((run) => (
+                <th key={run.run_id} scope="col" className="w-10 text-right">
+                  {run.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.objective_id}>
+                <th scope="row" className="py-0.5 pr-2 font-normal text-admin-ink-soft">
+                  {row.statement}
+                </th>
+                {arms.map((arm) => {
+                  // Paired by the objective it judges rather than by position: both arms are
+                  // judged against one scenario, and matching on that fact keeps a cell from
+                  // ever landing in the row above the objective it belongs to.
+                  const result = arm.objectives.find(
+                    (entry) => entry.objective_id === row.objective_id,
+                  );
+                  const outcome = result ? OUTCOMES[result.outcome] : null;
+                  return (
+                    <td key={arm.run_id} className="py-0.5 text-right" title={result?.detail}>
+                      <span aria-hidden="true">{outcome?.mark ?? "\u2014"}</span>
+                      {/* The evidence sentence, not only the symbol: what makes a cell read
+                          as a finding is in `detail`, and a tooltip is mouse-only. */}
+                      <span className="sr-only">
+                        {`${row.objective_id} ${outcome?.label ?? "not judged"}${
+                          result ? ` \u2014 ${result.detail}` : ""
+                        }`}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
   );
 }
 

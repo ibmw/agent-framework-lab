@@ -1,4 +1,5 @@
 import type {
+  ExperimentEvaluationResponse,
   ExperimentListResponse,
   ExperimentPreviewResponse,
   ExperimentResponse,
@@ -46,6 +47,26 @@ export async function getExperimentTimeline(
 ): Promise<ExperimentTimelineResponse> {
   return read<ExperimentTimelineResponse>(
     await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/timeline`), {
+      signal,
+    }),
+  );
+}
+
+/**
+ * Judge each arm against the objectives its scenario composed.
+ *
+ * Separate from `getExperiment` for the same reason the timeline is: the experiment is what
+ * each arm was asked and what it answered, and this is how each arm is doing against what the
+ * recipe asked for. Read after every advance, because an objective is met by a call the arm
+ * has just made.
+ */
+export async function getExperimentEvaluation(
+  shopId: string,
+  experimentId: string,
+  signal?: AbortSignal,
+): Promise<ExperimentEvaluationResponse> {
+  return read<ExperimentEvaluationResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/evaluation`), {
       signal,
     }),
   );

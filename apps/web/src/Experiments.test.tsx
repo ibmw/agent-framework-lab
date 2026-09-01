@@ -4,6 +4,7 @@ import type {
   AgentTurnSchema,
   ArmStandingSchema,
   ComparisonVariableSchema,
+  ExperimentEvaluationResponse,
   ExperimentListResponse,
   ExperimentPreviewResponse,
   ExperimentResponse,
@@ -262,12 +263,73 @@ function standing(
   );
   const ordinal = Math.max(...received.map((entry) => entry.ordinal));
   return {
-    awaiting: answered.has(ordinal) ? "customer" : "agent",
+    awaiting: !answered.has(ordinal) ? "agent" : ordinal >= maxTurns ? "completed" : "customer",
     ordinal,
     attempts: attempts.filter((entry) => entry.ordinal === ordinal).length,
     unanswered: received
       .filter((entry) => entry.ordinal < ordinal && !answered.has(entry.ordinal))
       .map((entry) => entry.ordinal),
+  };
+}
+
+/**
+ * How the backend would judge each arm, derived from the same record the page is handed.
+ *
+ * The read-check is met by the call that answered with the document and pending until the
+ * arm settles, exactly as the deterministic rule reads it — a fixture that pinned outcomes
+ * per test could show a matrix the real bench would never draw. The judge row is constant:
+ * nothing this build does decides it.
+ */
+function evaluation(
+  turns: ParticipantTurnSchema[],
+  agentTurns: AgentTurnSchema[] = [],
+  toolEvents: ToolEventSchema[] = [],
+): ExperimentEvaluationResponse {
+  return {
+    experiment_id: EXPERIMENT_ID,
+    arms: [ARM_A, ARM_B].map((runId) => {
+      const settled = standing(runId, turns, agentTurns).awaiting === "completed";
+      const read = toolEvents.some(
+        (entry) =>
+          entry.run_id === runId &&
+          entry.tool === "support.read_document" &&
+          entry.outcome === "success",
+      );
+      const outcome = read ? "met" : settled ? "missed" : "pending";
+      return {
+        run_id: runId,
+        settled,
+        met: outcome === "met" ? 1 : 0,
+        decided: outcome === "pending" ? 0 : 1,
+        failed: outcome === "missed",
+        objectives: [
+          {
+            objective_id: "read-address-change-policy",
+            block_id: "3a1f9e2c-7b64-4d51-9c0a-6f2d8e5b41c7",
+            block_version: 1,
+            statement: "Read the address-change policy",
+            severity: "required" as const,
+            assessment: "deterministic" as const,
+            evidence: "event" as const,
+            outcome,
+            detail: read
+              ? "support.read_document answered policy:address-change"
+              : "support.read_document never answered policy:address-change",
+          },
+          {
+            objective_id: "explain-the-outcome",
+            block_id: "5c2e7a10-88b3-4f6d-9a21-0e4d7c93b652",
+            block_version: 1,
+            statement: "Explain the outcome to the customer",
+            severity: "expected" as const,
+            assessment: "judge" as const,
+            evidence: "dimension" as const,
+            outcome: "deferred" as const,
+            detail: "a judge scores this dimension",
+          },
+        ],
+      };
+    }),
   };
 }
 
@@ -440,6 +502,7 @@ let turns: ParticipantTurnSchema[] = OPENED;
 let agentTurns: AgentTurnSchema[] = [];
 let toolEvents: ToolEventSchema[] = [];
 let mutationEvents: MutationEventSchema[] = [];
+let maxTurns = 12;
 let startFails = false;
 let runtimeUnavailable = false;
 
@@ -507,6 +570,9 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
     HttpResponse.json(experiment(turns, agentTurns, toolEvents, mutationEvents)),
   ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/evaluation`, () =>
+    HttpResponse.json(evaluation(turns, agentTurns, toolEvents)),
+  ),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
     HttpResponse.json(TIMELINE),
   ),
@@ -562,6 +628,7 @@ afterEach(() => {
   agentTurns = [];
   toolEvents = [];
   mutationEvents = [];
+  maxTurns = 12;
   startFails = false;
   runtimeUnavailable = false;
 });
@@ -861,6 +928,60 @@ describe("live bench", () => {
     expect(
       within(armA).getByText(/No reply — the customer wrote again before this arm was run/),
     ).toBeVisible();
+  });
+
+  it("reads every objective the scenario composed, per arm", async () => {
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+
+    expect(within(objectives).getByText("Read the address-change policy")).toBeVisible();
+    expect(within(objectives).getAllByText(/read-address-change-policy pending/)).toHaveLength(2);
+  });
+
+  it("marks an objective met by the call that answered it, in that arm alone", async () => {
+    toolEvents = [toolEvent(ARM_A, 1, "support.read_document")];
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+
+    // The cell carries the evidence sentence, not only the mark: what a reader needs is why.
+    expect(
+      within(objectives).getByText(
+        /read-address-change-policy met — support\.read_document answered policy:address-change/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(objectives).getByText(/read-address-change-policy pending — .*never answered/),
+    ).toBeInTheDocument();
+  });
+
+  it("says a judge scores its own rows rather than counting them as missed", async () => {
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+
+    expect(
+      within(objectives).getAllByText(/explain-the-outcome a judge scores this after the run/),
+    ).toHaveLength(2);
+  });
+
+  it("settles what an arm never did once it reaches the turn cap", async () => {
+    // The record of an arm driven to the last turn its scenario allows, and answered there.
+    maxTurns = 1;
+    turns = [...OPENED, turn(ARM_A, 1, "reply-1", "Any update?")];
+    agentTurns = [agentTurn(ARM_A, 1)];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    const objectives = screen.getByRole("region", { name: "Objectives" });
+    const composer = screen.getByRole("region", { name: "Customer composer" });
+
+    expect(within(armA).getByText(/Completed — this arm has answered every turn/)).toBeVisible();
+    expect(within(objectives).getByText(/read-address-change-policy missed/)).toBeInTheDocument();
+    // Nothing offers a move the backend would refuse: no advance, and no message.
+    expect(within(armA).queryByRole("button", { name: /Arm A's agent/ })).toBeNull();
+    expect(within(composer).getByRole("checkbox", { name: /Arm A/ })).toBeDisabled();
   });
 
   it("reads both arms back to the one starting state they were cloned from", async () => {
