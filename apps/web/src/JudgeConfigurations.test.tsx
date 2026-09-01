@@ -1,0 +1,288 @@
+import type {
+  JudgeConfigurationDraftResponse,
+  JudgeConfigurationListResponse,
+  JudgeConfigurationPreviewResponse,
+  JudgeConfigurationResourcesResponse,
+  JudgeConfigurationVersionResponse,
+  ShopDraftResponse,
+  ShopListResponse,
+  ShopPreviewResponse,
+} from "@agent-lab/contracts";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import { MemoryRouter } from "react-router-dom";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { App } from "./App";
+
+const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
+const JUDGE_ID = "7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
+const RUBRIC = "Score whether the incident the customer opened was resolved.";
+
+const SHOP_CONTENT: ShopDraftResponse["content"] = {
+  identity: {
+    name: "Northstar Outfitters",
+    slug: "northstar",
+    locale: "en-GB",
+    currencies: ["EUR"],
+    channels: ["chat"],
+  },
+  products: [],
+  faq: [],
+  policies: [],
+  payment_methods: [],
+  fulfilment_methods: [],
+  support_guidelines: [],
+  tone_of_voice_guidelines: [],
+  default_tone_of_voice_id: null,
+};
+
+const JUDGE: JudgeConfigurationDraftResponse["content"] = {
+  name: "Resolution quality",
+  description: "Reads the incident as the customer would.",
+  rubric: RUBRIC,
+  evidence: ["agent_replies", "customer_turns", "tool_calls"],
+  model: { provider: "openai", model_id: "gpt-5-mini", temperature: "0.00" },
+};
+
+const RESOURCES: JudgeConfigurationResourcesResponse = {
+  judges: [
+    {
+      provider: "openai",
+      label: "OpenAI",
+      models: ["gpt-5-mini"],
+      summary: "The lab's first judge.",
+    },
+    {
+      provider: "fake",
+      label: "Deterministic control",
+      models: ["deterministic"],
+      summary: "Offline judge with no model call.",
+    },
+  ],
+  evidence: ["customer_turns", "agent_replies", "tool_calls", "state_changes"],
+  reserved_terms: ["Deterministic fake", "fake", "gpt-5-mini", "openai", "pydantic-ai"],
+};
+
+const LIST: JudgeConfigurationListResponse = {
+  judges: [
+    {
+      judge_id: JUDGE_ID,
+      name: "Resolution quality",
+      provider: "openai",
+      provider_label: "OpenAI",
+      model_id: "gpt-5-mini",
+      evidence_count: 3,
+      updated_at: "2026-09-01T09:00:00+00:00",
+      latest_published_version: null,
+      published_version_count: 0,
+    },
+  ],
+};
+
+function preview(
+  overrides: Partial<JudgeConfigurationPreviewResponse> = {},
+): JudgeConfigurationPreviewResponse {
+  return {
+    judge_id: JUDGE_ID,
+    publishable: true,
+    issues: [],
+    changes: [],
+    content_fingerprint: "a".repeat(64),
+    latest_published_version: null,
+    next_version: 1,
+    matches_latest_published: false,
+    content: currentJudge,
+    ...overrides,
+  };
+}
+
+let currentJudge: JudgeConfigurationDraftResponse["content"] = JUDGE;
+let currentPreview: JudgeConfigurationPreviewResponse = preview();
+let savedPayloads: Record<string, unknown>[] = [];
+let created: Record<string, unknown>[] = [];
+
+const server = setupServer(
+  http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
+  http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
+    HttpResponse.json({
+      shop_id: SHOP_ID,
+      lifecycle_state: "draft",
+      content: SHOP_CONTENT,
+      created_at: "2026-09-01T09:00:00+00:00",
+      updated_at: "2026-09-01T09:05:00+00:00",
+    } satisfies ShopDraftResponse),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () =>
+    HttpResponse.json({
+      shop_id: SHOP_ID,
+      publishable: false,
+      issues: [],
+      changes: [],
+      content_fingerprint: "c".repeat(64),
+      latest_published_version: null,
+      next_version: 1,
+      matches_latest_published: false,
+      content: SHOP_CONTENT,
+    } satisfies ShopPreviewResponse),
+  ),
+  http.get("*/api/v1/judge-configurations/resources", () => HttpResponse.json(RESOURCES)),
+  http.get("*/api/v1/judge-configurations", () => HttpResponse.json(LIST)),
+  http.post("*/api/v1/judge-configurations", async ({ request }) => {
+    created.push((await request.json()) as Record<string, unknown>);
+    return HttpResponse.json(
+      {
+        judge_id: JUDGE_ID,
+        lifecycle_state: "draft",
+        content: { ...JUDGE, rubric: "" },
+        created_at: "2026-09-01T09:00:00+00:00",
+        updated_at: "2026-09-01T09:00:00+00:00",
+      } satisfies JudgeConfigurationDraftResponse,
+      { status: 201 },
+    );
+  }),
+  http.get(`*/api/v1/judge-configurations/${JUDGE_ID}/draft`, () =>
+    HttpResponse.json({
+      judge_id: JUDGE_ID,
+      lifecycle_state: "draft",
+      content: currentJudge,
+      created_at: "2026-09-01T09:00:00+00:00",
+      updated_at: "2026-09-01T09:05:00+00:00",
+    } satisfies JudgeConfigurationDraftResponse),
+  ),
+  http.put(`*/api/v1/judge-configurations/${JUDGE_ID}/draft`, async ({ request }) => {
+    const body = (await request.json()) as { payload: Record<string, unknown> };
+    savedPayloads.push(body.payload);
+    currentJudge = body.payload as typeof currentJudge;
+    return HttpResponse.json({
+      judge_id: JUDGE_ID,
+      lifecycle_state: "draft",
+      content: currentJudge,
+      created_at: "2026-09-01T09:00:00+00:00",
+      updated_at: "2026-09-01T09:06:00+00:00",
+    } satisfies JudgeConfigurationDraftResponse);
+  }),
+  http.get(`*/api/v1/judge-configurations/${JUDGE_ID}/draft/preview`, () =>
+    HttpResponse.json(currentPreview),
+  ),
+  http.post(`*/api/v1/judge-configurations/${JUDGE_ID}/versions`, () => {
+    currentPreview = preview({
+      latest_published_version: 1,
+      next_version: 2,
+      matches_latest_published: true,
+    });
+    return HttpResponse.json(
+      {
+        judge_id: JUDGE_ID,
+        lifecycle_state: "published",
+        version: 1,
+        content_fingerprint: "b".repeat(64),
+        published_at: "2026-09-01T09:10:00+00:00",
+        content: currentJudge,
+      } satisfies JudgeConfigurationVersionResponse,
+      { status: 201 },
+    );
+  }),
+);
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => {
+  server.resetHandlers();
+  currentJudge = JUDGE;
+  currentPreview = preview();
+  savedPayloads = [];
+  created = [];
+});
+afterAll(() => server.close());
+
+function renderAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <App />
+    </MemoryRouter>,
+  );
+}
+
+describe("judge workspace", () => {
+  it("lists judges with the model that scores and their publication state", async () => {
+    renderAt(`/shops/${SHOP_ID}/judges`);
+
+    expect(await screen.findByRole("heading", { name: "Judges" })).toBeVisible();
+    expect(await screen.findByRole("link", { name: "Resolution quality" })).toBeVisible();
+    expect(screen.getByText("OpenAI")).toBeVisible();
+    expect(screen.getByText("Never published")).toBeVisible();
+  });
+
+  it("creates a judge with no rubric, because the rubric is what an author writes", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges`);
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+
+    await waitFor(() => expect(created).toEqual([{ name: "Tone" }]));
+  });
+
+  it("shows what each kind of evidence puts in front of the judge", async () => {
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const evidence = await screen.findByRole("region", { name: "Evidence" });
+    expect(
+      within(evidence).getByText(/What this arm answered\. Without it, the judge scores the calls/),
+    ).toBeVisible();
+    expect(within(evidence).getByRole("checkbox", { name: /agent replies/ })).toBeChecked();
+    expect(within(evidence).getByRole("checkbox", { name: /state changes/ })).not.toBeChecked();
+  });
+
+  it("saves a change to what the judge is shown, because it changes the question", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const evidence = await screen.findByRole("region", { name: "Evidence" });
+    await user.click(within(evidence).getByRole("checkbox", { name: /state changes/ }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].evidence).toContain("state_changes");
+  });
+
+  it("names the words a rubric may not contain, read from the server", async () => {
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const anonymity = await screen.findByRole("region", { name: "Anonymity" });
+    expect(within(anonymity).getByText(/pydantic-ai/)).toBeVisible();
+  });
+
+  it("refuses to publish a rubric that names what an arm runs, and says which word", async () => {
+    currentPreview = preview({
+      publishable: false,
+      issues: [
+        {
+          severity: "error",
+          code: "rubric_names_an_arm",
+          message:
+            "the rubric names pydantic-ai, and a judge is shown no such thing: the brief " +
+            "carries what the arm did, never what ran it",
+          path: "rubric",
+        },
+      ],
+    });
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const gate = await screen.findByRole("region", { name: "Publish gate" });
+    expect(within(gate).getByText(/the rubric names pydantic-ai/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Publish v1/ })).toBeDisabled();
+  });
+
+  it("publishes the judge every later verdict will name", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    await user.click(await screen.findByRole("button", { name: "Publish v1" }));
+
+    expect(
+      await screen.findByText(/Published version 1\. Every verdict records the version/),
+    ).toBeVisible();
+  });
+});

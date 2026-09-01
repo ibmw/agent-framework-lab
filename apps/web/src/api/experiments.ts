@@ -7,6 +7,7 @@ import type {
   ParticipantTurnListResponse,
   ParticipantTurnRequest,
   RunTurnResponse,
+  ScoreExperimentRequest,
   StartExperimentRequest,
 } from "@agent-lab/contracts";
 import { apiPath, JSON_HEADERS, read } from "./client";
@@ -68,6 +69,27 @@ export async function getExperimentEvaluation(
   return read<ExperimentEvaluationResponse>(
     await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/evaluation`), {
       signal,
+    }),
+  );
+}
+
+/**
+ * Score every objective this scenario left to a judge, in every arm.
+ *
+ * Answers with the whole evaluation rather than with the verdicts it produced: a scoring
+ * pass fills some of an arm's rows and none of the others, and a client that had to merge
+ * them into a matrix it read separately would be holding two readings of one experiment.
+ */
+export async function scoreExperiment(
+  shopId: string,
+  experimentId: string,
+  command: ScoreExperimentRequest,
+): Promise<ExperimentEvaluationResponse> {
+  return read<ExperimentEvaluationResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/judgements`), {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(command),
     }),
   );
 }

@@ -4,6 +4,7 @@ import type {
   ExperimentEvaluationResponse,
   ExperimentResponse,
   ExperimentRunSchema,
+  JudgeConfigurationSummarySchema,
   MutationEventSchema,
   ObjectiveResultSchema,
   ParticipantTurnSchema,
@@ -17,10 +18,13 @@ import {
   deliverParticipantTurn,
   getExperiment,
   getExperimentEvaluation,
+  scoreExperiment,
 } from "../api/experiments";
+import { listJudgeConfigurations } from "../api/judgeConfigurations";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
+  fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
@@ -74,6 +78,9 @@ export function ExperimentBenchPage() {
   const { experimentId = "" } = useParams();
   const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
+  const [judges, setJudges] = useState<JudgeConfigurationSummarySchema[]>([]);
+  const [judgeId, setJudgeId] = useState("");
+  const [scoring, setScoring] = useState(false);
   const [message, setMessage] = useState("");
   const [targets, setTargets] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +114,23 @@ export function ExperimentBenchPage() {
     });
     return () => controller.abort();
   }, [load]);
+
+  // Only published judges can score: a verdict names the frozen version that produced it,
+  // and a draft has none.
+  useEffect(() => {
+    const controller = new AbortController();
+    listJudgeConfigurations(controller.signal)
+      .then((listed) => {
+        const published = listed.judges.filter((judge) => judge.latest_published_version !== null);
+        setJudges(published);
+        setJudgeId((current) => current || (published[0]?.judge_id ?? ""));
+      })
+      .catch(() => {
+        // A bench with no judge service still runs its arms; the objectives matrix simply
+        // keeps saying a judge decides those rows.
+      });
+    return () => controller.abort();
+  }, []);
 
   /**
    * Run each named arm, one after another, and report the first arm that could not run.
@@ -155,6 +179,21 @@ export function ExperimentBenchPage() {
     } finally {
       setWorking(null);
       await load().catch(() => setError(UNAVAILABLE));
+    }
+  };
+
+  const runJudge = async () => {
+    if (judgeId === "") {
+      return;
+    }
+    setScoring(true);
+    setError(null);
+    try {
+      setEvaluation(await scoreExperiment(shopId, experimentId, { judge_id: judgeId }));
+    } catch (cause: unknown) {
+      setError(describeApiError(cause, "This experiment could not be scored."));
+    } finally {
+      setScoring(false);
     }
   };
 
@@ -322,7 +361,15 @@ export function ExperimentBenchPage() {
             </ul>
           </Card>
 
-          <Objectives experiment={experiment} evaluation={evaluation} />
+          <Objectives
+            experiment={experiment}
+            evaluation={evaluation}
+            judges={judges}
+            judgeId={judgeId}
+            scoring={scoring}
+            onSelectJudge={setJudgeId}
+            onScore={() => void runJudge()}
+          />
 
           <StateChanges experiment={experiment} />
 
@@ -590,23 +637,39 @@ function driveable(run: ExperimentRunSchema): boolean {
  * "Pending" is a real state and not a soft failure: deterministic evidence is monotone, so
  * an arm that has not read the document yet may still read it. It becomes a miss when the
  * arm reaches its turn cap and nothing more can happen.
+ *
+ * The rows a judge owns are filled by scoring, from here. The judge is chosen at scoring
+ * time rather than pinned by the experiment, because judging is separate from the run and
+ * rerunnable — what explains a verdict is the version recorded on it, which is why each
+ * scored cell carries the judge and the model that produced it.
  */
 function Objectives({
   experiment,
   evaluation,
+  judges,
+  judgeId,
+  scoring,
+  onSelectJudge,
+  onScore,
 }: {
   experiment: ExperimentResponse;
   evaluation: ExperimentEvaluationResponse | null;
+  judges: JudgeConfigurationSummarySchema[];
+  judgeId: string;
+  scoring: boolean;
+  onSelectJudge: (judgeId: string) => void;
+  onScore: () => void;
 }) {
   const arms = evaluation?.arms ?? [];
   const rows = arms[0]?.objectives ?? [];
+  const judgeRows = rows.filter((row) => row.assessment === "judge");
   return (
     <Card
       title="Objectives"
       footer={
         <p className="text-xs text-admin-muted">
           Evidence, not a score: a pending objective is one this arm can still meet, and a judge
-          scores its own rows after the run.
+          scores its own rows from its rubric, on an anonymized record of what each arm did.
         </p>
       }
     >
@@ -642,14 +705,21 @@ function Objectives({
                   );
                   const outcome = result ? OUTCOMES[result.outcome] : null;
                   return (
-                    <td key={arm.run_id} className="py-0.5 text-right" title={result?.detail}>
+                    <td
+                      key={arm.run_id}
+                      className="py-0.5 text-right"
+                      // The provenance is on the hover too, not only in the accessible name:
+                      // "which judge, at which version, on which model" is what makes a
+                      // verdict readable, and a sighted operator needs it as much (ADR 0031).
+                      title={`${result?.detail ?? ""}${describeJudgement(result)}`}
+                    >
                       <span aria-hidden="true">{outcome?.mark ?? "\u2014"}</span>
                       {/* The evidence sentence, not only the symbol: what makes a cell read
                           as a finding is in `detail`, and a tooltip is mouse-only. */}
                       <span className="sr-only">
                         {`${row.objective_id} ${outcome?.label ?? "not judged"}${
                           result ? ` \u2014 ${result.detail}` : ""
-                        }`}
+                        }${describeJudgement(result)}`}
                       </span>
                     </td>
                   );
@@ -659,8 +729,58 @@ function Objectives({
           </tbody>
         </table>
       )}
+
+      {judgeRows.length > 0 ? (
+        <div className="mt-3 grid gap-2 border-t border-admin-border pt-3">
+          {judges.length === 0 ? (
+            <p className="text-[13px] text-admin-muted">
+              {judgeRows.length} objective(s) here are a judge's. Publish a judge to score them.
+            </p>
+          ) : (
+            <>
+              <label className={fieldLabelClasses}>
+                Judge
+                <select
+                  aria-label="Judge"
+                  className={fieldControlClasses}
+                  value={judgeId}
+                  onChange={(event) => onSelectJudge(event.target.value)}
+                >
+                  {judges.map((judge) => (
+                    <option key={judge.judge_id} value={judge.judge_id}>
+                      {judge.name} · v{judge.latest_published_version} · {judge.model_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className={outlineButtonClasses}
+                type="button"
+                onClick={onScore}
+                disabled={scoring || judgeId === ""}
+              >
+                {scoring ? "Scoring…" : `Score ${judgeRows.length} judged objective(s)`}
+              </button>
+              <p className="text-xs text-admin-muted">
+                Each arm is scored on its own record, and the judge is told nothing about what ran
+                it. Scoring again keeps the previous verdict and records a new attempt.
+              </p>
+            </>
+          )}
+        </div>
+      ) : null}
     </Card>
   );
+}
+
+/** The provenance a screen reader hears after a scored cell's evidence sentence. */
+function describeJudgement(result: ObjectiveResultSchema | undefined): string {
+  const judgement = result?.judgement;
+  if (!judgement) {
+    return "";
+  }
+  const attempt = `attempt ${judgement.attempt}`;
+  return ` \u2014 judged by ${judgement.model_id} under judge version ${judgement.judge_version}, ${attempt}`;
 }
 
 /**

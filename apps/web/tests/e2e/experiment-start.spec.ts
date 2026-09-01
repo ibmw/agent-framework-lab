@@ -203,7 +203,7 @@ async function publishSupportIdentity(page: Page, name: string) {
 }
 
 /** The two templates the recipe composes, both published so a scenario can pin them. */
-async function publishTemplates(page: Page, objective: string, mutation: string) {
+async function publishTemplates(page: Page, objective: string, judged: string, mutation: string) {
   await openSection(page, "Objective blocks", "Objective blocks");
   const newObjective = card(page, "New objective block");
   await newObjective.getByLabel("Name", { exact: true }).fill(objective);
@@ -226,6 +226,24 @@ async function publishTemplates(page: Page, objective: string, mutation: string)
   await objectiveParameters
     .getByLabel("Description of doc_ref", { exact: true })
     .fill("The shop document the arm has to read.");
+  await saveDraft(page);
+  await page.getByRole("button", { name: "Publish v1" }).click();
+  await expect(page.getByRole("status")).toContainText("Published version 1");
+
+  // The other kind of objective: one no rule can decide, which a judge scores (ADR 0031).
+  await openSection(page, "Objective blocks", "Objective blocks");
+  const newJudged = card(page, "New objective block");
+  await newJudged.getByLabel("Name", { exact: true }).fill(judged);
+  await newJudged.getByRole("button", { name: "Create block" }).click();
+  await page.getByRole("link", { name: judged }).click();
+  const judgedTemplate = card(page, "Template");
+  await judgedTemplate.getByLabel("Statement", { exact: true }).fill("Resolve the incident");
+  await judgedTemplate
+    .getByLabel("Description", { exact: true })
+    .fill("Passes when the arm identified the order and said plainly what it changed.");
+  await card(page, "Assessment")
+    .getByRole("combobox", { name: "Assessed by" })
+    .selectOption("judge");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByRole("status")).toContainText("Published version 1");
@@ -298,7 +316,28 @@ async function publishConfiguration(page: Page, name: string, identity: string, 
 }
 
 /** The published recipe both arms will run, built on the incident above. */
-async function publishScenario(page: Page, objective: string, mutation: string) {
+/** The judge that will score the row no rule decides, published so a verdict can name it. */
+async function publishJudge(page: Page, name: string) {
+  await openSection(page, "Judges", "Judges");
+  const create = card(page, "New judge");
+  await create.getByLabel("Name", { exact: true }).fill(name);
+  await create.getByRole("button", { name: "Create judge" }).click();
+  await page.getByRole("link", { name }).click();
+
+  const rubric = card(page, "Rubric");
+  await rubric
+    .getByLabel("How this judge scores", { exact: true })
+    .fill("Score whether the arm identified the order and said plainly what it changed.");
+  // The offline judge, so this journey needs no provider: its rule is declared, which is
+  // what lets the assertion below name the verdict.
+  await card(page, "Model").getByRole("combobox", { name: "Provider" }).selectOption("fake");
+  await card(page, "Model").getByLabel("Model", { exact: true }).fill("deterministic");
+  await saveDraft(page);
+  await page.getByRole("button", { name: "Publish v1" }).click();
+  await expect(page.getByRole("status")).toContainText("Published version 1");
+}
+
+async function publishScenario(page: Page, objective: string, judged: string, mutation: string) {
   await openSection(page, "All scenarios", "Scenarios");
   const create = card(page, "New scenario");
   await create.getByLabel("Name", { exact: true }).fill("Wrong shipping address");
@@ -316,6 +355,10 @@ async function publishScenario(page: Page, objective: string, mutation: string) 
   await objectives
     .getByLabel(`doc_ref of ${objective}`, { exact: true })
     .selectOption("policy:address-change");
+  await objectives
+    .getByLabel("Add objective block", { exact: true })
+    .selectOption({ label: `${judged} — v1` });
+  await objectives.getByRole("button", { name: "Add" }).click();
 
   const mutations = card(page, "Mutations");
   await mutations
@@ -356,6 +399,7 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   test.slow();
   const unique = Date.now().toString(36);
   const objective = `experiment-read-required-document-${unique}`;
+  const judged = `experiment-resolve-the-incident-${unique}`;
   const mutation = `experiment-concurrent-entity-mutation-${unique}`;
   const identity = `experiment-tier-1-${unique}`;
   const atlas = `cfg-atlas-${unique}`;
@@ -363,8 +407,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
 
   await buildIncident(page, unique);
   await publishSupportIdentity(page, identity);
-  await publishTemplates(page, objective, mutation);
-  await publishScenario(page, objective, mutation);
+  await publishTemplates(page, objective, judged, mutation);
+  await publishScenario(page, objective, judged, mutation);
+  await publishJudge(page, `experiment-resolution-quality-${unique}`);
   await publishConfiguration(
     page,
     atlas,
@@ -477,6 +522,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   const objectivesMatrix = card(page, "Objectives");
   await expect(objectivesMatrix.getByText("Read document")).toBeVisible();
   await expect(objectivesMatrix.getByText(/ pending — /)).toHaveCount(2);
+  await expect(objectivesMatrix.getByText(/a judge scores this dimension; none has/)).toHaveCount(
+    2,
+  );
 
   // One composition, both arms: the customer says the same thing to each.
   const composer = card(page, "Customer composer");
@@ -507,6 +555,24 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(objectivesMatrix.getByText(/ pending — /)).toHaveCount(1);
   await expect(armA.getByRole("button", { name: /Arm A's agent/ })).toHaveCount(0);
   await expect(composer.getByRole("checkbox", { name: /Arm A/ })).toBeDisabled();
+
+  // And the row no rule can decide is filled by the judge the operator chose — on each arm's
+  // own record, with the version and model that produced the verdict recorded on the cell.
+  await objectivesMatrix
+    .getByRole("combobox", { name: "Judge" })
+    .selectOption({ label: `experiment-resolution-quality-${unique} · v1 · deterministic` });
+  await objectivesMatrix.getByRole("button", { name: /Score 1 judged objective/ }).click();
+  await expect(objectivesMatrix.getByText(/a judge scores this dimension; none has/)).toHaveCount(
+    0,
+  );
+  await expect(
+    objectivesMatrix.getByText(/judged by deterministic under judge version 1, attempt 1/),
+  ).toHaveCount(2);
+  // Arm A answered every turn it received; arm B is still holding one, and the judge says so
+  // rather than counting an unfinished incident against it.
+  await expect(
+    objectivesMatrix.getByText(/ met — the arm answered every turn it received/),
+  ).toHaveCount(1);
 
   // An empty composition is a run that has not been driven, not a customer who said nothing.
   await composer.getByRole("button", { name: "Send as the customer" }).click();

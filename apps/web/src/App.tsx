@@ -8,6 +8,8 @@ import { CustomersPage } from "./routes/CustomersPage";
 import { ExperimentBenchPage } from "./routes/ExperimentBenchPage";
 import { ExperimentSetupPage } from "./routes/ExperimentSetupPage";
 import { ExperimentTimelinePage } from "./routes/ExperimentTimelinePage";
+import { JudgeConfigurationEditorPage } from "./routes/JudgeConfigurationEditorPage";
+import { JudgeConfigurationsPage } from "./routes/JudgeConfigurationsPage";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
 import { OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
@@ -60,6 +62,8 @@ export function App() {
           path="agent-configurations/:configurationId"
           element={<AgentConfigurationEditorPage />}
         />
+        <Route path="judges" element={<JudgeConfigurationsPage />} />
+        <Route path="judges/:judgeId" element={<JudgeConfigurationEditorPage />} />
         <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
         <Route path="setup/identity" element={<ShopIdentityPage />} />
         <Route path="setup/policies" element={<PoliciesAndFaqPage />} />

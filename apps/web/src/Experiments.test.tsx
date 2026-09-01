@@ -9,7 +9,9 @@ import type {
   ExperimentPreviewResponse,
   ExperimentResponse,
   ExperimentTimelineResponse,
+  JudgeConfigurationListResponse,
   MutationEventSchema,
+  ObjectiveResultSchema,
   ParticipantTurnSchema,
   ScenarioListResponse,
   ScenarioVersionListResponse,
@@ -38,6 +40,23 @@ const SANDBOX_FINGERPRINT = "a".repeat(64);
 const RESOLUTION_FINGERPRINT = "b".repeat(64);
 const STATE_FINGERPRINT = "c".repeat(64);
 const ORDER_ID = "4d5e6f7a-8b9c-4d0e-8f1a-2b3c4d5e6f7a";
+const JUDGE_ID = "7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
+
+const JUDGES: JudgeConfigurationListResponse = {
+  judges: [
+    {
+      judge_id: JUDGE_ID,
+      name: "Resolution quality",
+      provider: "openai",
+      provider_label: "OpenAI",
+      model_id: "gpt-5-mini",
+      evidence_count: 3,
+      updated_at: "2026-09-01T09:00:00+00:00",
+      latest_published_version: 2,
+      published_version_count: 2,
+    },
+  ],
+};
 
 const SHOP_CONTENT: ShopDraftResponse["content"] = {
   identity: {
@@ -324,12 +343,42 @@ function evaluation(
             severity: "expected" as const,
             assessment: "judge" as const,
             evidence: "dimension" as const,
-            outcome: "deferred" as const,
-            detail: "a judge scores this dimension",
+            ...judgeRow(),
           },
         ],
       };
     }),
+  };
+}
+
+/**
+ * The judge's own row, before and after a scoring pass.
+ *
+ * Deferred until a judge has actually scored it, which is what the row says on a bench
+ * where nobody has: the verdict, its reason, and the version that produced it all arrive
+ * together, because a verdict without them is a number.
+ */
+function judgeRow(): Pick<ObjectiveResultSchema, "outcome" | "detail" | "judgement"> {
+  if (!scored) {
+    return {
+      outcome: "deferred",
+      detail: "a judge scores this dimension; none has",
+      judgement: null,
+    };
+  }
+  return {
+    outcome: "met",
+    detail: "the arm named the order and said what it changed",
+    judgement: {
+      judge_id: JUDGE_ID,
+      judge_version: 2,
+      provider: "openai",
+      model_id: "gpt-5-mini",
+      brief_fingerprint: "e".repeat(64),
+      attempt: 1,
+      outcome: "met",
+      failure: null,
+    },
   };
 }
 
@@ -505,6 +554,9 @@ let mutationEvents: MutationEventSchema[] = [];
 let maxTurns = 12;
 let startFails = false;
 let runtimeUnavailable = false;
+let scored = false;
+let scoredBy: { judge_id: string }[] = [];
+let publishedJudges: JudgeConfigurationListResponse = JUDGES;
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -576,6 +628,15 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
     HttpResponse.json(TIMELINE),
   ),
+  http.get("*/api/v1/judge-configurations", () => HttpResponse.json(publishedJudges)),
+  http.post(
+    `*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/judgements`,
+    async ({ request }) => {
+      scoredBy.push((await request.json()) as { judge_id: string });
+      scored = true;
+      return HttpResponse.json(evaluation(turns, agentTurns, toolEvents), { status: 201 });
+    },
+  ),
   http.post(
     `*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/runs/:runId/agent-turns`,
     ({ params }) => {
@@ -631,6 +692,9 @@ afterEach(() => {
   maxTurns = 12;
   startFails = false;
   runtimeUnavailable = false;
+  scored = false;
+  scoredBy = [];
+  publishedJudges = JUDGES;
 });
 afterAll(() => server.close());
 
@@ -962,8 +1026,52 @@ describe("live bench", () => {
     const objectives = await screen.findByRole("region", { name: "Objectives" });
 
     expect(
-      within(objectives).getAllByText(/explain-the-outcome a judge scores this after the run/),
+      within(objectives).getAllByText(/explain-the-outcome a judge scores this.*none has/),
     ).toHaveLength(2);
+  });
+
+  it("scores the judge's rows with a published judge and reads what it answered", async () => {
+    const user = userEvent.setup();
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+    await user.selectOptions(
+      within(objectives).getByLabelText("Judge"),
+      "Resolution quality · v2 · gpt-5-mini",
+    );
+    await user.click(within(objectives).getByRole("button", { name: /Score 1 judged/ }));
+
+    await waitFor(() => expect(scoredBy).toEqual([{ judge_id: JUDGE_ID }]));
+    expect(
+      within(objectives).getAllByText(
+        /explain-the-outcome met — the arm named the order and said what it changed/,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("says which judge produced a verdict, at which version, on which model", async () => {
+    // A verdict an operator cannot trace to a rubric version and a model is a number.
+    const user = userEvent.setup();
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+    await user.click(within(objectives).getByRole("button", { name: /Score 1 judged/ }));
+
+    await waitFor(() =>
+      expect(
+        within(objectives).getAllByText(/judged by gpt-5-mini under judge version 2, attempt 1/),
+      ).toHaveLength(2),
+    );
+  });
+
+  it("offers no scoring when no judge has been published", async () => {
+    publishedJudges = { judges: [] };
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+
+    expect(within(objectives).getByText(/Publish a judge to score them/)).toBeInTheDocument();
+    expect(within(objectives).queryByRole("button", { name: /Score/ })).toBeNull();
   });
 
   it("settles what an arm never did once it reaches the turn cap", async () => {
