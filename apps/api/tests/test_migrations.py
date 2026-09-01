@@ -48,6 +48,8 @@ DEFINITION_TABLES = {
     "experiment_tool_events",
     # And what the scenario itself did to those arms while they worked.
     "experiment_mutation_events",
+    # And what a published judge answered about the rows no rule can decide.
+    "experiment_judgements",
 }
 POC_TABLES = {
     "action_proposals",

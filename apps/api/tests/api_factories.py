@@ -12,6 +12,7 @@ from typing import Any
 from httpx import ASGITransport, AsyncClient
 
 from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
+from capability_lab.application.judge_runtime import JudgeRuntimeRegistry
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -188,19 +189,23 @@ def api_client(
     tmp_path: Path,
     database_name: str,
     agent_runtimes: SupportAgentRuntimeRegistry | None = None,
+    judge_runtimes: JudgeRuntimeRegistry | None = None,
 ) -> AsyncClient:
     """One suite's app over its own database file; use it as an async context manager.
 
     `agent_runtimes` is how a test says which frameworks this lab can run, because that is
     composition's decision (`docs/architecture.md`) — a suite proving what happens to an arm
-    nothing can run says so here rather than reaching inside the runner.
+    nothing can run says so here rather than reaching inside the runner. `judge_runtimes`
+    says the same about which providers can score.
     """
     engine = create_database_engine(f"sqlite:///{tmp_path / database_name}")
     Base.metadata.create_all(engine)
     return AsyncClient(
         transport=ASGITransport(
             app=create_app(
-                session_factory=create_session_factory(engine), agent_runtimes=agent_runtimes
+                session_factory=create_session_factory(engine),
+                agent_runtimes=agent_runtimes,
+                judge_runtimes=judge_runtimes,
             )
         ),
         base_url="http://lab.test",

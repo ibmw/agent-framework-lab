@@ -198,7 +198,8 @@ class DefinitionDraftModel(Base):
         CheckConstraint(
             "definition_type IN ("
             "'shop', 'customer_profile', 'support_identity', 'ticket', 'scenario', "
-            "'objective_block', 'mutation_block', 'agent_configuration')",
+            "'objective_block', 'mutation_block', 'agent_configuration', "
+            "'judge_configuration')",
             name="ck_definition_drafts_type_valid",
         ),
         Index("ix_definition_drafts_shop_id", "shop_id"),
@@ -226,7 +227,8 @@ class DefinitionVersionModel(Base):
         CheckConstraint(
             "definition_type IN ("
             "'shop', 'customer_profile', 'support_identity', 'ticket', 'scenario', "
-            "'objective_block', 'mutation_block', 'agent_configuration')",
+            "'objective_block', 'mutation_block', 'agent_configuration', "
+            "'judge_configuration')",
             name="ck_definition_versions_type_valid",
         ),
         Index("ix_definition_versions_definition", "definition_type", "definition_id"),
@@ -651,4 +653,57 @@ class MutationEventModel(Base):
     revision_before: Mapped[int] = mapped_column(Integer)
     revision_after: Mapped[int] = mapped_column(Integer)
     state_fingerprint: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class JudgementModel(Base):
+    """One judge execution against one objective of one arm.
+
+    Keyed by the arm, the objective, and the attempt: scoring a row again writes attempt
+    *n+1* beside the last verdict rather than over it, because "the judge said something
+    else when we reran it" is exactly the kind of thing a rerunnable evaluator exists to
+    make visible (ADR 0031).
+
+    The judge and its version, the provider and model that ran, and the fingerprint of the
+    anonymized brief are columns rather than a document: a verdict has to be explainable
+    from the row an operator is reading, and a judge published again afterwards must not
+    change what a recorded execution says it read.
+
+    A scored execution carries an outcome and may carry a rationale; a failed one carries a
+    code and no words, for the reason a failed agent turn carries no body — nothing can
+    promise a provider's error text is free of the synthetic customer content the brief
+    holds.
+    """
+
+    __tablename__ = "experiment_judgements"
+    __table_args__ = (
+        CheckConstraint("attempt >= 1", name="ck_judgements_attempt_positive"),
+        CheckConstraint("judge_version >= 1", name="ck_judgements_judge_version_positive"),
+        CheckConstraint(
+            "outcome IS NULL OR outcome IN ('met', 'missed', 'unclear')",
+            name="ck_judgements_outcome_valid",
+        ),
+        CheckConstraint(
+            "(outcome IS NULL) = (failure IS NOT NULL)",
+            name="ck_judgements_failure_matches_outcome",
+        ),
+        CheckConstraint(
+            "failure IS NULL OR length(rationale) = 0",
+            name="ck_judgements_failure_has_no_rationale",
+        ),
+        Index("ix_judgements_experiment", "experiment_id", "created_at"),
+    )
+
+    run_id: Mapped[str] = mapped_column(ForeignKey("experiment_runs.run_id"), primary_key=True)
+    objective_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempt: Mapped[int] = mapped_column(Integer, primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(String(36))
+    judge_id: Mapped[str] = mapped_column(String(36))
+    judge_version: Mapped[int] = mapped_column(Integer)
+    provider: Mapped[str] = mapped_column(String(32))
+    model_id: Mapped[str] = mapped_column(String(200))
+    brief_fingerprint: Mapped[str] = mapped_column(String(64))
+    outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    failure: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    rationale: Mapped[str] = mapped_column(String(2000))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())

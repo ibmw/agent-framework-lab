@@ -1092,6 +1092,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/judgements": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Score every objective this scenario left to a judge, in every arm
+     * @description Runs one published judge over each arm's own record, one execution per objective per arm, and answers with the whole evaluation as it now reads. Each execution is shown an anonymized brief carrying what that arm did and said and nothing about what ran it, and the verdict is recorded with the judge version, the model, and the fingerprint of that exact input. Scoring again writes a new attempt beside the last rather than over it, so a rerun is readable as a rerun. A judge execution that fails is recorded and leaves its objective deferred — the lab's own outage never counts against an arm — while a provider this lab cannot reach at all is a 422 and records nothing.
+     */
+    post: operations["scoreExperiment"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns": {
     parameters: {
       query?: never;
@@ -1126,6 +1146,120 @@ export interface paths {
      * @description Resolves the arm's pinned configuration, renders its prompt against the shop and support-identity versions the experiment froze, and runs the framework against this arm's own sandbox with exactly the tools the configuration enables. Answers with the attempt, every tool call it made, and every scenario fault that fired into this arm while it worked. Idempotent over an answer and not over an attempt: an arm whose latest customer turn is already answered returns that answer and calls no model, while one whose last attempt failed makes a new attempt beside it. A framework failure is a recorded turn and a 201, because it is evidence about the run; a framework this lab cannot run at all is a 422, because it is not.
      */
     post: operations["advanceExperimentRun"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/judge-configurations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List judges with their published-version provenance */
+    get: operations["listJudgeConfigurations"];
+    put?: never;
+    /**
+     * Create a judge and its first draft
+     * @description The first draft carries the model and the evidence scopes the lab has proven, and deliberately no rubric: the rubric is the whole of what a judge is, and a default one would publish an evaluator nobody wrote.
+     */
+    post: operations["createJudgeConfiguration"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/judge-configurations/resources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * What a judge may name: proven providers, evidence scopes, reserved terms
+     * @description The catalog the publish gate reads. `reserved_terms` are the names of what the arms run — a rubric may not contain them, because a judge is shown an anonymized record and must score behavior rather than a label.
+     */
+    get: operations["getJudgeConfigurationResources"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/judge-configurations/{judge_id}/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve the mutable judge draft */
+    get: operations["getJudgeConfigurationDraft"];
+    /** Replace the draft without touching any published version */
+    put: operations["replaceJudgeConfigurationDraft"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/judge-configurations/{judge_id}/draft/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Validate the draft and preview the version publishing would create
+     * @description Refuses a judge the lab cannot run, and a rubric that names any of what the arms run — the one gate finding that reaches outside the payload, because anonymization is the property the whole evaluation rests on.
+     */
+    get: operations["previewJudgeConfigurationDraft"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/judge-configurations/{judge_id}/versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List a judge's published versions, newest first */
+    get: operations["listJudgeConfigurationVersions"];
+    put?: never;
+    /** Freeze the draft into the next immutable published version */
+    post: operations["publishJudgeConfiguration"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/judge-configurations/{judge_id}/versions/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Retrieve one immutable published judge version */
+    get: operations["getJudgeConfigurationVersion"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2081,6 +2215,11 @@ export interface components {
        */
       shop_id: string | null;
     };
+    /** CreateJudgeConfigurationRequest */
+    CreateJudgeConfigurationRequest: {
+      /** Name */
+      name: string;
+    };
     /**
      * CreateOrderRequest
      * @description The order's identity: a reference, the customer it belongs to, and when it happened.
@@ -2378,7 +2517,8 @@ export interface components {
       | "scenario"
       | "objective_block"
       | "mutation_block"
-      | "agent_configuration";
+      | "agent_configuration"
+      | "judge_configuration";
     /**
      * DefinitionValidationErrorResponse
      * @description A publish refusal that carries the exact publish-gate findings.
@@ -2743,6 +2883,210 @@ export interface components {
       /** Orders */
       orders: components["schemas"]["OrderResponse"][];
     };
+    /** JudgeConfigurationDraftResponse */
+    JudgeConfigurationDraftResponse: {
+      /**
+       * Judge Id
+       * Format: uuid
+       */
+      judge_id: string;
+      /**
+       * Lifecycle State
+       * @default draft
+       * @constant
+       */
+      lifecycle_state: "draft";
+      content: components["schemas"]["JudgeConfigurationPayloadSchema"];
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+    };
+    /** JudgeConfigurationListResponse */
+    JudgeConfigurationListResponse: {
+      /** Judges */
+      judges: components["schemas"]["JudgeConfigurationSummarySchema"][];
+    };
+    /**
+     * JudgeConfigurationPayloadSchema
+     * @description The whole authored content of a judge draft or published version.
+     */
+    JudgeConfigurationPayloadSchema: {
+      /** Name */
+      name: string;
+      /** Description */
+      description: string;
+      /** Rubric */
+      rubric: string;
+      /** Evidence */
+      evidence: components["schemas"]["JudgeEvidenceScope"][];
+      model: components["schemas"]["JudgeModelSchema"];
+    };
+    /**
+     * JudgeConfigurationPreviewResponse
+     * @description The publish gate: what blocks publication and what a publish would freeze.
+     */
+    JudgeConfigurationPreviewResponse: {
+      /**
+       * Judge Id
+       * Format: uuid
+       */
+      judge_id: string;
+      /** Publishable */
+      publishable: boolean;
+      /** Issues */
+      issues: components["schemas"]["DefinitionIssueSchema"][];
+      /** Changes */
+      changes: components["schemas"]["DefinitionChangeSchema"][];
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Next Version */
+      next_version: number;
+      /** Matches Latest Published */
+      matches_latest_published: boolean;
+      content: components["schemas"]["JudgeConfigurationPayloadSchema"];
+    };
+    /**
+     * JudgeConfigurationResourcesResponse
+     * @description Exactly what a judge may name, so an editor cannot offer a gate error.
+     *
+     *     `reserved_terms` is what a rubric may not contain: the names of what the arms run. It is
+     *     served rather than restated in the client, because the list grows the day the lab proves
+     *     a second framework and an editor with its own copy would stop matching the gate.
+     */
+    JudgeConfigurationResourcesResponse: {
+      /** Judges */
+      judges: components["schemas"]["ProvenJudgeSchema"][];
+      /** Evidence */
+      evidence: components["schemas"]["JudgeEvidenceScope"][];
+      /** Reserved Terms */
+      reserved_terms: string[];
+    };
+    /** JudgeConfigurationSummarySchema */
+    JudgeConfigurationSummarySchema: {
+      /**
+       * Judge Id
+       * Format: uuid
+       */
+      judge_id: string;
+      /** Name */
+      name: string;
+      /** Provider */
+      provider: string;
+      /** Provider Label */
+      provider_label: string;
+      /** Model Id */
+      model_id: string;
+      /** Evidence Count */
+      evidence_count: number;
+      /** Updated At */
+      updated_at: string;
+      /** Latest Published Version */
+      latest_published_version: number | null;
+      /** Published Version Count */
+      published_version_count: number;
+    };
+    /** JudgeConfigurationVersionListResponse */
+    JudgeConfigurationVersionListResponse: {
+      /** Versions */
+      versions: components["schemas"]["DefinitionVersionSummarySchema"][];
+    };
+    /** JudgeConfigurationVersionResponse */
+    JudgeConfigurationVersionResponse: {
+      /**
+       * Judge Id
+       * Format: uuid
+       */
+      judge_id: string;
+      /**
+       * Lifecycle State
+       * @default published
+       * @constant
+       */
+      lifecycle_state: "published";
+      /** Version */
+      version: number;
+      /** Content Fingerprint */
+      content_fingerprint: string;
+      /** Published At */
+      published_at: string;
+      content: components["schemas"]["JudgeConfigurationPayloadSchema"];
+    };
+    /**
+     * JudgeEvidenceScope
+     * @description One part of an arm's record a judge configuration may ask to be shown.
+     *
+     *     Every member is something the lab already records and can anonymize. There is
+     *     deliberately no "everything" member: a scope that grew silently when a new kind of
+     *     record was added would change what a published judge sees without a new version.
+     * @enum {string}
+     */
+    JudgeEvidenceScope: "customer_turns" | "agent_replies" | "tool_calls" | "state_changes";
+    /**
+     * JudgeFailure
+     * @description Why one judge execution produced no verdict.
+     *
+     *     The same taxonomy an agent turn uses, minus the two that cannot happen: a judge runs no
+     *     tools, so there is no round limit, and it is not a framework integration in the sense an
+     *     arm's runtime is. Kept as its own enum rather than shared with `AgentTurnFailure`
+     *     because these are failures of the *evaluator*, and a comparison that counted them
+     *     together with an arm's failures would put the lab's outage in the agent's column.
+     * @enum {string}
+     */
+    JudgeFailure: "provider" | "transient" | "invalid_response";
+    /** JudgeModelSchema */
+    JudgeModelSchema: {
+      /** Provider */
+      provider: string;
+      /** Model Id */
+      model_id: string;
+      /**
+       * Temperature
+       * @description Exact decimal sampling temperature; never a binary float.
+       */
+      temperature: string;
+    };
+    /**
+     * JudgeOutcome
+     * @description What one judge execution may answer, and nothing else.
+     *
+     *     Three values, closed and lab-owned. `UNCLEAR` is not a failure of the judge: it is the
+     *     honest reading of a record that does not settle the question, and it keeps a model from
+     *     being asked to guess in a matrix cell an operator will read as evidence.
+     * @enum {string}
+     */
+    JudgeOutcome: "met" | "missed" | "unclear";
+    /**
+     * JudgementSchema
+     * @description Which published judge produced one verdict, on what, and from what input.
+     *
+     *     Present exactly on a row a judge has scored — including one whose execution failed,
+     *     where the outcome is absent and `failure` says why. Provenance travels *on the row*
+     *     rather than in a listing beside it: a verdict an operator cannot trace to a rubric
+     *     version, a model, and an input fingerprint is a number, which is what this lab refuses
+     *     to report.
+     */
+    JudgementSchema: {
+      /**
+       * Judge Id
+       * Format: uuid
+       */
+      judge_id: string;
+      /** Judge Version */
+      judge_version: number;
+      /** Provider */
+      provider: string;
+      /** Model Id */
+      model_id: string;
+      /** Brief Fingerprint */
+      brief_fingerprint: string;
+      /** Attempt */
+      attempt: number;
+      outcome: components["schemas"]["JudgeOutcome"] | null;
+      failure: components["schemas"]["JudgeFailure"] | null;
+    };
     /**
      * LoyaltyTier
      * @enum {string}
@@ -3067,6 +3411,7 @@ export interface components {
       outcome: components["schemas"]["ObjectiveOutcome"];
       /** Detail */
       detail: string;
+      judgement?: components["schemas"]["JudgementSchema"] | null;
     };
     /**
      * ObjectiveSeverity
@@ -3548,6 +3893,20 @@ export interface components {
       /** Capabilities */
       capabilities: components["schemas"]["AgentCapability"][];
     };
+    /**
+     * ProvenJudgeSchema
+     * @description One provider the lab has proven it can judge with.
+     */
+    ProvenJudgeSchema: {
+      /** Provider */
+      provider: string;
+      /** Label */
+      label: string;
+      /** Models */
+      models: string[];
+      /** Summary */
+      summary: string;
+    };
     /** RatingSummarySchema */
     RatingSummarySchema: {
       /** Review Count */
@@ -3565,6 +3924,10 @@ export interface components {
     /** ReplaceCustomerProfileDraftRequest */
     ReplaceCustomerProfileDraftRequest: {
       payload: components["schemas"]["CustomerProfilePayloadSchema"];
+    };
+    /** ReplaceJudgeConfigurationDraftRequest */
+    ReplaceJudgeConfigurationDraftRequest: {
+      payload: components["schemas"]["JudgeConfigurationPayloadSchema"];
     };
     /** ReplaceMutationBlockDraftRequest */
     ReplaceMutationBlockDraftRequest: {
@@ -4317,6 +4680,20 @@ export interface components {
       /** Templates */
       templates: components["schemas"]["PinnedTemplateSchema"][];
       content: components["schemas"]["ScenarioContentSchema"];
+    };
+    /**
+     * ScoreExperimentRequest
+     * @description Which published judge scores this experiment's judge-assessed objectives.
+     *
+     *     Named at scoring time rather than pinned by the experiment, because judging is separate
+     *     from the run and rerunnable: what explains a verdict is the judge version recorded on it.
+     */
+    ScoreExperimentRequest: {
+      /**
+       * Judge Id
+       * Format: uuid
+       */
+      judge_id: string;
     };
     /** SendConversationMessageRequest */
     SendConversationMessageRequest: {
@@ -9395,6 +9772,62 @@ export interface operations {
       };
     };
   };
+  scoreExperiment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ScoreExperimentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentEvaluationResponse"];
+        };
+      };
+      /** @description The experiment or the named judge is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another scoring pass wrote the attempt this one numbered; read the evaluation and score again */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The judge has no published version, or no runtime for its provider is available here */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   deliverParticipantTurn: {
     parameters: {
       query?: never;
@@ -9477,6 +9910,358 @@ export interface operations {
         };
       };
       /** @description No runtime for this arm's framework is available here */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listJudgeConfigurations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationListResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  createJudgeConfiguration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateJudgeConfigurationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationDraftResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getJudgeConfigurationResources: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationResourcesResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getJudgeConfigurationDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable judge-configuration identifier. */
+        judge_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replaceJudgeConfigurationDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable judge-configuration identifier. */
+        judge_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReplaceJudgeConfigurationDraftRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationDraftResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  previewJudgeConfigurationDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable judge-configuration identifier. */
+        judge_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationPreviewResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listJudgeConfigurationVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable judge-configuration identifier. */
+        judge_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationVersionListResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  publishJudgeConfiguration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable judge-configuration identifier. */
+        judge_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The version already exists */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The draft has publish-gate errors */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DefinitionValidationErrorResponse"];
+        };
+      };
+    };
+  };
+  getJudgeConfigurationVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable judge-configuration identifier. */
+        judge_id: string;
+        /** @description Immutable published version number. */
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JudgeConfigurationVersionResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
       422: {
         headers: {
           [name: string]: unknown;

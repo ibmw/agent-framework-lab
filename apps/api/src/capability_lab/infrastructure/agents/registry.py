@@ -5,6 +5,7 @@ from capability_lab.application.agent_runtime import (
     SupportAgentRuntimeRegistry,
 )
 from capability_lab.application.conversations import AgentRegistry, FrameworkDeclaration
+from capability_lab.application.judge_runtime import JudgeRuntime, JudgeRuntimeRegistry
 from capability_lab.application.ports import AgentAdapter
 from capability_lab.infrastructure.agents.fake import FakeAgentAdapter, FakeSupportAgentRuntime
 from capability_lab.infrastructure.agents.pydantic_ai import (
@@ -13,6 +14,7 @@ from capability_lab.infrastructure.agents.pydantic_ai import (
 )
 from capability_lab.infrastructure.agents.pydantic_ai.adapter import create_openai_model
 from capability_lab.infrastructure.config import Settings
+from capability_lab.infrastructure.judges import ControlJudgeRuntime, PydanticAiJudgeRuntime
 from capability_lab.infrastructure.telemetry import SanitizedTracingAgentAdapter, Telemetry
 
 
@@ -101,3 +103,34 @@ def create_support_agent_runtimes(settings: Settings) -> SupportAgentRuntimeRegi
         return SupportAgentRuntimeRegistry(runtimes)
     runtimes[pydantic_runtime.framework_id] = pydantic_runtime
     return SupportAgentRuntimeRegistry(runtimes)
+
+
+def create_judge_runtimes(settings: Settings) -> JudgeRuntimeRegistry:
+    """The judges this process can actually score with.
+
+    A third registry rather than a member of either other one, for the reason there are
+    already two: an adapter serves the POC's conversations, a runtime runs an experiment
+    arm, and a judge reads a record none of them can see. One registry holding three
+    unrelated ports would only make it look as though a provider registered for one were
+    available for the others.
+
+    The deterministic control judge is always here, so an offline lab can still run an
+    evaluation end to end; the model-backed one appears only when this process is configured
+    to reach a provider. A judge this process cannot run is refused when it is asked to score
+    and never recorded as a failed execution, because a missing API key is a fact about the
+    machine rather than something an arm did (ADR 0031).
+    """
+    control = ControlJudgeRuntime()
+    runtimes: dict[str, JudgeRuntime] = {control.provider: control}
+    if settings.environment == "test":
+        judge = PydanticAiJudgeRuntime.for_test()
+    elif settings.openai_api_key is not None:
+        api_key = settings.openai_api_key.get_secret_value()
+        # The model comes from the published judge, not from this process: what scored a run
+        # is an authored input, and a runtime that substituted the environment's model would
+        # make a recorded verdict unexplainable.
+        judge = PydanticAiJudgeRuntime(lambda model_id: create_openai_model(model_id, api_key))
+    else:
+        return JudgeRuntimeRegistry(runtimes)
+    runtimes[judge.provider] = judge
+    return JudgeRuntimeRegistry(runtimes)

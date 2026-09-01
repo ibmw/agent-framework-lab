@@ -3591,6 +3591,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/judgements:
+    post:
+      summary: Score every objective this scenario left to a judge, in every arm
+      description: Runs one published judge over each arm's own record, one execution
+        per objective per arm, and answers with the whole evaluation as it now reads.
+        Each execution is shown an anonymized brief carrying what that arm did and
+        said and nothing about what ran it, and the verdict is recorded with the judge
+        version, the model, and the fingerprint of that exact input. Scoring again
+        writes a new attempt beside the last rather than over it, so a rerun is readable
+        as a rerun. A judge execution that fails is recorded and leaves its objective
+        deferred — the lab's own outage never counts against an arm — while a provider
+        this lab cannot reach at all is a 422 and records nothing.
+      operationId: scoreExperiment
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScoreExperimentRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentEvaluationResponse'
+        '404':
+          description: The experiment or the named judge is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another scoring pass wrote the attempt this one numbered; read
+            the evaluation and score again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The judge has no published version, or no runtime for its provider
+            is available here
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns:
     post:
       summary: Deliver one customer turn to one or both arms
@@ -3701,6 +3766,289 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: No runtime for this arm's framework is available here
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/judge-configurations:
+    get:
+      summary: List judges with their published-version provenance
+      operationId: listJudgeConfigurations
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationListResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create a judge and its first draft
+      description: 'The first draft carries the model and the evidence scopes the
+        lab has proven, and deliberately no rubric: the rubric is the whole of what
+        a judge is, and a default one would publish an evaluator nobody wrote.'
+      operationId: createJudgeConfiguration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJudgeConfigurationRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationDraftResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/judge-configurations/resources:
+    get:
+      summary: 'What a judge may name: proven providers, evidence scopes, reserved
+        terms'
+      description: The catalog the publish gate reads. `reserved_terms` are the names
+        of what the arms run — a rubric may not contain them, because a judge is shown
+        an anonymized record and must score behavior rather than a label.
+      operationId: getJudgeConfigurationResources
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationResourcesResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/judge-configurations/{judge_id}/draft:
+    get:
+      summary: Retrieve the mutable judge draft
+      operationId: getJudgeConfigurationDraft
+      parameters:
+      - name: judge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable judge-configuration identifier.
+          title: Judge Id
+        description: Stable judge-configuration identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Replace the draft without touching any published version
+      operationId: replaceJudgeConfigurationDraft
+      parameters:
+      - name: judge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable judge-configuration identifier.
+          title: Judge Id
+        description: Stable judge-configuration identifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceJudgeConfigurationDraftRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationDraftResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/judge-configurations/{judge_id}/draft/preview:
+    get:
+      summary: Validate the draft and preview the version publishing would create
+      description: Refuses a judge the lab cannot run, and a rubric that names any
+        of what the arms run — the one gate finding that reaches outside the payload,
+        because anonymization is the property the whole evaluation rests on.
+      operationId: previewJudgeConfigurationDraft
+      parameters:
+      - name: judge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable judge-configuration identifier.
+          title: Judge Id
+        description: Stable judge-configuration identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationPreviewResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/judge-configurations/{judge_id}/versions:
+    post:
+      summary: Freeze the draft into the next immutable published version
+      operationId: publishJudgeConfiguration
+      parameters:
+      - name: judge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable judge-configuration identifier.
+          title: Judge Id
+        description: Stable judge-configuration identifier.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The version already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The draft has publish-gate errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefinitionValidationErrorResponse'
+    get:
+      summary: List a judge's published versions, newest first
+      operationId: listJudgeConfigurationVersions
+      parameters:
+      - name: judge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable judge-configuration identifier.
+          title: Judge Id
+        description: Stable judge-configuration identifier.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationVersionListResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/judge-configurations/{judge_id}/versions/{version}:
+    get:
+      summary: Retrieve one immutable published judge version
+      operationId: getJudgeConfigurationVersion
+      parameters:
+      - name: judge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable judge-configuration identifier.
+          title: Judge Id
+        description: Stable judge-configuration identifier.
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          description: Immutable published version number.
+          title: Version
+        description: Immutable published version number.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JudgeConfigurationVersionResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
           content:
             application/json:
               schema:
@@ -5666,6 +6014,18 @@ components:
       - customer_since
       - shop_id
       title: CreateCustomerProfileRequest
+    CreateJudgeConfigurationRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: CreateJudgeConfigurationRequest
     CreateOrderRequest:
       properties:
         reference:
@@ -6198,6 +6558,7 @@ components:
       - objective_block
       - mutation_block
       - agent_configuration
+      - judge_configuration
       title: DefinitionType
     DefinitionValidationErrorResponse:
       properties:
@@ -6898,6 +7259,393 @@ components:
       - products
       - orders
       title: InitialStateResponse
+    JudgeConfigurationDraftResponse:
+      properties:
+        judge_id:
+          type: string
+          format: uuid
+          title: Judge Id
+        lifecycle_state:
+          type: string
+          const: draft
+          title: Lifecycle State
+          default: draft
+        content:
+          $ref: '#/components/schemas/JudgeConfigurationPayloadSchema'
+        created_at:
+          type: string
+          title: Created At
+        updated_at:
+          type: string
+          title: Updated At
+      additionalProperties: false
+      type: object
+      required:
+      - judge_id
+      - content
+      - created_at
+      - updated_at
+      title: JudgeConfigurationDraftResponse
+    JudgeConfigurationListResponse:
+      properties:
+        judges:
+          items:
+            $ref: '#/components/schemas/JudgeConfigurationSummarySchema'
+          type: array
+          title: Judges
+      additionalProperties: false
+      type: object
+      required:
+      - judges
+      title: JudgeConfigurationListResponse
+    JudgeConfigurationPayloadSchema:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        description:
+          type: string
+          maxLength: 4000
+          title: Description
+        rubric:
+          type: string
+          maxLength: 8000
+          title: Rubric
+        evidence:
+          items:
+            $ref: '#/components/schemas/JudgeEvidenceScope'
+          type: array
+          title: Evidence
+        model:
+          $ref: '#/components/schemas/JudgeModelSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - description
+      - rubric
+      - evidence
+      - model
+      title: JudgeConfigurationPayloadSchema
+      description: The whole authored content of a judge draft or published version.
+    JudgeConfigurationPreviewResponse:
+      properties:
+        judge_id:
+          type: string
+          format: uuid
+          title: Judge Id
+        publishable:
+          type: boolean
+          title: Publishable
+        issues:
+          items:
+            $ref: '#/components/schemas/DefinitionIssueSchema'
+          type: array
+          title: Issues
+        changes:
+          items:
+            $ref: '#/components/schemas/DefinitionChangeSchema'
+          type: array
+          title: Changes
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        next_version:
+          type: integer
+          title: Next Version
+        matches_latest_published:
+          type: boolean
+          title: Matches Latest Published
+        content:
+          $ref: '#/components/schemas/JudgeConfigurationPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - judge_id
+      - publishable
+      - issues
+      - changes
+      - content_fingerprint
+      - latest_published_version
+      - next_version
+      - matches_latest_published
+      - content
+      title: JudgeConfigurationPreviewResponse
+      description: 'The publish gate: what blocks publication and what a publish would
+        freeze.'
+    JudgeConfigurationResourcesResponse:
+      properties:
+        judges:
+          items:
+            $ref: '#/components/schemas/ProvenJudgeSchema'
+          type: array
+          title: Judges
+        evidence:
+          items:
+            $ref: '#/components/schemas/JudgeEvidenceScope'
+          type: array
+          title: Evidence
+        reserved_terms:
+          items:
+            type: string
+          type: array
+          title: Reserved Terms
+      additionalProperties: false
+      type: object
+      required:
+      - judges
+      - evidence
+      - reserved_terms
+      title: JudgeConfigurationResourcesResponse
+      description: 'Exactly what a judge may name, so an editor cannot offer a gate
+        error.
+
+
+        `reserved_terms` is what a rubric may not contain: the names of what the arms
+        run. It is
+
+        served rather than restated in the client, because the list grows the day
+        the lab proves
+
+        a second framework and an editor with its own copy would stop matching the
+        gate.'
+    JudgeConfigurationSummarySchema:
+      properties:
+        judge_id:
+          type: string
+          format: uuid
+          title: Judge Id
+        name:
+          type: string
+          title: Name
+        provider:
+          type: string
+          title: Provider
+        provider_label:
+          type: string
+          title: Provider Label
+        model_id:
+          type: string
+          title: Model Id
+        evidence_count:
+          type: integer
+          title: Evidence Count
+        updated_at:
+          type: string
+          title: Updated At
+        latest_published_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Latest Published Version
+        published_version_count:
+          type: integer
+          title: Published Version Count
+      additionalProperties: false
+      type: object
+      required:
+      - judge_id
+      - name
+      - provider
+      - provider_label
+      - model_id
+      - evidence_count
+      - updated_at
+      - latest_published_version
+      - published_version_count
+      title: JudgeConfigurationSummarySchema
+    JudgeConfigurationVersionListResponse:
+      properties:
+        versions:
+          items:
+            $ref: '#/components/schemas/DefinitionVersionSummarySchema'
+          type: array
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: JudgeConfigurationVersionListResponse
+    JudgeConfigurationVersionResponse:
+      properties:
+        judge_id:
+          type: string
+          format: uuid
+          title: Judge Id
+        lifecycle_state:
+          type: string
+          const: published
+          title: Lifecycle State
+          default: published
+        version:
+          type: integer
+          title: Version
+        content_fingerprint:
+          type: string
+          title: Content Fingerprint
+        published_at:
+          type: string
+          title: Published At
+        content:
+          $ref: '#/components/schemas/JudgeConfigurationPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - judge_id
+      - version
+      - content_fingerprint
+      - published_at
+      - content
+      title: JudgeConfigurationVersionResponse
+    JudgeEvidenceScope:
+      type: string
+      enum:
+      - customer_turns
+      - agent_replies
+      - tool_calls
+      - state_changes
+      title: JudgeEvidenceScope
+      description: 'One part of an arm''s record a judge configuration may ask to
+        be shown.
+
+
+        Every member is something the lab already records and can anonymize. There
+        is
+
+        deliberately no "everything" member: a scope that grew silently when a new
+        kind of
+
+        record was added would change what a published judge sees without a new version.'
+    JudgeFailure:
+      type: string
+      enum:
+      - provider
+      - transient
+      - invalid_response
+      title: JudgeFailure
+      description: 'Why one judge execution produced no verdict.
+
+
+        The same taxonomy an agent turn uses, minus the two that cannot happen: a
+        judge runs no
+
+        tools, so there is no round limit, and it is not a framework integration in
+        the sense an
+
+        arm''s runtime is. Kept as its own enum rather than shared with `AgentTurnFailure`
+
+        because these are failures of the *evaluator*, and a comparison that counted
+        them
+
+        together with an arm''s failures would put the lab''s outage in the agent''s
+        column.'
+    JudgeModelSchema:
+      properties:
+        provider:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          title: Provider
+        model_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Model Id
+        temperature:
+          type: string
+          pattern: ^\d(?:\.\d{1,2})?$
+          title: Temperature
+          description: Exact decimal sampling temperature; never a binary float.
+      additionalProperties: false
+      type: object
+      required:
+      - provider
+      - model_id
+      - temperature
+      title: JudgeModelSchema
+    JudgeOutcome:
+      type: string
+      enum:
+      - met
+      - missed
+      - unclear
+      title: JudgeOutcome
+      description: 'What one judge execution may answer, and nothing else.
+
+
+        Three values, closed and lab-owned. `UNCLEAR` is not a failure of the judge:
+        it is the
+
+        honest reading of a record that does not settle the question, and it keeps
+        a model from
+
+        being asked to guess in a matrix cell an operator will read as evidence.'
+    JudgementSchema:
+      properties:
+        judge_id:
+          type: string
+          format: uuid
+          title: Judge Id
+        judge_version:
+          type: integer
+          title: Judge Version
+        provider:
+          type: string
+          title: Provider
+        model_id:
+          type: string
+          title: Model Id
+        brief_fingerprint:
+          type: string
+          title: Brief Fingerprint
+        attempt:
+          type: integer
+          title: Attempt
+        outcome:
+          anyOf:
+          - $ref: '#/components/schemas/JudgeOutcome'
+          - type: 'null'
+        failure:
+          anyOf:
+          - $ref: '#/components/schemas/JudgeFailure'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - judge_id
+      - judge_version
+      - provider
+      - model_id
+      - brief_fingerprint
+      - attempt
+      - outcome
+      - failure
+      title: JudgementSchema
+      description: 'Which published judge produced one verdict, on what, and from
+        what input.
+
+
+        Present exactly on a row a judge has scored — including one whose execution
+        failed,
+
+        where the outcome is absent and `failure` says why. Provenance travels *on
+        the row*
+
+        rather than in a listing beside it: a verdict an operator cannot trace to
+        a rubric
+
+        version, a model, and an input fingerprint is a number, which is what this
+        lab refuses
+
+        to report.'
     LoyaltyTier:
       type: string
       enum:
@@ -7456,6 +8204,10 @@ components:
         detail:
           type: string
           title: Detail
+        judgement:
+          anyOf:
+          - $ref: '#/components/schemas/JudgementSchema'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -8412,6 +9164,31 @@ components:
       title: ProvenFrameworkSchema
       description: One framework the lab has proven, and the envelope it was proven
         inside.
+    ProvenJudgeSchema:
+      properties:
+        provider:
+          type: string
+          title: Provider
+        label:
+          type: string
+          title: Label
+        models:
+          items:
+            type: string
+          type: array
+          title: Models
+        summary:
+          type: string
+          title: Summary
+      additionalProperties: false
+      type: object
+      required:
+      - provider
+      - label
+      - models
+      - summary
+      title: ProvenJudgeSchema
+      description: One provider the lab has proven it can judge with.
     RatingSummarySchema:
       properties:
         review_count:
@@ -8447,6 +9224,15 @@ components:
       required:
       - payload
       title: ReplaceCustomerProfileDraftRequest
+    ReplaceJudgeConfigurationDraftRequest:
+      properties:
+        payload:
+          $ref: '#/components/schemas/JudgeConfigurationPayloadSchema'
+      additionalProperties: false
+      type: object
+      required:
+      - payload
+      title: ReplaceJudgeConfigurationDraftRequest
     ReplaceMutationBlockDraftRequest:
       properties:
         payload:
@@ -9853,6 +10639,26 @@ components:
       - content
       title: ScenarioVersionResponse
       description: One frozen version, with every version it pinned.
+    ScoreExperimentRequest:
+      properties:
+        judge_id:
+          type: string
+          format: uuid
+          title: Judge Id
+      additionalProperties: false
+      type: object
+      required:
+      - judge_id
+      title: ScoreExperimentRequest
+      description: 'Which published judge scores this experiment''s judge-assessed
+        objectives.
+
+
+        Named at scoring time rather than pinned by the experiment, because judging
+        is separate
+
+        from the run and rerunnable: what explains a verdict is the judge version
+        recorded on it.'
     SendConversationMessageRequest:
       properties:
         message:

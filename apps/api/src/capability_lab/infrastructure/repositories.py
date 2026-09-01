@@ -43,6 +43,8 @@ from capability_lab.application.experiments import (
     ParticipantTurnRecord,
     RunRecord,
 )
+from capability_lab.application.judge_configurations import JUDGE_CONFIGURATION_CODEC
+from capability_lab.application.judgements import JudgementConflictError, JudgementRecord
 from capability_lab.application.mutation_events import MutationEvent, MutationEventRecord
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.order_fixture_payload import (
@@ -112,6 +114,8 @@ from capability_lab.domain.experiment import (
     ParticipantTurn,
     ParticipantTurnSource,
 )
+from capability_lab.domain.judge import JudgeConfigurationPayload, JudgeOutcome
+from capability_lab.domain.judgement import JudgeFailure, Judgement
 from capability_lab.domain.scenario import ScenarioPayload
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload
@@ -131,6 +135,7 @@ from capability_lab.infrastructure.models import (
     GeneratedScenarioOrderModel,
     GeneratedScenarioProductModel,
     IdempotencyRecordModel,
+    JudgementModel,
     MemoryRecordModel,
     MutationEventModel,
     OrderFixtureModel,
@@ -1498,6 +1503,12 @@ def agent_configuration_repository(
     return SqlAlchemyDefinitionRepository(session, AGENT_CONFIGURATION_CODEC)
 
 
+def judge_configuration_repository(
+    session: Session,
+) -> SqlAlchemyDefinitionRepository[JudgeConfigurationPayload]:
+    return SqlAlchemyDefinitionRepository(session, JUDGE_CONFIGURATION_CODEC)
+
+
 class SqlAlchemyPublishedVersionDirectory:
     """Published versions of any definition, read without their payload codecs.
 
@@ -2411,6 +2422,76 @@ class SqlAlchemyMutationEventRepository:
                 revision_before=model.revision_before,
                 revision_after=model.revision_after,
                 state_fingerprint=model.state_fingerprint,
+            ),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyJudgementRepository:
+    """Append what one scoring pass answered, keyed by the row it answered about."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[JudgementRecord, ...]:
+        models = self._session.scalars(
+            select(JudgementModel)
+            .where(JudgementModel.experiment_id == str(experiment_id))
+            .order_by(
+                JudgementModel.run_id,
+                JudgementModel.objective_id,
+                JudgementModel.attempt,
+            )
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def append_all(self, records: tuple[JudgementRecord, ...]) -> tuple[JudgementRecord, ...]:
+        for record in records:
+            judgement = record.judgement
+            self._session.add(
+                JudgementModel(
+                    run_id=str(record.run_id),
+                    objective_id=judgement.objective_id,
+                    attempt=judgement.attempt,
+                    experiment_id=str(record.experiment_id),
+                    judge_id=str(judgement.judge_id),
+                    judge_version=judgement.judge_version,
+                    provider=judgement.provider,
+                    model_id=judgement.model_id,
+                    brief_fingerprint=judgement.brief_fingerprint,
+                    outcome=None if judgement.outcome is None else judgement.outcome.value,
+                    failure=None if judgement.failure is None else judgement.failure.value,
+                    rationale=judgement.rationale,
+                    created_at=record.created_at,
+                )
+            )
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            # The primary key did its job: a verdict already stands at this attempt, written
+            # by a pass that ran beside this one. Translated the way a second publication of
+            # one version is, because it is the same kind of fact.
+            raise JudgementConflictError(
+                "this experiment was scored concurrently; read the evaluation and score again"
+            ) from error
+        return records
+
+    @staticmethod
+    def _record(model: JudgementModel) -> JudgementRecord:
+        return JudgementRecord(
+            run_id=UUID(model.run_id),
+            experiment_id=UUID(model.experiment_id),
+            judgement=Judgement(
+                objective_id=model.objective_id,
+                judge_id=UUID(model.judge_id),
+                judge_version=model.judge_version,
+                provider=model.provider,
+                model_id=model.model_id,
+                brief_fingerprint=model.brief_fingerprint,
+                attempt=model.attempt,
+                outcome=None if model.outcome is None else JudgeOutcome(model.outcome),
+                rationale=model.rationale,
+                failure=None if model.failure is None else JudgeFailure(model.failure),
             ),
             created_at=model.created_at,
         )

@@ -262,3 +262,30 @@ export type TimelineEntryKind = components["schemas"]["TimelineEntryKind"];
 export type TimelineCategory = components["schemas"]["TimelineCategory"];
 export type SourceLocationSchema = components["schemas"]["SourceLocationSchema"];
 export type ResolvedDefinitionSchema = components["schemas"]["ResolvedDefinitionSchema"];
+export type JudgementSchema = components["schemas"]["JudgementSchema"];
+export type JudgeOutcome = components["schemas"]["JudgeOutcome"];
+export type JudgeFailure = components["schemas"]["JudgeFailure"];
+export type ScoreExperimentRequest = components["schemas"]["ScoreExperimentRequest"];
+export type JudgeConfigurationListResponse =
+  components["schemas"]["JudgeConfigurationListResponse"];
+export type JudgeConfigurationSummarySchema =
+  components["schemas"]["JudgeConfigurationSummarySchema"];
+export type JudgeConfigurationDraftResponse =
+  components["schemas"]["JudgeConfigurationDraftResponse"];
+export type JudgeConfigurationVersionResponse =
+  components["schemas"]["JudgeConfigurationVersionResponse"];
+export type JudgeConfigurationVersionListResponse =
+  components["schemas"]["JudgeConfigurationVersionListResponse"];
+export type JudgeConfigurationPreviewResponse =
+  components["schemas"]["JudgeConfigurationPreviewResponse"];
+export type JudgeConfigurationResourcesResponse =
+  components["schemas"]["JudgeConfigurationResourcesResponse"];
+export type JudgeConfigurationPayloadSchema =
+  components["schemas"]["JudgeConfigurationPayloadSchema"];
+export type JudgeModelSchema = components["schemas"]["JudgeModelSchema"];
+export type JudgeEvidenceScope = components["schemas"]["JudgeEvidenceScope"];
+export type ProvenJudgeSchema = components["schemas"]["ProvenJudgeSchema"];
+export type CreateJudgeConfigurationRequest =
+  components["schemas"]["CreateJudgeConfigurationRequest"];
+export type ReplaceJudgeConfigurationDraftRequest =
+  components["schemas"]["ReplaceJudgeConfigurationDraftRequest"];

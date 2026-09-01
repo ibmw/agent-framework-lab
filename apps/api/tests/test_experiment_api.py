@@ -3,6 +3,7 @@
 from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -11,12 +12,15 @@ from httpx import AsyncClient
 from api_factories import (
     api_client,
     create_scenario,
+    make_block,
     make_identity,
     publish_everything,
     scenario_body,
     seed_lab,
 )
 from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
+from capability_lab.application.judge_runs import ExperimentJudgeService
+from capability_lab.application.judge_runtime import JudgeRuntimeRegistry
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
 
 SEED = 20260825
@@ -834,6 +838,193 @@ async def test_an_arm_driven_past_its_cap_settles_what_it_never_did(
     assert arm["met"] == 0
     assert arm["failed"] is True
     assert arm["objectives"][0]["outcome"] == "missed"
+
+
+JUDGES = "/api/v1/judge-configurations"
+JUDGE_TEMPLATE: dict[str, Any] = {
+    "name": "resolve-the-incident",
+    "statement": "Resolve the incident the customer opened",
+    "description": "A judge reads the thread and says whether the incident was resolved.",
+    "assessment": "judge",
+    "evidence": "dimension",
+    "parameters": [],
+}
+
+
+async def judged_scenario(client: AsyncClient, lab: dict[str, str]) -> dict[str, Any]:
+    """The wrong-address recipe with one more objective, the kind only a judge decides."""
+    block_id = await make_block(client, "objective-blocks", JUDGE_TEMPLATE)
+    published = await client.post(f"/api/v1/objective-blocks/{block_id}/versions")
+    assert published.status_code == 201, published.text
+    body = scenario_body(lab)
+    return await published_scenario(
+        client,
+        lab,
+        objectives=[
+            *body["objectives"],
+            {
+                "id": "resolve-the-incident",
+                "block_id": block_id,
+                "severity": "required",
+                "bindings": [],
+            },
+        ],
+    )
+
+
+async def published_judge(client: AsyncClient) -> str:
+    created = await client.post(JUDGES, json={"name": "Resolution quality"})
+    assert created.status_code == 201, created.text
+    judge_id = str(created.json()["judge_id"])
+    saved = await client.put(
+        f"{JUDGES}/{judge_id}/draft",
+        json={
+            "payload": {
+                **created.json()["content"],
+                "rubric": "Score whether the incident the customer opened was resolved.",
+                "model": {
+                    "provider": "fake",
+                    "model_id": "deterministic",
+                    "temperature": "0.00",
+                },
+            }
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert (await client.post(f"{JUDGES}/{judge_id}/versions")).status_code == 201
+    return judge_id
+
+
+async def judged_experiment(client: AsyncClient, lab: dict[str, str]) -> dict[str, Any]:
+    scenario = await judged_scenario(client, lab)
+    identity = await make_identity(client)
+    return await start(client, lab, start_body(scenario, await control_arm(client, identity)))
+
+
+async def score(
+    client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any], judge_id: str
+) -> Any:
+    return await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/judgements",
+        json={"judge_id": judge_id},
+    )
+
+
+async def test_an_objective_a_judge_owns_waits_for_one_rather_than_counting(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await judged_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    body = (await evaluation(client, lab, experiment)).json()
+    judged = next(
+        entry
+        for entry in body["arms"][0]["objectives"]
+        if entry["objective_id"] == "resolve-the-incident"
+    )
+
+    assert judged["outcome"] == "deferred"
+    assert judged["judgement"] is None
+    assert body["arms"][0]["decided"] == 0
+
+
+async def test_scoring_answers_with_the_evaluation_the_verdict_now_reads(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """One reading of an experiment: the judged row comes back beside the rules' own rows."""
+    experiment = await judged_experiment(client, lab)
+    await advance(client, lab, experiment)
+    judge_id = await published_judge(client)
+
+    response = await score(client, lab, experiment, judge_id)
+
+    assert response.status_code == 201, response.text
+    arm = response.json()["arms"][0]
+    judged = next(
+        entry for entry in arm["objectives"] if entry["objective_id"] == "resolve-the-incident"
+    )
+    assert judged["outcome"] == "met"
+    assert judged["judgement"]["judge_id"] == judge_id
+    assert judged["judgement"]["judge_version"] == 1
+    assert judged["judgement"]["attempt"] == 1
+    assert judged["judgement"]["provider"] == "fake"
+    assert len(judged["judgement"]["brief_fingerprint"]) == 64
+    assert arm["decided"] == 1
+
+
+async def test_scoring_again_records_a_second_attempt(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await judged_experiment(client, lab)
+    await advance(client, lab, experiment)
+    judge_id = await published_judge(client)
+
+    await score(client, lab, experiment, judge_id)
+    body = (await score(client, lab, experiment, judge_id)).json()
+
+    judged = next(
+        entry
+        for entry in body["arms"][0]["objectives"]
+        if entry["objective_id"] == "resolve-the-incident"
+    )
+    assert judged["judgement"]["attempt"] == 2
+
+
+async def test_a_pass_that_meets_a_stored_attempt_is_a_conflict_rather_than_a_failure(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The store refusing to overwrite a verdict has to read as something to act on.
+
+    Two operators scoring at once number the same attempt. Provoked here by a judge whose
+    verdict is written twice under one attempt number, which is the same collision.
+    """
+    experiment = await judged_experiment(client, lab)
+    await advance(client, lab, experiment)
+    judge_id = await published_judge(client)
+    assert (await score(client, lab, experiment, judge_id)).status_code == 201
+
+    with patch.object(ExperimentJudgeService, "_attempts", return_value={}):
+        response = await score(client, lab, experiment, judge_id)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "judgement_conflict"
+
+
+async def test_a_judge_with_no_published_version_cannot_score(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await judged_experiment(client, lab)
+    created = await client.post(JUDGES, json={"name": "Unfinished"})
+
+    response = await score(client, lab, experiment, str(created.json()["judge_id"]))
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "judge_configuration_unpublished"
+
+
+async def test_a_judge_this_lab_cannot_reach_is_refused_rather_than_recorded(
+    tmp_path: Path,
+) -> None:
+    """A missing provider key is a fact about the process, never an arm's evidence."""
+    async with api_client(
+        tmp_path, "judge-unavailable.db", judge_runtimes=JudgeRuntimeRegistry({})
+    ) as offline:
+        lab = await seed_lab(offline)
+        experiment = await judged_experiment(offline, lab)
+        await advance(offline, lab, experiment)
+        judge_id = await published_judge(offline)
+
+        response = await score(offline, lab, experiment, judge_id)
+
+        assert response.status_code == 422, response.text
+        assert response.json()["code"] == "judge_runtime_unavailable"
+        body = (await evaluation(offline, lab, experiment)).json()
+        judged = next(
+            entry
+            for entry in body["arms"][0]["objectives"]
+            if entry["objective_id"] == "resolve-the-incident"
+        )
+        assert judged["judgement"] is None
 
 
 async def test_a_completed_arm_refuses_another_customer_turn(

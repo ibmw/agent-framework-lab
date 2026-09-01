@@ -26,7 +26,6 @@ from capability_lab.application.evaluation import (
     OBJECTIVE_READERS,
     ORDER_FIELD_READERS,
     ArmEvidence,
-    ExperimentEvaluationService,
     judge_objective,
 )
 from capability_lab.application.experiments import (
@@ -81,9 +80,9 @@ from workspace_factories import (
     SEED,
     Workspace,
     author,
+    build_evaluation,
     build_experiments,
     build_runner,
-    objective_block_repository,
     publish_prerequisites,
     published_configuration,
     published_identity,
@@ -499,9 +498,7 @@ def say(session: Session, detail: ExperimentDetail, message: str, *positions: in
 
 
 def evaluate(session: Session, detail: ExperimentDetail) -> tuple[ArmEvaluation, ...]:
-    service = ExperimentEvaluationService(
-        build_experiments(session), objective_block_repository(session)
-    )
+    service = build_evaluation(session)
     return service.evaluate(detail.record.shop_id, detail.record.experiment_id).arms
 
 

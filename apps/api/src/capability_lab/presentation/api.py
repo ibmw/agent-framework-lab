@@ -73,6 +73,15 @@ from capability_lab.application.experiments import (
     ExperimentService,
     ParticipantDriverMismatchError,
 )
+from capability_lab.application.judge_configurations import (
+    JudgeConfigurationNotFoundError,
+    JudgeConfigurationNotPublishableError,
+    JudgeConfigurationService,
+    JudgeConfigurationVersionNotFoundError,
+)
+from capability_lab.application.judge_runs import ExperimentJudgeService, JudgeUnpublishedError
+from capability_lab.application.judge_runtime import JudgeRuntimeRegistry, JudgeUnavailableError
+from capability_lab.application.judgements import JudgementConflictError
 from capability_lab.application.order_actions import (
     ActionConfirmationError,
     ActionConflictError,
@@ -166,6 +175,7 @@ from capability_lab.domain.customer_profile import CustomerProfileConfigurationE
 from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
 from capability_lab.domain.experiment import ExperimentConfigurationError
+from capability_lab.domain.judge import JudgeConfigurationError
 from capability_lab.domain.order_fixture import (
     OrderFixtureConfigurationError,
     OrderTransitionError,
@@ -176,6 +186,7 @@ from capability_lab.domain.support_identity import SupportIdentityConfigurationE
 from capability_lab.domain.ticket import TicketConfigurationError
 from capability_lab.infrastructure.agents.registry import (
     create_agent_registry,
+    create_judge_runtimes,
     create_support_agent_runtimes,
 )
 from capability_lab.infrastructure.clock import SystemClock
@@ -199,6 +210,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyGeneratedScenarioRepository,
+    SqlAlchemyJudgementRepository,
     SqlAlchemyMutationEventRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
@@ -213,6 +225,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyToolEventRepository,
     agent_configuration_repository,
     customer_profile_repository,
+    judge_configuration_repository,
     mutation_block_repository,
     objective_block_repository,
     scenario_repository,
@@ -227,6 +240,7 @@ from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlo
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
 from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.experiments import ExperimentRoutes
+from capability_lab.presentation.judge_configurations import JudgeConfigurationRoutes
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
@@ -934,6 +948,7 @@ _NOT_PUBLISHABLE_CODES: dict[type[DefinitionNotPublishableError], str] = {
     MutationBlockNotPublishableError: "mutation_block_not_publishable",
     ScenarioNotPublishableError: "scenario_not_publishable",
     AgentConfigurationNotPublishableError: "agent_configuration_not_publishable",
+    JudgeConfigurationNotPublishableError: "judge_configuration_not_publishable",
 }
 
 
@@ -1207,6 +1222,65 @@ async def _agent_configuration_handler(request: Request, error: Exception) -> JS
     )
 
 
+async def _judge_configuration_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request, status_code=404, code="judge_configuration_not_found", message=str(error)
+    )
+
+
+async def _judge_configuration_version_not_found_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    return _error_response(
+        request,
+        status_code=404,
+        code="judge_configuration_version_not_found",
+        message=str(error),
+    )
+
+
+async def _judge_unpublished_handler(request: Request, error: Exception) -> JSONResponse:
+    """A judge asked to score before it was ever published.
+
+    422 rather than 404: the judge exists, and what is missing is the frozen version a
+    verdict has to name to stay explainable (ADR 0031). Registered beside the version
+    handler it derives from, so the more specific one answers this case.
+    """
+    return _error_response(
+        request, status_code=422, code="judge_configuration_unpublished", message=str(error)
+    )
+
+
+async def _judge_configuration_handler(request: Request, error: Exception) -> JSONResponse:
+    """A structural judge invariant the contract cannot express in a field schema."""
+    return _error_response(
+        request, status_code=422, code="judge_configuration_error", message=str(error)
+    )
+
+
+async def _judgement_conflict_handler(request: Request, error: Exception) -> JSONResponse:
+    """Another pass wrote the attempt this one numbered.
+
+    409 rather than 500: the store refused to overwrite a verdict, which is what it is for,
+    and the operator's move is to read the evaluation and score again (ADR 0031).
+    """
+    return _error_response(request, status_code=409, code="judgement_conflict", message=str(error))
+
+
+async def _judge_runtime_unavailable_handler(request: Request, error: Exception) -> JSONResponse:
+    """This lab cannot reach the provider this judge was published against.
+
+    422 and never a recorded judgement, for the reason an unrunnable framework is never a
+    recorded turn: a missing provider key is a fact about the process, and an evaluation that
+    recorded it would put the operator's machine into an arm's column.
+    """
+    return _error_response(
+        request, status_code=422, code="judge_runtime_unavailable", message=str(error)
+    )
+
+
 async def _order_not_found_handler(request: Request, error: Exception) -> JSONResponse:
     return _error_response(request, status_code=404, code="order_not_found", message=str(error))
 
@@ -1389,6 +1463,7 @@ def create_app(
     command_clock: Clock | None = None,
     agent_registry: AgentRegistry | None = None,
     agent_runtimes: SupportAgentRuntimeRegistry | None = None,
+    judge_runtimes: JudgeRuntimeRegistry | None = None,
     telemetry: Telemetry | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
@@ -1408,6 +1483,9 @@ def create_app(
     # a conversation (`docs/architecture.md`). A test that wants one arm to fail supplies its
     # own registry here rather than reaching into the runner.
     runtimes = agent_runtimes or create_support_agent_runtimes(settings)
+    # The same choice, one port over: a test that wants a judge to fail supplies its own
+    # registry here rather than reaching into the scoring service.
+    judges = judge_runtimes or create_judge_runtimes(settings)
 
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
@@ -1491,6 +1569,16 @@ def create_app(
         AgentConfigurationVersionNotFoundError, _agent_configuration_version_not_found_handler
     )
     application.add_exception_handler(AgentConfigurationError, _agent_configuration_handler)
+    application.add_exception_handler(
+        JudgeConfigurationNotFoundError, _judge_configuration_not_found_handler
+    )
+    application.add_exception_handler(
+        JudgeConfigurationVersionNotFoundError, _judge_configuration_version_not_found_handler
+    )
+    application.add_exception_handler(JudgeUnpublishedError, _judge_unpublished_handler)
+    application.add_exception_handler(JudgeConfigurationError, _judge_configuration_handler)
+    application.add_exception_handler(JudgeUnavailableError, _judge_runtime_unavailable_handler)
+    application.add_exception_handler(JudgementConflictError, _judgement_conflict_handler)
     application.add_exception_handler(
         PublishedVersionExistsError, _published_version_exists_handler
     )
@@ -1617,6 +1705,10 @@ def create_app(
                 SqlAlchemyPublishedVersionDirectory(session),
                 clock,
             )
+
+    def judge_configuration_service() -> Generator[JudgeConfigurationService, None, None]:
+        with session_scope(factory) as session:
+            yield JudgeConfigurationService(judge_configuration_repository(session), clock)
 
     def objective_block_service() -> Generator[ObjectiveBlockService, None, None]:
         with session_scope(factory) as session:
@@ -1747,12 +1839,32 @@ def create_app(
             # the adapter that produced it, and only this process knows which are here.
             yield ExperimentTimelineService(build_experiment_service(session), runtimes)
 
+    def build_evaluation_service(session: Session) -> ExperimentEvaluationService:
+        # Over the same experiment construction the timeline reads, so an evaluation and a
+        # thread can never disagree about what an arm did.
+        return ExperimentEvaluationService(
+            build_experiment_service(session),
+            objective_block_repository(session),
+            SqlAlchemyJudgementRepository(session),
+        )
+
     def experiment_evaluation_service() -> Generator[ExperimentEvaluationService, None, None]:
         with session_scope(factory) as session:
-            # Over the same experiment construction the timeline reads, so an evaluation and
-            # a thread can never disagree about what an arm did.
-            yield ExperimentEvaluationService(
-                build_experiment_service(session), objective_block_repository(session)
+            yield build_evaluation_service(session)
+
+    def experiment_judge_service() -> Generator[ExperimentJudgeService, None, None]:
+        with session_scope(factory) as session:
+            # One session for the pass and the reading it answers with: a verdict written in
+            # one transaction and read back in another would answer with a matrix that does
+            # not yet hold it (ADR 0031).
+            yield ExperimentJudgeService(
+                build_experiment_service(session),
+                build_evaluation_service(session),
+                objective_block_repository(session),
+                judge_configuration_repository(session),
+                SqlAlchemyJudgementRepository(session),
+                judges,
+                clock,
             )
 
     def experiment_runner() -> Generator[ExperimentRunner, None, None]:
@@ -2337,7 +2449,9 @@ def create_app(
         experiment_runner,
         experiment_timeline_service,
         experiment_evaluation_service,
+        experiment_judge_service,
     ).register(router)
+    JudgeConfigurationRoutes(judge_configuration_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)

@@ -20,8 +20,12 @@ from capability_lab.application.agent_configurations import AgentConfigurationSe
 from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
 from capability_lab.application.blocks import MutationBlockService, ObjectiveBlockService
 from capability_lab.application.customer_profiles import CustomerProfileService
+from capability_lab.application.evaluation import ExperimentEvaluationService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiments import ArmSelection, ExperimentService
+from capability_lab.application.judge_configurations import JudgeConfigurationService
+from capability_lab.application.judge_runs import ExperimentJudgeService
+from capability_lab.application.judge_runtime import JudgeRuntimeRegistry
 from capability_lab.application.order_fixtures import (
     OrderEdit,
     OrderEventDraft,
@@ -42,6 +46,7 @@ from capability_lab.application.support_identities import SupportIdentityService
 from capability_lab.application.tickets import TicketService
 from capability_lab.domain.blocks import ObjectiveSeverity
 from capability_lab.domain.customer_profile import CustomerProfilePayload
+from capability_lab.domain.judge import JudgeConfigurationPayload
 from capability_lab.domain.order_fixture import FulfilmentStatus, PaymentStatus
 from capability_lab.domain.scenario import (
     BoundMutation,
@@ -55,11 +60,13 @@ from capability_lab.domain.shop import ShopDocumentKind, SupportChannel
 from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import SuggestedDocument
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
+from capability_lab.infrastructure.judges import ControlJudgeRuntime
 from capability_lab.infrastructure.repositories import (
     SqlAlchemyAgentTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
+    SqlAlchemyJudgementRepository,
     SqlAlchemyMutationEventRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyParticipantTurnRepository,
@@ -71,6 +78,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyToolEventRepository,
     agent_configuration_repository,
     customer_profile_repository,
+    judge_configuration_repository,
     mutation_block_repository,
     objective_block_repository,
     scenario_repository,
@@ -85,6 +93,7 @@ from definition_factories import (
     publishable_profile,
     support_role,
 )
+from judge_factories import publishable_judge
 from shop_factories import identity, publishable_shop
 from ticket_factories import message
 
@@ -220,6 +229,45 @@ def build_experiments(session: Session) -> ExperimentService:
         SqlAlchemyPublishedVersionDirectory(session),
         AdvancingClock(),
     )
+
+
+def build_evaluation(session: Session) -> ExperimentEvaluationService:
+    """The projection every suite reads an arm's objectives through."""
+    return ExperimentEvaluationService(
+        build_experiments(session),
+        objective_block_repository(session),
+        SqlAlchemyJudgementRepository(session),
+    )
+
+
+def build_judge_service(
+    session: Session, runtimes: JudgeRuntimeRegistry | None = None
+) -> ExperimentJudgeService:
+    """The scoring pass, over the deterministic control judge by default.
+
+    Composition selects which providers can score, so a test that wants a failing or
+    model-backed judge hands its own registry in rather than reaching inside the service.
+    """
+    control = ControlJudgeRuntime()
+    return ExperimentJudgeService(
+        build_experiments(session),
+        build_evaluation(session),
+        objective_block_repository(session),
+        judge_configuration_repository(session),
+        SqlAlchemyJudgementRepository(session),
+        runtimes or JudgeRuntimeRegistry({control.provider: control}),
+        AdvancingClock(),
+    )
+
+
+def published_judge(session: Session, payload: JudgeConfigurationPayload | None = None) -> UUID:
+    """One published judge, ready to score an experiment."""
+    judges = JudgeConfigurationService(judge_configuration_repository(session), AdvancingClock())
+    created = judges.create_judge("Resolution quality")
+    judge_id = created.definition.id
+    judges.replace_judge(judge_id, publishable_judge() if payload is None else payload)
+    judges.publish(judge_id)
+    return judge_id
 
 
 def build_runner(

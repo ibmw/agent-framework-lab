@@ -58,6 +58,7 @@ from capability_lab.application.experiments import (
     RunRecord,
     StartExperiment,
 )
+from capability_lab.application.judge_runs import ExperimentJudgeService
 from capability_lab.application.mutation_events import MutationEventRecord
 from capability_lab.application.participants import ParticipantDriver
 from capability_lab.application.sandbox_tools import ToolOutcome
@@ -82,6 +83,8 @@ from capability_lab.domain.experiment import (
     ParticipantDriverType,
     ParticipantTurnSource,
 )
+from capability_lab.domain.judge import JudgeOutcome
+from capability_lab.domain.judgement import JudgeFailure, Judgement
 from capability_lab.presentation.base import ErrorResponse, StrictApiModel
 from capability_lab.presentation.definitions import (
     DefinitionIssueSchema,
@@ -673,6 +676,39 @@ class ExperimentTimelineResponse(StrictApiModel):
         )
 
 
+class JudgementSchema(StrictApiModel):
+    """Which published judge produced one verdict, on what, and from what input.
+
+    Present exactly on a row a judge has scored — including one whose execution failed,
+    where the outcome is absent and `failure` says why. Provenance travels *on the row*
+    rather than in a listing beside it: a verdict an operator cannot trace to a rubric
+    version, a model, and an input fingerprint is a number, which is what this lab refuses
+    to report.
+    """
+
+    judge_id: UUID
+    judge_version: int
+    provider: str
+    model_id: str
+    brief_fingerprint: str
+    attempt: int
+    outcome: JudgeOutcome | None
+    failure: JudgeFailure | None
+
+    @classmethod
+    def from_domain(cls, judgement: Judgement) -> Self:
+        return cls(
+            judge_id=judgement.judge_id,
+            judge_version=judgement.judge_version,
+            provider=judgement.provider,
+            model_id=judgement.model_id,
+            brief_fingerprint=judgement.brief_fingerprint,
+            attempt=judgement.attempt,
+            outcome=judgement.outcome,
+            failure=judgement.failure,
+        )
+
+
 class ObjectiveResultSchema(StrictApiModel):
     """One bound objective as one arm's record answers it.
 
@@ -690,6 +726,7 @@ class ObjectiveResultSchema(StrictApiModel):
     evidence: ObjectiveEvidence
     outcome: ObjectiveOutcome
     detail: str
+    judgement: JudgementSchema | None = None
 
     @classmethod
     def from_domain(cls, result: ObjectiveResult) -> Self:
@@ -703,6 +740,9 @@ class ObjectiveResultSchema(StrictApiModel):
             evidence=result.evidence,
             outcome=result.outcome,
             detail=result.detail,
+            judgement=(
+                None if result.judgement is None else JudgementSchema.from_domain(result.judgement)
+            ),
         )
 
 
@@ -747,6 +787,16 @@ class ExperimentEvaluationResponse(StrictApiModel):
         )
 
 
+class ScoreExperimentRequest(StrictApiModel):
+    """Which published judge scores this experiment's judge-assessed objectives.
+
+    Named at scoring time rather than pinned by the experiment, because judging is separate
+    from the run and rerunnable: what explains a verdict is the judge version recorded on it.
+    """
+
+    judge_id: UUID
+
+
 class ExperimentListResponse(StrictApiModel):
     experiments: list[ExperimentSummarySchema]
 
@@ -779,18 +829,21 @@ class ExperimentRoutes:
         runner: Callable[[], Generator[ExperimentRunner, None, None]],
         timeline: Callable[[], Generator[ExperimentTimelineService, None, None]],
         evaluation: Callable[[], Generator[ExperimentEvaluationService, None, None]],
+        judge: Callable[[], Generator[ExperimentJudgeService, None, None]],
     ) -> None:
         self._service = service
         self._driver = driver
         self._runner = runner
         self._timeline = timeline
         self._evaluation = evaluation
+        self._judge = judge
 
     def register(self, router: APIRouter) -> None:
         dependency = Depends(self._service)
         runner_dependency = Depends(self._runner)
         timeline_dependency = Depends(self._timeline)
         evaluation_dependency = Depends(self._evaluation)
+        judge_dependency = Depends(self._judge)
 
         def start_experiment(
             shop_id: ShopIdPath,
@@ -858,6 +911,19 @@ class ExperimentRoutes:
         ) -> ExperimentEvaluationResponse:
             return ExperimentEvaluationResponse.from_domain(
                 evaluation.evaluate(shop_id, experiment_id)
+            )
+
+        async def score_experiment(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            command: ScoreExperimentRequest,
+            judge: Annotated[ExperimentJudgeService, judge_dependency],
+        ) -> ExperimentEvaluationResponse:
+            # The whole evaluation, not the verdicts this pass produced: a scoring pass fills
+            # some of an arm's rows and none of the others, and one reading of an experiment
+            # is what keeps a judged row and a deterministic row beside it consistent.
+            return ExperimentEvaluationResponse.from_domain(
+                await judge.score(shop_id, experiment_id, command.judge_id)
             )
 
         async def advance_run(
@@ -953,6 +1019,42 @@ class ExperimentRoutes:
                 "read, says so in its own row rather than counting as a miss."
             ),
             responses=NotFoundResponses | InvalidResponses,
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/judgements",
+            score_experiment,
+            methods=["POST"],
+            status_code=201,
+            response_model=ExperimentEvaluationResponse,
+            operation_id="scoreExperiment",
+            summary="Score every objective this scenario left to a judge, in every arm",
+            description=(
+                "Runs one published judge over each arm's own record, one execution per "
+                "objective per arm, and answers with the whole evaluation as it now reads. "
+                "Each execution is shown an anonymized brief carrying what that arm did and "
+                "said and nothing about what ran it, and the verdict is recorded with the "
+                "judge version, the model, and the fingerprint of that exact input. Scoring "
+                "again writes a new attempt beside the last rather than over it, so a rerun "
+                "is readable as a rerun. A judge execution that fails is recorded and leaves "
+                "its objective deferred — the lab's own outage never counts against an arm — "
+                "while a provider this lab cannot reach at all is a 422 and records nothing."
+            ),
+            responses={
+                404: {
+                    "model": ErrorResponse,
+                    "description": "The experiment or the named judge is not found",
+                },
+                409: {
+                    "model": ErrorResponse,
+                    "description": "Another scoring pass wrote the attempt this one numbered; "
+                    "read the evaluation and score again",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "The judge has no published version, or no runtime for its "
+                    "provider is available here",
+                },
+            },
         )
         router.add_api_route(
             "/shops/{shop_id}/experiments/{experiment_id}/participant-turns",

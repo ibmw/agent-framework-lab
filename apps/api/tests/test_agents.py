@@ -206,6 +206,13 @@ def test_action_lifecycle_trace_uses_only_sanitized_stable_attributes() -> None:
     assert str(session_id) not in repr(attributes)
 
 
+# Every place an SDK is allowed to be imported at all: the framework adapter that runs an
+# arm, and the judge adapter that scores one (ADR 0031). Both are infrastructure modules a
+# port stands in front of, and the list is exhaustive on purpose — a new caller has to be
+# added here deliberately rather than by an import nobody noticed.
+SDK_MODULES = ("infrastructure/agents/pydantic_ai/", "infrastructure/judges/pydantic_ai.py")
+
+
 def test_agent_sdk_imports_are_isolated_to_framework_adapters() -> None:
     source_root = Path(__file__).parents[1] / "src" / "capability_lab"
     offenders: list[str] = []
@@ -226,7 +233,7 @@ def test_agent_sdk_imports_are_isolated_to_framework_adapters() -> None:
         if not imports_sdk:
             continue
         relative = path.relative_to(source_root).as_posix()
-        if not relative.startswith("infrastructure/agents/pydantic_ai/"):
+        if not relative.startswith(SDK_MODULES):
             offenders.append(relative)
 
     assert offenders == []

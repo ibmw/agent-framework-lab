@@ -39,6 +39,7 @@ from capability_lab.domain.blocks import (
 )
 from capability_lab.domain.content import require_instance, require_non_negative_int, require_slug
 from capability_lab.domain.entities import DomainError
+from capability_lab.domain.judgement import Judgement
 
 __all__ = [
     "ArmEvaluation",
@@ -120,6 +121,11 @@ class ObjectiveResult:
     `detail` is the sentence the evidence made — which call answered it, or which call was
     never made. It is the whole reason a matrix cell is readable: "missed" beside "the
     address-change policy was never read" is a finding, and "missed" on its own is a score.
+
+    `judgement` is present exactly on a row a judge has scored, and it is what makes that row
+    auditable: which published judge, at which version, on which model, shown which exact
+    input. A verdict whose provenance travelled separately would be a claim nobody could
+    check (ADR 0031).
     """
 
     objective_id: str
@@ -131,6 +137,7 @@ class ObjectiveResult:
     evidence: ObjectiveEvidence
     outcome: ObjectiveOutcome
     detail: str
+    judgement: Judgement | None = None
 
     def __post_init__(self) -> None:
         _require_slug(self.objective_id, "bound objective ID")
@@ -144,6 +151,10 @@ class ObjectiveResult:
         )
         _require_instance(self.evidence, ObjectiveEvidence, "an objective result carries evidence")
         _require_instance(self.outcome, ObjectiveOutcome, "an objective result carries an outcome")
+        if self.judgement is not None:
+            _require_instance(
+                self.judgement, Judgement, "a judged result carries the execution that judged it"
+            )
 
     @property
     def failed(self) -> bool:

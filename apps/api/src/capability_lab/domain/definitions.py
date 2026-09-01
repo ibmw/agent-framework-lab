@@ -35,6 +35,7 @@ class DefinitionType(StrEnum):
     OBJECTIVE_BLOCK = "objective_block"
     MUTATION_BLOCK = "mutation_block"
     AGENT_CONFIGURATION = "agent_configuration"
+    JUDGE_CONFIGURATION = "judge_configuration"
 
 
 SHOP_SCOPED_DEFINITION_TYPES: frozenset[DefinitionType] = frozenset(
@@ -59,6 +60,11 @@ ALLOWED_REFERENCE_TARGETS: dict[DefinitionType, frozenset[DefinitionType]] = {
     DefinitionType.OBJECTIVE_BLOCK: frozenset(),
     DefinitionType.MUTATION_BLOCK: frozenset(),
     DefinitionType.AGENT_CONFIGURATION: frozenset({DefinitionType.SUPPORT_IDENTITY}),
+    # A judge names a provider, a model, a rubric, and what it is shown. None of those is a
+    # definition, so it pins nothing — and it deliberately does not pin the experiment it
+    # scores either: judging is rerunnable, so what an execution names is the judge version,
+    # never the other way round (ADR 0031).
+    DefinitionType.JUDGE_CONFIGURATION: frozenset(),
 }
 
 # References whose source and target are both shop-scoped must stay inside one shop.

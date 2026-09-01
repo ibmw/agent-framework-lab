@@ -18,7 +18,8 @@ combine: a required pair is met by both and a forbidden pair is violated by eith
 same spirit as `APPLIABLE_MUTATIONS` (ADR 0028) and `sandbox_tool_contracts`: an evidence
 kind is here because there is code that reads it and tests that keep reading it. `POLICY` is
 absent because an encoded rule needs a rule registry that does not exist, and `DIMENSION` is
-absent because a judge decides it.
+absent because no rule reads it — a judge does, and its verdict arrives here as a recorded
+`Judgement` rather than as a reader (ADR 0031).
 
 **An objective this build cannot decide is reported, never refused.** A fault that never
 fires is invisible, so ADR 0028 refuses the experiment; an undecided objective is a row in
@@ -50,6 +51,7 @@ from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.application.definition_authoring import DefinitionRepository
 from capability_lab.application.definition_resolution import MissingReferenceVersionError
 from capability_lab.application.experiments import ExperimentDetail, ExperimentService
+from capability_lab.application.judgements import JudgementRecord, JudgementRepository
 from capability_lab.application.sandbox_tool_contracts import (
     CATALOG_PRODUCT,
     CUSTOMER_PROFILE,
@@ -73,6 +75,8 @@ from capability_lab.domain.evaluation import (
     decide,
 )
 from capability_lab.domain.experiment import ArmAwaiting, ArmStanding
+from capability_lab.domain.judge import JudgeOutcome
+from capability_lab.domain.judgement import Judgement
 from capability_lab.domain.order_fixture import OrderFixturePayload
 from capability_lab.domain.sandbox import SandboxState
 from capability_lab.domain.scenario import (
@@ -97,6 +101,8 @@ __all__ = [
     "Observation",
     "evaluate_arm",
     "judge_objective",
+    "latest_judgements",
+    "pinned_objective_templates",
 ]
 
 
@@ -302,8 +308,9 @@ EVALUABLE_OBJECTIVES: Mapping[ObjectiveEvidence, EvaluableObjective] = MappingPr
 
 `policy` is a rule evaluated against a run, and this lab publishes no rule registry for a
 template to name — writing one rule per scenario in Python would put the recipe back in the
-code the Studio exists to replace. `dimension` is a judge's, and a judge is versioned,
-anonymized, and rerunnable (`docs/PLAN.md` Milestone 5), which is a slice of its own.
+code the Studio exists to replace. `dimension` is a judge's, and a judge is a published
+definition whose verdict is recorded (ADR 0031): what fills that row is a `Judgement`, read
+here, never a reader written here.
 """
 
 
@@ -314,6 +321,7 @@ def judge_objective(
     evidence: ArmEvidence,
     *,
     settled: bool,
+    judgement: Judgement | None = None,
 ) -> ObjectiveResult:
     """One bound objective, as this arm's record answers it.
 
@@ -324,13 +332,7 @@ def judge_objective(
     """
     contract = EVALUABLE_OBJECTIVES.get(template.evidence)
     if template.assessment is ObjectiveAssessment.JUDGE:
-        return _undecided(
-            objective,
-            template,
-            version,
-            ObjectiveOutcome.DEFERRED,
-            f"a judge scores this {template.evidence.value}",
-        )
+        return _judged(objective, template, version, judgement)
     if contract is None:
         return _undecided(
             objective,
@@ -368,6 +370,66 @@ def judge_objective(
         ),
         detail="; ".join(entry.detail for entry in observations),
     )
+
+
+# What a judge's verdict is, in the vocabulary the matrix reports. `UNCLEAR` becomes
+# `UNDECIDABLE` because it says the same thing the unread evidence kinds say: this evidence
+# does not settle the question. It is deliberately not a miss — a judge asked to choose
+# between met and missed when the record does not say would be guessing, and a recorded
+# guess is the leaderboard scoring `docs/PLAN.md` refuses.
+JUDGE_OUTCOMES: Mapping[JudgeOutcome, ObjectiveOutcome] = MappingProxyType(
+    {
+        JudgeOutcome.MET: ObjectiveOutcome.MET,
+        JudgeOutcome.MISSED: ObjectiveOutcome.MISSED,
+        JudgeOutcome.UNCLEAR: ObjectiveOutcome.UNDECIDABLE,
+    }
+)
+
+
+def _judged(
+    objective: BoundObjective,
+    template: ObjectiveBlockPayload,
+    version: int,
+    judgement: Judgement | None,
+) -> ObjectiveResult:
+    """The row a judge owns: what the recorded verdict says, or that none has been made.
+
+    An execution that failed leaves the row exactly where it stood — deferred, waiting for a
+    judge — because a provider that refused said nothing about the arm. Reporting the lab's
+    own outage as a miss is the mistake ADR 0030 built `deferred` and `undecidable` to
+    prevent, and a failed judge is the clearest case of it.
+    """
+    if judgement is None:
+        return _undecided(
+            objective,
+            template,
+            version,
+            ObjectiveOutcome.DEFERRED,
+            f"a judge scores this {template.evidence.value}; none has",
+        )
+    if judgement.outcome is None:
+        return _result(
+            objective,
+            template,
+            version,
+            outcome=ObjectiveOutcome.DEFERRED,
+            detail=f"the judge produced no verdict ({_failure(judgement)}); scoring again may",
+            judgement=judgement,
+        )
+    return _result(
+        objective,
+        template,
+        version,
+        outcome=JUDGE_OUTCOMES[judgement.outcome],
+        # The judge's own words, unedited. A verdict with no reason is a score, which is the
+        # one thing this matrix must never report.
+        detail=judgement.rationale or "the judge gave no reason",
+        judgement=judgement,
+    )
+
+
+def _failure(judgement: Judgement) -> str:
+    return "unclassified" if judgement.failure is None else judgement.failure.value
 
 
 def _combined(polarity: EvidencePolarity, observations: tuple[Observation, ...]) -> bool:
@@ -413,6 +475,7 @@ def _result(
     *,
     outcome: ObjectiveOutcome,
     detail: str,
+    judgement: Judgement | None = None,
 ) -> ObjectiveResult:
     return ObjectiveResult(
         objective_id=objective.id,
@@ -424,6 +487,7 @@ def _result(
         evidence=template.evidence,
         outcome=outcome,
         detail=detail,
+        judgement=judgement,
     )
 
 
@@ -432,11 +496,16 @@ def evaluate_arm(
     templates: Mapping[UUID, tuple[ObjectiveBlockPayload, int]],
     evidence: ArmEvidence,
     standing: ArmStanding,
+    judgements: Mapping[str, Judgement] = MappingProxyType({}),
 ) -> ArmEvaluation:
     """Every objective of one arm, in the order the scenario composed them.
 
     Objective order is priority (ADR 0018) and it is preserved: the matrix reads top to
     bottom in the order the author decided matters.
+
+    `judgements` is the latest verdict recorded for each of this arm's rows. Empty is the
+    ordinary case — nothing has been scored — and it produces exactly the deferred rows this
+    module produced before there was a judge at all.
     """
     settled = standing.awaiting is ArmAwaiting.COMPLETED
     results: list[ObjectiveResult] = []
@@ -447,8 +516,60 @@ def evaluate_arm(
                 f"{objective.id} names a template this scenario version does not pin"
             )
         template, version = pinned
-        results.append(judge_objective(objective, template, version, evidence, settled=settled))
+        results.append(
+            judge_objective(
+                objective,
+                template,
+                version,
+                evidence,
+                settled=settled,
+                judgement=judgements.get(objective.id),
+            )
+        )
     return ArmEvaluation(run_id=evidence.run_id, settled=settled, results=tuple(results))
+
+
+def latest_judgements(
+    records: tuple[JudgementRecord, ...], run_id: UUID
+) -> Mapping[str, Judgement]:
+    """The verdict that stands for each of one arm's rows: the highest attempt, per row.
+
+    Every attempt is kept (ADR 0031), and what the matrix reads is the last one — scoring
+    again is how an operator answers "does the verdict hold", and the answer is the new one.
+    """
+    standing: dict[str, Judgement] = {}
+    for entry in records:
+        if entry.run_id != run_id:
+            continue
+        judgement = entry.judgement
+        current = standing.get(judgement.objective_id)
+        if current is None or judgement.attempt >= current.attempt:
+            standing[judgement.objective_id] = judgement
+    return standing
+
+
+def pinned_objective_templates(
+    detail: ExperimentDetail, objective_blocks: DefinitionRepository[ObjectiveBlockPayload]
+) -> Mapping[UUID, tuple[ObjectiveBlockPayload, int]]:
+    """Each objective template at the version the scenario's publication pinned.
+
+    Never as it reads now: an objective edited after the publication must not change what a
+    historical experiment was judged against, which is the whole reason publishing pinned a
+    version of it (ADR 0018). Shared with the judge service (ADR 0031) rather than copied,
+    so a verdict and a deterministic row can never be about different template versions.
+    """
+    pinned: dict[UUID, tuple[ObjectiveBlockPayload, int]] = {}
+    for reference in detail.scenario.published.references:
+        if reference.definition.definition_type is not DefinitionType.OBJECTIVE_BLOCK:
+            continue
+        record = objective_blocks.get_version(reference)
+        if record is None:
+            raise MissingReferenceVersionError(
+                f"objective block {reference.definition.id} version {reference.version} "
+                "is not resolvable"
+            )
+        pinned[reference.definition.id] = (record.payload, reference.version)
+    return pinned
 
 
 @dataclass(frozen=True, slots=True)
@@ -462,29 +583,39 @@ class ExperimentEvaluation:
 class ExperimentEvaluationService:
     """Read one experiment and judge each arm against the objectives its scenario bound.
 
-    Holds no repository but the objective library, for the reason the timeline holds none
-    (ADR 0027): everything else is what `getExperiment` already serves, so an evaluation
-    cannot describe an experiment differently from the threads it was read out of. The
-    templates are the exception because they are resolved at the versions the scenario
-    pinned, which is a read the detail has no other reason to make.
+    Holds no repository but the objective library and the judgement store, for the reason
+    the timeline holds none (ADR 0027): everything else is what `getExperiment` already
+    serves, so an evaluation cannot describe an experiment differently from the threads it
+    was read out of. The templates are an exception because they are resolved at the
+    versions the scenario pinned, and the judgements because a verdict is a record of its
+    own — the one thing about an evaluation that is not a function of the run (ADR 0031).
     """
 
     def __init__(
         self,
         experiments: ExperimentService,
         objective_blocks: DefinitionRepository[ObjectiveBlockPayload],
+        judgements: JudgementRepository,
     ) -> None:
         self._experiments = experiments
         self._objective_blocks = objective_blocks
+        self._judgements = judgements
 
     def evaluate(self, shop_id: UUID, experiment_id: UUID) -> ExperimentEvaluation:
         detail = self._experiments.get_experiment(shop_id, experiment_id)
         objectives = detail.scenario.payload.objectives
-        templates = self._templates(detail)
+        templates = pinned_objective_templates(detail, self._objective_blocks)
+        judged = self._judgements.list_for_experiment(experiment_id)
         return ExperimentEvaluation(
             experiment_id=experiment_id,
             arms=tuple(
-                evaluate_arm(objectives, templates, self._evidence(detail, index), standing)
+                evaluate_arm(
+                    objectives,
+                    templates,
+                    self._evidence(detail, index),
+                    standing,
+                    latest_judgements(judged, detail.runs[index].run_id),
+                )
                 for index, standing in enumerate(detail.standings)
             ),
         )
@@ -497,25 +628,3 @@ class ExperimentEvaluationService:
             starting=detail.starting_state,
             current=detail.sandboxes[index].content.state,
         )
-
-    def _templates(
-        self, detail: ExperimentDetail
-    ) -> Mapping[UUID, tuple[ObjectiveBlockPayload, int]]:
-        """Each objective template at the version the scenario's publication pinned.
-
-        Never as it reads now: an objective edited after the publication must not change what
-        a historical experiment was judged against, which is the whole reason publishing
-        pinned a version of it (ADR 0018).
-        """
-        pinned: dict[UUID, tuple[ObjectiveBlockPayload, int]] = {}
-        for reference in detail.scenario.published.references:
-            if reference.definition.definition_type is not DefinitionType.OBJECTIVE_BLOCK:
-                continue
-            record = self._objective_blocks.get_version(reference)
-            if record is None:
-                raise MissingReferenceVersionError(
-                    f"objective block {reference.definition.id} version {reference.version} "
-                    "is not resolvable"
-                )
-            pinned[reference.definition.id] = (record.payload, reference.version)
-        return pinned
