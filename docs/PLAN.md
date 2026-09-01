@@ -73,7 +73,10 @@ arm's standing read from its own record so a bench reopened cold says what it is
 and the question an arm passed over reported rather than left to be noticed (ADR 0029), and
 finally the objectives the scenario composed judged against each arm's own record, with the
 scenario's turn cap ending an arm and settling what it never did (ADR 0030) — which completes
-Milestone 4 and opens Milestone 5's deterministic evaluation.
+Milestone 4 and opens Milestone 5's deterministic evaluation. Milestone 5 has continued with
+the versioned judge that fills the rows no rule decides: a published rubric, model, and
+declared evidence scope, scoring one anonymized brief per objective per arm and recording
+every verdict with the version, model, and input fingerprint that produced it (ADR 0031).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -125,6 +128,8 @@ tested slices.
 - **Experiment:** immutable record binding one scenario to one or two agent configurations.
 - **Run:** independently mutable experiment arm and its evidence.
 - **Participant driver:** human, future LLM, or scripted source of customer turns.
+- **Judge configuration:** versioned rubric, model, and declared evidence scope; scores the
+  objectives a scenario leaves to a judge, from an anonymized record of one arm.
 - **Evaluation:** deterministic, judge, or quantitative evidence associated with a run or comparison.
 
 Exact code names may evolve through accepted designs; documents and UI should use these meanings
@@ -613,7 +618,7 @@ Turn completed runs into durable, searchable comparison evidence.
 - [x] Evaluate deterministic state, event, tool, and completion objectives. Policy objectives
   need a registry of named versioned rules a template can bind and are deliberately deferred to
   their own slice; safety is expressed as the forbidden polarity of the same readings (ADR 0030).
-- [ ] Add a versioned judge configuration and anonymized structured LLM-judge execution.
+- [x] Add a versioned judge configuration and anonymized structured LLM-judge execution.
 - [ ] Record turns, token usage, model/tool calls, duration, retries, failures, and estimated cost
   when available.
 - [ ] Present objective-level comparison without a global framework score.
@@ -624,7 +629,23 @@ Turn completed runs into durable, searchable comparison evidence.
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
 tab, and 10 · History; 9a · Execution timeline and 9c's source locations arrived with Milestone 4's
 fifth outcome (ADR 0027) and are extended here rather than built again. Together with the
-Milestone 4 frames this completes the 18-frame authoritative set.
+Milestone 4 frames this completes the 18-frame authoritative set. The judge itself has no frame:
+it is a cross-shop resource under the shell's Experiment lab section, and it is scored from
+frame 8's objectives matrix, where its rows already are.
+
+Judge evidence (frame 8's objectives matrix, and the judge's own editor): an author publishes a
+rubric, the model that reads it, and exactly what it is shown — after the gate has refused the
+two things a judge must never carry: a rubric that says nothing, and one that names the framework,
+provider, or model an arm runs. An operator then scores the row no rule can decide from the bench:
+each arm is judged on an anonymized brief of its own record, the arm that resolved the incident is
+met and the arm still holding a turn is not counted against, and every filled cell names the judge
+version, the model, and the attempt that produced it. Scoring again keeps the previous verdict and
+records the next attempt; a judge the lab cannot reach records nothing at all. ADR 0031 records the
+`judge-configuration-payload-v1` schema and the `judge-brief-v1` document, the closed verdict
+vocabulary and why "unclear" is one of its three values, the evidence scope as a published input
+whose absence is visible in the fingerprint, the anonymity rule the publish gate enforces from the
+framework catalog, the executions kept as records where the deterministic evaluation is a
+projection, and the third runtime port with a declared control judge behind it.
 
 ### Acceptance criteria
 

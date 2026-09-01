@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-08-30
+Status: current — 2026-09-01
 
 ## Authoritative direction
 
@@ -183,9 +183,16 @@ SDK immediately.
    with "not yet" kept apart from "no", a judge's rows deferred rather than counted, and the
    evidence this build cannot read saying so instead of failing the arm. The scenario's turn cap
    now ends an arm and settles what it never did; the completion statement is still a judge's.
-14. Next is the rest of Milestone 5: the versioned judge, the quantitative record, the results
-   surfaces (frames 9 and 9b), and experiment-first history. Nothing sets a run status today,
-   deliberately.
+14. The judge is delivered (ADR 0031). A judge is a published definition — a rubric, a model,
+   and a declared list of what it is shown — and it scores one anonymized brief per objective
+   per arm: what that arm did and said, and nothing about what ran it, with a rubric naming a
+   framework refused at the publish gate. Its three outcomes are the lab's, and "unclear" is
+   one of them, because a judge forced to choose would guess. Every execution is recorded with
+   the judge version, the model, and the fingerprint of the exact input it read; scoring again
+   writes the next attempt rather than replacing the last, and a judge the lab cannot reach
+   records nothing rather than counting against an arm.
+15. Next is the rest of Milestone 5: the quantitative record, the results surfaces (frames 9
+   and 9b), and experiment-first history. Nothing sets a run status today, deliberately.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

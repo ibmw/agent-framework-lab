@@ -47,7 +47,8 @@ that fires a recipe's bound faults into a running arm at the moment it named, on
 the tools travel (ADR 0028), and the arm standing that makes an experiment resumable by reading
 where each arm waits out of its own record rather than storing a status beside it (ADR 0029), and
 the deterministic evaluation that judges each arm against the objectives its scenario composed and
-ends it at the recipe's turn cap (ADR 0030).
+ends it at the recipe's turn cap (ADR 0030), and the versioned judge that scores the rows no rule
+decides, from an anonymized brief of one arm's own record (ADR 0031).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -274,6 +275,17 @@ scenario's own turn cap — the half of its completion conditions a runtime can 
 an arm and refuses a further customer turn, while the completion statement stays a judge's reading.
 Like the timeline, the evaluation is projected from the record rather than stored beside it
 (ADR 0030).
+
+The rows a rule cannot decide are a **judge's**, and the judge is a published definition of its own:
+a rubric, the model that reads it, and a declared list of what it is shown, whose publish gate
+refuses a rubric naming any framework, provider, or model an arm runs. Scoring builds one
+anonymized `judge-brief-v1` document per objective per arm — what that arm did and said, never what
+ran it and never the data its tools answered with — and records the verdict with the judge version,
+the model, and the fingerprint of that exact input. A verdict is the one part of an evaluation that
+is *stored*, because a model's reading cannot be re-derived from the record; scoring again writes
+the next attempt beside the last, and a failed or unreachable judge leaves its row deferred rather
+than counting against an arm. A third framework-neutral port (`JudgeRuntime`, keyed by provider)
+carries a declared control judge and Pydantic AI over structured output (ADR 0031).
 
 ## Persistence, versioning, and extensibility
 
