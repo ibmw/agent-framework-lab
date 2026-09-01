@@ -3542,6 +3542,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/evaluation:
+    get:
+      summary: Judge each arm against the objectives its scenario composed
+      description: Every bound objective, per arm, decided from that arm's own recorded
+        calls and the sandbox it started in and is in now — read against the objective
+        template versions the scenario version pinned. Deterministic evidence is monotone,
+        so an objective nothing has met yet is pending rather than missed until the
+        arm reaches its scenario's turn cap and can no longer act. An objective a
+        judge decides, or one whose evidence this build does not read, says so in
+        its own row rather than counting as a miss.
+      operationId: getExperimentEvaluation
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentEvaluationResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns:
     post:
       summary: Deliver one customer turn to one or both arms
@@ -3589,7 +3638,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: The driver has no turn to deliver, or does not drive this experiment
+          description: The driver has no turn to deliver, does not drive this experiment,
+            or an arm has answered every turn its scenario allows
           content:
             application/json:
               schema:
@@ -4889,24 +4939,78 @@ components:
       enum:
       - agent
       - customer
+      - completed
       title: ArmAwaiting
       description: 'What one arm is waiting for, which is the only thing an operator
         can act on.
 
 
-        Two values rather than a run status, because these are the two moves the bench
-        offers:
+        Two of these are the moves the bench offers — run the agent, or write the
+        customer''s next
 
-        run the agent, or write the customer''s next message. A third value for "this
-        arm is
+        message — and the third is the absence of both. ADR 0029 left it out because
+        a completion
 
-        finished" would be a completion claim, and completion is judged against the
-        scenario''s
+        claim needed an evaluation to make it; it is here now, and it is still not
+        a status
 
-        conditions by an evaluation that does not exist yet (`docs/PLAN.md` Milestone
-        5) — a
+        anyone sets: an arm is completed when it has answered the last turn its scenario''s
+        cap
 
-        status set by hand here would be answering that question with a guess.'
+        allows, which is read off the same two streams as the other two values (ADR
+        0030).
+
+
+        The cap is the half of the scenario''s completion conditions this build decides.
+        Whether
+
+        the incident was actually *resolved* is the completion statement''s, and that
+        is prose a
+
+        judge reads rather than a number a runtime counts.'
+    ArmEvaluationSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        settled:
+          type: boolean
+          title: Settled
+        met:
+          type: integer
+          title: Met
+        decided:
+          type: integer
+          title: Decided
+        failed:
+          type: boolean
+          title: Failed
+        objectives:
+          items:
+            $ref: '#/components/schemas/ObjectiveResultSchema'
+          type: array
+          title: Objectives
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - settled
+      - met
+      - decided
+      - failed
+      - objectives
+      title: ArmEvaluationSchema
+      description: 'One arm judged against every objective its scenario composed.
+
+
+        `decided` is what `met` is out of, and it is smaller than the objective list
+        whenever a
+
+        judge or a kind of evidence this build does not read owns a row: counting
+        those as
+
+        misses would report the lab''s own limits as the agent''s.'
     ArmSelectionSchema:
       properties:
         configuration_id:
@@ -6189,6 +6293,24 @@ components:
       - escalate_to
       - conditions
       title: EscalationPolicySchema
+    ExperimentEvaluationResponse:
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        arms:
+          items:
+            $ref: '#/components/schemas/ArmEvaluationSchema'
+          type: array
+          title: Arms
+      additionalProperties: false
+      type: object
+      required:
+      - experiment_id
+      - arms
+      title: ExperimentEvaluationResponse
+      description: Both arms judged against one scenario's objectives, in arm order.
     ExperimentListResponse:
       properties:
         experiments:
@@ -7285,6 +7407,78 @@ components:
       - dimension
       title: ObjectiveEvidence
       description: What the assessment reads.
+    ObjectiveOutcome:
+      type: string
+      enum:
+      - met
+      - missed
+      - pending
+      - deferred
+      - undecidable
+      title: ObjectiveOutcome
+      description: 'Where one bound objective stands for one arm.
+
+
+        Five values rather than a pass/fail, because three of the things an operator
+        needs to
+
+        tell apart are not verdicts. An objective nothing has decided yet, one a judge
+        will
+
+        decide, and one no evidence this build reads can decide are three different
+        states, and
+
+        collapsing any of them into "failed" would report the lab''s own limits as
+        the agent''s.'
+    ObjectiveResultSchema:
+      properties:
+        objective_id:
+          type: string
+          title: Objective Id
+        block_id:
+          type: string
+          format: uuid
+          title: Block Id
+        block_version:
+          type: integer
+          title: Block Version
+        statement:
+          type: string
+          title: Statement
+        severity:
+          $ref: '#/components/schemas/ObjectiveSeverity'
+        assessment:
+          $ref: '#/components/schemas/ObjectiveAssessment'
+        evidence:
+          $ref: '#/components/schemas/ObjectiveEvidence'
+        outcome:
+          $ref: '#/components/schemas/ObjectiveOutcome'
+        detail:
+          type: string
+          title: Detail
+      additionalProperties: false
+      type: object
+      required:
+      - objective_id
+      - block_id
+      - block_version
+      - statement
+      - severity
+      - assessment
+      - evidence
+      - outcome
+      - detail
+      title: ObjectiveResultSchema
+      description: 'One bound objective as one arm''s record answers it.
+
+
+        `detail` is the evidence in a sentence — the call that answered it, or the
+        call that was
+
+        never made. A cell that said only "missed" would be a score; the reason it
+        is missed is
+
+        the finding.'
     ObjectiveSeverity:
       type: string
       enum:

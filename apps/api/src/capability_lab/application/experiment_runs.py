@@ -120,6 +120,7 @@ from capability_lab.domain.experiment import (
     ParticipantTurn,
     stand_arm,
 )
+from capability_lab.domain.scenario import ScenarioPayload
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload
 
@@ -156,6 +157,22 @@ class RunTurn:
     mutation_events: tuple[MutationEventRecord, ...] = ()
 
 
+def _pin(snapshot: SandboxSnapshotRecord, kind: DefinitionType) -> VersionRef:
+    """The version one snapshot froze of one kind of definition.
+
+    One scan rather than one per caller: the shop a prompt renders against and the scenario a
+    cap is read from are the same question asked twice, and two copies of it would be two
+    chances to resolve an arm against something the snapshot did not pin.
+    """
+    pin = next(
+        (entry for entry in snapshot.content.pins if entry.definition.definition_type is kind),
+        None,
+    )
+    if pin is None:  # pragma: no cover - a snapshot is materialized from a shop's scenario
+        raise MissingReferenceVersionError(f"this snapshot pins no {kind.value}")
+    return pin.ref
+
+
 class ExperimentRunner:
     """Run one arm's configured agent against that arm's sandbox, once."""
 
@@ -168,6 +185,7 @@ class ExperimentRunner:
         tool_events: ToolEventRepository,
         snapshots: SandboxSnapshotService,
         sandboxes: SandboxRepository,
+        scenarios: DefinitionRepository[ScenarioPayload],
         shops: DefinitionRepository[ShopPayload],
         support_identities: DefinitionRepository[SupportIdentityPayload],
         configurations: DefinitionRepository[AgentConfigurationPayload],
@@ -183,6 +201,7 @@ class ExperimentRunner:
         self._tool_events = tool_events
         self._snapshots = snapshots
         self._sandboxes = sandboxes
+        self._scenarios = scenarios
         self._shops = shops
         self._support_identities = support_identities
         self._configurations = configurations
@@ -209,8 +228,8 @@ class ExperimentRunner:
                 f"run {run_id} is not an arm of experiment {experiment_id}"
             )
 
-        standing = self.standing(run)
-        if standing.awaiting is ArmAwaiting.CUSTOMER:
+        standing = self.standing(record, run)
+        if standing.awaiting is not ArmAwaiting.AGENT:
             # Already answered: return it and call nothing. Advancing twice must not cost a
             # second model call, and an arm must never hold two replies to one question. The
             # faults that fired during it come back too, because they are part of what that
@@ -231,7 +250,7 @@ class ExperimentRunner:
 
     # -- reading ---------------------------------------------------------------
 
-    def standing(self, run: RunRecord) -> ArmStanding:
+    def standing(self, record: ExperimentRecord, run: RunRecord) -> ArmStanding:
         """Where this arm stands: the turn it is on, and whether anything answered it.
 
         The one reading, shared with what a client is shown (ADR 0029), so an arm the bench
@@ -250,7 +269,22 @@ class ExperimentRunner:
         )
         if not turns:  # pragma: no cover - starting an experiment opens every arm
             raise RunUnansweredError(f"arm {run.label} has received no customer turn to answer")
-        return stand_arm(turns, tuple(entry.turn for entry in self._attempts_of(run)))
+        return stand_arm(
+            turns,
+            tuple(entry.turn for entry in self._attempts_of(run)),
+            max_turns=self._cap(record, run.shop_id),
+        )
+
+    def _cap(self, record: ExperimentRecord, shop_id: UUID) -> int:
+        """The turn cap the scenario version this experiment pinned declares.
+
+        Resolved through the snapshot like every other pin the runner reads, so an arm is
+        bounded by the recipe its experiment was started under rather than by the scenario as
+        it reads now.
+        """
+        snapshot = self._snapshots.get_snapshot(shop_id, record.snapshot_id)
+        ref = _pin(snapshot, DefinitionType.SCENARIO)
+        return self._version(self._scenarios, ref, DefinitionType.SCENARIO).completion.max_turns
 
     def list_agent_turns(self, experiment_id: UUID) -> tuple[AgentTurnRecord, ...]:
         return self._agent_turns.list_for_experiment(experiment_id)
@@ -493,17 +527,7 @@ class ExperimentRunner:
         return ref
 
     def _pinned_shop(self, snapshot: SandboxSnapshotRecord) -> ShopPayload:
-        pin = next(
-            (
-                entry
-                for entry in snapshot.content.pins
-                if entry.definition.definition_type is DefinitionType.SHOP
-            ),
-            None,
-        )
-        if pin is None:  # pragma: no cover - a snapshot is materialized from a shop's scenario
-            raise MissingReferenceVersionError("this snapshot pins no shop")
-        return self._version(self._shops, pin.ref, DefinitionType.SHOP)
+        return self._version(self._shops, _pin(snapshot, DefinitionType.SHOP), DefinitionType.SHOP)
 
     @staticmethod
     def _version[PayloadT](

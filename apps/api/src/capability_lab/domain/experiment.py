@@ -159,11 +159,15 @@ class ParticipantTurn:
 class ArmAwaiting(StrEnum):
     """What one arm is waiting for, which is the only thing an operator can act on.
 
-    Two values rather than a run status, because these are the two moves the bench offers:
-    run the agent, or write the customer's next message. A third value for "this arm is
-    finished" would be a completion claim, and completion is judged against the scenario's
-    conditions by an evaluation that does not exist yet (`docs/PLAN.md` Milestone 5) — a
-    status set by hand here would be answering that question with a guess.
+    Two of these are the moves the bench offers — run the agent, or write the customer's next
+    message — and the third is the absence of both. ADR 0029 left it out because a completion
+    claim needed an evaluation to make it; it is here now, and it is still not a status
+    anyone sets: an arm is completed when it has answered the last turn its scenario's cap
+    allows, which is read off the same two streams as the other two values (ADR 0030).
+
+    The cap is the half of the scenario's completion conditions this build decides. Whether
+    the incident was actually *resolved* is the completion statement's, and that is prose a
+    judge reads rather than a number a runtime counts.
     """
 
     AGENT = "agent"
@@ -171,6 +175,9 @@ class ArmAwaiting(StrEnum):
 
     CUSTOMER = "customer"
     """The latest customer turn is answered. Nothing moves until the customer writes."""
+
+    COMPLETED = "completed"
+    """The scenario's turn cap is answered. Nothing moves this arm again."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +209,9 @@ class ArmStanding:
     unanswered: tuple[int, ...]
 
 
-def stand_arm(turns: tuple[ParticipantTurn, ...], attempts: tuple[AgentTurn, ...]) -> ArmStanding:
+def stand_arm(
+    turns: tuple[ParticipantTurn, ...], attempts: tuple[AgentTurn, ...], *, max_turns: int
+) -> ArmStanding:
     """Read one arm's standing from the customer turns it received and the replies it tried.
 
     Both streams as this arm holds them — a caller that passed another arm's turns would be
@@ -211,17 +220,25 @@ def stand_arm(turns: tuple[ParticipantTurn, ...], attempts: tuple[AgentTurn, ...
     An arm with no turns has no standing rather than a neutral one: starting an experiment
     writes the trigger into every arm (ADR 0025), so an empty thread is an arm that was never
     opened, and reporting it as "waiting for the customer" would hide that.
+
+    `max_turns` is the scenario's own cap and is required rather than defaulted: a default
+    would let a caller that never resolved the scenario report an arm as still running past
+    the point its recipe ends, and the runner and the bench would then disagree about whether
+    there is anything left to do. The trigger is turn zero (ADR 0028), so the cap counts the
+    turns a participant drove.
     """
     if not turns:
         raise ExperimentConfigurationError(
             "an arm that has received no customer turn has no standing"
         )
+    # `bool` is an `int`, so the count check is the one that actually holds a caller to a cap.
+    _require_non_negative_int(max_turns, "arm standing turn cap")
     answered = frozenset(
         attempt.ordinal for attempt in attempts if attempt.outcome is AgentTurnOutcome.ANSWERED
     )
     latest = max(turn.ordinal for turn in turns)
     return ArmStanding(
-        awaiting=ArmAwaiting.CUSTOMER if latest in answered else ArmAwaiting.AGENT,
+        awaiting=_awaiting(latest, answered=latest in answered, max_turns=max_turns),
         ordinal=latest,
         attempts=sum(1 for attempt in attempts if attempt.ordinal == latest),
         unanswered=tuple(
@@ -232,6 +249,18 @@ def stand_arm(turns: tuple[ParticipantTurn, ...], attempts: tuple[AgentTurn, ...
             )
         ),
     )
+
+
+def _awaiting(latest: int, *, answered: bool, max_turns: int) -> ArmAwaiting:
+    """The three states in the order they exclude one another.
+
+    An unanswered turn always awaits the agent, cap or no cap: the last turn a scenario
+    allows still has to be answered, so an arm cannot complete by running out of turns while
+    it owes a reply.
+    """
+    if not answered:
+        return ArmAwaiting.AGENT
+    return ArmAwaiting.COMPLETED if latest >= max_turns else ArmAwaiting.CUSTOMER
 
 
 class ComparisonDimension(StrEnum):

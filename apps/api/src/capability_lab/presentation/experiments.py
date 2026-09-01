@@ -34,6 +34,10 @@ from pydantic import Field
 
 from capability_lab.application.agent_turns import AgentTurnRecord, ToolEventRecord
 from capability_lab.application.definition_resolution import ResolvedDefinition
+from capability_lab.application.evaluation import (
+    ExperimentEvaluation,
+    ExperimentEvaluationService,
+)
 from capability_lab.application.experiment_runs import ExperimentRunner, RunTurn
 from capability_lab.application.experiment_timeline import (
     ExperimentTimeline,
@@ -60,9 +64,15 @@ from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxRecord
 from capability_lab.application.source_locations import SourceLocation
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
-from capability_lab.domain.blocks import MutationEffect
+from capability_lab.domain.blocks import (
+    MutationEffect,
+    ObjectiveAssessment,
+    ObjectiveEvidence,
+    ObjectiveSeverity,
+)
 from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
+from capability_lab.domain.evaluation import ArmEvaluation, ObjectiveOutcome, ObjectiveResult
 from capability_lab.domain.experiment import (
     MAX_PARTICIPANT_TURN_LENGTH,
     ArmAwaiting,
@@ -663,6 +673,80 @@ class ExperimentTimelineResponse(StrictApiModel):
         )
 
 
+class ObjectiveResultSchema(StrictApiModel):
+    """One bound objective as one arm's record answers it.
+
+    `detail` is the evidence in a sentence — the call that answered it, or the call that was
+    never made. A cell that said only "missed" would be a score; the reason it is missed is
+    the finding.
+    """
+
+    objective_id: str
+    block_id: UUID
+    block_version: int
+    statement: str
+    severity: ObjectiveSeverity
+    assessment: ObjectiveAssessment
+    evidence: ObjectiveEvidence
+    outcome: ObjectiveOutcome
+    detail: str
+
+    @classmethod
+    def from_domain(cls, result: ObjectiveResult) -> Self:
+        return cls(
+            objective_id=result.objective_id,
+            block_id=result.block_id,
+            block_version=result.block_version,
+            statement=result.statement,
+            severity=result.severity,
+            assessment=result.assessment,
+            evidence=result.evidence,
+            outcome=result.outcome,
+            detail=result.detail,
+        )
+
+
+class ArmEvaluationSchema(StrictApiModel):
+    """One arm judged against every objective its scenario composed.
+
+    `decided` is what `met` is out of, and it is smaller than the objective list whenever a
+    judge or a kind of evidence this build does not read owns a row: counting those as
+    misses would report the lab's own limits as the agent's.
+    """
+
+    run_id: UUID
+    settled: bool
+    met: int
+    decided: int
+    failed: bool
+    objectives: list[ObjectiveResultSchema]
+
+    @classmethod
+    def from_domain(cls, evaluation: ArmEvaluation) -> Self:
+        return cls(
+            run_id=evaluation.run_id,
+            settled=evaluation.settled,
+            met=evaluation.met,
+            decided=len(evaluation.decided),
+            failed=evaluation.failed,
+            objectives=[ObjectiveResultSchema.from_domain(result) for result in evaluation.results],
+        )
+
+
+class ExperimentEvaluationResponse(StrictApiModel):
+    """Both arms judged against one scenario's objectives, in arm order."""
+
+    experiment_id: UUID
+    arms: list[ArmEvaluationSchema]
+
+    @classmethod
+    def from_domain(cls, evaluation: ExperimentEvaluation) -> Self:
+        return cls(
+            experiment_id=evaluation.experiment_id,
+            arms=[ArmEvaluationSchema.from_domain(arm) for arm in evaluation.arms],
+        )
+
+
 class ExperimentListResponse(StrictApiModel):
     experiments: list[ExperimentSummarySchema]
 
@@ -694,16 +778,19 @@ class ExperimentRoutes:
         driver: Callable[[str], ParticipantDriver],
         runner: Callable[[], Generator[ExperimentRunner, None, None]],
         timeline: Callable[[], Generator[ExperimentTimelineService, None, None]],
+        evaluation: Callable[[], Generator[ExperimentEvaluationService, None, None]],
     ) -> None:
         self._service = service
         self._driver = driver
         self._runner = runner
         self._timeline = timeline
+        self._evaluation = evaluation
 
     def register(self, router: APIRouter) -> None:
         dependency = Depends(self._service)
         runner_dependency = Depends(self._runner)
         timeline_dependency = Depends(self._timeline)
+        evaluation_dependency = Depends(self._evaluation)
 
         def start_experiment(
             shop_id: ShopIdPath,
@@ -763,6 +850,15 @@ class ExperimentRoutes:
             timeline: Annotated[ExperimentTimelineService, timeline_dependency],
         ) -> ExperimentTimelineResponse:
             return ExperimentTimelineResponse.from_domain(timeline.timeline(shop_id, experiment_id))
+
+        def get_experiment_evaluation(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            evaluation: Annotated[ExperimentEvaluationService, evaluation_dependency],
+        ) -> ExperimentEvaluationResponse:
+            return ExperimentEvaluationResponse.from_domain(
+                evaluation.evaluate(shop_id, experiment_id)
+            )
 
         async def advance_run(
             shop_id: ShopIdPath,
@@ -841,6 +937,24 @@ class ExperimentRoutes:
             responses=NotFoundResponses | InvalidResponses,
         )
         router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/evaluation",
+            get_experiment_evaluation,
+            methods=["GET"],
+            response_model=ExperimentEvaluationResponse,
+            operation_id="getExperimentEvaluation",
+            summary="Judge each arm against the objectives its scenario composed",
+            description=(
+                "Every bound objective, per arm, decided from that arm's own recorded calls "
+                "and the sandbox it started in and is in now — read against the objective "
+                "template versions the scenario version pinned. Deterministic evidence is "
+                "monotone, so an objective nothing has met yet is pending rather than "
+                "missed until the arm reaches its scenario's turn cap and can no longer act. "
+                "An objective a judge decides, or one whose evidence this build does not "
+                "read, says so in its own row rather than counting as a miss."
+            ),
+            responses=NotFoundResponses | InvalidResponses,
+        )
+        router.add_api_route(
             "/shops/{shop_id}/experiments/{experiment_id}/participant-turns",
             deliver_participant_turn,
             methods=["POST"],
@@ -860,8 +974,8 @@ class ExperimentRoutes:
                 },
                 422: {
                     "model": ErrorResponse,
-                    "description": "The driver has no turn to deliver, or does not drive this "
-                    "experiment",
+                    "description": "The driver has no turn to deliver, does not drive this "
+                    "experiment, or an arm has answered every turn its scenario allows",
                 },
             },
         )

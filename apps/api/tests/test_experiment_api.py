@@ -38,12 +38,14 @@ async def lab(client: AsyncClient) -> dict[str, str]:
     return await seed_lab(client)
 
 
-async def published_scenario(client: AsyncClient, lab: dict[str, str]) -> dict[str, Any]:
+async def published_scenario(
+    client: AsyncClient, lab: dict[str, str], **overrides: Any
+) -> dict[str, Any]:
     await publish_everything(client, lab)
     scenario_id = await create_scenario(client, lab)
     saved = await client.put(
         f"/api/v1/shops/{lab['shop_id']}/scenarios/{scenario_id}/draft",
-        json={"payload": scenario_body(lab)},
+        json={"payload": scenario_body(lab, **overrides)},
     )
     assert saved.status_code == 200, saved.text
     published = await client.post(
@@ -764,3 +766,99 @@ async def test_a_turn_sent_before_the_agent_ran_leaves_the_earlier_one_unanswere
         "attempts": 0,
         "unanswered": [0],
     }
+
+
+async def evaluation(client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any]) -> Any:
+    return await client.get(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/evaluation"
+    )
+
+
+async def test_an_experiment_is_judged_against_the_objectives_its_scenario_composed(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The control arm never opens a document, so the read-check is pending, not missed."""
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    response = await evaluation(client, lab, experiment)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [arm["run_id"] for arm in body["arms"]] == [run["run_id"] for run in experiment["runs"]]
+    ran = body["arms"][0]
+    assert ran["settled"] is False
+    assert ran["decided"] == 0
+    assert ran["failed"] is False
+    (objective,) = ran["objectives"]
+    assert objective["objective_id"] == "read-address-change-policy"
+    assert objective["outcome"] == "pending"
+    assert objective["severity"] == "required"
+    assert objective["assessment"] == "deterministic"
+    assert objective["evidence"] == "event"
+    assert objective["block_version"] == 1
+    assert "support.read_document" in objective["detail"]
+
+
+async def test_an_arm_driven_past_its_cap_settles_what_it_never_did(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """One turn is all this scenario allows, so the second answer ends the arm."""
+    scenario = await published_scenario(
+        client,
+        lab,
+        completion={"statement": "The order ships to the confirmed address.", "max_turns": 1},
+    )
+    identity = await make_identity(client)
+    experiment = await start(client, lab, start_body(scenario, await control_arm(client, identity)))
+    await advance(client, lab, experiment)
+    delivered = await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        "/participant-turns",
+        json={"run_ids": [experiment["runs"][0]["run_id"]], "message": "Any update?"},
+    )
+    assert delivered.status_code == 201, delivered.text
+    await advance(client, lab, experiment)
+
+    body = (await evaluation(client, lab, experiment)).json()
+    reopened = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+
+    assert reopened["runs"][0]["standing"]["awaiting"] == "completed"
+    arm = body["arms"][0]
+    assert arm["settled"] is True
+    assert arm["decided"] == 1
+    assert arm["met"] == 0
+    assert arm["failed"] is True
+    assert arm["objectives"][0]["outcome"] == "missed"
+
+
+async def test_a_completed_arm_refuses_another_customer_turn(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The cap is what guarantees a run terminates, so it refuses rather than warns."""
+    scenario = await published_scenario(
+        client,
+        lab,
+        completion={"statement": "The order ships to the confirmed address.", "max_turns": 1},
+    )
+    identity = await make_identity(client)
+    experiment = await start(client, lab, start_body(scenario, await control_arm(client, identity)))
+    await advance(client, lab, experiment)
+
+    async def drive() -> Any:
+        return await client.post(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+            "/participant-turns",
+            json={"run_ids": [experiment["runs"][0]["run_id"]], "message": "Any update?"},
+        )
+
+    assert (await drive()).status_code == 201
+    response = await drive()
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "experiment_completed"
+    assert "1 turns this scenario allows" in response.json()["message"]

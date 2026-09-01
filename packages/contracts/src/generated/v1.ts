@@ -1072,6 +1072,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/evaluation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Judge each arm against the objectives its scenario composed
+     * @description Every bound objective, per arm, decided from that arm's own recorded calls and the sandbox it started in and is in now — read against the objective template versions the scenario version pinned. Deterministic evidence is monotone, so an objective nothing has met yet is pending rather than missed until the arm reaches its scenario's turn cap and can no longer act. An objective a judge decides, or one whose evidence this build does not read, says so in its own row rather than counting as a miss.
+     */
+    get: operations["getExperimentEvaluation"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/experiments/{experiment_id}/participant-turns": {
     parameters: {
       query?: never;
@@ -1659,14 +1679,43 @@ export interface components {
      * ArmAwaiting
      * @description What one arm is waiting for, which is the only thing an operator can act on.
      *
-     *     Two values rather than a run status, because these are the two moves the bench offers:
-     *     run the agent, or write the customer's next message. A third value for "this arm is
-     *     finished" would be a completion claim, and completion is judged against the scenario's
-     *     conditions by an evaluation that does not exist yet (`docs/PLAN.md` Milestone 5) — a
-     *     status set by hand here would be answering that question with a guess.
+     *     Two of these are the moves the bench offers — run the agent, or write the customer's next
+     *     message — and the third is the absence of both. ADR 0029 left it out because a completion
+     *     claim needed an evaluation to make it; it is here now, and it is still not a status
+     *     anyone sets: an arm is completed when it has answered the last turn its scenario's cap
+     *     allows, which is read off the same two streams as the other two values (ADR 0030).
+     *
+     *     The cap is the half of the scenario's completion conditions this build decides. Whether
+     *     the incident was actually *resolved* is the completion statement's, and that is prose a
+     *     judge reads rather than a number a runtime counts.
      * @enum {string}
      */
-    ArmAwaiting: "agent" | "customer";
+    ArmAwaiting: "agent" | "customer" | "completed";
+    /**
+     * ArmEvaluationSchema
+     * @description One arm judged against every objective its scenario composed.
+     *
+     *     `decided` is what `met` is out of, and it is smaller than the objective list whenever a
+     *     judge or a kind of evidence this build does not read owns a row: counting those as
+     *     misses would report the lab's own limits as the agent's.
+     */
+    ArmEvaluationSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /** Settled */
+      settled: boolean;
+      /** Met */
+      met: number;
+      /** Decided */
+      decided: number;
+      /** Failed */
+      failed: boolean;
+      /** Objectives */
+      objectives: components["schemas"]["ObjectiveResultSchema"][];
+    };
     /**
      * ArmSelectionSchema
      * @description One arm: an exact published agent-configuration version, optionally named.
@@ -2373,6 +2422,19 @@ export interface components {
       /** Conditions */
       conditions: string[];
     };
+    /**
+     * ExperimentEvaluationResponse
+     * @description Both arms judged against one scenario's objectives, in arm order.
+     */
+    ExperimentEvaluationResponse: {
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /** Arms */
+      arms: components["schemas"]["ArmEvaluationSchema"][];
+    };
     /** ExperimentListResponse */
     ExperimentListResponse: {
       /** Experiments */
@@ -2968,6 +3030,44 @@ export interface components {
      * @enum {string}
      */
     ObjectiveEvidence: "event" | "policy" | "state" | "forbidden" | "dimension";
+    /**
+     * ObjectiveOutcome
+     * @description Where one bound objective stands for one arm.
+     *
+     *     Five values rather than a pass/fail, because three of the things an operator needs to
+     *     tell apart are not verdicts. An objective nothing has decided yet, one a judge will
+     *     decide, and one no evidence this build reads can decide are three different states, and
+     *     collapsing any of them into "failed" would report the lab's own limits as the agent's.
+     * @enum {string}
+     */
+    ObjectiveOutcome: "met" | "missed" | "pending" | "deferred" | "undecidable";
+    /**
+     * ObjectiveResultSchema
+     * @description One bound objective as one arm's record answers it.
+     *
+     *     `detail` is the evidence in a sentence — the call that answered it, or the call that was
+     *     never made. A cell that said only "missed" would be a score; the reason it is missed is
+     *     the finding.
+     */
+    ObjectiveResultSchema: {
+      /** Objective Id */
+      objective_id: string;
+      /**
+       * Block Id
+       * Format: uuid
+       */
+      block_id: string;
+      /** Block Version */
+      block_version: number;
+      /** Statement */
+      statement: string;
+      severity: components["schemas"]["ObjectiveSeverity"];
+      assessment: components["schemas"]["ObjectiveAssessment"];
+      evidence: components["schemas"]["ObjectiveEvidence"];
+      outcome: components["schemas"]["ObjectiveOutcome"];
+      /** Detail */
+      detail: string;
+    };
     /**
      * ObjectiveSeverity
      * @description What a missed objective does to the run.
@@ -9252,6 +9352,49 @@ export interface operations {
       };
     };
   };
+  getExperimentEvaluation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentEvaluationResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   deliverParticipantTurn: {
     parameters: {
       query?: never;
@@ -9288,7 +9431,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description The driver has no turn to deliver, or does not drive this experiment */
+      /** @description The driver has no turn to deliver, does not drive this experiment, or an arm has answered every turn its scenario allows */
       422: {
         headers: {
           [name: string]: unknown;

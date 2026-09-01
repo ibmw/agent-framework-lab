@@ -60,10 +60,12 @@ from capability_lab.application.definition_resolution import (
     PublishedVersionExistsError,
     UnpublishedReferenceError,
 )
+from capability_lab.application.evaluation import ExperimentEvaluationService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_timeline import ExperimentTimelineService
 from capability_lab.application.experiments import (
     ExperimentArmError,
+    ExperimentCompletedError,
     ExperimentLabelError,
     ExperimentNotFoundError,
     ExperimentNotStartableError,
@@ -1052,6 +1054,17 @@ async def _experiment_setup_handler(request: Request, error: Exception) -> JSONR
     )
 
 
+async def _experiment_completed_handler(request: Request, error: Exception) -> JSONResponse:
+    """This arm has answered every turn its scenario allows.
+
+    Its own code rather than the setup one: nothing about the experiment is invalid, and the
+    client's next move is to read the arm rather than to correct what it sent.
+    """
+    return _error_response(
+        request, status_code=422, code="experiment_completed", message=str(error)
+    )
+
+
 async def _participant_turn_handler(request: Request, error: Exception) -> JSONResponse:
     """The driver had nothing to deliver.
 
@@ -1525,6 +1538,7 @@ def create_app(
     application.add_exception_handler(ExperimentRunNotFoundError, _experiment_run_not_found_handler)
     application.add_exception_handler(ExperimentLabelError, _experiment_setup_handler)
     application.add_exception_handler(ExperimentArmError, _experiment_setup_handler)
+    application.add_exception_handler(ExperimentCompletedError, _experiment_completed_handler)
     application.add_exception_handler(
         ExperimentNotStartableError, _experiment_not_startable_handler
     )
@@ -1714,6 +1728,7 @@ def create_app(
                 SqlAlchemySandboxSnapshotRepository(session),
                 clock,
             ),
+            scenario_repository(session),
             shop_repository(session),
             ticket_repository(session),
             agent_configuration_repository(session),
@@ -1731,6 +1746,14 @@ def create_app(
             # The same runtime registry the runner is given: an attempt's source location is
             # the adapter that produced it, and only this process knows which are here.
             yield ExperimentTimelineService(build_experiment_service(session), runtimes)
+
+    def experiment_evaluation_service() -> Generator[ExperimentEvaluationService, None, None]:
+        with session_scope(factory) as session:
+            # Over the same experiment construction the timeline reads, so an evaluation and
+            # a thread can never disagree about what an arm did.
+            yield ExperimentEvaluationService(
+                build_experiment_service(session), objective_block_repository(session)
+            )
 
     def experiment_runner() -> Generator[ExperimentRunner, None, None]:
         with session_scope(factory) as session:
@@ -1752,6 +1775,7 @@ def create_app(
                     clock,
                 ),
                 SqlAlchemySandboxRepository(session),
+                scenario_repository(session),
                 shop_repository(session),
                 support_identity_repository(session),
                 agent_configuration_repository(session),
@@ -2308,7 +2332,11 @@ def create_app(
     # The participant driver is composed per delivery, from the words the request carries:
     # selecting it is composition's job, and its lifetime is one turn.
     ExperimentRoutes(
-        experiment_service, HumanParticipantDriver, experiment_runner, experiment_timeline_service
+        experiment_service,
+        HumanParticipantDriver,
+        experiment_runner,
+        experiment_timeline_service,
+        experiment_evaluation_service,
     ).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
