@@ -68,9 +68,12 @@ declared deterministic control policy and Pydantic AI over the published tool co
 framework-neutral stream, each entry carrying the project-owned file and line of the code that ran
 it where this build can resolve one (ADR 0027), and finally the scenario's own faults firing into a
 running arm at the moment the recipe bound them to — between two of the agent's calls, against a
-declared table of what this build can actually carry out, recorded once per arm (ADR 0028), and finally the experiment an operator comes back to: each
+declared table of what this build can actually carry out, recorded once per arm (ADR 0028), and then the experiment an operator comes back to: each
 arm's standing read from its own record so a bench reopened cold says what it is waiting for,
-and the question an arm passed over reported rather than left to be noticed (ADR 0029).
+and the question an arm passed over reported rather than left to be noticed (ADR 0029), and
+finally the objectives the scenario composed judged against each arm's own record, with the
+scenario's turn cap ending an arm and settling what it never did (ADR 0030) — which completes
+Milestone 4 and opens Milestone 5's deterministic evaluation.
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -520,10 +523,11 @@ behavior side by side.
   location (frame 9c) with them (ADR 0027).
 - [x] Fire the scenario's bound mutation blocks into a running arm at their bound timing, and
   record what each one moved (ADR 0028).
-- [ ] Cover start, divergence, independent action, resume, and completion with focused tests and an
+- [x] Cover start, divergence, independent action, resume, and completion with focused tests and an
   essential Playwright journey. Start, divergence, and independent action are covered (ADR 0025,
-  ADR 0026) and resume is (ADR 0029); completion is judged against the scenario's completion
-  conditions and follows with Milestone 5's evaluation.
+  ADR 0026), resume is (ADR 0029), and completion is (ADR 0030): the scenario's turn cap ends an
+  arm, which is the half of its completion conditions a runtime can decide. Whether the incident
+  was actually resolved is the completion statement's, and that is Milestone 5's judge.
 
 Frames: 7 · Experiment setup and 8 · Live bench (icon-only rail, ticket-thread chat UI, provenance
 chip strip, director's notes, objectives matrix), plus 9a · Execution timeline and the source
@@ -568,6 +572,18 @@ left to Milestone 5's evaluation, the turn an arm passed over reported rather th
 one reading the runner and the bench now share so a button never offers a run the backend would
 decline.
 
+Objective evidence (frame 8's objectives matrix): an operator watches the incident being
+judged as it runs — the order the arm identified and the address it moved marked met, the
+policy document it never opened pending rather than failed while the arm can still open it,
+and the row a judge owns saying so instead of counting against the arm — then drives the arm
+to the last turn the recipe allows, where the pending read becomes a miss, the arm is
+completed, and the bench stops offering to run or message it. ADR 0030 records the five
+outcomes and why three of them are not verdicts, the declared table of evidence this build
+reads and the two kinds absent from it, the polarity that makes a forbidden objective the same
+reading as a required one, the four readers keyed by binding kind and the rule that a refusal
+is not a reading, the turn cap as the half of a scenario's completion conditions a runtime can
+decide, and the evaluation projected from the record rather than stored beside it.
+
 Fault evidence (frames 8 and 9a, the scenario's own half): an operator runs an arm and watches the
 incident change under it — the order the recipe bound moves out of band at the moment it bound,
 between two of the agent's calls, with the agent never told and the arm beside it untouched until
@@ -594,7 +610,9 @@ Turn completed runs into durable, searchable comparison evidence.
 
 ### Outcomes
 
-- [ ] Evaluate deterministic state, event, tool, policy, safety, and completion objectives.
+- [x] Evaluate deterministic state, event, tool, and completion objectives. Policy objectives
+  need a registry of named versioned rules a template can bind and are deliberately deferred to
+  their own slice; safety is expressed as the forbidden polarity of the same readings (ADR 0030).
 - [ ] Add a versioned judge configuration and anonymized structured LLM-judge execution.
 - [ ] Record turns, token usage, model/tool calls, duration, retries, failures, and estimated cost
   when available.

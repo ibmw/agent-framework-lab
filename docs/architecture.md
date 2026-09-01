@@ -45,7 +45,9 @@ and the normalized execution timeline that reads all of it back as one framework
 carrying the project's own file and line behind every entry (ADR 0027), and the scenario runtime
 that fires a recipe's bound faults into a running arm at the moment it named, on the same call path
 the tools travel (ADR 0028), and the arm standing that makes an experiment resumable by reading
-where each arm waits out of its own record rather than storing a status beside it (ADR 0029).
+where each arm waits out of its own record rather than storing a status beside it (ADR 0029), and
+the deterministic evaluation that judges each arm against the objectives its scenario composed and
+ends it at the recipe's turn cap (ADR 0030).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -261,6 +263,17 @@ domain and read by both the runner and the client, so an offered advance is alwa
 would perform. It is never stored: a status column would be a second writer of a fact the streams
 already hold, and whether a run is *complete* is an evaluation question rather than a flag anyone
 sets (ADR 0029).
+
+That evaluation is the other half of the same reading. Each of the scenario's bound objectives is
+decided from one arm's own calls and the difference between the sandbox it started in and the one it
+is in now, against the objective template versions the scenario's publication pinned. Deterministic
+evidence is monotone, so an unmet objective is **pending** while the arm can still act and becomes a
+miss only when it cannot; an objective a judge scores, or one whose kind of evidence this build does
+not read, says so in its own row rather than counting against the arm. What settles them is the
+scenario's own turn cap — the half of its completion conditions a runtime can count, which now ends
+an arm and refuses a further customer turn, while the completion statement stays a judge's reading.
+Like the timeline, the evaluation is projected from the record rather than stored beside it
+(ADR 0030).
 
 ## Persistence, versioning, and extensibility
 

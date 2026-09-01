@@ -177,9 +177,15 @@ SDK immediately.
    two streams rather than stored beside them, so the runner deciding what an advance does and
    the bench drawing the button read one rule. A question an arm passed over, which ADR 0026
    made deliberate, is reported rather than left looking like a gap.
-13. Next is Milestone 5. Traces belong with its evaluation surfaces (frame 9b), and completion
-   follows there too, judged against the scenario's completion conditions rather than set by
-   hand; nothing sets a run status today, deliberately.
+13. Deterministic evaluation is delivered (ADR 0030), which completes Milestone 4 and opens
+   Milestone 5. Each of a scenario's bound objectives is judged from one arm's own record — the
+   calls it obtained answers from, and how its sandbox differs from the one it was cloned from —
+   with "not yet" kept apart from "no", a judge's rows deferred rather than counted, and the
+   evidence this build cannot read saying so instead of failing the arm. The scenario's turn cap
+   now ends an arm and settles what it never did; the completion statement is still a judge's.
+14. Next is the rest of Milestone 5: the versioned judge, the quantitative record, the results
+   surfaces (frames 9 and 9b), and experiment-first history. Nothing sets a run status today,
+   deliberately.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
