@@ -409,6 +409,24 @@ function judgeRow(): Pick<ObjectiveResultSchema, "outcome" | "detail" | "judgeme
       judgement: null,
     };
   }
+  if (judgeFailed) {
+    // A judge the lab could not reach is recorded and leaves the row deferred: the outage is
+    // the lab's, and an arm is never marked down for it (ADR 0031).
+    return {
+      outcome: "deferred",
+      detail: "the judge could not be reached",
+      judgement: {
+        judge_id: JUDGE_ID,
+        judge_version: 2,
+        provider: "openai",
+        model_id: "gpt-5-mini",
+        brief_fingerprint: "e".repeat(64),
+        attempt: 1,
+        outcome: null,
+        failure: "transient",
+      },
+    };
+  }
   return {
     outcome: "met",
     detail: "the arm named the order and said what it changed",
@@ -602,6 +620,7 @@ let maxTurns = 12;
 let startFails = false;
 let runtimeUnavailable = false;
 let scored = false;
+let judgeFailed = false;
 let scoredBy: { judge_id: string }[] = [];
 let publishedJudges: JudgeConfigurationListResponse = JUDGES;
 
@@ -740,6 +759,7 @@ afterEach(() => {
   startFails = false;
   runtimeUnavailable = false;
   scored = false;
+  judgeFailed = false;
   scoredBy = [];
   publishedJudges = JUDGES;
 });
@@ -755,7 +775,15 @@ function renderSetup() {
 
 function renderTimeline() {
   return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/timeline`]}>
+    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/timeline`]}>
+      <App />
+    </MemoryRouter>,
+  );
+}
+
+function renderResults() {
+  return render(
+    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`]}>
       <App />
     </MemoryRouter>,
   );
@@ -1188,6 +1216,173 @@ describe("live bench", () => {
   });
 });
 
+describe("experiment results", () => {
+  it("reads every objective the scenario composed with one column per arm", async () => {
+    toolEvents = [toolEvent(ARM_A, 0, "support.read_document")];
+    renderResults();
+
+    const evidence = await screen.findByRole("region", { name: "Deterministic evidence" });
+    const row = within(evidence).getByRole("row", { name: /Read the address-change policy/ });
+
+    // The arm that read the document and the arm that has not, side by side, each with the
+    // evidence sentence that makes the cell a finding rather than a mark.
+    expect(row).toHaveTextContent(
+      /read-address-change-policy met — support\.read_document answered policy:address-change/,
+    );
+    expect(row).toHaveTextContent(
+      /read-address-change-policy pending — support\.read_document never answered/,
+    );
+  });
+
+  it("counts each arm against what was decided for it, and never into one score", async () => {
+    toolEvents = [toolEvent(ARM_A, 0, "support.read_document")];
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+
+    // Arm A met the one row something decided; nothing has decided a row for arm B yet, so
+    // its denominator is zero rather than a miss it has not made.
+    expect(within(armA).getByText("1/1 decided")).toBeVisible();
+    expect(within(armB).getByText("0/0 decided")).toBeVisible();
+    expect(screen.getByText(/There is no aggregate score/)).toBeVisible();
+  });
+
+  it("keeps the rows a judge owns out of the deterministic evidence", async () => {
+    renderResults();
+
+    const evidence = await screen.findByRole("region", { name: "Deterministic evidence" });
+    const judged = screen.getByRole("region", { name: "LLM judge evidence" });
+
+    expect(within(evidence).queryByText("Explain the outcome to the customer")).toBeNull();
+    expect(within(judged).getByText("Explain the outcome to the customer")).toBeVisible();
+  });
+
+  it("names the judge, the version, the model, and the attempt behind a verdict", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
+    // Awaited: the published judges arrive on their own read, and the control appears with
+    // them — before that the card says a judge owns these rows and offers nothing.
+    await user.click(await within(judged).findByRole("button", { name: /Score 1 judged/ }));
+
+    await waitFor(() => expect(scoredBy).toEqual([{ judge_id: JUDGE_ID }]));
+    expect(within(judged).getAllByText(/judge v2 · gpt-5-mini · attempt 1/)).toHaveLength(2);
+    // Scoring again is offered as what it is: the previous verdict stands and a new attempt
+    // is recorded beside it.
+    expect(within(judged).getByRole("button", { name: "Score again" })).toBeVisible();
+  });
+
+  it("reads what each arm spent, and says so where nobody measured", async () => {
+    agentTurns = [agentTurn(ARM_A, 0)];
+    toolEvents = [toolEvent(ARM_A, 0, "orders.read_order")];
+    renderResults();
+
+    const quantitative = await screen.findByRole("region", { name: "Quantitative" });
+    const requests = within(quantitative).getByRole("row", { name: /Model requests/ });
+
+    // Arm A metered itself; the arm that never ran reports nothing rather than a zero an
+    // operator would read as a measurement somebody took.
+    expect(requests).toHaveTextContent("0");
+    expect(requests).toHaveTextContent("not reported");
+    expect(within(quantitative).getByRole("row", { name: /Attempts/ })).toHaveTextContent("1");
+  });
+
+  it("marks the turn one arm alone received", async () => {
+    turns = [...OPENED, turn(ARM_B, 1, "composition-1", "Yes, go ahead.")];
+    renderResults();
+
+    const divergence = await screen.findByRole("region", { name: "Input divergence" });
+
+    expect(within(divergence).getByText("Turn 1")).toBeVisible();
+    expect(within(divergence).getByText(/never received this turn/)).toBeVisible();
+    expect(within(divergence).getByText(/Yes, go ahead\./)).toBeVisible();
+  });
+
+  it("reads a controlled comparison as controlled", async () => {
+    renderResults();
+
+    const divergence = await screen.findByRole("region", { name: "Input divergence" });
+
+    expect(within(divergence).getByText(/the comparison is controlled/)).toBeVisible();
+  });
+
+  it("reports a judge the lab could not reach rather than leaving the row blank", async () => {
+    // The lab's own outage is a fact about the lab. A cell that simply stayed empty would
+    // read as an arm nobody thought worth judging.
+    judgeFailed = true;
+    const user = userEvent.setup();
+    renderResults();
+
+    const judged = await screen.findByRole("region", { name: "LLM judge evidence" });
+    await user.click(await within(judged).findByRole("button", { name: /Score 1 judged/ }));
+
+    await waitFor(() =>
+      expect(
+        within(judged).getAllByText(/no verdict — the provider was briefly unavailable/),
+      ).toHaveLength(2),
+    );
+  });
+
+  it("marks which depth tab is open", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    const tabs = await screen.findByRole("navigation", { name: "Results views" });
+    expect(within(tabs).getByRole("link", { name: "General" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    await user.click(within(tabs).getByRole("link", { name: "Execution timeline" }));
+    expect(within(tabs).getByRole("link", { name: "Execution timeline" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(tabs).getByRole("link", { name: "General" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("says so when the experiment behind the results cannot be read", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () =>
+        HttpResponse.json(
+          {
+            code: "internal_error",
+            message: "the experiment store is unavailable",
+            request_id: "req-3",
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderResults();
+
+    // The backend's own reason, not the page's fallback: a screen that swallowed it would
+    // leave an operator with nothing to act on. No tab renders behind it.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "the experiment store is unavailable",
+    );
+    expect(screen.queryByRole("region", { name: "Deterministic evidence" })).toBeNull();
+  });
+
+  it("reads what moved each arm from its revisions rather than from what it said", async () => {
+    toolEvents = [toolEvent(ARM_A, 0, "orders.apply_address_change", true)];
+    mutationEvents = [mutationEvent(ARM_B, 0)];
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    const rows = within(state).getAllByRole("listitem");
+
+    expect(rows[0]).toHaveTextContent("orders.apply_address_change · r0 → r1");
+    // The scenario's own fault is a writer beside the tools: two arms at different
+    // revisions is only explainable when both writers are on the page.
+    expect(rows[1]).toHaveTextContent("order-moves-under-the-arm · scenario fault · r0 → r1");
+  });
+});
+
 describe("execution timeline", () => {
   it("reads both arms' execution as one ordered stream", async () => {
     renderTimeline();
@@ -1255,13 +1450,20 @@ describe("execution timeline", () => {
     expect(within(stream).getAllByRole("listitem")).toHaveLength(5);
   });
 
-  it("is reachable from the bench and leads back to it", async () => {
+  it("is a depth tab of the results screen, and leads back to the bench", async () => {
     const user = userEvent.setup();
     renderBench();
 
+    await user.click(await screen.findByRole("link", { name: "Results" }));
     await user.click(await screen.findByRole("link", { name: "Execution timeline" }));
 
     expect(await screen.findByRole("region", { name: "Execution timeline" })).toBeVisible();
+    // The header stays across the tabs: an operator following a finding into the timeline is
+    // still reading one experiment, and has never lost which one.
+    expect(
+      screen.getByRole("heading", { name: "Wrong address — framework comparison" }),
+    ).toBeVisible();
+
     await user.click(screen.getByRole("link", { name: "Back to the live bench" }));
     expect(await screen.findByRole("region", { name: "Customer composer" })).toBeVisible();
   });

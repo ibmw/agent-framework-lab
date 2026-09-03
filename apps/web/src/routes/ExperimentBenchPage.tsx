@@ -7,7 +7,6 @@ import type {
   ExperimentRunSchema,
   JudgeConfigurationSummarySchema,
   MutationEventSchema,
-  ObjectiveResultSchema,
   ParticipantTurnSchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
@@ -21,11 +20,19 @@ import {
   getExperimentEvaluation,
   scoreExperiment,
 } from "../api/experiments";
-import { listJudgeConfigurations } from "../api/judgeConfigurations";
+import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
+  describeFailure,
+  formatCost,
+  formatDuration,
+  formatTokens,
+  writeKey,
+  writeLabel,
+  writesOf,
+} from "../lib/evidence";
+import {
   accentButtonClasses,
-  fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
@@ -35,24 +42,6 @@ import {
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "This experiment is unavailable.";
-
-/** Why an attempt ended without a reply, in words an operator can act on. */
-const FAILURES: Record<AgentTurnSchema["failure"] & string, string> = {
-  model_provider: "the model provider rejected the request",
-  model_transient: "the model provider was briefly unavailable",
-  invalid_response: "the model answered in a shape the lab cannot record",
-  framework: "the framework could not execute this turn",
-  tool_round_limit: "the agent used every tool call this configuration allows",
-};
-
-/** What each objective outcome looks like, and what the symbol means (frame 8). */
-const OUTCOMES: Record<ObjectiveResultSchema["outcome"], { mark: string; label: string }> = {
-  met: { mark: "\u2713", label: "met" },
-  missed: { mark: "\u2717", label: "missed" },
-  pending: { mark: "\u00b7", label: "pending" },
-  deferred: { mark: "judge", label: "a judge scores this after the run" },
-  undecidable: { mark: "\u2014", label: "no evidence this lab reads decides this" },
-};
 
 /**
  * The live bench (frame 8).
@@ -79,8 +68,7 @@ export function ExperimentBenchPage() {
   const { experimentId = "" } = useParams();
   const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
-  const [judges, setJudges] = useState<JudgeConfigurationSummarySchema[]>([]);
-  const [judgeId, setJudgeId] = useState("");
+  const { judges, judgeId, setJudgeId } = usePublishedJudges();
   const [scoring, setScoring] = useState(false);
   const [message, setMessage] = useState("");
   const [targets, setTargets] = useState<string[] | null>(null);
@@ -115,23 +103,6 @@ export function ExperimentBenchPage() {
     });
     return () => controller.abort();
   }, [load]);
-
-  // Only published judges can score: a verdict names the frozen version that produced it,
-  // and a draft has none.
-  useEffect(() => {
-    const controller = new AbortController();
-    listJudgeConfigurations(controller.signal)
-      .then((listed) => {
-        const published = listed.judges.filter((judge) => judge.latest_published_version !== null);
-        setJudges(published);
-        setJudgeId((current) => current || (published[0]?.judge_id ?? ""));
-      })
-      .catch(() => {
-        // A bench with no judge service still runs its arms; the objectives matrix simply
-        // keeps saying a judge decides those rows.
-      });
-    return () => controller.abort();
-  }, []);
 
   /**
    * Run each named arm, one after another, and report the first arm that could not run.
@@ -245,9 +216,9 @@ export function ExperimentBenchPage() {
         actions={
           <Link
             className={outlineButtonClasses}
-            to={`/shops/${shopId}/bench/${experimentId}/timeline`}
+            to={`/shops/${shopId}/bench/${experimentId}/results`}
           >
-            Execution timeline
+            Results
           </Link>
         }
       />
@@ -578,7 +549,7 @@ function Attempt({
         </p>
       ) : (
         <p className="rounded-lg border border-lab-error/40 px-3 py-2 text-[13px] text-lab-error">
-          This attempt produced no reply: {FAILURES[turn.failure ?? "framework"]}.
+          This attempt produced no reply: {describeFailure(turn.failure)}.
         </p>
       )}
     </div>
@@ -654,42 +625,6 @@ function RunCost({ metrics }: { metrics: ArmMetricsSchema }) {
   return <p className="text-xs text-admin-muted">{parts.join(" · ")}</p>;
 }
 
-/** A magnitude rather than an audited figure: `3.4k`, then `1.2M` once a thread is long. */
-function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M`;
-  }
-  return tokens < 1000 ? `${tokens}` : `${(tokens / 1000).toFixed(1)}k`;
-}
-
-/**
- * Seconds to one decimal under a minute, then whole minutes and seconds.
- *
- * Rounded once, before the branch is chosen. Rounding inside each branch renders 59,950 ms as
- * "60.0s" and 119,600 ms as "1m 60s" — two readings of a clock nobody owns.
- */
-function formatDuration(milliseconds: number): string {
-  const whole = Math.round(milliseconds / 1000);
-  if (whole < 60) {
-    return `${(milliseconds / 1000).toFixed(1)}s`;
-  }
-  return `${Math.floor(whole / 60)}m ${whole % 60}s`;
-}
-
-/**
- * The estimate exactly as the lab computed it, never re-derived.
- *
- * The amount arrives as a decimal string precisely because a binary float cannot hold it, so
- * it is trimmed rather than parsed: `Number("0.015000").toFixed(2)` is "0.01", which is a
- * different number from the one the lab priced. Trailing zeros go, two digits stay, and the
- * value shown is always the value sent.
- */
-function formatCost(cost: { amount: string; currency: string }): string {
-  const [whole, fraction = ""] = cost.amount.split(".");
-  const trimmed = fraction.replace(/0+$/, "");
-  return `${whole}.${trimmed.padEnd(2, "0")} ${cost.currency}`;
-}
-
 /**
  * Whether this arm can still be driven, which is the standing and never a count kept here.
  *
@@ -749,58 +684,7 @@ function Objectives({
       {rows.length === 0 ? (
         <p className="text-[13px] text-admin-muted">This scenario composes no objectives.</p>
       ) : (
-        <table className="w-full text-left text-[13px]">
-          <caption className="sr-only">
-            Every objective this scenario composed, and where each arm stands against it
-          </caption>
-          <thead>
-            <tr className="text-xs font-semibold text-admin-muted">
-              <th scope="col">Objective</th>
-              {experiment.runs.map((run) => (
-                <th key={run.run_id} scope="col" className="w-10 text-right">
-                  {run.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.objective_id}>
-                <th scope="row" className="py-0.5 pr-2 font-normal text-admin-ink-soft">
-                  {row.statement}
-                </th>
-                {arms.map((arm) => {
-                  // Paired by the objective it judges rather than by position: both arms are
-                  // judged against one scenario, and matching on that fact keeps a cell from
-                  // ever landing in the row above the objective it belongs to.
-                  const result = arm.objectives.find(
-                    (entry) => entry.objective_id === row.objective_id,
-                  );
-                  const outcome = result ? OUTCOMES[result.outcome] : null;
-                  return (
-                    <td
-                      key={arm.run_id}
-                      className="py-0.5 text-right"
-                      // The provenance is on the hover too, not only in the accessible name:
-                      // "which judge, at which version, on which model" is what makes a
-                      // verdict readable, and a sighted operator needs it as much (ADR 0031).
-                      title={`${result?.detail ?? ""}${describeJudgement(result)}`}
-                    >
-                      <span aria-hidden="true">{outcome?.mark ?? "\u2014"}</span>
-                      {/* The evidence sentence, not only the symbol: what makes a cell read
-                          as a finding is in `detail`, and a tooltip is mouse-only. */}
-                      <span className="sr-only">
-                        {`${row.objective_id} ${outcome?.label ?? "not judged"}${
-                          result ? ` \u2014 ${result.detail}` : ""
-                        }${describeJudgement(result)}`}
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={rows} compact />
       )}
 
       {judgeRows.length > 0 ? (
@@ -811,29 +695,14 @@ function Objectives({
             </p>
           ) : (
             <>
-              <label className={fieldLabelClasses}>
-                Judge
-                <select
-                  aria-label="Judge"
-                  className={fieldControlClasses}
-                  value={judgeId}
-                  onChange={(event) => onSelectJudge(event.target.value)}
-                >
-                  {judges.map((judge) => (
-                    <option key={judge.judge_id} value={judge.judge_id}>
-                      {judge.name} · v{judge.latest_published_version} · {judge.model_id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className={outlineButtonClasses}
-                type="button"
-                onClick={onScore}
-                disabled={scoring || judgeId === ""}
-              >
-                {scoring ? "Scoring…" : `Score ${judgeRows.length} judged objective(s)`}
-              </button>
+              <JudgePicker
+                judges={judges}
+                judgeId={judgeId}
+                action={`Score ${judgeRows.length} judged objective(s)`}
+                scoring={scoring}
+                onSelectJudge={onSelectJudge}
+                onScore={onScore}
+              />
               <p className="text-xs text-admin-muted">
                 Each arm is scored on its own record, and the judge is told nothing about what ran
                 it. Scoring again keeps the previous verdict and records a new attempt.
@@ -844,16 +713,6 @@ function Objectives({
       ) : null}
     </Card>
   );
-}
-
-/** The provenance a screen reader hears after a scored cell's evidence sentence. */
-function describeJudgement(result: ObjectiveResultSchema | undefined): string {
-  const judgement = result?.judgement;
-  if (!judgement) {
-    return "";
-  }
-  const attempt = `attempt ${judgement.attempt}`;
-  return ` \u2014 judged by ${judgement.model_id} under judge version ${judgement.judge_version}, ${attempt}`;
 }
 
 /**
@@ -875,7 +734,7 @@ function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
     >
       <ul className="grid gap-2 text-[13px]">
         {experiment.runs.map((run) => {
-          const moved = movers(experiment, run);
+          const moved = writesOf(experiment, run);
           return (
             <li key={run.run_id} className="grid gap-0.5">
               <span className="font-semibold text-lab-ink">{run.label}</span>
@@ -883,9 +742,8 @@ function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
                 <span className="text-xs text-admin-muted">nothing yet</span>
               ) : (
                 moved.map((event) => (
-                  <span key={moverKey(event)} className="text-xs text-admin-muted">
-                    {"tool" in event ? event.tool : `${event.mutation_id} · scenario fault`} · r
-                    {event.revision_before} → r{event.revision_after}
+                  <span key={writeKey(event)} className="text-xs text-admin-muted">
+                    {writeLabel(event)} · r{event.revision_before} → r{event.revision_after}
                   </span>
                 ))
               )}
@@ -895,24 +753,6 @@ function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
       </ul>
     </Card>
   );
-}
-
-/** Every recorded write into one arm, in the order the arm's revisions moved. */
-function movers(
-  experiment: ExperimentResponse,
-  run: ExperimentRunSchema,
-): (ToolEventSchema | MutationEventSchema)[] {
-  const wrote = [
-    ...experiment.tool_events.filter((event) => event.run_id === run.run_id),
-    ...experiment.mutation_events.filter((event) => event.run_id === run.run_id),
-  ].filter((event) => event.revision_after > event.revision_before);
-  return wrote.sort((left, right) => left.revision_before - right.revision_before);
-}
-
-function moverKey(event: ToolEventSchema | MutationEventSchema): string {
-  return "tool" in event
-    ? `call:${event.ordinal}:${event.attempt}:${event.sequence}`
-    : `fault:${event.mutation_id}`;
 }
 
 function attemptsFor(

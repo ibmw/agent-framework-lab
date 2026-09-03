@@ -584,6 +584,39 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await composer.getByRole("button", { name: "Send as the customer" }).click();
   await expect(page.getByRole("alert")).toContainText("Write the customer's next message");
 
+  // The results screen reads the same record objective by objective, arm beside arm — and
+  // refuses to add the two columns into a number that would decide, for the operator, how a
+  // missed process check weighs against a resolved incident.
+  await page.getByRole("link", { name: "Results" }).click();
+  await expect(page.getByText(/There is no aggregate score/)).toBeVisible();
+  await expect(card(page, "Arm A summary").getByText(/\d+\/\d+ decided/)).toBeVisible();
+  await expect(card(page, "Arm B summary").getByText(/\d+\/\d+ decided/)).toBeVisible();
+
+  const deterministic = card(page, "Deterministic evidence");
+  await expect(
+    deterministic.getByText(/ missed — support\.read_document never answered/),
+  ).toHaveCount(1);
+  await expect(deterministic.getByText(/ pending — /)).toHaveCount(1);
+  // The judge's row is on its own card with the version and model that produced it, never
+  // mixed in with the evidence a rule decided.
+  await expect(deterministic.getByText("Read document")).toBeVisible();
+  await expect(deterministic.getByText("Resolve the incident")).toHaveCount(0);
+  const judgeCard = card(page, "LLM judge evidence");
+  await expect(judgeCard.getByText("Resolve the incident")).toBeVisible();
+  await expect(judgeCard.getByText(/judge v1 · deterministic · attempt 1/)).toHaveCount(2);
+
+  // What actually moved each arm, read off its revisions rather than off what it answered.
+  await expect(
+    card(page, "Business state — verified, not claimed").getByText(
+      /orders\.apply_address_change · r1 → r2/,
+    ),
+  ).toHaveCount(2);
+
+  // And the turn only one arm heard is what makes everything after it two conversations.
+  const divergence = card(page, "Input divergence");
+  await expect(divergence.getByText("Turn 2")).toBeVisible();
+  await expect(divergence.getByText(/never received this turn/)).toBeVisible();
+
   // The same incident read as one normalized stream: the arms interleaved on the messages
   // they share, every call in the order it was asked, and the project's own code behind it.
   await page.getByRole("link", { name: "Execution timeline" }).click();

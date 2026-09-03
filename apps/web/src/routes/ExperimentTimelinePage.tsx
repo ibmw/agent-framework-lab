@@ -6,13 +6,13 @@ import type {
   TimelineCategory,
   TimelineEntrySchema,
 } from "@agent-lab/contracts";
-import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { describeApiError } from "../api/client";
-import { getExperiment, getExperimentTimeline } from "../api/experiments";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { getExperimentTimeline } from "../api/experiments";
+import { Card } from "../components/WorkspaceChrome";
+import { describeFailure } from "../lib/evidence";
 import { outlineButtonClasses, subtleButtonClasses } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useExperimentResults } from "./ExperimentResultsLayout";
 
 const UNAVAILABLE = "This experiment's timeline is unavailable.";
 
@@ -40,17 +40,8 @@ const EFFECTS: Record<string, string> = {
   service_outage: "took a dependency offline",
 };
 
-/** Why an attempt ended without a reply, in words an operator can act on. */
-const FAILURES: Record<string, string> = {
-  model_provider: "the model provider rejected the request",
-  model_transient: "the model provider was briefly unavailable",
-  invalid_response: "the model answered in a shape the lab cannot record",
-  framework: "the framework could not execute this turn",
-  tool_round_limit: "the agent used every tool call this configuration allows",
-};
-
 /**
- * The execution timeline (frame 9a).
+ * The execution timeline (frame 9a), the results screen's second depth tab.
  *
  * One ordered, framework-neutral stream for the whole experiment: the trigger both arms
  * opened on, every customer composition and the arms it reached, each arm's attempts, and
@@ -61,51 +52,36 @@ const FAILURES: Record<string, string> = {
  * It carries no message body on purpose, which is why every row is a description built from
  * structural facts rather than an echo of what anyone said. The thread on the bench is where
  * the words live; this is where the order and the code paths do.
+ *
+ * The experiment itself comes from the results layout rather than from a read of its own:
+ * depth is a tab on one screen, and a header that reloaded under the operator as they moved
+ * between tabs would be a second reading of the run they are trying to follow.
  */
 export function ExperimentTimelinePage() {
-  const { shopId } = useShopWorkspace();
-  const { experimentId = "" } = useParams();
-  const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
+  const { shopId, experimentId, experiment } = useExperimentResults();
   const [timeline, setTimeline] = useState<ExperimentTimelineResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lenses, setLenses] = useState<TimelineCategory[]>([]);
 
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      // Two reads because they answer two questions: the experiment names its arms and what
-      // they were run against, the timeline says what happened.
-      const [record, stream] = await Promise.all([
-        getExperiment(shopId, experimentId, signal),
-        getExperimentTimeline(shopId, experimentId, signal),
-      ]);
-      setExperiment(record);
-      setTimeline(stream);
-    },
-    [shopId, experimentId],
-  );
-
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal).catch((cause: unknown) => {
-      if (!controller.signal.aborted) {
-        setError(describeApiError(cause, UNAVAILABLE));
-      }
-    });
+    getExperimentTimeline(shopId, experimentId, controller.signal)
+      .then(setTimeline)
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(describeApiError(cause, UNAVAILABLE));
+        }
+      });
     return () => controller.abort();
-  }, [load]);
+  }, [shopId, experimentId]);
 
-  if (experiment === null || timeline === null) {
-    return (
-      <>
-        <PageHeader title="Execution timeline" />
-        {error ? (
-          <p role="alert" className="text-[13px] text-lab-error">
-            {error}
-          </p>
-        ) : (
-          <p className="text-sm text-admin-muted">Loading timeline…</p>
-        )}
-      </>
+  if (timeline === null) {
+    return error ? (
+      <p role="alert" className="text-[13px] text-lab-error">
+        {error}
+      </p>
+    ) : (
+      <p className="text-sm text-admin-muted">Loading timeline…</p>
     );
   }
 
@@ -117,72 +93,55 @@ export function ExperimentTimelinePage() {
         );
 
   return (
-    <>
-      <PageHeader
-        title={experiment.label}
-        description={
-          <>
-            <Link
-              className="font-semibold text-lab-ink"
-              to={`/shops/${shopId}/bench/${experimentId}`}
-            >
-              Back to the live bench
-            </Link>{" "}
-            · scenario v{experiment.scenario_version} · seed {experiment.seed}
-          </>
-        }
-      />
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid min-w-0 content-start gap-4">
-          <Card
-            title="Execution timeline"
-            footer={
-              <p className="text-xs text-admin-muted">
-                Normalized events: a framework's own payloads never enter this stream, and no
-                message body does either. What was said is on the bench; this is what happened.
-              </p>
-            }
-          >
-            <Lenses selected={lenses} onChange={setLenses} />
-            {shown.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">No event matches this lens yet.</p>
-            ) : (
-              <ol className="grid gap-2">
-                {shown.map((entry) => (
-                  <Row key={entryKey(entry)} entry={entry} experiment={experiment} />
-                ))}
-              </ol>
-            )}
-          </Card>
-        </div>
-
-        <div className="grid content-start gap-4">
-          <CodePaths entries={timeline.entries} />
-
-          <Card
-            title="Arms"
-            footer={
-              <p className="text-xs text-admin-muted">
-                Each arm ran the framework and model its published configuration named, not
-                whichever this lab happens to be configured for now.
-              </p>
-            }
-          >
-            <ul className="grid gap-2 text-[13px]">
-              {experiment.runs.map((run) => (
-                <li key={run.run_id} className="grid gap-0.5">
-                  <span className="font-semibold text-lab-ink">{run.label}</span>
-                  <span className="text-xs text-admin-muted">
-                    {run.framework_id} · {run.model_id}
-                  </span>
-                </li>
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid min-w-0 content-start gap-4">
+        <Card
+          title="Execution timeline"
+          footer={
+            <p className="text-xs text-admin-muted">
+              Normalized events: a framework's own payloads never enter this stream, and no message
+              body does either. What was said is on the bench; this is what happened.
+            </p>
+          }
+        >
+          <Lenses selected={lenses} onChange={setLenses} />
+          {shown.length === 0 ? (
+            <p className="text-[13px] text-admin-muted">No event matches this lens yet.</p>
+          ) : (
+            <ol className="grid gap-2">
+              {shown.map((entry) => (
+                <Row key={entryKey(entry)} entry={entry} experiment={experiment} />
               ))}
-            </ul>
-          </Card>
-        </div>
+            </ol>
+          )}
+        </Card>
       </div>
-    </>
+
+      <div className="grid content-start gap-4">
+        <CodePaths entries={timeline.entries} />
+
+        <Card
+          title="Arms"
+          footer={
+            <p className="text-xs text-admin-muted">
+              Each arm ran the framework and model its published configuration named, not whichever
+              this lab happens to be configured for now.
+            </p>
+          }
+        >
+          <ul className="grid gap-2 text-[13px]">
+            {experiment.runs.map((run) => (
+              <li key={run.run_id} className="grid gap-0.5">
+                <span className="font-semibold text-lab-ink">{run.label}</span>
+                <span className="text-xs text-admin-muted">
+                  {run.framework_id} · {run.model_id}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+    </div>
   );
 }
 
@@ -334,9 +293,7 @@ function describe(entry: TimelineEntrySchema): string {
     if (entry.turn_outcome === "answered") {
       return `The agent replied${attempt}.`;
     }
-    return `The attempt produced no reply${attempt}: ${
-      FAILURES[entry.failure ?? "framework"] ?? "the framework could not execute this turn"
-    }.`;
+    return `The attempt produced no reply${attempt}: ${describeFailure(entry.failure)}.`;
   }
   // One entry shape serves five kinds, so every field below is optional in the contract even
   // though a tool call always fills them. Falling back keeps a malformed entry readable
