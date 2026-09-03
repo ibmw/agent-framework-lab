@@ -48,7 +48,9 @@ the tools travel (ADR 0028), and the arm standing that makes an experiment resum
 where each arm waits out of its own record rather than storing a status beside it (ADR 0029), and
 the deterministic evaluation that judges each arm against the objectives its scenario composed and
 ends it at the recipe's turn cap (ADR 0030), and the versioned judge that scores the rows no rule
-decides, from an anonymized brief of one arm's own record (ADR 0031).
+decides, from an anonymized brief of one arm's own record (ADR 0031), and the run cost read
+back beside it — the duration and the provider usage stored, everything else counted over the
+record (ADR 0032).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -287,6 +289,18 @@ the next attempt beside the last, and a failed or unreachable judge leaves its r
 than counting against an arm. A third framework-neutral port (`JudgeRuntime`, keyed by provider)
 carries a declared control judge and Pydantic AI over structured output (ADR 0031).
 
+What a run *cost* is the same shape of reading. Two things about an attempt cannot be
+recovered once it returns — how long it took, and what the provider metered — so those are
+stored on the row that produced them, and every other number is counted over the record:
+turns, model and tool calls, retries, and failures by code. Usage crosses the runtime port
+with the answer, because only the framework can see it, and it carries the three counts every
+provider bills in and nothing provider-specific. An absence is preserved rather than filled:
+calling no model is zeros, a framework that cannot meter itself is nothing, and neither is
+turned into the other. A cost is estimated at read time from a dated price table declared
+apart from the adapters, never stored, so correcting a rate corrects every historical estimate
+at once — and there is no aggregate, because efficiency is interpretable only beside the
+outcome (ADR 0032).
+
 ## Persistence, versioning, and extensibility
 
 Authorable definitions use mutable drafts and immutable published versions, stored as one canonical
@@ -308,7 +322,10 @@ be renumbered onto another position (ADR 0025). What the agent produced is appen
 keyed by that attempt plus the sequence the agent asked in, each holding the published
 `tool-result-v1` document whole. There is deliberately no separate confirmation or state-change
 table: the confirmation is inside the result the proposal answered with, and the state change is
-the pair of revisions the event carries (ADR 0026). Experiments and judge executions are
+the pair of revisions the event carries (ADR 0026). Both tables also carry nullable measurement
+columns — an attempt's duration and provider usage, a call's duration — nullable because "the
+lab did not measure this" is a real state and a zero would be counted into a total (ADR 0032).
+Experiments and judge executions are
 append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
 never changes the published definitions or canonical starting snapshot.
 

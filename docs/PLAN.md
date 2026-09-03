@@ -76,7 +76,10 @@ scenario's turn cap ending an arm and settling what it never did (ADR 0030) — 
 Milestone 4 and opens Milestone 5's deterministic evaluation. Milestone 5 has continued with
 the versioned judge that fills the rows no rule decides: a published rubric, model, and
 declared evidence scope, scoring one anonymized brief per objective per arm and recording
-every verdict with the version, model, and input fingerprint that produced it (ADR 0031).
+every verdict with the version, model, and input fingerprint that produced it (ADR 0031),
+and then what a run cost: the duration and the provider usage stored because they cannot be
+recovered afterwards, and the turns, calls, retries, failures, and estimated cost projected
+over the record beside them (ADR 0032).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -619,7 +622,7 @@ Turn completed runs into durable, searchable comparison evidence.
   need a registry of named versioned rules a template can bind and are deliberately deferred to
   their own slice; safety is expressed as the forbidden polarity of the same readings (ADR 0030).
 - [x] Add a versioned judge configuration and anonymized structured LLM-judge execution.
-- [ ] Record turns, token usage, model/tool calls, duration, retries, failures, and estimated cost
+- [x] Record turns, token usage, model/tool calls, duration, retries, failures, and estimated cost
   when available.
 - [ ] Present objective-level comparison without a global framework score.
 - [ ] Replace persona-first history with experiment-first filters and detail pages.
@@ -632,6 +635,20 @@ fifth outcome (ADR 0027) and are extended here rather than built again. Together
 Milestone 4 frames this completes the 18-frame authoritative set. The judge itself has no frame:
 it is a cross-shop resource under the shell's Experiment lab section, and it is scored from
 frame 8's objectives matrix, where its rows already are.
+
+Cost evidence (frame 8's per-arm strip; frame 9's Quantitative card extends this same
+reading when the results page arrives): an operator runs one arm and reads what the turn cost
+under its thread — the turns it has had, the tokens it spent, the tools it called, how long it
+took, and what the lab's declared rates say that was worth — while the arm beside it shows no
+strip at all, because a row of zeros would read as a measurement nobody took. A retry is
+counted apart from the failure that caused it, the control arm's zero tokens are a reading
+rather than an absence, and a framework that does not meter itself says so instead of looking
+free. ADR 0032 records the two measurements stored because they cannot be recovered afterwards
+and the counts projected over the record like the timeline and the evaluation before them, the
+neutral usage shape a framework reports through the runtime port and why a failed attempt
+reports none, the difference between "spent nothing" and "nobody said" carried end to end, the
+duration taken on the clock the record is already timestamped by, and the dated price table
+declared apart from the adapters whose estimate is recomputed at read time rather than stored.
 
 Judge evidence (frame 8's objectives matrix, and the judge's own editor): an author publishes a
 rubric, the model that reads it, and exactly what it is shown — after the gate has refused the
