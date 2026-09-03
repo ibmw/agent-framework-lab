@@ -34,6 +34,13 @@ own starting state.
 records, and each carries the code the record keeps. A provider's message is neither stable
 across models nor safe to store beside synthetic customer content, so it never becomes
 evidence — the same discipline as a failed tool result that refuses to describe itself.
+
+**A runtime reports what it spent, and nothing else about itself.** An answer carries the
+provider usage the framework metered, because only the framework can see it. It is the one
+thing an adapter says about its own execution, and it is deliberately a count rather than a
+story: what the agent *did* is the tool events the invoker wrote, and how long it took is
+the runner's clock. A framework that cannot meter itself reports nothing, which the record
+keeps as nothing.
 """
 
 from __future__ import annotations
@@ -45,11 +52,13 @@ from typing import Protocol
 from uuid import UUID
 
 from capability_lab.application.canonical_json import CanonicalValue
+from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.sandbox_tool_contracts import ToolContract
 from capability_lab.domain.agent_configuration import ModelSettings
 from capability_lab.domain.agent_turn import AgentTurnFailure
 
 __all__ = [
+    "AgentAnswer",
     "AgentMessage",
     "AgentRole",
     "AgentToolBudgetExceededError",
@@ -152,6 +161,24 @@ class AgentTurnRequest:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class AgentAnswer:
+    """What a runtime produced: the reply, and what the provider was asked for.
+
+    Text plus a meter, and still no structured claim about the world. The POC's adapter
+    returned a summary and identifier lists; here every fact an arm touched is already the
+    tool event that produced it, and asking a model to restate them would make the evidence
+    depend on the model's honesty about its own behavior. Usage is different in kind: it is
+    not something the model says, it is something the framework counted.
+
+    `usage` is `None` when the framework does not report it, and `ModelUsage.none()` when it
+    genuinely called no model — the control arm's reading (`model_cost`).
+    """
+
+    body: str
+    usage: ModelUsage | None = None
+
+
 class SandboxToolInvoker(Protocol):
     """The one way a runtime reaches the world, bound to one arm and one actor."""
 
@@ -172,14 +199,14 @@ class SupportAgentRuntime(Protocol):
     @property
     def framework_id(self) -> str: ...
 
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
-        """The agent's reply, as text.
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
+        """The agent's reply, and what the framework metered producing it.
 
-        Text rather than a structured result, deliberately. The POC's adapter returned a
-        summary and identifier lists because a persona-first conversation had nowhere else
-        to put them; here every fact an arm touched is already recorded as the tool event
-        that produced it, and asking a model to restate them would make the evidence depend
-        on the model's honesty about its own behavior.
+        The reply is text rather than a structured result, deliberately. The POC's adapter
+        returned a summary and identifier lists because a persona-first conversation had
+        nowhere else to put them; here every fact an arm touched is already recorded as the
+        tool event that produced it, and asking a model to restate them would make the
+        evidence depend on the model's honesty about its own behavior.
         """
         ...
 

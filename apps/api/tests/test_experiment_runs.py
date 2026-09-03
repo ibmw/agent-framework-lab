@@ -1,8 +1,10 @@
-"""Advancing one arm: what the agent answered, what it called, what it moved, and where it
-now stands (ADR 0026, ADR 0028, ADR 0029)."""
+"""Advancing one arm: what the agent answered, what it called, what it moved, where it
+now stands, and what it cost (ADR 0026, ADR 0028, ADR 0029, ADR 0032)."""
 
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +17,7 @@ from capability_lab.application.agent_capabilities import (
     PYDANTIC_AI_FRAMEWORK_ID,
 )
 from capability_lab.application.agent_runtime import (
+    AgentAnswer,
     AgentTurnRequest,
     SandboxToolInvoker,
     SupportAgentProviderError,
@@ -31,6 +34,9 @@ from capability_lab.application.experiments import (
     ExperimentRunNotFoundError,
     StartExperiment,
 )
+from capability_lab.application.model_cost import ModelUsage
+from capability_lab.application.ports import Clock
+from capability_lab.application.run_metrics import ArmMetrics
 from capability_lab.application.sandbox_tool_contracts import (
     ADDRESS_CHANGE_APPLY,
     ADDRESS_CHANGE_PROPOSE,
@@ -139,9 +145,12 @@ async def advance(
     detail: ExperimentDetail,
     position: int = 0,
     runtimes: SupportAgentRuntimeRegistry | None = None,
+    clock: Clock | None = None,
 ) -> RunTurn:
     run = detail.runs[position]
-    return await build_runner(session, runtimes).advance(run.shop_id, run.experiment_id, run.run_id)
+    return await build_runner(session, runtimes, clock=clock).advance(
+        run.shop_id, run.experiment_id, run.run_id
+    )
 
 
 def calls(produced: RunTurn) -> list[str]:
@@ -834,6 +843,190 @@ async def test_a_recipe_with_no_fault_fires_none(session: Session, workspace: Wo
     assert revision(session, detail) == 1
 
 
+@pytest.mark.asyncio
+async def test_a_fault_is_the_scenario_s_time_and_never_charged_to_the_call_before_it(
+    session: Session, workspace: Workspace
+) -> None:
+    """A tool call stops being measured before the schedule is asked (ADR 0028, ADR 0032).
+
+    The clock ticks once per read, so a call measured over exactly two reads is 1000ms — and
+    a firing reads the clock itself. Every call reading the same duration is therefore the
+    proof that the fault's work happened outside the measurement, rather than making the arm
+    it interfered with look slower.
+    """
+    detail = start(session, workspace, control_arm(session), mutations=(mutation(workspace),))
+
+    produced = await advance(session, detail)
+
+    assert fired(produced) == ["order-moves-under-the-arm"]
+    assert {event.event.duration_ms for event in produced.tool_events} == {1000}
+
+
+# -- what the run cost ---------------------------------------------------------
+
+
+def metrics(session: Session, detail: ExperimentDetail, position: int = 0) -> ArmMetrics:
+    """One arm's reading of its own record, taken through the experiment the bench reads."""
+    read = build_experiments(session).get_experiment(
+        detail.record.shop_id, detail.record.experiment_id
+    )
+    return read.metrics[position]
+
+
+@pytest.mark.asyncio
+async def test_an_attempt_records_how_long_it_took(session: Session, workspace: Workspace) -> None:
+    """The whole attempt, model and tool calls together: what the operator waited for."""
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail)
+
+    assert produced.turn.duration_ms is not None
+    assert produced.turn.duration_ms > 0
+
+
+@pytest.mark.asyncio
+async def test_a_clock_that_steps_backwards_costs_the_measurement_not_the_total(
+    session: Session, workspace: Workspace
+) -> None:
+    """An operational clock can be stepped back under a running process (ADR 0032).
+
+    A negative duration would subtract from a total a comparison reads, so an elapsed
+    reading is clamped at zero: the measurement is lost, and nothing else is.
+    """
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail, clock=_RetreatingClock())
+
+    assert produced.turn.duration_ms == 0
+    assert all(event.event.duration_ms == 0 for event in produced.tool_events)
+
+
+@pytest.mark.asyncio
+async def test_every_tool_call_carries_its_own_duration(
+    session: Session, workspace: Workspace
+) -> None:
+    """On the call rather than only on the attempt, so time at the world is separable."""
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail)
+
+    assert produced.tool_events
+    assert all(event.event.duration_ms is not None for event in produced.tool_events)
+
+
+@pytest.mark.asyncio
+async def test_the_control_arm_reports_calling_no_model_rather_than_nothing(
+    session: Session, workspace: Workspace
+) -> None:
+    """Zeros are a measurement: this arm calls no provider, and that is knowable."""
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail)
+
+    assert produced.turn.usage == ModelUsage.none()
+    assert metrics(session, detail).estimated_cost is not None
+
+
+@pytest.mark.asyncio
+async def test_a_framework_that_does_not_meter_itself_records_no_usage(
+    session: Session, workspace: Workspace
+) -> None:
+    """`None` and zeros are different answers, and neither is invented for the other."""
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail, runtimes=_registry(_RecordingRuntime()))
+
+    assert produced.turn.usage is None
+    reading = metrics(session, detail)
+    assert reading.usage is None
+    assert reading.model_requests is None
+    assert reading.estimated_cost is None
+
+
+@pytest.mark.asyncio
+async def test_a_failed_attempt_is_timed_and_reports_nothing_it_spent(
+    session: Session, workspace: Workspace
+) -> None:
+    """The tokens a broken attempt burned reach the lab only through an answer it never gave."""
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail, runtimes=_registry(_FailingRuntime()))
+
+    assert produced.turn.duration_ms is not None
+    assert produced.turn.usage is None
+
+
+@pytest.mark.asyncio
+async def test_a_metered_arm_reports_what_the_declared_rate_says_it_spent(
+    session: Session, workspace: Workspace
+) -> None:
+    """The usage the framework reported, priced against the model the arm actually pinned."""
+    detail = start(session, workspace, published_configuration(session))
+    runtime = _MeteredRuntime(ModelUsage(input_tokens=1_000, output_tokens=200, model_requests=2))
+
+    await advance(session, detail, runtimes=_registry(runtime))
+
+    reading = metrics(session, detail)
+    assert reading.usage == ModelUsage(input_tokens=1_000, output_tokens=200, model_requests=2)
+    assert reading.model_requests == 2
+    assert reading.estimated_cost is not None
+    assert reading.estimated_cost.amount == Decimal("0.000650")
+
+
+@pytest.mark.asyncio
+async def test_an_arm_s_metrics_count_the_calls_it_made_and_the_writes_that_landed(
+    session: Session, workspace: Workspace
+) -> None:
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail)
+
+    reading = metrics(session, detail)
+    assert reading.turns == 1
+    assert reading.answered_turns == 1
+    assert reading.attempts == 1
+    assert reading.retries == 0
+    assert reading.failures == {}
+    assert reading.tool_calls == len(produced.tool_events)
+    assert reading.tool_writes == 1
+
+
+@pytest.mark.asyncio
+async def test_a_retry_is_counted_apart_from_the_failure_that_caused_it(
+    session: Session, workspace: Workspace
+) -> None:
+    """One question, two attempts: one failure and one retry, never one number for both."""
+    detail = start(session, workspace, control_arm(session))
+
+    await advance(session, detail, runtimes=_registry(_FailingRuntime()))
+    await advance(session, detail)
+
+    reading = metrics(session, detail)
+    assert reading.attempts == 2
+    assert reading.retries == 1
+    assert reading.failures == {AgentTurnFailure.MODEL_PROVIDER: 1}
+    assert reading.answered_turns == 1
+    assert reading.measured_attempts == 2
+    # A failed attempt reports nothing it spent, so the tokens and the cost cover one of the
+    # two attempts — and say so, rather than reading as the whole arm's.
+    assert reading.metered_attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_each_arm_is_counted_on_its_own_record(
+    session: Session, workspace: Workspace
+) -> None:
+    """The isolation the arms already have, read in the column that reports their cost."""
+    detail = start(session, workspace, control_arm(session), control_arm(session))
+
+    await advance(session, detail)
+
+    assert metrics(session, detail, 0).attempts == 1
+    assert metrics(session, detail, 1).attempts == 0
+    assert metrics(session, detail, 1).tool_calls == 0
+    assert metrics(session, detail, 1).duration_ms is None
+
+
 # -- helpers -------------------------------------------------------------------
 
 
@@ -860,6 +1053,9 @@ def _registry(runtime: SupportAgentRuntime) -> SupportAgentRuntimeRegistry:
 class _StubRuntime(SupportAgentRuntime):
     """A runtime standing in for the control arm, so the runner is what is under test."""
 
+    usage: ModelUsage | None = None
+    """What this stub claims the provider metered; `None` is a framework that cannot say."""
+
     @property
     def framework_id(self) -> str:
         return FAKE_FRAMEWORK_ID
@@ -875,9 +1071,9 @@ class _RecordingRuntime(_StubRuntime):
     def seen(self) -> AgentTurnRequest:
         return self.requests[-1]
 
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         self.requests.append(request)
-        return "Noted."
+        return AgentAnswer(body="Noted.", usage=self.usage)
 
 
 class _CallingRuntime(_StubRuntime):
@@ -887,29 +1083,59 @@ class _CallingRuntime(_StubRuntime):
         self._tool = tool
         self._times = times
 
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         for _ in range(self._times):
             tools.invoke(self._tool, {})
-        return "Done."
+        return AgentAnswer(body="Done.", usage=self.usage)
 
 
 class _FailingRuntime(_StubRuntime):
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         raise SupportAgentProviderError("the provider rejected the request")
 
 
 class _SilentRuntime(_StubRuntime):
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
-        return "   "
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
+        return AgentAnswer(body="   ")
 
 
 class _BrokenRuntime(_StubRuntime):
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         raise ZeroDivisionError("an adapter bug nobody classified")
 
 
 class _LostArmRuntime(_StubRuntime):
     """Stands in for a world that stopped resolving while the agent was reading it."""
 
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         raise SandboxNotFoundError("this arm is not in this shop")
+
+
+class _RetreatingClock:
+    """A wall clock stepped backwards between reads, which NTP can genuinely do."""
+
+    def __init__(self) -> None:
+        self._value = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+
+    def now(self) -> datetime:
+        self._value -= timedelta(seconds=1)
+        return self._value
+
+
+class _MeteredRuntime(_StubRuntime):
+    """A framework that reports what the provider metered, standing in for a real one.
+
+    Names itself `pydantic-ai` because a priced model belongs to a proven provider, and the
+    fake framework is only proven with the free control model — an arm cannot be published
+    with a framework and a provider the catalog never paired (ADR 0024).
+    """
+
+    def __init__(self, usage: ModelUsage) -> None:
+        self.usage = usage
+
+    @property
+    def framework_id(self) -> str:
+        return PYDANTIC_AI_FRAMEWORK_ID
+
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
+        return AgentAnswer(body="Noted.", usage=self.usage)

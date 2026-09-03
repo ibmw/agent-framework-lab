@@ -59,8 +59,10 @@ from capability_lab.application.experiments import (
     StartExperiment,
 )
 from capability_lab.application.judge_runs import ExperimentJudgeService
+from capability_lab.application.model_cost import EstimatedCost, ModelUsage
 from capability_lab.application.mutation_events import MutationEventRecord
 from capability_lab.application.participants import ParticipantDriver
+from capability_lab.application.run_metrics import ArmMetrics
 from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxRecord
 from capability_lab.application.source_locations import SourceLocation
@@ -306,6 +308,118 @@ class ArmStandingSchema(StrictApiModel):
         )
 
 
+class ModelUsageSchema(StrictApiModel):
+    """What one attempt asked of a provider, in the units every provider bills in.
+
+    Three counts and no provider detail. Cache reads, audio tokens, and reasoning
+    breakdowns differ by provider and by model generation, and a comparison across two
+    frameworks needs the columns to line up more than it needs any one of them complete.
+    """
+
+    input_tokens: int
+    output_tokens: int
+    model_requests: int
+
+    @classmethod
+    def from_domain(cls, usage: ModelUsage | None) -> Self | None:
+        return (
+            None
+            if usage is None
+            else cls(
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                model_requests=usage.model_requests,
+            )
+        )
+
+
+class EstimatedCostSchema(StrictApiModel):
+    """What the lab's declared rates say one arm's usage was worth.
+
+    `amount` is a decimal string rather than a number, for the reason money is everywhere
+    else in this contract: a binary float cannot hold a rate exactly, and a cost a client
+    re-renders must be the cost the lab computed.
+
+    `recorded_on` is when the rate behind this amount was read off the provider's public
+    pricing. It travels because an estimate whose age is invisible is a number an operator
+    cannot weigh — and because a client cannot look it up: the table is the lab's.
+    """
+
+    amount: str
+    currency: str
+    recorded_on: str
+
+    @classmethod
+    def from_domain(cls, cost: EstimatedCost | None) -> Self | None:
+        return (
+            None
+            if cost is None
+            else cls(
+                amount=cost.canonical_amount,
+                currency=cost.currency,
+                recorded_on=cost.recorded_on.isoformat(),
+            )
+        )
+
+
+class ArmMetricsSchema(StrictApiModel):
+    """What one arm has spent so far: turns, calls, tokens, time, and an estimate.
+
+    Served rather than counted by the client for the reason the standing is (ADR 0029): the
+    rows are already here, and a client that counted them again would be free to count them
+    differently. Every number is of the record as it stands, so an arm still being driven
+    reports a growing total rather than waiting for a completion nobody sets.
+
+    Deliberately no aggregate and no arm-versus-arm delta. An efficiency reading is only
+    interpretable beside the outcome, which is the evaluation's, and the product direction
+    forbids collapsing evidence into one score.
+    """
+
+    turns: int
+    answered_turns: int
+    attempts: int
+    retries: int
+    failures: dict[AgentTurnFailure, int]
+    """How many attempts ended in each kind of failure; absent kinds are simply not there."""
+
+    tool_calls: int
+    tool_writes: int
+    model_requests: int | None
+    usage: ModelUsageSchema | None
+    duration_ms: int | None
+    tool_duration_ms: int | None
+    measured_attempts: int
+    """How many attempts contributed a duration — the denominator of `duration_ms`."""
+
+    metered_attempts: int
+    """How many attempts contributed usage — the denominator of `usage` and the cost.
+
+    Below `attempts` whenever one of them failed: a failed attempt reports nothing it spent,
+    so a retried arm's tokens cover fewer attempts than it made."""
+
+    estimated_cost: EstimatedCostSchema | None
+    """Null when either half is unknown: unreported usage, or a model the lab has not priced."""
+
+    @classmethod
+    def from_domain(cls, metrics: ArmMetrics) -> Self:
+        return cls(
+            turns=metrics.turns,
+            answered_turns=metrics.answered_turns,
+            attempts=metrics.attempts,
+            retries=metrics.retries,
+            failures=dict(metrics.failures),
+            tool_calls=metrics.tool_calls,
+            tool_writes=metrics.tool_writes,
+            model_requests=metrics.model_requests,
+            usage=ModelUsageSchema.from_domain(metrics.usage),
+            duration_ms=metrics.duration_ms,
+            tool_duration_ms=metrics.tool_duration_ms,
+            measured_attempts=metrics.measured_attempts,
+            metered_attempts=metrics.metered_attempts,
+            estimated_cost=EstimatedCostSchema.from_domain(metrics.estimated_cost),
+        )
+
+
 class ExperimentRunSchema(StrictApiModel):
     """One arm: what it runs, where it works, how far its world has moved, and what next.
 
@@ -320,12 +434,14 @@ class ExperimentRunSchema(StrictApiModel):
     agent_configuration_id: UUID
     agent_configuration_version: int
     framework_id: str
+    provider: str
     model_id: str
     sandbox_id: UUID
     revision: int
     snapshot_fingerprint: str
     state_fingerprint: str
     standing: ArmStandingSchema
+    metrics: ArmMetricsSchema
 
     @classmethod
     def from_records(
@@ -334,6 +450,7 @@ class ExperimentRunSchema(StrictApiModel):
         sandbox: SandboxRecord,
         runtime: ArmRuntime,
         standing: ArmStanding,
+        metrics: ArmMetrics,
     ) -> Self:
         return cls(
             run_id=run.run_id,
@@ -344,12 +461,14 @@ class ExperimentRunSchema(StrictApiModel):
             # Read from the configuration version this arm pinned, not from anything the
             # process is currently able to run: what an arm ran is a recorded input.
             framework_id=runtime.framework_id,
+            provider=runtime.provider,
             model_id=runtime.model_id,
             sandbox_id=run.sandbox_id,
             revision=sandbox.revision,
             snapshot_fingerprint=sandbox.snapshot_fingerprint,
             state_fingerprint=sandbox.state_fingerprint,
             standing=ArmStandingSchema.from_domain(standing),
+            metrics=ArmMetricsSchema.from_domain(metrics),
         )
 
 
@@ -401,6 +520,8 @@ class ToolEventSchema(StrictApiModel):
     revision_after: int
     state_fingerprint: str
     created_at: str
+    duration_ms: int | None
+    """How long this one call took, or null on a row recorded before the lab measured."""
 
     @classmethod
     def from_record(cls, record: ToolEventRecord) -> Self:
@@ -418,6 +539,7 @@ class ToolEventSchema(StrictApiModel):
             revision_after=event.revision_after,
             state_fingerprint=event.state_fingerprint,
             created_at=record.created_at.isoformat(),
+            duration_ms=event.duration_ms,
         )
 
 
@@ -492,6 +614,17 @@ class AgentTurnSchema(StrictApiModel):
     failure: AgentTurnFailure | None
     body: str
     created_at: str
+    duration_ms: int | None
+    """Wall-clock milliseconds this attempt took, model and tool calls together.
+
+    Null when the lab did not measure it, never zero: a zero would be counted into a total
+    as if the attempt had been instantaneous."""
+
+    usage: ModelUsageSchema | None
+    """What the framework metered, or null when it does not meter itself.
+
+    `ModelUsage.none()` — zeros with zero requests — is a different answer: it says the
+    runtime called no provider at all, which is what the deterministic control arm does."""
 
     @classmethod
     def from_record(cls, record: AgentTurnRecord) -> Self:
@@ -504,6 +637,8 @@ class AgentTurnSchema(StrictApiModel):
             failure=turn.failure,
             body=turn.body,
             created_at=record.created_at.isoformat(),
+            duration_ms=record.duration_ms,
+            usage=ModelUsageSchema.from_domain(record.usage),
         )
 
 
@@ -561,9 +696,15 @@ class ExperimentResponse(ExperimentSummarySchema):
                 ComparisonVariableSchema.from_domain(variable) for variable in detail.comparison
             ],
             runs=[
-                ExperimentRunSchema.from_records(run, sandboxes[run.sandbox_id], runtime, standing)
-                for run, runtime, standing in zip(
-                    detail.runs, detail.arm_runtimes, detail.standings, strict=True
+                ExperimentRunSchema.from_records(
+                    run, sandboxes[run.sandbox_id], runtime, standing, metrics
+                )
+                for run, runtime, standing, metrics in zip(
+                    detail.runs,
+                    detail.arm_runtimes,
+                    detail.standings,
+                    detail.metrics,
+                    strict=True,
                 )
             ],
             turns=[ParticipantTurnSchema.from_record(turn) for turn in detail.turns],

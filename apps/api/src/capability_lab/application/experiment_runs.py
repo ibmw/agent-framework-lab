@@ -35,6 +35,13 @@ an invoker this module constructs; there is no other path. A tool event is there
 produced by the call rather than reported by an adapter, which is what keeps a framework's
 own event objects out of the evidence entirely.
 
+**What an attempt spent is measured here, and only here.** The runner holds the clock, so
+it times the whole attempt — the model and every tool call inside it — and the invoker times
+each call it makes. The one thing the runner cannot see is the provider's token meter, which
+comes back with the answer because only the framework can read it (`model_cost`). Nothing is
+derived: an unmeasured attempt records no duration and an unmetered one no usage, and the
+estimate built on them says so rather than reading as free.
+
 **The scenario's faults ride on that same path.** A mutation's moment can arrive between two
 of an agent's calls — that is the case ADR 0022 built the concurrency refusal for — so the
 schedule is asked before the runtime is started and again after every call the invoker makes
@@ -47,6 +54,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from capability_lab.application.agent_prompt import render_prompt
@@ -84,6 +92,7 @@ from capability_lab.application.experiments import (
     ParticipantTurnRepository,
     RunRecord,
 )
+from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.mutation_events import MutationEventRecord
 from capability_lab.application.ports import Clock
 from capability_lab.application.sandbox_actions import ToolActor
@@ -155,6 +164,17 @@ class RunTurn:
     turn: AgentTurnRecord
     tool_events: tuple[ToolEventRecord, ...]
     mutation_events: tuple[MutationEventRecord, ...] = ()
+
+
+def _elapsed_ms(started: datetime, ended: datetime) -> int:
+    """How long something took, on the same wall clock the record is timestamped by.
+
+    Clamped at zero. An operational clock can be stepped backwards under a running process,
+    and a negative duration in an evidence record would be worse than a lost measurement: it
+    would subtract from a total a comparison reads. Rounded rather than truncated so a call
+    that took under a millisecond is not recorded as instantaneous.
+    """
+    return max(0, round((ended - started).total_seconds() * 1000))
 
 
 def _pin(snapshot: SandboxSnapshotRecord, kind: DefinitionType) -> VersionRef:
@@ -324,6 +344,7 @@ class ExperimentRunner:
         invoker = _RecordingInvoker(
             tools=self._tools,
             sandboxes=self._sandboxes,
+            clock=self._clock,
             shop_id=run.shop_id,
             sandbox_id=run.sandbox_id,
             actor=resolved.actor,
@@ -341,7 +362,13 @@ class ExperimentRunner:
             message=next(turn.body for turn in thread if turn.ordinal == ordinal),
         )
 
-        turn = await self._answer(runtime, request, invoker, ordinal=ordinal, attempt=attempt)
+        # The clock the record is timestamped by, read once on each side of the run. A
+        # second time source would be a second thing to trust and to fake, and the moment an
+        # attempt ended is already needed for `created_at`.
+        started = self._clock.now()
+        turn, usage = await self._answer(
+            runtime, request, invoker, ordinal=ordinal, attempt=attempt
+        )
         now = self._clock.now()
         written = self._agent_turns.append(
             AgentTurnRecord(
@@ -349,6 +376,8 @@ class ExperimentRunner:
                 experiment_id=record.experiment_id,
                 turn=turn,
                 created_at=now,
+                duration_ms=_elapsed_ms(started, now),
+                usage=usage,
             )
         )
         # After the attempt, so a call can never reference a turn that is not there — and
@@ -389,12 +418,18 @@ class ExperimentRunner:
         *,
         ordinal: int,
         attempt: int,
-    ) -> AgentTurn:
-        """Run the framework and turn whatever came back into one recordable attempt."""
+    ) -> tuple[AgentTurn, ModelUsage | None]:
+        """Run the framework and turn whatever came back into one recordable attempt.
+
+        A failed attempt reports no usage. The tokens it spent before it broke are real, but
+        they reach the lab only through an answer the framework never produced — and a
+        number invented for a failure would be the one part of a cost comparison nobody
+        could check.
+        """
         try:
-            body = await runtime.answer(request, invoker)
+            answer = await runtime.answer(request, invoker)
         except SupportAgentRuntimeError as error:
-            return self._failed(error.failure, ordinal=ordinal, attempt=attempt)
+            return self._failed(error.failure, ordinal=ordinal, attempt=attempt), None
         except DefinitionResolutionError:
             # An arm whose snapshot or pins no longer resolve is a broken lab, not something
             # the agent did, and ADR 0021 already refuses to answer that as a tool result.
@@ -409,17 +444,23 @@ class ExperimentRunner:
             _logger.error(
                 "agent runtime %s failed with %s", runtime.framework_id, type(error).__name__
             )
-            return self._failed(AgentTurnFailure.FRAMEWORK, ordinal=ordinal, attempt=attempt)
+            return self._failed(AgentTurnFailure.FRAMEWORK, ordinal=ordinal, attempt=attempt), None
 
-        reply = body.strip()
+        reply = answer.body.strip()
         if not reply or len(reply) > MAX_AGENT_TURN_LENGTH:
             # A model that said nothing, and one that said more than the thread can hold,
             # are the same kind of finding: an answer the lab cannot record as the arm's
             # reply. Truncating would put words in the agent's mouth that it can then be
             # compared on.
-            return self._failed(AgentTurnFailure.INVALID_RESPONSE, ordinal=ordinal, attempt=attempt)
-        return AgentTurn(
-            ordinal=ordinal, attempt=attempt, outcome=AgentTurnOutcome.ANSWERED, body=reply
+            return (
+                self._failed(AgentTurnFailure.INVALID_RESPONSE, ordinal=ordinal, attempt=attempt),
+                None,
+            )
+        return (
+            AgentTurn(
+                ordinal=ordinal, attempt=attempt, outcome=AgentTurnOutcome.ANSWERED, body=reply
+            ),
+            answer.usage,
         )
 
     @staticmethod
@@ -626,6 +667,7 @@ class _RecordingInvoker(SandboxToolInvoker):
         *,
         tools: SandboxToolService,
         sandboxes: SandboxRepository,
+        clock: Clock,
         shop_id: UUID,
         sandbox_id: UUID,
         actor: ToolActor,
@@ -635,6 +677,7 @@ class _RecordingInvoker(SandboxToolInvoker):
     ) -> None:
         self._tools = tools
         self._sandboxes = sandboxes
+        self._clock = clock
         self._shop_id = shop_id
         self._sandbox_id = sandbox_id
         self._actor = actor
@@ -659,6 +702,7 @@ class _RecordingInvoker(SandboxToolInvoker):
             )
         self._spent += 1
 
+        started = self._clock.now()
         execution = self._tools.execute(
             self._shop_id,
             self._sandbox_id,
@@ -676,6 +720,11 @@ class _RecordingInvoker(SandboxToolInvoker):
         after = self._sandboxes.get(self._shop_id, self._sandbox_id)
         if after is None:  # pragma: no cover - the call just read this arm
             raise SupportAgentFrameworkError("this arm disappeared while it was being run")
+        # Measured over the call and the read that says where it left the arm, and stopped
+        # before the fault check below: what a fault costs is the scenario's time, not the
+        # tool's, and charging it to the call would make an arm look slower for having been
+        # interfered with.
+        duration_ms = _elapsed_ms(started, self._clock.now())
         self._calls.append(
             _Call(
                 contract=contract,
@@ -684,6 +733,7 @@ class _RecordingInvoker(SandboxToolInvoker):
                 revision_before=execution.revision,
                 revision_after=after.revision,
                 state_fingerprint=after.state_fingerprint,
+                duration_ms=duration_ms,
             )
         )
         # After the call is recorded, so a fault that fires now is recorded as having
@@ -706,6 +756,7 @@ class _RecordingInvoker(SandboxToolInvoker):
                 revision_before=call.revision_before,
                 revision_after=call.revision_after,
                 state_fingerprint=call.state_fingerprint,
+                duration_ms=call.duration_ms,
             )
             for sequence, call in enumerate(self._calls)
         )
@@ -721,3 +772,4 @@ class _Call:
     revision_before: int
     revision_after: int
     state_fingerprint: str
+    duration_ms: int

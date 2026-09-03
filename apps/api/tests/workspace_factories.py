@@ -32,6 +32,7 @@ from capability_lab.application.order_fixtures import (
     OrderFixtureService,
     OrderLineSelection,
 )
+from capability_lab.application.ports import Clock
 from capability_lab.application.sandbox_actions import SandboxActionService, ToolActor
 from capability_lab.application.sandbox_materialization import (
     SandboxSnapshotRecord,
@@ -201,14 +202,22 @@ def build_tools(
     )
 
 
-def build_scenario_mutations(session: Session) -> ScenarioMutationRuntime:
-    """The fault schedule an experiment carries, over the arm it fires into."""
+def build_scenario_mutations(
+    session: Session, clock: Clock | None = None
+) -> ScenarioMutationRuntime:
+    """The fault schedule an experiment carries, over the arm it fires into.
+
+    Takes the caller's clock so a runner and the faults firing into it share one, as
+    composition gives them (`presentation/api.py`). A separate clock here would make a
+    firing cost the runner nothing, which is exactly the thing a duration test has to be
+    able to see.
+    """
     return ScenarioMutationRuntime(
         scenario_repository(session),
         mutation_block_repository(session),
         build_sandboxes(session),
         SqlAlchemyMutationEventRepository(session),
-        AdvancingClock(),
+        clock or AdvancingClock(),
     )
 
 
@@ -274,15 +283,18 @@ def build_runner(
     session: Session,
     runtimes: SupportAgentRuntimeRegistry | None = None,
     handlers: Mapping[str, ToolHandler] | None = None,
+    clock: Clock | None = None,
 ) -> ExperimentRunner:
     """The runner that advances one arm, over the deterministic control runtime by default.
 
     Composition selects which frameworks can run an arm, so a test that wants a failing or
     model-backed arm hands its own registry in rather than reaching inside the runner. The
     same goes for a handler that breaks: a tool failure is the lab's own, and a test that
-    needs one supplies it here.
+    needs one supplies it here, and for the clock a run is measured on: an operational clock
+    that steps backwards is something the runner has to survive rather than trust.
     """
     control = FakeSupportAgentRuntime()
+    ticking = clock or AdvancingClock()
     return ExperimentRunner(
         SqlAlchemyExperimentRepository(session),
         SqlAlchemyExperimentRunRepository(session),
@@ -296,9 +308,9 @@ def build_runner(
         support_identity_repository(session),
         agent_configuration_repository(session),
         build_tools(session, handlers),
-        build_scenario_mutations(session),
+        build_scenario_mutations(session, ticking),
         runtimes or SupportAgentRuntimeRegistry({control.framework_id: control}),
-        AdvancingClock(),
+        ticking,
     )
 
 

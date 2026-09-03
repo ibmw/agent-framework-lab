@@ -58,4 +58,4 @@ async def test_a_live_model_discovers_the_order_through_the_sandbox_tools() -> N
     )
 
     assert INTERACTION_CONTEXT in tools.called
-    assert reply.strip()
+    assert reply.body.strip()

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from agent_factories import READ_TOOL_NAMES, model_settings
 from capability_lab.application.agent_capabilities import FAKE_FRAMEWORK_ID
 from capability_lab.application.agent_runtime import (
+    AgentAnswer,
     AgentTurnRequest,
     SandboxToolInvoker,
     SupportAgentProviderError,
@@ -28,6 +29,7 @@ from capability_lab.application.experiments import (
     ExperimentDetail,
     StartExperiment,
 )
+from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.sandbox_tool_context import SandboxToolContext
 from capability_lab.application.sandbox_tool_contracts import (
     ADDRESS_CHANGE_APPLY,
@@ -534,9 +536,9 @@ class _CallingRuntime(_StubRuntime):
     def __init__(self, tool: str) -> None:
         self._tool = tool
 
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         tools.invoke(self._tool, {})
-        return "Noted."
+        return AgentAnswer(body="Noted.", usage=ModelUsage.none())
 
 
 def _broken_handler(
@@ -548,5 +550,5 @@ def _broken_handler(
 
 
 class _FailingRuntime(_StubRuntime):
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         raise SupportAgentProviderError("the provider rejected the request")

@@ -45,6 +45,7 @@ from capability_lab.application.experiments import (
 )
 from capability_lab.application.judge_configurations import JUDGE_CONFIGURATION_CODEC
 from capability_lab.application.judgements import JudgementConflictError, JudgementRecord
+from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.mutation_events import MutationEvent, MutationEventRecord
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
 from capability_lab.application.order_fixture_payload import (
@@ -2267,6 +2268,13 @@ class SqlAlchemyAgentTurnRepository:
                 failure=None if turn.failure is None else turn.failure.value,
                 body=turn.body,
                 created_at=record.created_at,
+                duration_ms=record.duration_ms,
+                # Written apart rather than as a document, for the reason the outcome and
+                # the failure are columns: a cost has to be totalled and compared without
+                # decoding every row of a run.
+                input_tokens=None if record.usage is None else record.usage.input_tokens,
+                output_tokens=None if record.usage is None else record.usage.output_tokens,
+                model_requests=None if record.usage is None else record.usage.model_requests,
             )
         )
         self._session.flush()
@@ -2285,6 +2293,8 @@ class SqlAlchemyAgentTurnRepository:
                 failure=None if model.failure is None else AgentTurnFailure(model.failure),
             ),
             created_at=model.created_at,
+            duration_ms=model.duration_ms,
+            usage=_usage(model),
         )
 
 
@@ -2327,6 +2337,7 @@ class SqlAlchemyToolEventRepository:
                     revision_after=event.revision_after,
                     state_fingerprint=event.state_fingerprint,
                     created_at=record.created_at,
+                    duration_ms=event.duration_ms,
                 )
             )
         self._session.flush()
@@ -2348,9 +2359,25 @@ class SqlAlchemyToolEventRepository:
                 revision_before=model.revision_before,
                 revision_after=model.revision_after,
                 state_fingerprint=model.state_fingerprint,
+                duration_ms=model.duration_ms,
             ),
             created_at=model.created_at,
         )
+
+
+def _usage(model: AgentTurnModel) -> ModelUsage | None:
+    """The three usage columns read back as one value, or nothing when the row has none.
+
+    The whole-or-nothing rule the table's own constraint enforces, restated here so a row
+    written by an older schema cannot become a usage total with holes in it.
+    """
+    if model.input_tokens is None or model.output_tokens is None or model.model_requests is None:
+        return None
+    return ModelUsage(
+        input_tokens=model.input_tokens,
+        output_tokens=model.output_tokens,
+        model_requests=model.model_requests,
+    )
 
 
 class SqlAlchemyMutationEventRepository:

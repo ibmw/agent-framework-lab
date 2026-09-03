@@ -715,6 +715,59 @@ async def test_an_arm_reports_the_framework_and_model_its_configuration_pinned(
     assert {run["model_id"] for run in experiment["runs"]} == {CONTROL_MODEL["model_id"]}
 
 
+async def test_an_arm_that_has_not_run_reports_a_cost_of_nothing_measured(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """A started arm has a metrics block from the first read, with the trigger it received.
+
+    Zero attempts and a null duration rather than an absent object: an arm that has not run
+    is a real reading, and a client should not have to tell "no arm here" from "this arm has
+    not run yet". What the *bench* does with it is its own decision — it draws no strip until
+    the first attempt, because a row of zeros reads as a measurement nobody took.
+    """
+    experiment = await control_experiment(client, lab)
+
+    metrics = experiment["runs"][0]["metrics"]
+    assert metrics["turns"] == 1
+    assert metrics["attempts"] == 0
+    assert metrics["tool_calls"] == 0
+    assert metrics["duration_ms"] is None
+    assert metrics["usage"] is None
+    assert metrics["estimated_cost"] is None
+
+
+async def test_an_arm_that_ran_reports_what_it_spent_beside_the_arm_that_did_not(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The control arm calls no provider, so its cost is zero rather than unknown."""
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    body = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+
+    ran, waiting = (run["metrics"] for run in body["runs"])
+    assert ran["attempts"] == 1
+    assert ran["answered_turns"] == 1
+    assert ran["tool_calls"] > 0
+    assert ran["tool_writes"] == 1
+    assert ran["duration_ms"] is not None
+    assert ran["usage"] == {"input_tokens": 0, "output_tokens": 0, "model_requests": 0}
+    assert ran["metered_attempts"] == 1
+    # The rate's own date travels with the amount: an estimate whose age is invisible is a
+    # number an operator cannot weigh.
+    assert ran["estimated_cost"] == {
+        "amount": "0.000000",
+        "currency": "USD",
+        "recorded_on": "2026-09-01",
+    }
+    assert waiting["attempts"] == 0
+    assert waiting["duration_ms"] is None
+
+
 async def test_every_arm_says_what_it_is_waiting_for(
     client: AsyncClient, lab: dict[str, str]
 ) -> None:

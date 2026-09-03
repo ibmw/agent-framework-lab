@@ -1808,6 +1808,9 @@ export interface components {
       body: string;
       /** Created At */
       created_at: string;
+      /** Duration Ms */
+      duration_ms: number | null;
+      usage: components["schemas"]["ModelUsageSchema"] | null;
     };
     /**
      * ArmAwaiting
@@ -1849,6 +1852,49 @@ export interface components {
       failed: boolean;
       /** Objectives */
       objectives: components["schemas"]["ObjectiveResultSchema"][];
+    };
+    /**
+     * ArmMetricsSchema
+     * @description What one arm has spent so far: turns, calls, tokens, time, and an estimate.
+     *
+     *     Served rather than counted by the client for the reason the standing is (ADR 0029): the
+     *     rows are already here, and a client that counted them again would be free to count them
+     *     differently. Every number is of the record as it stands, so an arm still being driven
+     *     reports a growing total rather than waiting for a completion nobody sets.
+     *
+     *     Deliberately no aggregate and no arm-versus-arm delta. An efficiency reading is only
+     *     interpretable beside the outcome, which is the evaluation's, and the product direction
+     *     forbids collapsing evidence into one score.
+     */
+    ArmMetricsSchema: {
+      /** Turns */
+      turns: number;
+      /** Answered Turns */
+      answered_turns: number;
+      /** Attempts */
+      attempts: number;
+      /** Retries */
+      retries: number;
+      /** Failures */
+      failures: {
+        [key: string]: number;
+      };
+      /** Tool Calls */
+      tool_calls: number;
+      /** Tool Writes */
+      tool_writes: number;
+      /** Model Requests */
+      model_requests: number | null;
+      usage: components["schemas"]["ModelUsageSchema"] | null;
+      /** Duration Ms */
+      duration_ms: number | null;
+      /** Tool Duration Ms */
+      tool_duration_ms: number | null;
+      /** Measured Attempts */
+      measured_attempts: number;
+      /** Metered Attempts */
+      metered_attempts: number;
+      estimated_cost: components["schemas"]["EstimatedCostSchema"] | null;
     };
     /**
      * ArmSelectionSchema
@@ -2563,6 +2609,26 @@ export interface components {
       conditions: string[];
     };
     /**
+     * EstimatedCostSchema
+     * @description What the lab's declared rates say one arm's usage was worth.
+     *
+     *     `amount` is a decimal string rather than a number, for the reason money is everywhere
+     *     else in this contract: a binary float cannot hold a rate exactly, and a cost a client
+     *     re-renders must be the cost the lab computed.
+     *
+     *     `recorded_on` is when the rate behind this amount was read off the provider's public
+     *     pricing. It travels because an estimate whose age is invisible is a number an operator
+     *     cannot weigh — and because a client cannot look it up: the table is the lab's.
+     */
+    EstimatedCostSchema: {
+      /** Amount */
+      amount: string;
+      /** Currency */
+      currency: string;
+      /** Recorded On */
+      recorded_on: string;
+    };
+    /**
      * ExperimentEvaluationResponse
      * @description Both arms judged against one scenario's objectives, in arm order.
      */
@@ -2675,6 +2741,8 @@ export interface components {
       agent_configuration_version: number;
       /** Framework Id */
       framework_id: string;
+      /** Provider */
+      provider: string;
       /** Model Id */
       model_id: string;
       /**
@@ -2689,6 +2757,7 @@ export interface components {
       /** State Fingerprint */
       state_fingerprint: string;
       standing: components["schemas"]["ArmStandingSchema"];
+      metrics: components["schemas"]["ArmMetricsSchema"];
     };
     /**
      * ExperimentSummarySchema
@@ -3129,6 +3198,22 @@ export interface components {
       temperature: string;
       /** Max Tool Rounds */
       max_tool_rounds: number;
+    };
+    /**
+     * ModelUsageSchema
+     * @description What one attempt asked of a provider, in the units every provider bills in.
+     *
+     *     Three counts and no provider detail. Cache reads, audio tokens, and reasoning
+     *     breakdowns differ by provider and by model generation, and a comparison across two
+     *     frameworks needs the columns to line up more than it needs any one of them complete.
+     */
+    ModelUsageSchema: {
+      /** Input Tokens */
+      input_tokens: number;
+      /** Output Tokens */
+      output_tokens: number;
+      /** Model Requests */
+      model_requests: number;
     };
     /** MoneySchema */
     MoneySchema: {
@@ -5788,6 +5873,8 @@ export interface components {
       state_fingerprint: string;
       /** Created At */
       created_at: string;
+      /** Duration Ms */
+      duration_ms: number | null;
     };
     /**
      * ToolOutcome

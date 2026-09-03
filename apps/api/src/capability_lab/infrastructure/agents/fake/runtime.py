@@ -21,6 +21,9 @@ point of a control arm rather than a fixed script: two configurations of this fr
 differing only in their tool bindings genuinely behave differently, so a comparison over
 the tool dimension is a real comparison before a single model is called.
 
+It calls no model, so the usage it reports is zeros rather than nothing — the one arm in the
+lab whose cost is known exactly.
+
 What it deliberately is not: intelligent. It does not read the customer's words, because a
 fake that appeared to understand them would invite exactly the interpretation of a result
 that a fake cannot support. It acts on the state of the world, which it can actually see.
@@ -29,11 +32,13 @@ that a fake cannot support. It acts on the state of the world, which it can actu
 from __future__ import annotations
 
 from capability_lab.application.agent_runtime import (
+    AgentAnswer,
     AgentTurnRequest,
     SandboxToolInvoker,
     SupportAgentRuntime,
 )
 from capability_lab.application.canonical_json import CanonicalValue
+from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.sandbox_tool_contracts import (
     ADDRESS_CHANGE_APPLY,
     ADDRESS_CHANGE_PROPOSE,
@@ -55,7 +60,7 @@ class FakeSupportAgentRuntime(SupportAgentRuntime):
     def framework_id(self) -> str:
         return FAKE_RUNTIME_FRAMEWORK_ID
 
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         offered = frozenset(contract.name for contract in request.tools)
         seen = _Findings()
 
@@ -78,7 +83,10 @@ class FakeSupportAgentRuntime(SupportAgentRuntime):
         if self._should_redirect(offered, seen):
             seen.redirected = self._redirect(tools, seen)
 
-        return seen.reply()
+        # Zero rather than nothing. This arm calls no provider, which is a fact about it
+        # and not an absence of information: a control arm costs nothing, and a comparison
+        # should read that as "$0.00" rather than as "the lab could not say" (`model_cost`).
+        return AgentAnswer(body=seen.reply(), usage=ModelUsage.none())
 
     @staticmethod
     def _should_redirect(offered: frozenset[str], seen: _Findings) -> bool:

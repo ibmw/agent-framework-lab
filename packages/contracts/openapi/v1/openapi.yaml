@@ -5251,6 +5251,15 @@ components:
         created_at:
           type: string
           title: Created At
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
+        usage:
+          anyOf:
+          - $ref: '#/components/schemas/ModelUsageSchema'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -5261,6 +5270,8 @@ components:
       - failure
       - body
       - created_at
+      - duration_ms
+      - usage
       title: AgentTurnSchema
       description: 'One attempt at one arm''s reply.
 
@@ -5359,6 +5370,103 @@ components:
         those as
 
         misses would report the lab''s own limits as the agent''s.'
+    ArmMetricsSchema:
+      properties:
+        turns:
+          type: integer
+          title: Turns
+        answered_turns:
+          type: integer
+          title: Answered Turns
+        attempts:
+          type: integer
+          title: Attempts
+        retries:
+          type: integer
+          title: Retries
+        failures:
+          additionalProperties:
+            type: integer
+          propertyNames:
+            $ref: '#/components/schemas/AgentTurnFailure'
+          type: object
+          title: Failures
+        tool_calls:
+          type: integer
+          title: Tool Calls
+        tool_writes:
+          type: integer
+          title: Tool Writes
+        model_requests:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Model Requests
+        usage:
+          anyOf:
+          - $ref: '#/components/schemas/ModelUsageSchema'
+          - type: 'null'
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
+        tool_duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Tool Duration Ms
+        measured_attempts:
+          type: integer
+          title: Measured Attempts
+        metered_attempts:
+          type: integer
+          title: Metered Attempts
+        estimated_cost:
+          anyOf:
+          - $ref: '#/components/schemas/EstimatedCostSchema'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - turns
+      - answered_turns
+      - attempts
+      - retries
+      - failures
+      - tool_calls
+      - tool_writes
+      - model_requests
+      - usage
+      - duration_ms
+      - tool_duration_ms
+      - measured_attempts
+      - metered_attempts
+      - estimated_cost
+      title: ArmMetricsSchema
+      description: 'What one arm has spent so far: turns, calls, tokens, time, and
+        an estimate.
+
+
+        Served rather than counted by the client for the reason the standing is (ADR
+        0029): the
+
+        rows are already here, and a client that counted them again would be free
+        to count them
+
+        differently. Every number is of the record as it stands, so an arm still being
+        driven
+
+        reports a growing total rather than waiting for a completion nobody sets.
+
+
+        Deliberately no aggregate and no arm-versus-arm delta. An efficiency reading
+        is only
+
+        interpretable beside the outcome, which is the evaluation''s, and the product
+        direction
+
+        forbids collapsing evidence into one score.'
     ArmSelectionSchema:
       properties:
         configuration_id:
@@ -6654,6 +6762,43 @@ components:
       - escalate_to
       - conditions
       title: EscalationPolicySchema
+    EstimatedCostSchema:
+      properties:
+        amount:
+          type: string
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+        recorded_on:
+          type: string
+          title: Recorded On
+      additionalProperties: false
+      type: object
+      required:
+      - amount
+      - currency
+      - recorded_on
+      title: EstimatedCostSchema
+      description: 'What the lab''s declared rates say one arm''s usage was worth.
+
+
+        `amount` is a decimal string rather than a number, for the reason money is
+        everywhere
+
+        else in this contract: a binary float cannot hold a rate exactly, and a cost
+        a client
+
+        re-renders must be the cost the lab computed.
+
+
+        `recorded_on` is when the rate behind this amount was read off the provider''s
+        public
+
+        pricing. It travels because an estimate whose age is invisible is a number
+        an operator
+
+        cannot weigh — and because a client cannot look it up: the table is the lab''s.'
     ExperimentEvaluationResponse:
       properties:
         experiment_id:
@@ -6842,6 +6987,9 @@ components:
         framework_id:
           type: string
           title: Framework Id
+        provider:
+          type: string
+          title: Provider
         model_id:
           type: string
           title: Model Id
@@ -6860,6 +7008,8 @@ components:
           title: State Fingerprint
         standing:
           $ref: '#/components/schemas/ArmStandingSchema'
+        metrics:
+          $ref: '#/components/schemas/ArmMetricsSchema'
       additionalProperties: false
       type: object
       required:
@@ -6869,12 +7019,14 @@ components:
       - agent_configuration_id
       - agent_configuration_version
       - framework_id
+      - provider
       - model_id
       - sandbox_id
       - revision
       - snapshot_fingerprint
       - state_fingerprint
       - standing
+      - metrics
       title: ExperimentRunSchema
       description: 'One arm: what it runs, where it works, how far its world has moved,
         and what next.
@@ -7725,6 +7877,35 @@ components:
       - temperature
       - max_tool_rounds
       title: ModelSettingsSchema
+    ModelUsageSchema:
+      properties:
+        input_tokens:
+          type: integer
+          title: Input Tokens
+        output_tokens:
+          type: integer
+          title: Output Tokens
+        model_requests:
+          type: integer
+          title: Model Requests
+      additionalProperties: false
+      type: object
+      required:
+      - input_tokens
+      - output_tokens
+      - model_requests
+      title: ModelUsageSchema
+      description: 'What one attempt asked of a provider, in the units every provider
+        bills in.
+
+
+        Three counts and no provider detail. Cache reads, audio tokens, and reasoning
+
+        breakdowns differ by provider and by model generation, and a comparison across
+        two
+
+        frameworks needs the columns to line up more than it needs any one of them
+        complete.'
     MoneySchema:
       properties:
         amount:
@@ -12763,6 +12944,11 @@ components:
         created_at:
           type: string
           title: Created At
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
       additionalProperties: false
       type: object
       required:
@@ -12778,6 +12964,7 @@ components:
       - revision_after
       - state_fingerprint
       - created_at
+      - duration_ms
       title: ToolEventSchema
       description: 'One tool call one attempt made, and what it did to the arm.
 

@@ -156,8 +156,8 @@ async def test_the_control_arm_follows_the_incident_to_the_order_and_redirects_i
         ADDRESS_CHANGE_PROPOSE,
         ADDRESS_CHANGE_APPLY,
     ]
-    assert "NS-10482" in reply
-    assert "18 rue des Écoles" in reply
+    assert "NS-10482" in reply.body
+    assert "18 rue des Écoles" in reply.body
 
 
 @pytest.mark.asyncio
@@ -181,7 +181,7 @@ async def test_the_control_arm_never_calls_a_tool_it_was_not_offered() -> None:
     reply = await FakeSupportAgentRuntime().answer(request(*reads), tools)
 
     assert tools.called == [INTERACTION_CONTEXT, ORDER_DETAIL]
-    assert "18 rue des Écoles" not in reply
+    assert "18 rue des Écoles" not in reply.body
 
 
 @pytest.mark.asyncio
@@ -198,7 +198,7 @@ async def test_the_control_arm_leaves_an_order_that_already_ships_to_the_default
     reply = await FakeSupportAgentRuntime().answer(request(*every_tool()), tools)
 
     assert ADDRESS_CHANGE_PROPOSE not in tools.called
-    assert "already the address on file" in reply
+    assert "already the address on file" in reply.body
 
 
 @pytest.mark.asyncio
@@ -209,7 +209,7 @@ async def test_a_refusal_stops_the_step_that_depended_on_it() -> None:
     reply = await FakeSupportAgentRuntime().answer(request(*every_tool()), tools)
 
     assert tools.called == [INTERACTION_CONTEXT, CUSTOMER_PROFILE]
-    assert "could not find an order" in reply
+    assert "could not find an order" in reply.body
 
 
 @pytest.mark.asyncio
@@ -219,7 +219,7 @@ async def test_a_refused_proposal_leaves_nothing_to_confirm() -> None:
     reply = await FakeSupportAgentRuntime().answer(request(*every_tool()), tools)
 
     assert ADDRESS_CHANGE_APPLY not in tools.called
-    assert "redirected" not in reply
+    assert "redirected" not in reply.body
 
 
 @pytest.mark.asyncio
@@ -245,7 +245,7 @@ async def test_pydantic_ai_offers_every_tool_the_configuration_enables() -> None
     reply = await PydanticAiSupportAgentRuntime.for_test().answer(request(*offered), tools)
 
     assert sorted(tools.called) == sorted([INTERACTION_CONTEXT, ORDER_DETAIL])
-    assert reply
+    assert reply.body
 
 
 @pytest.mark.asyncio
@@ -304,7 +304,7 @@ async def test_pydantic_ai_carries_the_arm_s_earlier_thread() -> None:
         request(CONTRACTS[INTERACTION_CONTEXT], history=history), StubInvoker()
     )
 
-    assert reply
+    assert reply.body
 
 
 class _ExhaustingInvoker(SandboxToolInvoker):

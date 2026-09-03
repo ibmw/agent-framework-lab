@@ -571,6 +571,53 @@ def test_two_arms_may_hold_the_same_starting_state(
 
 
 @pytest.mark.migration
+def test_an_attempt_s_usage_is_whole_and_never_spent_without_a_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The three usage columns are written together, and tokens need a request that spent them.
+
+    Both rules live in `ModelUsage` too, and that is exactly why the table holds them: the
+    value object raises on the way *out*, so one incoherent row would make every read of the
+    experiment holding it fail. Refused on the way in, the mistake stays with whoever made it.
+    """
+    database_url = f"sqlite:///{tmp_path / 'usage.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO experiment_agent_turns (
+            run_id, ordinal, attempt, experiment_id, outcome, failure, body, created_at,
+            duration_ms, input_tokens, output_tokens, model_requests
+        ) VALUES (
+            :run_id, :ordinal, 1, :experiment_id, 'answered', NULL, 'Noted.',
+            '2026-09-01 12:00:00.000000',
+            :duration_ms, :input_tokens, :output_tokens, :model_requests
+        )
+        """
+    )
+    row = {
+        "run_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac021",
+        "experiment_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac022",
+        "duration_ms": 1000,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "model_requests": 0,
+    }
+    # An attempt that called no model: zeros with zero requests, which is a measurement.
+    with engine.begin() as connection:
+        connection.execute(insert, {**row, "ordinal": 0})
+
+    # Half a reading: the request count without the tokens it spent.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "ordinal": 1, "input_tokens": None})
+
+    # And tokens nobody asked for: a meter reading that could not have been produced.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "ordinal": 2, "input_tokens": 40})
+
+
+@pytest.mark.migration
 def test_a_proposal_is_open_or_closed_and_never_half_of_each(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

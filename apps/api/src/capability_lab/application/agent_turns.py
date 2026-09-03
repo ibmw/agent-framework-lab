@@ -15,6 +15,7 @@ from typing import Protocol
 from uuid import UUID
 
 from capability_lab.application.canonical_json import CanonicalValue
+from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.domain.agent_turn import AgentTurn
 
@@ -29,12 +30,32 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class AgentTurnRecord:
-    """One attempt at one arm's reply, with when it was made."""
+    """One attempt at one arm's reply, with when it was made and what it cost.
+
+    The measurements sit here rather than on `AgentTurn` deliberately: the domain turn is
+    what the agent did — which question it answered, in which attempt, with what words or
+    which failure code — and a duration is not part of that. It is operational metadata of
+    exactly the kind `created_at` already is, and putting it in the domain would make an
+    arm's history depend on how fast the machine that produced it was.
+
+    Both are absent rather than zero when the lab does not know them: `duration_ms` on a row
+    written before the lab measured, and `usage` on a framework that does not meter itself
+    (`model_cost`). A zero would understate a total, and a total is what a comparison reads.
+    """
 
     run_id: UUID
     experiment_id: UUID
     turn: AgentTurn
     created_at: datetime
+    duration_ms: int | None = None
+    """Wall-clock milliseconds from before the runtime was started to after it returned.
+
+    The whole attempt including every tool call it made, because that is what an operator
+    waited for. What the tools took of it is on the events below, so time spent asking the
+    world can be separated from time spent at the model without a second measurement of
+    either."""
+
+    usage: ModelUsage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +83,12 @@ class ToolEvent:
     revision_before: int
     revision_after: int
     state_fingerprint: str
+    duration_ms: int | None = None
+    """Wall-clock milliseconds this one call took, measured by the invoker that made it.
+
+    On the event rather than on the attempt because a call is what it measures: two arms
+    that asked the same tool the same number of times and waited differently for it are
+    telling a comparison something, and an attempt total could not say which call it was."""
 
     @property
     def moved_the_arm(self) -> bool:

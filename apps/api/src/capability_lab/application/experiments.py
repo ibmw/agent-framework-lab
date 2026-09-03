@@ -77,6 +77,7 @@ from capability_lab.application.participants import (
     ParticipantRequest,
 )
 from capability_lab.application.ports import Clock
+from capability_lab.application.run_metrics import ArmMetrics, arm_metrics
 from capability_lab.application.sandbox_materialization import (
     SANDBOX_TOOL_CONTRACT_VERSIONS,
     SandboxSnapshotRecord,
@@ -319,6 +320,7 @@ class ArmRuntime:
 
     run_id: UUID
     framework_id: str
+    provider: str
     model_id: str
 
 
@@ -335,6 +337,11 @@ class ExperimentDetail:
     beside the streams rather than being left to the client, because the runner reads the
     identical rule to decide what an advance does (ADR 0029).
 
+    `metrics` is the third such reading, and the only one that is about the run rather than
+    about the incident: what each arm has spent so far. It travels here for the reason the
+    standing does — it is a projection of the same streams, and a client that counted them
+    again would be free to count them differently (ADR 0032).
+
     `scenario` and `starting_state` are what the whole record is judged against: the recipe
     version the snapshot pinned — which says how many turns an arm may take and what
     objectives it is measured by — and the state every arm was cloned from, which is what a
@@ -349,6 +356,7 @@ class ExperimentDetail:
     comparison: tuple[ComparisonVariable, ...]
     arm_runtimes: tuple[ArmRuntime, ...]
     standings: tuple[ArmStanding, ...]
+    metrics: tuple[ArmMetrics, ...]
     runs: tuple[RunRecord, ...]
     sandboxes: tuple[SandboxRecord, ...]
     turns: tuple[ParticipantTurnRecord, ...]
@@ -408,6 +416,7 @@ class ExperimentService:
         payloads = tuple(self._arm_payload(run) for run in runs)
         turns = self._turns.list_for_experiment(experiment_id)
         agent_turns = self._agent_turns.list_for_experiment(experiment_id)
+        tool_events = self._tool_events.list_for_experiment(experiment_id)
         # The version the snapshot pinned rather than the scenario as it reads now: an arm
         # stands against the cap its own experiment was started under, and an evaluation
         # judges it against the objectives that experiment froze (ADR 0030).
@@ -422,6 +431,10 @@ class ExperimentService:
                 ArmRuntime(
                     run_id=run.run_id,
                     framework_id=payload.framework_id,
+                    # The provider beside the model because a rate is declared for the pair
+                    # (`model_cost`): two providers can serve one model name, and a cost
+                    # read against the wrong one would be a number nobody could check.
+                    provider=payload.model.provider,
                     model_id=payload.model.model_id,
                 )
                 for run, payload in zip(runs, payloads, strict=True)
@@ -430,11 +443,15 @@ class ExperimentService:
                 _standing(run, turns, agent_turns, scenario.payload.completion.max_turns)
                 for run in runs
             ),
+            metrics=tuple(
+                _metrics(run, turns, agent_turns, tool_events, payload)
+                for run, payload in zip(runs, payloads, strict=True)
+            ),
             runs=runs,
             sandboxes=tuple(self._sandboxes.get_sandbox(shop_id, run.sandbox_id) for run in runs),
             turns=turns,
             agent_turns=agent_turns,
-            tool_events=self._tool_events.list_for_experiment(experiment_id),
+            tool_events=tool_events,
             mutation_events=self._mutations.list_events(experiment_id),
         )
 
@@ -884,6 +901,32 @@ def _standing(
         tuple(entry.turn for entry in turns if entry.run_id == run.run_id),
         tuple(entry.turn for entry in agent_turns if entry.run_id == run.run_id),
         max_turns=max_turns,
+    )
+
+
+def _metrics(
+    run: RunRecord,
+    turns: tuple[ParticipantTurnRecord, ...],
+    agent_turns: tuple[AgentTurnRecord, ...],
+    tool_events: tuple[ToolEventRecord, ...],
+    payload: AgentConfigurationPayload,
+) -> ArmMetrics:
+    """One arm's running cost, cut out of the same three streams the standing reads.
+
+    Narrowed here for the reason `_standing` narrows: the listings are already in hand, and
+    reading them again per arm would be two chances to count two different moments.
+
+    The provider and model come from the configuration version this arm *pinned*, never from
+    the one published since: a historical run's cost has to be explainable by the inputs it
+    recorded (ADR 0025).
+    """
+    return arm_metrics(
+        run.run_id,
+        turns=sum(1 for entry in turns if entry.run_id == run.run_id),
+        attempts=tuple(entry for entry in agent_turns if entry.run_id == run.run_id),
+        events=tuple(entry for entry in tool_events if entry.run_id == run.run_id),
+        provider=payload.model.provider,
+        model_id=payload.model.model_id,
     )
 
 

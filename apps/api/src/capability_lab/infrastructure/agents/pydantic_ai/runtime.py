@@ -6,7 +6,7 @@ of what it did all come from outside — so this adapter is roughly "map a `Tool
 an SDK tool and map the SDK's failures back to a classified one", and everything a
 comparison later reads is identical in shape to what the deterministic control arm produced.
 
-Four things are worth stating.
+Five things are worth stating.
 
 **The tool schema is derived, never authored twice.** `sandbox_tool_contracts` exists to be
 the one description a framework generates its own dialect from (ADR 0021). This builds the
@@ -22,6 +22,12 @@ never depends on a provider's spelling rules.
 **Tools run one at a time.** A write is guarded by the revision it was proposed against, and
 the recorded sequence is meant to be the order the agent asked; both stop being true the
 moment two calls race. The framework is told so rather than being trusted to be serial.
+
+**Usage is passed through, never re-shaped.** The SDK's own run usage carries more than the
+lab compares — cache reads, audio tokens, per-request detail — and only the three counts
+every provider bills in are reported, because a comparison across frameworks needs the
+columns to line up (`model_cost`). What is dropped is not lost evidence; it is evidence the
+lab does not claim to compare.
 
 **A usage limit is the same finding as the lab's own budget.** The only limit configured
 here is the configuration's tool-call allowance, so exceeding it is reported as the lab's
@@ -45,9 +51,10 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings as PydanticModelSettings
 from pydantic_ai.tools import Tool
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from capability_lab.application.agent_runtime import (
+    AgentAnswer,
     AgentRole,
     AgentToolBudgetExceededError,
     AgentTurnRequest,
@@ -59,6 +66,7 @@ from capability_lab.application.agent_runtime import (
     SupportAgentRuntimeError,
     SupportAgentTransientError,
 )
+from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.sandbox_tool_contracts import (
     ToolArgument,
     ToolArgumentKind,
@@ -96,7 +104,7 @@ class PydanticAiSupportAgentRuntime(SupportAgentRuntime):
     def framework_id(self) -> str:
         return PYDANTIC_AI_RUNTIME_FRAMEWORK_ID
 
-    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> str:
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         agent = Agent(
             self._model(request.model.model_id),
             output_type=str,
@@ -132,7 +140,21 @@ class PydanticAiSupportAgentRuntime(SupportAgentRuntime):
             raise SupportAgentFrameworkError(
                 "the agent framework could not execute this turn"
             ) from error
-        return result.output
+        return AgentAnswer(body=result.output, usage=_usage(result.usage))
+
+
+def _usage(usage: RunUsage) -> ModelUsage:
+    """The SDK's run usage as the three counts the lab records.
+
+    `requests` is how many times the provider was actually called, which is what separates
+    a one-shot answer from an agent that went round the tool loop five times — the "model
+    calls" a comparison reads beside the tool calls the invoker counted.
+    """
+    return ModelUsage(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        model_requests=usage.requests,
+    )
 
 
 def _tool(contract: ToolContract, tools: SandboxToolInvoker) -> Tool[None]:

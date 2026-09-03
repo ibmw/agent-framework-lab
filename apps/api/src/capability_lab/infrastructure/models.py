@@ -533,6 +533,11 @@ class AgentTurnModel(Base):
 
     `body` is synthetic content in a support thread. It is stored, as the participant turns
     beside it are, and it is never logged or traced (`AGENTS.md`).
+
+    The four measurement columns are nullable because "the lab did not measure this" is a
+    real state: rows written before the lab measured have no duration, and a framework that
+    does not meter itself reports no usage (ADR 0032). Nullable rather than defaulted to
+    zero, because a zero would be counted into a total a comparison reads.
     """
 
     __tablename__ = "experiment_agent_turns"
@@ -548,6 +553,38 @@ class AgentTurnModel(Base):
             "(outcome = 'answered') = (length(body) > 0)",
             name="ck_agent_turns_body_matches_outcome",
         ),
+        CheckConstraint(
+            "duration_ms IS NULL OR duration_ms >= 0", name="ck_agent_turns_duration_non_negative"
+        ),
+        CheckConstraint(
+            "input_tokens IS NULL OR input_tokens >= 0",
+            name="ck_agent_turns_input_tokens_non_negative",
+        ),
+        CheckConstraint(
+            "output_tokens IS NULL OR output_tokens >= 0",
+            name="ck_agent_turns_output_tokens_non_negative",
+        ),
+        CheckConstraint(
+            "model_requests IS NULL OR model_requests >= 0",
+            name="ck_agent_turns_model_requests_non_negative",
+        ),
+        # Usage is one reading or none of it: an attempt cannot know its input tokens and
+        # not its output tokens, and a half-filled row would total as if the other half
+        # were zero.
+        CheckConstraint(
+            "(input_tokens IS NULL) = (model_requests IS NULL) "
+            "AND (output_tokens IS NULL) = (model_requests IS NULL)",
+            name="ck_agent_turns_usage_is_whole",
+        ),
+        # And the rule `ModelUsage` itself refuses: tokens spent with no request that spent
+        # them. The value object would raise on the way out, which turns one hand-written
+        # row into an experiment nobody can read at all — so the table refuses it on the way
+        # in, where the mistake still belongs to whoever made it.
+        CheckConstraint(
+            "model_requests IS NULL OR model_requests > 0 "
+            "OR (input_tokens = 0 AND output_tokens = 0)",
+            name="ck_agent_turns_usage_has_a_request",
+        ),
         Index("ix_agent_turns_experiment", "experiment_id", "created_at"),
     )
 
@@ -559,6 +596,10 @@ class AgentTurnModel(Base):
     failure: Mapped[str | None] = mapped_column(String(32), nullable=True)
     body: Mapped[str] = mapped_column(String(4000))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ToolEventModel(Base):
@@ -589,6 +630,9 @@ class ToolEventModel(Base):
         CheckConstraint(
             "revision_after >= revision_before", name="ck_tool_events_revision_forward"
         ),
+        CheckConstraint(
+            "duration_ms IS NULL OR duration_ms >= 0", name="ck_tool_events_duration_non_negative"
+        ),
         Index("ix_tool_events_experiment", "experiment_id", "created_at"),
         Index("ix_tool_events_attempt", "run_id", "ordinal", "attempt", "sequence"),
     )
@@ -606,6 +650,7 @@ class ToolEventModel(Base):
     revision_after: Mapped[int] = mapped_column(Integer)
     state_fingerprint: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class MutationEventModel(Base):
