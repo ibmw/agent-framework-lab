@@ -301,6 +301,16 @@ apart from the adapters, never stored, so correcting a rate corrects every histo
 at once — and there is no aggregate, because efficiency is interpretable only beside the
 outcome (ADR 0032).
 
+All four of those readings — the standing, the evaluation with the judge's verdicts on it, the
+metrics, and the arms' own recorded writes — are what an experiment is *compared* on, and the
+comparison adds no fifth reader of the record: the results surface presents them objective by
+objective, arm beside arm, and derives nothing of its own. Each arm carries what it met out of
+what was decided *for it*, and those counts are never combined. A single score would hide that
+two arms driven to different depths hold different denominators, and would decide on the
+operator's behalf how a missed process check weighs against a resolved incident — which the
+product direction reserves for a person. Depth is tabs on that one screen rather than pages
+beside it, so an execution timeline followed out of a finding is still the same run (ADR 0033).
+
 ## Persistence, versioning, and extensibility
 
 Authorable definitions use mutable drafts and immutable published versions, stored as one canonical

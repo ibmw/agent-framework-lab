@@ -79,7 +79,9 @@ declared evidence scope, scoring one anonymized brief per objective per arm and 
 every verdict with the version, model, and input fingerprint that produced it (ADR 0031),
 and then what a run cost: the duration and the provider usage stored because they cannot be
 recovered afterwards, and the turns, calls, retries, failures, and estimated cost projected
-over the record beside them (ADR 0032).
+over the record beside them (ADR 0032), and then the results screen those readings are
+compared on: every objective read arm beside arm, with the counts kept per arm and no
+aggregate anywhere, and the execution timeline moved onto it as a depth tab (ADR 0033).
 The POC's conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
 the new shell.
@@ -624,20 +626,21 @@ Turn completed runs into durable, searchable comparison evidence.
 - [x] Add a versioned judge configuration and anonymized structured LLM-judge execution.
 - [x] Record turns, token usage, model/tool calls, duration, retries, failures, and estimated cost
   when available.
-- [ ] Present objective-level comparison without a global framework score.
+- [x] Present objective-level comparison without a global framework score.
 - [ ] Replace persona-first history with experiment-first filters and detail pages.
 - [ ] Preserve evaluator executions, notes, tags, state diffs, traces, replay, and fork provenance.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
 tab, and 10 · History; 9a · Execution timeline and 9c's source locations arrived with Milestone 4's
-fifth outcome (ADR 0027) and are extended here rather than built again. Together with the
-Milestone 4 frames this completes the 18-frame authoritative set. The judge itself has no frame:
-it is a cross-shop resource under the shell's Experiment lab section, and it is scored from
-frame 8's objectives matrix, where its rows already are.
+fifth outcome (ADR 0027) and are extended here rather than built again — frame 9's General tab and
+the depth-tab shell the others will hang from arrived with the comparison outcome (ADR 0033).
+Together with the Milestone 4 frames this completes the 18-frame authoritative set. The judge
+itself has no frame: it is a cross-shop resource under the shell's Experiment lab section, and it
+is scored from frame 8's objectives matrix, where its rows already are.
 
-Cost evidence (frame 8's per-arm strip; frame 9's Quantitative card extends this same
-reading when the results page arrives): an operator runs one arm and reads what the turn cost
+Cost evidence (frame 8's per-arm strip; frame 9's Quantitative card, which extends the same
+reading, arrived with ADR 0033): an operator runs one arm and reads what the turn cost
 under its thread — the turns it has had, the tokens it spent, the tools it called, how long it
 took, and what the lab's declared rates say that was worth — while the arm beside it shows no
 strip at all, because a row of zeros would read as a measurement nobody took. A retry is
@@ -649,6 +652,22 @@ neutral usage shape a framework reports through the runtime port and why a faile
 reports none, the difference between "spent nothing" and "nobody said" carried end to end, the
 duration taken on the clock the record is already timestamped by, and the dated price table
 declared apart from the adapters whose estimate is recomputed at read time rather than stored.
+
+Comparison evidence (frame 9's General tab, and the depth tabs it holds): an operator who has
+driven an incident to its end leaves the bench for the results screen and reads the two arms
+objective by objective — the read-check missed in the arm that never opened the document and
+pending in the arm still holding a turn, each cell carrying the call that answered it or the call
+that was never made; the judged row on its own card naming the version, model, and attempt behind
+each verdict; what actually moved each arm read from its revisions rather than from what it
+answered; what each arm spent, with an unmeasured column saying so instead of showing zero; and the
+turn only one arm heard, which is what makes everything after it two conversations. Nowhere is
+there a total: each arm's count is of the rows something decided for it, and the columns are never
+added into a winner. ADR 0033 records the results screen as a presentation of readings the backend
+already serves rather than a fourth reader of the record, the per-arm denominators and why a single
+score would report the operator's own pacing as a difference between configurations, the split
+between what a rule decided and what a judge did, divergence read from the composition rather than
+from the words, the depth tabs the header stays across — which is where the execution timeline now
+lives — and the parts of the frame that belong to the outcomes still open.
 
 Judge evidence (frame 8's objectives matrix, and the judge's own editor): an author publishes a
 rubric, the model that reads it, and exactly what it is shown — after the gate has refused the
