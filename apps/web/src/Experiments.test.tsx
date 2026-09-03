@@ -2,6 +2,7 @@ import type {
   AgentConfigurationListResponse,
   AgentConfigurationVersionListResponse,
   AgentTurnSchema,
+  ArmMetricsSchema,
   ArmStandingSchema,
   ComparisonVariableSchema,
   ExperimentEvaluationResponse,
@@ -204,6 +205,8 @@ function agentTurn(
     failure,
     body: failure === null ? ANSWER : "",
     created_at: "2026-08-28T10:00:30+00:00",
+    duration_ms: 2100,
+    usage: failure === null ? { input_tokens: 0, output_tokens: 0, model_requests: 0 } : null,
   };
 }
 
@@ -236,6 +239,7 @@ function toolEvent(
     revision_after: moved ? 1 : 0,
     state_fingerprint: STATE_FINGERPRINT,
     created_at: "2026-08-28T10:00:30+00:00",
+    duration_ms: 300,
   };
 }
 
@@ -270,6 +274,45 @@ function mutationEvent(
  * standing that disagreed with the thread beside it would let a test assert a button the
  * real bench would never draw.
  */
+/**
+ * What the backend would say this arm has spent, derived from the same record the page reads.
+ *
+ * Derived rather than pinned for the reason the standing is: a strip that disagreed with the
+ * thread beside it would let a test assert a cost the real bench would never draw.
+ */
+function metrics(
+  runId: string,
+  turns: ParticipantTurnSchema[],
+  agentTurns: AgentTurnSchema[],
+  toolEvents: ToolEventSchema[],
+): ArmMetricsSchema {
+  const attempts = agentTurns.filter((entry) => entry.run_id === runId);
+  const events = toolEvents.filter((entry) => entry.run_id === runId);
+  const answered = new Set(
+    attempts.filter((entry) => entry.outcome === "answered").map((entry) => entry.ordinal),
+  );
+  const measured = attempts.filter((entry) => entry.duration_ms !== null);
+  return {
+    turns: turns.filter((entry) => entry.run_id === runId).length,
+    answered_turns: answered.size,
+    attempts: attempts.length,
+    retries: attempts.length - new Set(attempts.map((entry) => entry.ordinal)).size,
+    failures: {},
+    tool_calls: events.length,
+    tool_writes: events.filter((entry) => entry.revision_after !== entry.revision_before).length,
+    model_requests: attempts.length === 0 ? null : 0,
+    usage: attempts.length === 0 ? null : { input_tokens: 0, output_tokens: 0, model_requests: 0 },
+    duration_ms: measured.length === 0 ? null : 2100 * measured.length,
+    tool_duration_ms: events.length === 0 ? null : 300 * events.length,
+    measured_attempts: measured.length,
+    metered_attempts: attempts.filter((entry) => entry.usage !== null).length,
+    estimated_cost:
+      attempts.length === 0
+        ? null
+        : { amount: "0.000000", currency: "USD", recorded_on: "2026-09-01" },
+  };
+}
+
 function standing(
   runId: string,
   turns: ParticipantTurnSchema[],
@@ -419,12 +462,14 @@ function experiment(
         agent_configuration_id: ATLAS_ID,
         agent_configuration_version: 1,
         framework_id: "fake",
+        provider: "fake",
         model_id: "deterministic",
         sandbox_id: "aaaaaaaa-1111-4222-8333-444444444444",
         revision: 0,
         snapshot_fingerprint: SANDBOX_FINGERPRINT,
         state_fingerprint: STATE_FINGERPRINT,
         standing: standing(ARM_A, turns, agentTurns),
+        metrics: metrics(ARM_A, turns, agentTurns, toolEvents),
       },
       {
         run_id: ARM_B,
@@ -433,12 +478,14 @@ function experiment(
         agent_configuration_id: BEACON_ID,
         agent_configuration_version: 1,
         framework_id: "fake",
+        provider: "fake",
         model_id: "deterministic",
         sandbox_id: "bbbbbbbb-1111-4222-8333-444444444444",
         revision: 0,
         snapshot_fingerprint: SANDBOX_FINGERPRINT,
         state_fingerprint: STATE_FINGERPRINT,
         standing: standing(ARM_B, turns, agentTurns),
+        metrics: metrics(ARM_B, turns, agentTurns, toolEvents),
       },
     ],
     turns,
@@ -950,6 +997,44 @@ describe("live bench", () => {
 
     expect(within(changes).getByText(/orders\.apply_address_change · r0 → r1/)).toBeVisible();
     expect(within(changes).getByText("nothing yet")).toBeVisible();
+  });
+
+  it("reads what an arm has spent, and shows nothing for one that never ran", async () => {
+    agentTurns = [agentTurn(ARM_A, 0)];
+    toolEvents = [
+      toolEvent(ARM_A, 0, "orders.read_order"),
+      toolEvent(ARM_A, 1, "customer.read_profile"),
+    ];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    const armB = screen.getByRole("region", { name: "Arm B" });
+
+    expect(within(armA).getByText("1 turn · 0 tok · 2 tools · 2.1s · 0.00 USD")).toBeVisible();
+    // The arm beside it has run nothing, so there is no strip at all rather than a row of
+    // zeros an operator would read as a measurement.
+    expect(within(armB).queryByText(/tools/)).toBeNull();
+  });
+
+  it("counts a retry apart from the failure that caused it", async () => {
+    agentTurns = [agentTurn(ARM_A, 0, 1, "model_transient"), agentTurn(ARM_A, 0, 2)];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+
+    expect(within(armA).getByText(/· 1 retry/)).toBeVisible();
+  });
+
+  it("marks a token and cost total that covers only some of an arm's attempts", async () => {
+    // The failed attempt reports nothing it spent, so what is shown is a floor rather than
+    // the arm's whole spend — and it says so instead of reading as the complete figure.
+    agentTurns = [agentTurn(ARM_A, 0, 1, "model_transient"), agentTurn(ARM_A, 0, 2)];
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+
+    expect(within(armA).getByText(/≥0 tok/)).toBeVisible();
+    expect(within(armA).getByText(/≥0\.00 USD/)).toBeVisible();
   });
 
   it("says what each arm is waiting for", async () => {

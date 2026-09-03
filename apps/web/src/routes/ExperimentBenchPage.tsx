@@ -1,5 +1,6 @@
 import type {
   AgentTurnSchema,
+  ArmMetricsSchema,
   ArmStandingSchema,
   ExperimentEvaluationResponse,
   ExperimentResponse,
@@ -271,6 +272,7 @@ export function ExperimentBenchPage() {
                 </p>
                 <Standing standing={run.standing} />
                 <Thread experiment={experiment} run={run} divergent={divergent} />
+                <RunCost metrics={run.metrics} />
                 <AdvanceControl
                   run={run}
                   working={working === run.run_id}
@@ -615,6 +617,77 @@ function AdvanceControl({
       {working ? "Running…" : attempts === 0 ? "Run the agent" : "Try again"}
     </button>
   );
+}
+
+/**
+ * What this arm has spent so far: the strip under each thread in frame 8.
+ *
+ * Every number is the server's reading of the arm's own record (ADR 0032), not a count taken
+ * over the rows this page happens to be rendering — an arm's thread and its cost must not be
+ * able to disagree about how many times it ran.
+ *
+ * An absent measurement is left out rather than drawn as a zero. A framework that does not
+ * meter itself and one that spent nothing are different findings, and a strip that showed
+ * "0 tok" for both would hide the one an operator has to act on. A total that covers only
+ * some of the arm's attempts is marked as the floor it is, for the same reason: a failed
+ * attempt reports nothing it spent, and a retried arm spent more than this says.
+ */
+function RunCost({ metrics }: { metrics: ArmMetricsSchema }) {
+  if (metrics.attempts === 0) {
+    return null;
+  }
+  // A total that covers fewer attempts than the arm made is a floor, not a figure. A failed
+  // attempt reports nothing it spent, so a retried arm really did spend more than this.
+  const floor = metrics.metered_attempts < metrics.attempts ? "≥" : "";
+  const parts = [
+    `${metrics.turns} ${metrics.turns === 1 ? "turn" : "turns"}`,
+    metrics.usage
+      ? `${floor}${formatTokens(metrics.usage.input_tokens + metrics.usage.output_tokens)} tok`
+      : null,
+    `${metrics.tool_calls} ${metrics.tool_calls === 1 ? "tool" : "tools"}`,
+    metrics.duration_ms === null ? null : formatDuration(metrics.duration_ms),
+    metrics.retries > 0
+      ? `${metrics.retries} ${metrics.retries === 1 ? "retry" : "retries"}`
+      : null,
+    metrics.estimated_cost ? `${floor}${formatCost(metrics.estimated_cost)}` : null,
+  ].filter((part): part is string => part !== null);
+  return <p className="text-xs text-admin-muted">{parts.join(" · ")}</p>;
+}
+
+/** A magnitude rather than an audited figure: `3.4k`, then `1.2M` once a thread is long. */
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  return tokens < 1000 ? `${tokens}` : `${(tokens / 1000).toFixed(1)}k`;
+}
+
+/**
+ * Seconds to one decimal under a minute, then whole minutes and seconds.
+ *
+ * Rounded once, before the branch is chosen. Rounding inside each branch renders 59,950 ms as
+ * "60.0s" and 119,600 ms as "1m 60s" — two readings of a clock nobody owns.
+ */
+function formatDuration(milliseconds: number): string {
+  const whole = Math.round(milliseconds / 1000);
+  if (whole < 60) {
+    return `${(milliseconds / 1000).toFixed(1)}s`;
+  }
+  return `${Math.floor(whole / 60)}m ${whole % 60}s`;
+}
+
+/**
+ * The estimate exactly as the lab computed it, never re-derived.
+ *
+ * The amount arrives as a decimal string precisely because a binary float cannot hold it, so
+ * it is trimmed rather than parsed: `Number("0.015000").toFixed(2)` is "0.01", which is a
+ * different number from the one the lab priced. Trailing zeros go, two digits stay, and the
+ * value shown is always the value sent.
+ */
+function formatCost(cost: { amount: string; currency: string }): string {
+  const [whole, fraction = ""] = cost.amount.split(".");
+  const trimmed = fraction.replace(/0+$/, "");
+  return `${whole}.${trimmed.padEnd(2, "0")} ${cost.currency}`;
 }
 
 /**

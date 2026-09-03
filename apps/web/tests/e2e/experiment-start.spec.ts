@@ -497,6 +497,12 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(armA.getByText("Waiting for the customer · turn 0")).toBeVisible();
   await expect(armB.getByText("Waiting for the agent · turn 0")).toBeVisible();
 
+  // And what that turn cost: the control arm calls no provider, so it reports zero tokens
+  // and a cost of nothing rather than an empty column. The arm that has not run shows no
+  // strip at all — a row of zeros would read as a measurement nobody took.
+  await expect(armA.getByText(/1 turn · 0 tok · \d+ tools? · [\dms. ]+ · 0\.00 USD/)).toBeVisible();
+  await expect(armB.getByText(/ tools? · /)).toHaveCount(0);
+
   // Resume. An experiment is entirely in the record, so coming back to one is an ordinary
   // read — the operator reloads the browser, leaves for the bench index, and returns through
   // the shop's experiment list to find both threads exactly where they stood.
