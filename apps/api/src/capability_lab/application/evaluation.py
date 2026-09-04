@@ -602,7 +602,16 @@ class ExperimentEvaluationService:
         self._judgements = judgements
 
     def evaluate(self, shop_id: UUID, experiment_id: UUID) -> ExperimentEvaluation:
-        detail = self._experiments.get_experiment(shop_id, experiment_id)
+        return self.evaluate_detail(self._experiments.get_experiment(shop_id, experiment_id))
+
+    def evaluate_detail(self, detail: ExperimentDetail) -> ExperimentEvaluation:
+        """Judge an experiment already in hand.
+
+        Split out for the caller that reads several experiments at once (history): reading
+        one back a second time to evaluate it would be two readings of one record, which is
+        the disagreement every projection in this codebase is shaped to prevent.
+        """
+        experiment_id = detail.record.experiment_id
         objectives = detail.scenario.payload.objectives
         templates = pinned_objective_templates(detail, self._objective_blocks)
         judged = self._judgements.list_for_experiment(experiment_id)

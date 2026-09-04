@@ -7,14 +7,10 @@ from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import (
-    ColumnElement,
     CursorResult,
-    Integer,
-    and_,
     delete,
     func,
     select,
-    type_coerce,
     update,
 )
 from sqlalchemy.exc import IntegrityError
@@ -29,7 +25,6 @@ from capability_lab.application.agent_turns import (
 from capability_lab.application.blocks import MUTATION_BLOCK_CODEC, OBJECTIVE_BLOCK_CODEC
 from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.application.canonical_state import fingerprint_initial_state
-from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
 from capability_lab.application.customer_profiles import CUSTOMER_PROFILE_CODEC
 from capability_lab.application.definition_authoring import (
     DefinitionDraftRecord,
@@ -77,8 +72,6 @@ from capability_lab.application.sandboxes import (
 )
 from capability_lab.application.scenario_generation import (
     GeneratedScenario,
-    GeneratedScenarioSummary,
-    PersonaLibraryFilter,
 )
 from capability_lab.application.scenarios import SCENARIO_CODEC
 from capability_lab.application.shops import SHOP_CODEC
@@ -149,7 +142,6 @@ from capability_lab.infrastructure.models import (
     SandboxSnapshotModel,
     ToolEventModel,
 )
-from capability_lab.infrastructure.sql_types import UtcDateTime
 
 _GENERATION_OPERATION = "generate_scenario_v1"
 _CANCEL_ORDER_OPERATION = "cancel_order_v1"
@@ -481,31 +473,6 @@ class SqlAlchemyActionDecisionIdempotencyRepository:
         return None
 
 
-def _session_last_activity() -> ColumnElement[datetime]:
-    """Latest turn time for a session, falling back to when the session was created."""
-    return type_coerce(
-        func.coalesce(
-            select(func.max(ConversationTurnModel.created_at))
-            .where(ConversationTurnModel.session_id == ConversationSessionModel.id)
-            .correlate(ConversationSessionModel)
-            .scalar_subquery(),
-            ConversationSessionModel.created_at,
-        ),
-        UtcDateTime(),
-    )
-
-
-def _session_turn_count() -> ColumnElement[int]:
-    return type_coerce(
-        select(func.count())
-        .select_from(ConversationTurnModel)
-        .where(ConversationTurnModel.session_id == ConversationSessionModel.id)
-        .correlate(ConversationSessionModel)
-        .scalar_subquery(),
-        Integer(),
-    )
-
-
 def _delete_session_records(session: Session, session_id: str, deleted_at: datetime) -> bool:
     """Delete one session graph and retain its deterministic identity as a tombstone."""
     connection = session.connection()
@@ -593,55 +560,6 @@ class SqlAlchemySessionRepository:
 
     def delete(self, session_id: UUID, *, deleted_at: datetime) -> bool:
         return _delete_session_records(self._session, str(session_id), deleted_at)
-
-    def list_summaries(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        filters: ConversationListFilter,
-    ) -> tuple[list[ConversationSummary], int]:
-        activity = _session_last_activity()
-        statement = select(
-            ConversationSessionModel,
-            activity.label("last_activity_at"),
-            _session_turn_count().label("turn_count"),
-        )
-        predicates: list[ColumnElement[bool]] = []
-        if filters.scenario_id is not None:
-            predicates.append(ConversationSessionModel.scenario_id == filters.scenario_id)
-        if filters.scenario_version is not None:
-            predicates.append(ConversationSessionModel.scenario_version == filters.scenario_version)
-        if filters.seed is not None:
-            predicates.append(ConversationSessionModel.seed == filters.seed)
-        if filters.framework_id is not None:
-            predicates.append(ConversationSessionModel.framework_id == filters.framework_id)
-        if filters.active_since is not None:
-            predicates.append(activity >= filters.active_since)
-        if predicates:
-            statement = statement.where(*predicates)
-
-        total = self._session.scalar(select(func.count()).select_from(statement.subquery())) or 0
-        page = (
-            statement.order_by(activity.desc(), ConversationSessionModel.id.desc())
-            .offset(offset)
-            .limit(limit)
-        )
-
-        summaries = [
-            ConversationSummary(
-                id=UUID(model.id),
-                scenario_id=model.scenario_id,
-                scenario_version=model.scenario_version,
-                seed=model.seed,
-                framework_id=model.framework_id,
-                created_at=model.created_at,
-                last_activity_at=last_activity_at,
-                turn_count=turn_count,
-            )
-            for model, last_activity_at, turn_count in self._session.execute(page).tuples().all()
-        ]
-        return summaries, total
 
 
 class SqlAlchemyConversationTurnRepository:
@@ -1077,105 +995,6 @@ class SqlAlchemyGeneratedScenarioRepository:
         )
         self._session.flush()
         return True
-
-    def list_summaries(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        filters: PersonaLibraryFilter,
-    ) -> tuple[list[GeneratedScenarioSummary], int]:
-        # Aggregate each persona's conversation activity without reconstructing the
-        # (heavier) full generated aggregate the way ``get`` does.
-        sessions_select = select(
-            ConversationSessionModel.scenario_id.label("scenario_id"),
-            ConversationSessionModel.scenario_version.label("scenario_version"),
-            ConversationSessionModel.seed.label("seed"),
-            _session_last_activity().label("activity"),
-        )
-        # A framework filter narrows the aggregate to that framework's conversations, so the
-        # count and activity reflect it, and the inner join drops personas without a match.
-        if filters.framework_id is not None:
-            sessions_select = sessions_select.where(
-                ConversationSessionModel.framework_id == filters.framework_id
-            )
-        sessions = sessions_select.subquery()
-        activity_by_persona = (
-            select(
-                sessions.c.scenario_id,
-                sessions.c.scenario_version,
-                sessions.c.seed,
-                func.count().label("conversation_count"),
-                func.max(sessions.c.activity).label("last_activity"),
-            )
-            .group_by(sessions.c.scenario_id, sessions.c.scenario_version, sessions.c.seed)
-            .subquery()
-        )
-
-        activity = type_coerce(
-            func.coalesce(activity_by_persona.c.last_activity, GeneratedScenarioModel.created_at),
-            UtcDateTime(),
-        )
-        conversation_count = type_coerce(
-            func.coalesce(activity_by_persona.c.conversation_count, 0), Integer()
-        )
-
-        statement = (
-            select(
-                GeneratedScenarioModel,
-                PersonaModel,
-                activity.label("last_activity_at"),
-                conversation_count.label("conversation_count"),
-            )
-            .join(PersonaModel, PersonaModel.id == GeneratedScenarioModel.persona_id)
-            .join(
-                activity_by_persona,
-                and_(
-                    activity_by_persona.c.scenario_id == GeneratedScenarioModel.scenario_id,
-                    activity_by_persona.c.scenario_version
-                    == GeneratedScenarioModel.scenario_version,
-                    activity_by_persona.c.seed == GeneratedScenarioModel.seed,
-                ),
-                isouter=filters.framework_id is None,
-            )
-        )
-
-        predicates: list[ColumnElement[bool]] = []
-        if filters.scenario_id is not None:
-            predicates.append(GeneratedScenarioModel.scenario_id == filters.scenario_id)
-        if filters.scenario_version is not None:
-            predicates.append(GeneratedScenarioModel.scenario_version == filters.scenario_version)
-        if filters.active_since is not None:
-            predicates.append(activity >= filters.active_since)
-        if predicates:
-            statement = statement.where(*predicates)
-
-        # Offset paging over a stable order gives page numbers and a total for the UI; the
-        # id tie-breaker keeps the order deterministic when activity timestamps coincide.
-        total = self._session.scalar(select(func.count()).select_from(statement.subquery())) or 0
-        page = (
-            statement.order_by(activity.desc(), GeneratedScenarioModel.initial_state_hash.desc())
-            .offset(offset)
-            .limit(limit)
-        )
-
-        summaries = [
-            GeneratedScenarioSummary(
-                scenario_id=generated.scenario_id,
-                scenario_version=generated.scenario_version,
-                seed=generated.seed,
-                display_name=persona.display_name,
-                locale=persona.locale,
-                initial_state_hash=generated.initial_state_hash,
-                created_at=generated.created_at,
-                last_activity_at=last_activity_at,
-                conversation_count=count,
-            )
-            for generated, persona, last_activity_at, count in self._session.execute(page)
-            .tuples()
-            .all()
-        ]
-        return summaries, total
 
 
 class SqlAlchemyScenarioGenerationIdempotencyRepository:
@@ -2105,6 +1924,17 @@ class SqlAlchemyExperimentRepository:
             .where(ExperimentModel.shop_id == str(shop_id))
             # Newest first: an operator opening the bench is looking for what they just ran.
             .order_by(ExperimentModel.created_at.desc(), ExperimentModel.experiment_id)
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def list_all(self) -> tuple[ExperimentRecord, ...]:
+        models = self._session.scalars(
+            # The same order as one shop's listing, for the same reason and with the same
+            # tie-break: two experiments started in one second still have one order, and a
+            # page of history that reshuffled between two reads would page over itself.
+            select(ExperimentModel).order_by(
+                ExperimentModel.created_at.desc(), ExperimentModel.experiment_id
+            )
         ).all()
         return tuple(self._record(model) for model in models)
 

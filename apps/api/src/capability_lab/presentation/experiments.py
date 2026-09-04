@@ -433,6 +433,7 @@ class ExperimentRunSchema(StrictApiModel):
     label: str
     agent_configuration_id: UUID
     agent_configuration_version: int
+    agent_configuration_name: str
     framework_id: str
     provider: str
     model_id: str
@@ -459,7 +460,10 @@ class ExperimentRunSchema(StrictApiModel):
             agent_configuration_id=run.agent_configuration_id,
             agent_configuration_version=run.agent_configuration_version,
             # Read from the configuration version this arm pinned, not from anything the
-            # process is currently able to run: what an arm ran is a recorded input.
+            # process is currently able to run: what an arm ran is a recorded input. The
+            # name is pinned for the same reason: a configuration renamed after a run must
+            # not rename what that run says it ran.
+            agent_configuration_name=runtime.configuration_name,
             framework_id=runtime.framework_id,
             provider=runtime.provider,
             model_id=runtime.model_id,

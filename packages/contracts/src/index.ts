@@ -8,11 +8,6 @@ export type ErrorResponse = components["schemas"]["ErrorResponse"];
 export type ActionProposalResponse = components["schemas"]["ActionProposalResponse"];
 export type AgentFrameworkListResponse = components["schemas"]["AgentFrameworkListResponse"];
 export type ConversationResponse = components["schemas"]["ConversationResponse"];
-export type ConversationSummaryResponse = components["schemas"]["ConversationSummaryResponse"];
-export type ConversationListResponse = components["schemas"]["ConversationListResponse"];
-export type GeneratedScenarioSummaryResponse =
-  components["schemas"]["GeneratedScenarioSummaryResponse"];
-export type GeneratedScenarioListResponse = components["schemas"]["GeneratedScenarioListResponse"];
 export type GenerateScenarioRequest = components["schemas"]["GenerateScenarioRequest"];
 export type DecideOrderActionRequest = components["schemas"]["DecideOrderActionRequest"];
 export type GeneratedScenarioResponse = components["schemas"]["GeneratedScenarioResponse"];
@@ -269,6 +264,10 @@ export type JudgementSchema = components["schemas"]["JudgementSchema"];
 export type JudgeOutcome = components["schemas"]["JudgeOutcome"];
 export type JudgeFailure = components["schemas"]["JudgeFailure"];
 export type ScoreExperimentRequest = components["schemas"]["ScoreExperimentRequest"];
+export type ExperimentHistoryResponse = components["schemas"]["ExperimentHistoryResponse"];
+export type ExperimentHistoryEntrySchema = components["schemas"]["ExperimentHistoryEntrySchema"];
+export type HistoryArmSchema = components["schemas"]["HistoryArmSchema"];
+export type HistoryFacetSchema = components["schemas"]["HistoryFacetSchema"];
 export type JudgeConfigurationListResponse =
   components["schemas"]["JudgeConfigurationListResponse"];
 export type JudgeConfigurationSummarySchema =

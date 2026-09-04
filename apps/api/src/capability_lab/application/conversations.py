@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from capability_lab.application.ports import (
@@ -16,35 +15,6 @@ from capability_lab.application.ports import (
 )
 from capability_lab.application.support_tools import RetailSupportContext
 from capability_lab.domain.entities import ConversationSession
-
-
-@dataclass(frozen=True, slots=True)
-class ConversationSummary:
-    """A framework-neutral read model for one conversation in a history listing."""
-
-    id: UUID
-    scenario_id: str
-    scenario_version: str
-    seed: int
-    framework_id: str
-    created_at: datetime
-    last_activity_at: datetime
-    turn_count: int
-
-
-@dataclass(frozen=True, slots=True)
-class ConversationListFilter:
-    """Optional narrowing for a conversation listing.
-
-    The persona reference (scenario id/version/seed) must be provided together or not at all.
-    ``framework_id`` and ``active_since`` further restrict which conversations appear.
-    """
-
-    scenario_id: str | None = None
-    scenario_version: str | None = None
-    seed: int | None = None
-    framework_id: str | None = None
-    active_since: datetime | None = None
 
 
 class ConversationNotFoundError(LookupError):
@@ -177,21 +147,6 @@ class ConversationService:
         if session is None:
             raise ConversationNotFoundError("conversation session not found")
         return session, self._turns.list_for_session(session_id)
-
-    def list(
-        self,
-        *,
-        limit: int,
-        page: int,
-        filters: ConversationListFilter | None = None,
-    ) -> tuple[list[ConversationSummary], int]:
-        """Return one page of conversations and the total count for the same filters."""
-        offset = (page - 1) * limit
-        return self._sessions.list_summaries(
-            limit=limit,
-            offset=offset,
-            filters=filters or ConversationListFilter(),
-        )
 
     def delete(self, session_id: UUID) -> None:
         """Hard-delete a conversation and every record scoped to it."""

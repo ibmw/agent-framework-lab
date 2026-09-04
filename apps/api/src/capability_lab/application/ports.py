@@ -16,18 +16,13 @@ from capability_lab.domain.entities import (
 )
 
 if TYPE_CHECKING:
-    from capability_lab.application.conversations import ConversationListFilter, ConversationSummary
     from capability_lab.application.order_actions import (
         ActionProposal,
         ActionProposalDraft,
         ActionStatus,
         OrderActionRequest,
     )
-    from capability_lab.application.scenario_generation import (
-        GeneratedScenario,
-        GeneratedScenarioSummary,
-        PersonaLibraryFilter,
-    )
+    from capability_lab.application.scenario_generation import GeneratedScenario
     from capability_lab.application.support_tools import RetailSupportContext
 
 
@@ -101,14 +96,6 @@ class SessionRepository(Protocol):
         """Hard-delete the session and its dependents; return whether it existed."""
         ...
 
-    def list_summaries(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        filters: ConversationListFilter,
-    ) -> tuple[list[ConversationSummary], int]: ...
-
 
 class MemoryRepository(Protocol):
     def list_for_session(self, session_id: UUID) -> list[MemoryRecord]: ...
@@ -140,14 +127,6 @@ class GeneratedScenarioRepository(Protocol):
     ) -> bool:
         """Delete generated state and dependent conversations; return whether it existed."""
         ...
-
-    def list_summaries(
-        self,
-        *,
-        limit: int,
-        offset: int,
-        filters: PersonaLibraryFilter,
-    ) -> tuple[list[GeneratedScenarioSummary], int]: ...
 
 
 class ScenarioGenerationIdempotencyRepository(Protocol):

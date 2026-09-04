@@ -39,15 +39,18 @@ from capability_lab.domain.blocks import (
 )
 from capability_lab.domain.content import require_instance, require_non_negative_int, require_slug
 from capability_lab.domain.entities import DomainError
+from capability_lab.domain.experiment import ArmAwaiting, ArmStanding
 from capability_lab.domain.judgement import Judgement
 
 __all__ = [
     "ArmEvaluation",
     "EvaluationError",
     "EvidencePolarity",
+    "ExperimentStatus",
     "ObjectiveOutcome",
     "ObjectiveResult",
     "decide",
+    "stand_experiment",
 ]
 
 
@@ -199,3 +202,51 @@ class ArmEvaluation:
     def failed(self) -> bool:
         """Whether any required objective is missed, which is what makes a run a failure."""
         return any(result.failed for result in self.results)
+
+
+class ExperimentStatus(StrEnum):
+    """Where a whole experiment stands, out of what each of its arms says.
+
+    A fourth reading of the same record, at the width a listing needs: an operator scanning
+    history is asking "is there anything left to do here, and did it end badly", which is a
+    question about the experiment rather than about one arm.
+
+    Three values because two readings decide it, and they decide different things. Whether
+    anything can still happen is the arms' standing (ADR 0029) — an experiment is running
+    while any arm can still be advanced or written to. Whether what happened was a failure is
+    the evaluation's, and it is already defined: an arm fails when a *required* objective is
+    missed (ADR 0030), never when the lab could not decide a row.
+    """
+
+    RUNNING = "running"
+    """At least one arm is still waiting for its agent or for the customer."""
+
+    COMPLETED = "completed"
+    """Every arm answered the last turn its scenario allows, and none failed a requirement."""
+
+    FAILED = "failed"
+    """Every arm is finished and at least one missed something its scenario required."""
+
+
+def stand_experiment(
+    standings: tuple[ArmStanding, ...], evaluations: tuple[ArmEvaluation, ...]
+) -> ExperimentStatus:
+    """Read one experiment's status off its arms' standings and their evaluations.
+
+    Here rather than beside `stand_arm`, which reads one arm's two streams: this needs the
+    verdicts as well, and "failed" is a word the evaluation owns.
+
+    A running experiment is never reported as failed, however badly one arm is doing. A
+    required objective that is currently missed in an arm that has already settled is a real
+    reading — but the arm beside it may still be driven to meet its own, and the experiment
+    is what the pair produced. Waiting is therefore the stronger statement of the two.
+    """
+    if not standings:
+        raise EvaluationError("an experiment with no arm has no status")
+    if len(standings) != len(evaluations):
+        raise EvaluationError("every arm's standing must be read beside its own evaluation")
+    if any(standing.awaiting is not ArmAwaiting.COMPLETED for standing in standings):
+        return ExperimentStatus.RUNNING
+    if any(evaluation.failed for evaluation in evaluations):
+        return ExperimentStatus.FAILED
+    return ExperimentStatus.COMPLETED

@@ -280,6 +280,15 @@ class ExperimentRepository(Protocol):
 
     def list_for_shop(self, shop_id: UUID) -> tuple[ExperimentRecord, ...]: ...
 
+    def list_all(self) -> tuple[ExperimentRecord, ...]:
+        """Every experiment this lab has run, newest first, across every shop.
+
+        Beside `list_for_shop` rather than replacing it: the bench asks what has been run
+        *here* and history asks what has been run at all, and a caller that had to filter a
+        whole lab down to one shop would be doing in Python what the index already does.
+        """
+        ...
+
     def save(self, record: ExperimentRecord) -> ExperimentRecord: ...
 
 
@@ -319,6 +328,7 @@ class ArmRuntime:
     """
 
     run_id: UUID
+    configuration_name: str
     framework_id: str
     provider: str
     model_id: str
@@ -430,6 +440,10 @@ class ExperimentService:
             arm_runtimes=tuple(
                 ArmRuntime(
                     run_id=run.run_id,
+                    # The name the version this arm pinned was published under, never the
+                    # one the configuration answers to now: a configuration renamed after a
+                    # run would otherwise rename what that run says it ran.
+                    configuration_name=payload.name,
                     framework_id=payload.framework_id,
                     # The provider beside the model because a rate is declared for the pair
                     # (`model_cost`): two providers can serve one model name, and a cost

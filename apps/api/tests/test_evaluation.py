@@ -51,11 +51,15 @@ from capability_lab.domain.blocks import (
 )
 from capability_lab.domain.evaluation import (
     ArmEvaluation,
+    EvaluationError,
     EvidencePolarity,
+    ExperimentStatus,
     ObjectiveOutcome,
+    ObjectiveResult,
     decide,
+    stand_experiment,
 )
-from capability_lab.domain.experiment import ArmAwaiting
+from capability_lab.domain.experiment import ArmAwaiting, ArmStanding
 from capability_lab.domain.sandbox import SandboxInteraction, SandboxOrder, SandboxState
 from capability_lab.domain.scenario import (
     DATA_FIELDS,
@@ -130,6 +134,70 @@ def test_something_forbidden_is_pending_until_the_arm_stops_being_able_to_do_it(
         decide(EvidencePolarity.MUST_NOT_OCCUR, observed=False, settled=True)
         is ObjectiveOutcome.MET
     )
+
+
+# -- where a whole experiment stands --------------------------------------------
+
+
+def standing(awaiting: ArmAwaiting) -> ArmStanding:
+    return ArmStanding(awaiting=awaiting, ordinal=1, attempts=1, unanswered=())
+
+
+def judged(outcome: ObjectiveOutcome, severity: ObjectiveSeverity) -> ArmEvaluation:
+    return ArmEvaluation(
+        run_id=uuid4(),
+        settled=True,
+        results=(
+            ObjectiveResult(
+                objective_id="read-shipping-policy",
+                block_id=uuid4(),
+                block_version=1,
+                statement="Read the shipping policy",
+                severity=severity,
+                assessment=ObjectiveAssessment.DETERMINISTIC,
+                evidence=ObjectiveEvidence.EVENT,
+                outcome=outcome,
+                detail="",
+            ),
+        ),
+    )
+
+
+def test_an_experiment_is_running_while_any_arm_can_still_be_acted_on() -> None:
+    """Waiting is the stronger statement: the arm beside this one can still meet its own."""
+    status = stand_experiment(
+        (standing(ArmAwaiting.COMPLETED), standing(ArmAwaiting.CUSTOMER)),
+        (
+            judged(ObjectiveOutcome.MISSED, ObjectiveSeverity.REQUIRED),
+            judged(ObjectiveOutcome.PENDING, ObjectiveSeverity.REQUIRED),
+        ),
+    )
+
+    assert status is ExperimentStatus.RUNNING
+
+
+def test_a_finished_experiment_that_missed_a_requirement_failed() -> None:
+    status = stand_experiment(
+        (standing(ArmAwaiting.COMPLETED),),
+        (judged(ObjectiveOutcome.MISSED, ObjectiveSeverity.REQUIRED),),
+    )
+
+    assert status is ExperimentStatus.FAILED
+
+
+def test_a_missed_expectation_finishes_an_experiment_without_failing_it() -> None:
+    """Severity decides what a miss costs, never whether it is a miss (ADR 0030)."""
+    status = stand_experiment(
+        (standing(ArmAwaiting.COMPLETED),),
+        (judged(ObjectiveOutcome.MISSED, ObjectiveSeverity.EXPECTED),),
+    )
+
+    assert status is ExperimentStatus.COMPLETED
+
+
+def test_an_arm_standing_read_without_its_own_evaluation_is_refused() -> None:
+    with pytest.raises(EvaluationError):
+        stand_experiment((standing(ArmAwaiting.COMPLETED),), ())
 
 
 # -- the tables this build declares ---------------------------------------------

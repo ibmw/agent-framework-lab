@@ -75,98 +75,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-    get:
-      summary: List support conversations most recently active first
-      operationId: listConversations
-      parameters:
-      - name: scenario_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 64
-            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
-          - type: 'null'
-          title: Scenario Id
-      - name: scenario_version
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 2
-            maxLength: 64
-            pattern: ^v[1-9][0-9]*$
-          - type: 'null'
-          title: Scenario Version
-      - name: seed
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: integer
-            maximum: 4294967295
-            minimum: 0
-          - type: 'null'
-          title: Seed
-      - name: framework_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 64
-            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
-          - type: 'null'
-          title: Framework Id
-      - name: active_since
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Active Since
-      - name: page
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 1
-          default: 1
-          title: Page
-      - name: page_size
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 100
-          minimum: 1
-          default: 50
-          title: Page Size
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConversationListResponse'
-        '422':
-          description: Invalid filter or page
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/conversations/{session_id}:
     get:
       summary: Resume a persisted support conversation
@@ -580,89 +488,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Invalid command
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/v1/scenarios/generations:
-    get:
-      summary: List generated personas most recently active first
-      operationId: listGeneratedScenarios
-      parameters:
-      - name: scenario_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 64
-            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
-          - type: 'null'
-          title: Scenario Id
-      - name: scenario_version
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 2
-            maxLength: 64
-            pattern: ^v[1-9][0-9]*$
-          - type: 'null'
-          title: Scenario Version
-      - name: framework_id
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            minLength: 1
-            maxLength: 64
-            pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
-          - type: 'null'
-          title: Framework Id
-      - name: active_since
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Active Since
-      - name: page
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 1
-          default: 1
-          title: Page
-      - name: page_size
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 100
-          minimum: 1
-          default: 50
-          title: Page Size
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GeneratedScenarioListResponse'
-        '422':
-          description: Invalid filter or page
           content:
             application/json:
               schema:
@@ -3333,6 +3158,131 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/experiments:
+    get:
+      summary: List every experiment this lab has run, most recently started first
+      description: Experiment-first history across every shop. Each row is projected
+        from the experiment's own record — the arms it pinned, where each one stands,
+        and what each one's objectives say — so a row can never disagree with the
+        bench or the results screen it opens into. Counts are per arm and are never
+        combined into a score. The filter options travel with the page and are read
+        from the experiments themselves rather than from the definition libraries.
+      operationId: listExperimentHistory
+      parameters:
+      - name: shop_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Only this shop's runs.
+          title: Shop Id
+        description: Only this shop's runs.
+      - name: scenario_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          description: Only runs of this scenario.
+          title: Scenario Id
+        description: Only runs of this scenario.
+      - name: framework_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Only runs with an arm on this framework.
+          title: Framework Id
+        description: Only runs with an arm on this framework.
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ExperimentStatus'
+          - type: 'null'
+          description: 'Only runs standing here: running, completed, or failed.'
+          title: Status
+        description: 'Only runs standing here: running, completed, or failed.'
+      - name: outcome
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ObjectiveOutcome'
+          - type: 'null'
+          description: Only runs where an arm holds an objective with this outcome.
+          title: Outcome
+        description: Only runs where an arm holds an objective with this outcome.
+      - name: started_after
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Only runs started at or after this moment.
+          title: Started After
+        description: Only runs started at or after this moment.
+      - name: started_before
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          description: Only runs started at or before this moment.
+          title: Started Before
+        description: Only runs started at or before this moment.
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Match the name, scenario, shop, or arms of a run.
+          title: Q
+        description: Match the name, scenario, shop, or arms of a run.
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Page Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentHistoryResponse'
+        '422':
+          description: Invalid filter or page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/experiments:
     post:
       summary: 'Start one experiment: freeze the starting state and clone its arms'
@@ -5913,30 +5863,6 @@ components:
       - kind
       - document_id
       title: ContextDocumentSchema
-    ConversationListResponse:
-      properties:
-        conversations:
-          items:
-            $ref: '#/components/schemas/ConversationSummaryResponse'
-          type: array
-          title: Conversations
-        page:
-          type: integer
-          title: Page
-        page_size:
-          type: integer
-          title: Page Size
-        total:
-          type: integer
-          title: Total
-      additionalProperties: false
-      type: object
-      required:
-      - conversations
-      - page
-      - page_size
-      - total
-      title: ConversationListResponse
     ConversationResponse:
       properties:
         id:
@@ -5984,47 +5910,6 @@ components:
       - created_at
       - turns
       title: ConversationResponse
-    ConversationSummaryResponse:
-      properties:
-        id:
-          type: string
-          format: uuid
-          title: Id
-        scenario_id:
-          type: string
-          title: Scenario Id
-        scenario_version:
-          type: string
-          title: Scenario Version
-        seed:
-          type: integer
-          title: Seed
-        framework_id:
-          type: string
-          title: Framework Id
-        created_at:
-          type: string
-          format: date-time
-          title: Created At
-        last_activity_at:
-          type: string
-          format: date-time
-          title: Last Activity At
-        turn_count:
-          type: integer
-          title: Turn Count
-      additionalProperties: false
-      type: object
-      required:
-      - id
-      - scenario_id
-      - scenario_version
-      - seed
-      - framework_id
-      - created_at
-      - last_activity_at
-      - turn_count
-      title: ConversationSummaryResponse
     ConversationTurnResponse:
       properties:
         id:
@@ -6817,6 +6702,121 @@ components:
       - arms
       title: ExperimentEvaluationResponse
       description: Both arms judged against one scenario's objectives, in arm order.
+    ExperimentHistoryEntrySchema:
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        shop_name:
+          type: string
+          title: Shop Name
+        label:
+          type: string
+          title: Label
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        scenario_name:
+          type: string
+          title: Scenario Name
+        scenario_version:
+          type: integer
+          title: Scenario Version
+        scenario_superseded:
+          type: boolean
+          title: Scenario Superseded
+        seed:
+          type: integer
+          title: Seed
+        sandbox_fingerprint:
+          type: string
+          title: Sandbox Fingerprint
+        resolution_fingerprint:
+          type: string
+          title: Resolution Fingerprint
+        participant_driver:
+          $ref: '#/components/schemas/ParticipantDriverType'
+        status:
+          $ref: '#/components/schemas/ExperimentStatus'
+        arms:
+          items:
+            $ref: '#/components/schemas/HistoryArmSchema'
+          type: array
+          title: Arms
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - experiment_id
+      - shop_id
+      - shop_name
+      - label
+      - scenario_id
+      - scenario_name
+      - scenario_version
+      - scenario_superseded
+      - seed
+      - sandbox_fingerprint
+      - resolution_fingerprint
+      - participant_driver
+      - status
+      - arms
+      - created_at
+      title: ExperimentHistoryEntrySchema
+      description: 'One row of history: an experiment, what it ran, and where each
+        arm ended.'
+    ExperimentHistoryResponse:
+      properties:
+        experiments:
+          items:
+            $ref: '#/components/schemas/ExperimentHistoryEntrySchema'
+          type: array
+          title: Experiments
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+        total:
+          type: integer
+          title: Total
+        shops:
+          items:
+            $ref: '#/components/schemas/HistoryFacetSchema'
+          type: array
+          title: Shops
+        scenarios:
+          items:
+            $ref: '#/components/schemas/HistoryFacetSchema'
+          type: array
+          title: Scenarios
+        frameworks:
+          items:
+            $ref: '#/components/schemas/HistoryFacetSchema'
+          type: array
+          title: Frameworks
+      additionalProperties: false
+      type: object
+      required:
+      - experiments
+      - page
+      - page_size
+      - total
+      - shops
+      - scenarios
+      - frameworks
+      title: ExperimentHistoryResponse
+      description: One page of history, and every value its filters can be narrowed
+        to.
     ExperimentListResponse:
       properties:
         experiments:
@@ -6984,6 +6984,9 @@ components:
         agent_configuration_version:
           type: integer
           title: Agent Configuration Version
+        agent_configuration_name:
+          type: string
+          title: Agent Configuration Name
         framework_id:
           type: string
           title: Framework Id
@@ -7018,6 +7021,7 @@ components:
       - label
       - agent_configuration_id
       - agent_configuration_version
+      - agent_configuration_name
       - framework_id
       - provider
       - model_id
@@ -7040,6 +7044,39 @@ components:
 
         `state_fingerprint` is where it is now and stops agreeing the moment something
         writes.'
+    ExperimentStatus:
+      type: string
+      enum:
+      - running
+      - completed
+      - failed
+      title: ExperimentStatus
+      description: 'Where a whole experiment stands, out of what each of its arms
+        says.
+
+
+        A fourth reading of the same record, at the width a listing needs: an operator
+        scanning
+
+        history is asking "is there anything left to do here, and did it end badly",
+        which is a
+
+        question about the experiment rather than about one arm.
+
+
+        Three values because two readings decide it, and they decide different things.
+        Whether
+
+        anything can still happen is the arms'' standing (ADR 0029) — an experiment
+        is running
+
+        while any arm can still be advanced or written to. Whether what happened was
+        a failure is
+
+        the evaluation''s, and it is already defined: an arm fails when a *required*
+        objective is
+
+        missed (ADR 0030), never when the lab could not decide a row.'
     ExperimentSummarySchema:
       properties:
         experiment_id:
@@ -7225,30 +7262,6 @@ components:
       required:
       - seed
       title: GenerateScenarioRequest
-    GeneratedScenarioListResponse:
-      properties:
-        generations:
-          items:
-            $ref: '#/components/schemas/GeneratedScenarioSummaryResponse'
-          type: array
-          title: Generations
-        page:
-          type: integer
-          title: Page
-        page_size:
-          type: integer
-          title: Page Size
-        total:
-          type: integer
-          title: Total
-      additionalProperties: false
-      type: object
-      required:
-      - generations
-      - page
-      - page_size
-      - total
-      title: GeneratedScenarioListResponse
     GeneratedScenarioResponse:
       properties:
         metadata:
@@ -7266,50 +7279,6 @@ components:
       - initial_state_hash
       - initial_state
       title: GeneratedScenarioResponse
-    GeneratedScenarioSummaryResponse:
-      properties:
-        scenario_id:
-          type: string
-          title: Scenario Id
-        scenario_version:
-          type: string
-          title: Scenario Version
-        seed:
-          type: integer
-          title: Seed
-        display_name:
-          type: string
-          title: Display Name
-        locale:
-          type: string
-          title: Locale
-        initial_state_hash:
-          type: string
-          title: Initial State Hash
-        created_at:
-          type: string
-          format: date-time
-          title: Created At
-        last_activity_at:
-          type: string
-          format: date-time
-          title: Last Activity At
-        conversation_count:
-          type: integer
-          title: Conversation Count
-      additionalProperties: false
-      type: object
-      required:
-      - scenario_id
-      - scenario_version
-      - seed
-      - display_name
-      - locale
-      - initial_state_hash
-      - created_at
-      - last_activity_at
-      - conversation_count
-      title: GeneratedScenarioSummaryResponse
     GuidanceNoteSchema:
       properties:
         id:
@@ -7376,6 +7345,79 @@ components:
       - revealed_when
       title: HiddenFactSchema
       description: Known to the customer side of a simulation only.
+    HistoryArmSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        label:
+          type: string
+          title: Label
+        agent_configuration_id:
+          type: string
+          format: uuid
+          title: Agent Configuration Id
+        agent_configuration_version:
+          type: integer
+          title: Agent Configuration Version
+        agent_configuration_name:
+          type: string
+          title: Agent Configuration Name
+        framework_id:
+          type: string
+          title: Framework Id
+        framework_label:
+          type: string
+          title: Framework Label
+        model_id:
+          type: string
+          title: Model Id
+        awaiting:
+          $ref: '#/components/schemas/ArmAwaiting'
+        met:
+          type: integer
+          title: Met
+        decided:
+          type: integer
+          title: Decided
+        failed:
+          type: boolean
+          title: Failed
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - label
+      - agent_configuration_id
+      - agent_configuration_version
+      - agent_configuration_name
+      - framework_id
+      - framework_label
+      - model_id
+      - awaiting
+      - met
+      - decided
+      - failed
+      title: HistoryArmSchema
+      description: 'One arm of one historical experiment: what it ran, where it stopped,
+        how it did.'
+    HistoryFacetSchema:
+      properties:
+        id:
+          type: string
+          title: Id
+        label:
+          type: string
+          title: Label
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - label
+      title: HistoryFacetSchema
+      description: One value a history filter offers, as the runs themselves name
+        it.
     InitialStateResponse:
       properties:
         canonical_schema_version:

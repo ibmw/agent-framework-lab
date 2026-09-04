@@ -212,8 +212,11 @@ def api_client(
     )
 
 
-async def make_shop(client: AsyncClient) -> str:
-    created = await client.post("/api/v1/shops", json={"identity": SHOP_IDENTITY})
+async def make_shop(client: AsyncClient, identity: dict[str, Any] | None = None) -> str:
+    """One publishable shop, named as the caller asks or as this workspace's default shop."""
+    created = await client.post(
+        "/api/v1/shops", json={"identity": identity if identity is not None else SHOP_IDENTITY}
+    )
     shop_id = str(created.json()["shop_id"])
     draft = (await client.get(f"/api/v1/shops/{shop_id}/draft")).json()["content"]
     draft.pop("default_tone_of_voice_id", None)

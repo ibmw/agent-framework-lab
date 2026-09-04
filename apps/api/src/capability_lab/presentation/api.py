@@ -1,11 +1,11 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import asynccontextmanager, nullcontext
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Path, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, Path, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -41,10 +41,8 @@ from capability_lab.application.conversations import (
     AgentRegistry,
     AgentTransientError,
     ConversationConflictError,
-    ConversationListFilter,
     ConversationNotFoundError,
     ConversationService,
-    ConversationSummary,
     FrameworkDeclaration,
     InvalidConversationMessageError,
 )
@@ -61,6 +59,7 @@ from capability_lab.application.definition_resolution import (
     UnpublishedReferenceError,
 )
 from capability_lab.application.evaluation import ExperimentEvaluationService
+from capability_lab.application.experiment_history import ExperimentHistoryService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_timeline import ExperimentTimelineService
 from capability_lab.application.experiments import (
@@ -97,7 +96,6 @@ from capability_lab.application.order_fixtures import (
     OrderReferenceExistsError,
     OrderSelectionError,
 )
-from capability_lab.application.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from capability_lab.application.participants import ParticipantTurnUnavailableError
 from capability_lab.application.ports import Clock, ConversationTurn, OrderWriteConflictError
 from capability_lab.application.sandbox_actions import SandboxActionService
@@ -120,11 +118,9 @@ from capability_lab.application.scenario_generation import (
     GeneratedScenario,
     GeneratedScenarioDeletedError,
     GeneratedScenarioNotFoundError,
-    GeneratedScenarioSummary,
     IdempotencyConflictError,
     IdempotencyStateNotFoundError,
     InvalidIdempotencyKeyError,
-    PersonaLibraryFilter,
     ScenarioGenerationKernel,
     ScenarioGenerationService,
     ScenarioGeneratorNotConfiguredError,
@@ -240,6 +236,7 @@ from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlo
 from capability_lab.presentation.customer_profiles import CustomerProfileRoutes
 from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.experiments import ExperimentRoutes
+from capability_lab.presentation.history import ExperimentHistoryRoutes
 from capability_lab.presentation.judge_configurations import JudgeConfigurationRoutes
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
@@ -584,70 +581,6 @@ class ConversationResponse(StrictApiModel):
             created_at=session_value.created_at,
             turns=[ConversationTurnResponse.from_turn(turn) for turn in turns],
         )
-
-
-class GeneratedScenarioSummaryResponse(StrictApiModel):
-    scenario_id: str
-    scenario_version: str
-    seed: int
-    display_name: str
-    locale: str
-    initial_state_hash: str
-    created_at: datetime
-    last_activity_at: datetime
-    conversation_count: int
-
-    @classmethod
-    def from_summary(cls, summary: GeneratedScenarioSummary) -> Self:
-        return cls(
-            scenario_id=summary.scenario_id,
-            scenario_version=summary.scenario_version,
-            seed=summary.seed,
-            display_name=summary.display_name,
-            locale=summary.locale,
-            initial_state_hash=summary.initial_state_hash,
-            created_at=summary.created_at,
-            last_activity_at=summary.last_activity_at,
-            conversation_count=summary.conversation_count,
-        )
-
-
-class GeneratedScenarioListResponse(StrictApiModel):
-    generations: list[GeneratedScenarioSummaryResponse]
-    page: int
-    page_size: int
-    total: int
-
-
-class ConversationSummaryResponse(StrictApiModel):
-    id: UUID
-    scenario_id: str
-    scenario_version: str
-    seed: int
-    framework_id: str
-    created_at: datetime
-    last_activity_at: datetime
-    turn_count: int
-
-    @classmethod
-    def from_summary(cls, summary: ConversationSummary) -> Self:
-        return cls(
-            id=summary.id,
-            scenario_id=summary.scenario_id,
-            scenario_version=summary.scenario_version,
-            seed=summary.seed,
-            framework_id=summary.framework_id,
-            created_at=summary.created_at,
-            last_activity_at=summary.last_activity_at,
-            turn_count=summary.turn_count,
-        )
-
-
-class ConversationListResponse(StrictApiModel):
-    conversations: list[ConversationSummaryResponse]
-    page: int
-    page_size: int
-    total: int
 
 
 def _money(value: Decimal) -> str:
@@ -1852,6 +1785,23 @@ def create_app(
         with session_scope(factory) as session:
             yield build_evaluation_service(session)
 
+    def experiment_history_service() -> Generator[ExperimentHistoryService, None, None]:
+        with session_scope(factory) as session:
+            # Over the same experiment construction the evaluation is built on, so a history
+            # row and the bench it opens are one reading of one record (ADR 0034).
+            experiments = build_experiment_service(session)
+            yield ExperimentHistoryService(
+                SqlAlchemyExperimentRepository(session),
+                experiments,
+                ExperimentEvaluationService(
+                    experiments,
+                    objective_block_repository(session),
+                    SqlAlchemyJudgementRepository(session),
+                ),
+                shop_repository(session),
+                scenario_repository(session),
+            )
+
     def experiment_judge_service() -> Generator[ExperimentJudgeService, None, None]:
         with session_scope(factory) as session:
             # One session for the pass and the reading it answers with: a verdict written in
@@ -1987,47 +1937,6 @@ def create_app(
         service.delete(scenario_id, scenario_version, seed)
         return Response(status_code=204)
 
-    def list_generated_scenarios(
-        service: Annotated[ScenarioGenerationService, Depends(generation_service)],
-        scenario_id: Annotated[
-            str | None,
-            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
-        ] = None,
-        scenario_version: Annotated[
-            str | None,
-            Query(min_length=2, max_length=64, pattern=r"^v[1-9][0-9]*$"),
-        ] = None,
-        framework_id: Annotated[
-            str | None,
-            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
-        ] = None,
-        active_since: Annotated[datetime | None, Query()] = None,
-        page: Annotated[int, Query(ge=1)] = 1,
-        page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
-    ) -> GeneratedScenarioListResponse:
-        summaries, total = service.list_summaries(
-            limit=page_size,
-            page=page,
-            filters=PersonaLibraryFilter(
-                scenario_id=scenario_id,
-                scenario_version=scenario_version,
-                framework_id=framework_id,
-                active_since=(
-                    active_since.replace(tzinfo=UTC)
-                    if active_since is not None and active_since.tzinfo is None
-                    else active_since
-                ),
-            ),
-        )
-        return GeneratedScenarioListResponse(
-            generations=[
-                GeneratedScenarioSummaryResponse.from_summary(summary) for summary in summaries
-            ],
-            page=page,
-            page_size=page_size,
-            total=total,
-        )
-
     def list_agent_frameworks() -> AgentFrameworkListResponse:
         return AgentFrameworkListResponse(
             frameworks=[
@@ -2058,62 +1967,6 @@ def create_app(
         service: Annotated[ConversationService, Depends(conversation_service)],
     ) -> ConversationResponse:
         return ConversationResponse.from_conversation(service.get(session_id))
-
-    def list_conversations(
-        service: Annotated[ConversationService, Depends(conversation_service)],
-        scenario_id: Annotated[
-            str | None,
-            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
-        ] = None,
-        scenario_version: Annotated[
-            str | None,
-            Query(min_length=2, max_length=64, pattern=r"^v[1-9][0-9]*$"),
-        ] = None,
-        seed: Annotated[int | None, Query(ge=0, le=MAX_SCENARIO_SEED)] = None,
-        framework_id: Annotated[
-            str | None,
-            Query(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
-        ] = None,
-        active_since: Annotated[datetime | None, Query()] = None,
-        page: Annotated[int, Query(ge=1)] = 1,
-        page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
-    ) -> ConversationListResponse:
-        persona_filter = (scenario_id, scenario_version, seed)
-        if any(part is not None for part in persona_filter) and not all(
-            part is not None for part in persona_filter
-        ):
-            raise RequestValidationError(
-                [
-                    {
-                        "loc": ("query", "scenario_id, scenario_version, seed"),
-                        "msg": "scenario_id, scenario_version and seed must be provided together",
-                        "type": "value_error",
-                    }
-                ]
-            )
-        summaries, total = service.list(
-            limit=page_size,
-            page=page,
-            filters=ConversationListFilter(
-                scenario_id=scenario_id,
-                scenario_version=scenario_version,
-                seed=seed,
-                framework_id=framework_id,
-                active_since=(
-                    active_since.replace(tzinfo=UTC)
-                    if active_since is not None and active_since.tzinfo is None
-                    else active_since
-                ),
-            ),
-        )
-        return ConversationListResponse(
-            conversations=[
-                ConversationSummaryResponse.from_summary(summary) for summary in summaries
-            ],
-            page=page,
-            page_size=page_size,
-            total=total,
-        )
 
     def delete_conversation(
         session_id: UUID,
@@ -2262,18 +2115,6 @@ def create_app(
         },
     )
     router.add_api_route(
-        "/conversations",
-        list_conversations,
-        methods=["GET"],
-        response_model=ConversationListResponse,
-        operation_id="listConversations",
-        summary="List support conversations most recently active first",
-        responses={
-            422: {"model": ErrorResponse, "description": "Invalid filter or page"},
-            500: {"model": ErrorResponse, "description": "Internal server error"},
-        },
-    )
-    router.add_api_route(
         "/conversations/{session_id}",
         get_conversation,
         methods=["GET"],
@@ -2392,18 +2233,6 @@ def create_app(
         },
     )
     router.add_api_route(
-        "/scenarios/generations",
-        list_generated_scenarios,
-        methods=["GET"],
-        response_model=GeneratedScenarioListResponse,
-        operation_id="listGeneratedScenarios",
-        summary="List generated personas most recently active first",
-        responses={
-            422: {"model": ErrorResponse, "description": "Invalid filter or page"},
-            500: {"model": ErrorResponse, "description": "Internal server error"},
-        },
-    )
-    router.add_api_route(
         "/scenarios/{scenario_id}/versions/{scenario_version}/generations/{seed}",
         get_generated_scenario,
         methods=["GET"],
@@ -2443,6 +2272,7 @@ def create_app(
     SandboxToolRoutes(sandbox_tool_service).register(router)
     # The participant driver is composed per delivery, from the words the request carries:
     # selecting it is composition's job, and its lifetime is one turn.
+    ExperimentHistoryRoutes(experiment_history_service).register(router)
     ExperimentRoutes(
         experiment_service,
         HumanParticipantDriver,

@@ -45,8 +45,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List support conversations most recently active first */
-    get: operations["listConversations"];
+    get?: never;
     put?: never;
     /** Start a support conversation from generated scenario state */
     post: operations["startConversation"];
@@ -170,23 +169,6 @@ export interface paths {
     put?: never;
     /** Generate and persist deterministic scenario state */
     post: operations["generateScenario"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v1/scenarios/generations": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List generated personas most recently active first */
-    get: operations["listGeneratedScenarios"];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -988,6 +970,26 @@ export interface paths {
      * @description Reads the arm's own state and the exact published versions its snapshot pinned, and — for a tool whose effect is 'write' — changes that arm and no other. A tool that understands the call and declines it answers with outcome 'refused' and HTTP 200, including when the arm moved after the change was proposed; only a call that could not run at all is an HTTP error.
      */
     post: operations["callSandboxTool"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/experiments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List every experiment this lab has run, most recently started first
+     * @description Experiment-first history across every shop. Each row is projected from the experiment's own record — the arms it pinned, where each one stands, and what each one's objectives say — so a row can never disagree with the bench or the results screen it opens into. Counts are per arm and are never combined into a score. The filter options travel with the page and are read from the experiments themselves rather than from the definition libraries.
+     */
+    get: operations["listExperimentHistory"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2139,17 +2141,6 @@ export interface components {
       /** Document Id */
       document_id: string;
     };
-    /** ConversationListResponse */
-    ConversationListResponse: {
-      /** Conversations */
-      conversations: components["schemas"]["ConversationSummaryResponse"][];
-      /** Page */
-      page: number;
-      /** Page Size */
-      page_size: number;
-      /** Total */
-      total: number;
-    };
     /** ConversationResponse */
     ConversationResponse: {
       /**
@@ -2179,34 +2170,6 @@ export interface components {
       created_at: string;
       /** Turns */
       turns: components["schemas"]["ConversationTurnResponse"][];
-    };
-    /** ConversationSummaryResponse */
-    ConversationSummaryResponse: {
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Scenario Id */
-      scenario_id: string;
-      /** Scenario Version */
-      scenario_version: string;
-      /** Seed */
-      seed: number;
-      /** Framework Id */
-      framework_id: string;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Last Activity At
-       * Format: date-time
-       */
-      last_activity_at: string;
-      /** Turn Count */
-      turn_count: number;
     };
     /** ConversationTurnResponse */
     ConversationTurnResponse: {
@@ -2641,6 +2604,69 @@ export interface components {
       /** Arms */
       arms: components["schemas"]["ArmEvaluationSchema"][];
     };
+    /**
+     * ExperimentHistoryEntrySchema
+     * @description One row of history: an experiment, what it ran, and where each arm ended.
+     */
+    ExperimentHistoryEntrySchema: {
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /** Shop Name */
+      shop_name: string;
+      /** Label */
+      label: string;
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Scenario Name */
+      scenario_name: string;
+      /** Scenario Version */
+      scenario_version: number;
+      /** Scenario Superseded */
+      scenario_superseded: boolean;
+      /** Seed */
+      seed: number;
+      /** Sandbox Fingerprint */
+      sandbox_fingerprint: string;
+      /** Resolution Fingerprint */
+      resolution_fingerprint: string;
+      participant_driver: components["schemas"]["ParticipantDriverType"];
+      status: components["schemas"]["ExperimentStatus"];
+      /** Arms */
+      arms: components["schemas"]["HistoryArmSchema"][];
+      /** Created At */
+      created_at: string;
+    };
+    /**
+     * ExperimentHistoryResponse
+     * @description One page of history, and every value its filters can be narrowed to.
+     */
+    ExperimentHistoryResponse: {
+      /** Experiments */
+      experiments: components["schemas"]["ExperimentHistoryEntrySchema"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+      /** Shops */
+      shops: components["schemas"]["HistoryFacetSchema"][];
+      /** Scenarios */
+      scenarios: components["schemas"]["HistoryFacetSchema"][];
+      /** Frameworks */
+      frameworks: components["schemas"]["HistoryFacetSchema"][];
+    };
     /** ExperimentListResponse */
     ExperimentListResponse: {
       /** Experiments */
@@ -2739,6 +2765,8 @@ export interface components {
       agent_configuration_id: string;
       /** Agent Configuration Version */
       agent_configuration_version: number;
+      /** Agent Configuration Name */
+      agent_configuration_name: string;
       /** Framework Id */
       framework_id: string;
       /** Provider */
@@ -2759,6 +2787,22 @@ export interface components {
       standing: components["schemas"]["ArmStandingSchema"];
       metrics: components["schemas"]["ArmMetricsSchema"];
     };
+    /**
+     * ExperimentStatus
+     * @description Where a whole experiment stands, out of what each of its arms says.
+     *
+     *     A fourth reading of the same record, at the width a listing needs: an operator scanning
+     *     history is asking "is there anything left to do here, and did it end badly", which is a
+     *     question about the experiment rather than about one arm.
+     *
+     *     Three values because two readings decide it, and they decide different things. Whether
+     *     anything can still happen is the arms' standing (ADR 0029) — an experiment is running
+     *     while any arm can still be advanced or written to. Whether what happened was a failure is
+     *     the evaluation's, and it is already defined: an arm fails when a *required* objective is
+     *     missed (ADR 0030), never when the lab could not decide a row.
+     * @enum {string}
+     */
+    ExperimentStatus: "running" | "completed" | "failed";
     /**
      * ExperimentSummarySchema
      * @description One row of the bench's experiment list.
@@ -2859,50 +2903,12 @@ export interface components {
        */
       seed: number;
     };
-    /** GeneratedScenarioListResponse */
-    GeneratedScenarioListResponse: {
-      /** Generations */
-      generations: components["schemas"]["GeneratedScenarioSummaryResponse"][];
-      /** Page */
-      page: number;
-      /** Page Size */
-      page_size: number;
-      /** Total */
-      total: number;
-    };
     /** GeneratedScenarioResponse */
     GeneratedScenarioResponse: {
       metadata: components["schemas"]["ScenarioMetadataResponse"];
       /** Initial State Hash */
       initial_state_hash: string;
       initial_state: components["schemas"]["InitialStateResponse"];
-    };
-    /** GeneratedScenarioSummaryResponse */
-    GeneratedScenarioSummaryResponse: {
-      /** Scenario Id */
-      scenario_id: string;
-      /** Scenario Version */
-      scenario_version: string;
-      /** Seed */
-      seed: number;
-      /** Display Name */
-      display_name: string;
-      /** Locale */
-      locale: string;
-      /** Initial State Hash */
-      initial_state_hash: string;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Last Activity At
-       * Format: date-time
-       */
-      last_activity_at: string;
-      /** Conversation Count */
-      conversation_count: number;
     };
     /** GuidanceNoteSchema */
     GuidanceNoteSchema: {
@@ -2937,6 +2943,51 @@ export interface components {
       note: string;
       /** Revealed When */
       revealed_when: string;
+    };
+    /**
+     * HistoryArmSchema
+     * @description One arm of one historical experiment: what it ran, where it stopped, how it did.
+     */
+    HistoryArmSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /** Label */
+      label: string;
+      /**
+       * Agent Configuration Id
+       * Format: uuid
+       */
+      agent_configuration_id: string;
+      /** Agent Configuration Version */
+      agent_configuration_version: number;
+      /** Agent Configuration Name */
+      agent_configuration_name: string;
+      /** Framework Id */
+      framework_id: string;
+      /** Framework Label */
+      framework_label: string;
+      /** Model Id */
+      model_id: string;
+      awaiting: components["schemas"]["ArmAwaiting"];
+      /** Met */
+      met: number;
+      /** Decided */
+      decided: number;
+      /** Failed */
+      failed: boolean;
+    };
+    /**
+     * HistoryFacetSchema
+     * @description One value a history filter offers, as the runs themselves name it.
+     */
+    HistoryFacetSchema: {
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
     };
     /** InitialStateResponse */
     InitialStateResponse: {
@@ -5988,52 +6039,6 @@ export interface operations {
       };
     };
   };
-  listConversations: {
-    parameters: {
-      query?: {
-        scenario_id?: string | null;
-        scenario_version?: string | null;
-        seed?: number | null;
-        framework_id?: string | null;
-        active_since?: string | null;
-        page?: number;
-        page_size?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ConversationListResponse"];
-        };
-      };
-      /** @description Invalid filter or page */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
   startConversation: {
     parameters: {
       query?: never;
@@ -6545,51 +6550,6 @@ export interface operations {
         };
       };
       /** @description Invalid command */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ErrorResponse"];
-        };
-      };
-    };
-  };
-  listGeneratedScenarios: {
-    parameters: {
-      query?: {
-        scenario_id?: string | null;
-        scenario_version?: string | null;
-        framework_id?: string | null;
-        active_since?: string | null;
-        page?: number;
-        page_size?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["GeneratedScenarioListResponse"];
-        };
-      };
-      /** @description Invalid filter or page */
       422: {
         headers: {
           [name: string]: unknown;
@@ -9589,6 +9549,54 @@ export interface operations {
         };
       };
       /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listExperimentHistory: {
+    parameters: {
+      query?: {
+        /** @description Only this shop's runs. */
+        shop_id?: string | null;
+        /** @description Only runs of this scenario. */
+        scenario_id?: string | null;
+        /** @description Only runs with an arm on this framework. */
+        framework_id?: string | null;
+        /** @description Only runs standing here: running, completed, or failed. */
+        status?: components["schemas"]["ExperimentStatus"] | null;
+        /** @description Only runs where an arm holds an objective with this outcome. */
+        outcome?: components["schemas"]["ObjectiveOutcome"] | null;
+        /** @description Only runs started at or after this moment. */
+        started_after?: string | null;
+        /** @description Only runs started at or before this moment. */
+        started_before?: string | null;
+        /** @description Match the name, scenario, shop, or arms of a run. */
+        q?: string | null;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentHistoryResponse"];
+        };
+      };
+      /** @description Invalid filter or page */
       422: {
         headers: {
           [name: string]: unknown;
