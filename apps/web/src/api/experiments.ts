@@ -1,9 +1,12 @@
 import type {
   ExperimentEvaluationResponse,
+  ExperimentHistoryEntrySchema,
+  ExperimentHistoryResponse,
   ExperimentListResponse,
   ExperimentPreviewResponse,
   ExperimentResponse,
   ExperimentTimelineResponse,
+  ObjectiveResultSchema,
   ParticipantTurnListResponse,
   ParticipantTurnRequest,
   RunTurnResponse,
@@ -14,6 +17,49 @@ import { apiPath, JSON_HEADERS, read } from "./client";
 
 function experimentsPath(shopId: string, suffix = ""): string {
   return apiPath(`/shops/${encodeURIComponent(shopId)}/experiments${suffix}`);
+}
+
+/**
+ * How history is narrowed, as the query string the contract takes.
+ *
+ * The two closed vocabularies are the contract's own rather than plain strings: a status or
+ * an outcome the backend does not publish is a 422, and a caller should be told that where
+ * it is written rather than where it is answered.
+ */
+export interface ExperimentHistoryQuery {
+  shop_id?: string;
+  scenario_id?: string;
+  framework_id?: string;
+  status?: ExperimentHistoryEntrySchema["status"] | "";
+  outcome?: ObjectiveResultSchema["outcome"] | "";
+  started_after?: string;
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * Read every experiment this lab has run, narrowed and paged.
+ *
+ * Deliberately not under a shop: `listExperiments` is the bench's listing of what has been
+ * started *here*, and this is the lab's. The response carries the filter options beside the
+ * rows, so one read fills the screen rather than rendering filters against a lab it has not
+ * listed.
+ */
+export async function listExperimentHistory(
+  query: ExperimentHistoryQuery,
+  signal?: AbortSignal,
+): Promise<ExperimentHistoryResponse> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== "") {
+      params.set(key, String(value));
+    }
+  }
+  const search = params.toString();
+  return read<ExperimentHistoryResponse>(
+    await fetch(apiPath(`/experiments${search === "" ? "" : `?${search}`}`), { signal }),
+  );
 }
 
 export async function listExperiments(

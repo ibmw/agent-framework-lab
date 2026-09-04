@@ -646,4 +646,41 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   );
   const faulted = paths.getByRole("listitem").filter({ hasText: "advance_fulfilment" });
   await expect(faulted).toHaveText(/capability_lab\/domain\/mutation\.py:\d+ · 2 calls/);
+
+  // And the incident is found again from history — experiment-first, across every shop,
+  // with each arm's own count beside what it ran and no total anywhere.
+  await openSection(page, "History", "Experiment history");
+  const listed = card(page, "Experiment history");
+  const row = listed.getByRole("row").filter({ hasText: `Prompt comparison ${unique}` });
+  await expect(row).toHaveCount(1);
+  await expect(row.getByText(`cfg-atlas-${unique} v1`)).toBeVisible();
+  await expect(row.getByText(`cfg-beacon-${unique} v1`)).toBeVisible();
+  // Each arm against what was decided *for it*: the arm driven to the cap has two decided
+  // rows, and the arm still holding a turn has none — a denominator, not a defeat.
+  await expect(row.getByText("Arm A 1/2 decided")).toBeVisible();
+  await expect(row.getByText("Arm B 0/0 decided")).toBeVisible();
+
+  // Narrowing is the backend's answer, so the assertion waits for the answer rather than
+  // for the select to have changed.
+  const narrowed = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/experiments?") &&
+      response.url().includes("framework_id=fake"),
+  );
+  await page.getByLabel("Framework").selectOption({ label: "Deterministic fake" });
+  await narrowed;
+  await expect(row).toHaveCount(1);
+  await page.getByLabel("Search").fill("a name nothing was given");
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(listed.getByText(/No experiment matches these filters/)).toBeVisible();
+  await page.getByLabel("Search").fill(`Prompt comparison ${unique}`);
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(row).toHaveCount(1);
+
+  // And the row opens the evidence it summarizes.
+  await row.getByRole("link", { name: "View evidence" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
+  ).toBeVisible();
+  await expect(page.getByText(/There is no aggregate score/)).toBeVisible();
 });

@@ -108,7 +108,7 @@ function studioSections(shopId: string): NavSection[] {
         },
         { label: "Judges", to: `${base}/judges`, icon: <Scale size={15} /> },
         { label: "Bench", to: `${base}/bench`, icon: <Play size={15} /> },
-        { label: "History", icon: <Clock size={15} />, milestone: "Milestone 5" },
+        { label: "History", to: `${base}/history`, icon: <Clock size={15} /> },
       ],
     },
   ];

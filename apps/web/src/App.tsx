@@ -6,6 +6,7 @@ import { MutationBlocksPage, ObjectiveBlocksPage } from "./routes/BlockLibraryPa
 import { CustomerEditorPage } from "./routes/CustomerEditorPage";
 import { CustomersPage } from "./routes/CustomersPage";
 import { ExperimentBenchPage } from "./routes/ExperimentBenchPage";
+import { ExperimentHistoryPage } from "./routes/ExperimentHistoryPage";
 import { ExperimentResultsLayout } from "./routes/ExperimentResultsLayout";
 import { ExperimentResultsPage } from "./routes/ExperimentResultsPage";
 import { ExperimentSetupPage } from "./routes/ExperimentSetupPage";
@@ -54,6 +55,7 @@ export function App() {
           <Route index element={<ExperimentResultsPage />} />
           <Route path="timeline" element={<ExperimentTimelinePage />} />
         </Route>
+        <Route path="history" element={<ExperimentHistoryPage />} />
         <Route path="scenarios" element={<ScenariosPage />} />
         <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
         <Route path="scenarios/:scenarioId/snapshots" element={<SnapshotsPage />} />
