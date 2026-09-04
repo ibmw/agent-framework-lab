@@ -311,6 +311,19 @@ operator's behalf how a missed process check weighs against a resolved incident 
 product direction reserves for a person. Depth is tabs on that one screen rather than pages
 beside it, so an execution timeline followed out of a finding is still the same run (ADR 0033).
 
+The way *into* any of that is one cross-shop listing rather than a page per shop:
+`GET /experiments` narrows every experiment the lab holds by shop, scenario, framework,
+status, objective outcome, start date, and text, and pages it by number. Its rows are the same
+projection one level out — where each arm stands, what each arm met out of what was decided for
+it, and the versions the run pinned — read through the same services the bench and the results
+screen read, so nothing about a run can be summarized in a listing differently from the screen
+it opens. An experiment's status is that reading too: running while any arm can still be acted
+on, failed once every arm is finished and one missed something the scenario required, completed
+otherwise. The filter options travel with the page and are read from the experiments themselves,
+so a dropdown offers what has actually been run. That listing is the target historical record,
+and the POC's persona-first `listConversations` and `listGeneratedScenarios` were removed with it
+(ADR 0034).
+
 ## Persistence, versioning, and extensibility
 
 Authorable definitions use mutable drafts and immutable published versions, stored as one canonical

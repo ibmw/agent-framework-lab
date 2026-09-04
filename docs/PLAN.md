@@ -81,10 +81,13 @@ and then what a run cost: the duration and the provider usage stored because the
 recovered afterwards, and the turns, calls, retries, failures, and estimated cost projected
 over the record beside them (ADR 0032), and then the results screen those readings are
 compared on: every objective read arm beside arm, with the counts kept per arm and no
-aggregate anywhere, and the execution timeline moved onto it as a depth tab (ADR 0033).
-The POC's conversation, persona, and order-action HTTP contracts
-remain published and tested but have no UI consumer until the Milestone 2–4 surfaces are built on
-the new shell.
+aggregate anywhere, and the execution timeline moved onto it as a depth tab (ADR 0033), and
+then the way back into any of it: the cross-shop history an experiment is found again
+through, whose every row is projected from the record the bench and the results screen read
+— which also removes the persona-first listings it replaces (ADR 0034).
+The POC's remaining conversation, persona, and order-action HTTP contracts
+remain published and tested but have no UI consumer; their two history listings were removed
+by ADR 0034, which is the target historical record that replaces them.
 
 The POC does not implement the target Scenario Studio, published agent configurations, LLM judge,
 experiment-first history, or target wrong-address journey. Existing persona-first contracts and data may be replaced through cohesive
@@ -627,7 +630,7 @@ Turn completed runs into durable, searchable comparison evidence.
 - [x] Record turns, token usage, model/tool calls, duration, retries, failures, and estimated cost
   when available.
 - [x] Present objective-level comparison without a global framework score.
-- [ ] Replace persona-first history with experiment-first filters and detail pages.
+- [x] Replace persona-first history with experiment-first filters and detail pages.
 - [ ] Preserve evaluator executions, notes, tags, state diffs, traces, replay, and fork provenance.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
@@ -668,6 +671,22 @@ score would report the operator's own pacing as a difference between configurati
 between what a rule decided and what a judge did, divergence read from the composition rather than
 from the words, the depth tabs the header stays across — which is where the execution timeline now
 lives — and the parts of the frame that belong to the outcomes still open.
+
+History evidence (frame 10): an operator who has driven an incident to its end leaves the shop
+they ran it in and finds it again in the lab's own listing — every run this lab has made, whichever
+shop it belongs to, each row naming the recipe version it pinned, the configuration version each
+arm ran, and what each arm's own record decided: the arm driven to the cap counted against two
+rows and the arm still holding a turn against none, which is a denominator rather than a defeat.
+The row says the recipe has been published again since without pretending the run was, narrowing
+to a name nothing was given empties the listing rather than the lab, and the row opens the
+evidence it summarizes in the shop that produced it. ADR 0034 records the cross-shop listing and
+why the bench's own remains beside it, the row as a projection of the same reading the bench and
+the results screen make and the cost that choice is worth paying, the status decided by the
+standing and the evaluation rather than set by anything, the filter options read from the runs
+themselves rather than from the definition libraries, the pinned names a row keeps against the
+renaming of what it ran, the narrowing kept in the URL, and the removal of `listConversations` and
+`listGeneratedScenarios` — the persona-first history this outcome names, replaced rather than left
+published beside its replacement.
 
 Judge evidence (frame 8's objectives matrix, and the judge's own editor): an author publishes a
 rubric, the model that reads it, and exactly what it is shown — after the gate has refused the

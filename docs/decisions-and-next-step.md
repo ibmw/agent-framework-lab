@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-09-01
+Status: current — 2026-09-03
 
 ## Authoritative direction
 
@@ -68,9 +68,11 @@ SDK immediately.
 - The POC's `RetailSupportTools` (`read_customer`, `list_products`, `list_customer_orders`) remain
   implemented POC behavior serving the persona-first conversation contracts. The target tool surface
   is the versioned read-tool set over a sandbox arm (ADR 0021).
-- ADR 0010's persona library and conversation history are superseded as navigation: their frontend
-  was removed by ADR 0013 in favour of the Studio shell. The underlying conversation and persona
-  HTTP contracts remain published POC behavior, not the target historical record.
+- ADR 0010's persona library and conversation history are superseded: their frontend was removed by
+  ADR 0013 in favour of the Studio shell, and their two listings — `listConversations` and
+  `listGeneratedScenarios` — were removed by ADR 0034, which delivers the experiment-first
+  historical record that replaces them. The remaining conversation and persona HTTP contracts
+  (start, resume, message, delete, and the order-action protocol) stay published POC behavior.
 - ADR 0009's order-cancellation proposal/confirmation protocol remains implemented POC behavior on
   the persona-first conversation contracts. The target modifying-tool protocol is the propose/apply
   pair over a sandbox arm, whose confirmation is the hash of the change and therefore serves as both
@@ -191,8 +193,16 @@ SDK immediately.
    the judge version, the model, and the fingerprint of the exact input it read; scoring again
    writes the next attempt rather than replacing the last, and a judge the lab cannot reach
    records nothing rather than counting against an arm.
-15. Next is the rest of Milestone 5: the quantitative record, the results surfaces (frames 9
-   and 9b), and experiment-first history. Nothing sets a run status today, deliberately.
+15. The quantitative record (ADR 0032), the objective-level comparison on frame 9's General tab
+   (ADR 0033), and experiment-first history (ADR 0034) are delivered. History is one cross-shop
+   listing whose every row — each arm's standing, what it met out of what was decided for it, and
+   the versions it pinned — is projected from the record the bench and the results screen read;
+   it replaces the persona-first listings, which were removed with it. An experiment's status is
+   read the same way and is still not a state anything sets: running while an arm can be acted
+   on, failed once every arm is finished and one missed a required objective.
+16. Next is the rest of Milestone 5: notes, tags, state diffs, traces (frame 9b), the code excerpt
+   of frame 9c, replay and fork provenance, and judge failure/rerun tested apart from the
+   deterministic outcome calculation.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
