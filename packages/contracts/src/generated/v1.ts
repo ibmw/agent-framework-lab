@@ -1937,6 +1937,24 @@ export interface components {
       /** Unanswered */
       unanswered: number[];
     };
+    /**
+     * ArmStateDiffSchema
+     * @description What one arm's world is, read against the world it was cloned into.
+     *
+     *     Served rather than computed by the client for the reason the standing and the metrics
+     *     are: it is a difference between the exact bytes two fingerprints cover, and a client
+     *     comparing its own two readings would be free to decide differently what changed.
+     *
+     *     `other` carries changes outside every order, which nothing in this build can produce —
+     *     an empty list is the "no other state changed" check passing rather than a section with
+     *     nothing in it.
+     */
+    ArmStateDiffSchema: {
+      /** Orders */
+      orders: components["schemas"]["OrderStateDiffSchema"][];
+      /** Other */
+      other: components["schemas"]["FieldChangeSchema"][];
+    };
     /** AttachCustomerProfileRequest */
     AttachCustomerProfileRequest: {
       /**
@@ -2747,6 +2765,8 @@ export interface components {
      *     The two fingerprints are the arm's own, read off the sandbox rather than restated:
      *     `snapshot_fingerprint` is where it started and agrees with every sibling arm forever;
      *     `state_fingerprint` is where it is now and stops agreeing the moment something writes.
+     *     `state_diff` is what that second fingerprint moved *to*, field by field: the fingerprint
+     *     says an arm's world is not the one it started in, and the diff says what about it is not.
      */
     ExperimentRunSchema: {
       /**
@@ -2786,6 +2806,7 @@ export interface components {
       state_fingerprint: string;
       standing: components["schemas"]["ArmStandingSchema"];
       metrics: components["schemas"]["ArmMetricsSchema"];
+      state_diff: components["schemas"]["ArmStateDiffSchema"];
     };
     /**
      * ExperimentStatus
@@ -2876,6 +2897,22 @@ export interface components {
       question: string;
       /** Answer */
       answer: string;
+    };
+    /**
+     * FieldChangeSchema
+     * @description One field of one canonical document that reads differently than it started.
+     *
+     *     `null` on either side means the field was *absent* there rather than empty: an order
+     *     that had no shipping address and now has one is a different fact from one whose city
+     *     was blanked.
+     */
+    FieldChangeSchema: {
+      /** Path */
+      path: string;
+      /** Before */
+      before: string | null;
+      /** After */
+      after: string | null;
     };
     /** FulfilmentMethodSchema */
     FulfilmentMethodSchema: {
@@ -3719,6 +3756,21 @@ export interface components {
       status: "pending" | "paid" | "cancelled";
       /** Version */
       version: number;
+    };
+    /**
+     * OrderStateDiffSchema
+     * @description Everything that moved in one order, named the way the incident names it.
+     */
+    OrderStateDiffSchema: {
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /** Reference */
+      reference: string;
+      /** Changes */
+      changes: components["schemas"]["FieldChangeSchema"][];
     };
     /**
      * OrderSummarySchema

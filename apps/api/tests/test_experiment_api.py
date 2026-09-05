@@ -517,6 +517,36 @@ async def test_the_write_is_reported_as_the_state_change_it_is(
     assert len({run["state_fingerprint"] for run in read["runs"]}) == 2
 
 
+async def test_an_arm_reads_back_what_its_world_became_field_by_field(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The half of "verified, not claimed" a revision counter cannot say (ADR 0035)."""
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    read = (
+        await client.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+    ).json()
+
+    advanced, untouched = read["runs"]
+    moved = advanced["state_diff"]["orders"]
+    assert [order["reference"] for order in moved] == ["NS-10482"]
+    changes = {
+        change["path"]: (change["before"], change["after"]) for change in moved[0]["changes"]
+    }
+    # The agent's own write: the stale Bordeaux copy replaced by the customer's default.
+    assert changes["shipping_address.source_address_id"] == ("bordeaux-previous-flat", "home")
+    assert changes["shipping_address.city"] == ("Bordeaux", "Lyon")
+    # And the scenario's fault beside it, which no agent asked for and none was told about.
+    assert changes["fulfilment.status"] == ("unfulfilled", "partially_fulfilled")
+    # Nothing outside the orders moved, which is the claim the card makes.
+    assert advanced["state_diff"]["other"] == []
+    # The arm beside it is still in the world it was cloned into.
+    assert untouched["state_diff"] == {"orders": [], "other": []}
+
+
 async def test_an_experiment_reads_back_both_sides_of_its_threads(
     client: AsyncClient, lab: dict[str, str]
 ) -> None:

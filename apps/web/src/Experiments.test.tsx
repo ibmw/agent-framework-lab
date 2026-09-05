@@ -4,6 +4,7 @@ import type {
   AgentTurnSchema,
   ArmMetricsSchema,
   ArmStandingSchema,
+  ArmStateDiffSchema,
   ComparisonVariableSchema,
   ExperimentEvaluationResponse,
   ExperimentListResponse,
@@ -394,6 +395,9 @@ function evaluation(
   };
 }
 
+/** An arm whose world is still the one it was cloned into. */
+const UNMOVED: ArmStateDiffSchema = { orders: [], other: [] };
+
 /**
  * The judge's own row, before and after a scoring pass.
  *
@@ -489,6 +493,7 @@ function experiment(
         state_fingerprint: STATE_FINGERPRINT,
         standing: standing(ARM_A, turns, agentTurns),
         metrics: metrics(ARM_A, turns, agentTurns, toolEvents),
+        state_diff: stateDiffs[ARM_A] ?? UNMOVED,
       },
       {
         run_id: ARM_B,
@@ -506,6 +511,7 @@ function experiment(
         state_fingerprint: STATE_FINGERPRINT,
         standing: standing(ARM_B, turns, agentTurns),
         metrics: metrics(ARM_B, turns, agentTurns, toolEvents),
+        state_diff: stateDiffs[ARM_B] ?? UNMOVED,
       },
     ],
     turns,
@@ -618,6 +624,7 @@ let turns: ParticipantTurnSchema[] = OPENED;
 let agentTurns: AgentTurnSchema[] = [];
 let toolEvents: ToolEventSchema[] = [];
 let mutationEvents: MutationEventSchema[] = [];
+let stateDiffs: Record<string, ArmStateDiffSchema> = {};
 let maxTurns = 12;
 let startFails = false;
 let runtimeUnavailable = false;
@@ -757,6 +764,7 @@ afterEach(() => {
   agentTurns = [];
   toolEvents = [];
   mutationEvents = [];
+  stateDiffs = {};
   maxTurns = 12;
   startFails = false;
   runtimeUnavailable = false;

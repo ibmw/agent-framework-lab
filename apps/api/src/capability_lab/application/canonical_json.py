@@ -44,15 +44,24 @@ def normalize_canonical_value(value: object) -> CanonicalValue:
     )
 
 
-def canonical_json_bytes(payload: dict[str, CanonicalValue]) -> bytes:
-    normalized = normalize_canonical_value(payload)
+def canonical_json_text(value: object) -> str:
+    """Render one value as its canonical JSON text: normalized, sorted, and unspaced.
+
+    The single definition of what canonical serialization *is*. Anything that renders a
+    canonical value — the bytes a fingerprint covers, or a subtree quoted into a diff —
+    goes through here, so no second caller can settle these options slightly differently.
+    """
     return json.dumps(
-        normalized,
+        normalize_canonical_value(value),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
         allow_nan=False,
-    ).encode("utf-8")
+    )
+
+
+def canonical_json_bytes(payload: dict[str, CanonicalValue]) -> bytes:
+    return canonical_json_text(payload).encode("utf-8")
 
 
 def canonical_sha256(canonical_json: bytes) -> str:

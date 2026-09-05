@@ -5476,6 +5476,44 @@ components:
         to offer a
 
         button for something the backend would answer differently.'
+    ArmStateDiffSchema:
+      properties:
+        orders:
+          items:
+            $ref: '#/components/schemas/OrderStateDiffSchema'
+          type: array
+          title: Orders
+        other:
+          items:
+            $ref: '#/components/schemas/FieldChangeSchema'
+          type: array
+          title: Other
+      additionalProperties: false
+      type: object
+      required:
+      - orders
+      - other
+      title: ArmStateDiffSchema
+      description: 'What one arm''s world is, read against the world it was cloned
+        into.
+
+
+        Served rather than computed by the client for the reason the standing and
+        the metrics
+
+        are: it is a difference between the exact bytes two fingerprints cover, and
+        a client
+
+        comparing its own two readings would be free to decide differently what changed.
+
+
+        `other` carries changes outside every order, which nothing in this build can
+        produce —
+
+        an empty list is the "no other state changed" check passing rather than a
+        section with
+
+        nothing in it.'
     AttachCustomerProfileRequest:
       properties:
         shop_id:
@@ -7013,6 +7051,8 @@ components:
           $ref: '#/components/schemas/ArmStandingSchema'
         metrics:
           $ref: '#/components/schemas/ArmMetricsSchema'
+        state_diff:
+          $ref: '#/components/schemas/ArmStateDiffSchema'
       additionalProperties: false
       type: object
       required:
@@ -7031,6 +7071,7 @@ components:
       - state_fingerprint
       - standing
       - metrics
+      - state_diff
       title: ExperimentRunSchema
       description: 'One arm: what it runs, where it works, how far its world has moved,
         and what next.
@@ -7043,7 +7084,13 @@ components:
         forever;
 
         `state_fingerprint` is where it is now and stops agreeing the moment something
-        writes.'
+        writes.
+
+        `state_diff` is what that second fingerprint moved *to*, field by field: the
+        fingerprint
+
+        says an arm''s world is not the one it started in, and the diff says what
+        about it is not.'
     ExperimentStatus:
       type: string
       enum:
@@ -7205,6 +7252,39 @@ components:
       - question
       - answer
       title: FaqEntrySchema
+    FieldChangeSchema:
+      properties:
+        path:
+          type: string
+          title: Path
+        before:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Before
+        after:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: After
+      additionalProperties: false
+      type: object
+      required:
+      - path
+      - before
+      - after
+      title: FieldChangeSchema
+      description: 'One field of one canonical document that reads differently than
+        it started.
+
+
+        `null` on either side means the field was *absent* there rather than empty:
+        an order
+
+        that had no shipping address and now has one is a different fact from one
+        whose city
+
+        was blanked.'
     FulfilmentMethodSchema:
       properties:
         id:
@@ -8786,6 +8866,29 @@ components:
       - status
       - version
       title: OrderResponse
+    OrderStateDiffSchema:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        reference:
+          type: string
+          title: Reference
+        changes:
+          items:
+            $ref: '#/components/schemas/FieldChangeSchema'
+          type: array
+          title: Changes
+      additionalProperties: false
+      type: object
+      required:
+      - order_id
+      - reference
+      - changes
+      title: OrderStateDiffSchema
+      description: Everything that moved in one order, named the way the incident
+        names it.
     OrderSummarySchema:
       properties:
         order_id:

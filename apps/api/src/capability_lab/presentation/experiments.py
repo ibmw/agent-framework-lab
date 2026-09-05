@@ -66,6 +66,7 @@ from capability_lab.application.run_metrics import ArmMetrics
 from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxRecord
 from capability_lab.application.source_locations import SourceLocation
+from capability_lab.application.state_diff import ArmStateDiff, FieldChange, OrderStateDiff
 from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.blocks import (
     MutationEffect,
@@ -420,12 +421,70 @@ class ArmMetricsSchema(StrictApiModel):
         )
 
 
+class FieldChangeSchema(StrictApiModel):
+    """One field of one canonical document that reads differently than it started.
+
+    `null` on either side means the field was *absent* there rather than empty: an order
+    that had no shipping address and now has one is a different fact from one whose city
+    was blanked.
+    """
+
+    path: str
+    before: str | None
+    after: str | None
+
+    @classmethod
+    def from_domain(cls, change: FieldChange) -> Self:
+        return cls(path=change.path, before=change.before, after=change.after)
+
+
+class OrderStateDiffSchema(StrictApiModel):
+    """Everything that moved in one order, named the way the incident names it."""
+
+    order_id: UUID
+    reference: str
+    changes: list[FieldChangeSchema]
+
+    @classmethod
+    def from_domain(cls, diff: OrderStateDiff) -> Self:
+        return cls(
+            order_id=diff.order_id,
+            reference=diff.reference,
+            changes=[FieldChangeSchema.from_domain(change) for change in diff.changes],
+        )
+
+
+class ArmStateDiffSchema(StrictApiModel):
+    """What one arm's world is, read against the world it was cloned into.
+
+    Served rather than computed by the client for the reason the standing and the metrics
+    are: it is a difference between the exact bytes two fingerprints cover, and a client
+    comparing its own two readings would be free to decide differently what changed.
+
+    `other` carries changes outside every order, which nothing in this build can produce —
+    an empty list is the "no other state changed" check passing rather than a section with
+    nothing in it.
+    """
+
+    orders: list[OrderStateDiffSchema]
+    other: list[FieldChangeSchema]
+
+    @classmethod
+    def from_domain(cls, diff: ArmStateDiff) -> Self:
+        return cls(
+            orders=[OrderStateDiffSchema.from_domain(order) for order in diff.orders],
+            other=[FieldChangeSchema.from_domain(change) for change in diff.other],
+        )
+
+
 class ExperimentRunSchema(StrictApiModel):
     """One arm: what it runs, where it works, how far its world has moved, and what next.
 
     The two fingerprints are the arm's own, read off the sandbox rather than restated:
     `snapshot_fingerprint` is where it started and agrees with every sibling arm forever;
     `state_fingerprint` is where it is now and stops agreeing the moment something writes.
+    `state_diff` is what that second fingerprint moved *to*, field by field: the fingerprint
+    says an arm's world is not the one it started in, and the diff says what about it is not.
     """
 
     run_id: UUID
@@ -443,6 +502,7 @@ class ExperimentRunSchema(StrictApiModel):
     state_fingerprint: str
     standing: ArmStandingSchema
     metrics: ArmMetricsSchema
+    state_diff: ArmStateDiffSchema
 
     @classmethod
     def from_records(
@@ -452,6 +512,7 @@ class ExperimentRunSchema(StrictApiModel):
         runtime: ArmRuntime,
         standing: ArmStanding,
         metrics: ArmMetrics,
+        state_diff: ArmStateDiff,
     ) -> Self:
         return cls(
             run_id=run.run_id,
@@ -473,6 +534,7 @@ class ExperimentRunSchema(StrictApiModel):
             state_fingerprint=sandbox.state_fingerprint,
             standing=ArmStandingSchema.from_domain(standing),
             metrics=ArmMetricsSchema.from_domain(metrics),
+            state_diff=ArmStateDiffSchema.from_domain(state_diff),
         )
 
 
@@ -701,13 +763,14 @@ class ExperimentResponse(ExperimentSummarySchema):
             ],
             runs=[
                 ExperimentRunSchema.from_records(
-                    run, sandboxes[run.sandbox_id], runtime, standing, metrics
+                    run, sandboxes[run.sandbox_id], runtime, standing, metrics, state_diff
                 )
-                for run, runtime, standing, metrics in zip(
+                for run, runtime, standing, metrics, state_diff in zip(
                     detail.runs,
                     detail.arm_runtimes,
                     detail.standings,
                     detail.metrics,
+                    detail.state_diffs,
                     strict=True,
                 )
             ],

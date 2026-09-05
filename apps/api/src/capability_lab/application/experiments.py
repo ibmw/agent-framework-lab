@@ -89,6 +89,7 @@ from capability_lab.application.scenarios import (
     ScenarioVersionNotFoundError,
     scenario_definition_id,
 )
+from capability_lab.application.state_diff import ArmStateDiff, arm_state_diff
 from capability_lab.domain.agent_configuration import (
     AgentConfigurationPayload,
     ToneOfVoiceSource,
@@ -357,6 +358,12 @@ class ExperimentDetail:
     objectives it is measured by — and the state every arm was cloned from, which is what a
     change in one arm's sandbox is a change *from* (ADR 0030). Both are resolved once here
     because everything downstream reads them together.
+
+    `state_diffs` is that last sentence made literal: each arm read against the starting
+    state beside it, field by field. It travels with the standing and the metrics because it
+    is the same kind of reading — a projection of documents already resolved here — and
+    because a client holding both states would otherwise be free to decide for itself what
+    "changed" means (ADR 0035).
     """
 
     record: ExperimentRecord
@@ -367,6 +374,7 @@ class ExperimentDetail:
     arm_runtimes: tuple[ArmRuntime, ...]
     standings: tuple[ArmStanding, ...]
     metrics: tuple[ArmMetrics, ...]
+    state_diffs: tuple[ArmStateDiff, ...]
     runs: tuple[RunRecord, ...]
     sandboxes: tuple[SandboxRecord, ...]
     turns: tuple[ParticipantTurnRecord, ...]
@@ -431,6 +439,10 @@ class ExperimentService:
         # stands against the cap its own experiment was started under, and an evaluation
         # judges it against the objectives that experiment froze (ADR 0030).
         scenario = self._pinned(snapshot, DefinitionType.SCENARIO, self._scenarios)
+        # Read once and paired to their arms by position, exactly as the standings and the
+        # metrics are. The starting state is the snapshot's rather than anything stored per
+        # arm, so both arms' diffs are differences from one common world (ADR 0035).
+        sandboxes = tuple(self._sandboxes.get_sandbox(shop_id, run.sandbox_id) for run in runs)
         return ExperimentDetail(
             record=record,
             resolution=record.content(snapshot.content.pins).resolution,
@@ -461,8 +473,14 @@ class ExperimentService:
                 _metrics(run, turns, agent_turns, tool_events, payload)
                 for run, payload in zip(runs, payloads, strict=True)
             ),
+            state_diffs=tuple(
+                arm_state_diff(
+                    run.run_id, before=snapshot.content.state, after=sandbox.content.state
+                )
+                for run, sandbox in zip(runs, sandboxes, strict=True)
+            ),
             runs=runs,
-            sandboxes=tuple(self._sandboxes.get_sandbox(shop_id, run.sandbox_id) for run in runs),
+            sandboxes=sandboxes,
             turns=turns,
             agent_turns=agent_turns,
             tool_events=tool_events,
