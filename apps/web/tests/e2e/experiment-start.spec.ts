@@ -606,11 +606,16 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(judgeCard.getByText(/judge v1 · deterministic · attempt 1/)).toHaveCount(2);
 
   // What actually moved each arm, read off its revisions rather than off what it answered.
-  await expect(
-    card(page, "Business state — verified, not claimed").getByText(
-      /orders\.apply_address_change · r1 → r2/,
-    ),
-  ).toHaveCount(2);
+  const businessState = card(page, "Business state — verified, not claimed");
+  await expect(businessState.getByText(/orders\.apply_address_change · r1 → r2/)).toHaveCount(2);
+  // And what those revisions moved the world *to*: a revision counter is true of a redirected
+  // order and of a corrected typo alike, so the value on both sides is the evidence.
+  await expect(businessState.getByText("shipping_address.city: Bordeaux → Lyon")).toHaveCount(2);
+  await expect(businessState.getByText("NS-10482", { exact: true })).toHaveCount(2);
+  // The scenario's own fault moved the same world, so its field is in the same difference.
+  await expect(businessState.getByText(/fulfilment\.status: unfulfilled → /)).toHaveCount(2);
+  // The claim the card makes, checked against the whole document rather than assumed.
+  await expect(businessState.getByText(/no other state changed/)).toHaveCount(2);
 
   // And the turn only one arm heard is what makes everything after it two conversations.
   const divergence = card(page, "Input divergence");

@@ -150,3 +150,14 @@ export function writeKey(event: ToolEventSchema | MutationEventSchema): string {
 export function writeLabel(event: ToolEventSchema | MutationEventSchema): string {
   return "tool" in event ? event.tool : `${event.mutation_id} · scenario fault`;
 }
+
+/**
+ * One side of a field change, as an operator reads it.
+ *
+ * `null` means the field was not there rather than empty, and saying so is the point: an
+ * order that had no shipping address and now has one is a different fact from one whose city
+ * was blanked, and a blank cell would read as the same thing for both.
+ */
+export function changeValue(value: string | null): string {
+  return value ?? "not set";
+}

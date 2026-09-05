@@ -13,6 +13,7 @@ import { scoreExperiment } from "../api/experiments";
 import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
 import {
+  changeValue,
   describeFailure,
   describeJudgeFailure,
   formatCost,
@@ -123,9 +124,10 @@ export function ExperimentResultsPage() {
             title="Business state — verified, not claimed"
             footer={
               <p className="text-xs text-admin-muted">
-                Read from each arm's revisions rather than from what its agent said it did. A
-                scenario fault appears beside the tools because it moved the same world, and an
-                arm's final fingerprint is what makes "nothing else changed" checkable.
+                Read from each arm's own state rather than from what its agent said it did. A
+                scenario fault appears beside the tools because it moved the same world, and the
+                fields below are the whole difference between the world an arm was cloned into and
+                the one it is in now — so nothing can have moved without appearing here.
               </p>
             }
           >
@@ -271,7 +273,13 @@ function describeVerdict(judgement: JudgementSchema): string {
   return judgement.outcome ?? "no verdict";
 }
 
-/** Everything that moved one arm, and where that arm's world stands now. */
+/**
+ * Everything that moved one arm, what it moved it to, and where that arm's world stands now.
+ *
+ * The writes say who moved it and the diff says what about it moved — a revision counter is
+ * true of a redirected order and of a corrected typo alike, and the frame this card
+ * implements shows the value on both sides (ADR 0035).
+ */
 function BusinessState({
   experiment,
   run,
@@ -280,6 +288,7 @@ function BusinessState({
   run: ExperimentRunSchema;
 }) {
   const writes = writesOf(experiment, run);
+  const { orders, other } = run.state_diff;
   return (
     <li className="grid gap-0.5">
       <span className="font-semibold text-lab-ink">{run.label}</span>
@@ -294,9 +303,32 @@ function BusinessState({
           </span>
         ))
       )}
+      {orders.map((order) => (
+        <dl key={order.order_id} className="mt-1 grid gap-0.5">
+          <dt className="text-xs font-semibold text-lab-ink">{order.reference}</dt>
+          {order.changes.map((change) => (
+            <dd key={change.path} className="text-xs text-admin-muted">
+              {change.path}: {changeValue(change.before)} →{" "}
+              <span className="text-lab-ink">{changeValue(change.after)}</span>
+            </dd>
+          ))}
+        </dl>
+      ))}
+      {other.length > 0 ? (
+        <span role="alert" className="text-xs text-lab-error">
+          Changed outside every order:{" "}
+          {other
+            .map(
+              (change) =>
+                `${change.path}: ${changeValue(change.before)} → ${changeValue(change.after)}`,
+            )
+            .join(", ")}
+        </span>
+      ) : null}
       <span className="text-xs text-admin-muted">
         Now at r{run.revision} · <Fingerprint value={run.state_fingerprint} /> · started from{" "}
         <Fingerprint value={run.snapshot_fingerprint} />
+        {other.length === 0 && orders.length > 0 ? " · no other state changed" : null}
       </span>
     </li>
   );

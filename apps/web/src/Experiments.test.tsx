@@ -399,6 +399,31 @@ function evaluation(
 const UNMOVED: ArmStateDiffSchema = { orders: [], other: [] };
 
 /**
+ * The redirect the wrong-address incident turns on, as the arm's own state reports it.
+ *
+ * The values on both sides rather than the revision that moved: "r0 → r1" is true of this
+ * and of a corrected typo alike.
+ */
+const REDIRECTED: ArmStateDiffSchema = {
+  orders: [
+    {
+      order_id: ORDER_ID,
+      reference: "NS-10482",
+      changes: [
+        { path: "fulfilment.status", before: "unfulfilled", after: "partially_fulfilled" },
+        { path: "shipping_address.city", before: "Bordeaux", after: "Lyon" },
+        {
+          path: "shipping_address.source_label",
+          before: "Bordeaux — previous flat",
+          after: "Home",
+        },
+      ],
+    },
+  ],
+  other: [],
+};
+
+/**
  * The judge's own row, before and after a scoring pass.
  *
  * Deferred until a judge has actually scored it, which is what the row says on a bench
@@ -1390,6 +1415,70 @@ describe("experiment results", () => {
     // The scenario's own fault is a writer beside the tools: two arms at different
     // revisions is only explainable when both writers are on the page.
     expect(rows[1]).toHaveTextContent("order-moves-under-the-arm · scenario fault · r0 → r1");
+  });
+
+  it("says what each write moved the world to, field by field", async () => {
+    toolEvents = [toolEvent(ARM_A, 0, "orders.apply_address_change", true)];
+    stateDiffs = { [ARM_A]: REDIRECTED };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+    const [moved, untouched] = within(state).getAllByRole("listitem");
+
+    // The order the customer quotes, then the values a revision counter cannot say.
+    expect(moved).toHaveTextContent("NS-10482");
+    expect(moved).toHaveTextContent("shipping_address.city: Bordeaux → Lyon");
+    // The scenario's own fault moved the same world, so its field is in the same diff.
+    expect(moved).toHaveTextContent("fulfilment.status: unfulfilled → partially_fulfilled");
+    // The claim the card makes, checked rather than assumed.
+    expect(moved).toHaveTextContent("no other state changed");
+    expect(untouched).toHaveTextContent(
+      "Nothing wrote — this arm's world is the one it started in",
+    );
+  });
+
+  it("says a field was not there rather than showing it blank", async () => {
+    stateDiffs = {
+      [ARM_A]: {
+        orders: [
+          {
+            order_id: ORDER_ID,
+            reference: "NS-10482",
+            changes: [{ path: "shipping_address.city", before: null, after: "Lyon" }],
+          },
+        ],
+        other: [],
+      },
+    };
+    renderResults();
+
+    const state = await screen.findByRole("region", {
+      name: "Business state — verified, not claimed",
+    });
+
+    // An order that had no address and now has one is a different fact from one whose city
+    // was blanked, and an empty cell would read as the same thing for both.
+    expect(within(state).getAllByRole("listitem")[0]).toHaveTextContent(
+      "shipping_address.city: not set → Lyon",
+    );
+  });
+
+  it("reports a change outside every order rather than hiding it", async () => {
+    stateDiffs = {
+      [ARM_A]: {
+        orders: [],
+        other: [{ path: "interaction.ticket_reference", before: "T-204", after: "T-999" }],
+      },
+    };
+    renderResults();
+
+    // Nothing in this build can produce one, which is exactly why it must be visible if one
+    // appears: the card's "no other state changed" is otherwise unfalsifiable.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Changed outside every order: interaction.ticket_reference: T-204 → T-999",
+    );
   });
 });
 
