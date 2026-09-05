@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-09-03
+Status: current — 2026-09-05
 
 ## Authoritative direction
 
@@ -200,9 +200,16 @@ SDK immediately.
    it replaces the persona-first listings, which were removed with it. An experiment's status is
    read the same way and is still not a state anything sets: running while an arm can be acted
    on, failed once every arm is finished and one missed a required objective.
-16. Next is the rest of Milestone 5: notes, tags, state diffs, traces (frame 9b), the code excerpt
-   of frame 9c, replay and fork provenance, and judge failure/rerun tested apart from the
-   deterministic outcome calculation.
+16. The per-arm state diff is delivered (ADR 0035). The business-state card now says what an
+   arm's world became and not only that it moved: the difference between the exact bytes the
+   arm's two fingerprints cover, walked over the whole canonical state document so a field
+   authored tomorrow appears without a change, grouped by the order the incident names and
+   paired by order identity. A field that was never there is kept apart from one that was
+   emptied, and what lies outside every order is reported rather than dropped — which is what
+   keeps "no other state changed" a claim that could fail.
+17. Next is the rest of Milestone 5: notes, tags, traces (frame 9b), the code excerpt of frame 9c,
+   replay and fork provenance, and judge failure/rerun tested apart from the deterministic
+   outcome calculation.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

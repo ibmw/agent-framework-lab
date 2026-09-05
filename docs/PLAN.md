@@ -1,6 +1,6 @@
 # Project plan
 
-Status: current redesign roadmap — 2026-08-24
+Status: current redesign roadmap — 2026-09-05
 
 ## Purpose and authority
 
@@ -84,7 +84,10 @@ compared on: every objective read arm beside arm, with the counts kept per arm a
 aggregate anywhere, and the execution timeline moved onto it as a depth tab (ADR 0033), and
 then the way back into any of it: the cross-shop history an experiment is found again
 through, whose every row is projected from the record the bench and the results screen read
-— which also removes the persona-first listings it replaces (ADR 0034).
+— which also removes the persona-first listings it replaces (ADR 0034) — and then what an
+arm's world actually became: the difference between the bytes its two fingerprints cover,
+field by field, which is the half of "verified, not claimed" a revision counter cannot say
+(ADR 0035).
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -631,7 +634,13 @@ Turn completed runs into durable, searchable comparison evidence.
   when available.
 - [x] Present objective-level comparison without a global framework score.
 - [x] Replace persona-first history with experiment-first filters and detail pages.
-- [ ] Preserve evaluator executions, notes, tags, state diffs, traces, replay, and fork provenance.
+- [x] Preserve evaluator executions and per-arm state diffs. Executions are records rather than
+  projections and never overwrite each other (ADR 0031); a diff is the difference between the
+  bytes an arm's two fingerprints cover (ADR 0035).
+- [ ] Preserve notes, tags, traces, replay, and fork provenance. Split from the outcome above
+  because a diff is a reading of state the lab already holds, while notes and tags are the first
+  thing an operator writes, traces need the recorded spans beside the record, and replay and fork
+  derive new experiments from old ones — four slices, not one.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
@@ -671,6 +680,21 @@ score would report the operator's own pacing as a difference between configurati
 between what a rule decided and what a judge did, divergence read from the composition rather than
 from the words, the depth tabs the header stays across — which is where the execution timeline now
 lives — and the parts of the frame that belong to the outcomes still open.
+
+State-diff evidence (frame 9's business-state card): an operator reads not only that an arm moved
+but what its world became — the order named by the reference the customer quotes, the stale
+Bordeaux copy replaced by the address on file, the fulfilment the scenario's fault advanced in the
+same difference, a field that was never there saying so rather than reading blank, and the sentence
+that nothing else changed, checked against the whole document rather than asserted. The arm beside
+it is still in the world both were cloned into. ADR 0035 records the diff as a difference between
+the exact bytes the clone's fingerprint covers, normalized the way that fingerprint normalizes — so
+it is empty precisely when the fingerprint has not moved, by the function's own doing rather than
+by where it happens to be called from — the walk that has no list of fields worth watching and so
+gains a field the day one is authored, the pairing of orders by identity rather than by position,
+absence kept distinct from
+emptiness, the region no writer can touch reported rather than dropped so the card's claim stays
+falsifiable, and the projection served on the run beside the standing and the metrics rather than
+through a reading a client could make differently.
 
 History evidence (frame 10): an operator who has driven an incident to its end leaves the shop
 they ran it in and finds it again in the lab's own listing — every run this lab has made, whichever

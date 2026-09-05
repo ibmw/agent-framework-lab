@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target architecture with an implemented POC baseline — 2026-08-30
+Status: target architecture with an implemented POC baseline — 2026-09-05
 
 Read `docs/product-direction.md` first. This document distinguishes principles that remain binding,
 the code that exists today, and the target boundaries that future slices must establish. Do not
@@ -50,7 +50,8 @@ the deterministic evaluation that judges each arm against the objectives its sce
 ends it at the recipe's turn cap (ADR 0030), and the versioned judge that scores the rows no rule
 decides, from an anonymized brief of one arm's own record (ADR 0031), and the run cost read
 back beside it — the duration and the provider usage stored, everything else counted over the
-record (ADR 0032).
+record (ADR 0032) — and the difference between the world an arm was cloned into and the one it is
+in now, read off the bytes its own fingerprints cover (ADR 0035).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -323,6 +324,17 @@ otherwise. The filter options travel with the page and are read from the experim
 so a dropdown offers what has actually been run. That listing is the target historical record,
 and the POC's persona-first `listConversations` and `listGeneratedScenarios` were removed with it
 (ADR 0034).
+
+What an arm's world *became* is the same shape of reading once more. An arm carries two
+fingerprints, and the difference between the exact bytes they cover — walked over the canonical
+state documents rather than over the domain objects behind them — is what moved: grouped by the
+order the incident names, paired by order identity rather than by position, with a field that was
+never there kept distinct from one that was emptied. The walk has no list of fields worth watching,
+so the card's claim that nothing else changed is checkable and a field authored tomorrow appears
+without a change here; what lies outside every order is reported rather than dropped, precisely
+because no writer in this build can move it. Like the standing and the metrics, it is projected
+from documents the experiment already resolves and served on the run, so a client holding both
+states never decides for itself what changed (ADR 0035).
 
 ## Persistence, versioning, and extensibility
 
