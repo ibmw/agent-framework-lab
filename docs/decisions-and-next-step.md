@@ -207,9 +207,16 @@ SDK immediately.
    paired by order identity. A field that was never there is kept apart from one that was
    emptied, and what lies outside every order is reported rather than dropped — which is what
    keeps "no other state changed" a claim that could fail.
-17. Next is the rest of Milestone 5: notes, tags, traces (frame 9b), the code excerpt of frame 9c,
-   replay and fork provenance, and judge failure/rerun tested apart from the deterministic
-   outcome calculation.
+17. Experiment notes and tags are delivered (ADR 0036). What an operator concludes about a run is
+   stored beside the experiment rather than inside it, so annotating one cannot move the
+   fingerprints it pinned. A note is appended and never edited, because it is what a reviewer
+   thought when they read this evidence; a tag set is replaced whole, because how a run is filed
+   is a current classification. A tag is folded to one lowercase kebab-case spelling — and
+   refused rather than mangled when the fold cannot make a slug of it — so the shelf history
+   narrows by has one identity. The listing shows the tags, counts the notes, and searches both.
+18. Next is the rest of Milestone 5: traces (frame 9b), the code excerpt of frame 9c, replay and
+   fork provenance, and judge failure/rerun tested apart from the deterministic outcome
+   calculation.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

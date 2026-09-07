@@ -336,6 +336,18 @@ because no writer in this build can move it. Like the standing and the metrics, 
 from documents the experiment already resolves and served on the run, so a client holding both
 states never decides for itself what changed (ADR 0035).
 
+The one thing on those surfaces that is neither a record of the run nor a reading of one is what
+an operator concluded about it. Notes and tags are stored in `experiment_notes` and
+`experiment_tags` beside an experiment nothing updates, so annotating a run cannot move the
+fingerprints it pinned. A note is appended and never edited, because what makes it worth keeping
+is that it is what a reviewer thought when they read this evidence; a tag set is replaced whole,
+because how a run is filed is a current classification rather than a record of what happened to
+it. A tag is folded to one lowercase kebab-case spelling and refused if that fold cannot make a
+slug of it, so a shelf history narrows by has exactly one identity. It is read through its own
+operation rather than on the run — it is stored rather than projected, and the runner, the
+timeline, and every history row would otherwise carry text nobody asked for — and the listing
+shows the tags, counts the notes, and searches both (ADR 0036).
+
 ## Persistence, versioning, and extensibility
 
 Authorable definitions use mutable drafts and immutable published versions, stored as one canonical
@@ -360,9 +372,11 @@ table: the confirmation is inside the result the proposal answered with, and the
 the pair of revisions the event carries (ADR 0026). Both tables also carry nullable measurement
 columns — an attempt's duration and provider usage, a call's duration — nullable because "the
 lab did not measure this" is a real state and a zero would be counted into a total (ADR 0032).
-Experiments and judge executions are
-append-oriented historical evidence. Operational sandbox state is mutable only inside one run and
-never changes the published definitions or canonical starting snapshot.
+What an operator writes afterwards is stored beside all of it rather than in it:
+`experiment_notes` is append-only, and `experiment_tags` is keyed by the run and the folded tag so
+the set is a set rather than a rule the writer has to remember (ADR 0036). Experiments and judge
+executions are append-oriented historical evidence. Operational sandbox state is mutable only
+inside one run and never changes the published definitions or canonical starting snapshot.
 
 Typed domain objects protect important commerce invariants. Configurable typed attributes extend
 catalog content without one schema change per display field; versioned metadata extensions are

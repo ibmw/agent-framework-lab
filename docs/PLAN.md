@@ -87,7 +87,10 @@ through, whose every row is projected from the record the bench and the results 
 — which also removes the persona-first listings it replaces (ADR 0034) — and then what an
 arm's world actually became: the difference between the bytes its two fingerprints cover,
 field by field, which is the half of "verified, not claimed" a revision counter cannot say
-(ADR 0035).
+(ADR 0035), and finally the first thing about a run that the run did not produce: the notes an
+operator writes on it and the shelves they file it under, stored beside the experiment so
+annotating one cannot move the fingerprints it pinned, and offered back as a column, a filter, and
+a search over words the listing never shows (ADR 0036).
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -637,16 +640,19 @@ Turn completed runs into durable, searchable comparison evidence.
 - [x] Preserve evaluator executions and per-arm state diffs. Executions are records rather than
   projections and never overwrite each other (ADR 0031); a diff is the difference between the
   bytes an arm's two fingerprints cover (ADR 0035).
-- [ ] Preserve notes, tags, traces, replay, and fork provenance. Split from the outcome above
-  because a diff is a reading of state the lab already holds, while notes and tags are the first
-  thing an operator writes, traces need the recorded spans beside the record, and replay and fork
-  derive new experiments from old ones — four slices, not one.
+- [x] Preserve the notes and tags an operator writes on a run. Split from the outcome above
+  because a diff is a reading of state the lab already holds, while a note is what a person
+  concluded and is stored beside the record rather than in it (ADR 0036).
+- [ ] Preserve traces, replay, and fork provenance. Three slices, not one: traces need the
+  recorded spans beside the record, and replay and fork derive new experiments from old ones.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
-tab, and 10 · History; 9a · Execution timeline and 9c's source locations arrived with Milestone 4's
-fifth outcome (ADR 0027) and are extended here rather than built again — frame 9's General tab and
-the depth-tab shell the others will hang from arrived with the comparison outcome (ADR 0033).
+tab, and 10 · History; frame 9's notes-and-tags strip and frame 10's tag filter arrived with the
+annotation outcome (ADR 0036). 9a · Execution timeline and 9c's source locations arrived with
+Milestone 4's fifth outcome (ADR 0027) and are extended here rather than built again — frame 9's
+General tab and the depth-tab shell the others will hang from arrived with the comparison outcome
+(ADR 0033).
 Together with the Milestone 4 frames this completes the 18-frame authoritative set. The judge
 itself has no frame: it is a cross-shop resource under the shell's Experiment lab section, and it
 is scored from frame 8's objectives matrix, where its rows already are.
@@ -695,6 +701,19 @@ absence kept distinct from
 emptiness, the region no writer can touch reported rather than dropped so the card's claim stays
 falsifiable, and the projection served on the run beside the standing and the metrics rather than
 through a reading a client could make differently.
+
+Annotation evidence (frame 9's notes-and-tags strip, and frame 10's tag filter): an operator
+who has read both arms concludes something no reading of the record could have produced, and
+writes it down — the sentence about why one arm acted before it read, and the shelf the run is
+filed under so the next comparison of that failure starts from a list rather than from memory.
+Writing it moves neither fingerprint the run pinned: the run that has been written about is
+still the run that was started. The tag they typed with spaces comes back as the one spelling
+history narrows by, the note comes back exactly as written, and the listing finds the run by
+words it never displays. ADR 0036 records the annotation as a document stored beside the
+experiment rather than inside it, the append-versus-replace split between a note and a tag set
+and why each is the honest operation for what it says, the fold that gives a shelf one identity
+and refuses rather than mangles what it cannot fold, the reading served on its own because it
+is stored rather than projected, and the row that shows tags, counts notes, and searches both.
 
 History evidence (frame 10): an operator who has driven an incident to its end leaves the shop
 they ran it in and finds it again in the lab's own listing — every run this lab has made, whichever
