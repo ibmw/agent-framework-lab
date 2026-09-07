@@ -653,6 +653,62 @@ class ToolEventModel(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class RunSpanModel(Base):
+    """One span of one attempt: where it sat in the trace, and when inside the attempt it ran.
+
+    Stored rather than projected because the record cannot answer for it. An attempt and
+    every call it made are timestamped from one reading of the clock (ADR 0027), so the
+    record says how long a call took and never *when* in the attempt it took it — and the
+    gaps between the calls, which are the framework's own time, are exactly what a waterfall
+    is read for.
+
+    There is deliberately no attribute column. Which tool this span timed, what it answered,
+    and which revisions it moved are joined from `experiment_tool_events` through
+    `(run_id, ordinal, attempt, sequence)`; a free-form attribute map on an evidence row is
+    the back door around the `CUSTOMER_ONLY` rule ADR 0021 enforces on tools, and a table
+    whose every column is a hex identifier, a small integer, or a closed enum cannot be one.
+
+    `started_offset_ms` is relative to the start of the attempt rather than absolute, for the
+    same reason: an absolute timestamp would be a second answer to what `created_at` already
+    says, taken from a clock the runner reads once.
+    """
+
+    __tablename__ = "experiment_run_spans"
+    __table_args__ = (
+        CheckConstraint("ordinal >= 0", name="ck_run_spans_ordinal_non_negative"),
+        CheckConstraint("attempt >= 1", name="ck_run_spans_attempt_positive"),
+        CheckConstraint("kind IN ('attempt', 'runtime', 'tool')", name="ck_run_spans_kind_valid"),
+        CheckConstraint("started_offset_ms >= 0", name="ck_run_spans_started_offset_non_negative"),
+        CheckConstraint("duration_ms >= 0", name="ck_run_spans_duration_non_negative"),
+        # The coordinate is the join, so it has to mean one thing: exactly a tool span
+        # carries the sequence of the call it timed, and exactly the attempt span is a root.
+        CheckConstraint(
+            "(kind = 'tool') = (sequence IS NOT NULL)", name="ck_run_spans_sequence_matches_kind"
+        ),
+        CheckConstraint(
+            "sequence IS NULL OR sequence >= 0", name="ck_run_spans_sequence_non_negative"
+        ),
+        CheckConstraint(
+            "(kind = 'attempt') = (parent_span_id IS NULL)", name="ck_run_spans_one_root"
+        ),
+        Index("ix_run_spans_experiment", "experiment_id", "created_at"),
+        Index("ix_run_spans_attempt", "run_id", "ordinal", "attempt", "started_offset_ms"),
+    )
+
+    run_id: Mapped[str] = mapped_column(ForeignKey("experiment_runs.run_id"), primary_key=True)
+    span_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(String(36))
+    trace_id: Mapped[str] = mapped_column(String(32))
+    parent_span_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    ordinal: Mapped[int] = mapped_column(Integer)
+    attempt: Mapped[int] = mapped_column(Integer)
+    sequence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_offset_ms: Mapped[int] = mapped_column(Integer)
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
 class MutationEventModel(Base):
     """One scenario fault firing into one arm, and what it did to that arm.
 

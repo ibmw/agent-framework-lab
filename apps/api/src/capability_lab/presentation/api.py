@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import asynccontextmanager
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
@@ -66,6 +66,7 @@ from capability_lab.application.experiment_annotations import (
 from capability_lab.application.experiment_history import ExperimentHistoryService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_timeline import ExperimentTimelineService
+from capability_lab.application.experiment_traces import ExperimentTraceService
 from capability_lab.application.experiments import (
     ExperimentArmError,
     ExperimentCompletedError,
@@ -217,6 +218,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyOrderRepository,
     SqlAlchemyParticipantTurnRepository,
     SqlAlchemyPublishedVersionDirectory,
+    SqlAlchemyRunSpanRepository,
     SqlAlchemySandboxActionProposalRepository,
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
@@ -234,7 +236,11 @@ from capability_lab.infrastructure.repositories import (
     support_identity_repository,
     ticket_repository,
 )
-from capability_lab.infrastructure.telemetry import Telemetry, create_telemetry
+from capability_lab.infrastructure.telemetry import (
+    Telemetry,
+    create_run_tracer,
+    create_telemetry,
+)
 from capability_lab.presentation.agent_configurations import AgentConfigurationRoutes
 from capability_lab.presentation.base import ErrorResponse, StrictApiModel, ValidationIssue
 from capability_lab.presentation.blocks import MutationBlockRoutes, ObjectiveBlockRoutes
@@ -1423,12 +1429,13 @@ def create_app(
     factory = session_factory
     clock = command_clock or SystemClock()
     kernel = generation_kernel or create_retail_profile_kernel(clock)
-    configured_telemetry = telemetry
-    if agent_registry is None:
-        configured_telemetry = configured_telemetry or create_telemetry(settings)
-        agents = create_agent_registry(settings, configured_telemetry)
-    else:
-        agents = agent_registry
+    # Always constructed now, where it used to arrive only with the POC's agent registry: an
+    # experiment arm records a trace on every advance, so a tracer is part of composition
+    # rather than an optional decoration of one adapter. Whether anything is exported is
+    # still the provider's business and nobody else's (ADR 0004).
+    configured_telemetry = telemetry or create_telemetry(settings)
+    agents = agent_registry or create_agent_registry(settings, configured_telemetry)
+    run_tracer = create_run_tracer(configured_telemetry)
     # Composition selects which frameworks can run an arm, the way it selects which can serve
     # a conversation (`docs/architecture.md`). A test that wants one arm to fail supplies its
     # own registry here rather than reaching into the runner.
@@ -1442,8 +1449,7 @@ def create_app(
         try:
             yield
         finally:
-            if configured_telemetry is not None:
-                configured_telemetry.shutdown()
+            configured_telemetry.shutdown()
 
     application = FastAPI(title=API_TITLE, version=API_VERSION, lifespan=lifespan)
     application.middleware("http")(_add_request_id)
@@ -1790,6 +1796,14 @@ def create_app(
             # the adapter that produced it, and only this process knows which are here.
             yield ExperimentTimelineService(build_experiment_service(session), runtimes)
 
+    def experiment_trace_service() -> Generator[ExperimentTraceService, None, None]:
+        with session_scope(factory) as session:
+            # Over the same experiment construction the timeline reads: a span is joined to
+            # the tool event it timed, and two readings of that event could disagree.
+            yield ExperimentTraceService(
+                build_experiment_service(session), SqlAlchemyRunSpanRepository(session)
+            )
+
     def build_evaluation_service(session: Session) -> ExperimentEvaluationService:
         # Over the same experiment construction the timeline reads, so an evaluation and a
         # thread can never disagree about what an arm did.
@@ -1854,6 +1868,7 @@ def create_app(
                 SqlAlchemyParticipantTurnRepository(session),
                 SqlAlchemyAgentTurnRepository(session),
                 SqlAlchemyToolEventRepository(session),
+                SqlAlchemyRunSpanRepository(session),
                 SandboxSnapshotService(
                     SqlAlchemySandboxSnapshotRepository(session),
                     scenario_repository(session),
@@ -1889,6 +1904,7 @@ def create_app(
                 ),
                 build_scenario_mutations(session),
                 runtimes,
+                run_tracer,
                 clock,
             )
 
@@ -2030,22 +2046,15 @@ def create_app(
         ],
         service: Annotated[OrderActionService, Depends(order_action_service)],
     ) -> ActionProposalResponse:
-        context = (
-            configured_telemetry.action_span("propose", session_id=session_id)
-            if configured_telemetry is not None
-            else nullcontext()
-        )
-        with context as span:
+        with configured_telemetry.action_span("propose", session_id=session_id) as span:
             proposal = await service.propose_cancel(
                 session_id,
                 order_id=command.order_id,
                 expected_version=command.expected_version,
                 idempotency_key=idempotency_key,
             )
-            trace_id = None
-            if span is not None:
-                span.set_attribute("action.outcome", proposal.status.value)
-                trace_id = format(span.get_span_context().trace_id, "032x")
+            span.set_attribute("action.outcome", proposal.status.value)
+            trace_id = format(span.get_span_context().trace_id, "032x")
             return ActionProposalResponse.from_proposal(proposal, trace_id)
 
     def get_order_action(
@@ -2065,12 +2074,7 @@ def create_app(
         ],
         service: Annotated[OrderActionService, Depends(order_action_service)],
     ) -> ActionProposalResponse:
-        context = (
-            configured_telemetry.action_span(command.decision, session_id=session_id)
-            if configured_telemetry is not None
-            else nullcontext()
-        )
-        with context as span:
+        with configured_telemetry.action_span(command.decision, session_id=session_id) as span:
             proposal = service.decide(
                 session_id,
                 proposal_id,
@@ -2078,10 +2082,8 @@ def create_app(
                 confirmation_token=command.confirmation_token,
                 idempotency_key=idempotency_key,
             )
-            trace_id = None
-            if span is not None:
-                span.set_attribute("action.outcome", proposal.status.value)
-                trace_id = format(span.get_span_context().trace_id, "032x")
+            span.set_attribute("action.outcome", proposal.status.value)
+            trace_id = format(span.get_span_context().trace_id, "032x")
             return ActionProposalResponse.from_proposal(proposal, trace_id)
 
     def execute_order_action(
@@ -2093,22 +2095,15 @@ def create_app(
         ],
         service: Annotated[OrderActionService, Depends(order_action_service)],
     ) -> ActionProposalResponse:
-        context = (
-            configured_telemetry.action_span("execute", session_id=session_id)
-            if configured_telemetry is not None
-            else nullcontext()
-        )
-        with context as span:
+        with configured_telemetry.action_span("execute", session_id=session_id) as span:
             proposal = service.execute(
                 session_id,
                 proposal_id,
                 idempotency_key=idempotency_key,
             )
-            trace_id = None
-            if span is not None:
-                span.set_attribute("action.outcome", proposal.status.value)
-                span.set_attribute("action.attempt", proposal.attempts)
-                trace_id = format(span.get_span_context().trace_id, "032x")
+            span.set_attribute("action.outcome", proposal.status.value)
+            span.set_attribute("action.attempt", proposal.attempts)
+            trace_id = format(span.get_span_context().trace_id, "032x")
             return ActionProposalResponse.from_proposal(proposal, trace_id)
 
     router.add_api_route(
@@ -2307,6 +2302,7 @@ def create_app(
         HumanParticipantDriver,
         experiment_runner,
         experiment_timeline_service,
+        experiment_trace_service,
         experiment_evaluation_service,
         experiment_judge_service,
         experiment_annotation_service,

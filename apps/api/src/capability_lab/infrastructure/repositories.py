@@ -38,6 +38,11 @@ from capability_lab.application.experiment_annotations import (
     ExperimentNoteRecord,
     ExperimentTagConflictError,
 )
+from capability_lab.application.experiment_traces import (
+    RunSpan,
+    RunSpanRecord,
+    SpanKind,
+)
 from capability_lab.application.experiments import (
     ExperimentRecord,
     ParticipantTurnRecord,
@@ -144,6 +149,7 @@ from capability_lab.infrastructure.models import (
     ParticipantTurnModel,
     PersonaModel,
     ProductModel,
+    RunSpanModel,
     SandboxActionProposalModel,
     SandboxModel,
     SandboxSnapshotModel,
@@ -2197,6 +2203,68 @@ class SqlAlchemyToolEventRepository:
                 revision_after=model.revision_after,
                 state_fingerprint=model.state_fingerprint,
                 duration_ms=model.duration_ms,
+            ),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyRunSpanRepository:
+    """Append one attempt's spans together, after the attempt they belong to."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for_experiment(self, experiment_id: UUID) -> tuple[RunSpanRecord, ...]:
+        models = self._session.scalars(
+            select(RunSpanModel)
+            .where(RunSpanModel.experiment_id == str(experiment_id))
+            .order_by(
+                RunSpanModel.run_id,
+                RunSpanModel.ordinal,
+                RunSpanModel.attempt,
+                RunSpanModel.started_offset_ms,
+                RunSpanModel.span_id,
+            )
+        ).all()
+        return tuple(self._record(model) for model in models)
+
+    def append_all(self, records: tuple[RunSpanRecord, ...]) -> tuple[RunSpanRecord, ...]:
+        for record in records:
+            span = record.span
+            self._session.add(
+                RunSpanModel(
+                    run_id=str(record.run_id),
+                    span_id=span.span_id,
+                    experiment_id=str(record.experiment_id),
+                    trace_id=record.trace_id,
+                    parent_span_id=span.parent_span_id,
+                    kind=span.kind.value,
+                    ordinal=span.ordinal,
+                    attempt=span.attempt,
+                    sequence=span.sequence,
+                    started_offset_ms=span.started_offset_ms,
+                    duration_ms=span.duration_ms,
+                    created_at=record.created_at,
+                )
+            )
+        self._session.flush()
+        return records
+
+    @staticmethod
+    def _record(model: RunSpanModel) -> RunSpanRecord:
+        return RunSpanRecord(
+            run_id=UUID(model.run_id),
+            experiment_id=UUID(model.experiment_id),
+            trace_id=model.trace_id,
+            span=RunSpan(
+                span_id=model.span_id,
+                parent_span_id=model.parent_span_id,
+                kind=SpanKind(model.kind),
+                ordinal=model.ordinal,
+                attempt=model.attempt,
+                started_offset_ms=model.started_offset_ms,
+                duration_ms=model.duration_ms,
+                sequence=model.sequence,
             ),
             created_at=model.created_at,
         )

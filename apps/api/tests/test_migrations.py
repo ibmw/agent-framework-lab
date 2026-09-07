@@ -53,6 +53,9 @@ DEFINITION_TABLES = {
     # And what an operator concluded afterwards, stored beside the record rather than in it.
     "experiment_notes",
     "experiment_tags",
+    # And the one measurement of an attempt the record cannot reproduce: where inside it
+    # each part of it ran.
+    "experiment_run_spans",
 }
 POC_TABLES = {
     "action_proposals",
@@ -618,6 +621,62 @@ def test_an_attempt_s_usage_is_whole_and_never_spent_without_a_request(
     # And tokens nobody asked for: a meter reading that could not have been produced.
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(insert, {**row, "ordinal": 2, "input_tokens": 40})
+
+
+@pytest.mark.migration
+def test_a_span_s_coordinate_means_one_thing_and_a_trace_has_one_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stored span carries no attribute, so the sequence is the only join back to the call.
+
+    Both rules live in `RunSpan` too, and the table holds them for the reason it holds the
+    usage rules above: the value object raises on the way out, where the constraint refuses
+    the row on the way in.
+    """
+    database_url = f"sqlite:///{tmp_path / 'spans.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO experiment_run_spans (
+            run_id, span_id, experiment_id, trace_id, parent_span_id, kind, ordinal, attempt,
+            sequence, started_offset_ms, duration_ms, created_at
+        ) VALUES (
+            :run_id, :span_id, :experiment_id, :trace_id, :parent_span_id, :kind, 0, 1,
+            :sequence, :started_offset_ms, 40, '2026-09-07 12:00:00.000000'
+        )
+        """
+    )
+    row = {
+        "run_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac041",
+        "experiment_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac042",
+        "trace_id": "b" * 32,
+        "parent_span_id": None,
+        "kind": "attempt",
+        "sequence": None,
+        "started_offset_ms": 0,
+    }
+    child = {**row, "parent_span_id": "a" * 16}
+    with engine.begin() as connection:
+        connection.execute(insert, {**row, "span_id": "a" * 16})
+        connection.execute(insert, {**child, "span_id": "c" * 16, "kind": "tool", "sequence": 0})
+
+    # A tool span with nothing to join back to the call it timed.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**child, "span_id": "d" * 16, "kind": "tool"})
+
+    # And one claiming a call that is not there.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**child, "span_id": "e" * 16, "kind": "runtime", "sequence": 0})
+
+    # A trace has exactly one root, and it is the attempt.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "span_id": "f" * 16, "kind": "runtime"})
+
+    # Nothing runs for a negative number of milliseconds.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {**row, "span_id": "0" * 16, "started_offset_ms": -1})
 
 
 @pytest.mark.migration

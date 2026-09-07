@@ -57,6 +57,13 @@ from capability_lab.application.experiment_timeline import (
     TimelineEntry,
     TimelineEntryKind,
 )
+from capability_lab.application.experiment_traces import (
+    ExperimentTraces,
+    ExperimentTraceService,
+    RunTrace,
+    RunTraceSpan,
+    SpanKind,
+)
 from capability_lab.application.experiments import (
     MAX_ARMS,
     ArmRuntime,
@@ -985,6 +992,98 @@ class ExperimentTimelineResponse(StrictApiModel):
         )
 
 
+class RunTraceSpanSchema(StrictApiModel):
+    """One span of one attempt, with what the record says it was about joined onto it.
+
+    The stored span carries no attribute of its own — only hex identifiers, a closed kind,
+    and two millisecond counts — so a trace can never become the way synthetic customer
+    content leaves the lab. `tool`, `tool_version`, and `tool_outcome` are read from the tool
+    event this span's `sequence` names, which is the same document the timeline reads.
+
+    `started_offset_ms` is measured from the start of the attempt, and it is the one fact
+    here that no other reading of an experiment can supply: the record timestamps an attempt
+    and every call it made from one reading of the clock, so where inside the attempt a call
+    ran — and therefore how much of the attempt was the framework thinking rather than the
+    lab answering — is gone unless it is recorded.
+    """
+
+    span_id: str
+    parent_span_id: str | None
+    kind: SpanKind
+    started_offset_ms: int
+    duration_ms: int
+    sequence: int | None
+    tool: str | None
+    tool_version: str | None
+    tool_outcome: ToolOutcome | None
+
+    @classmethod
+    def from_domain(cls, span: RunTraceSpan) -> Self:
+        return cls(
+            span_id=span.span_id,
+            parent_span_id=span.parent_span_id,
+            kind=span.kind,
+            started_offset_ms=span.started_offset_ms,
+            duration_ms=span.duration_ms,
+            sequence=span.sequence,
+            tool=span.tool,
+            tool_version=span.tool_version,
+            tool_outcome=span.tool_outcome,
+        )
+
+
+class RunTraceSchema(StrictApiModel):
+    """One attempt of one arm, and the trace of it where the lab recorded one.
+
+    Every recorded attempt appears, including the ones made before this lab traced anything:
+    `trace_id` is absent and `spans` is empty, which says nobody watched rather than nothing
+    happened. An invented waterfall would be the mistake ADR 0032 refused when it left an
+    unmeasured duration null.
+    """
+
+    run_id: UUID
+    arm_label: str
+    framework_id: str
+    model_id: str
+    ordinal: int
+    attempt: int
+    outcome: AgentTurnOutcome
+    failure: AgentTurnFailure | None
+    duration_ms: int | None
+    trace_id: str | None
+    spans: list[RunTraceSpanSchema]
+
+    @classmethod
+    def from_domain(cls, trace: RunTrace) -> Self:
+        return cls(
+            run_id=trace.run_id,
+            arm_label=trace.arm_label,
+            framework_id=trace.framework_id,
+            model_id=trace.model_id,
+            ordinal=trace.ordinal,
+            attempt=trace.attempt,
+            outcome=trace.outcome,
+            failure=trace.failure,
+            duration_ms=trace.duration_ms,
+            trace_id=trace.trace_id,
+            spans=[RunTraceSpanSchema.from_domain(span) for span in trace.spans],
+        )
+
+
+class ExperimentTracesResponse(StrictApiModel):
+    """Every attempt both arms made, arm by arm and turn by turn."""
+
+    experiment_id: UUID
+    traces: list[RunTraceSchema]
+
+    @classmethod
+    def from_domain(cls, traces: ExperimentTraces) -> Self:
+        return cls(
+            experiment_id=traces.experiment_id,
+            traces=[RunTraceSchema.from_domain(trace) for trace in traces.traces],
+        )
+
+
 class JudgementSchema(StrictApiModel):
     """Which published judge produced one verdict, on what, and from what input.
 
@@ -1137,6 +1236,7 @@ class ExperimentRoutes:
         driver: Callable[[str], ParticipantDriver],
         runner: Callable[[], Generator[ExperimentRunner, None, None]],
         timeline: Callable[[], Generator[ExperimentTimelineService, None, None]],
+        traces: Callable[[], Generator[ExperimentTraceService, None, None]],
         evaluation: Callable[[], Generator[ExperimentEvaluationService, None, None]],
         judge: Callable[[], Generator[ExperimentJudgeService, None, None]],
         annotations: Callable[[], Generator[ExperimentAnnotationService, None, None]],
@@ -1145,6 +1245,7 @@ class ExperimentRoutes:
         self._driver = driver
         self._runner = runner
         self._timeline = timeline
+        self._traces = traces
         self._evaluation = evaluation
         self._judge = judge
         self._annotations = annotations
@@ -1153,6 +1254,7 @@ class ExperimentRoutes:
         dependency = Depends(self._service)
         runner_dependency = Depends(self._runner)
         timeline_dependency = Depends(self._timeline)
+        traces_dependency = Depends(self._traces)
         evaluation_dependency = Depends(self._evaluation)
         judge_dependency = Depends(self._judge)
         annotation_dependency = Depends(self._annotations)
@@ -1215,6 +1317,13 @@ class ExperimentRoutes:
             timeline: Annotated[ExperimentTimelineService, timeline_dependency],
         ) -> ExperimentTimelineResponse:
             return ExperimentTimelineResponse.from_domain(timeline.timeline(shop_id, experiment_id))
+
+        def get_experiment_traces(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            traces: Annotated[ExperimentTraceService, traces_dependency],
+        ) -> ExperimentTracesResponse:
+            return ExperimentTracesResponse.from_domain(traces.traces(shop_id, experiment_id))
 
         def get_experiment_evaluation(
             shop_id: ShopIdPath,
@@ -1340,6 +1449,26 @@ class ExperimentRoutes:
                 "the timeline can never describe an experiment differently from its threads. "
                 "Deliberately carries no message body: what was said is the thread's, and "
                 "what happened is this."
+            ),
+            responses=NotFoundResponses | InvalidResponses,
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/traces",
+            get_experiment_traces,
+            methods=["GET"],
+            response_model=ExperimentTracesResponse,
+            operation_id="getExperimentTraces",
+            summary="Read the recorded span tree of every attempt both arms made",
+            description=(
+                "One trace per recorded attempt: the advance, the framework's turn inside "
+                "it, and every tool call it made, each carrying where inside the attempt it "
+                "ran. Unlike the timeline beside it, this is stored rather than projected — "
+                "an attempt and its calls are timestamped from one reading of the clock, so "
+                "how the attempt's milliseconds were spent is not recoverable from the "
+                "record afterwards. A stored span carries no attribute of its own: which "
+                "tool it timed and what that tool answered are joined from the same tool "
+                "events `getExperiment` serves. An attempt made before this lab traced "
+                "anything reports no trace rather than an invented one."
             ),
             responses=NotFoundResponses | InvalidResponses,
         )

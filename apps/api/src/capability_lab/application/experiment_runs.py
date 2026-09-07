@@ -83,6 +83,14 @@ from capability_lab.application.definition_resolution import (
     DefinitionResolutionError,
     MissingReferenceVersionError,
 )
+from capability_lab.application.experiment_traces import (
+    AttemptTraceDraft,
+    RunSpanRecord,
+    RunSpanRepository,
+    RunTracer,
+    SpanDraft,
+    SpanKind,
+)
 from capability_lab.application.experiments import (
     ExperimentNotFoundError,
     ExperimentRecord,
@@ -203,6 +211,7 @@ class ExperimentRunner:
         participant_turns: ParticipantTurnRepository,
         agent_turns: AgentTurnRepository,
         tool_events: ToolEventRepository,
+        spans: RunSpanRepository,
         snapshots: SandboxSnapshotService,
         sandboxes: SandboxRepository,
         scenarios: DefinitionRepository[ScenarioPayload],
@@ -212,6 +221,7 @@ class ExperimentRunner:
         tools: SandboxToolService,
         mutations: ScenarioMutationRuntime,
         runtimes: SupportAgentRuntimeRegistry,
+        tracer: RunTracer,
         clock: Clock,
     ) -> None:
         self._experiments = experiments
@@ -219,6 +229,7 @@ class ExperimentRunner:
         self._participant_turns = participant_turns
         self._agent_turns = agent_turns
         self._tool_events = tool_events
+        self._spans = spans
         self._snapshots = snapshots
         self._sandboxes = sandboxes
         self._scenarios = scenarios
@@ -228,6 +239,7 @@ class ExperimentRunner:
         self._tools = tools
         self._mutations = mutations
         self._runtimes = runtimes
+        self._tracer = tracer
         self._clock = clock
 
     async def advance(self, shop_id: UUID, experiment_id: UUID, run_id: UUID) -> RunTurn:
@@ -330,6 +342,13 @@ class ExperimentRunner:
     async def _attempt(
         self, record: ExperimentRecord, run: RunRecord, *, ordinal: int, attempt: int
     ) -> RunTurn:
+        # The moment the advance began, which is earlier than the moment the attempt is
+        # *measured* from. The difference between the two is the lab's own resolution of
+        # what this arm runs and the faults due before it starts — project-owned glue code,
+        # and the one part of a run a framework comparison should not charge to a framework.
+        # It is the origin every span offset below is relative to, and it deliberately does
+        # not touch `duration_ms`, which stays exactly the measurement ADR 0032 published.
+        opened = self._clock.now()
         resolved = self._resolve(record, run)
         runtime = self._runtimes.get(resolved.configuration.framework_id)
         thread = tuple(
@@ -345,6 +364,7 @@ class ExperimentRunner:
             tools=self._tools,
             sandboxes=self._sandboxes,
             clock=self._clock,
+            opened=opened,
             shop_id=run.shop_id,
             sandbox_id=run.sandbox_id,
             actor=resolved.actor,
@@ -408,7 +428,83 @@ class ExperimentRunner:
                 for event in mutations.events
             )
         )
+        # Last, and from the measurements already taken rather than from a second reading of
+        # anything. A trace is the one thing about an attempt the record cannot answer for
+        # afterwards, so it is stored — and it is stored with the same numbers the rows above
+        # carry, because two durations for one call is worse than none.
+        self._trace(
+            record,
+            run,
+            runtime,
+            invoker,
+            ordinal=ordinal,
+            attempt=attempt,
+            opened=opened,
+            started=started,
+            ended=now,
+        )
         return RunTurn(turn=written, tool_events=events, mutation_events=fired)
+
+    def _trace(
+        self,
+        record: ExperimentRecord,
+        run: RunRecord,
+        runtime: SupportAgentRuntime,
+        invoker: _RecordingInvoker,
+        *,
+        ordinal: int,
+        attempt: int,
+        opened: datetime,
+        started: datetime,
+        ended: datetime,
+    ) -> None:
+        """Record where inside this attempt each part of it ran.
+
+        Three kinds, because three are what this process can honestly see: the advance, the
+        framework's turn inside it, and each call back into the world. What sits *between*
+        two tool spans is the framework thinking, and it is deliberately not a span of its
+        own — the lab did not open it, does not know what happened in it, and a gap a reader
+        can measure is more honest than a bar the lab invented a name for.
+        """
+        spans = (
+            SpanDraft(
+                kind=SpanKind.ATTEMPT,
+                label="attempt",
+                started_offset_ms=0,
+                duration_ms=_elapsed_ms(opened, ended),
+            ),
+            SpanDraft(
+                kind=SpanKind.RUNTIME,
+                label=runtime.framework_id,
+                started_offset_ms=_elapsed_ms(opened, started),
+                duration_ms=_elapsed_ms(started, ended),
+            ),
+            *invoker.spans(),
+        )
+        trace = self._tracer.record(
+            AttemptTraceDraft(
+                run_id=run.run_id,
+                experiment_id=record.experiment_id,
+                arm_label=run.label,
+                framework_id=runtime.framework_id,
+                ordinal=ordinal,
+                attempt=attempt,
+                started_at=opened,
+                spans=spans,
+            )
+        )
+        self._spans.append_all(
+            tuple(
+                RunSpanRecord(
+                    run_id=run.run_id,
+                    experiment_id=record.experiment_id,
+                    trace_id=trace.trace_id,
+                    span=span,
+                    created_at=ended,
+                )
+                for span in trace.spans
+            )
+        )
 
     async def _answer(
         self,
@@ -668,6 +764,7 @@ class _RecordingInvoker(SandboxToolInvoker):
         tools: SandboxToolService,
         sandboxes: SandboxRepository,
         clock: Clock,
+        opened: datetime,
         shop_id: UUID,
         sandbox_id: UUID,
         actor: ToolActor,
@@ -678,6 +775,7 @@ class _RecordingInvoker(SandboxToolInvoker):
         self._tools = tools
         self._sandboxes = sandboxes
         self._clock = clock
+        self._opened = opened
         self._shop_id = shop_id
         self._sandbox_id = sandbox_id
         self._actor = actor
@@ -727,6 +825,7 @@ class _RecordingInvoker(SandboxToolInvoker):
         duration_ms = _elapsed_ms(started, self._clock.now())
         self._calls.append(
             _Call(
+                started_offset_ms=_elapsed_ms(self._opened, started),
                 contract=contract,
                 outcome=execution.result.outcome,
                 document=execution.result.document,
@@ -741,6 +840,25 @@ class _RecordingInvoker(SandboxToolInvoker):
         # the world the agent asked about rather than the one the fault left behind.
         self._mutations.after_call(contract.name, execution.result.document)
         return execution.result.document
+
+    def spans(self) -> tuple[SpanDraft, ...]:
+        """Where inside the attempt each call ran, from the same measurement its event has.
+
+        The same `_Call` produces both, so a span's extent and its tool event's `duration_ms`
+        are one number written twice rather than two answers to one question.
+        """
+        return tuple(
+            SpanDraft(
+                kind=SpanKind.TOOL,
+                label=call.contract.name,
+                started_offset_ms=call.started_offset_ms,
+                duration_ms=call.duration_ms,
+                sequence=sequence,
+                tool=call.contract.name,
+                tool_version=call.contract.version,
+            )
+            for sequence, call in enumerate(self._calls)
+        )
 
     def events(self, *, ordinal: int, attempt: int) -> tuple[ToolEvent, ...]:
         """The calls this attempt made, numbered in the order the agent asked."""
@@ -766,6 +884,7 @@ class _RecordingInvoker(SandboxToolInvoker):
 class _Call:
     """One executed call, held until the attempt it belongs to has a row to hang it on."""
 
+    started_offset_ms: int
     contract: ToolContract
     outcome: ToolOutcome
     document: dict[str, CanonicalValue]

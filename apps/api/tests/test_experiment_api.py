@@ -735,6 +735,97 @@ async def test_a_timeline_for_an_experiment_of_another_shop_is_not_found(
     assert response.json()["code"] == "experiment_not_found"
 
 
+# -- the recorded traces -------------------------------------------------------
+
+
+async def traces(client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any]) -> Any:
+    return await client.get(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/traces"
+    )
+
+
+async def test_an_advance_records_the_span_tree_of_the_attempt_it_made(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The root, the framework's turn inside it, and one span per call it made."""
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    response = await traces(client, lab, experiment)
+
+    assert response.status_code == 200, response.text
+    (trace,) = response.json()["traces"]
+    assert trace["outcome"] == "answered"
+    assert len(trace["trace_id"]) == 32
+    assert trace["arm_label"] == experiment["runs"][0]["label"]
+    kinds = [span["kind"] for span in trace["spans"]]
+    assert kinds[:2] == ["attempt", "runtime"]
+    assert set(kinds[2:]) == {"tool"}
+    assert trace["spans"][0]["parent_span_id"] is None
+    assert trace["spans"][1]["parent_span_id"] == trace["spans"][0]["span_id"]
+    assert [span["tool"] for span in trace["spans"][2:]] == [
+        "interaction.read_context",
+        "orders.read_order",
+        "customer.read_profile",
+        "orders.propose_address_change",
+        "orders.apply_address_change",
+    ]
+
+
+async def test_a_traced_call_says_where_inside_the_attempt_it_ran(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The fact the record cannot supply: an attempt and its calls share one clock reading."""
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    (trace,) = (await traces(client, lab, experiment)).json()["traces"]
+
+    calls = [span for span in trace["spans"] if span["kind"] == "tool"]
+    offsets = [span["started_offset_ms"] for span in calls]
+    assert offsets == sorted(offsets)
+    assert trace["spans"][0]["started_offset_ms"] == 0
+    assert trace["spans"][1]["duration_ms"] == trace["duration_ms"]
+    assert all(span["sequence"] is not None for span in calls)
+    assert all(span["tool_version"] for span in calls)
+
+
+async def test_a_trace_carries_no_message_body(client: AsyncClient, lab: dict[str, str]) -> None:
+    """A stored span has no attribute column, and the contract is where that has to show.
+
+    Checked against the rendered response for the reason the timeline's equivalent is: this
+    is what an export and a future evaluation will actually read.
+    """
+    experiment = await control_experiment(client, lab)
+    await advance(client, lab, experiment)
+
+    rendered = (await traces(client, lab, experiment)).text
+
+    assert "NS-10482" not in rendered
+    assert "Lyon" not in rendered
+
+
+async def test_an_arm_that_has_not_run_contributes_no_trace(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    assert (await traces(client, lab, experiment)).json()["traces"] == []
+
+
+async def test_traces_for_an_experiment_of_another_shop_are_not_found(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await client.get(
+        f"/api/v1/shops/{uuid4()}/experiments/{experiment['experiment_id']}/traces"
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["code"] == "experiment_not_found"
+
+
 async def test_an_arm_reports_the_framework_and_model_its_configuration_pinned(
     client: AsyncClient, lab: dict[str, str]
 ) -> None:

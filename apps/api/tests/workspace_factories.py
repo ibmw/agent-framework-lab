@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from opentelemetry.sdk.trace import TracerProvider
 from sqlalchemy.orm import Session
 
 from agent_factories import publishable_configuration
@@ -23,6 +24,7 @@ from capability_lab.application.customer_profiles import CustomerProfileService
 from capability_lab.application.evaluation import ExperimentEvaluationService
 from capability_lab.application.experiment_annotations import ExperimentAnnotationService
 from capability_lab.application.experiment_runs import ExperimentRunner
+from capability_lab.application.experiment_traces import ExperimentTraceService, RunTracer
 from capability_lab.application.experiments import ArmSelection, ExperimentService
 from capability_lab.application.judge_configurations import JudgeConfigurationService
 from capability_lab.application.judge_runs import ExperimentJudgeService
@@ -74,6 +76,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyParticipantTurnRepository,
     SqlAlchemyPublishedVersionDirectory,
+    SqlAlchemyRunSpanRepository,
     SqlAlchemySandboxActionProposalRepository,
     SqlAlchemySandboxRepository,
     SqlAlchemySandboxSnapshotRepository,
@@ -89,6 +92,7 @@ from capability_lab.infrastructure.repositories import (
     support_identity_repository,
     ticket_repository,
 )
+from capability_lab.infrastructure.telemetry import Telemetry, create_run_tracer
 from definition_factories import (
     address,
     customer_identity,
@@ -312,6 +316,7 @@ def build_runner(
         SqlAlchemyParticipantTurnRepository(session),
         SqlAlchemyAgentTurnRepository(session),
         SqlAlchemyToolEventRepository(session),
+        SqlAlchemyRunSpanRepository(session),
         build_snapshots(session),
         SqlAlchemySandboxRepository(session),
         scenario_repository(session),
@@ -321,8 +326,29 @@ def build_runner(
         build_tools(session, handlers),
         build_scenario_mutations(session, ticking),
         runtimes or SupportAgentRuntimeRegistry({control.framework_id: control}),
+        build_run_tracer(),
         ticking,
     )
+
+
+def build_run_tracer() -> RunTracer:
+    """A real tracer over a provider with no exporter, which is the local default.
+
+    Real rather than a double on purpose: a span id and a trace id are what a stored trace
+    is, and a fake that minted counters would let a suite pass while the thing an operator
+    correlates with Phoenix was never produced.
+    """
+    return create_run_tracer(
+        Telemetry(
+            tracer=TracerProvider().get_tracer("capability_lab.test", "1.0.0"),
+            hash_salt=b"test-salt",
+        )
+    )
+
+
+def build_traces(session: Session) -> ExperimentTraceService:
+    """The recorded spans read back beside the record that explains them."""
+    return ExperimentTraceService(build_experiments(session), SqlAlchemyRunSpanRepository(session))
 
 
 def published_configuration(

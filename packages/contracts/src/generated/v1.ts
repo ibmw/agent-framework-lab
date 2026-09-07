@@ -1074,6 +1074,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/traces": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read the recorded span tree of every attempt both arms made
+     * @description One trace per recorded attempt: the advance, the framework's turn inside it, and every tool call it made, each carrying where inside the attempt it ran. Unlike the timeline beside it, this is stored rather than projected — an attempt and its calls are timestamped from one reading of the clock, so how the attempt's milliseconds were spent is not recoverable from the record afterwards. A stored span carries no attribute of its own: which tool it timed and what that tool answered are joined from the same tool events `getExperiment` serves. An attempt made before this lab traced anything reports no trace rather than an invented one.
+     */
+    get: operations["getExperimentTraces"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/experiments/{experiment_id}/evaluation": {
     parameters: {
       query?: never;
@@ -2985,6 +3005,19 @@ export interface components {
       entries: components["schemas"]["TimelineEntrySchema"][];
     };
     /**
+     * ExperimentTracesResponse
+     * @description Every attempt both arms made, arm by arm and turn by turn.
+     */
+    ExperimentTracesResponse: {
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /** Traces */
+      traces: components["schemas"]["RunTraceSchema"][];
+    };
+    /**
      * ExperimentValidationErrorResponse
      * @description A start refusal that carries the exact setup-gate findings.
      */
@@ -4399,6 +4432,73 @@ export interface components {
       body: string;
     };
     /**
+     * RunTraceSchema
+     * @description One attempt of one arm, and the trace of it where the lab recorded one.
+     *
+     *     Every recorded attempt appears, including the ones made before this lab traced anything:
+     *     `trace_id` is absent and `spans` is empty, which says nobody watched rather than nothing
+     *     happened. An invented waterfall would be the mistake ADR 0032 refused when it left an
+     *     unmeasured duration null.
+     */
+    RunTraceSchema: {
+      /**
+       * Run Id
+       * Format: uuid
+       */
+      run_id: string;
+      /** Arm Label */
+      arm_label: string;
+      /** Framework Id */
+      framework_id: string;
+      /** Model Id */
+      model_id: string;
+      /** Ordinal */
+      ordinal: number;
+      /** Attempt */
+      attempt: number;
+      outcome: components["schemas"]["AgentTurnOutcome"];
+      failure: components["schemas"]["AgentTurnFailure"] | null;
+      /** Duration Ms */
+      duration_ms: number | null;
+      /** Trace Id */
+      trace_id: string | null;
+      /** Spans */
+      spans: components["schemas"]["RunTraceSpanSchema"][];
+    };
+    /**
+     * RunTraceSpanSchema
+     * @description One span of one attempt, with what the record says it was about joined onto it.
+     *
+     *     The stored span carries no attribute of its own — only hex identifiers, a closed kind,
+     *     and two millisecond counts — so a trace can never become the way synthetic customer
+     *     content leaves the lab. `tool`, `tool_version`, and `tool_outcome` are read from the tool
+     *     event this span's `sequence` names, which is the same document the timeline reads.
+     *
+     *     `started_offset_ms` is measured from the start of the attempt, and it is the one fact
+     *     here that no other reading of an experiment can supply: the record timestamps an attempt
+     *     and every call it made from one reading of the clock, so where inside the attempt a call
+     *     ran — and therefore how much of the attempt was the framework thinking rather than the
+     *     lab answering — is gone unless it is recorded.
+     */
+    RunTraceSpanSchema: {
+      /** Span Id */
+      span_id: string;
+      /** Parent Span Id */
+      parent_span_id: string | null;
+      kind: components["schemas"]["SpanKind"];
+      /** Started Offset Ms */
+      started_offset_ms: number;
+      /** Duration Ms */
+      duration_ms: number;
+      /** Sequence */
+      sequence: number | null;
+      /** Tool */
+      tool: string | null;
+      /** Tool Version */
+      tool_version: string | null;
+      tool_outcome: components["schemas"]["ToolOutcome"] | null;
+    };
+    /**
      * RunTurnResponse
      * @description What advancing one arm produced: the attempt, its calls, and the faults it met.
      *
@@ -5252,6 +5352,16 @@ export interface components {
       /** Line */
       line: number;
     };
+    /**
+     * SpanKind
+     * @description The three things the lab's own code can time inside one attempt.
+     *
+     *     Closed and lab-owned, exactly as `TimelineEntryKind` is. A framework reporting its own
+     *     idea of a step would put its vocabulary into evidence two arms are compared on, which is
+     *     what Milestone 4's fourth acceptance criterion forbids.
+     * @enum {string}
+     */
+    SpanKind: "attempt" | "runtime" | "tool";
     /** StartConversationRequest */
     StartConversationRequest: {
       /** Scenario Id */
@@ -9981,6 +10091,49 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ExperimentTimelineResponse"];
+        };
+      };
+      /** @description The definition is not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getExperimentTraces: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentTracesResponse"];
         };
       };
       /** @description The definition is not found */

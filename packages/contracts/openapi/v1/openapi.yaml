@@ -3509,6 +3509,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/traces:
+    get:
+      summary: Read the recorded span tree of every attempt both arms made
+      description: 'One trace per recorded attempt: the advance, the framework''s
+        turn inside it, and every tool call it made, each carrying where inside the
+        attempt it ran. Unlike the timeline beside it, this is stored rather than
+        projected — an attempt and its calls are timestamped from one reading of the
+        clock, so how the attempt''s milliseconds were spent is not recoverable from
+        the record afterwards. A stored span carries no attribute of its own: which
+        tool it timed and what that tool answered are joined from the same tool events
+        `getExperiment` serves. An attempt made before this lab traced anything reports
+        no trace rather than an invented one.'
+      operationId: getExperimentTraces
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentTracesResponse'
+        '404':
+          description: The definition is not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/experiments/{experiment_id}/evaluation:
     get:
       summary: Judge each arm against the objectives its scenario composed
@@ -7460,6 +7511,24 @@ components:
       - entries
       title: ExperimentTimelineResponse
       description: One experiment's execution as one ordered, framework-neutral stream.
+    ExperimentTracesResponse:
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        traces:
+          items:
+            $ref: '#/components/schemas/RunTraceSchema'
+          type: array
+          title: Traces
+      additionalProperties: false
+      type: object
+      required:
+      - experiment_id
+      - traces
+      title: ExperimentTracesResponse
+      description: Every attempt both arms made, arm by arm and turn by turn.
     ExperimentValidationErrorResponse:
       properties:
         code:
@@ -10188,6 +10257,157 @@ components:
       - rating
       - body
       title: ReviewSchema
+    RunTraceSchema:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+          title: Run Id
+        arm_label:
+          type: string
+          title: Arm Label
+        framework_id:
+          type: string
+          title: Framework Id
+        model_id:
+          type: string
+          title: Model Id
+        ordinal:
+          type: integer
+          title: Ordinal
+        attempt:
+          type: integer
+          title: Attempt
+        outcome:
+          $ref: '#/components/schemas/AgentTurnOutcome'
+        failure:
+          anyOf:
+          - $ref: '#/components/schemas/AgentTurnFailure'
+          - type: 'null'
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
+        trace_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trace Id
+        spans:
+          items:
+            $ref: '#/components/schemas/RunTraceSpanSchema'
+          type: array
+          title: Spans
+      additionalProperties: false
+      type: object
+      required:
+      - run_id
+      - arm_label
+      - framework_id
+      - model_id
+      - ordinal
+      - attempt
+      - outcome
+      - failure
+      - duration_ms
+      - trace_id
+      - spans
+      title: RunTraceSchema
+      description: 'One attempt of one arm, and the trace of it where the lab recorded
+        one.
+
+
+        Every recorded attempt appears, including the ones made before this lab traced
+        anything:
+
+        `trace_id` is absent and `spans` is empty, which says nobody watched rather
+        than nothing
+
+        happened. An invented waterfall would be the mistake ADR 0032 refused when
+        it left an
+
+        unmeasured duration null.'
+    RunTraceSpanSchema:
+      properties:
+        span_id:
+          type: string
+          title: Span Id
+        parent_span_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Parent Span Id
+        kind:
+          $ref: '#/components/schemas/SpanKind'
+        started_offset_ms:
+          type: integer
+          title: Started Offset Ms
+        duration_ms:
+          type: integer
+          title: Duration Ms
+        sequence:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Sequence
+        tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool
+        tool_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool Version
+        tool_outcome:
+          anyOf:
+          - $ref: '#/components/schemas/ToolOutcome'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - span_id
+      - parent_span_id
+      - kind
+      - started_offset_ms
+      - duration_ms
+      - sequence
+      - tool
+      - tool_version
+      - tool_outcome
+      title: RunTraceSpanSchema
+      description: 'One span of one attempt, with what the record says it was about
+        joined onto it.
+
+
+        The stored span carries no attribute of its own — only hex identifiers, a
+        closed kind,
+
+        and two millisecond counts — so a trace can never become the way synthetic
+        customer
+
+        content leaves the lab. `tool`, `tool_version`, and `tool_outcome` are read
+        from the tool
+
+        event this span''s `sequence` names, which is the same document the timeline
+        reads.
+
+
+        `started_offset_ms` is measured from the start of the attempt, and it is the
+        one fact
+
+        here that no other reading of an experiment can supply: the record timestamps
+        an attempt
+
+        and every call it made from one reading of the clock, so where inside the
+        attempt a call
+
+        ran — and therefore how much of the attempt was the framework thinking rather
+        than the
+
+        lab answering — is gone unless it is recorded.'
     RunTurnResponse:
       properties:
         turn:
@@ -11763,6 +11983,23 @@ components:
 
         two checkouts would otherwise report two different locations for identical
         work.'
+    SpanKind:
+      type: string
+      enum:
+      - attempt
+      - runtime
+      - tool
+      title: SpanKind
+      description: 'The three things the lab''s own code can time inside one attempt.
+
+
+        Closed and lab-owned, exactly as `TimelineEntryKind` is. A framework reporting
+        its own
+
+        idea of a step would put its vocabulary into evidence two arms are compared
+        on, which is
+
+        what Milestone 4''s fourth acceptance criterion forbids.'
     StartConversationRequest:
       properties:
         scenario_id:
