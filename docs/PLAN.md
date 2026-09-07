@@ -1,6 +1,6 @@
 # Project plan
 
-Status: current redesign roadmap — 2026-09-05
+Status: current redesign roadmap — 2026-09-07
 
 ## Purpose and authority
 
@@ -90,7 +90,9 @@ field by field, which is the half of "verified, not claimed" a revision counter 
 (ADR 0035), and finally the first thing about a run that the run did not produce: the notes an
 operator writes on it and the shelves they file it under, stored beside the experiment so
 annotating one cannot move the fingerprints it pinned, and offered back as a column, a filter, and
-a search over words the listing never shows (ADR 0036).
+a search over words the listing never shows (ADR 0036), and finally the one reading of a run that
+is stored rather than projected: the span tree each advance records, because where inside an
+attempt each of its calls ran is gone the moment the advance returns (ADR 0037).
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -643,13 +645,15 @@ Turn completed runs into durable, searchable comparison evidence.
 - [x] Preserve the notes and tags an operator writes on a run. Split from the outcome above
   because a diff is a reading of state the lab already holds, while a note is what a person
   concluded and is stored beside the record rather than in it (ADR 0036).
-- [ ] Preserve traces, replay, and fork provenance. Three slices, not one: traces need the
-  recorded spans beside the record, and replay and fork derive new experiments from old ones.
+- [ ] Preserve traces, replay, and fork provenance. Three slices, not one, and the first has
+  landed: traces are the spans the lab now records beside the record (ADR 0037). Replay and
+  fork remain, and derive new experiments from old ones rather than reading one.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
 tab, and 10 · History; frame 9's notes-and-tags strip and frame 10's tag filter arrived with the
-annotation outcome (ADR 0036). 9a · Execution timeline and 9c's source locations arrived with
+annotation outcome (ADR 0036), and frame 9b with the traces outcome (ADR 0037). 9a · Execution
+timeline and 9c's source locations arrived with
 Milestone 4's fifth outcome (ADR 0027) and are extended here rather than built again — frame 9's
 General tab and the depth-tab shell the others will hang from arrived with the comparison outcome
 (ADR 0033).
@@ -714,6 +718,24 @@ experiment rather than inside it, the append-versus-replace split between a note
 and why each is the honest operation for what it says, the fold that gives a shelf one identity
 and refuses rather than mangles what it cannot fold, the reading served on its own because it
 is stored rather than projected, and the row that shows tags, counts notes, and searches both.
+
+Trace evidence (frame 9b): an operator who has followed an incident into the execution
+timeline reads the same attempt again as the shape it actually had — the advance, the
+framework's turn inside it, and every call the arm made, each drawn where inside the attempt
+it ran rather than merely in the order it was asked. The space between two calls is the
+framework thinking, which is a quantity no other reading of the run can produce: the record
+timestamps an attempt and its calls from one clock reading, so it can say what a call cost and
+never when it happened. A span says only that; which tool it timed and what that tool answered
+are joined from the events the thread already shows, because a span with an attribute of its
+own would be the one place synthetic customer content could leave the lab unnoticed. An
+attempt made before the lab traced anything says so rather than showing a waterfall somebody
+reconstructed. ADR 0037 records the trace as the one stored reading beside four projected
+ones and the confirmation that earned it, the coordinate that joins a span to the call it
+timed instead of describing it, the single measurement handed to both the record and the
+trace, the three kinds of span this build can honestly claim to have seen and the model call
+it refuses to invent, the attempt span that is wider than the framework's turn because the
+lab's own resolution is not a framework's cost, and the tracer that mints real
+OpenTelemetry identities after the fact so the runner holds no SDK type.
 
 History evidence (frame 10): an operator who has driven an incident to its end leaves the shop
 they ran it in and finds it again in the lab's own listing — every run this lab has made, whichever

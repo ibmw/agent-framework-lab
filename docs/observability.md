@@ -23,6 +23,24 @@ Instrumentation depends on an application interface or remains in infrastructure
 creates no span. Phoenix is a replaceable local consumer: no domain rule or test depends on its
 availability. The application continues to work when export is disabled.
 
+Advancing an experiment arm records a span tree beside the record as well as emitting one
+(ADR 0037). Three kinds are recorded, and only the three the lab itself opens: the whole
+advance, the framework's turn inside it, and each tool call. A framework's own instrumentation
+is never captured into the store — the lab cannot promise the sanitization of an attribute it
+did not write — so a model call inside an SDK's loop reaches an exporter if one is configured
+and reaches the record as the measurable gap between two recorded spans, never as a bar the
+lab invented.
+
+A stored span has no attribute column. It carries a span and trace identifier, its parent, its
+kind, its offset from the start of the attempt, its duration, and the `(run, ordinal, attempt,
+sequence)` that names the recorded call it timed; which tool that was and what it answered are
+joined from the tool events rather than copied onto the span. That is what keeps a trace from
+becoming the way synthetic customer content leaves the lab: every column is a hex identifier,
+a small integer, or a value from a closed enum. The **exported** span carries a written
+allowlist rather than a filtered one — the lab's identifiers pseudonymized, the arm, the turn,
+the framework, and the published tool name and version — and an exception's message is never
+recorded, only its type.
+
 For local POC visualization, start `infra/phoenix/compose.yaml`, set
 `AGENT_LAB_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006/v1/traces`, and open
 `http://localhost:6006`. The HTTP endpoint must include `/v1/traces`. Leaving the setting unset

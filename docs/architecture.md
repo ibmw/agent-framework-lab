@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target architecture with an implemented POC baseline — 2026-09-05
+Status: target architecture with an implemented POC baseline — 2026-09-07
 
 Read `docs/product-direction.md` first. This document distinguishes principles that remain binding,
 the code that exists today, and the target boundaries that future slices must establish. Do not
@@ -51,7 +51,9 @@ ends it at the recipe's turn cap (ADR 0030), and the versioned judge that scores
 decides, from an anonymized brief of one arm's own record (ADR 0031), and the run cost read
 back beside it — the duration and the provider usage stored, everything else counted over the
 record (ADR 0032) — and the difference between the world an arm was cloned into and the one it is
-in now, read off the bytes its own fingerprints cover (ADR 0035).
+in now, read off the bytes its own fingerprints cover (ADR 0035), and the span tree each advance
+records beside all of it, which is the one reading of a run that is stored rather than projected
+(ADR 0037).
 The POC's persona-first frontend was removed with that shell; its HTTP contracts remain published
 and tested without a UI consumer.
 
@@ -336,6 +338,20 @@ because no writer in this build can move it. Like the standing and the metrics, 
 from documents the experiment already resolves and served on the run, so a client holding both
 states never decides for itself what changed (ADR 0035).
 
+The one reading on those surfaces that is *stored* rather than projected is the trace. A run's
+spans are recorded in `experiment_run_spans` because a waterfall is the one thing the record
+cannot answer for afterwards: an attempt and every call it made are timestamped from one clock
+reading, deliberately, so what a call cost is recoverable and *when inside the attempt* it ran
+is not — and the gaps between the calls are the framework's own time. Three kinds are opened,
+and only the three the lab itself can see: the advance, the framework's turn inside it, and
+each tool call. A stored span has no attribute column at all — which tool it timed and what
+that tool answered are joined from the tool events through the coordinate it carries — so a
+trace cannot become the way synthetic customer content leaves the lab, and a framework's own
+instrumentation is never swept into the record even where an SDK emits it. Each duration is
+one measurement handed to both the record and the trace rather than taken twice, and the spans
+are real OpenTelemetry spans opened after the fact from those measurements, so the runner
+holds no SDK type and an exporter sees exactly the tree that was stored (ADR 0037).
+
 The one thing on those surfaces that is neither a record of the run nor a reading of one is what
 an operator concluded about it. Notes and tags are stored in `experiment_notes` and
 `experiment_tags` beside an experiment nothing updates, so annotating a run cannot move the
@@ -372,7 +388,9 @@ table: the confirmation is inside the result the proposal answered with, and the
 the pair of revisions the event carries (ADR 0026). Both tables also carry nullable measurement
 columns — an attempt's duration and provider usage, a call's duration — nullable because "the
 lab did not measure this" is a real state and a zero would be counted into a total (ADR 0032).
-What an operator writes afterwards is stored beside all of it rather than in it:
+The spans of each attempt live in `experiment_run_spans`, keyed by the arm and the span id and
+holding identifiers, a kind, an offset, and a duration — and nothing that could carry content
+(ADR 0037). What an operator writes afterwards is stored beside all of it rather than in it:
 `experiment_notes` is append-only, and `experiment_tags` is keyed by the run and the folded tag so
 the set is a set rather than a rule the writer has to remember (ADR 0036). Experiments and judge
 executions are append-oriented historical evidence. Operational sandbox state is mutable only
