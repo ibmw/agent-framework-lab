@@ -823,9 +823,12 @@ class ExperimentReplayModel(Base):
     envelope either.
 
     The derived experiment is the primary key: an experiment is derived once, by the act
-    that created it, and a second row would be a second story about where it came from. The
-    source is indexed so "what has been replayed from this run" is one statement, and both
+    that created it, and a second row would be a second story about where it came from. Both
     ends are foreign keys because neither experiment can be deleted.
+
+    There is deliberately no index on the source. A derived run names what it came from and
+    nothing asks the question from the other end yet; an index for a read that does not exist
+    is the speculative structure this codebase keeps refusing to add ahead of its caller.
     """
 
     __tablename__ = "experiment_replays"
@@ -833,7 +836,6 @@ class ExperimentReplayModel(Base):
         CheckConstraint(
             "experiment_id <> source_experiment_id", name="ck_experiment_replays_distinct"
         ),
-        Index("ix_experiment_replays_source", "source_experiment_id", "created_at"),
     )
 
     experiment_id: Mapped[str] = mapped_column(

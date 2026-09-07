@@ -2443,12 +2443,6 @@ class SqlAlchemyExperimentReplayRepository:
         model = self._session.get(ExperimentReplayModel, str(experiment_id))
         return None if model is None else self._record(model)
 
-    def list_all(self) -> dict[UUID, ExperimentReplay]:
-        return {
-            UUID(model.experiment_id): self._record(model)
-            for model in self._session.scalars(select(ExperimentReplayModel)).all()
-        }
-
     def save(self, record: ExperimentReplay) -> ExperimentReplay:
         self._session.add(
             ExperimentReplayModel(

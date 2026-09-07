@@ -753,21 +753,42 @@ def test_an_experiment_is_derived_once_and_never_from_itself(
 ) -> None:
     """The derivation's key is the derived experiment, so it has one story about its source.
 
+    Both ends are foreign keys and both are exercised here, over the engine the application
+    actually uses — the one that turns SQLite's foreign keys on. A derivation naming an
+    experiment nobody ran would be provenance pointing at nothing.
+
     The self-reference check is in the table for the reason the span coordinates are: the
     service cannot produce one, and a row that claimed a run replayed itself would be
     provenance nobody could follow."""
     database_url = f"sqlite:///{tmp_path / 'replays.db'}"
     command.upgrade(alembic_config(database_url, monkeypatch), "head")
-    engine = create_engine(database_url)
+    engine = create_database_engine(database_url)
     derived = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac041"
     source = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac042"
+    absent = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac043"
+    experiment = text(
+        """
+        INSERT INTO experiments (
+            experiment_id, shop_id, label, scenario_id, scenario_version, seed, snapshot_id,
+            sandbox_fingerprint, resolution_fingerprint, participant_driver, document,
+            created_at
+        )
+        VALUES (
+            :experiment_id, '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0ff', 'Wrong address',
+            '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0fe', 1, 1, '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0fd',
+            :fingerprint, :fingerprint, 'human', '{}', '2026-09-07 12:00:00.000000'
+        )
+        """
+    )
     insert = text(
         """
         INSERT INTO experiment_replays (experiment_id, source_experiment_id, created_at)
-        VALUES (:experiment_id, :source_experiment_id, '2026-09-08 12:00:00.000000')
+        VALUES (:experiment_id, :source_experiment_id, '2026-09-07 12:00:00.000000')
         """
     )
     with engine.begin() as connection:
+        for identifier in (source, derived):
+            connection.execute(experiment, {"experiment_id": identifier, "fingerprint": "a" * 64})
         connection.execute(insert, {"experiment_id": derived, "source_experiment_id": source})
 
     with pytest.raises(IntegrityError), engine.begin() as connection:
@@ -775,6 +796,13 @@ def test_an_experiment_is_derived_once_and_never_from_itself(
 
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(insert, {"experiment_id": source, "source_experiment_id": source})
+
+    # Neither end may name an experiment this lab never ran.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {"experiment_id": absent, "source_experiment_id": source})
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {"experiment_id": source, "source_experiment_id": absent})
 
 
 @pytest.mark.migration

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "20260908_0019"
+revision: str = "20260907_0019"
 down_revision: str | None = "20260907_0018"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -29,15 +29,7 @@ def upgrade() -> None:
             "experiment_id <> source_experiment_id", name="ck_experiment_replays_distinct"
         ),
     )
-    # Answers "what has been replayed from this run" without scanning, which is the only
-    # question this table is asked from the other end.
-    op.create_index(
-        "ix_experiment_replays_source",
-        "experiment_replays",
-        ["source_experiment_id", "created_at"],
-    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_experiment_replays_source", table_name="experiment_replays")
     op.drop_table("experiment_replays")

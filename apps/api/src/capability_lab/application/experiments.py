@@ -37,7 +37,6 @@ decision or two.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, cast
@@ -343,18 +342,15 @@ class ExperimentOrigin:
 
 
 class ExperimentReplayRepository(Protocol):
-    """Which experiments were derived from which, written once per derivation."""
+    """Which experiments were derived from which, written once per derivation.
+
+    Two methods and no listing. History reads a derived row's origin through the same
+    `get_experiment` it projects every other column from, so a batch read would be a second
+    way to answer a question one already answers — and the annotation repository's `list_all`
+    exists because an annotation is *not* on the run, which is the difference.
+    """
 
     def get(self, experiment_id: UUID) -> ExperimentReplay | None: ...
-
-    def list_all(self) -> Mapping[UUID, ExperimentReplay]:
-        """Every derived experiment in the lab, keyed by the derived one.
-
-        Beside `get` for the reason the annotation repository's is: history reads a whole
-        lab, and a listing that asked per row would be doing per experiment what one
-        statement answers for the page.
-        """
-        ...
 
     def save(self, record: ExperimentReplay) -> ExperimentReplay: ...
 
