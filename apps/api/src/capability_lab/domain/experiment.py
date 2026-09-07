@@ -25,6 +25,13 @@ experiment whose arms differ in more than one dimension can still be run, but wh
 measures is no longer attributable, so the difference set is computed once here and
 recorded on the experiment for every later reading of it.
 
+**What an operator writes about a run is not part of what the run was.** A note and a tag
+are a reviewer's, not the scenario's: they are recorded beside the experiment rather than
+inside the document it is fingerprinted from, so annotating a run six months later cannot
+change what it says it ran. What lives here is only the shape of them — a tag is folded to
+one spelling because history narrows by it, and a note is bounded text because it is a
+paragraph rather than a report.
+
 **Where an arm stands is read, never stored.** An experiment an operator comes back to has
 to say what it is waiting for, and the two streams already answer it: the last customer turn
 the arm received, and whether any attempt at it produced a reply. `stand_arm` is that
@@ -34,9 +41,12 @@ button agree by construction rather than by both remembering the same rule.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
+from typing import cast
 from uuid import UUID
 
 from capability_lab.domain.agent_configuration import AgentConfigurationPayload
@@ -44,21 +54,28 @@ from capability_lab.domain.agent_turn import AgentTurn, AgentTurnOutcome
 from capability_lab.domain.content import (
     require_instance,
     require_non_negative_int,
+    require_slug,
     require_text,
 )
 from capability_lab.domain.entities import DomainError
 
 __all__ = [
+    "MAX_NOTE_LENGTH",
     "MAX_PARTICIPANT_TURN_LENGTH",
+    "MAX_TAGS",
     "ArmAwaiting",
     "ArmStanding",
     "ComparisonDimension",
     "ComparisonVariable",
     "ExperimentConfigurationError",
+    "ExperimentNote",
     "ParticipantDriverType",
     "ParticipantTurn",
     "ParticipantTurnSource",
     "compare_configurations",
+    "fold_tag",
+    "fold_tags",
+    "normalize_tag",
     "stand_arm",
 ]
 
@@ -66,6 +83,25 @@ __all__ = [
 # bounded at the shared text length, and a turn typed into the bench is the same thing
 # arriving later, so it is bounded the same way.
 MAX_PARTICIPANT_TURN_LENGTH = 4000
+
+# A note is a reviewer's paragraph about a run, not the write-up the run belongs in. Half
+# the turn length, because a note longer than the message it is about has stopped being an
+# annotation and become a document with nowhere to live.
+MAX_NOTE_LENGTH = 2000
+
+# Tags are a shelf, not a taxonomy: past a couple of dozen on one run nothing is being
+# narrowed by them, and the cap is what stops a paste from becoming the filter list.
+MAX_TAGS = 24
+
+# The separators a typed tag may be spelled with, folded to the one it is stored as. A tag
+# is an identity that history narrows by, so "read check gap" and "read_check_gap" have to
+# arrive as the same shelf rather than as two that look alike in a dropdown.
+#
+# The hyphen is in the class as well as the output, so a run of them collapses: somebody who
+# typed `read - check` or `read--check` spelled the shelf they meant, and refusing them would
+# reject kebab-case for being kebab-case. A leading or trailing separator still folds to a
+# leading or trailing hyphen and is still refused, because `-leading` is not a slug.
+_TAG_SEPARATORS = re.compile(r"[\s_-]+")
 
 
 class ExperimentConfigurationError(DomainError):
@@ -75,6 +111,7 @@ class ExperimentConfigurationError(DomainError):
 _require_instance = partial(require_instance, error=ExperimentConfigurationError)
 _require_text = partial(require_text, error=ExperimentConfigurationError)
 _require_non_negative_int = partial(require_non_negative_int, error=ExperimentConfigurationError)
+_require_slug = partial(require_slug, error=ExperimentConfigurationError)
 
 
 class ParticipantDriverType(StrEnum):
@@ -351,3 +388,76 @@ def _value(dimension: ComparisonDimension, payload: AgentConfigurationPayload) -
         case ComparisonDimension.TONE_OF_VOICE:
             selection = payload.tone_of_voice
             return selection.guideline_id or selection.source.value
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentNote:
+    """One thing an operator wrote about a run, and nothing about the run itself.
+
+    Written once and never edited, for the reason a judge execution is never overwritten
+    (ADR 0031): a note is what a reviewer thought at the moment they read the evidence, and
+    a note quietly rewritten afterwards is no longer that.
+
+    The body may quote what a synthetic customer said, so it is stored exactly as the
+    participant turns beside it are — and, like them, never logged or traced.
+    """
+
+    note_id: UUID
+    body: str
+
+    def __post_init__(self) -> None:
+        _require_instance(self.note_id, UUID, "a note must have an identity")
+        _require_text(self.body, "note body")
+        if len(self.body) > MAX_NOTE_LENGTH:
+            raise ExperimentConfigurationError(
+                f"a note must contain at most {MAX_NOTE_LENGTH} characters"
+            )
+
+
+def normalize_tag(value: str) -> str:
+    """The lenient half of the fold: trimmed, lowercased, separated by single hyphens.
+
+    Separated from `fold_tag` because the two callers want different halves of one rule. A
+    *write* has to end in a shelf that can be stored, so it refuses what it cannot fold. A
+    *filter* must never refuse: a link shared after the last run under a shelf was refiled
+    should narrow to nothing rather than become an error page, and a query is not authoring.
+
+    Both go through this step, which is what makes the filter agree with the write. Matching
+    on the raw string instead would narrow correctly only for the spellings the dropdown
+    happens to emit, and a hand-typed `tag=Read check gap` would find nothing while the
+    identical tag sat on a row.
+    """
+    return _TAG_SEPARATORS.sub("-", value.strip().lower())
+
+
+def fold_tag(value: object) -> str:
+    """One tag as it is stored: normalized, and then required to be a slug.
+
+    A tag is an identity a listing narrows by rather than prose, so the spellings a person
+    reaches for — `Read check gap`, `read_check_gap`, `READ-CHECK-GAP` — have to arrive as
+    one shelf. The fold is total over what it accepts and idempotent, which is what lets the
+    stored form be compared directly and a filter option be offered exactly once.
+
+    What it deliberately does not do is invent a tag out of anything: the normalized value
+    must still be a slug, so an accented or punctuated string is refused rather than mangled
+    into a key nobody would guess. The words go in a note; a tag is what the note is filed
+    under.
+    """
+    if not isinstance(value, str):
+        raise ExperimentConfigurationError("a tag must be text")
+    return _require_slug(normalize_tag(value), "tag")
+
+
+def fold_tags(values: object) -> tuple[str, ...]:
+    """A run's whole tag set as it is stored: folded, deduplicated, and in one order.
+
+    Sorted rather than kept as typed, because this is a set: two operators who tagged the
+    same run with the same shelves in different orders have done the same thing, and a
+    stored order would make that read as two different classifications.
+    """
+    if isinstance(values, str) or not isinstance(values, Iterable):
+        raise ExperimentConfigurationError("tags must be a list of text values")
+    folded = frozenset(fold_tag(value) for value in cast("Iterable[object]", values))
+    if len(folded) > MAX_TAGS:
+        raise ExperimentConfigurationError(f"a run may carry at most {MAX_TAGS} tags")
+    return tuple(sorted(folded))

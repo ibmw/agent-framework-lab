@@ -3166,7 +3166,8 @@ paths:
         and what each one's objectives say — so a row can never disagree with the
         bench or the results screen it opens into. Counts are per arm and are never
         combined into a score. The filter options travel with the page and are read
-        from the experiments themselves rather than from the definition libraries.
+        from the experiments themselves rather than from the definition libraries
+        — the tags among them, so the shelves offered are the ones runs are on.
       operationId: listExperimentHistory
       parameters:
       - name: shop_id
@@ -3201,6 +3202,20 @@ paths:
           description: Only runs with an arm on this framework.
           title: Framework Id
         description: Only runs with an arm on this framework.
+      - name: tag
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Only runs filed under this tag. Matched against the stored
+            folded value, so a tag no run carries narrows to nothing rather than refusing
+            the request.
+          title: Tag
+        description: Only runs filed under this tag. Matched against the stored folded
+          value, so a tag no run carries narrows to nothing rather than refusing the
+          request.
       - name: status
         in: query
         required: false
@@ -3250,9 +3265,11 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: Match the name, scenario, shop, or arms of a run.
+          description: Match the name, scenario, shop, or arms of a run, and the notes
+            and tags written on it.
           title: Q
-        description: Match the name, scenario, shop, or arms of a run.
+        description: Match the name, scenario, shop, or arms of a run, and the notes
+          and tags written on it.
       - name: page
         in: query
         required: false
@@ -3655,6 +3672,164 @@ paths:
         '422':
           description: The driver has no turn to deliver, does not drive this experiment,
             or an arm has answered every turn its scenario allows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/annotations:
+    get:
+      summary: Read the notes and tags written on this experiment
+      description: 'What an operator concluded about a run, stored beside the record
+        rather than inside it: annotating an experiment never moves the document it
+        is fingerprinted from. Read separately from the experiment because it has
+        its own lifecycle — the run is finished, and this is not.'
+      operationId: getExperimentAnnotations
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentAnnotationsResponse'
+        '404':
+          description: The experiment is not found in this shop
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid definition content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/notes:
+    post:
+      summary: Write one note about this experiment
+      description: 'Appended and never edited, for the reason a judge execution is
+        never overwritten: a note is what a reviewer thought when they read the run.
+        Deliberately not idempotent — two reviewers who wrote the same sentence wrote
+        two notes. Answers with everything written on the run.'
+      operationId: addExperimentNote
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddExperimentNoteRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentAnnotationsResponse'
+        '404':
+          description: The experiment is not found in this shop
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The note is empty or too long
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/tags:
+    put:
+      summary: Replace the tags this experiment is filed under
+      description: 'The whole set rather than one tag at a time: the operator is saying
+        what the chips should be. Each value is folded to lowercase kebab-case so
+        a shelf has one spelling, and setting the same set again changes nothing.
+        Answers with everything written on the run.'
+      operationId: setExperimentTags
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetExperimentTagsRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentAnnotationsResponse'
+        '404':
+          description: The experiment is not found in this shop
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Another request filed this run while this one was filing it;
+            read its tags and set them again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: A tag is not a lowercase kebab-case identifier once folded,
+            or there are too many of them
           content:
             application/json:
               schema:
@@ -4653,6 +4828,32 @@ components:
       - result_order_status
       - result_order_version
       title: ActionProposalResponse
+    AddExperimentNoteRequest:
+      properties:
+        body:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Body
+          description: What the reviewer concluded, in their own words.
+      additionalProperties: false
+      type: object
+      required:
+      - body
+      title: AddExperimentNoteRequest
+      description: 'One thing an operator wants recorded about this run.
+
+
+        Stripped here rather than left to the domain, because padding is a fact about
+        a text box
+
+        and not about what the reviewer wrote. Length is then measured on what will
+        actually be
+
+        stored, so a body of spaces is the contract''s own "must not be empty" rather
+        than a
+
+        domain refusal the 422 description does not describe.'
     AddressSchema:
       properties:
         id:
@@ -6722,6 +6923,34 @@ components:
         an operator
 
         cannot weigh — and because a client cannot look it up: the table is the lab''s.'
+    ExperimentAnnotationsResponse:
+      properties:
+        notes:
+          items:
+            $ref: '#/components/schemas/ExperimentNoteSchema'
+          type: array
+          title: Notes
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+      additionalProperties: false
+      type: object
+      required:
+      - notes
+      - tags
+      title: ExperimentAnnotationsResponse
+      description: 'Everything an operator has written on one run.
+
+
+        Answered by both writes as well as by the read, for the reason a scoring pass
+        answers
+
+        with the whole evaluation: a client that had to merge one appended note into
+        a list it
+
+        read separately would be holding two readings of one run.'
     ExperimentEvaluationResponse:
       properties:
         experiment_id:
@@ -6787,6 +7016,14 @@ components:
             $ref: '#/components/schemas/HistoryArmSchema'
           type: array
           title: Arms
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        note_count:
+          type: integer
+          title: Note Count
         created_at:
           type: string
           title: Created At
@@ -6807,6 +7044,8 @@ components:
       - participant_driver
       - status
       - arms
+      - tags
+      - note_count
       - created_at
       title: ExperimentHistoryEntrySchema
       description: 'One row of history: an experiment, what it ran, and where each
@@ -6842,6 +7081,11 @@ components:
             $ref: '#/components/schemas/HistoryFacetSchema'
           type: array
           title: Frameworks
+        tags:
+          items:
+            $ref: '#/components/schemas/HistoryFacetSchema'
+          type: array
+          title: Tags
       additionalProperties: false
       type: object
       required:
@@ -6852,6 +7096,7 @@ components:
       - shops
       - scenarios
       - frameworks
+      - tags
       title: ExperimentHistoryResponse
       description: One page of history, and every value its filters can be narrowed
         to.
@@ -6867,6 +7112,26 @@ components:
       required:
       - experiments
       title: ExperimentListResponse
+    ExperimentNoteSchema:
+      properties:
+        note_id:
+          type: string
+          format: uuid
+          title: Note Id
+        body:
+          type: string
+          title: Body
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - note_id
+      - body
+      - created_at
+      title: ExperimentNoteSchema
+      description: 'One note as it was written: the words, and when.'
     ExperimentPreviewResponse:
       properties:
         issues:
@@ -10997,6 +11262,29 @@ components:
       required:
       - message
       title: SendConversationMessageRequest
+    SetExperimentTagsRequest:
+      properties:
+        tags:
+          items:
+            type: string
+          type: array
+          maxItems: 24
+          title: Tags
+          description: The run's whole tag set. Each value is folded to lowercase
+            kebab-case, so 'Read check gap' and 'read_check_gap' are one tag.
+      additionalProperties: false
+      type: object
+      required:
+      - tags
+      title: SetExperimentTagsRequest
+      description: 'Every shelf this run should be filed on, which is the whole set.
+
+
+        Not an add and not a remove: the operator is looking at the chips and saying
+        what they
+
+        are, and two requests that crossed would otherwise leave a set neither of
+        them asked for.'
     ShippingAddressSchema:
       properties:
         source_address_id:

@@ -985,7 +985,7 @@ export interface paths {
     };
     /**
      * List every experiment this lab has run, most recently started first
-     * @description Experiment-first history across every shop. Each row is projected from the experiment's own record — the arms it pinned, where each one stands, and what each one's objectives say — so a row can never disagree with the bench or the results screen it opens into. Counts are per arm and are never combined into a score. The filter options travel with the page and are read from the experiments themselves rather than from the definition libraries.
+     * @description Experiment-first history across every shop. Each row is projected from the experiment's own record — the arms it pinned, where each one stands, and what each one's objectives say — so a row can never disagree with the bench or the results screen it opens into. Counts are per arm and are never combined into a score. The filter options travel with the page and are read from the experiments themselves rather than from the definition libraries — the tags among them, so the shelves offered are the ones runs are on.
      */
     get: operations["listExperimentHistory"];
     put?: never;
@@ -1128,6 +1128,66 @@ export interface paths {
      * @description One call is one composition however many arms it reaches, so the turns it writes share a composition identifier. Two calls are two compositions even when the words match, which is what makes divergent replies readable later.
      */
     post: operations["deliverParticipantTurn"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/annotations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read the notes and tags written on this experiment
+     * @description What an operator concluded about a run, stored beside the record rather than inside it: annotating an experiment never moves the document it is fingerprinted from. Read separately from the experiment because it has its own lifecycle — the run is finished, and this is not.
+     */
+    get: operations["getExperimentAnnotations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/notes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Write one note about this experiment
+     * @description Appended and never edited, for the reason a judge execution is never overwritten: a note is what a reviewer thought when they read the run. Deliberately not idempotent — two reviewers who wrote the same sentence wrote two notes. Answers with everything written on the run.
+     */
+    post: operations["addExperimentNote"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/tags": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Replace the tags this experiment is filed under
+     * @description The whole set rather than one tag at a time: the operator is saying what the chips should be. Each value is folded to lowercase kebab-case so a shelf has one spelling, and setting the same set again changes nothing. Answers with everything written on the run.
+     */
+    put: operations["setExperimentTags"];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1515,6 +1575,22 @@ export interface components {
       result_order_version: number | null;
       /** Trace Id */
       trace_id?: string | null;
+    };
+    /**
+     * AddExperimentNoteRequest
+     * @description One thing an operator wants recorded about this run.
+     *
+     *     Stripped here rather than left to the domain, because padding is a fact about a text box
+     *     and not about what the reviewer wrote. Length is then measured on what will actually be
+     *     stored, so a body of spaces is the contract's own "must not be empty" rather than a
+     *     domain refusal the 422 description does not describe.
+     */
+    AddExperimentNoteRequest: {
+      /**
+       * Body
+       * @description What the reviewer concluded, in their own words.
+       */
+      body: string;
     };
     /** AddressSchema */
     AddressSchema: {
@@ -2610,6 +2686,20 @@ export interface components {
       recorded_on: string;
     };
     /**
+     * ExperimentAnnotationsResponse
+     * @description Everything an operator has written on one run.
+     *
+     *     Answered by both writes as well as by the read, for the reason a scoring pass answers
+     *     with the whole evaluation: a client that had to merge one appended note into a list it
+     *     read separately would be holding two readings of one run.
+     */
+    ExperimentAnnotationsResponse: {
+      /** Notes */
+      notes: components["schemas"]["ExperimentNoteSchema"][];
+      /** Tags */
+      tags: string[];
+    };
+    /**
      * ExperimentEvaluationResponse
      * @description Both arms judged against one scenario's objectives, in arm order.
      */
@@ -2662,6 +2752,10 @@ export interface components {
       status: components["schemas"]["ExperimentStatus"];
       /** Arms */
       arms: components["schemas"]["HistoryArmSchema"][];
+      /** Tags */
+      tags: string[];
+      /** Note Count */
+      note_count: number;
       /** Created At */
       created_at: string;
     };
@@ -2684,11 +2778,28 @@ export interface components {
       scenarios: components["schemas"]["HistoryFacetSchema"][];
       /** Frameworks */
       frameworks: components["schemas"]["HistoryFacetSchema"][];
+      /** Tags */
+      tags: components["schemas"]["HistoryFacetSchema"][];
     };
     /** ExperimentListResponse */
     ExperimentListResponse: {
       /** Experiments */
       experiments: components["schemas"]["ExperimentSummarySchema"][];
+    };
+    /**
+     * ExperimentNoteSchema
+     * @description One note as it was written: the words, and when.
+     */
+    ExperimentNoteSchema: {
+      /**
+       * Note Id
+       * Format: uuid
+       */
+      note_id: string;
+      /** Body */
+      body: string;
+      /** Created At */
+      created_at: string;
     };
     /**
      * ExperimentPreviewResponse
@@ -4887,6 +4998,20 @@ export interface components {
     SendConversationMessageRequest: {
       /** Message */
       message: string;
+    };
+    /**
+     * SetExperimentTagsRequest
+     * @description Every shelf this run should be filed on, which is the whole set.
+     *
+     *     Not an add and not a remove: the operator is looking at the chips and saying what they
+     *     are, and two requests that crossed would otherwise leave a set neither of them asked for.
+     */
+    SetExperimentTagsRequest: {
+      /**
+       * Tags
+       * @description The run's whole tag set. Each value is folded to lowercase kebab-case, so 'Read check gap' and 'read_check_gap' are one tag.
+       */
+      tags: string[];
     };
     /**
      * ShippingAddressSchema
@@ -9620,6 +9745,8 @@ export interface operations {
         scenario_id?: string | null;
         /** @description Only runs with an arm on this framework. */
         framework_id?: string | null;
+        /** @description Only runs filed under this tag. Matched against the stored folded value, so a tag no run carries narrows to nothing rather than refusing the request. */
+        tag?: string | null;
         /** @description Only runs standing here: running, completed, or failed. */
         status?: components["schemas"]["ExperimentStatus"] | null;
         /** @description Only runs where an arm holds an objective with this outcome. */
@@ -9628,7 +9755,7 @@ export interface operations {
         started_after?: string | null;
         /** @description Only runs started at or before this moment. */
         started_before?: string | null;
-        /** @description Match the name, scenario, shop, or arms of a run. */
+        /** @description Match the name, scenario, shop, or arms of a run, and the notes and tags written on it. */
         q?: string | null;
         page?: number;
         page_size?: number;
@@ -10012,6 +10139,152 @@ export interface operations {
         };
       };
       /** @description The driver has no turn to deliver, does not drive this experiment, or an arm has answered every turn its scenario allows */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getExperimentAnnotations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentAnnotationsResponse"];
+        };
+      };
+      /** @description The experiment is not found in this shop */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Invalid definition content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  addExperimentNote: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AddExperimentNoteRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentAnnotationsResponse"];
+        };
+      };
+      /** @description The experiment is not found in this shop */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The note is empty or too long */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  setExperimentTags: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetExperimentTagsRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentAnnotationsResponse"];
+        };
+      };
+      /** @description The experiment is not found in this shop */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Another request filed this run while this one was filing it; read its tags and set them again */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description A tag is not a lowercase kebab-case identifier once folded, or there are too many of them */
       422: {
         headers: {
           [name: string]: unknown;

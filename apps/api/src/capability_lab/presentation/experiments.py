@@ -23,6 +23,12 @@ acts: the arms progress independently, an advance is where a retry becomes expre
 a model call is slow and costly enough that it must not be a side effect of typing. The
 request carries no body — everything the turn runs on is already pinned — and the response
 is the attempt plus the calls it made.
+
+`POST /experiments/{id}/notes` and `PUT /experiments/{id}/tags` are the one surface here
+that writes something the run did not do. They are separate operations because they are
+different statements: a note is appended and never edited, and a tag set is replaced whole.
+Both answer with everything written on the run, and neither touches the experiment record —
+what an operator concluded is stored beside what happened, never inside it (ADR 0036).
 """
 
 from collections.abc import Callable, Generator
@@ -30,13 +36,18 @@ from typing import Annotated, Any, Self
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from capability_lab.application.agent_turns import AgentTurnRecord, ToolEventRecord
 from capability_lab.application.definition_resolution import ResolvedDefinition
 from capability_lab.application.evaluation import (
     ExperimentEvaluation,
     ExperimentEvaluationService,
+)
+from capability_lab.application.experiment_annotations import (
+    ExperimentAnnotations,
+    ExperimentAnnotationService,
+    ExperimentNoteRecord,
 )
 from capability_lab.application.experiment_runs import ExperimentRunner, RunTurn
 from capability_lab.application.experiment_timeline import (
@@ -78,7 +89,9 @@ from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, MIN_SCENARIO_SEED
 from capability_lab.domain.evaluation import ArmEvaluation, ObjectiveOutcome, ObjectiveResult
 from capability_lab.domain.experiment import (
+    MAX_NOTE_LENGTH,
     MAX_PARTICIPANT_TURN_LENGTH,
+    MAX_TAGS,
     ArmAwaiting,
     ArmStanding,
     ComparisonDimension,
@@ -185,6 +198,94 @@ class ParticipantTurnRequest(StrictApiModel):
         ),
     ]
     message: Annotated[str, Field(default="", max_length=MAX_PARTICIPANT_TURN_LENGTH)]
+
+
+class AddExperimentNoteRequest(StrictApiModel):
+    """One thing an operator wants recorded about this run.
+
+    Stripped here rather than left to the domain, because padding is a fact about a text box
+    and not about what the reviewer wrote. Length is then measured on what will actually be
+    stored, so a body of spaces is the contract's own "must not be empty" rather than a
+    domain refusal the 422 description does not describe.
+    """
+
+    body: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_NOTE_LENGTH),
+        Field(description="What the reviewer concluded, in their own words."),
+    ]
+
+
+class SetExperimentTagsRequest(StrictApiModel):
+    """Every shelf this run should be filed on, which is the whole set.
+
+    Not an add and not a remove: the operator is looking at the chips and saying what they
+    are, and two requests that crossed would otherwise leave a set neither of them asked for.
+    """
+
+    tags: Annotated[
+        list[str],
+        Field(
+            max_length=MAX_TAGS,
+            description="The run's whole tag set. Each value is folded to lowercase "
+            "kebab-case, so 'Read check gap' and 'read_check_gap' are one tag.",
+        ),
+    ]
+
+
+class ExperimentNoteSchema(StrictApiModel):
+    """One note as it was written: the words, and when."""
+
+    note_id: UUID
+    body: str
+    created_at: str
+
+    @classmethod
+    def from_record(cls, record: ExperimentNoteRecord) -> Self:
+        return cls(
+            note_id=record.note_id, body=record.body, created_at=record.created_at.isoformat()
+        )
+
+
+class ExperimentAnnotationsResponse(StrictApiModel):
+    """Everything an operator has written on one run.
+
+    Answered by both writes as well as by the read, for the reason a scoring pass answers
+    with the whole evaluation: a client that had to merge one appended note into a list it
+    read separately would be holding two readings of one run.
+    """
+
+    notes: list[ExperimentNoteSchema]
+    """Oldest first — successive reviewers reading one run, in the order they read it."""
+    tags: list[str]
+    """The folded set, in one order, so two operators who filed a run the same way agree."""
+
+    @classmethod
+    def from_domain(cls, annotations: ExperimentAnnotations) -> Self:
+        return cls(
+            notes=[ExperimentNoteSchema.from_record(note) for note in annotations.notes],
+            tags=list(annotations.tags),
+        )
+
+
+AnnotationNotFoundResponses: dict[int | str, dict[str, Any]] = {
+    404: {"model": ErrorResponse, "description": "The experiment is not found in this shop"}
+}
+NoteResponses: dict[int | str, dict[str, Any]] = AnnotationNotFoundResponses | {
+    422: {"model": ErrorResponse, "description": "The note is empty or too long"}
+}
+TagResponses: dict[int | str, dict[str, Any]] = AnnotationNotFoundResponses | {
+    409: {
+        "model": ErrorResponse,
+        "description": "Another request filed this run while this one was filing it; "
+        "read its tags and set them again",
+    },
+    422: {
+        "model": ErrorResponse,
+        "description": "A tag is not a lowercase kebab-case identifier once folded, or "
+        "there are too many of them",
+    },
+}
 
 
 class ComparisonVariableSchema(StrictApiModel):
@@ -1038,6 +1139,7 @@ class ExperimentRoutes:
         timeline: Callable[[], Generator[ExperimentTimelineService, None, None]],
         evaluation: Callable[[], Generator[ExperimentEvaluationService, None, None]],
         judge: Callable[[], Generator[ExperimentJudgeService, None, None]],
+        annotations: Callable[[], Generator[ExperimentAnnotationService, None, None]],
     ) -> None:
         self._service = service
         self._driver = driver
@@ -1045,6 +1147,7 @@ class ExperimentRoutes:
         self._timeline = timeline
         self._evaluation = evaluation
         self._judge = judge
+        self._annotations = annotations
 
     def register(self, router: APIRouter) -> None:
         dependency = Depends(self._service)
@@ -1052,6 +1155,7 @@ class ExperimentRoutes:
         timeline_dependency = Depends(self._timeline)
         evaluation_dependency = Depends(self._evaluation)
         judge_dependency = Depends(self._judge)
+        annotation_dependency = Depends(self._annotations)
 
         def start_experiment(
             shop_id: ShopIdPath,
@@ -1132,6 +1236,35 @@ class ExperimentRoutes:
             # is what keeps a judged row and a deterministic row beside it consistent.
             return ExperimentEvaluationResponse.from_domain(
                 await judge.score(shop_id, experiment_id, command.judge_id)
+            )
+
+        def get_experiment_annotations(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            annotations: Annotated[ExperimentAnnotationService, annotation_dependency],
+        ) -> ExperimentAnnotationsResponse:
+            return ExperimentAnnotationsResponse.from_domain(
+                annotations.get(shop_id, experiment_id)
+            )
+
+        def add_experiment_note(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            command: AddExperimentNoteRequest,
+            annotations: Annotated[ExperimentAnnotationService, annotation_dependency],
+        ) -> ExperimentAnnotationsResponse:
+            return ExperimentAnnotationsResponse.from_domain(
+                annotations.add_note(shop_id, experiment_id, command.body)
+            )
+
+        def set_experiment_tags(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            command: SetExperimentTagsRequest,
+            annotations: Annotated[ExperimentAnnotationService, annotation_dependency],
+        ) -> ExperimentAnnotationsResponse:
+            return ExperimentAnnotationsResponse.from_domain(
+                annotations.set_tags(shop_id, experiment_id, tuple(command.tags))
             )
 
         async def advance_run(
@@ -1288,6 +1421,52 @@ class ExperimentRoutes:
                     "experiment, or an arm has answered every turn its scenario allows",
                 },
             },
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/annotations",
+            get_experiment_annotations,
+            methods=["GET"],
+            response_model=ExperimentAnnotationsResponse,
+            operation_id="getExperimentAnnotations",
+            summary="Read the notes and tags written on this experiment",
+            description=(
+                "What an operator concluded about a run, stored beside the record rather "
+                "than inside it: annotating an experiment never moves the document it is "
+                "fingerprinted from. Read separately from the experiment because it has its "
+                "own lifecycle — the run is finished, and this is not."
+            ),
+            responses=AnnotationNotFoundResponses | InvalidResponses,
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/notes",
+            add_experiment_note,
+            methods=["POST"],
+            status_code=201,
+            response_model=ExperimentAnnotationsResponse,
+            operation_id="addExperimentNote",
+            summary="Write one note about this experiment",
+            description=(
+                "Appended and never edited, for the reason a judge execution is never "
+                "overwritten: a note is what a reviewer thought when they read the run. "
+                "Deliberately not idempotent — two reviewers who wrote the same sentence "
+                "wrote two notes. Answers with everything written on the run."
+            ),
+            responses=NoteResponses,
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/tags",
+            set_experiment_tags,
+            methods=["PUT"],
+            response_model=ExperimentAnnotationsResponse,
+            operation_id="setExperimentTags",
+            summary="Replace the tags this experiment is filed under",
+            description=(
+                "The whole set rather than one tag at a time: the operator is saying what "
+                "the chips should be. Each value is folded to lowercase kebab-case so a "
+                "shelf has one spelling, and setting the same set again changes nothing. "
+                "Answers with everything written on the run."
+            ),
+            responses=TagResponses,
         )
         router.add_api_route(
             "/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns",

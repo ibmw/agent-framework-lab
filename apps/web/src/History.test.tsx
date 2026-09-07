@@ -75,6 +75,8 @@ const FINISHED: ExperimentHistoryEntrySchema = {
     arm("Arm A", "cfg-atlas"),
     arm("Arm B", "cfg-beacon", { met: 0, decided: 1, failed: true }),
   ],
+  tags: ["read-check-gap", "two-arm"],
+  note_count: 2,
   created_at: "2026-09-02T17:41:00+00:00",
 };
 
@@ -88,6 +90,8 @@ const RUNNING: ExperimentHistoryEntrySchema = {
   scenario_name: "Order status inquiry",
   scenario_superseded: false,
   status: "running",
+  tags: [],
+  note_count: 0,
   arms: [
     arm("Arm A", "cfg-control", {
       awaiting: "agent",
@@ -120,6 +124,10 @@ function historyOf(rows: ExperimentHistoryEntrySchema[]): ExperimentHistoryRespo
     frameworks: [
       { id: "fake", label: "Deterministic fake" },
       { id: "pydantic-ai", label: "Pydantic AI" },
+    ],
+    tags: [
+      { id: "read-check-gap", label: "read-check-gap" },
+      { id: "two-arm", label: "two-arm" },
     ],
   };
 }

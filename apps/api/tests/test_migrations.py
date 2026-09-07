@@ -50,6 +50,9 @@ DEFINITION_TABLES = {
     "experiment_mutation_events",
     # And what a published judge answered about the rows no rule can decide.
     "experiment_judgements",
+    # And what an operator concluded afterwards, stored beside the record rather than in it.
+    "experiment_notes",
+    "experiment_tags",
 }
 POC_TABLES = {
     "action_proposals",
@@ -665,3 +668,48 @@ def test_a_proposal_is_open_or_closed_and_never_half_of_each(
 
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(insert, {**row, "confirmation": "c" * 64, "expected_revision": -1})
+
+
+@pytest.mark.migration
+def test_a_run_is_filed_under_one_shelf_only_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The tag table's key is what makes the set a set, rather than a check the writer runs.
+
+    Notes are the opposite and the same test says so: two reviewers who wrote the same
+    sentence wrote two notes, and the store must not collapse them.
+    """
+    database_url = f"sqlite:///{tmp_path / 'annotations.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    experiment_id = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac031"
+    tag = text("INSERT INTO experiment_tags (experiment_id, tag) VALUES (:id, :tag)")
+    note = text(
+        """
+        INSERT INTO experiment_notes (note_id, experiment_id, body, created_at)
+        VALUES (:note_id, :id, :body, '2026-09-05 12:00:00.000000')
+        """
+    )
+    with engine.begin() as connection:
+        connection.execute(tag, {"id": experiment_id, "tag": "read-check-gap"})
+        connection.execute(tag, {"id": experiment_id, "tag": "two-arm"})
+        connection.execute(
+            note,
+            {
+                "note_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac032",
+                "id": experiment_id,
+                "body": "Worth rerunning.",
+            },
+        )
+        connection.execute(
+            note,
+            {
+                "note_id": "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac033",
+                "id": experiment_id,
+                "body": "Worth rerunning.",
+            },
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(tag, {"id": experiment_id, "tag": "read-check-gap"})

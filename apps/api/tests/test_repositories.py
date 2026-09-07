@@ -8,6 +8,7 @@ from sqlalchemy import delete, event
 from sqlalchemy.exc import IntegrityError
 
 from capability_lab.application.canonical_state import fingerprint_initial_state
+from capability_lab.application.experiment_annotations import ExperimentTagConflictError
 from capability_lab.application.ports import OrderWriteTransientError
 from capability_lab.application.scenario_generation import create_retail_profile_kernel
 from capability_lab.domain.entities import Customer, Persona
@@ -20,6 +21,9 @@ from capability_lab.infrastructure.database import (
 )
 from capability_lab.infrastructure.models import (
     CustomerModel,
+    ExperimentModel,
+    ExperimentNoteModel,
+    ExperimentTagModel,
     IdempotencyRecordModel,
     OrderModel,
     PersonaModel,
@@ -29,6 +33,7 @@ from capability_lab.infrastructure.repositories import (
     GeneratedScenarioConflictError,
     PersistedScenarioIntegrityError,
     SqlAlchemyCustomerRepository,
+    SqlAlchemyExperimentAnnotationRepository,
     SqlAlchemyGeneratedScenarioRepository,
     SqlAlchemyOrderRepository,
     SqlAlchemyPersonaRepository,
@@ -374,3 +379,87 @@ def test_system_clock_returns_current_utc_time() -> None:
 
     assert actual.tzinfo is UTC
     assert before <= actual <= after
+
+
+def test_filing_a_run_under_one_shelf_twice_is_a_conflict_rather_than_a_failure(
+    tmp_path: Path,
+) -> None:
+    """The tag key refusing a duplicate has to reach the operator as something to retry.
+
+    The service folds a set before it gets here, so this drives the repository directly —
+    which is exactly the shape two crossing requests take on PostgreSQL, where both delete
+    and then both insert the same shelf. SQLite serializes writers and never produces it, so
+    without this the translation would be untested until the first Postgres deployment, and
+    a retryable conflict would surface as a 500 rather than as a 409.
+
+    The experiment row is real because this engine enforces foreign keys: a tag belongs to a
+    run, and the store says so.
+    """
+    engine = create_database_engine(database_url(tmp_path))
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    experiment_id = uuid4()
+    with session_scope(factory) as session:
+        session.add(
+            ExperimentModel(
+                experiment_id=str(experiment_id),
+                shop_id=str(uuid4()),
+                label="Prompt comparison",
+                scenario_id=str(uuid4()),
+                scenario_version=1,
+                seed=20260905,
+                snapshot_id=str(uuid4()),
+                sandbox_fingerprint="a" * 64,
+                resolution_fingerprint="b" * 64,
+                participant_driver="human",
+                document={},
+                created_at=datetime(2026, 9, 5, 12, 0, tzinfo=UTC),
+            )
+        )
+
+    with session_scope(factory) as session:
+        SqlAlchemyExperimentAnnotationRepository(session).replace_tags(
+            experiment_id, ("read-check-gap",)
+        )
+
+    with (
+        pytest.raises(ExperimentTagConflictError, match="set them again"),
+        session_scope(factory) as session,
+    ):
+        SqlAlchemyExperimentAnnotationRepository(session).replace_tags(
+            experiment_id, ("two-arm", "two-arm")
+        )
+
+    # The refusal rolled the whole replacement back rather than leaving the run half-refiled.
+    with session_scope(factory) as session:
+        annotations = SqlAlchemyExperimentAnnotationRepository(session).get(experiment_id)
+    assert annotations.tags == ("read-check-gap",)
+
+
+def test_an_annotation_belongs_to_a_run_that_exists(tmp_path: Path) -> None:
+    """The foreign key, which is what keeps an annotation attached to what it annotates.
+
+    Written against the store rather than through `replace_tags`, deliberately: that method
+    translates an integrity failure into the one cause reachable through the service — two
+    requests filing one run at once — and reporting an orphan as "filed concurrently" would
+    be worse than not translating at all. Nothing in this lab deletes an experiment, so the
+    orphan is unreachable from the service; the constraint is what keeps it that way.
+    """
+    engine = create_database_engine(database_url(tmp_path))
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+
+    with pytest.raises(IntegrityError), session_scope(factory) as session:
+        session.add(ExperimentTagModel(experiment_id=str(uuid4()), tag="orphan"))
+        session.flush()
+
+    with pytest.raises(IntegrityError), session_scope(factory) as session:
+        session.add(
+            ExperimentNoteModel(
+                note_id=str(uuid4()),
+                experiment_id=str(uuid4()),
+                body="A note about a run that is not there.",
+                created_at=datetime(2026, 9, 5, 12, 0, tzinfo=UTC),
+            )
+        )
+        session.flush()

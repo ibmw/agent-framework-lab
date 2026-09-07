@@ -13,14 +13,20 @@ from capability_lab.domain.agent_configuration import (
 )
 from capability_lab.domain.agent_turn import AgentTurn, AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.experiment import (
+    MAX_NOTE_LENGTH,
     MAX_PARTICIPANT_TURN_LENGTH,
+    MAX_TAGS,
     ArmAwaiting,
     ComparisonDimension,
     ExperimentConfigurationError,
+    ExperimentNote,
     ParticipantDriverType,
     ParticipantTurn,
     ParticipantTurnSource,
     compare_configurations,
+    fold_tag,
+    fold_tags,
+    normalize_tag,
     stand_arm,
 )
 
@@ -253,3 +259,85 @@ def test_the_tone_selection_is_compared_by_what_it_names() -> None:
 def test_a_comparison_needs_something_to_compare() -> None:
     with pytest.raises(ExperimentConfigurationError, match="at least one"):
         compare_configurations(())
+
+
+# -- what an operator writes on a run ------------------------------------------
+
+
+def test_a_note_carries_words_and_an_identity() -> None:
+    note = ExperimentNote(note_id=uuid4(), body="Beacon acts before reading the policy.")
+
+    assert note.body == "Beacon acts before reading the policy."
+
+
+@pytest.mark.parametrize("body", ["", "   ", " padded "])
+def test_a_note_with_nothing_in_it_is_not_a_note(body: str) -> None:
+    with pytest.raises(ExperimentConfigurationError, match="note body"):
+        ExperimentNote(note_id=uuid4(), body=body)
+
+
+def test_a_note_is_a_paragraph_rather_than_a_report() -> None:
+    with pytest.raises(ExperimentConfigurationError, match=f"at most {MAX_NOTE_LENGTH}"):
+        ExperimentNote(note_id=uuid4(), body="x" * (MAX_NOTE_LENGTH + 1))
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "read-check-gap",
+        "Read check gap",
+        "  READ_CHECK_GAP  ",
+        "read   check\tgap",
+        # A hyphen is a separator as well as the one this fold writes, so somebody who spelled
+        # the shelf with spaces around it, or doubled one, spelled the shelf they meant.
+        "read - check - gap",
+        "read -check -gap",
+        "read--check--gap",
+        "read_check-gap",
+    ],
+)
+def test_every_spelling_of_one_shelf_folds_to_the_same_tag(typed: str) -> None:
+    """A tag is what history narrows by, so two spellings cannot be two filter options."""
+    assert fold_tag(typed) == "read-check-gap"
+
+
+def test_folding_a_folded_tag_changes_nothing() -> None:
+    """The stored form is what the next fold is applied to, so it has to be a fixed point."""
+    once = fold_tag("Read check gap")
+
+    assert fold_tag(once) == once
+
+
+@pytest.mark.parametrize("typed", ["écoles", "read/check", "-leading", "trailing-", "", "  "])
+def test_a_tag_the_fold_cannot_make_a_slug_of_is_refused(typed: str) -> None:
+    """Refused rather than mangled: a key nobody would guess is worse than no key.
+
+    A leading or trailing separator survives the fold as a leading or trailing hyphen, which
+    is not a slug — so widening the separator class did not quietly start accepting them."""
+    with pytest.raises(ExperimentConfigurationError):
+        fold_tag(typed)
+
+
+@pytest.mark.parametrize("typed", ["Read check gap", "écoles", "-leading", ""])
+def test_the_filter_half_of_the_fold_normalizes_without_ever_refusing(typed: str) -> None:
+    """A query is not authoring: a link nothing matches must narrow to nothing, not 422.
+
+    It is the same normalization a write folds through, which is what makes a hand-typed
+    `tag=Read check gap` find the run the dropdown would have found."""
+    assert normalize_tag(typed) == normalize_tag(typed).strip()
+    assert normalize_tag("Read check gap") == "read-check-gap"
+
+
+def test_a_tag_set_is_a_set_in_one_order() -> None:
+    assert fold_tags(["two-arm", "Read check gap", "two_arm"]) == ("read-check-gap", "two-arm")
+
+
+def test_a_run_can_be_filed_on_only_so_many_shelves() -> None:
+    with pytest.raises(ExperimentConfigurationError, match=f"at most {MAX_TAGS}"):
+        fold_tags([f"tag-{index}" for index in range(MAX_TAGS + 1)])
+
+
+def test_a_string_is_not_a_tag_set() -> None:
+    """A caller handing one word over would otherwise be filed under every letter of it."""
+    with pytest.raises(ExperimentConfigurationError, match="list of text"):
+        fold_tags("read-check-gap")

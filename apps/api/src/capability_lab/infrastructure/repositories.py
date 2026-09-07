@@ -33,6 +33,11 @@ from capability_lab.application.definition_authoring import (
     PayloadCodec,
 )
 from capability_lab.application.definition_resolution import PublishedVersionExistsError
+from capability_lab.application.experiment_annotations import (
+    ExperimentAnnotations,
+    ExperimentNoteRecord,
+    ExperimentTagConflictError,
+)
 from capability_lab.application.experiments import (
     ExperimentRecord,
     ParticipantTurnRecord,
@@ -124,7 +129,9 @@ from capability_lab.infrastructure.models import (
     DefinitionShopAttachmentModel,
     DefinitionVersionModel,
     ExperimentModel,
+    ExperimentNoteModel,
     ExperimentRunModel,
+    ExperimentTagModel,
     GeneratedScenarioModel,
     GeneratedScenarioOrderModel,
     GeneratedScenarioProductModel,
@@ -2350,5 +2357,103 @@ class SqlAlchemyJudgementRepository:
                 rationale=model.rationale,
                 failure=None if model.failure is None else JudgeFailure(model.failure),
             ),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyExperimentAnnotationRepository:
+    """Notes appended and tags replaced, in two tables beside an experiment nothing updates."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, experiment_id: UUID) -> ExperimentAnnotations:
+        return ExperimentAnnotations(
+            notes=tuple(
+                self._note(model)
+                for model in self._session.scalars(
+                    select(ExperimentNoteModel)
+                    .where(ExperimentNoteModel.experiment_id == str(experiment_id))
+                    .order_by(ExperimentNoteModel.created_at, ExperimentNoteModel.note_id)
+                ).all()
+            ),
+            tags=tuple(
+                self._session.scalars(
+                    select(ExperimentTagModel.tag)
+                    .where(ExperimentTagModel.experiment_id == str(experiment_id))
+                    .order_by(ExperimentTagModel.tag)
+                ).all()
+            ),
+        )
+
+    def list_all(self) -> dict[UUID, ExperimentAnnotations]:
+        """Every annotated run in the lab, in two statements rather than two per row."""
+        notes: dict[UUID, list[ExperimentNoteRecord]] = {}
+        for model in self._session.scalars(
+            select(ExperimentNoteModel).order_by(
+                ExperimentNoteModel.created_at, ExperimentNoteModel.note_id
+            )
+        ).all():
+            notes.setdefault(UUID(model.experiment_id), []).append(self._note(model))
+        tags: dict[UUID, list[str]] = {}
+        for experiment_id, tag in self._session.execute(
+            select(ExperimentTagModel.experiment_id, ExperimentTagModel.tag).order_by(
+                ExperimentTagModel.tag
+            )
+        ).all():
+            tags.setdefault(UUID(experiment_id), []).append(tag)
+        return {
+            experiment_id: ExperimentAnnotations(
+                notes=tuple(notes.get(experiment_id, ())),
+                tags=tuple(tags.get(experiment_id, ())),
+            )
+            for experiment_id in notes.keys() | tags.keys()
+        }
+
+    def append_note(self, record: ExperimentNoteRecord) -> None:
+        self._session.add(
+            ExperimentNoteModel(
+                note_id=str(record.note_id),
+                experiment_id=str(record.experiment_id),
+                body=record.body,
+                created_at=record.created_at,
+            )
+        )
+        self._session.flush()
+
+    def replace_tags(self, experiment_id: UUID, tags: tuple[str, ...]) -> None:
+        """Delete the shelves this run is on and write the ones it should be on.
+
+        Written as a replacement rather than as a difference because that is what the
+        operation means: the caller is looking at the chips and saying what they are. A
+        computed add-and-remove would produce the same rows and would additionally have to
+        be right about which ones already existed.
+
+        The delete and the inserts are a statement pair rather than an atomic swap, so two
+        requests that cross can both delete and then both insert one shelf. SQLite serializes
+        writers and never produces it; PostgreSQL under READ COMMITTED does, and the primary
+        key catches it. Translated the way a second publication of one version is, because it
+        is the same kind of fact — and because the retry it asks for is safe here by
+        construction: setting a tag set is idempotent.
+        """
+        self._session.execute(
+            delete(ExperimentTagModel).where(ExperimentTagModel.experiment_id == str(experiment_id))
+        )
+        self._session.add_all(
+            ExperimentTagModel(experiment_id=str(experiment_id), tag=tag) for tag in tags
+        )
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            raise ExperimentTagConflictError(
+                "this run was filed concurrently; read its tags and set them again"
+            ) from error
+
+    @staticmethod
+    def _note(model: ExperimentNoteModel) -> ExperimentNoteRecord:
+        return ExperimentNoteRecord(
+            note_id=UUID(model.note_id),
+            experiment_id=UUID(model.experiment_id),
+            body=model.body,
             created_at=model.created_at,
         )

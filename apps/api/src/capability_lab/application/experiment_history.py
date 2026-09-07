@@ -5,7 +5,7 @@ back to what they were driving. History answers a different question — "what h
 run, and which of those runs is worth reopening" — and it answers it across shops, because
 an operator comparing two frameworks is not comparing two shops.
 
-Three rules live here.
+Five rules live here.
 
 **A row is projected, never stored.** Every number on a history row is the reading the bench
 and the results screen already show: the arm standing (ADR 0029), the objective evaluation
@@ -26,12 +26,19 @@ in the record rather than from the definition libraries, so they offer exactly w
 actually been run: a scenario nobody ran is not a way to narrow history, and a shop deleted
 from the studio would still name the runs it produced. They are deliberately not narrowed by
 the current filters — an operator who has chosen one shop must still be able to choose
-another.
+another. The tag list follows the same rule one step further: it offers the shelves runs are
+actually filed on, so it is empty in a lab where nobody has tagged anything rather than
+offering a vocabulary nobody uses.
+
+**What an operator wrote is searched, and only the tags are shown.** A note is prose about
+one run and belongs on the screen that holds the evidence it is about, but it is the most
+specific thing anyone ever writes down — so the text box matches it. A tag is the opposite:
+it exists to be narrowed by, so it is a column, a filter, and a facet.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -39,6 +46,11 @@ from uuid import UUID
 from capability_lab.application.agent_capabilities import PROVEN_FRAMEWORKS_BY_ID
 from capability_lab.application.definition_authoring import DefinitionRepository
 from capability_lab.application.evaluation import ExperimentEvaluationService
+from capability_lab.application.experiment_annotations import (
+    EMPTY_ANNOTATIONS,
+    ExperimentAnnotationRepository,
+    ExperimentAnnotations,
+)
 from capability_lab.application.experiments import (
     ArmRuntime,
     ExperimentRecord,
@@ -54,7 +66,7 @@ from capability_lab.domain.evaluation import (
     ObjectiveOutcome,
     stand_experiment,
 )
-from capability_lab.domain.experiment import ArmAwaiting
+from capability_lab.domain.experiment import ArmAwaiting, normalize_tag
 from capability_lab.domain.scenario import ScenarioPayload
 from capability_lab.domain.shop import ShopPayload
 
@@ -75,12 +87,14 @@ class ExperimentHistoryQuery:
     Every filter is optional and they combine by conjunction. `text` matches what a row
     *shows* — its name, its scenario, its shop, and what each arm ran — because the search
     box sits above those columns and an operator searching "beacon" means the row that says
-    beacon.
+    beacon — plus the notes and tags written on it, which are the words an operator chose
+    for this run and so the ones they are most likely to come back with.
     """
 
     shop_id: UUID | None = None
     scenario_id: UUID | None = None
     framework_id: str = ""
+    tag: str = ""
     status: ExperimentStatus | None = None
     outcome: ObjectiveOutcome | None = None
     started_after: datetime | None = None
@@ -135,6 +149,13 @@ class ExperimentHistoryEntry:
     scenario_superseded: bool
     status: ExperimentStatus
     arms: tuple[HistoryArm, ...]
+    tags: tuple[str, ...]
+    note_count: int
+    """How many notes this run carries, never the notes themselves.
+
+    A listing is about the runs; a note is about one of them, and it reads as itself only
+    beside the evidence it was written against. The count is what tells an operator there is
+    something written here to open, and the text box is what finds it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +177,7 @@ class ExperimentHistoryPage:
     shops: tuple[HistoryFacet, ...]
     scenarios: tuple[HistoryFacet, ...]
     frameworks: tuple[HistoryFacet, ...]
+    tags: tuple[HistoryFacet, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,12 +202,14 @@ class ExperimentHistoryService:
         experiments: ExperimentRepository,
         details: ExperimentService,
         evaluations: ExperimentEvaluationService,
+        annotations: ExperimentAnnotationRepository,
         shops: DefinitionRepository[ShopPayload],
         scenarios: DefinitionRepository[ScenarioPayload],
     ) -> None:
         self._experiments = experiments
         self._details = details
         self._evaluations = evaluations
+        self._annotations = annotations
         self._shops = shops
         self._scenarios = scenarios
 
@@ -194,14 +218,23 @@ class ExperimentHistoryService:
         # handful of shops and scenarios, and the name of one does not change mid-read.
         shop_names: dict[UUID, str] = {}
         latest_scenarios: dict[UUID, int | None] = {}
+        # Two statements for the whole listing rather than two per row: what an operator
+        # wrote is stored beside the experiment (ADR 0036) rather than read back through it,
+        # so it is the one part of a row that does not arrive with the record.
+        written = self._annotations.list_all()
         projected = tuple(
-            self._project(record, shop_names, latest_scenarios)
+            self._project(record, written, shop_names, latest_scenarios)
             for record in self._experiments.list_all()
         )
         # Normalized once for the whole listing rather than per row: the needle does not
         # change between two rows of one read.
         needle = query.text.strip().lower()
-        matching = tuple(row for row in projected if _matches(row, query, needle))
+        # Normalized by the same step a write folds through, but without the slug refusal at
+        # the end of it: a filter that only lowered would narrow correctly for the spellings
+        # the dropdown emits and find nothing for a hand-typed `Read check gap`, while a
+        # filter that refused would turn a link shared after a refiling into an error page.
+        tag = normalize_tag(query.tag)
+        matching = tuple(row for row in projected if _matches(row, query, needle, tag))
         # The contract already refuses a page or a size outside these bounds; clamping here
         # keeps a caller that is not the HTTP layer from asking for a page that cannot exist.
         page_size = min(MAX_PAGE_LIMIT, max(1, query.page_size))
@@ -223,11 +256,15 @@ class ExperimentHistoryService:
                 for row in projected
                 for arm in row.entry.arms
             ),
+            # A tag is its own label: it is stored folded, so there is no second spelling of
+            # it for a facet to have to choose between.
+            tags=_facets((tag, tag) for row in projected for tag in row.entry.tags),
         )
 
     def _project(
         self,
         record: ExperimentRecord,
+        written: Mapping[UUID, ExperimentAnnotations],
         shop_names: dict[UUID, str],
         latest_scenarios: dict[UUID, int | None],
     ) -> _Projected:
@@ -239,6 +276,7 @@ class ExperimentHistoryService:
                 detail.runs, detail.arm_runtimes, detail.standings, evaluation.arms, strict=True
             )
         )
+        annotations = written.get(record.experiment_id, EMPTY_ANNOTATIONS)
         entry = ExperimentHistoryEntry(
             record=record,
             shop_name=self._shop_name(record.shop_id, shop_names),
@@ -246,6 +284,8 @@ class ExperimentHistoryService:
             scenario_superseded=self._superseded(record, latest_scenarios),
             status=stand_experiment(detail.standings, evaluation.arms),
             arms=arms,
+            tags=annotations.tags,
+            note_count=len(annotations.notes),
         )
         return _Projected(
             entry=entry,
@@ -260,6 +300,8 @@ class ExperimentHistoryService:
                     *(arm.configuration_name for arm in arms),
                     *(arm.framework_label for arm in arms),
                     *(arm.model_id for arm in arms),
+                    *annotations.tags,
+                    *(note.body for note in annotations.notes),
                 )
             ).lower(),
         )
@@ -329,11 +371,11 @@ def _facets(values: Iterable[tuple[str, str]]) -> tuple[HistoryFacet, ...]:
     )
 
 
-def _matches(row: _Projected, query: ExperimentHistoryQuery, needle: str) -> bool:
+def _matches(row: _Projected, query: ExperimentHistoryQuery, needle: str, tag: str) -> bool:
     """Whether one projected row survives every filter the operator has set.
 
-    `needle` is `query.text` already trimmed and lowered, because it is the same string for
-    every row this listing walks."""
+    `needle` and `tag` are `query.text` and `query.tag` already trimmed and lowered, because
+    they are the same two strings for every row this listing walks."""
     entry = row.entry
     record = entry.record
     if query.shop_id is not None and record.shop_id != query.shop_id:
@@ -343,6 +385,8 @@ def _matches(row: _Projected, query: ExperimentHistoryQuery, needle: str) -> boo
     if query.status is not None and entry.status is not query.status:
         return False
     if query.framework_id and all(arm.framework_id != query.framework_id for arm in entry.arms):
+        return False
+    if tag and tag not in entry.tags:
         return False
     if query.outcome is not None and query.outcome not in row.outcomes:
         return False

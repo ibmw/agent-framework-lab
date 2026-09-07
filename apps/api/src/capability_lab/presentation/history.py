@@ -13,6 +13,11 @@ frameworks separately would render its filters against a lab it had not listed.
 Every row is a projection of the same record the bench and the results screen read
 (ADR 0034). Nothing here is stored, and nothing here counts anything the evaluation does not
 already count: `met` out of `decided` is per arm, and the two are never added together.
+
+The one exception is what an operator wrote: tags and notes are stored beside the experiment
+rather than projected from it (ADR 0036). A row shows the tags and how many notes there are,
+and the search text matches both — the note itself belongs on the screen that holds the
+evidence it was written about.
 """
 
 from collections.abc import Callable, Generator
@@ -115,6 +120,18 @@ class ExperimentHistoryEntrySchema(StrictApiModel):
     participant_driver: ParticipantDriverType
     status: ExperimentStatus
     arms: list[HistoryArmSchema]
+    tags: list[str]
+    """The shelves this run is filed on, folded and in one order (ADR 0036)."""
+    note_count: int
+    """How many notes this run carries, never the notes themselves.
+
+    A listing is about the runs; a note reads as itself only beside the evidence it was
+    written against. The count says there is something written here to open, and the search
+    text matches the words in it.
+
+    Named apart from the annotation document's `notes`, which is the list: one field name
+    holding a number on one response and an array on another is a trap a generated client
+    walks into once and a person walks into every time."""
     created_at: str
 
     @classmethod
@@ -135,6 +152,8 @@ class ExperimentHistoryEntrySchema(StrictApiModel):
             participant_driver=record.participant_driver,
             status=entry.status,
             arms=[HistoryArmSchema.from_domain(arm) for arm in entry.arms],
+            tags=list(entry.tags),
+            note_count=entry.note_count,
             created_at=record.created_at.isoformat(),
         )
 
@@ -160,6 +179,8 @@ class ExperimentHistoryResponse(StrictApiModel):
     shops: list[HistoryFacetSchema]
     scenarios: list[HistoryFacetSchema]
     frameworks: list[HistoryFacetSchema]
+    tags: list[HistoryFacetSchema]
+    """The shelves runs are actually filed on — empty in a lab where nobody has tagged."""
 
     @classmethod
     def from_domain(cls, listing: ExperimentHistoryPage) -> Self:
@@ -173,6 +194,7 @@ class ExperimentHistoryResponse(StrictApiModel):
             shops=[HistoryFacetSchema.from_domain(facet) for facet in listing.shops],
             scenarios=[HistoryFacetSchema.from_domain(facet) for facet in listing.scenarios],
             frameworks=[HistoryFacetSchema.from_domain(facet) for facet in listing.frameworks],
+            tags=[HistoryFacetSchema.from_domain(facet) for facet in listing.tags],
         )
 
 
@@ -194,6 +216,14 @@ class ExperimentHistoryRoutes:
             framework_id: Annotated[
                 str | None, Query(description="Only runs with an arm on this framework.")
             ] = None,
+            tag: Annotated[
+                str | None,
+                Query(
+                    description="Only runs filed under this tag. Matched against the stored "
+                    "folded value, so a tag no run carries narrows to nothing rather than "
+                    "refusing the request."
+                ),
+            ] = None,
             status: Annotated[
                 ExperimentStatus | None,
                 Query(description="Only runs standing here: running, completed, or failed."),
@@ -209,7 +239,11 @@ class ExperimentHistoryRoutes:
                 datetime | None, Query(description="Only runs started at or before this moment.")
             ] = None,
             q: Annotated[
-                str | None, Query(description="Match the name, scenario, shop, or arms of a run.")
+                str | None,
+                Query(
+                    description="Match the name, scenario, shop, or arms of a run, and the "
+                    "notes and tags written on it."
+                ),
             ] = None,
             page: Annotated[int, Query(ge=1)] = 1,
             page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
@@ -220,6 +254,7 @@ class ExperimentHistoryRoutes:
                         shop_id=shop_id,
                         scenario_id=scenario_id,
                         framework_id=framework_id or "",
+                        tag=tag or "",
                         status=status,
                         outcome=outcome,
                         started_after=_utc(started_after),
@@ -244,7 +279,8 @@ class ExperimentHistoryRoutes:
                 "what each one's objectives say — so a row can never disagree with the bench "
                 "or the results screen it opens into. Counts are per arm and are never "
                 "combined into a score. The filter options travel with the page and are read "
-                "from the experiments themselves rather than from the definition libraries."
+                "from the experiments themselves rather than from the definition libraries — "
+                "the tags among them, so the shelves offered are the ones runs are on."
             ),
             responses=HistoryResponses,
         )

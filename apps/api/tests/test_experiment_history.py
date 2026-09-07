@@ -275,6 +275,7 @@ async def test_an_empty_lab_has_a_history_with_no_rows_and_no_options(
         "shops": [],
         "scenarios": [],
         "frameworks": [],
+        "tags": [],
     }
 
 
@@ -305,3 +306,132 @@ async def test_a_configuration_renamed_after_a_run_does_not_rename_the_run(
 
     assert row["arms"][0]["agent_configuration_name"] == "Frontline v1"
     assert row["arms"][0]["agent_configuration_version"] == 1
+
+
+# -- what an operator wrote ----------------------------------------------------
+
+
+async def annotate(
+    client: AsyncClient,
+    lab: dict[str, str],
+    experiment: dict[str, Any],
+    *,
+    tags: list[str] | None = None,
+    note: str | None = None,
+) -> None:
+    base = f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+    if tags is not None:
+        filed = await client.put(f"{base}/tags", json={"tags": tags})
+        assert filed.status_code == 200, filed.text
+    if note is not None:
+        written = await client.post(f"{base}/notes", json={"body": note})
+        assert written.status_code == 201, written.text
+
+
+async def test_a_row_shows_the_tags_it_is_filed_under_and_how_many_notes_it_carries(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The count rather than the words: a note reads as itself beside the evidence."""
+    experiment = await control_run(client, lab)
+    await annotate(
+        client,
+        lab,
+        experiment,
+        tags=["two-arm", "read-check-gap"],
+        note="Beacon acts before reading the policy.",
+    )
+
+    row = (await history(client))["experiments"][0]
+
+    assert row["tags"] == ["read-check-gap", "two-arm"]
+    assert row["note_count"] == 1
+
+
+async def test_history_narrows_to_the_runs_filed_under_one_tag(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    scenario = await published_scenario(client, lab)
+    arm = await control_arm(client)
+    tagged = await start(client, lab, start_body(scenario, arm, label="Tagged run"))
+    await start(client, lab, start_body(scenario, arm, label="Untagged run"))
+    await annotate(client, lab, tagged, tags=["read-check-gap"])
+
+    body = await history(client, tag="read-check-gap")
+
+    assert [row["label"] for row in body["experiments"]] == ["Tagged run"]
+
+
+async def test_a_tag_no_run_carries_narrows_to_nothing_rather_than_refusing(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """A shared link must not become an error page when the last run under it is refiled."""
+    await control_run(client, lab)
+
+    body = await history(client, tag="never-used")
+
+    assert body["total"] == 0
+
+
+@pytest.mark.parametrize(
+    "asked", ["READ-CHECK-GAP", "Read check gap", "read_check_gap", "  read - check - gap  "]
+)
+async def test_the_tag_filter_matches_however_the_shelf_was_typed(
+    client: AsyncClient, lab: dict[str, str], asked: str
+) -> None:
+    """The filter normalizes through the same step a write folds through.
+
+    A link is typed by hand as often as it is clicked, and one that only matched the exact
+    spelling the dropdown emits would find nothing while the identical tag sat on a row."""
+    experiment = await control_run(client, lab)
+    await annotate(client, lab, experiment, tags=["Read check gap"])
+
+    body = await history(client, tag=asked)
+
+    assert body["total"] == 1
+
+
+async def test_the_search_box_finds_a_run_by_what_was_written_on_it(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    scenario = await published_scenario(client, lab)
+    arm = await control_arm(client)
+    annotated = await start(client, lab, start_body(scenario, arm, label="Run 1"))
+    await start(client, lab, start_body(scenario, arm, label="Run 2"))
+    await annotate(
+        client, lab, annotated, tags=["read-check-gap"], note="Its prompt under-specifies the tool."
+    )
+
+    by_note = await history(client, q="under-specifies")
+    by_tag = await history(client, q="read-check")
+
+    assert [row["label"] for row in by_note["experiments"]] == ["Run 1"]
+    assert [row["label"] for row in by_tag["experiments"]] == ["Run 1"]
+
+
+async def test_the_tag_options_are_the_shelves_runs_are_actually_on(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_run(client, lab)
+    await annotate(client, lab, experiment, tags=["two-arm", "read-check-gap"])
+
+    body = await history(client)
+
+    assert [facet["id"] for facet in body["tags"]] == ["read-check-gap", "two-arm"]
+    assert [facet["label"] for facet in body["tags"]] == ["read-check-gap", "two-arm"]
+
+
+async def test_the_tag_options_stay_the_whole_labs_even_when_one_is_chosen(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """An operator who has narrowed to one shelf must still be able to choose another."""
+    scenario = await published_scenario(client, lab)
+    arm = await control_arm(client)
+    first = await start(client, lab, start_body(scenario, arm, label="Run 1"))
+    second = await start(client, lab, start_body(scenario, arm, label="Run 2"))
+    await annotate(client, lab, first, tags=["read-check-gap"])
+    await annotate(client, lab, second, tags=["two-arm"])
+
+    body = await history(client, tag="two-arm")
+
+    assert body["total"] == 1
+    assert [facet["id"] for facet in body["tags"]] == ["read-check-gap", "two-arm"]

@@ -752,3 +752,51 @@ class JudgementModel(Base):
     failure: Mapped[str | None] = mapped_column(String(32), nullable=True)
     rationale: Mapped[str] = mapped_column(String(2000))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ExperimentNoteModel(Base):
+    """One thing an operator wrote about a run, in its own row beside the experiment.
+
+    Beside rather than inside, deliberately: `experiments` is written once because its
+    document is what explains the result, and an annotation table is what lets a run be
+    written *about* without the record it is fingerprinted from ever moving.
+
+    Append-only, like every other evidence stream here: there is no update path, so a note
+    is what a reviewer thought when they read the run rather than what they would rather
+    have said later.
+
+    `body` may quote what a synthetic customer said. It is stored as the participant turns
+    beside it are, and it is never logged or traced (`AGENTS.md`).
+    """
+
+    __tablename__ = "experiment_notes"
+    __table_args__ = (Index("ix_experiment_notes_experiment", "experiment_id", "created_at"),)
+
+    note_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.experiment_id"))
+    body: Mapped[str] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
+class ExperimentTagModel(Base):
+    """One shelf a run is filed on.
+
+    The primary key is the run and the tag, which is what makes the set a set: filing a run
+    twice under one tag cannot produce two chips, and a history facet built from these rows
+    can never offer one shelf twice. The stored value is already folded (`fold_tag`), so
+    comparison is equality rather than a rule the reader has to remember.
+
+    Rows are deleted and rewritten when the set is replaced, unlike everything else stored
+    about an experiment. That is the point: how a run is filed is a current classification,
+    not a record of what happened to it — which is also why there is no timestamp here. A
+    written-at column would survive a replacement as a fiction, and a rewritten one would
+    report every shelf as filed the last time any of them changed.
+    """
+
+    __tablename__ = "experiment_tags"
+    __table_args__ = (Index("ix_experiment_tags_tag", "tag"),)
+
+    experiment_id: Mapped[str] = mapped_column(
+        ForeignKey("experiments.experiment_id"), primary_key=True
+    )
+    tag: Mapped[str] = mapped_column(String(64), primary_key=True)

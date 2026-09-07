@@ -1136,3 +1136,179 @@ async def test_a_completed_arm_refuses_another_customer_turn(
     assert response.status_code == 422, response.text
     assert response.json()["code"] == "experiment_completed"
     assert "1 turns this scenario allows" in response.json()["message"]
+
+
+# -- what an operator writes on a run ------------------------------------------
+
+
+def annotations_path(lab: dict[str, str], experiment: dict[str, Any], suffix: str) -> str:
+    return f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/{suffix}"
+
+
+async def add_note(
+    client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any], body: str
+) -> Any:
+    return await client.post(annotations_path(lab, experiment, "notes"), json={"body": body})
+
+
+async def set_tags(
+    client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any], tags: list[str]
+) -> Any:
+    return await client.put(annotations_path(lab, experiment, "tags"), json={"tags": tags})
+
+
+async def test_a_run_nobody_has_written_on_reads_as_empty_rather_than_missing(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await client.get(annotations_path(lab, experiment, "annotations"))
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"notes": [], "tags": []}
+
+
+async def test_a_note_answers_with_everything_written_on_the_run(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+    await set_tags(client, lab, experiment, ["read-check-gap"])
+
+    response = await add_note(client, lab, experiment, "Beacon acts before reading the policy.")
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert [note["body"] for note in body["notes"]] == ["Beacon acts before reading the policy."]
+    assert body["tags"] == ["read-check-gap"]
+
+
+async def test_two_reviewers_who_wrote_the_same_sentence_wrote_two_notes(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """Deliberately not idempotent: collapsing them would delete the second reading."""
+    experiment = await two_arm_experiment(client, lab)
+    await add_note(client, lab, experiment, "Worth rerunning with the policy tool renamed.")
+
+    response = await add_note(
+        client, lab, experiment, "Worth rerunning with the policy tool renamed."
+    )
+
+    assert response.status_code == 201, response.text
+    notes = response.json()["notes"]
+    assert len(notes) == 2
+    assert notes[0]["note_id"] != notes[1]["note_id"]
+
+
+async def test_notes_read_back_in_the_order_they_were_written(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+    await add_note(client, lab, experiment, "First read: arm B never opened the policy.")
+    await add_note(client, lab, experiment, "Second read: its prompt does not name the tool.")
+
+    body = (await client.get(annotations_path(lab, experiment, "annotations"))).json()
+
+    assert [note["body"][:5] for note in body["notes"]] == ["First", "Secon"]
+
+
+async def test_the_run_the_note_is_about_is_not_changed_by_writing_it(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """An annotation is stored beside the record, so the document it pinned cannot move."""
+    experiment = await two_arm_experiment(client, lab)
+    await add_note(client, lab, experiment, "Beacon acts before reading the policy.")
+    await set_tags(client, lab, experiment, ["read-check-gap"])
+
+    reread = await client.get(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+    )
+
+    assert reread.status_code == 200, reread.text
+    assert reread.json()["resolution_fingerprint"] == experiment["resolution_fingerprint"]
+    assert reread.json()["sandbox_fingerprint"] == experiment["sandbox_fingerprint"]
+
+
+async def test_tags_are_folded_to_one_spelling_and_deduplicated(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await set_tags(
+        client, lab, experiment, ["Read check gap", "two-arm", "read_check_gap"]
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["tags"] == ["read-check-gap", "two-arm"]
+
+
+async def test_setting_the_tags_replaces_the_whole_set(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+    await set_tags(client, lab, experiment, ["read-check-gap", "two-arm"])
+
+    response = await set_tags(client, lab, experiment, ["two-arm"])
+
+    assert response.json()["tags"] == ["two-arm"]
+
+
+async def test_filing_a_run_the_same_way_twice_changes_nothing(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+    first = await set_tags(client, lab, experiment, ["two-arm", "read-check-gap"])
+
+    second = await set_tags(client, lab, experiment, ["read-check-gap", "two-arm"])
+
+    assert second.json()["tags"] == first.json()["tags"]
+
+
+async def test_a_tag_the_fold_cannot_make_a_slug_of_is_refused(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await set_tags(client, lab, experiment, ["écoles"])
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "experiment_configuration_error"
+
+
+@pytest.mark.parametrize("body", ["", "   ", "\n\t "])
+async def test_a_note_with_nothing_in_it_is_refused_by_the_contract(
+    client: AsyncClient, lab: dict[str, str], body: str
+) -> None:
+    """Padding is a fact about a text box, so it is stripped before the length is judged.
+
+    That makes a body of spaces the contract's own refusal rather than a domain error the
+    422 description does not describe."""
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await add_note(client, lab, experiment, body)
+
+    assert response.status_code == 422, response.text
+
+
+async def test_a_note_the_client_padded_is_recorded_trimmed(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await add_note(client, lab, experiment, "  Beacon acts before reading.  ")
+
+    assert response.status_code == 201, response.text
+    assert [note["body"] for note in response.json()["notes"]] == ["Beacon acts before reading."]
+
+
+async def test_an_experiment_of_another_shop_cannot_be_annotated(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await two_arm_experiment(client, lab)
+
+    response = await client.post(
+        f"/api/v1/shops/{uuid4()}/experiments/{experiment['experiment_id']}/notes",
+        json={"body": "Filed against the wrong shop."},
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["code"] == "experiment_not_found"

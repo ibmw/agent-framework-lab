@@ -21,6 +21,7 @@ from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
 from capability_lab.application.blocks import MutationBlockService, ObjectiveBlockService
 from capability_lab.application.customer_profiles import CustomerProfileService
 from capability_lab.application.evaluation import ExperimentEvaluationService
+from capability_lab.application.experiment_annotations import ExperimentAnnotationService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiments import ArmSelection, ExperimentService
 from capability_lab.application.judge_configurations import JudgeConfigurationService
@@ -65,6 +66,7 @@ from capability_lab.infrastructure.judges import ControlJudgeRuntime
 from capability_lab.infrastructure.repositories import (
     SqlAlchemyAgentTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
+    SqlAlchemyExperimentAnnotationRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyJudgementRepository,
@@ -236,6 +238,15 @@ def build_experiments(session: Session) -> ExperimentService:
         agent_configuration_repository(session),
         build_scenario_mutations(session),
         SqlAlchemyPublishedVersionDirectory(session),
+        AdvancingClock(),
+    )
+
+
+def build_annotations(session: Session) -> ExperimentAnnotationService:
+    """The notes and tags one run carries, over the experiment row that scopes them."""
+    return ExperimentAnnotationService(
+        SqlAlchemyExperimentRepository(session),
+        SqlAlchemyExperimentAnnotationRepository(session),
         AdvancingClock(),
     )
 

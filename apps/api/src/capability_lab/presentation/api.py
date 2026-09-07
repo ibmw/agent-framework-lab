@@ -59,6 +59,10 @@ from capability_lab.application.definition_resolution import (
     UnpublishedReferenceError,
 )
 from capability_lab.application.evaluation import ExperimentEvaluationService
+from capability_lab.application.experiment_annotations import (
+    ExperimentAnnotationService,
+    ExperimentTagConflictError,
+)
 from capability_lab.application.experiment_history import ExperimentHistoryService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_timeline import ExperimentTimelineService
@@ -203,6 +207,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyAgentTurnRepository,
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
+    SqlAlchemyExperimentAnnotationRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyGeneratedScenarioRepository,
@@ -1202,6 +1207,18 @@ async def _judgement_conflict_handler(request: Request, error: Exception) -> JSO
     return _error_response(request, status_code=409, code="judgement_conflict", message=str(error))
 
 
+async def _experiment_tag_conflict_handler(request: Request, error: Exception) -> JSONResponse:
+    """Another request replaced this run's tags while this one was replacing them.
+
+    409 rather than 500: the store refused to file one run under one shelf twice, which is
+    what the key is for, and the operator's move is to read the chips and set them again —
+    which is safe, because setting a tag set is idempotent (ADR 0036).
+    """
+    return _error_response(
+        request, status_code=409, code="experiment_tag_conflict", message=str(error)
+    )
+
+
 async def _judge_runtime_unavailable_handler(request: Request, error: Exception) -> JSONResponse:
     """This lab cannot reach the provider this judge was published against.
 
@@ -1512,6 +1529,7 @@ def create_app(
     application.add_exception_handler(JudgeConfigurationError, _judge_configuration_handler)
     application.add_exception_handler(JudgeUnavailableError, _judge_runtime_unavailable_handler)
     application.add_exception_handler(JudgementConflictError, _judgement_conflict_handler)
+    application.add_exception_handler(ExperimentTagConflictError, _experiment_tag_conflict_handler)
     application.add_exception_handler(
         PublishedVersionExistsError, _published_version_exists_handler
     )
@@ -1798,8 +1816,19 @@ def create_app(
                     objective_block_repository(session),
                     SqlAlchemyJudgementRepository(session),
                 ),
+                SqlAlchemyExperimentAnnotationRepository(session),
                 shop_repository(session),
                 scenario_repository(session),
+            )
+
+    def experiment_annotation_service() -> Generator[ExperimentAnnotationService, None, None]:
+        with session_scope(factory) as session:
+            # The experiment repository rather than the service that resolves one: writing a
+            # note needs to know the run exists in this shop and nothing else (ADR 0036).
+            yield ExperimentAnnotationService(
+                SqlAlchemyExperimentRepository(session),
+                SqlAlchemyExperimentAnnotationRepository(session),
+                clock,
             )
 
     def experiment_judge_service() -> Generator[ExperimentJudgeService, None, None]:
@@ -2280,6 +2309,7 @@ def create_app(
         experiment_timeline_service,
         experiment_evaluation_service,
         experiment_judge_service,
+        experiment_annotation_service,
     ).register(router)
     JudgeConfigurationRoutes(judge_configuration_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
