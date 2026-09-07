@@ -20,6 +20,7 @@ const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
 const OTHER_SCENARIO_ID = "7e8f9a0b-1c2d-4e3f-8a4b-5c6d7e8f9a0b";
 const FINISHED_ID = "9f8e7d6c-5b4a-4392-8817-6f5e4d3c2b1a";
 const RUNNING_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+const DERIVED_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 
 const SHOP_CONTENT: ShopDraftResponse["content"] = {
   identity: {
@@ -104,6 +105,18 @@ const RUNNING: ExperimentHistoryEntrySchema = {
   created_at: "2026-09-03T14:02:00+00:00",
 };
 
+/** A run derived from another one: an ordinary experiment that names where it came from. */
+const DERIVED: ExperimentHistoryEntrySchema = {
+  ...FINISHED,
+  experiment_id: DERIVED_ID,
+  label: "Prompt A against prompt B (replay)",
+  participant_driver: "scripted",
+  replay_of: { experiment_id: FINISHED_ID, label: "Prompt A against prompt B" },
+  tags: [],
+  note_count: 0,
+  created_at: "2026-09-04T09:15:00+00:00",
+};
+
 const EVERY_ROW = [RUNNING, FINISHED];
 
 /** The listing as the backend serves it: the page, its total, and its filter options. */
@@ -134,6 +147,8 @@ function historyOf(rows: ExperimentHistoryEntrySchema[]): ExperimentHistoryRespo
 
 let asked: URLSearchParams[] = [];
 let unavailable = false;
+let replayed: string[] = [];
+let rows: ExperimentHistoryEntrySchema[] = EVERY_ROW;
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -175,9 +190,27 @@ const server = setupServer(
     // The backend narrows; this stands in for it so the page is tested on what it asks for
     // and what it renders, never on a filter it applied itself.
     const shop = url.searchParams.get("shop_id");
-    const rows = shop === null ? EVERY_ROW : EVERY_ROW.filter((row) => row.shop_id === shop);
-    return HttpResponse.json({ ...historyOf(rows), total: rows.length });
+    const listed = shop === null ? rows : rows.filter((row) => row.shop_id === shop);
+    return HttpResponse.json({ ...historyOf(listed), total: listed.length });
   }),
+  http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${FINISHED_ID}/replays`, () => {
+    replayed.push(FINISHED_ID);
+    return HttpResponse.json({ experiment_id: DERIVED_ID }, { status: 201 });
+  }),
+  // The derived run's own screen is the results suite's; here it only has to be somewhere
+  // this page navigated to, so its three reads answer rather than going unhandled.
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${DERIVED_ID}/*`, () =>
+    HttpResponse.json(
+      { code: "internal_error", message: "not part of this suite", request_id: "req-2" },
+      { status: 500 },
+    ),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${DERIVED_ID}`, () =>
+    HttpResponse.json(
+      { code: "internal_error", message: "not part of this suite", request_id: "req-2" },
+      { status: 500 },
+    ),
+  ),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -185,6 +218,8 @@ afterEach(() => server.resetHandlers());
 beforeEach(() => {
   asked = [];
   unavailable = false;
+  replayed = [];
+  rows = EVERY_ROW;
 });
 afterAll(() => server.close());
 
@@ -261,6 +296,41 @@ describe("experiment history", () => {
       "href",
       `/shops/${OTHER_SHOP_ID}/bench/${RUNNING_ID}`,
     );
+  });
+
+  it("says which run a row was derived from, and links to the one it replays", async () => {
+    rows = [DERIVED, FINISHED];
+    renderHistory();
+
+    const table = await screen.findByRole("table");
+    const derived = within(table)
+      .getByText("Prompt A against prompt B (replay)")
+      .closest("tr") as HTMLElement;
+    const source = within(table)
+      .getAllByText("Prompt A against prompt B")
+      .map((node) => node.closest("tr") as HTMLElement)
+      .find((candidate) => candidate !== derived) as HTMLElement;
+
+    expect(
+      within(derived).getByRole("link", { name: "Prompt A against prompt B" }),
+    ).toHaveAttribute("href", `/shops/${SHOP_ID}/bench/${FINISHED_ID}/results`);
+    // Provenance is on the derived row alone: the run it came from is not a replay of
+    // anything, and a marker on both would make the pair unreadable.
+    expect(within(source).queryByText(/^replay of/)).toBeNull();
+  });
+
+  it("replays a row's recorded versions and leaves the listing for what that produced", async () => {
+    const user = userEvent.setup();
+    renderHistory();
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+
+    await user.click(within(row).getByRole("button", { name: "Replay recorded versions" }));
+
+    expect(replayed).toEqual([FINISHED_ID]);
+    // What came back is a different experiment, so the operator is taken to it rather than
+    // left on a listing that now has one more row than it shows.
+    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
   });
 
   it("narrows by shop, offering every other shop the lab has run in", async () => {

@@ -1,8 +1,8 @@
 import type { ExperimentHistoryEntrySchema, ExperimentHistoryResponse } from "@agent-lab/contracts";
-import { type FormEvent, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { listExperimentHistory } from "../api/experiments";
+import { listExperimentHistory, replayExperiment } from "../api/experiments";
 import { PageHeader } from "../components/WorkspaceChrome";
 import { OUTCOMES } from "../lib/evidence";
 import {
@@ -80,6 +80,31 @@ export function ExperimentHistoryPage() {
   const [listing, setListing] = useState<ExperimentHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [replaying, setReplaying] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  /**
+   * Derive a new experiment from a row and open the evidence it produced.
+   *
+   * The derived arms are actually run before the answer comes back, so the row says so
+   * while it waits. It navigates rather than refreshing the listing: what came back is a
+   * different run, and the reason to replay one is to read what it did.
+   */
+  const replay = useCallback(
+    async (experiment: ExperimentHistoryEntrySchema) => {
+      setReplaying(experiment.experiment_id);
+      setError(null);
+      try {
+        const derived = await replayExperiment(experiment.shop_id, experiment.experiment_id);
+        navigate(`/shops/${experiment.shop_id}/bench/${derived.experiment_id}/results`);
+      } catch (cause: unknown) {
+        setError(describeApiError(cause, "This experiment could not be replayed."));
+      } finally {
+        setReplaying(null);
+      }
+    },
+    [navigate],
+  );
 
   const shopId = params.get("shop") ?? "";
   const scenarioId = params.get("scenario") ?? "";
@@ -342,7 +367,12 @@ export function ExperimentHistoryPage() {
               </thead>
               <tbody>
                 {(listing?.experiments ?? []).map((experiment) => (
-                  <HistoryRow key={experiment.experiment_id} experiment={experiment} />
+                  <HistoryRow
+                    key={experiment.experiment_id}
+                    experiment={experiment}
+                    onReplay={replay}
+                    replaying={replaying === experiment.experiment_id}
+                  />
                 ))}
               </tbody>
             </table>
@@ -381,7 +411,15 @@ export function ExperimentHistoryPage() {
   );
 }
 
-function HistoryRow({ experiment }: { experiment: ExperimentHistoryEntrySchema }) {
+function HistoryRow({
+  experiment,
+  onReplay,
+  replaying,
+}: {
+  experiment: ExperimentHistoryEntrySchema;
+  onReplay: (experiment: ExperimentHistoryEntrySchema) => void;
+  replaying: boolean;
+}) {
   const bench = `/shops/${experiment.shop_id}/bench/${experiment.experiment_id}`;
   const meaning = STATUSES[experiment.status];
   return (
@@ -394,6 +432,19 @@ function HistoryRow({ experiment }: { experiment: ExperimentHistoryEntrySchema }
           {experiment.label}
         </Link>
         <p className="text-xs text-admin-muted">{experiment.shop_name}</p>
+        {experiment.replay_of ? (
+          // Provenance rather than a status: a derived run is an experiment like any other,
+          // and this is what says the two rows sharing a fingerprint are related (ADR 0038).
+          <p className="text-xs text-admin-muted">
+            replay of{" "}
+            <Link
+              className="text-lab-ink underline-offset-2 hover:underline"
+              to={`/shops/${experiment.shop_id}/bench/${experiment.replay_of.experiment_id}/results`}
+            >
+              {experiment.replay_of.label}
+            </Link>
+          </p>
+        ) : null}
       </td>
       <td className={tableCellClasses}>
         {experiment.scenario_name}
@@ -465,6 +516,14 @@ function HistoryRow({ experiment }: { experiment: ExperimentHistoryEntrySchema }
           <Link className="text-lab-ink underline-offset-2 hover:underline" to={bench}>
             Open live bench
           </Link>
+          <button
+            className="text-left text-lab-ink underline-offset-2 hover:underline"
+            type="button"
+            disabled={replaying}
+            onClick={() => onReplay(experiment)}
+          >
+            {replaying ? "Replaying…" : "Replay recorded versions"}
+          </button>
         </div>
       </td>
     </tr>

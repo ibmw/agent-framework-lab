@@ -39,6 +39,8 @@ const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
 const ATLAS_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const BEACON_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 const EXPERIMENT_ID = "9f8e7d6c-5b4a-4392-8817-6f5e4d3c2b1a";
+/** The experiment a replay derives, which is a different run and never this one. */
+const REPLAY_ID = "8e7d6c5b-4a39-4281-9776-5e4d3c2b1a09";
 const ARM_A = "0a0a0a0a-1111-4222-8333-444444444444";
 const ARM_B = "0b0b0b0b-1111-4222-8333-444444444444";
 const SANDBOX_FINGERPRINT = "a".repeat(64);
@@ -490,7 +492,7 @@ function experiment(
     snapshot_id: "7d8e9f0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
     sandbox_fingerprint: SANDBOX_FINGERPRINT,
     resolution_fingerprint: RESOLUTION_FINGERPRINT,
-    participant_driver: "human",
+    participant_driver: driver,
     canonical_schema_version: "experiment-v1",
     created_at: "2026-08-28T09:30:00+00:00",
     sandbox_inputs: [
@@ -546,6 +548,23 @@ function experiment(
     agent_turns: agentTurns,
     tool_events: toolEvents,
     mutation_events: mutationEvents,
+  };
+}
+
+/**
+ * The experiment a replay produces: a different run, in the same world, that says so.
+ *
+ * Deliberately built from the same factory rather than hand-written, because the whole point
+ * of a derived run is that it is an ordinary experiment — the only things that differ are its
+ * identity, the driver that produced its turns, and the run it names as its source.
+ */
+function derivedExperiment(): ExperimentResponse {
+  return {
+    ...experiment(turns, agentTurns, toolEvents, mutationEvents),
+    experiment_id: REPLAY_ID,
+    label: "Wrong address — framework comparison (replay)",
+    participant_driver: "scripted",
+    replay_of: { experiment_id: EXPERIMENT_ID, label: "Wrong address — framework comparison" },
   };
 }
 
@@ -731,6 +750,10 @@ let publishedJudges: JudgeConfigurationListResponse = JUDGES;
 let annotations: ExperimentAnnotationsResponse = { notes: [], tags: [] };
 /** The spans the lab recorded, which are stored rather than projected from the record. */
 let traced: ExperimentTracesResponse = TRACES;
+/** Where this run's customer turns came from, which a derived run records as `scripted`. */
+let driver: ExperimentResponse["participant_driver"] = "human";
+let replayed: string[] = [];
+let replayFails = false;
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -807,6 +830,29 @@ const server = setupServer(
   ),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/annotations`, () =>
     HttpResponse.json(annotations),
+  ),
+  http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/replays`, () => {
+    replayed.push(EXPERIMENT_ID);
+    if (replayFails) {
+      return HttpResponse.json(
+        {
+          code: "support_agent_runtime_unavailable",
+          message: "no runtime for this arm's framework is available here",
+          request_id: "req-9",
+        },
+        { status: 422 },
+      );
+    }
+    return HttpResponse.json(derivedExperiment(), { status: 201 });
+  }),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${REPLAY_ID}`, () =>
+    HttpResponse.json(derivedExperiment()),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${REPLAY_ID}/evaluation`, () =>
+    HttpResponse.json(evaluation(turns, agentTurns, toolEvents)),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${REPLAY_ID}/annotations`, () =>
+    HttpResponse.json({ notes: [], tags: [] } satisfies ExperimentAnnotationsResponse),
   ),
   http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/notes`, async ({ request }) => {
     const body = (await request.json()) as { body: string };
@@ -905,6 +951,9 @@ afterEach(() => {
   annotations = { notes: [], tags: [] };
   filed = [];
   traced = TRACES;
+  driver = "human";
+  replayed = [];
+  replayFails = false;
 });
 afterAll(() => server.close());
 
@@ -1913,5 +1962,61 @@ describe("notes and tags", () => {
       "the annotation store is unavailable",
     );
     expect(within(strip).getByLabelText("Add a note")).toHaveValue("Worth rerunning.");
+  });
+});
+
+describe("replay", () => {
+  it("derives a new experiment from the results screen and opens what it produced", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Replay" }));
+
+    expect(replayed).toEqual([EXPERIMENT_ID]);
+    // A different run, not this one refreshed: leaving the operator on the old experiment
+    // would hide the only thing that happened.
+    expect(
+      await screen.findByRole("heading", {
+        name: "Wrong address — framework comparison (replay)",
+      }),
+    ).toBeVisible();
+  });
+
+  it("says which run a derived experiment replays, and links back to it", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${REPLAY_ID}/results`]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const back = await screen.findByRole("link", {
+      name: "Wrong address — framework comparison",
+    });
+    expect(back).toHaveAttribute("href", `/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`);
+  });
+
+  it("reports a replay the backend refuses without leaving the run being read", async () => {
+    const user = userEvent.setup();
+    replayFails = true;
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Replay" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "no runtime for this arm's framework is available here",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Wrong address — framework comparison" }),
+    ).toBeVisible();
+  });
+
+  it("offers no composer on a run a script drove, because a person cannot drive it", async () => {
+    driver = "scripted";
+    renderBench();
+
+    const composer = await screen.findByRole("region", { name: "Customer composer" });
+
+    expect(composer).toHaveTextContent(/records its customer turns as scripted/);
+    expect(within(composer).queryByRole("button", { name: "Send as the customer" })).toBeNull();
   });
 });

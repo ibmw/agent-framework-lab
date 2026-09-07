@@ -262,7 +262,22 @@ export function ExperimentBenchPage() {
               </p>
             }
           >
-            <form className="grid gap-3" onSubmit={send}>
+            {experiment.participant_driver === "human" ? null : (
+              // The recorded driver is what produced this run's turns, and a run half typed
+              // by a person would carry one label for two things (ADR 0025). A derived run
+              // was driven by the script its source recorded, so the composer says so
+              // rather than offering a send the backend would refuse.
+              <p className="text-[13px] text-admin-ink-soft">
+                This experiment records its customer turns as {experiment.participant_driver}. Its
+                thread was driven by the run it was derived from, so there is nothing to compose
+                here.
+              </p>
+            )}
+            <form
+              className="grid gap-3"
+              hidden={experiment.participant_driver !== "human"}
+              onSubmit={send}
+            >
               <label className={fieldLabelClasses}>
                 Message
                 <textarea

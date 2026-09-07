@@ -733,4 +733,31 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
     page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
   ).toBeVisible();
   await expect(page.getByText(/There is no aggregate score/)).toBeVisible();
+
+  // Replaying it derives a *new* experiment rather than re-running this one: the same
+  // snapshot cloned again, the same configuration versions, and the compositions this run
+  // recorded delivered into it — so the derived arms end where these did.
+  await page.getByRole("button", { name: "Replay" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique} (replay)` }),
+  ).toBeVisible();
+  // The derived arms were driven by the script rather than by anyone at the composer, and
+  // they reached the same place: the arm driven to the recipe's cap, the arm beside it still
+  // holding the turn only it received, and the read-check the first arm missed again.
+  await expect(card(page, "Arm A summary").getByText("Completed at turn 2")).toBeVisible();
+  await expect(
+    card(page, "Arm B summary").getByText(/waiting for the customer at turn 1/),
+  ).toBeVisible();
+  await expect(
+    card(page, "Deterministic evidence").getByText(/ missed — support\.read_document never/),
+  ).toHaveCount(1);
+  // What is *not* carried over: a verdict is a record about the arm it was scored on
+  // (ADR 0031), so the derived arms are unjudged until somebody scores them.
+  await expect(card(page, "LLM judge evidence").getByText(/judge v1 · /)).toHaveCount(0);
+
+  // It says where it came from, and the link leads back to the run it reproduces.
+  await page.getByRole("link", { name: `Prompt comparison ${unique}` }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
+  ).toBeVisible();
 });

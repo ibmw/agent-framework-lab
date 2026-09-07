@@ -301,3 +301,24 @@ export async function advanceExperimentRun(
     ),
   );
 }
+
+/**
+ * Derive a new experiment that re-runs this one as it was recorded.
+ *
+ * A replay cannot change the experiment it replays — an experiment is immutable and
+ * everything about it is in the record — so it answers with a *different* run: the same
+ * snapshot cloned again, the same configuration versions, and the customer's compositions
+ * replayed into it. Deliberately not idempotent, and slow enough to be worth a pending
+ * state: the derived arms are actually run before the answer comes back.
+ */
+export async function replayExperiment(
+  shopId: string,
+  experimentId: string,
+): Promise<ExperimentResponse> {
+  return read<ExperimentResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/replays`), {
+      method: "POST",
+      headers: JSON_HEADERS,
+    }),
+  );
+}

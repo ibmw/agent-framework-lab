@@ -6,12 +6,13 @@ import type {
   ExperimentRunSchema,
 } from "@agent-lab/contracts";
 import { useCallback, useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useOutletContext, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
   getExperiment,
   getExperimentAnnotations,
   getExperimentEvaluation,
+  replayExperiment,
 } from "../api/experiments";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import { formatTimestamp, subtleButtonClasses } from "../lib/ui";
@@ -63,6 +64,28 @@ export function ExperimentResultsLayout() {
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
   const [annotations, setAnnotations] = useState<ExperimentAnnotationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [replaying, setReplaying] = useState(false);
+  const navigate = useNavigate();
+
+  /**
+   * Derive a new experiment from this one and open its results.
+   *
+   * It navigates rather than staying here, because a replay does not change this run: what
+   * came back is a different experiment, and leaving the operator on the old one with a
+   * success message would hide the only thing that happened.
+   */
+  const replay = useCallback(async () => {
+    setReplaying(true);
+    setError(null);
+    try {
+      const derived = await replayExperiment(shopId, experimentId);
+      navigate(`/shops/${shopId}/bench/${derived.experiment_id}/results`);
+    } catch (cause: unknown) {
+      setError(describeApiError(cause, "This experiment could not be replayed."));
+    } finally {
+      setReplaying(false);
+    }
+  }, [shopId, experimentId, navigate]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -122,6 +145,16 @@ export function ExperimentResultsLayout() {
     <>
       <PageHeader
         title={experiment.label}
+        actions={
+          <button
+            className={subtleButtonClasses}
+            type="button"
+            onClick={replay}
+            disabled={replaying}
+          >
+            {replaying ? "Replaying…" : "Replay"}
+          </button>
+        }
         description={
           <>
             <Link
@@ -132,9 +165,26 @@ export function ExperimentResultsLayout() {
             </Link>{" "}
             · {describeStanding(experiment)} · scenario v{experiment.scenario_version} · seed{" "}
             {experiment.seed} · started {formatTimestamp(experiment.created_at)}
+            {experiment.replay_of ? (
+              <>
+                {" · replay of "}
+                <Link
+                  className="font-semibold text-lab-ink"
+                  to={`/shops/${shopId}/bench/${experiment.replay_of.experiment_id}/results`}
+                >
+                  {experiment.replay_of.label}
+                </Link>
+              </>
+            ) : null}
           </>
         }
       />
+
+      {error ? (
+        <p role="alert" className="mb-3 text-[13px] text-lab-error">
+          {error}
+        </p>
+      ) : null}
 
       <div className="mb-4 grid gap-3">
         <div className="grid gap-3 lg:grid-cols-2">
