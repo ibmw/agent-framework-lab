@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from typing import ClassVar
 from uuid import UUID
 
+from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -189,7 +190,10 @@ class OtelRunTracer:
         common: dict[str, str | int] = {
             "lab.experiment.id": self._telemetry.pseudonymize(str(draft.experiment_id)),
             "lab.run.id": self._telemetry.pseudonymize(str(draft.run_id)),
-            "lab.arm.label": draft.arm_label,
+            # The arm's position, never the name an operator typed for it: a label is
+            # free-form text, and `docs/observability.md` allows none of that out of the
+            # process. Which arm this was is already the pseudonymized run id above.
+            "lab.arm.position": draft.arm_position,
             "lab.turn.ordinal": draft.ordinal,
             "agent.attempt": draft.attempt,
             "agent.framework.id": draft.framework_id,
@@ -201,7 +205,11 @@ class OtelRunTracer:
             parent = None if entry.kind is SpanKind.ATTEMPT else (runtime or root)
             span = self._telemetry.tracer.start_span(
                 self._NAMES[entry.kind],
-                context=None if parent is None else set_span_in_context(parent),
+                # An empty context for the root rather than `None`, which would resolve to
+                # whatever span happens to be current. A root parented into an ambient trace
+                # would be exported under a parent the stored row says it does not have, and
+                # the two views of one execution would stop being the same tree.
+                context=Context() if parent is None else set_span_in_context(parent),
                 attributes=common | self._attributes(entry),
                 start_time=base + entry.started_offset_ms * 1_000_000,
                 record_exception=False,
@@ -236,7 +244,7 @@ class OtelRunTracer:
 
     @staticmethod
     def _attributes(entry: SpanDraft) -> dict[str, str | int]:
-        attributes: dict[str, str | int] = {"lab.span.label": entry.label}
+        attributes: dict[str, str | int] = {}
         if entry.sequence is not None:
             attributes["tool.sequence"] = entry.sequence
         if entry.tool is not None:

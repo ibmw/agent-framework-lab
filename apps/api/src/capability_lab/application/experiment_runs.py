@@ -469,13 +469,11 @@ class ExperimentRunner:
         spans = (
             SpanDraft(
                 kind=SpanKind.ATTEMPT,
-                label="attempt",
                 started_offset_ms=0,
                 duration_ms=_elapsed_ms(opened, ended),
             ),
             SpanDraft(
                 kind=SpanKind.RUNTIME,
-                label=runtime.framework_id,
                 started_offset_ms=_elapsed_ms(opened, started),
                 duration_ms=_elapsed_ms(started, ended),
             ),
@@ -485,7 +483,7 @@ class ExperimentRunner:
             AttemptTraceDraft(
                 run_id=run.run_id,
                 experiment_id=record.experiment_id,
-                arm_label=run.label,
+                arm_position=run.position,
                 framework_id=runtime.framework_id,
                 ordinal=ordinal,
                 attempt=attempt,
@@ -850,7 +848,6 @@ class _RecordingInvoker(SandboxToolInvoker):
         return tuple(
             SpanDraft(
                 kind=SpanKind.TOOL,
-                label=call.contract.name,
                 started_offset_ms=call.started_offset_ms,
                 duration_ms=call.duration_ms,
                 sequence=sequence,
