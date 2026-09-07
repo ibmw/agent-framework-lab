@@ -95,7 +95,12 @@ is stored rather than projected: the span tree each advance records, because whe
 attempt each of its calls ran is gone the moment the advance returns (ADR 0037), and then the
 first operation that does not read an experiment but derives one: a replay, which starts in the
 world its source started in and is driven by the compositions that source recorded, because an
-immutable record leaves no other way to run an incident twice (ADR 0038).
+immutable record leaves no other way to run an incident twice (ADR 0038), and finally the
+derivation that changes something on purpose: a fork, which holds the world, the recipe, the
+arm positions and the recorded script still and moves only which published configuration
+version each arm runs — so the one thing it changed is the only thing that changed, and the
+difference between the two records is attributable to it (ADR 0039), which completes the
+milestone's traces, replay, and fork outcome.
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -648,18 +653,19 @@ Turn completed runs into durable, searchable comparison evidence.
 - [x] Preserve the notes and tags an operator writes on a run. Split from the outcome above
   because a diff is a reading of state the lab already holds, while a note is what a person
   concluded and is stored beside the record rather than in it (ADR 0036).
-- [ ] Preserve traces, replay, and fork provenance. Three slices, not one, and two have
-  landed: traces are the spans the lab now records beside the record (ADR 0037), and a replay
+- [x] Preserve traces, replay, and fork provenance. Three slices, not one, and all three
+  have landed: traces are the spans the lab now records beside the record (ADR 0037), a replay
   derives a new experiment that starts in the world its source started in and is driven by the
-  compositions that source recorded (ADR 0038). Fork remains: it derives a new experiment too,
-  and it is the one that deliberately moves the pinned versions forward.
+  compositions that source recorded (ADR 0038), and a fork derives one the same way while
+  moving the pinned configuration versions on purpose — which is the only thing it moves, so
+  the difference between the two records is attributable to it (ADR 0039).
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
 tab, and 10 · History; frame 9's notes-and-tags strip and frame 10's tag filter arrived with the
-annotation outcome (ADR 0036), frame 9b with the traces outcome (ADR 0037), and frame 9's Replay
-header action and frame 10's replay quick action with the replay outcome — frame 9's `Fork…`
-waits for the slice it names (ADR 0038). 9a · Execution
+annotation outcome (ADR 0036), frame 9b with the traces outcome (ADR 0037), frame 9's Replay
+header action and frame 10's replay quick action with the replay outcome (ADR 0038), and frame
+9's `Fork…` and frame 10's fork quick action with the fork outcome (ADR 0039). 9a · Execution
 timeline and 9c's source locations arrived with
 Milestone 4's fifth outcome (ADR 0027) and are extended here rather than built again — frame 9's
 General tab and the depth-tab shell the others will hang from arrived with the comparison outcome
@@ -774,6 +780,30 @@ fingerprints could name two different tool sets — the scripted participant dri
 would arrive with its first caller, the honest limit that a deterministic runtime replays
 exactly and a model-backed one does not, and the derivation stored beside two experiments
 because it is part of neither.
+
+Fork evidence (frame 9's header, and frame 10's quick actions): an operator who has read
+both arms and replayed the incident suspects one of the two prompts, and asks the question a
+replay refuses to ask — the same run, with that arm moved onto a newer published version, or
+onto a different configuration altogether. Everything else is held still, deliberately: the
+snapshot the source froze is cloned again rather than the world re-frozen, the recipe version
+and the seed are the source's, the arms keep their names and their positions, and the
+customer's own compositions drive it to the same depths — because a derivation that moved the
+world as well as the arms would explain nothing about either. A fork that changes no arm is
+refused rather than recorded, in the sentence that says what it is instead: a replay. And what
+it did change is on the derived run where it names the run it came from — one dimension reads
+as provenance, and two say out loud that no difference between these two records can be
+attributed to either of them, which is the setup gate's own comparison warning carried one
+level out to the comparison the gate cannot see. From the listing the question is simpler and
+the row asks it in one click, offering it only where there is something newer to move to.
+Nothing about the run it forked changes, its verdicts and notes stay on the run they were made
+about, and a fork of a replay names the replay rather than claiming the head of the chain.
+ADR 0039 records what a fork may vary and why each excluded candidate is excluded, the
+starting state reused through the one door that already refuses a drifted tool contract set,
+the refusal of a derivation that changes nothing and why it is judged on the pins rather than
+on the payloads, the derivation table generalized with a kind rather than paralleled — because
+the two rows differ in one word and that word is what a reader has to be shown — the difference
+set read against the source rather than only within the fork's own two arms, and the chains
+each read a link at a time.
 
 History evidence (frame 10): an operator who has driven an incident to its end leaves the shop
 they ran it in and finds it again in the lab's own listing — every run this lab has made, whichever

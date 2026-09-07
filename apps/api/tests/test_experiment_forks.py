@@ -327,7 +327,7 @@ async def test_a_fork_that_moves_two_dimensions_says_so_rather_than_being_refuse
 async def test_both_arms_moved_the_same_way_is_one_variable(
     session: Session, workspace: Workspace
 ) -> None:
-    """ "Does the new prompt help either of them" is one question, so it counts as one."""
+    """Both arms onto the same new prompt asks one question, so it counts as one."""
     first, second = control_arm(session), control_arm(session)
     source = start(session, workspace, first, second)
     await run_arm(session, source)

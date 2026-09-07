@@ -275,14 +275,12 @@ def test_a_derivation_that_moved_one_arm_one_way_moved_one_dimension() -> None:
 
 
 def test_two_arms_moved_the_same_way_are_one_variable() -> None:
-    """"Does the new prompt help either of them" is one question, so it counts as one."""
+    """Both arms onto the same new prompt asks one question, so it counts as one."""
     identity_id = uuid4()
     before = publishable_configuration(identity_id)
     after = publishable_configuration(identity_id, prompt="Read the policy before acting.")
 
-    assert derivation_variables(((before, after), (before, after))) == (
-        ComparisonDimension.PROMPT,
-    )
+    assert derivation_variables(((before, after), (before, after))) == (ComparisonDimension.PROMPT,)
 
 
 def test_two_arms_moved_different_ways_are_two_variables_in_the_enums_own_order() -> None:

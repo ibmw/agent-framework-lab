@@ -374,6 +374,21 @@ the lab guarantees is the input. The derivation is stored in `experiment_derivat
 both experiments — it is part of neither run's inputs, and a runtime identifier does not belong
 in fingerprinted bytes (ADR 0038).
 
+A **fork** is the same derivation with one thing changed on purpose: which published
+agent-configuration version each arm runs, and nothing else. The snapshot is cloned again
+through the same door — a fork that re-froze would have moved the world as well as the arms,
+so nothing it produced could be attributed to either — and the recipe version, the seed, the
+arm positions and names, and the recorded compositions are all the source's. Holding them
+constant is what makes the derived run a comparison *with* its source rather than a new
+experiment, so a fork that changes no arm is refused with the word for what it actually is: a
+replay. The refusal is on the pinned versions rather than on the payloads, which is also why
+the derivation's kind is stored rather than inferred from a comparison. What the fork moved is
+read back on the derived run beside the source it names — one dimension is provenance, and two
+say that no difference between the two records is attributable to either, which is ADR 0025's
+comparison-variable warning carried out to the comparison the setup gate cannot see. Chains are
+ordinary: each derivation names its immediate source and reports what that step moved, and every
+run in a chain carries the sandbox fingerprint the first one froze (ADR 0039).
+
 The one thing on those surfaces that is neither a record of the run nor a reading of one is what
 an operator concluded about it. Notes and tags are stored in `experiment_notes` and
 `experiment_tags` beside an experiment nothing updates, so annotating a run cannot move the
@@ -414,7 +429,8 @@ The spans of each attempt live in `experiment_run_spans`, keyed by the arm and t
 holding identifiers, a kind, an offset, and a duration — and nothing that could carry content
 (ADR 0037). That one experiment was derived from another is `experiment_derivations`, keyed by
 the derived one because it is derived by the single act that created it, and carrying the kind of
-derivation it was because "replay of" and "fork of" are not the same sentence (ADR 0038).
+derivation it was because "replay of" and "fork of" are not the same sentence
+(ADR 0038, ADR 0039).
 What an operator writes afterwards is stored beside all of it rather than in it:
 `experiment_notes` is append-only, and `experiment_tags` is keyed by the run and the folded tag so
 the set is a set rather than a rule the writer has to remember (ADR 0036). Experiments and judge
