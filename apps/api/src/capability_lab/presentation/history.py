@@ -68,6 +68,11 @@ class HistoryArmSchema(StrictApiModel):
     agent_configuration_id: UUID
     agent_configuration_version: int
     agent_configuration_name: str
+    agent_configuration_latest_version: int | None = None
+    """The newest published version of this arm's configuration, or `null` if it has none.
+
+    Beside the version this arm pinned rather than replacing it: the run stays explained by
+    what it pinned, and this is what says there is something newer to fork it onto."""
     framework_id: str
     framework_label: str
     model_id: str
@@ -90,6 +95,7 @@ class HistoryArmSchema(StrictApiModel):
             agent_configuration_id=arm.configuration_id,
             agent_configuration_version=arm.configuration_version,
             agent_configuration_name=arm.configuration_name,
+            agent_configuration_latest_version=arm.configuration_latest_version,
             framework_id=arm.framework_id,
             framework_label=arm.framework_label,
             model_id=arm.model_id,

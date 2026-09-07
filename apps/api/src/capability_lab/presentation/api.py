@@ -1837,6 +1837,7 @@ def create_app(
                 SqlAlchemyExperimentAnnotationRepository(session),
                 shop_repository(session),
                 scenario_repository(session),
+                agent_configuration_repository(session),
             )
 
     def experiment_annotation_service() -> Generator[ExperimentAnnotationService, None, None]:

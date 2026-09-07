@@ -49,7 +49,10 @@ from capability_lab.application.experiment_annotations import (
     ExperimentAnnotationService,
     ExperimentNoteRecord,
 )
-from capability_lab.application.experiment_derivations import ExperimentDerivationService
+from capability_lab.application.experiment_derivations import (
+    ExperimentDerivationService,
+    ForkArm,
+)
 from capability_lab.application.experiment_runs import ExperimentRunner, RunTurn
 from capability_lab.application.experiment_timeline import (
     ExperimentTimeline,
@@ -145,6 +148,32 @@ class ArmSelectionSchema(StrictApiModel):
         return ArmSelection(
             configuration_id=self.configuration_id, version=self.version, label=self.label
         )
+
+
+class ForkArmSchema(StrictApiModel):
+    """One arm of a fork: the published configuration version it will run instead.
+
+    No label. A fork keeps the names its source gave the arms, because a comparison refers to
+    an arm by its position and renaming one would only make the two records harder to read
+    side by side.
+    """
+
+    configuration_id: UUID
+    version: DefinitionVersionPath
+
+    def to_domain(self) -> ForkArm:
+        return ForkArm(configuration_id=self.configuration_id, version=self.version)
+
+
+class ForkExperimentRequest(StrictApiModel):
+    """What a fork changes, which is the whole of what a fork may change.
+
+    One entry per arm of the source, in the source's own arm order, because the recorded
+    script is written in arm positions. An arm may keep the exact version its source ran, but
+    not all of them may: a derivation that changes nothing is a replay.
+    """
+
+    arms: Annotated[list[ForkArmSchema], Field(min_length=1, max_length=MAX_ARMS)]
 
 
 class StartExperimentRequest(StrictApiModel):
@@ -848,10 +877,22 @@ class ExperimentOriginSchema(StrictApiModel):
     label: str
     kind: DerivationKind
     """How this run was derived: `replay` re-ran what the source pinned, `fork` moved it."""
+    changed: list[ComparisonDimension]
+    """The dimensions this derivation moved from its source; empty for a replay.
+
+    A reading over the two records rather than something stored at derivation time, so it
+    cannot drift from the versions the arms actually pinned. More than one entry is a
+    derived run whose difference from its source cannot be attributed to any one of them —
+    the derivation's own version of the setup gate's comparison warning (ADR 0039)."""
 
     @classmethod
     def from_domain(cls, origin: ExperimentOrigin) -> Self:
-        return cls(experiment_id=origin.experiment_id, label=origin.label, kind=origin.kind)
+        return cls(
+            experiment_id=origin.experiment_id,
+            label=origin.label,
+            kind=origin.kind,
+            changed=list(origin.changed),
+        )
 
 
 class ExperimentResponse(ExperimentSummarySchema):
@@ -1425,6 +1466,21 @@ class ExperimentRoutes:
             # of an experiment arrives in.
             return ExperimentResponse.from_detail(await derivations.replay(shop_id, experiment_id))
 
+        async def fork_experiment(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            command: ForkExperimentRequest,
+            derivations: Annotated[ExperimentDerivationService, derivation_dependency],
+        ) -> ExperimentResponse:
+            # The derived experiment, whole, exactly as a replay answers: the caller asked
+            # for this run's incident with other arms, and what they need back is the run
+            # that produced.
+            return ExperimentResponse.from_detail(
+                await derivations.fork(
+                    shop_id, experiment_id, tuple(arm.to_domain() for arm in command.arms)
+                )
+            )
+
         async def advance_run(
             shop_id: ShopIdPath,
             experiment_id: ExperimentIdPath,
@@ -1681,6 +1737,46 @@ class ExperimentRoutes:
                     "longer passes, or its starting state was frozen against a tool contract "
                     "set this build no longer publishes — or no runtime for an arm's "
                     "framework is available here",
+                },
+            },
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/forks",
+            fork_experiment,
+            methods=["POST"],
+            status_code=201,
+            response_model=ExperimentResponse,
+            operation_id="forkExperiment",
+            summary="Derive a new experiment that runs this one's incident with other arms",
+            description=(
+                "Everything a replay holds constant, a fork holds constant too — the same "
+                "snapshot cloned again rather than the world re-frozen, the same recipe "
+                "version at the same seed, the same arm positions and names, and the same "
+                "recorded compositions delivered to the same arms at the same depths — and "
+                "it changes exactly one thing: which published agent-configuration version "
+                "each arm runs. That is what makes the derived run a comparison with its "
+                "source rather than a new experiment, so a difference in the answers is "
+                "about the arms. Names one arm per arm of the source, in the source's arm "
+                "order; at least one of them must differ from what that arm ran, because a "
+                "derivation that changes nothing is a replay. The derived experiment records "
+                "`scripted`, answers with itself, and reports on `derived_from.changed` the "
+                "dimensions it moved — more than one, and no difference from the source can "
+                "be attributed to any of them. Deliberately not idempotent. Nothing about "
+                "the forked experiment changes."
+            ),
+            responses={
+                404: {
+                    "model": ErrorResponse,
+                    "description": "The experiment, or the starting state it froze, is not "
+                    "found in this shop",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "The fork names the wrong number of arms, changes no arm "
+                    "at all, or names an agent-configuration version that is not published; "
+                    "or the derived setup no longer passes the gate, its starting state was "
+                    "frozen against a tool contract set this build no longer publishes, or "
+                    "no runtime for an arm's framework is available here",
                 },
             },
         )

@@ -86,6 +86,7 @@ __all__ = [
     "ReplayLine",
     "ReplayScript",
     "compare_configurations",
+    "derivation_variables",
     "fold_tag",
     "fold_tags",
     "normalize_tag",
@@ -515,6 +516,39 @@ def compare_configurations(
         _variable(dimension, tuple(_value(dimension, payload) for payload in configurations))
         for dimension in ComparisonDimension
     )
+
+
+def derivation_variables(
+    moved: tuple[tuple[AgentConfigurationPayload, AgentConfigurationPayload], ...],
+) -> tuple[ComparisonDimension, ...]:
+    """Which dimensions a derivation moved, over the arms whose pins it actually changed.
+
+    The comparison a fork has to answer for is not the one between its own two arms — the
+    setup gate already counts that, and it counted the same thing for the run this one comes
+    from. It is the comparison *with the source*: a fork's whole claim is that the thing it
+    changed is the only thing that changed, and a fork that moved two dimensions has no such
+    claim to make, whichever arm each of them landed on (ADR 0039).
+
+    So the dimensions are unioned across the arms rather than reported per arm. Two arms both
+    moved to a newer prompt is one variable and reads as one question ("does the new prompt
+    help either of them"); one arm moved to a newer prompt while the other moved to a
+    different model is two, and no difference between the derived run and its source can be
+    attributed to either.
+
+    Each pair is one arm's configuration before and after, and only the arms whose published
+    version the derivation changed belong here: an arm pinned to the exact version its source
+    ran cannot have moved along any dimension, so comparing it with itself would be work done
+    to prove an identity.
+    """
+    changed = {
+        variable.dimension
+        for before, after in moved
+        for variable in compare_configurations((before, after))
+        if variable.differs
+    }
+    # In the enum's own order rather than in the order the arms happened to move, so two
+    # derivations that changed the same things read the same way.
+    return tuple(dimension for dimension in ComparisonDimension if dimension in changed)
 
 
 def _variable(dimension: ComparisonDimension, values: tuple[str, ...]) -> ComparisonVariable:

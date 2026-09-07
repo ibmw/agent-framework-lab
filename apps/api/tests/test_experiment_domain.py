@@ -24,6 +24,7 @@ from capability_lab.domain.experiment import (
     ParticipantTurn,
     ParticipantTurnSource,
     compare_configurations,
+    derivation_variables,
     fold_tag,
     fold_tags,
     normalize_tag,
@@ -260,6 +261,61 @@ def test_the_tone_selection_is_compared_by_what_it_names() -> None:
 def test_a_comparison_needs_something_to_compare() -> None:
     with pytest.raises(ExperimentConfigurationError, match="at least one"):
         compare_configurations(())
+
+
+# -- what a derivation moved from the run it came from -------------------------
+
+
+def test_a_derivation_that_moved_one_arm_one_way_moved_one_dimension() -> None:
+    identity_id = uuid4()
+    before = publishable_configuration(identity_id)
+    after = publishable_configuration(identity_id, prompt="Read the policy before acting.")
+
+    assert derivation_variables(((before, after),)) == (ComparisonDimension.PROMPT,)
+
+
+def test_two_arms_moved_the_same_way_are_one_variable() -> None:
+    """"Does the new prompt help either of them" is one question, so it counts as one."""
+    identity_id = uuid4()
+    before = publishable_configuration(identity_id)
+    after = publishable_configuration(identity_id, prompt="Read the policy before acting.")
+
+    assert derivation_variables(((before, after), (before, after))) == (
+        ComparisonDimension.PROMPT,
+    )
+
+
+def test_two_arms_moved_different_ways_are_two_variables_in_the_enums_own_order() -> None:
+    """The count is what makes the attribution claim checkable, whichever arm each landed on.
+
+    Reported in the dimension enum's order rather than in the order the arms moved, so two
+    derivations that changed the same things read the same way."""
+    identity_id = uuid4()
+    before = publishable_configuration(identity_id)
+    prompted = publishable_configuration(identity_id, prompt="Read the policy before acting.")
+    warmer = publishable_configuration(
+        identity_id, model=replace(before.model, temperature=Decimal("0.90"))
+    )
+
+    assert derivation_variables(((prompted, before), (before, warmer))) == (
+        ComparisonDimension.MODEL,
+        ComparisonDimension.PROMPT,
+    )
+
+
+def test_a_derivation_that_moved_no_arm_moved_no_dimension() -> None:
+    """What a replay's own reading answers, without a payload having to be resolved for it."""
+    assert derivation_variables(()) == ()
+
+
+def test_an_arm_repinned_to_content_that_compares_equal_moved_nothing() -> None:
+    """A different published version is still a fork; it just did not move a dimension.
+
+    The kind is recorded rather than inferred from this reading for exactly that reason."""
+    identity_id = uuid4()
+    payload = publishable_configuration(identity_id)
+
+    assert derivation_variables(((payload, payload),)) == ()
 
 
 # -- what an operator writes on a run ------------------------------------------

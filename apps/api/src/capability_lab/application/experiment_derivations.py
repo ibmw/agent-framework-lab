@@ -1,13 +1,15 @@
 """Deriving one experiment from another, in the world the first one started in.
 
-One module for both derivations, because they differ in one thing: a replay re-runs the
-versions its source pinned, and everything below is what it holds constant.
+One module for two operations, because they differ in exactly one thing. A **replay** runs
+the versions its source pinned again; a **fork** moves those versions on purpose and holds
+everything else still, so that the thing it changed is the only thing that changed
+(ADR 0038, ADR 0039). Everything below the first heading is what both of them hold constant.
 
 An experiment is immutable and everything about it is in the record (ADR 0025, ADR 0029),
 so replaying one cannot mean running it again. It means **deriving a new experiment** that
 is honest about where it came from and that starts from exactly what the original pinned.
 
-Five decisions shape it.
+Six decisions shape it.
 
 **The starting state is reused, never re-frozen.** Materializing a snapshot copies the
 shop's order fixtures as they read *now* and re-runs the publish gate against them
@@ -18,9 +20,22 @@ what makes "historical experiments remain reproducible after newer definition ve
 published" true rather than hoped for: both derived arms begin at the same
 `sandbox_fingerprint` the original's did.
 
-**The arms are reused by content, at the versions the original ran.** Not the newest
-publication of the same configuration: choosing newer versions is what a *fork* is for, and
-a replay that quietly ran one would answer a different question under the old one's name.
+**The arms are pinned by content, and they are the only thing a derivation may vary.** A
+replay names the exact `(configuration_id, version)` each source arm ran: not the newest
+publication of the same configuration, because a replay that quietly ran one would answer a
+different question under the old one's name. A fork names a different pair for at least one
+arm — a newer version of the same configuration, or a different configuration entirely — and
+that is the whole of what it is allowed to change. The scenario version, the seed, the
+starting state, the arm count, the arm labels, and the customer's own script are held
+constant, because a derivation that varied one of those would not be a comparison with its
+source at all: it would be a new experiment, which the setup screen already starts
+(ADR 0039).
+
+**A fork that changes nothing is refused.** The provenance says what happened, and a fork
+whose every arm names the version its source ran did not fork anything — it replayed, under
+a word that would tell every later reader something untrue. The refusal is on the pins rather
+than on the payloads: asking for a different published version is a real choice even where
+the two versions compare equal along every dimension this lab reads.
 
 **The customer's turns are the script.** A derived run with nobody at the composer would
 stall at the first customer turn, so what drives it is the compositions the original
@@ -45,6 +60,7 @@ configurations, which is precisely what makes a difference in the answers worth 
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from uuid import UUID
 
 from capability_lab.application.experiment_runs import ExperimentRunner
@@ -61,17 +77,41 @@ from capability_lab.application.ports import Clock
 from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.experiment import (
     DerivationKind,
+    ExperimentConfigurationError,
     ParticipantDriverType,
     ReplayScript,
     replay_script,
 )
 
-__all__ = ["REPLAY_LABEL_SUFFIX", "ExperimentDerivationService"]
+__all__ = [
+    "DERIVATION_LABEL_SUFFIXES",
+    "ExperimentDerivationService",
+    "ForkArm",
+]
 
 # What a derived experiment is called when nobody names it. The source's name plus a marker,
 # because a history row's first column is how a run is recognized and "replay" without the
-# incident it replays would be recognizable only by its timestamp.
-REPLAY_LABEL_SUFFIX = " (replay)"
+# incident it replays would be recognizable only by its timestamp. Neither operation takes a
+# name: what a run is *about* is the incident, and what an operator wants to say about the
+# one they derived is a note (ADR 0036).
+DERIVATION_LABEL_SUFFIXES = {
+    DerivationKind.REPLAY: " (replay)",
+    DerivationKind.FORK: " (fork)",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ForkArm:
+    """One arm of a fork: the published configuration version it will run instead.
+
+    No label. The arm keeps the name its source arm had, because a comparison refers to arms
+    by position ("arm A read the policy, arm B did not") and a fork that renamed one would
+    make the two records harder to read side by side for no gain — the version each arm runs
+    is on the row beside the name.
+    """
+
+    configuration_id: UUID
+    version: int
 
 
 class ExperimentDerivationService:
@@ -105,24 +145,96 @@ class ExperimentDerivationService:
         of one moment rather than a subscription to a run that may still grow.
         """
         source = self._experiments.get_experiment(shop_id, experiment_id)
+        return await self._derive(
+            shop_id,
+            source,
+            DerivationKind.REPLAY,
+            tuple(
+                ArmSelection(
+                    configuration_id=run.agent_configuration_id,
+                    version=run.agent_configuration_version,
+                    label=run.label,
+                )
+                for run in source.runs
+            ),
+        )
+
+    async def fork(
+        self, shop_id: UUID, experiment_id: UUID, arms: tuple[ForkArm, ...]
+    ) -> ExperimentDetail:
+        """Derive a new experiment that runs the arms an operator chose instead.
+
+        Everything a replay holds constant, a fork holds constant too: the same snapshot
+        cloned again, the same recipe version at the same seed, the same arm positions and
+        names, and the same recorded compositions delivered to the same arms at the same
+        depths. That is what makes the derived run a comparison with its source rather than
+        a second experiment that happens to look like it — the arms are the one variable, so
+        a difference in the answers is about the arms.
+
+        Not idempotent, for the reason a replay is not: forking the same run twice with the
+        same arms is two derived experiments, and against a model-backed runtime they are two
+        pieces of evidence rather than one repeated.
+        """
+        source = self._experiments.get_experiment(shop_id, experiment_id)
+        if len(arms) != len(source.runs):
+            # The script is written in arm positions, which is the only coordinate the two
+            # experiments share: a fork with a different number of arms would have no script
+            # for the arm it added, and nowhere to deliver the turns of the one it dropped.
+            raise ExperimentConfigurationError(
+                f"this experiment has {len(source.runs)} arm(s), so a fork of it names "
+                f"{len(source.runs)}, not {len(arms)}"
+            )
+        if all(
+            (arm.configuration_id, arm.version)
+            == (run.agent_configuration_id, run.agent_configuration_version)
+            for arm, run in zip(arms, source.runs, strict=True)
+        ):
+            raise ExperimentConfigurationError(
+                "a fork changes at least one arm's published configuration version; a "
+                "derivation that changes nothing is a replay"
+            )
+        return await self._derive(
+            shop_id,
+            source,
+            DerivationKind.FORK,
+            tuple(
+                ArmSelection(
+                    configuration_id=arm.configuration_id, version=arm.version, label=run.label
+                )
+                for arm, run in zip(arms, source.runs, strict=True)
+            ),
+        )
+
+    async def _derive(
+        self,
+        shop_id: UUID,
+        source: ExperimentDetail,
+        kind: DerivationKind,
+        arms: tuple[ArmSelection, ...],
+    ) -> ExperimentDetail:
+        """Start the derived experiment and drive it through what the source recorded.
+
+        One body for both operations rather than two that have to be kept in agreement. Every
+        rule here belongs to *deriving* — the recorded snapshot reused by identity, the setup
+        gate re-run, the recorded compositions replayed, the provenance written — and the only
+        thing either caller decides is which arms run and what the row is called.
+        """
         script = _script_of(source)
+        source_id = source.record.experiment_id
         derived = self._experiments.start(
             shop_id,
             StartExperiment(
-                label=_derived_label(source.record.label),
+                label=_derived_label(source.record.label, kind),
                 scenario_id=source.record.scenario_id,
                 scenario_version=source.record.scenario_version,
                 seed=source.record.seed,
-                arms=tuple(
-                    ArmSelection(
-                        configuration_id=run.agent_configuration_id,
-                        version=run.agent_configuration_version,
-                        label=run.label,
-                    )
-                    for run in source.runs
-                ),
+                arms=arms,
                 participant_driver=ParticipantDriverType.SCRIPTED,
             ),
+            # By identity, never frozen again — and identically for a fork, because a fork
+            # that re-materialized would have moved the world as well as the arms, which is
+            # the second variable it exists to avoid (ADR 0019, ADR 0039). Reusing it is also
+            # what keeps the tool-contract refusal in one place: `start` is the only door.
             starting_state=source.record.snapshot_id,
         )
         derived_id = derived.record.experiment_id
@@ -131,8 +243,8 @@ class ExperimentDerivationService:
         self._derivations.save(
             ExperimentDerivation(
                 experiment_id=derived_id,
-                source_experiment_id=experiment_id,
-                kind=DerivationKind.REPLAY,
+                source_experiment_id=source_id,
+                kind=kind,
                 created_at=self._clock.now(),
             )
         )
@@ -201,12 +313,15 @@ def _script_of(source: ExperimentDetail) -> ReplayScript:
     )
 
 
-def _derived_label(label: str) -> str:
-    """The derived experiment's name: the source's, marked as a replay of it.
+def _derived_label(label: str, kind: DerivationKind) -> str:
+    """The derived experiment's name: the source's, marked as what was derived from it.
 
     Trimmed from the left of the suffix rather than refused, because an experiment label is
     bounded (`require_label`) and a source already at the bound is a run somebody named
-    carefully rather than a mistake — refusing to replay it would be refusing over a string.
+    carefully rather than a mistake — refusing to derive from it would be refusing over a
+    string. A chain trims the same way, so a fork of a replay is recognizable by its row's
+    provenance line rather than by however much of the suffix stack survived.
     """
-    room = MAX_LABEL_LENGTH - len(REPLAY_LABEL_SUFFIX)
-    return f"{label[:room].strip()}{REPLAY_LABEL_SUFFIX}"
+    suffix = DERIVATION_LABEL_SUFFIXES[kind]
+    room = MAX_LABEL_LENGTH - len(suffix)
+    return f"{label[:room].strip()}{suffix}"

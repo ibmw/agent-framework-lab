@@ -60,6 +60,7 @@ from capability_lab.application.experiments import (
     RunRecord,
 )
 from capability_lab.application.pagination import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
+from capability_lab.domain.agent_configuration import AgentConfigurationPayload
 from capability_lab.domain.definitions import DefinitionId, DefinitionType
 from capability_lab.domain.evaluation import (
     ArmEvaluation,
@@ -119,6 +120,14 @@ class HistoryArm:
     configuration_id: UUID
     configuration_version: int
     configuration_name: str
+    configuration_latest_version: int | None
+    """The newest published version of this arm's configuration, or `None` if it has none.
+
+    Beside the version the arm pinned rather than replacing it, and read for the same reason
+    `scenario_superseded` is: a historical run stays reproducible from what it pinned
+    (ADR 0025), and this is what tells an operator there is a newer configuration to fork
+    this run onto — and what makes the row's fork action refuse to offer a derivation that
+    would change nothing (ADR 0039)."""
     framework_id: str
     framework_label: str
     model_id: str
@@ -212,6 +221,7 @@ class ExperimentHistoryService:
         annotations: ExperimentAnnotationRepository,
         shops: DefinitionRepository[ShopPayload],
         scenarios: DefinitionRepository[ScenarioPayload],
+        configurations: DefinitionRepository[AgentConfigurationPayload],
     ) -> None:
         self._experiments = experiments
         self._details = details
@@ -219,18 +229,22 @@ class ExperimentHistoryService:
         self._annotations = annotations
         self._shops = shops
         self._scenarios = scenarios
+        self._configurations = configurations
 
     def history(self, query: ExperimentHistoryQuery) -> ExperimentHistoryPage:
         # Resolved once per listing rather than per row: a lab's experiments cluster on a
         # handful of shops and scenarios, and the name of one does not change mid-read.
         shop_names: dict[UUID, str] = {}
         latest_scenarios: dict[UUID, int | None] = {}
+        # Resolved once per listing for the reason the scenario versions are: a lab's runs
+        # cluster on a handful of configurations, and none of them is published mid-read.
+        latest_configurations: dict[UUID, int | None] = {}
         # Two statements for the whole listing rather than two per row: what an operator
         # wrote is stored beside the experiment (ADR 0036) rather than read back through it,
         # so it is the one part of a row that does not arrive with the record.
         written = self._annotations.list_all()
         projected = tuple(
-            self._project(record, written, shop_names, latest_scenarios)
+            self._project(record, written, shop_names, latest_scenarios, latest_configurations)
             for record in self._experiments.list_all()
         )
         # Normalized once for the whole listing rather than per row: the needle does not
@@ -274,11 +288,18 @@ class ExperimentHistoryService:
         written: Mapping[UUID, ExperimentAnnotations],
         shop_names: dict[UUID, str],
         latest_scenarios: dict[UUID, int | None],
+        latest_configurations: dict[UUID, int | None],
     ) -> _Projected:
         detail = self._details.get_experiment(record.shop_id, record.experiment_id)
         evaluation = self._evaluations.evaluate_detail(detail)
         arms = tuple(
-            _arm(run, runtime, standing.awaiting, judged)
+            _arm(
+                run,
+                runtime,
+                standing.awaiting,
+                judged,
+                self._latest_configuration(run.agent_configuration_id, latest_configurations),
+            )
             for run, runtime, standing, judged in zip(
                 detail.runs, detail.arm_runtimes, detail.standings, evaluation.arms, strict=True
             )
@@ -324,6 +345,15 @@ class ExperimentHistoryService:
             cache[shop_id] = str(shop_id) if draft is None else draft.payload.identity.name
         return cache[shop_id]
 
+    def _latest_configuration(
+        self, configuration_id: UUID, cache: dict[UUID, int | None]
+    ) -> int | None:
+        if configuration_id not in cache:
+            cache[configuration_id] = self._configurations.latest_published_version(
+                DefinitionId(DefinitionType.AGENT_CONFIGURATION, configuration_id)
+            )
+        return cache[configuration_id]
+
     def _superseded(self, record: ExperimentRecord, cache: dict[UUID, int | None]) -> bool:
         if record.scenario_id not in cache:
             cache[record.scenario_id] = self._scenarios.latest_published_version(
@@ -338,6 +368,7 @@ def _arm(
     runtime: ArmRuntime,
     awaiting: ArmAwaiting,
     judged: ArmEvaluation,
+    latest_version: int | None,
 ) -> HistoryArm:
     """One arm's row: the version it pinned, where it stopped, and what its record answered.
 
@@ -351,6 +382,7 @@ def _arm(
         configuration_id=run.agent_configuration_id,
         configuration_version=run.agent_configuration_version,
         configuration_name=runtime.configuration_name,
+        configuration_latest_version=latest_version,
         framework_id=runtime.framework_id,
         framework_label=_framework_label(runtime.framework_id),
         model_id=runtime.model_id,

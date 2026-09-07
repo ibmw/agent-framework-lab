@@ -1234,6 +1234,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/forks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Derive a new experiment that runs this one's incident with other arms
+     * @description Everything a replay holds constant, a fork holds constant too — the same snapshot cloned again rather than the world re-frozen, the same recipe version at the same seed, the same arm positions and names, and the same recorded compositions delivered to the same arms at the same depths — and it changes exactly one thing: which published agent-configuration version each arm runs. That is what makes the derived run a comparison with its source rather than a new experiment, so a difference in the answers is about the arms. Names one arm per arm of the source, in the source's arm order; at least one of them must differ from what that arm ran, because a derivation that changes nothing is a replay. The derived experiment records `scripted`, answers with itself, and reports on `derived_from.changed` the dimensions it moved — more than one, and no difference from the source can be attributed to any of them. Deliberately not idempotent. Nothing about the forked experiment changes.
+     */
+    post: operations["forkExperiment"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns": {
     parameters: {
       query?: never;
@@ -2873,6 +2893,8 @@ export interface components {
       /** Label */
       label: string;
       kind: components["schemas"]["DerivationKind"];
+      /** Changed */
+      changed: components["schemas"]["ComparisonDimension"][];
     };
     /**
      * ExperimentPreviewResponse
@@ -3112,6 +3134,38 @@ export interface components {
       /** After */
       after: string | null;
     };
+    /**
+     * ForkArmSchema
+     * @description One arm of a fork: the published configuration version it will run instead.
+     *
+     *     No label. A fork keeps the names its source gave the arms, because a comparison refers to
+     *     an arm by its position and renaming one would only make the two records harder to read
+     *     side by side.
+     */
+    ForkArmSchema: {
+      /**
+       * Configuration Id
+       * Format: uuid
+       */
+      configuration_id: string;
+      /**
+       * Version
+       * @description Immutable published version number.
+       */
+      version: number;
+    };
+    /**
+     * ForkExperimentRequest
+     * @description What a fork changes, which is the whole of what a fork may change.
+     *
+     *     One entry per arm of the source, in the source's own arm order, because the recorded
+     *     script is written in arm positions. An arm may keep the exact version its source ran, but
+     *     not all of them may: a derivation that changes nothing is a replay.
+     */
+    ForkExperimentRequest: {
+      /** Arms */
+      arms: components["schemas"]["ForkArmSchema"][];
+    };
     /** FulfilmentMethodSchema */
     FulfilmentMethodSchema: {
       /** Id */
@@ -3200,6 +3254,8 @@ export interface components {
       agent_configuration_version: number;
       /** Agent Configuration Name */
       agent_configuration_name: string;
+      /** Agent Configuration Latest Version */
+      agent_configuration_latest_version?: number | null;
       /** Framework Id */
       framework_id: string;
       /** Framework Label */
@@ -10535,6 +10591,53 @@ export interface operations {
         };
       };
       /** @description The derived experiment cannot be started — its setup no longer passes, or its starting state was frozen against a tool contract set this build no longer publishes — or no runtime for an arm's framework is available here */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  forkExperiment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ForkExperimentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentResponse"];
+        };
+      };
+      /** @description The experiment, or the starting state it froze, is not found in this shop */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The fork names the wrong number of arms, changes no arm at all, or names an agent-configuration version that is not published; or the derived setup no longer passes the gate, its starting state was frozen against a tool contract set this build no longer publishes, or no runtime for an arm's framework is available here */
       422: {
         headers: {
           [name: string]: unknown;

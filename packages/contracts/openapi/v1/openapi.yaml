@@ -3944,6 +3944,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/forks:
+    post:
+      summary: Derive a new experiment that runs this one's incident with other arms
+      description: 'Everything a replay holds constant, a fork holds constant too
+        — the same snapshot cloned again rather than the world re-frozen, the same
+        recipe version at the same seed, the same arm positions and names, and the
+        same recorded compositions delivered to the same arms at the same depths —
+        and it changes exactly one thing: which published agent-configuration version
+        each arm runs. That is what makes the derived run a comparison with its source
+        rather than a new experiment, so a difference in the answers is about the
+        arms. Names one arm per arm of the source, in the source''s arm order; at
+        least one of them must differ from what that arm ran, because a derivation
+        that changes nothing is a replay. The derived experiment records `scripted`,
+        answers with itself, and reports on `derived_from.changed` the dimensions
+        it moved — more than one, and no difference from the source can be attributed
+        to any of them. Deliberately not idempotent. Nothing about the forked experiment
+        changes.'
+      operationId: forkExperiment
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForkExperimentRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentResponse'
+        '404':
+          description: The experiment, or the starting state it froze, is not found
+            in this shop
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The fork names the wrong number of arms, changes no arm at
+            all, or names an agent-configuration version that is not published; or
+            the derived setup no longer passes the gate, its starting state was frozen
+            against a tool contract set this build no longer publishes, or no runtime
+            for an arm's framework is available here
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns:
     post:
       summary: Run this arm's agent against the customer turn it has not answered
@@ -7294,12 +7361,18 @@ components:
           title: Label
         kind:
           $ref: '#/components/schemas/DerivationKind'
+        changed:
+          items:
+            $ref: '#/components/schemas/ComparisonDimension'
+          type: array
+          title: Changed
       additionalProperties: false
       type: object
       required:
       - experiment_id
       - label
       - kind
+      - changed
       title: ExperimentOriginSchema
       description: The experiment a derived one came from, named as a reader would
         name it.
@@ -7743,6 +7816,58 @@ components:
         whose city
 
         was blanked.'
+    ForkArmSchema:
+      properties:
+        configuration_id:
+          type: string
+          format: uuid
+          title: Configuration Id
+        version:
+          type: integer
+          minimum: 1.0
+          title: Version
+          description: Immutable published version number.
+      additionalProperties: false
+      type: object
+      required:
+      - configuration_id
+      - version
+      title: ForkArmSchema
+      description: 'One arm of a fork: the published configuration version it will
+        run instead.
+
+
+        No label. A fork keeps the names its source gave the arms, because a comparison
+        refers to
+
+        an arm by its position and renaming one would only make the two records harder
+        to read
+
+        side by side.'
+    ForkExperimentRequest:
+      properties:
+        arms:
+          items:
+            $ref: '#/components/schemas/ForkArmSchema'
+          type: array
+          maxItems: 2
+          minItems: 1
+          title: Arms
+      additionalProperties: false
+      type: object
+      required:
+      - arms
+      title: ForkExperimentRequest
+      description: 'What a fork changes, which is the whole of what a fork may change.
+
+
+        One entry per arm of the source, in the source''s own arm order, because the
+        recorded
+
+        script is written in arm positions. An arm may keep the exact version its
+        source ran, but
+
+        not all of them may: a derivation that changes nothing is a replay.'
     FulfilmentMethodSchema:
       properties:
         id:
@@ -7902,6 +8027,11 @@ components:
         agent_configuration_name:
           type: string
           title: Agent Configuration Name
+        agent_configuration_latest_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Agent Configuration Latest Version
         framework_id:
           type: string
           title: Framework Id

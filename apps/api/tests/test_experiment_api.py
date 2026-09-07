@@ -1437,6 +1437,8 @@ async def test_replaying_a_run_answers_with_a_new_experiment_in_the_same_world(
         "experiment_id": experiment["experiment_id"],
         "label": experiment["label"],
         "kind": "replay",
+        # A replay pins every arm to the version its source ran, so it moved nothing.
+        "changed": [],
     }
 
 
@@ -1557,3 +1559,161 @@ async def test_a_replay_whose_store_refuses_the_commit_never_answers_created(
 
     assert response.status_code == 500, response.text
     assert len((await client.get(listed)).json()["experiments"]) == before
+
+
+# -- forking -------------------------------------------------------------------
+
+
+async def republish(client: AsyncClient, arm: dict[str, Any], **changes: Any) -> dict[str, Any]:
+    """A newer published version of the configuration one arm ran — what a fork moves to."""
+    configuration_id = arm["agent_configuration_id"]
+    draft = (await client.get(f"{CONFIGURATIONS}/{configuration_id}/draft")).json()["content"]
+    saved = await client.put(
+        f"{CONFIGURATIONS}/{configuration_id}/draft", json={"payload": {**draft, **changes}}
+    )
+    assert saved.status_code == 200, saved.text
+    published = await client.post(f"{CONFIGURATIONS}/{configuration_id}/versions")
+    assert published.status_code == 201, published.text
+    return {"configuration_id": configuration_id, "version": published.json()["version"]}
+
+
+def fork_body(experiment: dict[str, Any], position: int, arm: dict[str, Any]) -> dict[str, Any]:
+    """The source's own arms, with one of them pointed somewhere else."""
+    arms = [
+        {
+            "configuration_id": run["agent_configuration_id"],
+            "version": run["agent_configuration_version"],
+        }
+        for run in experiment["runs"]
+    ]
+    arms[position] = {"configuration_id": arm["configuration_id"], "version": arm["version"]}
+    return {"arms": arms}
+
+
+async def fork(
+    client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any], body: dict[str, Any]
+) -> Any:
+    return await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/forks",
+        json=body,
+    )
+
+
+async def test_forking_a_run_answers_with_the_arms_chosen_in_the_world_it_started_in(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The one variable a fork moves, in a world and a script it does not."""
+    experiment = await control_experiment(client, lab)
+    assert (await advance(client, lab, experiment)).status_code == 201
+    newer = await republish(client, experiment["runs"][1], prompt="Read the policy first.")
+
+    response = await fork(client, lab, experiment, fork_body(experiment, 1, newer))
+
+    assert response.status_code == 201, response.text
+    derived = response.json()
+    assert derived["experiment_id"] != experiment["experiment_id"]
+    assert derived["snapshot_id"] == experiment["snapshot_id"]
+    assert derived["sandbox_fingerprint"] == experiment["sandbox_fingerprint"]
+    assert derived["participant_driver"] == "scripted"
+    assert [run["agent_configuration_version"] for run in derived["runs"]] == [
+        experiment["runs"][0]["agent_configuration_version"],
+        newer["version"],
+    ]
+    assert [run["label"] for run in derived["runs"]] == [run["label"] for run in experiment["runs"]]
+    assert derived["derived_from"] == {
+        "experiment_id": experiment["experiment_id"],
+        "label": experiment["label"],
+        "kind": "fork",
+        "changed": ["prompt"],
+    }
+
+
+async def test_a_forked_arm_reruns_the_recorded_script_and_the_other_arm_stays_where_it_was(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The script is the source's, so the arms are the only thing that moved."""
+    experiment = await control_experiment(client, lab)
+    answered = (await advance(client, lab, experiment)).json()
+    newer = await republish(client, experiment["runs"][0], prompt="Read the policy first.")
+
+    derived = (await fork(client, lab, experiment, fork_body(experiment, 0, newer))).json()
+
+    assert [turn["body"] for turn in derived["agent_turns"]] == [answered["turn"]["body"]]
+    assert derived["runs"][0]["standing"]["awaiting"] == "customer"
+    assert derived["runs"][1]["standing"]["awaiting"] == "agent"
+
+
+async def test_a_fork_that_changes_nothing_is_refused(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+
+    response = await fork(
+        client,
+        lab,
+        experiment,
+        fork_body(
+            experiment,
+            0,
+            {
+                "configuration_id": experiment["runs"][0]["agent_configuration_id"],
+                "version": experiment["runs"][0]["agent_configuration_version"],
+            },
+        ),
+    )
+
+    assert response.status_code == 422, response.text
+    assert "replay" in response.json()["message"]
+
+
+async def test_a_fork_naming_the_wrong_number_of_arms_is_refused(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    newer = await republish(client, experiment["runs"][0], prompt="Read the policy first.")
+
+    response = await fork(
+        client,
+        lab,
+        experiment,
+        {"arms": [{"configuration_id": newer["configuration_id"], "version": newer["version"]}]},
+    )
+
+    assert response.status_code == 422, response.text
+
+
+async def test_forking_a_run_leaves_it_as_it_was_and_lists_the_derived_one_beside_it(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    assert (await advance(client, lab, experiment)).status_code == 201
+    newer = await republish(client, experiment["runs"][0], prompt="Read the policy first.")
+    reading = f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+    before = (await client.get(reading)).json()
+
+    derived = (await fork(client, lab, experiment, fork_body(experiment, 0, newer))).json()
+
+    assert (await client.get(reading)).json() == before
+    history = await client.get("/api/v1/experiments")
+    rows = {row["experiment_id"]: row for row in history.json()["experiments"]}
+    assert rows[derived["experiment_id"]]["derived_from"]["kind"] == "fork"
+    assert rows[experiment["experiment_id"]]["derived_from"] is None
+    # The row says what there is to fork onto without pretending the run was forked onto it.
+    assert (
+        rows[experiment["experiment_id"]]["arms"][0]["agent_configuration_latest_version"]
+        == newer["version"]
+    )
+
+
+async def test_an_experiment_of_another_shop_cannot_be_forked(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    newer = await republish(client, experiment["runs"][0], prompt="Read the policy first.")
+
+    response = await client.post(
+        f"/api/v1/shops/{uuid4()}/experiments/{experiment['experiment_id']}/forks",
+        json=fork_body(experiment, 0, newer),
+    )
+
+    assert response.status_code == 404, response.text

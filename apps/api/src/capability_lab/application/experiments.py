@@ -108,6 +108,7 @@ from capability_lab.domain.definitions import (
 )
 from capability_lab.domain.experiment import (
     ArmStanding,
+    ComparisonDimension,
     ComparisonVariable,
     DerivationKind,
     ExperimentConfigurationError,
@@ -115,6 +116,7 @@ from capability_lab.domain.experiment import (
     ParticipantTurn,
     ParticipantTurnSource,
     compare_configurations,
+    derivation_variables,
     stand_arm,
 )
 from capability_lab.domain.sandbox import SandboxState
@@ -346,6 +348,15 @@ class ExperimentOrigin:
     experiment_id: UUID
     label: str
     kind: DerivationKind
+    changed: tuple[ComparisonDimension, ...]
+    """The dimensions this derivation moved from its source, and empty for a replay.
+
+    A reading rather than a stored column, like everything else on the detail beside it: both
+    experiments are written once and their arms are pinned by content, so the answer cannot
+    drift, and a copy taken at derivation time would be a second source of truth for
+    something the two records already say. It is what makes a fork's claim checkable — the
+    thing it changed is the only thing that changed — and it is what says out loud when that
+    claim does not hold (ADR 0039)."""
 
 
 class ExperimentDerivationRepository(Protocol):
@@ -542,7 +553,7 @@ class ExperimentService:
                 )
                 for run, sandbox in zip(runs, sandboxes, strict=True)
             ),
-            derived_from=self._origin(shop_id, experiment_id),
+            derived_from=self._origin(shop_id, experiment_id, runs, payloads),
             runs=runs,
             sandboxes=sandboxes,
             turns=turns,
@@ -811,7 +822,13 @@ class ExperimentService:
                 )
             )
 
-    def _origin(self, shop_id: UUID, experiment_id: UUID) -> ExperimentOrigin | None:
+    def _origin(
+        self,
+        shop_id: UUID,
+        experiment_id: UUID,
+        runs: tuple[RunRecord, ...],
+        payloads: tuple[AgentConfigurationPayload, ...],
+    ) -> ExperimentOrigin | None:
         """The experiment this one came from, named by the row it was derived through.
 
         A missing source is reported as no origin rather than raised: experiments are
@@ -826,7 +843,36 @@ class ExperimentService:
         if source is None:  # pragma: no cover - an experiment is never deleted
             return None
         return ExperimentOrigin(
-            experiment_id=source.experiment_id, label=source.label, kind=derivation.kind
+            experiment_id=source.experiment_id,
+            label=source.label,
+            kind=derivation.kind,
+            changed=self._moved(source.experiment_id, runs, payloads),
+        )
+
+    def _moved(
+        self,
+        source_experiment_id: UUID,
+        runs: tuple[RunRecord, ...],
+        payloads: tuple[AgentConfigurationPayload, ...],
+    ) -> tuple[ComparisonDimension, ...]:
+        """What this derivation changed about the arms, read against the run it came from.
+
+        The pins are compared first and the payloads only for the arms whose pins differ.
+        That makes a replay free — it pins every arm to the exact version its source ran, so
+        there is nothing to resolve — and it is also the honest test: a fork is a fork
+        because the operator asked for different published content, whether or not the two
+        versions turn out to compare equal along every dimension this lab reads.
+        """
+        source_runs = self._runs.list_for_experiment(source_experiment_id)
+        if len(source_runs) != len(runs):  # pragma: no cover - a derivation keeps the arms
+            return ()
+        return derivation_variables(
+            tuple(
+                (self._arm_payload(before), after)
+                for before, run, after in zip(source_runs, runs, payloads, strict=True)
+                if (before.agent_configuration_id, before.agent_configuration_version)
+                != (run.agent_configuration_id, run.agent_configuration_version)
+            )
         )
 
     def _trigger(self, snapshot: SandboxSnapshotRecord) -> str:
