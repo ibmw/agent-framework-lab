@@ -264,13 +264,16 @@ export function ExperimentBenchPage() {
           >
             {experiment.participant_driver === "human" ? null : (
               // The recorded driver is what produced this run's turns, and a run half typed
-              // by a person would carry one label for two things (ADR 0025). A derived run
-              // was driven by the script its source recorded, so the composer says so
-              // rather than offering a send the backend would refuse.
+              // by a person would carry one label for two things (ADR 0025). So the composer
+              // says which driver this run records rather than offering a send the backend
+              // would refuse — and only a *derived* run can say where its script came from,
+              // because an experiment may also be started under a driver by hand.
               <p className="text-[13px] text-admin-ink-soft">
-                This experiment records its customer turns as {experiment.participant_driver}. Its
-                thread was driven by the run it was derived from, so there is nothing to compose
-                here.
+                This experiment records its customer turns as {experiment.participant_driver}, so
+                there is nothing to compose here.
+                {experiment.replay_of
+                  ? ` Its thread was driven by the run it was derived from, ${experiment.replay_of.label}.`
+                  : ""}
               </p>
             )}
             <form

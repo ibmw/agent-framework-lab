@@ -2018,5 +2018,22 @@ describe("replay", () => {
 
     expect(composer).toHaveTextContent(/records its customer turns as scripted/);
     expect(within(composer).queryByRole("button", { name: "Send as the customer" })).toBeNull();
+    // An experiment may be started under a driver by hand, so a run that was not derived
+    // from anything must not claim it was.
+    expect(composer).not.toHaveTextContent(/derived from/);
+  });
+
+  it("names the run a derived thread was driven by, where there is one to name", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${REPLAY_ID}`]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const composer = await screen.findByRole("region", { name: "Customer composer" });
+
+    expect(composer).toHaveTextContent(
+      /driven by the run it was derived from, Wrong address — framework comparison/,
+    );
   });
 });
