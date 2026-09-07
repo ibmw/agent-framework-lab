@@ -113,10 +113,27 @@ differs between them is one word, and that word is exactly what a reader must be
 
 The wire field moves with it: `replay_of` becomes `derived_from` and carries the kind.
 Retaining `replay_of` and adding `fork_of` beside it would have offered every consumer two
-places to look for a fact that is only ever in one of them. This is a breaking change to `v1`
-made in one cohesive slice with its migration, consumers, tests and documentation, which is the
-path `AGENTS.md` sanctions for a POC contract; the field is one slice old and its only consumer
-is this repository's own screens.
+places to look for a fact that is only ever in one of them.
+
+That is a **breaking change made in place in `v1`**, and it is worth being exact about which
+rule it departs from. `docs/api-and-schema-conventions.md` says a breaking change "creates a new
+major route version and a migration ADR; it never silently changes `v1`", and `AGENTS.md`'s
+replace-in-a-cohesive-slice clause is not the licence: that clause is scoped to "the current
+persona/scenario/conversation contracts", and the experiment contract is target-model rather
+than POC. The argument is the conventions rule's own last word. What it forbids is a *silent*
+change, and the precedent for a loud one is ADR 0034, which removed `listConversations` and
+`listGeneratedScenarios` from `v1` in place — "replaced rather than left published beside its
+replacement" — rather than minting a `v2` for a lab with one client.
+
+This case is inside that exception on every count that matters. The field is one slice old; its
+only consumer is this repository's own screens, which move with it in the same commit; the
+change is complete and consistent across the OpenAPI document, the generated types, the
+application, the frontend and the tests, so nothing can read the old name and silently get
+nothing; and it is recorded here rather than discovered. A `v2` route for a lab whose only
+client is in this repository would have been two published shapes of one fact, which is the cost
+the rule exists to avoid rather than an instance of paying it. If either condition changes — a
+client outside this repository, or a field that has been published long enough to be relied on —
+the answer becomes a `v2` and this paragraph is the record of why it was not one here.
 
 The service generalizes the same way. `ExperimentReplayService` becomes
 `ExperimentDerivationService` with `replay` and `fork` over one private `_derive`, because every
@@ -131,9 +148,17 @@ A fork goes through `start`, so it meets the same gate a hand-started experiment
 tone override resolved against the shop the scenario pinned, the closure that disagrees with
 itself, the faults this build can actually inject, and the dimensions the fork's own two arms
 differ along. All of those are questions about published versions and about this process, and
-all of them are as true of a derived run as of a first one. The gate is where a fork onto an
-unpublished version, or onto a configuration whose tone override the shop does not publish, is
-refused.
+all of them are as true of a derived run as of a first one. The gate is where a fork onto a
+configuration whose tone override the target shop does not publish is refused, as a finding.
+
+A fork onto a version *nobody published* is refused earlier and differently: resolving the arms
+happens in `_selected` before the gate runs, and an unresolvable arm raises the configuration's
+own not-found error, which the API answers **404** rather than 422 — the same status
+`startExperiment` answers for an arm it cannot resolve, and for the reason ADR 0024 gave when it
+refused an unknown identity with the identity's own error: a caller has to be able to tell a
+stale arm from a stale experiment. The fork route's `422` description says what the gate and the
+reuse refuse; the `404` says what cannot be resolved, and a contract test pins both so the two
+cannot drift apart again.
 
 What that gate cannot see is the comparison this outcome is named for. It counts the dimensions
 along which an experiment's *two arms* differ — which for a fork is largely the count its
@@ -223,11 +248,22 @@ is what lets the row refuse to offer a derivation that would change nothing.
   Argued above. The first two would need a second snapshot and would make the derivation a
   different world; the third would make it a different conversation.
 - **A preview of a fork.** The setup screen's `previewExperiment` already judges an arbitrary
-  arm set against the gate, and a fork could call it. It does not, because the answer it would
-  give is about the fork's own two arms and the panel's operator is choosing against the
-  *source* — so the useful half would be missing and the misleading half would be prominent.
-  What the operator needs before committing is on the screen already: what each arm ran, and
-  what they are moving it to.
+  arm set against the gate, and the fork panel could call it before submitting. It does not, and
+  the honest statement of the cost is that the operator gets no warning *before* committing when
+  the versions they picked would turn a one-variable source into a two-variable experiment —
+  because the payloads of the versions being moved to are not on the screen, so nothing the panel
+  holds can work that out on its own.
+
+  What makes that acceptable is where the two warnings land. Both are on the screen the fork
+  navigates to and neither had to be built for it: the derivation's own difference set is beside
+  the run it names, and ADR 0025's comparison count over the derived run's *own* arms is in the
+  provenance chip strip the results screen has drawn since ADR 0033 — so a fork that produced two
+  differences says "2 differences — no behavior here can be attributed to any one of them" on
+  arrival, and a test pins that. And the thing being warned about is cheap to have done: a
+  derivation is a new record, the source is untouched, and the answer to a fork that moved two
+  things is to fork the source again moving one. A pre-commit preview would turn every panel
+  interaction into a round trip to buy a warning the operator sees a second later anyway; it is
+  worth adding the day the derived run is expensive enough that arriving at it is a cost.
 - **Refusing a fork that moves more than one dimension.** A warning, as the gate's own is.
 - **Showing an experiment what has been derived from it.** Still nothing asks the question from
   that end, so there is still no listing and no index on the source column (ADR 0038). Both are
@@ -258,36 +294,43 @@ is what lets the row refuse to offer a derivation that would change nothing.
   fork naming the wrong number of arms, a fork onto a version nobody published, the experiment of
   another shop, and a starting state frozen against a tool contract set this build no longer
   publishes — driven from the fork side, because "it comes free from the shared path" is a claim
-  that has to be checkable. And the chains: a fork of a replay naming the replay and still
-  carrying the first run's sandbox fingerprint, a fork of a fork whose difference set is against
-  its immediate source rather than the head of the chain, one run forked twice as two
-  experiments, and the derived run in the shop's listing.
+  that has to be checkable. And the chains, in all three directions: a fork of a replay naming the
+  replay and still carrying the first run's sandbox fingerprint, a fork of a fork whose difference
+  set is against its immediate source rather than the head of the chain, a replay of a fork
+  reproducing the fork's *moved* arms and reporting that it moved nothing itself, one run forked
+  twice as two experiments, and the derived run in the shop's listing.
 - Contract tests (`test_experiment_api.py`) drive the operation: the 201 carrying a new
   experiment with the source's snapshot and fingerprint, the arm labels, the chosen versions and a
   `derived_from` naming the kind and the dimension it changed; the recorded script re-run on the
   forked arm with the other arm left where it was; the fork that changes nothing answered 422
   naming the replay; the wrong number of arms answered 422; the source unchanged with the derived
   row in history carrying `fork` beside a source whose own origin is null and whose arm reports
-  the newer version there is to fork onto; and the experiment of another shop answered 404.
-- A migration test (`test_migrations.py`) covers both halves of the generalization: a derivation
+  the newer version there is to fork onto; the experiment of another shop answered 404; and an arm
+  naming a version — or a configuration — this lab never published answered 404 with the
+  configuration's own error code, which is what pins the route's two documented statuses to what
+  it actually does.
+- Migration tests (`test_migrations.py`) cover both halves of the generalization: a derivation
   recorded before this slice carried over as a `replay`, and the new table holding to what the
-  service cannot produce — an experiment derived twice, an experiment derived from itself, and
-  either end naming an experiment this lab never ran, over the engine the application actually
-  uses so both foreign keys are live.
+  service cannot produce — a kind outside the vocabulary, an experiment derived twice, an
+  experiment derived from itself, and either end naming an experiment this lab never ran, over the
+  engine the application actually uses so both foreign keys are live. And the downgrade both ways:
+  refused while a fork is stored, and carrying the replays back whole once it is not.
 - Frontend tests (`Experiments.test.tsx`, `History.test.tsx`) cover the surfaces: the results
   header forking onto the version an operator chose and opening what it produced, with the request
   carrying one arm per arm of the source and only the chosen one moved; the submit disabled and no
-  request made where nothing has moved; a derived run naming its source, the kind, and the
-  dimension it changed; the history row forking every arm onto its newest published version and
-  leaving the listing for the evidence; and the row offering no fork where every arm already runs
-  the newest.
+  request made where nothing has moved; the panel closed once it has derived, so the run it lands
+  on does not inherit a draft written against the run before it; the configuration library
+  reported as unreadable rather than offered as an empty picker; a derived run naming its source,
+  the kind, and the dimension it changed, *and* warning that its own two arms now differ two ways;
+  the history row forking every arm onto its newest published version and leaving the listing for
+  the evidence; and the row offering no fork where every arm already runs the newest.
 - The Playwright journey (`experiment-start.spec.ts`) is extended rather than duplicated, as every
   slice since ADR 0026 has been: having replayed the incident and read that it reached the same
   place, the operator suspects the prompt, opens `Fork…`, finds it refuses to derive until
   something moves, moves the arm that missed the read-check onto the configuration the other arm
   ran, and reads the derived run naming the run it came from, the one dimension it changed, and
-  the same two standings the script left — then follows the link back to a source that has not
-  moved.
+  the same two standings the script left, with the panel closed behind it — then follows the link
+  back to a source that has not moved.
 - No new live-model test. A fork makes exactly the model calls an advance makes, and this journey
   runs the declared control runtime.
 
@@ -298,6 +341,19 @@ into it as a `replay`, and drops the old table. Built and filled rather than alt
 SQLite rewrites a table to add a constraint anyway, and both the table and its check constraint
 are renamed here, so a batch alter would have left the old names on the new shape. The kind is
 filled in rather than defaulted — the only operation that could have written one of those rows
-was the replay, so the migration knows what it is looking at. The downgrade rebuilds the old
-table from the `replay` rows and drops the forks, which have no shape in the schema it returns to
-and are not rewritten as a derivation they never were.
+was the replay, so the migration knows what it is looking at.
+
+`kind` carries a CHECK for its closed vocabulary, as `participant_driver` and the span kind
+already do. It is written in *this* migration rather than a later one deliberately: SQLite
+rebuilds a table to add a constraint, so a table this migration is already building is the one
+cheap moment to constrain it. And the constraint is not tidiness — a value outside the vocabulary
+raises on the way back to a `DerivationKind`, which would take out both the derived run's own
+screen and the cross-shop history that projects every experiment in the lab through the same
+reading.
+
+The downgrade **refuses** when the store holds a fork, rather than dropping the rows: the schema
+it returns to has no shape for one, and the rule the generated-scenario migration set (ADR 0003)
+is that a downgrade which cannot represent its data says so. ADR 0038's own downgrade simply
+dropped the table it had created, which was lossless at the time because nothing had been written
+through it yet; that is not the situation here, so the older precedent is the one this follows.
+A replay-only store downgrades and comes back whole, and a test drives both halves.
