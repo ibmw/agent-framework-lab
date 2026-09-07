@@ -1281,7 +1281,14 @@ class ExperimentRoutes:
     def register(self, router: APIRouter) -> None:
         dependency = Depends(self._service)
         runner_dependency = Depends(self._runner)
-        replay_dependency = Depends(self._replays)
+        # The one write dependency in this router that is asked for `scope="function"`.
+        # A replay holds the longest write transaction the lab opens — it starts an
+        # experiment and then drives every turn of a recorded script — and a `yield`
+        # dependency left on the request stack commits *after* the response has gone out, so
+        # a store that refused the commit would leave the client holding a 201 for an
+        # experiment nothing can read. Ending it around the path operation instead makes the
+        # commit part of what the status code reports.
+        replay_dependency = Depends(self._replays, scope="function")
         timeline_dependency = Depends(self._timeline)
         traces_dependency = Depends(self._traces)
         evaluation_dependency = Depends(self._evaluation)

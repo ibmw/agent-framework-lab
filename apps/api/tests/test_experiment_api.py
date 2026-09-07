@@ -1,6 +1,7 @@
 """Public contract for starting an experiment, reading it, and driving its arms."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -8,6 +9,8 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session, sessionmaker
 
 from api_factories import (
     api_client,
@@ -22,6 +25,7 @@ from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
 from capability_lab.application.judge_runs import ExperimentJudgeService
 from capability_lab.application.judge_runtime import JudgeRuntimeRegistry
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
+from capability_lab.presentation import api as api_module
 
 SEED = 20260825
 CONFIGURATIONS = "/api/v1/agent-configurations"
@@ -1521,3 +1525,33 @@ async def test_an_experiment_of_another_shop_cannot_be_replayed(
 
     assert response.status_code == 404, response.text
     assert response.json()["code"] == "experiment_not_found"
+
+
+async def test_a_replay_whose_store_refuses_the_commit_never_answers_created(
+    client: AsyncClient, lab: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 201 has to be a claim about what was stored, not about what was attempted.
+
+    A `yield` dependency left on the request stack commits after the response is on the
+    wire, so a refused commit would leave the caller holding an identifier for an experiment
+    nothing can read. This route's dependency ends around the path operation, so the failure
+    is the answer."""
+    experiment = await control_experiment(client, lab)
+    listed = f"/api/v1/shops/{lab['shop_id']}/experiments"
+    before = len((await client.get(listed)).json()["experiments"])
+
+    @contextmanager
+    def refusing_commit(factory: sessionmaker[Session]) -> Generator[Session]:
+        with factory() as session:
+            yield session
+            session.rollback()
+            raise OperationalError("COMMIT", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(api_module, "session_scope", refusing_commit)
+    response = await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/replays"
+    )
+    monkeypatch.undo()
+
+    assert response.status_code == 500, response.text
+    assert len((await client.get(listed)).json()["experiments"]) == before
