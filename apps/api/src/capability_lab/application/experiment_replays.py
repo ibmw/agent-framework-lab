@@ -4,7 +4,7 @@ An experiment is immutable and everything about it is in the record (ADR 0025, A
 so replaying one cannot mean running it again. It means **deriving a new experiment** that
 is honest about where it came from and that starts from exactly what the original pinned.
 
-Four decisions shape it.
+Five decisions shape it.
 
 **The starting state is reused, never re-frozen.** Materializing a snapshot copies the
 shop's order fixtures as they read *now* and re-runs the publish gate against them

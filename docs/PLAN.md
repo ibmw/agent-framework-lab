@@ -1,6 +1,6 @@
 # Project plan
 
-Status: current redesign roadmap — 2026-09-07
+Status: current redesign roadmap — 2026-09-08
 
 ## Purpose and authority
 
@@ -90,9 +90,12 @@ field by field, which is the half of "verified, not claimed" a revision counter 
 (ADR 0035), then the first thing about a run that the run did not produce: the notes an
 operator writes on it and the shelves they file it under, stored beside the experiment so
 annotating one cannot move the fingerprints it pinned, and offered back as a column, a filter, and
-a search over words the listing never shows (ADR 0036), and finally the one reading of a run that
+a search over words the listing never shows (ADR 0036), then the one reading of a run that
 is stored rather than projected: the span tree each advance records, because where inside an
-attempt each of its calls ran is gone the moment the advance returns (ADR 0037).
+attempt each of its calls ran is gone the moment the advance returns (ADR 0037), and then the
+first operation that does not read an experiment but derives one: a replay, which starts in the
+world its source started in and is driven by the compositions that source recorded, because an
+immutable record leaves no other way to run an incident twice (ADR 0038).
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -645,14 +648,18 @@ Turn completed runs into durable, searchable comparison evidence.
 - [x] Preserve the notes and tags an operator writes on a run. Split from the outcome above
   because a diff is a reading of state the lab already holds, while a note is what a person
   concluded and is stored beside the record rather than in it (ADR 0036).
-- [ ] Preserve traces, replay, and fork provenance. Three slices, not one, and the first has
-  landed: traces are the spans the lab now records beside the record (ADR 0037). Replay and
-  fork remain, and derive new experiments from old ones rather than reading one.
+- [ ] Preserve traces, replay, and fork provenance. Three slices, not one, and two have
+  landed: traces are the spans the lab now records beside the record (ADR 0037), and a replay
+  derives a new experiment that starts in the world its source started in and is driven by the
+  compositions that source recorded (ADR 0038). Fork remains: it derives a new experiment too,
+  and it is the one that deliberately moves the pinned versions forward.
 - [ ] Test judge failure/rerun separately from deterministic outcome calculation.
 
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
 tab, and 10 · History; frame 9's notes-and-tags strip and frame 10's tag filter arrived with the
-annotation outcome (ADR 0036), and frame 9b with the traces outcome (ADR 0037). 9a · Execution
+annotation outcome (ADR 0036), frame 9b with the traces outcome (ADR 0037), and frame 9's Replay
+header action and frame 10's replay quick action with the replay outcome — frame 9's `Fork…`
+waits for the slice it names (ADR 0038). 9a · Execution
 timeline and 9c's source locations arrived with
 Milestone 4's fifth outcome (ADR 0027) and are extended here rather than built again — frame 9's
 General tab and the depth-tab shell the others will hang from arrived with the comparison outcome
@@ -740,6 +747,31 @@ wider than the framework's turn because the lab's own resolution is not a framew
 the exported allowlist that carries an arm's position rather than the name an operator gave
 it, and the tracer that mints real OpenTelemetry identities after the fact so the runner
 holds no SDK type.
+
+Replay evidence (frame 9's header, and frame 10's quick actions): an operator who has read
+both arms replays the run, and reads a *new* experiment that reached the same place — because
+an experiment is immutable and everything about it is in the record, so reproducing one can
+only mean deriving another. It starts in the world the first one started in rather than in
+the world the shop is in today: the snapshot the source froze, cloned again, so the derived
+arms carry the same starting-state fingerprint however far the shop's orders have moved since
+— and a run whose order was deleted afterwards is still replayable, where freezing the recipe
+again would be refused outright. Each arm runs the configuration version its arm ran, not the
+one published since; taking a newer one is the fork this outcome still owes. Nobody is at the
+composer, and nobody needs to be: the customer's own compositions are the script, delivered to
+the same arms at the same depths, with each arm advanced as often as it was advanced then — so
+the linked send stays one composition, the arm-only send stays one arm's, and the turn the
+operator moved on from is skipped again. The derived run says a script drove it, which moves
+the fingerprint that names its inputs and not the one that names its world. Nothing about the
+run it replays changes, and it is in history as itself, naming what it came from. ADR 0038
+records the replay as a derivation rather than a re-run and why the record's immutability
+leaves no other reading, the starting state reused by fingerprint rather than frozen again and
+the two cases that decide it, the recorded compositions as the script and the trigger
+deliberately left out of it, the composition order reconstructed from the ordinals rather than
+from a clock ADR 0027 already refused to trust, the advance count that is self-limiting
+because advancing is idempotent over an answer, the scripted participant driver ADR 0025 said
+would arrive with its first caller, the honest limit that a deterministic runtime replays
+exactly and a model-backed one does not, and the derivation stored beside two experiments
+because it is part of neither.
 
 History evidence (frame 10): an operator who has driven an incident to its end leaves the shop
 they ran it in and finds it again in the lab's own listing — every run this lab has made, whichever

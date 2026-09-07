@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target architecture with an implemented POC baseline — 2026-09-07
+Status: target architecture with an implemented POC baseline — 2026-09-08
 
 Read `docs/product-direction.md` first. This document distinguishes principles that remain binding,
 the code that exists today, and the target boundaries that future slices must establish. Do not
@@ -354,6 +354,23 @@ one measurement handed to both the record and the trace rather than taken twice,
 are real OpenTelemetry spans opened after the fact from those measurements, so the runner
 holds no SDK type and an exporter sees exactly the tree that was stored (ADR 0037).
 
+What none of those readings can do is produce a *second* run of the same incident, and an
+experiment nothing may update leaves only one way to: a **replay** derives a new experiment
+from an old one. It clones the snapshot its source froze rather than freezing the recipe again
+— materializing copies the shop's order fixtures as they read now and re-runs the publish gate
+against them (ADR 0019), so re-freezing after an order moved is different starting state and
+after an order was deleted is no starting state at all — and it pins each arm to the exact
+configuration version that arm ran, because taking a newer one is a fork rather than a replay.
+What drives it is the source's own recorded compositions: the same words, to the same arms, at
+the same depths, with each arm advanced as often as it was advanced then, delivered through the
+scripted participant driver the port has had a type for since ADR 0025. So the derived run
+records `scripted`, which moves the fingerprint that says which inputs ran and not the one that
+says which world they ran in. A deterministic runtime replays it call for call and a
+model-backed one does not, which is a property of the runtime rather than of the replay: what
+the lab guarantees is the input. The derivation is stored in `experiment_replays` beside both
+experiments — it is part of neither run's inputs, and a runtime identifier does not belong in
+fingerprinted bytes (ADR 0038).
+
 The one thing on those surfaces that is neither a record of the run nor a reading of one is what
 an operator concluded about it. Notes and tags are stored in `experiment_notes` and
 `experiment_tags` beside an experiment nothing updates, so annotating a run cannot move the
@@ -392,7 +409,8 @@ columns — an attempt's duration and provider usage, a call's duration — null
 lab did not measure this" is a real state and a zero would be counted into a total (ADR 0032).
 The spans of each attempt live in `experiment_run_spans`, keyed by the arm and the span id and
 holding identifiers, a kind, an offset, and a duration — and nothing that could carry content
-(ADR 0037). What an operator writes afterwards is stored beside all of it rather than in it:
+(ADR 0037). That one experiment was derived from another is `experiment_replays`, keyed by the
+derived one because it is derived by the single act that created it (ADR 0038). What an operator writes afterwards is stored beside all of it rather than in it:
 `experiment_notes` is append-only, and `experiment_tags` is keyed by the run and the folded tag so
 the set is a set rather than a rule the writer has to remember (ADR 0036). Experiments and judge
 executions are append-oriented historical evidence. Operational sandbox state is mutable only
