@@ -579,15 +579,20 @@ function HistoryRow({
             className="text-left text-lab-ink underline-offset-2 hover:underline disabled:text-admin-muted disabled:no-underline"
             type="button"
             disabled={deriving || !newer}
-            title={
-              newer
-                ? undefined
-                : "Every arm already runs the newest published version of its configuration."
-            }
+            // Described rather than titled: a browser does not reliably show a `title` on a
+            // disabled control, so the reason a row cannot be forked is real text that a
+            // screen reader announces with the button.
+            aria-describedby={newer ? undefined : `${experiment.experiment_id}-fork-reason`}
             onClick={() => onFork(experiment)}
           >
             {deriving ? "Deriving…" : "Fork with newer versions"}
           </button>
+          {newer ? null : (
+            <span id={`${experiment.experiment_id}-fork-reason`} className="sr-only">
+              Every arm already runs the newest published version of its configuration, and a
+              derivation that changes nothing is a replay.
+            </span>
+          )}
         </div>
       </td>
     </tr>

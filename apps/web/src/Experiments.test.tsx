@@ -590,6 +590,17 @@ function forkedExperiment(): ExperimentResponse {
       kind: "fork" as const,
       changed: ["prompt"],
     },
+    // The fork moved one arm's prompt, and the arms it produced now differ along two
+    // dimensions rather than the one their source differed along.
+    comparison: [
+      variable("framework", ["fake", "fake"]),
+      variable("architecture", ["single_agent", "single_agent"]),
+      variable("model", ["fake/deterministic", "fake/warmer"]),
+      variable("prompt", ["You are support.", "Read the policy first."]),
+      variable("tools", ["orders.read_order", "orders.read_order"]),
+      variable("support_identity", ["frontline", "frontline"]),
+      variable("tone_of_voice", ["shop_default", "shop_default"]),
+    ],
   };
 }
 
@@ -2102,6 +2113,63 @@ describe("replay", () => {
     });
     expect(back).toHaveAttribute("href", `/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`);
     expect(await screen.findByText(/fork of/)).toHaveTextContent("changed prompt");
+  });
+
+  it("warns on the derived screen when a fork left its own arms differing two ways", async () => {
+    // Two comparisons, and both belong here. `changed` is the derivation's — what this fork
+    // moved from the run it came from — and the chip strip is ADR 0025's, over the arms this
+    // experiment actually holds. A fork is the operation most likely to turn a one-variable
+    // source into a two-variable run, and the screen it lands on has to say so.
+    render(
+      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${FORK_ID}/results`]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(
+        /2 differences — no behavior here can be attributed to any one of them/,
+      ),
+    ).toBeVisible();
+  });
+
+  it("closes the fork panel once it has derived, so the next run opens clean", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+    await user.selectOptions(within(panel).getAllByLabelText("Published version")[1], "2");
+    await user.click(within(panel).getByRole("button", { name: "Fork this run" }));
+    await screen.findByRole("heading", { name: "Wrong address — framework comparison (fork)" });
+
+    // The panel belonged to the run it was opened on. Left open it would sit over a
+    // different experiment with a draft written against the previous one.
+    expect(screen.queryByRole("region", { name: "Fork this experiment" })).toBeNull();
+  });
+
+  it("says the configurations could not be read rather than offering an empty picker", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json(
+          {
+            code: "internal_error",
+            message: "the configuration library is unavailable",
+            request_id: "req-11",
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+
+    expect(await within(panel).findByRole("alert")).toHaveTextContent(
+      "the configuration library is unavailable",
+    );
   });
 
   it("offers no composer on a run a script drove, because a person cannot drive it", async () => {

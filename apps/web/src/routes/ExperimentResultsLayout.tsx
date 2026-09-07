@@ -34,6 +34,9 @@ import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
 
+/** Named so the header's `Fork…` can say which region it expands (`aria-controls`). */
+const FORK_PANEL_ID = "fork-experiment-panel";
+
 /**
  * What every results tab is handed, so no two of them read the experiment differently.
  *
@@ -145,6 +148,16 @@ export function ExperimentResultsLayout() {
 
   useEffect(() => {
     const controller = new AbortController();
+    // Cleared before the next read rather than left showing the previous run. This element
+    // stays mounted across a navigation between two experiments — deriving one lands here,
+    // and so does following a derived run's provenance link back — so a screen that kept its
+    // state would show one run's header over another run's evidence until the fetch landed,
+    // and would leave the fork panel open on a draft written against the run before it.
+    setExperiment(null);
+    setEvaluation(null);
+    setAnnotations(null);
+    setForking(false);
+    setError(null);
     load(controller.signal).catch((cause: unknown) => {
       if (!controller.signal.aborted) {
         setError(describeApiError(cause, UNAVAILABLE));
@@ -200,6 +213,7 @@ export function ExperimentResultsLayout() {
               className={subtleButtonClasses}
               type="button"
               aria-expanded={forking}
+              aria-controls={FORK_PANEL_ID}
               onClick={() => setForking((open) => !open)}
             >
               Fork…
@@ -309,6 +323,10 @@ function ForkPanel({
   onFork: (arms: { configuration_id: string; version: number }[]) => void;
 }) {
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
+  // What the panel could not read. Reported rather than swallowed, as the setup screen
+  // reports it: an empty picker with no message reads as "there is nothing to fork onto",
+  // which is a claim about the lab rather than about a request that failed.
+  const [unreadable, setUnreadable] = useState<string | null>(null);
   const [chosen, setChosen] = useState<ForkDraft[]>(() =>
     experiment.runs.map((run) => ({
       configurationId: run.agent_configuration_id,
@@ -319,8 +337,15 @@ function ForkPanel({
   useEffect(() => {
     const controller = new AbortController();
     listAgentConfigurations(controller.signal)
-      .then((listed) => setConfigurations(listed.configurations))
-      .catch(() => setConfigurations([]));
+      .then((listed) => {
+        setConfigurations(listed.configurations);
+        setUnreadable(null);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setUnreadable(describeApiError(cause, "The agent configurations are unavailable."));
+        }
+      });
     return () => controller.abort();
   }, []);
 
@@ -332,9 +357,15 @@ function ForkPanel({
 
   return (
     <section
+      id={FORK_PANEL_ID}
       aria-label="Fork this experiment"
       className="mb-4 grid gap-3 rounded-lg border border-admin-border bg-admin-surface px-4 py-3"
     >
+      {unreadable ? (
+        <p role="alert" className="text-[13px] text-lab-error">
+          {unreadable}
+        </p>
+      ) : null}
       <p className="text-xs text-admin-muted">
         A fork runs this incident again in the world it started in, driven by the turns it recorded,
         with the arms you choose here. Change at least one — a derivation that changes nothing is a
@@ -346,6 +377,7 @@ function ForkPanel({
           run={run}
           configurations={configurations}
           arm={chosen[position]}
+          onUnreadable={setUnreadable}
           onChange={(next) =>
             setChosen((current) =>
               current.map((entry, index) => (index === position ? next : entry)),
@@ -385,11 +417,13 @@ function ForkArmPicker({
   run,
   configurations,
   arm,
+  onUnreadable,
   onChange,
 }: {
   run: ExperimentRunSchema;
   configurations: AgentConfigurationSummarySchema[];
   arm: ForkDraft;
+  onUnreadable: (message: string) => void;
   onChange: (next: ForkDraft) => void;
 }) {
   const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
@@ -398,9 +432,15 @@ function ForkArmPicker({
     const controller = new AbortController();
     listAgentConfigurationVersions(arm.configurationId, controller.signal)
       .then((listed) => setVersions(listed.versions))
-      .catch(() => setVersions([]));
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          // Reported into the panel's one alert rather than beside each picker: an operator
+          // whose lab is unreachable is reading one message, not one per arm.
+          onUnreadable(describeApiError(cause, "This configuration's versions are unavailable."));
+        }
+      });
     return () => controller.abort();
-  }, [arm.configurationId]);
+  }, [arm.configurationId, onUnreadable]);
 
   return (
     <fieldset className="grid gap-2 rounded-lg border border-admin-border p-3">

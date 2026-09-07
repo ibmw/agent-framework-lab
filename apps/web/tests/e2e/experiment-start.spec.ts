@@ -777,6 +777,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(
     page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique} (fork)` }),
   ).toBeVisible();
+  // The panel belonged to the run it was opened on: left open it would sit over a different
+  // experiment holding a draft written against the previous one.
+  await expect(forkPanel).toHaveCount(0);
   // The provenance names the run it came from and the one dimension it moved, which is what
   // makes "the thing it changed is the only thing that changed" a claim anyone can check.
   await expect(page.getByText("· changed prompt")).toBeVisible();
