@@ -56,8 +56,9 @@ def upgrade() -> None:
     op.create_index(
         "ix_run_spans_experiment", "experiment_run_spans", ["experiment_id", "created_at"]
     )
-    # One attempt's spans in the order they started, which is the order a waterfall draws
-    # them and the only order this table is ever read in.
+    # Narrows to one attempt's spans, which is the only way this table is ever read. The
+    # offset trails so a scan comes back stably; which span is listed before which is the
+    # projection's to decide, from the coordinates the calls are numbered by.
     op.create_index(
         "ix_run_spans_attempt",
         "experiment_run_spans",

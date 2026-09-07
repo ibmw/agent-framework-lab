@@ -2,7 +2,7 @@
 
 from collections.abc import Generator, Mapping
 from dataclasses import fields
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from uuid import uuid4
@@ -38,6 +38,7 @@ from capability_lab.application.experiments import (
     StartExperiment,
 )
 from capability_lab.application.model_cost import ModelUsage
+from capability_lab.application.ports import Clock
 from capability_lab.application.sandbox_tool_contracts import (
     ADDRESS_CHANGE_APPLY,
     ADDRESS_CHANGE_PROPOSE,
@@ -117,9 +118,10 @@ async def advance(
     position: int = 0,
     runtimes: SupportAgentRuntimeRegistry | None = None,
     handlers: Mapping[str, ToolHandler] | None = None,
+    clock: Clock | None = None,
 ) -> None:
     run = detail.runs[position]
-    runner = build_runner(session, runtimes, handlers)
+    runner = build_runner(session, runtimes, handlers, clock)
     await runner.advance(run.shop_id, run.experiment_id, run.run_id)
 
 
@@ -199,6 +201,28 @@ async def test_a_call_says_where_inside_the_attempt_it_ran(
     # between two calls is the framework deciding what to ask next.
     for before, after in pairwise(calls):
         assert before.started_offset_ms + before.duration_ms < after.started_offset_ms
+
+
+@pytest.mark.asyncio
+async def test_the_calls_are_listed_in_the_order_the_agent_asked_not_the_order_of_the_clock(
+    session: Session, workspace: Workspace
+) -> None:
+    """The offset draws a bar; it never decides which row comes first.
+
+    An operational clock can be stepped backwards under a running process (ADR 0032), which
+    leaves every offset clamped at zero and, if this sorted by them, a later call listed
+    above an earlier one — while the timeline beside it, ordered by the sequence the agent
+    asked in, listed the opposite. One record cannot say two things about one attempt.
+    """
+    detail = start(session, workspace, control_arm(session))
+
+    await advance(session, detail, clock=_RetreatingClock())
+
+    (trace,) = traces(session, detail)
+    calls = [span for span in trace.spans if span.kind is SpanKind.TOOL]
+    assert [span.started_offset_ms for span in calls] == [0] * len(calls)
+    assert [span.sequence for span in calls] == list(range(len(calls)))
+    assert [span.kind for span in trace.spans[:2]] == [SpanKind.ATTEMPT, SpanKind.RUNTIME]
 
 
 @pytest.mark.asyncio
@@ -315,6 +339,24 @@ async def test_the_arm_beside_it_records_nothing(session: Session, workspace: Wo
 
     recorded = traces(session, detail)
     assert [trace.run_id for trace in recorded] == [detail.runs[0].run_id]
+
+
+@pytest.mark.asyncio
+async def test_each_arm_is_traced_on_its_own_advances(
+    session: Session, workspace: Workspace
+) -> None:
+    """Two arms driven to the same place hold two traces, and neither borrows the other's."""
+    detail = start(session, workspace, control_arm(session), control_arm(session))
+
+    await advance(session, detail, 0)
+    await advance(session, detail, 1)
+
+    first, second = traces(session, detail)
+    assert (first.run_id, second.run_id) == (detail.runs[0].run_id, detail.runs[1].run_id)
+    assert (first.arm_label, second.arm_label) == (detail.runs[0].label, detail.runs[1].label)
+    assert first.trace_id != second.trace_id
+    assert {span.span_id for span in first.spans}.isdisjoint(span.span_id for span in second.spans)
+    assert [span.kind for span in first.spans] == [span.kind for span in second.spans]
 
 
 @pytest.mark.asyncio
@@ -448,24 +490,16 @@ def test_an_exported_span_carries_only_the_lab_s_own_pseudonymized_vocabulary() 
         AttemptTraceDraft(
             run_id=run_id,
             experiment_id=experiment_id,
-            arm_label="A",
+            arm_position=0,
             framework_id=FAKE_FRAMEWORK_ID,
             ordinal=0,
             attempt=1,
             started_at=_EPOCH,
             spans=(
-                SpanDraft(
-                    kind=SpanKind.ATTEMPT, label="attempt", started_offset_ms=0, duration_ms=40
-                ),
-                SpanDraft(
-                    kind=SpanKind.RUNTIME,
-                    label=FAKE_FRAMEWORK_ID,
-                    started_offset_ms=5,
-                    duration_ms=30,
-                ),
+                SpanDraft(kind=SpanKind.ATTEMPT, started_offset_ms=0, duration_ms=40),
+                SpanDraft(kind=SpanKind.RUNTIME, started_offset_ms=5, duration_ms=30),
                 SpanDraft(
                     kind=SpanKind.TOOL,
-                    label=INTERACTION_CONTEXT,
                     started_offset_ms=10,
                     duration_ms=4,
                     sequence=0,
@@ -484,15 +518,15 @@ def test_an_exported_span_carries_only_the_lab_s_own_pseudonymized_vocabulary() 
     ]
     attributes = dict(exported[0].attributes or {})
     assert attributes["lab.run.id"] == telemetry.pseudonymize(str(run_id))
+    assert attributes["lab.arm.position"] == 0
     assert str(run_id) not in str(attributes)
     assert attributes["tool.name"] == INTERACTION_CONTEXT
     assert attributes["agent.framework.id"] == FAKE_FRAMEWORK_ID
     assert set(attributes) <= {
         "lab.experiment.id",
         "lab.run.id",
-        "lab.arm.label",
+        "lab.arm.position",
         "lab.turn.ordinal",
-        "lab.span.label",
         "agent.attempt",
         "agent.framework.id",
         "tool.sequence",
@@ -514,16 +548,12 @@ def test_an_exported_span_lasts_exactly_as_long_as_the_runner_measured() -> None
         AttemptTraceDraft(
             run_id=uuid4(),
             experiment_id=uuid4(),
-            arm_label="A",
+            arm_position=0,
             framework_id=FAKE_FRAMEWORK_ID,
             ordinal=0,
             attempt=1,
             started_at=_EPOCH,
-            spans=(
-                SpanDraft(
-                    kind=SpanKind.ATTEMPT, label="attempt", started_offset_ms=0, duration_ms=40
-                ),
-            ),
+            spans=(SpanDraft(kind=SpanKind.ATTEMPT, started_offset_ms=0, duration_ms=40),),
         )
     )
 
@@ -572,3 +602,14 @@ class _CallingRuntime(_StubRuntime):
 class _FailingRuntime(_StubRuntime):
     async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         raise SupportAgentProviderError("the provider rejected the request")
+
+
+class _RetreatingClock:
+    """A wall clock stepped backwards between reads, which NTP can genuinely do."""
+
+    def __init__(self) -> None:
+        self._value = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+
+    def now(self) -> datetime:
+        self._value -= timedelta(seconds=1)
+        return self._value

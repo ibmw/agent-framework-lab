@@ -692,6 +692,9 @@ class RunSpanModel(Base):
             "(kind = 'attempt') = (parent_span_id IS NULL)", name="ck_run_spans_one_root"
         ),
         Index("ix_run_spans_experiment", "experiment_id", "created_at"),
+        # Narrows to one attempt's spans, which is the only way this table is ever read. The
+        # offset is the trailing column so a scan comes back in a stable order; it is not the
+        # order the spans are listed in, which the projection decides from their coordinates.
         Index("ix_run_spans_attempt", "run_id", "ordinal", "attempt", "started_offset_ms"),
     )
 

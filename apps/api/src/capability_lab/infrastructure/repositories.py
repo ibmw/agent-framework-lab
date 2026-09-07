@@ -2218,11 +2218,13 @@ class SqlAlchemyRunSpanRepository:
         models = self._session.scalars(
             select(RunSpanModel)
             .where(RunSpanModel.experiment_id == str(experiment_id))
+            # A stable read order and nothing more: which span comes before which inside one
+            # attempt is the projection's to decide, from the coordinates the agent's own
+            # calls are numbered by rather than from a clock that can be stepped backwards.
             .order_by(
                 RunSpanModel.run_id,
                 RunSpanModel.ordinal,
                 RunSpanModel.attempt,
-                RunSpanModel.started_offset_ms,
                 RunSpanModel.span_id,
             )
         ).all()

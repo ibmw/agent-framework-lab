@@ -174,14 +174,16 @@ class RunSpanRepository(Protocol):
 class SpanDraft:
     """One span the runner measured, before anything has given it an identity.
 
-    `label`, `tool`, and `tool_version` exist for the **exporter** and are deliberately not
-    stored: a span reaching Phoenix needs a name, and a lab-published tool name is the only
-    kind of word that may be one. The stored row joins for the same facts instead, so the
-    two views of one execution cannot drift into naming a call differently.
+    `tool` and `tool_version` exist for the **exporter** and are deliberately not stored: a
+    span reaching Phoenix needs to say which published tool it timed, and the stored row
+    joins for the same fact instead — so the two views of one execution cannot drift into
+    naming a call differently.
+
+    There is no free-text label. A span's name is decided from its kind by the tracer, and
+    the only other word an exported span carries is a tool name the lab itself publishes.
     """
 
     kind: SpanKind
-    label: str
     started_offset_ms: int
     duration_ms: int
     sequence: int | None = None
@@ -200,12 +202,17 @@ class AttemptTraceDraft:
 
     run_id: UUID
     experiment_id: UUID
-    arm_label: str
+    arm_position: int
     framework_id: str
     ordinal: int
     attempt: int
     started_at: datetime
     spans: tuple[SpanDraft, ...]
+    """Outermost first, with the runtime span ahead of every call it contains.
+
+    A tracer parents each span on the last one above it, so this order is part of the port
+    rather than a habit of the caller: a draft listing a call before the runtime span would
+    hang it off the root and record a tree the attempt did not have."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -352,10 +359,14 @@ def _events_by_attempt(
 def _spans_by_attempt(
     spans: tuple[RunSpanRecord, ...],
 ) -> dict[tuple[UUID, int, int], tuple[str, tuple[RunSpan, ...]]]:
-    """One attempt's spans, ordered by when they started rather than by how they were read.
+    """One attempt's spans, ordered by the record's own coordinates and never by the clock.
 
-    The tie-break on kind keeps the root above the runtime span it contains when the lab's
-    own resolution took under a millisecond, which on a warm process it usually does.
+    The offset says where a bar is drawn and decides nothing about the order the rows are
+    listed in. That is ADR 0027's rule, and it has teeth here: an operational clock can be
+    stepped backwards under a running process — the case `_elapsed_ms` clamps at zero for —
+    and a trace sorted by the offset would then list a later call above an earlier one while
+    the timeline beside it listed the opposite. The sequence is what the agent asked in, so
+    the sequence is what this lists in.
     """
     grouped: dict[tuple[UUID, int, int], list[RunSpanRecord]] = {}
     for record in spans:
@@ -368,9 +379,9 @@ def _spans_by_attempt(
     return ordered
 
 
-def _span_key(span: RunSpan) -> tuple[int, int, int]:
+def _span_key(span: RunSpan) -> tuple[int, int]:
     depth = {SpanKind.ATTEMPT: 0, SpanKind.RUNTIME: 1, SpanKind.TOOL: 2}[span.kind]
-    return (span.started_offset_ms, depth, span.sequence if span.sequence is not None else 0)
+    return (depth, span.sequence if span.sequence is not None else 0)
 
 
 def _attempt_key(arms: dict[UUID, RunRecord], turn: AgentTurnRecord) -> tuple[int, int, int]:

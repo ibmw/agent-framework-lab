@@ -674,9 +674,23 @@ def test_a_span_s_coordinate_means_one_thing_and_a_trace_has_one_root(
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(insert, {**row, "span_id": "f" * 16, "kind": "runtime"})
 
-    # Nothing runs for a negative number of milliseconds.
+    # Nothing starts or lasts a negative number of milliseconds.
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(insert, {**row, "span_id": "0" * 16, "started_offset_ms": -1})
+
+    negative = text(
+        """
+        INSERT INTO experiment_run_spans (
+            run_id, span_id, experiment_id, trace_id, parent_span_id, kind, ordinal,
+            attempt, sequence, started_offset_ms, duration_ms, created_at
+        ) VALUES (
+            :run_id, '9999999999999999', :experiment_id, :trace_id, NULL, 'attempt', 0, 1,
+            NULL, 0, -1, '2026-09-07 12:00:00.000000'
+        )
+        """
+    )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(negative, row)
 
 
 @pytest.mark.migration
