@@ -1767,16 +1767,16 @@ class ExperimentRoutes:
             responses={
                 404: {
                     "model": ErrorResponse,
-                    "description": "The experiment, or the starting state it froze, is not "
-                    "found in this shop",
+                    "description": "The experiment, the starting state it froze, or an "
+                    "agent-configuration version an arm names is not found — the same 404 a "
+                    "start answers for an arm it cannot resolve",
                 },
                 422: {
                     "model": ErrorResponse,
-                    "description": "The fork names the wrong number of arms, changes no arm "
-                    "at all, or names an agent-configuration version that is not published; "
-                    "or the derived setup no longer passes the gate, its starting state was "
-                    "frozen against a tool contract set this build no longer publishes, or "
-                    "no runtime for an arm's framework is available here",
+                    "description": "The fork names the wrong number of arms or changes no arm "
+                    "at all; or the derived setup no longer passes the gate, its starting "
+                    "state was frozen against a tool contract set this build no longer "
+                    "publishes, or no runtime for an arm's framework is available here",
                 },
             },
         )

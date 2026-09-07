@@ -1682,6 +1682,42 @@ async def test_a_fork_naming_the_wrong_number_of_arms_is_refused(
     assert response.status_code == 422, response.text
 
 
+async def test_a_fork_onto_a_version_nobody_published_is_answered_as_not_found(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The same 404 a start answers for an arm it cannot resolve (ADR 0024).
+
+    An arm is an exact published version, and a caller has to be able to tell a stale arm
+    from a stale experiment — so this is a not-found rather than a gate refusal, and the
+    fork route's contract says 404 because that is what it does."""
+    experiment = await control_experiment(client, lab)
+    arm = experiment["runs"][0]
+
+    absent_version = await fork(
+        client,
+        lab,
+        experiment,
+        fork_body(
+            experiment,
+            0,
+            {
+                "configuration_id": arm["agent_configuration_id"],
+                "version": arm["agent_configuration_version"] + 99,
+            },
+        ),
+    )
+    absent_configuration = await fork(
+        client,
+        lab,
+        experiment,
+        fork_body(experiment, 0, {"configuration_id": str(uuid4()), "version": 1}),
+    )
+
+    assert absent_version.status_code == 404, absent_version.text
+    assert absent_version.json()["code"] == "agent_configuration_version_not_found"
+    assert absent_configuration.status_code == 404, absent_configuration.text
+
+
 async def test_forking_a_run_leaves_it_as_it_was_and_lists_the_derived_one_beside_it(
     client: AsyncClient, lab: dict[str, str]
 ) -> None:

@@ -703,6 +703,35 @@ async def test_a_fork_of_a_fork_is_read_against_the_run_it_came_from(
 
 
 @pytest.mark.asyncio
+async def test_a_replay_of_a_fork_reproduces_the_fork_and_names_it(
+    session: Session, workspace: Workspace
+) -> None:
+    """The third direction a chain runs in: a fork is an ordinary run, so it replays.
+
+    What it reproduces is the *fork's* arms — the versions the operator moved to — because a
+    replay pins what its source pinned, whichever act produced that source."""
+    arm = control_arm(session)
+    source = start(session, workspace, arm)
+    await run_arm(session, source)
+    newer = republish(session, arm, prompt="Read the policy before acting.")
+    forked = await build_derivations(session).fork(
+        workspace.shop_id, source.record.experiment_id, moving(source, 0, newer)
+    )
+
+    replayed = await build_derivations(session).replay(
+        workspace.shop_id, forked.record.experiment_id
+    )
+
+    assert replayed.derived_from is not None
+    assert replayed.derived_from.experiment_id == forked.record.experiment_id
+    assert replayed.derived_from.kind is DerivationKind.REPLAY
+    # A replay moved nothing, even where the run it replays had moved something.
+    assert replayed.derived_from.changed == ()
+    assert pins(replayed) == pins(forked)
+    assert replayed.record.sandbox_fingerprint == source.record.sandbox_fingerprint
+
+
+@pytest.mark.asyncio
 async def test_forking_one_run_twice_is_two_derived_experiments(
     session: Session, workspace: Workspace
 ) -> None:
