@@ -1403,3 +1403,121 @@ async def test_an_experiment_of_another_shop_cannot_be_annotated(
 
     assert response.status_code == 404, response.text
     assert response.json()["code"] == "experiment_not_found"
+
+
+# -- replaying a run (ADR 0038) ------------------------------------------------
+
+
+async def replay(client: AsyncClient, lab: dict[str, str], experiment: dict[str, Any]) -> Any:
+    return await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}/replays"
+    )
+
+
+async def test_replaying_a_run_answers_with_a_new_experiment_in_the_same_world(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    """The derived run is a new experiment that starts where the old one started."""
+    experiment = await control_experiment(client, lab)
+    assert (await advance(client, lab, experiment)).status_code == 201
+
+    response = await replay(client, lab, experiment)
+
+    assert response.status_code == 201, response.text
+    derived = response.json()
+    assert derived["experiment_id"] != experiment["experiment_id"]
+    assert derived["snapshot_id"] == experiment["snapshot_id"]
+    assert derived["sandbox_fingerprint"] == experiment["sandbox_fingerprint"]
+    assert derived["participant_driver"] == "scripted"
+    assert derived["replay_of"] == {
+        "experiment_id": experiment["experiment_id"],
+        "label": experiment["label"],
+    }
+
+
+async def test_a_replay_reruns_the_arm_the_source_ran_and_leaves_the_other_where_it_was(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    answered = (await advance(client, lab, experiment)).json()
+
+    derived = (await replay(client, lab, experiment)).json()
+
+    assert [turn["body"] for turn in derived["agent_turns"]] == [answered["turn"]["body"]]
+    assert [event["tool"] for event in derived["tool_events"]] == [
+        event["tool"] for event in answered["tool_events"]
+    ]
+    assert [run["standing"]["awaiting"] for run in derived["runs"]] == ["customer", "agent"]
+
+
+async def test_a_replay_carries_the_recorded_composition_into_the_derived_thread(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    assert (await advance(client, lab, experiment)).status_code == 201
+    assert (await advance(client, lab, experiment, arm=1)).status_code == 201
+    delivered = await client.post(
+        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        "/participant-turns",
+        json={
+            "run_ids": [run["run_id"] for run in experiment["runs"]],
+            "message": "Any update on the address?",
+        },
+    )
+    assert delivered.status_code == 201, delivered.text
+
+    derived = (await replay(client, lab, experiment)).json()
+
+    driven = [turn for turn in derived["turns"] if turn["source"] == "participant"]
+    assert [turn["body"] for turn in driven] == ["Any update on the address?"] * 2
+    assert {turn["driver"] for turn in driven} == {"scripted"}
+    # One send in the source is one composition in the derived run, which is what makes the
+    # divergence record of the two experiments the same shape.
+    assert len({turn["turn_id"] for turn in driven}) == 1
+
+
+async def test_replaying_a_run_leaves_the_run_it_replayed_exactly_as_it_was(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    assert (await advance(client, lab, experiment)).status_code == 201
+    reading = f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+    before = (await client.get(reading)).json()
+
+    assert (await replay(client, lab, experiment)).status_code == 201
+
+    assert (await client.get(reading)).json() == before
+    assert before["replay_of"] is None
+
+
+async def test_a_replay_is_listed_beside_the_run_it_derives_from(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+    derived = (await replay(client, lab, experiment)).json()
+
+    listed = await client.get(f"/api/v1/shops/{lab['shop_id']}/experiments")
+
+    assert listed.status_code == 200, listed.text
+    assert {row["experiment_id"] for row in listed.json()["experiments"]} == {
+        experiment["experiment_id"],
+        derived["experiment_id"],
+    }
+    history = await client.get("/api/v1/experiments")
+    rows = {row["experiment_id"]: row for row in history.json()["experiments"]}
+    derived_row = rows[derived["experiment_id"]]
+    assert derived_row["replay_of"]["experiment_id"] == experiment["experiment_id"]
+    assert rows[experiment["experiment_id"]]["replay_of"] is None
+
+
+async def test_an_experiment_of_another_shop_cannot_be_replayed(
+    client: AsyncClient, lab: dict[str, str]
+) -> None:
+    experiment = await control_experiment(client, lab)
+
+    response = await client.post(
+        f"/api/v1/shops/{uuid4()}/experiments/{experiment['experiment_id']}/replays"
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["code"] == "experiment_not_found"

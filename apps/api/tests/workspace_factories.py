@@ -23,6 +23,7 @@ from capability_lab.application.blocks import MutationBlockService, ObjectiveBlo
 from capability_lab.application.customer_profiles import CustomerProfileService
 from capability_lab.application.evaluation import ExperimentEvaluationService
 from capability_lab.application.experiment_annotations import ExperimentAnnotationService
+from capability_lab.application.experiment_replays import ExperimentReplayService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_traces import ExperimentTraceService, RunTracer
 from capability_lab.application.experiments import ArmSelection, ExperimentService
@@ -65,10 +66,12 @@ from capability_lab.domain.support_identity import SupportIdentityPayload
 from capability_lab.domain.ticket import SuggestedDocument
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
 from capability_lab.infrastructure.judges import ControlJudgeRuntime
+from capability_lab.infrastructure.participants.scripted import ScriptedParticipantDriver
 from capability_lab.infrastructure.repositories import (
     SqlAlchemyAgentTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentAnnotationRepository,
+    SqlAlchemyExperimentReplayRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyJudgementRepository,
@@ -234,6 +237,7 @@ def build_experiments(session: Session) -> ExperimentService:
         SqlAlchemyParticipantTurnRepository(session),
         SqlAlchemyAgentTurnRepository(session),
         SqlAlchemyToolEventRepository(session),
+        SqlAlchemyExperimentReplayRepository(session),
         build_snapshots(session),
         build_sandboxes(session),
         scenario_repository(session),
@@ -242,6 +246,25 @@ def build_experiments(session: Session) -> ExperimentService:
         agent_configuration_repository(session),
         build_scenario_mutations(session),
         SqlAlchemyPublishedVersionDirectory(session),
+        AdvancingClock(),
+    )
+
+
+def build_replays(
+    session: Session,
+    runtimes: SupportAgentRuntimeRegistry | None = None,
+    handlers: Mapping[str, ToolHandler] | None = None,
+) -> ExperimentReplayService:
+    """Deriving one experiment from another, over the runner every suite advances with.
+
+    The runtimes and handlers travel through to that runner, so a suite that wants a replay
+    whose arms fail supplies them here rather than reaching inside the service.
+    """
+    return ExperimentReplayService(
+        build_experiments(session),
+        build_runner(session, runtimes, handlers),
+        SqlAlchemyExperimentReplayRepository(session),
+        ScriptedParticipantDriver,
         AdvancingClock(),
     )
 

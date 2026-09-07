@@ -49,6 +49,7 @@ from capability_lab.application.experiment_annotations import (
     ExperimentAnnotationService,
     ExperimentNoteRecord,
 )
+from capability_lab.application.experiment_replays import ExperimentReplayService
 from capability_lab.application.experiment_runs import ExperimentRunner, RunTurn
 from capability_lab.application.experiment_timeline import (
     ExperimentTimeline,
@@ -69,6 +70,7 @@ from capability_lab.application.experiments import (
     ArmRuntime,
     ArmSelection,
     ExperimentDetail,
+    ExperimentOrigin,
     ExperimentPreview,
     ExperimentRecord,
     ExperimentService,
@@ -838,8 +840,27 @@ class RunTurnResponse(StrictApiModel):
         )
 
 
+class ExperimentOriginSchema(StrictApiModel):
+    """The experiment a derived one replays, named as a reader would name it."""
+
+    experiment_id: UUID
+    label: str
+
+    @classmethod
+    def from_domain(cls, origin: ExperimentOrigin) -> Self:
+        return cls(experiment_id=origin.experiment_id, label=origin.label)
+
+
 class ExperimentResponse(ExperimentSummarySchema):
     """One experiment in full: the versions it pinned, its arms, and their threads."""
+
+    replay_of: ExperimentOriginSchema | None = None
+    """The experiment this one was derived from, and `null` for one an operator started.
+
+    Served on the experiment rather than through an operation of its own — unlike the notes
+    beside it (ADR 0036) — because it is a nullable identifier rather than text, and because
+    a derived run that did not say what it derives from would be missing the provenance the
+    derivation exists for (ADR 0038)."""
 
     sandbox_inputs: list[ResolvedDefinitionSchema]
     arm_inputs: list[list[ResolvedDefinitionSchema]]
@@ -857,6 +878,11 @@ class ExperimentResponse(ExperimentSummarySchema):
         sandboxes = {sandbox.sandbox_id: sandbox for sandbox in detail.sandboxes}
         return cls(
             **ExperimentSummarySchema.from_record(detail.record).model_dump(),
+            replay_of=(
+                None
+                if detail.replay_of is None
+                else ExperimentOriginSchema.from_domain(detail.replay_of)
+            ),
             sandbox_inputs=[_resolved(entry) for entry in resolution.sandbox_inputs],
             arm_inputs=[
                 [
@@ -1235,6 +1261,7 @@ class ExperimentRoutes:
         service: Callable[[], Generator[ExperimentService, None, None]],
         driver: Callable[[str], ParticipantDriver],
         runner: Callable[[], Generator[ExperimentRunner, None, None]],
+        replays: Callable[[], Generator[ExperimentReplayService, None, None]],
         timeline: Callable[[], Generator[ExperimentTimelineService, None, None]],
         traces: Callable[[], Generator[ExperimentTraceService, None, None]],
         evaluation: Callable[[], Generator[ExperimentEvaluationService, None, None]],
@@ -1244,6 +1271,7 @@ class ExperimentRoutes:
         self._service = service
         self._driver = driver
         self._runner = runner
+        self._replays = replays
         self._timeline = timeline
         self._traces = traces
         self._evaluation = evaluation
@@ -1253,6 +1281,7 @@ class ExperimentRoutes:
     def register(self, router: APIRouter) -> None:
         dependency = Depends(self._service)
         runner_dependency = Depends(self._runner)
+        replay_dependency = Depends(self._replays)
         timeline_dependency = Depends(self._timeline)
         traces_dependency = Depends(self._traces)
         evaluation_dependency = Depends(self._evaluation)
@@ -1375,6 +1404,16 @@ class ExperimentRoutes:
             return ExperimentAnnotationsResponse.from_domain(
                 annotations.set_tags(shop_id, experiment_id, tuple(command.tags))
             )
+
+        async def replay_experiment(
+            shop_id: ShopIdPath,
+            experiment_id: ExperimentIdPath,
+            replays: Annotated[ExperimentReplayService, replay_dependency],
+        ) -> ExperimentResponse:
+            # The derived experiment, whole: the caller asked to reproduce a run and what
+            # they need back is the run that was produced, in the shape every other reading
+            # of an experiment arrives in.
+            return ExperimentResponse.from_detail(await replays.replay(shop_id, experiment_id))
 
         async def advance_run(
             shop_id: ShopIdPath,
@@ -1596,6 +1635,41 @@ class ExperimentRoutes:
                 "Answers with everything written on the run."
             ),
             responses=TagResponses,
+        )
+        router.add_api_route(
+            "/shops/{shop_id}/experiments/{experiment_id}/replays",
+            replay_experiment,
+            methods=["POST"],
+            status_code=201,
+            response_model=ExperimentResponse,
+            operation_id="replayExperiment",
+            summary="Derive a new experiment that re-runs this one as it was recorded",
+            description=(
+                "Clones the snapshot this experiment froze rather than freezing the world "
+                "again, so the derived arms start at the same `sandbox_fingerprint` however "
+                "far the shop's orders and definitions have moved since; pins each arm to "
+                "the exact agent-configuration version this run pinned, because choosing a "
+                "newer one is a fork rather than a replay; and drives the derived arms "
+                "through the compositions this run recorded, to the same arms, at the same "
+                "depths, advancing each arm as often as it was advanced then. The derived "
+                "experiment records `scripted` as its participant driver, because that is "
+                "what produced its turns, and answers with itself. Deliberately not "
+                "idempotent: replaying one run twice is two derived experiments. Nothing "
+                "about the replayed experiment changes — the derived run has its own arms, "
+                "its own sandboxes, and its own evidence. A model-backed arm will not answer "
+                "identically; what a replay reproduces is the input."
+            ),
+            responses={
+                404: {
+                    "model": ErrorResponse,
+                    "description": "The experiment is not found in this shop",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "The derived experiment cannot be started, or no runtime "
+                    "for an arm's framework is available here",
+                },
+            },
         )
         router.add_api_route(
             "/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns",

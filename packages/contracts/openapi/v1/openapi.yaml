@@ -3885,6 +3885,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/shops/{shop_id}/experiments/{experiment_id}/replays:
+    post:
+      summary: Derive a new experiment that re-runs this one as it was recorded
+      description: 'Clones the snapshot this experiment froze rather than freezing
+        the world again, so the derived arms start at the same `sandbox_fingerprint`
+        however far the shop''s orders and definitions have moved since; pins each
+        arm to the exact agent-configuration version this run pinned, because choosing
+        a newer one is a fork rather than a replay; and drives the derived arms through
+        the compositions this run recorded, to the same arms, at the same depths,
+        advancing each arm as often as it was advanced then. The derived experiment
+        records `scripted` as its participant driver, because that is what produced
+        its turns, and answers with itself. Deliberately not idempotent: replaying
+        one run twice is two derived experiments. Nothing about the replayed experiment
+        changes — the derived run has its own arms, its own sandboxes, and its own
+        evidence. A model-backed arm will not answer identically; what a replay reproduces
+        is the input.'
+      operationId: replayExperiment
+      parameters:
+      - name: shop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable shop definition identifier.
+          title: Shop Id
+        description: Stable shop definition identifier.
+      - name: experiment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          description: Stable experiment identifier inside one shop.
+          title: Experiment Id
+        description: Stable experiment identifier inside one shop.
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentResponse'
+        '404':
+          description: The experiment is not found in this shop
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The derived experiment cannot be started, or no runtime for
+            an arm's framework is available here
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns:
     post:
       summary: Run this arm's agent against the customer turn it has not answered
@@ -7049,6 +7105,10 @@ components:
         scenario_superseded:
           type: boolean
           title: Scenario Superseded
+        replay_of:
+          anyOf:
+          - $ref: '#/components/schemas/ExperimentOriginSchema'
+          - type: 'null'
         seed:
           type: integer
           title: Seed
@@ -7183,6 +7243,23 @@ components:
       - created_at
       title: ExperimentNoteSchema
       description: 'One note as it was written: the words, and when.'
+    ExperimentOriginSchema:
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        label:
+          type: string
+          title: Label
+      additionalProperties: false
+      type: object
+      required:
+      - experiment_id
+      - label
+      title: ExperimentOriginSchema
+      description: The experiment a derived one replays, named as a reader would name
+        it.
     ExperimentPreviewResponse:
       properties:
         issues:
@@ -7246,6 +7323,10 @@ components:
         created_at:
           type: string
           title: Created At
+        replay_of:
+          anyOf:
+          - $ref: '#/components/schemas/ExperimentOriginSchema'
+          - type: 'null'
         sandbox_inputs:
           items:
             $ref: '#/components/schemas/ResolvedDefinitionSchema'

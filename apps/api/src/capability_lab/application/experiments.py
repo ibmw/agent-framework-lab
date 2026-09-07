@@ -37,6 +37,7 @@ decision or two.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, cast
@@ -129,8 +130,11 @@ __all__ = [
     "ExperimentLabelError",
     "ExperimentNotFoundError",
     "ExperimentNotStartableError",
+    "ExperimentOrigin",
     "ExperimentPreview",
     "ExperimentRecord",
+    "ExperimentReplay",
+    "ExperimentReplayRepository",
     "ExperimentRepository",
     "ExperimentRunNotFoundError",
     "ExperimentRunRepository",
@@ -310,6 +314,52 @@ class ParticipantTurnRepository(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class ExperimentReplay:
+    """That one experiment was derived by replaying another, and when.
+
+    Stored beside the experiments rather than inside either of them, for the reason a note
+    is (ADR 0036): `experiments` is written once because its document is what explains the
+    result, and a derived run's source is not one of its inputs — the replay would run
+    identically without knowing where it came from. Putting it in the envelope would also put
+    a runtime identifier into fingerprinted bytes, which ADR 0012 keeps out of them.
+    """
+
+    experiment_id: UUID
+    source_experiment_id: UUID
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentOrigin:
+    """The experiment a derived one replays, as a reader needs to name it.
+
+    The label is read from the source row rather than copied at derivation time: an
+    experiment is written once, so the name it was started under cannot drift, and a copy
+    here would be a second source of truth for a string that has one.
+    """
+
+    experiment_id: UUID
+    label: str
+
+
+class ExperimentReplayRepository(Protocol):
+    """Which experiments were derived from which, written once per derivation."""
+
+    def get(self, experiment_id: UUID) -> ExperimentReplay | None: ...
+
+    def list_all(self) -> Mapping[UUID, ExperimentReplay]:
+        """Every derived experiment in the lab, keyed by the derived one.
+
+        Beside `get` for the reason the annotation repository's is: history reads a whole
+        lab, and a listing that asked per row would be doing per experiment what one
+        statement answers for the page.
+        """
+        ...
+
+    def save(self, record: ExperimentReplay) -> ExperimentReplay: ...
+
+
+@dataclass(frozen=True, slots=True)
 class ExperimentPreview:
     """What starting this experiment would produce, and what still refuses it."""
 
@@ -364,6 +414,13 @@ class ExperimentDetail:
     is the same kind of reading — a projection of documents already resolved here — and
     because a client holding both states would otherwise be free to decide for itself what
     "changed" means (ADR 0035).
+
+    `replay_of` is the one field here that is neither an input nor a reading of the run: it
+    is where this experiment came from, and it is `None` for every experiment an operator
+    started themselves. It travels on the detail rather than through an operation of its own
+    — unlike the annotation, which ADR 0036 kept off the run — because it is a nullable
+    identifier rather than text, and because a derived run that did not say what it derives
+    from would be exactly the provenance this outcome is named for (ADR 0038).
     """
 
     record: ExperimentRecord
@@ -375,6 +432,7 @@ class ExperimentDetail:
     standings: tuple[ArmStanding, ...]
     metrics: tuple[ArmMetrics, ...]
     state_diffs: tuple[ArmStateDiff, ...]
+    replay_of: ExperimentOrigin | None
     runs: tuple[RunRecord, ...]
     sandboxes: tuple[SandboxRecord, ...]
     turns: tuple[ParticipantTurnRecord, ...]
@@ -393,6 +451,7 @@ class ExperimentService:
         turns: ParticipantTurnRepository,
         agent_turns: AgentTurnRepository,
         tool_events: ToolEventRepository,
+        replays: ExperimentReplayRepository,
         snapshots: SandboxSnapshotService,
         sandboxes: SandboxService,
         scenarios: DefinitionRepository[ScenarioPayload],
@@ -408,6 +467,7 @@ class ExperimentService:
         self._turns = turns
         self._agent_turns = agent_turns
         self._tool_events = tool_events
+        self._replays = replays
         self._snapshots = snapshots
         self._sandboxes = sandboxes
         self._scenarios = scenarios
@@ -479,6 +539,7 @@ class ExperimentService:
                 )
                 for run, sandbox in zip(runs, sandboxes, strict=True)
             ),
+            replay_of=self._origin(shop_id, experiment_id),
             runs=runs,
             sandboxes=sandboxes,
             turns=turns,
@@ -506,12 +567,22 @@ class ExperimentService:
 
     # -- starting --------------------------------------------------------------
 
-    def start(self, shop_id: UUID, command: StartExperiment) -> ExperimentDetail:
+    def start(
+        self, shop_id: UUID, command: StartExperiment, *, starting_state: UUID | None = None
+    ) -> ExperimentDetail:
         """Freeze the starting state, clone one arm per configuration, and open the thread.
 
         Deliberately not idempotent, for the reason cloning is not (ADR 0020): the same
         scenario run twice is two experiments, and collapsing them would delete the second
         result rather than reuse the first.
+
+        `starting_state` names a snapshot to clone instead of freezing today's world, and
+        exists for exactly one caller: a replay, which has to start in the world its source
+        started in (ADR 0038). Materializing again would re-copy the shop's order fixtures
+        as they read now and re-run the publish gate against them, so an order edited or
+        deleted since would silently make the derived run a different experiment — or refuse
+        it outright. A snapshot is immutable and identified by its fingerprint (ADR 0019), so
+        cloning the recorded one is the only way to claim the same starting state.
         """
         try:
             require_label(command.label, "experiment label", error=ExperimentConfigurationError)
@@ -523,8 +594,12 @@ class ExperimentService:
         if judged.validation.errors or judged.resolution is None:
             raise ExperimentNotStartableError(judged.validation)
 
-        snapshot = self._snapshots.materialize(
-            shop_id, command.scenario_id, command.scenario_version, seed=command.seed
+        snapshot = (
+            self._snapshots.materialize(
+                shop_id, command.scenario_id, command.scenario_version, seed=command.seed
+            )
+            if starting_state is None
+            else self._recorded_state(shop_id, starting_state, command)
         )
         resolution = judged.resolution
         comparison = compare_configurations(tuple(arm.payload for arm in arms))
@@ -579,6 +654,28 @@ class ExperimentService:
 
         self._open(record, runs, snapshot)
         return self.get_experiment(shop_id, experiment_id)
+
+    def _recorded_state(
+        self, shop_id: UUID, snapshot_id: UUID, command: StartExperiment
+    ) -> SandboxSnapshotRecord:
+        """The snapshot a derived experiment starts in, checked against what it claims.
+
+        The columns are compared rather than trusted because they are what the experiment
+        row will carry: a snapshot of another recipe, version, or seed would produce an
+        experiment whose provenance columns describe starting state it is not in, and the
+        fingerprint beside them could not be used to tell.
+        """
+        snapshot = self._snapshots.get_snapshot(shop_id, snapshot_id)
+        if (
+            snapshot.scenario_id != command.scenario_id
+            or snapshot.scenario_version != command.scenario_version
+            or snapshot.seed != command.seed
+        ):
+            raise ExperimentConfigurationError(
+                f"snapshot {snapshot_id} does not freeze scenario {command.scenario_id} "
+                f"version {command.scenario_version} at seed {command.seed}"
+            )
+        return snapshot
 
     # -- driving ---------------------------------------------------------------
 
@@ -694,6 +791,22 @@ class ExperimentService:
                     created_at=record.created_at,
                 )
             )
+
+    def _origin(self, shop_id: UUID, experiment_id: UUID) -> ExperimentOrigin | None:
+        """The experiment this one replays, named by the row it was derived from.
+
+        A missing source is reported as no origin rather than raised: experiments are
+        write-once and never deleted, so this cannot happen in a lab that has one store,
+        and a read of an experiment must not fail because a *different* experiment could not
+        be found.
+        """
+        derivation = self._replays.get(experiment_id)
+        if derivation is None:
+            return None
+        source = self._experiments.get(shop_id, derivation.source_experiment_id)
+        if source is None:  # pragma: no cover - an experiment is never deleted
+            return None
+        return ExperimentOrigin(experiment_id=source.experiment_id, label=source.label)
 
     def _trigger(self, snapshot: SandboxSnapshotRecord) -> str:
         ticket = self._pinned(snapshot, DefinitionType.TICKET, self._tickets).payload

@@ -56,6 +56,9 @@ DEFINITION_TABLES = {
     # And the one measurement of an attempt the record cannot reproduce: where inside it
     # each part of it ran.
     "experiment_run_spans",
+    # And where a derived experiment came from, which is neither an input of the run nor a
+    # reading of it.
+    "experiment_replays",
 }
 POC_TABLES = {
     "action_proposals",
@@ -741,6 +744,37 @@ def test_a_proposal_is_open_or_closed_and_never_half_of_each(
 
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(insert, {**row, "confirmation": "c" * 64, "expected_revision": -1})
+
+
+@pytest.mark.migration
+def test_an_experiment_is_derived_once_and_never_from_itself(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The derivation's key is the derived experiment, so it has one story about its source.
+
+    The self-reference check is in the table for the reason the span coordinates are: the
+    service cannot produce one, and a row that claimed a run replayed itself would be
+    provenance nobody could follow."""
+    database_url = f"sqlite:///{tmp_path / 'replays.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    derived = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac041"
+    source = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac042"
+    insert = text(
+        """
+        INSERT INTO experiment_replays (experiment_id, source_experiment_id, created_at)
+        VALUES (:experiment_id, :source_experiment_id, '2026-09-08 12:00:00.000000')
+        """
+    )
+    with engine.begin() as connection:
+        connection.execute(insert, {"experiment_id": derived, "source_experiment_id": source})
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {"experiment_id": derived, "source_experiment_id": source})
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(insert, {"experiment_id": source, "source_experiment_id": source})
 
 
 @pytest.mark.migration

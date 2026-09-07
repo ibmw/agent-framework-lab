@@ -27,6 +27,7 @@ from capability_lab.domain.experiment import (
     fold_tag,
     fold_tags,
     normalize_tag,
+    replay_script,
     stand_arm,
 )
 
@@ -341,3 +342,140 @@ def test_a_string_is_not_a_tag_set() -> None:
     """A caller handing one word over would otherwise be filed under every letter of it."""
     with pytest.raises(ExperimentConfigurationError, match="list of text"):
         fold_tags("read-check-gap")
+
+
+# -- the script a replay reads out of a run ------------------------------------
+
+
+def trigger(**overrides: object) -> ParticipantTurn:
+    fields: dict[str, object] = {
+        "ordinal": 0,
+        "source": ParticipantTurnSource.TRIGGER,
+        "driver": None,
+        "body": "My order is going to the wrong address.",
+    }
+    fields.update(overrides)
+    return turn(**fields)
+
+
+def test_a_script_carries_the_compositions_a_run_recorded_and_not_its_trigger() -> None:
+    """The trigger is written from the ticket a snapshot pinned, so a script never copies it."""
+    linked = uuid4()
+
+    script = replay_script(
+        ((trigger(), turn(turn_id=linked, ordinal=1, body="Any update?")),),
+        ((answered(0), answered(1)),),
+    )
+
+    assert script.opening == (1,)
+    assert [
+        [(line.position, line.body, line.attempts) for line in composition.lines]
+        for composition in script.compositions
+    ] == [[(0, "Any update?", 1)]]
+
+
+def test_one_composition_that_reached_both_arms_stays_one_composition() -> None:
+    """The divergence record (ADR 0025): a linked send must be replayed as a linked send."""
+    linked = uuid4()
+
+    script = replay_script(
+        (
+            (trigger(), turn(turn_id=linked, ordinal=1, body="Any update?")),
+            (trigger(), turn(turn_id=linked, ordinal=1, body="Any update?")),
+        ),
+        ((answered(0),), (answered(0),)),
+    )
+
+    assert len(script.compositions) == 1
+    assert [line.position for line in script.compositions[0].lines] == [0, 1]
+
+
+def test_a_composition_only_one_arm_received_reaches_only_that_arm() -> None:
+    script = replay_script(
+        (
+            (trigger(), turn(ordinal=1, body="Any update?")),
+            (trigger(),),
+        ),
+        ((answered(0),), ()),
+    )
+
+    assert [line.position for line in script.compositions[0].lines] == [0]
+    assert script.opening == (1, 0)
+
+
+def test_a_composition_carries_what_each_arm_actually_received() -> None:
+    """A driver answers one arm at a time, so two arms of one send may hold two sentences."""
+    linked = uuid4()
+
+    script = replay_script(
+        (
+            (trigger(), turn(turn_id=linked, ordinal=1, body="Any update?")),
+            (trigger(), turn(turn_id=linked, ordinal=1, body="Still nothing?")),
+        ),
+        ((), ()),
+    )
+
+    assert [line.body for line in script.compositions[0].lines] == ["Any update?", "Still nothing?"]
+
+
+def test_a_turn_the_operator_never_ran_the_agent_on_is_scripted_with_no_advance() -> None:
+    """A skipped turn is part of the record (ADR 0029), so a replay reproduces the skip."""
+    script = replay_script(
+        ((trigger(), turn(ordinal=1), turn(ordinal=2)),),
+        ((answered(2),),),
+    )
+
+    assert [line.attempts for composition in script.compositions for line in composition.lines] == [
+        0,
+        1,
+    ]
+
+
+def test_a_failed_attempt_and_its_retry_are_two_advances() -> None:
+    script = replay_script(
+        ((trigger(), turn(ordinal=1)),),
+        ((failed(0), answered(0, attempt=2), failed(1), answered(1, attempt=2)),),
+    )
+
+    assert script.opening == (2,)
+    assert script.compositions[0].lines[0].attempts == 2
+
+
+def test_compositions_are_ordered_so_every_arm_stands_where_it_recorded() -> None:
+    """Ordinals are per arm, so the order between two arms' sends is reconstructed here."""
+    first = uuid4()
+    second = uuid4()
+    linked = uuid4()
+
+    script = replay_script(
+        (
+            (trigger(), turn(turn_id=first, ordinal=1), turn(turn_id=linked, ordinal=2)),
+            (trigger(), turn(turn_id=second, ordinal=1), turn(turn_id=linked, ordinal=2)),
+        ),
+        ((), ()),
+    )
+
+    assert [
+        [line.position for line in composition.lines] for composition in script.compositions
+    ] == [[0], [1], [0, 1]]
+
+
+def test_a_thread_with_a_hole_in_it_cannot_be_replayed() -> None:
+    """A gap is a corrupted stream rather than something a derived run should paper over."""
+    with pytest.raises(ExperimentConfigurationError, match="any order"):
+        replay_script(((trigger(), turn(ordinal=2)),), ((),))
+
+
+def test_an_arm_that_was_never_opened_has_no_script() -> None:
+    with pytest.raises(ExperimentConfigurationError, match="no script"):
+        replay_script(((),), ((),))
+
+
+def test_a_script_reads_one_attempt_stream_per_arm() -> None:
+    with pytest.raises(ExperimentConfigurationError, match="one attempt stream per arm"):
+        replay_script(((trigger(),), (trigger(),)), ((),))
+
+
+def test_an_experiment_with_no_arm_has_nothing_to_replay() -> None:
+    with pytest.raises(ExperimentConfigurationError, match="nothing to replay"):
+        replay_script((), ())

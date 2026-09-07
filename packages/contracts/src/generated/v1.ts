@@ -1214,6 +1214,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/shops/{shop_id}/experiments/{experiment_id}/replays": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Derive a new experiment that re-runs this one as it was recorded
+     * @description Clones the snapshot this experiment froze rather than freezing the world again, so the derived arms start at the same `sandbox_fingerprint` however far the shop's orders and definitions have moved since; pins each arm to the exact agent-configuration version this run pinned, because choosing a newer one is a fork rather than a replay; and drives the derived arms through the compositions this run recorded, to the same arms, at the same depths, advancing each arm as often as it was advanced then. The derived experiment records `scripted` as its participant driver, because that is what produced its turns, and answers with itself. Deliberately not idempotent: replaying one run twice is two derived experiments. Nothing about the replayed experiment changes — the derived run has its own arms, its own sandboxes, and its own evidence. A model-backed arm will not answer identically; what a replay reproduces is the input.
+     */
+    post: operations["replayExperiment"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/shops/{shop_id}/experiments/{experiment_id}/runs/{run_id}/agent-turns": {
     parameters: {
       query?: never;
@@ -2762,6 +2782,7 @@ export interface components {
       scenario_version: number;
       /** Scenario Superseded */
       scenario_superseded: boolean;
+      replay_of?: components["schemas"]["ExperimentOriginSchema"] | null;
       /** Seed */
       seed: number;
       /** Sandbox Fingerprint */
@@ -2822,6 +2843,19 @@ export interface components {
       created_at: string;
     };
     /**
+     * ExperimentOriginSchema
+     * @description The experiment a derived one replays, named as a reader would name it.
+     */
+    ExperimentOriginSchema: {
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /** Label */
+      label: string;
+    };
+    /**
      * ExperimentPreviewResponse
      * @description The setup gate and the comparison matrix, computed without starting anything.
      */
@@ -2868,6 +2902,7 @@ export interface components {
       canonical_schema_version: string;
       /** Created At */
       created_at: string;
+      replay_of?: components["schemas"]["ExperimentOriginSchema"] | null;
       /** Sandbox Inputs */
       sandbox_inputs: components["schemas"]["ResolvedDefinitionSchema"][];
       /** Arm Inputs */
@@ -10438,6 +10473,49 @@ export interface operations {
         };
       };
       /** @description A tag is not a lowercase kebab-case identifier once folded, or there are too many of them */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  replayExperiment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable shop definition identifier. */
+        shop_id: string;
+        /** @description Stable experiment identifier inside one shop. */
+        experiment_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExperimentResponse"];
+        };
+      };
+      /** @description The experiment is not found in this shop */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description The derived experiment cannot be started, or no runtime for an arm's framework is available here */
       422: {
         headers: {
           [name: string]: unknown;

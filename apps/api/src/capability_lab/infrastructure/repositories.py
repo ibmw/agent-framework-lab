@@ -45,6 +45,7 @@ from capability_lab.application.experiment_traces import (
 )
 from capability_lab.application.experiments import (
     ExperimentRecord,
+    ExperimentReplay,
     ParticipantTurnRecord,
     RunRecord,
 )
@@ -135,6 +136,7 @@ from capability_lab.infrastructure.models import (
     DefinitionVersionModel,
     ExperimentModel,
     ExperimentNoteModel,
+    ExperimentReplayModel,
     ExperimentRunModel,
     ExperimentTagModel,
     GeneratedScenarioModel,
@@ -2427,6 +2429,42 @@ class SqlAlchemyJudgementRepository:
                 rationale=model.rationale,
                 failure=None if model.failure is None else JudgeFailure(model.failure),
             ),
+            created_at=model.created_at,
+        )
+
+
+class SqlAlchemyExperimentReplayRepository:
+    """Which experiments were derived from which, one row per derivation."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, experiment_id: UUID) -> ExperimentReplay | None:
+        model = self._session.get(ExperimentReplayModel, str(experiment_id))
+        return None if model is None else self._record(model)
+
+    def list_all(self) -> dict[UUID, ExperimentReplay]:
+        return {
+            UUID(model.experiment_id): self._record(model)
+            for model in self._session.scalars(select(ExperimentReplayModel)).all()
+        }
+
+    def save(self, record: ExperimentReplay) -> ExperimentReplay:
+        self._session.add(
+            ExperimentReplayModel(
+                experiment_id=str(record.experiment_id),
+                source_experiment_id=str(record.source_experiment_id),
+                created_at=record.created_at,
+            )
+        )
+        self._session.flush()
+        return record
+
+    @staticmethod
+    def _record(model: ExperimentReplayModel) -> ExperimentReplay:
+        return ExperimentReplay(
+            experiment_id=UUID(model.experiment_id),
+            source_experiment_id=UUID(model.source_experiment_id),
             created_at=model.created_at,
         )
 

@@ -813,6 +813,36 @@ class JudgementModel(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
 
 
+class ExperimentReplayModel(Base):
+    """That one experiment was derived by replaying another.
+
+    Beside the experiments rather than a column on them: `experiments` holds the canonical
+    document plus the columns read *out of* it, and where a run came from is not one of its
+    inputs — a replay would run identically without knowing. It is also a runtime identifier,
+    which ADR 0012 keeps out of fingerprinted bytes, so it could not have gone into the
+    envelope either.
+
+    The derived experiment is the primary key: an experiment is derived once, by the act
+    that created it, and a second row would be a second story about where it came from. The
+    source is indexed so "what has been replayed from this run" is one statement, and both
+    ends are foreign keys because neither experiment can be deleted.
+    """
+
+    __tablename__ = "experiment_replays"
+    __table_args__ = (
+        CheckConstraint(
+            "experiment_id <> source_experiment_id", name="ck_experiment_replays_distinct"
+        ),
+        Index("ix_experiment_replays_source", "source_experiment_id", "created_at"),
+    )
+
+    experiment_id: Mapped[str] = mapped_column(
+        ForeignKey("experiments.experiment_id"), primary_key=True
+    )
+    source_experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.experiment_id"))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+
+
 class ExperimentNoteModel(Base):
     """One thing an operator wrote about a run, in its own row beside the experiment.
 

@@ -27,6 +27,7 @@ exist precisely so that reaching them is the agent's job.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
@@ -38,6 +39,7 @@ __all__ = [
     "ParticipantDriverError",
     "ParticipantRequest",
     "ParticipantTurnUnavailableError",
+    "ScriptedDriverFactory",
 ]
 
 
@@ -87,3 +89,20 @@ class ParticipantDriver(Protocol):
         Raises `ParticipantTurnUnavailableError` when the driver has nothing to send yet.
         """
         ...
+
+
+class ScriptedDriverFactory(Protocol):
+    """How composition hands a caller the driver that speaks recorded lines.
+
+    A replay derives a new experiment and drives it from what an earlier one recorded
+    (ADR 0038), so the use case that performs it has to construct a driver per delivery
+    exactly as the HTTP layer constructs a human one per request. Selecting drivers is
+    composition's job (`docs/architecture.md`), so the use case is given this factory rather
+    than an implementation: the application never learns which class speaks the lines.
+
+    The lines are keyed by run because a composition is delivered per arm and each arm is
+    handed what *it* received — which for a linked send is the same sentence twice, and for
+    a divergent one is not.
+    """
+
+    def __call__(self, lines: Mapping[UUID, str]) -> ParticipantDriver: ...

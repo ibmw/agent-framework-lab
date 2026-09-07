@@ -32,6 +32,14 @@ change what it says it ran. What lives here is only the shape of them — a tag 
 one spelling because history narrows by it, and a note is bounded text because it is a
 paragraph rather than a report.
 
+**What a replay does is read out of the run it derives from.** An experiment is
+immutable and everything about it is in the record, so replaying one cannot re-run it — it
+can only produce a new experiment driven the same way. `replay_script` is that reading: the
+compositions the original recorded, in an order that could have produced the ordinals they
+carry, each carrying how many times the arm it reached was advanced on it. The trigger is
+deliberately not in it — a replay is opened from the ticket the snapshot pinned, exactly as
+a start is, so the opening question stays a property of the starting state.
+
 **Where an arm stands is read, never stored.** An experiment an operator comes back to has
 to say what it is waiting for, and the two streams already answer it: the last customer turn
 the arm received, and whether any attempt at it produced a reply. `stand_arm` is that
@@ -42,6 +50,7 @@ button agree by construction rather than by both remembering the same rule.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -72,10 +81,14 @@ __all__ = [
     "ParticipantDriverType",
     "ParticipantTurn",
     "ParticipantTurnSource",
+    "ReplayComposition",
+    "ReplayLine",
+    "ReplayScript",
     "compare_configurations",
     "fold_tag",
     "fold_tags",
     "normalize_tag",
+    "replay_script",
     "stand_arm",
 ]
 
@@ -298,6 +311,140 @@ def _awaiting(latest: int, *, answered: bool, max_turns: int) -> ArmAwaiting:
     if not answered:
         return ArmAwaiting.AGENT
     return ArmAwaiting.COMPLETED if latest >= max_turns else ArmAwaiting.CUSTOMER
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayLine:
+    """One arm's share of one recorded delivery.
+
+    `body` is what *this* arm received rather than what the composition was: a driver
+    answers one arm at a time (ADR 0025), so the words are read back per arm and a replay
+    reproduces exactly what each thread held.
+
+    `attempts` is how many times the original ran this arm's agent on this turn — zero for a
+    turn the operator moved on from without advancing, and more than one where an attempt
+    failed and was retried. It rides on the line rather than being counted again later
+    because it is the same reading: what happened to this arm at this depth.
+    """
+
+    position: int
+    body: str
+    attempts: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayComposition:
+    """One recorded delivery, to be replayed as one delivery.
+
+    Kept whole rather than flattened into a turn per arm, because a composition *is* the
+    divergence record (ADR 0025): a message that reached both arms must be redelivered as
+    one composition, or the derived run would claim two decisions where the original made
+    one, and no comparison of the bodies could tell them apart afterwards.
+    """
+
+    lines: tuple[ReplayLine, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayScript:
+    """What driving a derived experiment consists of, read off the run it derives from.
+
+    `opening` is how many times each arm was advanced on the scenario's triggering message,
+    by position. The trigger itself is deliberately absent: it is authored fixture content
+    that a start writes into every arm out of the ticket the snapshot pinned, so a replay
+    that carried a copy of it could open a derived run on words the starting state does not
+    contain.
+    """
+
+    opening: tuple[int, ...]
+    compositions: tuple[ReplayComposition, ...]
+
+
+def replay_script(
+    threads: tuple[tuple[ParticipantTurn, ...], ...],
+    attempts: tuple[tuple[AgentTurn, ...], ...],
+) -> ReplayScript:
+    """Read what a replay would do out of the two streams one experiment recorded.
+
+    Both arguments are indexed by arm position, which is the only coordinate a derived
+    experiment shares with the one it comes from: its runs are new rows over new sandboxes,
+    so a script written in run identifiers would name arms that do not exist yet.
+
+    The compositions are put back in **an** order that could have produced the ordinals they
+    carry, not in the order a clock says they were written. A turn's ordinal is its depth in
+    one arm (ADR 0025), so a composition is deliverable exactly when every arm it reaches
+    stands at the depth it recorded; the order between two compositions that reached
+    different arms is not in the record at all, and it does not need to be — arms are
+    isolated, and each arm's own sequence is what this reconstructs.
+
+    A record that admits no such order is refused rather than replayed in some order: it
+    would be a gap in one arm's turns, which is a corrupted stream rather than something a
+    derived run should paper over.
+    """
+    if not threads:
+        raise ExperimentConfigurationError("an experiment with no arm has nothing to replay")
+    if len(attempts) != len(threads):
+        raise ExperimentConfigurationError(
+            "a replay reads one attempt stream per arm, in the arms' own order"
+        )
+    for turns in threads:
+        if not turns:
+            raise ExperimentConfigurationError(
+                "an arm that has received no customer turn has no script"
+            )
+    tried = tuple(Counter(attempt.ordinal for attempt in arm) for arm in attempts)
+
+    # The compositions this experiment recorded, each as the arms it reached. Insertion
+    # order is a tie-break and nothing more; which of two compositions is ready is decided
+    # below, by the depths they claim.
+    recorded: dict[UUID, dict[int, ParticipantTurn]] = {}
+    for position, turns in enumerate(threads):
+        for turn in sorted(turns, key=lambda entry: entry.ordinal):
+            if turn.source is ParticipantTurnSource.TRIGGER:
+                continue
+            recorded.setdefault(turn.turn_id, {})[position] = turn
+
+    depth = dict.fromkeys(range(len(threads)), 1)
+    pending = sorted(
+        recorded,
+        key=lambda turn_id: min(turn.ordinal for turn in recorded[turn_id].values()),
+    )
+    compositions: list[ReplayComposition] = []
+    while pending:
+        ready = next(
+            (
+                turn_id
+                for turn_id in pending
+                if all(
+                    turn.ordinal == depth[position] for position, turn in recorded[turn_id].items()
+                )
+            ),
+            None,
+        )
+        if ready is None:
+            raise ExperimentConfigurationError(
+                "these turns cannot be replayed in any order that would have produced them"
+            )
+        pending.remove(ready)
+        reached = recorded[ready]
+        compositions.append(
+            ReplayComposition(
+                lines=tuple(
+                    ReplayLine(
+                        position=position,
+                        body=reached[position].body,
+                        attempts=tried[position][reached[position].ordinal],
+                    )
+                    for position in sorted(reached)
+                )
+            )
+        )
+        for position in reached:
+            depth[position] += 1
+    return ReplayScript(
+        opening=tuple(counted[0] for counted in tried),
+        compositions=tuple(compositions),
+    )
 
 
 class ComparisonDimension(StrEnum):

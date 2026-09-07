@@ -53,6 +53,7 @@ from capability_lab.application.experiment_annotations import (
 )
 from capability_lab.application.experiments import (
     ArmRuntime,
+    ExperimentOrigin,
     ExperimentRecord,
     ExperimentRepository,
     ExperimentService,
@@ -147,6 +148,12 @@ class ExperimentHistoryEntry:
     shop_name: str
     scenario_name: str
     scenario_superseded: bool
+    replay_of: ExperimentOrigin | None
+    """The experiment this row was derived from, and `None` for one an operator started.
+
+    On the row rather than only on the screen it opens, because a listing of every run this
+    lab has made would otherwise show a replay and its source as two unrelated experiments
+    that happen to share a fingerprint (ADR 0038)."""
     status: ExperimentStatus
     arms: tuple[HistoryArm, ...]
     tags: tuple[str, ...]
@@ -282,6 +289,9 @@ class ExperimentHistoryService:
             shop_name=self._shop_name(record.shop_id, shop_names),
             scenario_name=detail.scenario.payload.name,
             scenario_superseded=self._superseded(record, latest_scenarios),
+            # Already resolved by the reading this row is projected from, so a listing never
+            # asks a second question about where a run came from.
+            replay_of=detail.replay_of,
             status=stand_experiment(detail.standings, evaluation.arms),
             arms=arms,
             tags=annotations.tags,

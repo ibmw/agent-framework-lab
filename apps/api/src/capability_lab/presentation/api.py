@@ -64,6 +64,7 @@ from capability_lab.application.experiment_annotations import (
     ExperimentTagConflictError,
 )
 from capability_lab.application.experiment_history import ExperimentHistoryService
+from capability_lab.application.experiment_replays import ExperimentReplayService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_timeline import ExperimentTimelineService
 from capability_lab.application.experiment_traces import ExperimentTraceService
@@ -198,6 +199,7 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.infrastructure.participants.human import HumanParticipantDriver
+from capability_lab.infrastructure.participants.scripted import ScriptedParticipantDriver
 from capability_lab.infrastructure.repositories import (
     ConversationTurnConflictError,
     GeneratedScenarioConflictError,
@@ -209,6 +211,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentAnnotationRepository,
+    SqlAlchemyExperimentReplayRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyGeneratedScenarioRepository,
@@ -1761,6 +1764,7 @@ def create_app(
             SqlAlchemyParticipantTurnRepository(session),
             SqlAlchemyAgentTurnRepository(session),
             SqlAlchemyToolEventRepository(session),
+            SqlAlchemyExperimentReplayRepository(session),
             SandboxSnapshotService(
                 SqlAlchemySandboxSnapshotRepository(session),
                 scenario_repository(session),
@@ -1860,51 +1864,71 @@ def create_app(
                 clock,
             )
 
-    def experiment_runner() -> Generator[ExperimentRunner, None, None]:
-        with session_scope(factory) as session:
-            yield ExperimentRunner(
-                SqlAlchemyExperimentRepository(session),
-                SqlAlchemyExperimentRunRepository(session),
-                SqlAlchemyParticipantTurnRepository(session),
-                SqlAlchemyAgentTurnRepository(session),
-                SqlAlchemyToolEventRepository(session),
-                SqlAlchemyRunSpanRepository(session),
-                SandboxSnapshotService(
-                    SqlAlchemySandboxSnapshotRepository(session),
-                    scenario_repository(session),
-                    shop_repository(session),
-                    ticket_repository(session),
-                    SqlAlchemyOrderFixtureRepository(session),
-                    objective_block_repository(session),
-                    mutation_block_repository(session),
-                    SqlAlchemyPublishedVersionDirectory(session),
-                    clock,
-                ),
-                SqlAlchemySandboxRepository(session),
+    def build_experiment_runner(session: Session) -> ExperimentRunner:
+        """One construction, read by the advance route and by the replay that drives it."""
+        return ExperimentRunner(
+            SqlAlchemyExperimentRepository(session),
+            SqlAlchemyExperimentRunRepository(session),
+            SqlAlchemyParticipantTurnRepository(session),
+            SqlAlchemyAgentTurnRepository(session),
+            SqlAlchemyToolEventRepository(session),
+            SqlAlchemyRunSpanRepository(session),
+            SandboxSnapshotService(
+                SqlAlchemySandboxSnapshotRepository(session),
                 scenario_repository(session),
                 shop_repository(session),
+                ticket_repository(session),
+                SqlAlchemyOrderFixtureRepository(session),
+                objective_block_repository(session),
+                mutation_block_repository(session),
+                SqlAlchemyPublishedVersionDirectory(session),
+                clock,
+            ),
+            SqlAlchemySandboxRepository(session),
+            scenario_repository(session),
+            shop_repository(session),
+            support_identity_repository(session),
+            agent_configuration_repository(session),
+            SandboxToolService(
+                SqlAlchemySandboxRepository(session),
+                SqlAlchemySandboxSnapshotRepository(session),
+                shop_repository(session),
+                ticket_repository(session),
+                customer_profile_repository(session),
                 support_identity_repository(session),
-                agent_configuration_repository(session),
-                SandboxToolService(
-                    SqlAlchemySandboxRepository(session),
-                    SqlAlchemySandboxSnapshotRepository(session),
-                    shop_repository(session),
-                    ticket_repository(session),
-                    customer_profile_repository(session),
-                    support_identity_repository(session),
-                    SandboxActionService(
-                        SandboxService(
-                            SqlAlchemySandboxRepository(session),
-                            SqlAlchemySandboxSnapshotRepository(session),
-                            clock,
-                        ),
-                        SqlAlchemySandboxActionProposalRepository(session),
+                SandboxActionService(
+                    SandboxService(
+                        SqlAlchemySandboxRepository(session),
+                        SqlAlchemySandboxSnapshotRepository(session),
                         clock,
                     ),
+                    SqlAlchemySandboxActionProposalRepository(session),
+                    clock,
                 ),
-                build_scenario_mutations(session),
-                runtimes,
-                run_tracer,
+            ),
+            build_scenario_mutations(session),
+            runtimes,
+            run_tracer,
+            clock,
+        )
+
+    def experiment_runner() -> Generator[ExperimentRunner, None, None]:
+        with session_scope(factory) as session:
+            yield build_experiment_runner(session)
+
+    def experiment_replay_service() -> Generator[ExperimentReplayService, None, None]:
+        with session_scope(factory) as session:
+            # One session for the whole derivation: a replay starts an experiment and then
+            # drives it, and a failure halfway must leave no half-run behind. Over the same
+            # experiment construction the runner and the reading use, so a derived arm is
+            # advanced by exactly the code an operator's own advance runs.
+            yield ExperimentReplayService(
+                build_experiment_service(session),
+                build_experiment_runner(session),
+                SqlAlchemyExperimentReplayRepository(session),
+                # Composition selects the participant driver, as it does for the human one
+                # beside it; the use case is handed the class and never learns which it is.
+                ScriptedParticipantDriver,
                 clock,
             )
 
@@ -2301,6 +2325,7 @@ def create_app(
         experiment_service,
         HumanParticipantDriver,
         experiment_runner,
+        experiment_replay_service,
         experiment_timeline_service,
         experiment_trace_service,
         experiment_evaluation_service,
