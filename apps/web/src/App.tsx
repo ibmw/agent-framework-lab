@@ -11,6 +11,7 @@ import { ExperimentResultsLayout } from "./routes/ExperimentResultsLayout";
 import { ExperimentResultsPage } from "./routes/ExperimentResultsPage";
 import { ExperimentSetupPage } from "./routes/ExperimentSetupPage";
 import { ExperimentTimelinePage } from "./routes/ExperimentTimelinePage";
+import { ExperimentTracesPage } from "./routes/ExperimentTracesPage";
 import { JudgeConfigurationEditorPage } from "./routes/JudgeConfigurationEditorPage";
 import { JudgeConfigurationsPage } from "./routes/JudgeConfigurationsPage";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
@@ -54,6 +55,7 @@ export function App() {
         <Route path="bench/:experimentId/results" element={<ExperimentResultsLayout />}>
           <Route index element={<ExperimentResultsPage />} />
           <Route path="timeline" element={<ExperimentTimelinePage />} />
+          <Route path="traces" element={<ExperimentTracesPage />} />
         </Route>
         <Route path="history" element={<ExperimentHistoryPage />} />
         <Route path="scenarios" element={<ScenariosPage />} />

@@ -8,6 +8,7 @@ import type {
   ExperimentPreviewResponse,
   ExperimentResponse,
   ExperimentTimelineResponse,
+  ExperimentTracesResponse,
   ObjectiveResultSchema,
   ParticipantTurnListResponse,
   ParticipantTurnRequest,
@@ -98,6 +99,28 @@ export async function getExperimentTimeline(
 ): Promise<ExperimentTimelineResponse> {
   return read<ExperimentTimelineResponse>(
     await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/timeline`), {
+      signal,
+    }),
+  );
+}
+
+/**
+ * Read the recorded span tree of every attempt both arms made.
+ *
+ * Separate from the timeline beside it because it is a different *kind* of thing rather
+ * than a different question: the timeline is projected from the record on every read, and
+ * this is stored, because an attempt and its calls are timestamped from one reading of the
+ * clock and where inside the attempt each call ran cannot be recovered afterwards. A stored
+ * span carries no attribute of its own; the tool it timed and what that tool answered are
+ * joined onto it from the same events `getExperiment` serves.
+ */
+export async function getExperimentTraces(
+  shopId: string,
+  experimentId: string,
+  signal?: AbortSignal,
+): Promise<ExperimentTracesResponse> {
+  return read<ExperimentTracesResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/traces`), {
       signal,
     }),
   );

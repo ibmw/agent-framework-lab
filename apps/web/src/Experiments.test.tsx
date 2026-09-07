@@ -12,10 +12,12 @@ import type {
   ExperimentPreviewResponse,
   ExperimentResponse,
   ExperimentTimelineResponse,
+  ExperimentTracesResponse,
   JudgeConfigurationListResponse,
   MutationEventSchema,
   ObjectiveResultSchema,
   ParticipantTurnSchema,
+  RunTraceSpanSchema,
   ScenarioListResponse,
   ScenarioVersionListResponse,
   ShopDraftResponse,
@@ -643,6 +645,72 @@ const TIMELINE: ExperimentTimelineResponse = {
   ],
 };
 
+function span(
+  overrides: Partial<RunTraceSpanSchema> & Pick<RunTraceSpanSchema, "span_id" | "kind">,
+): RunTraceSpanSchema {
+  return {
+    parent_span_id: null,
+    started_offset_ms: 0,
+    duration_ms: 0,
+    sequence: null,
+    tool: null,
+    tool_version: null,
+    tool_outcome: null,
+    ...overrides,
+  };
+}
+
+/** One traced attempt of arm A: the advance, the framework's turn, and two calls inside it. */
+const TRACES: ExperimentTracesResponse = {
+  experiment_id: EXPERIMENT_ID,
+  traces: [
+    {
+      run_id: ARM_A,
+      arm_label: "Arm A",
+      framework_id: "pydantic-ai",
+      model_id: "claude-sonnet-5",
+      ordinal: 0,
+      attempt: 1,
+      outcome: "answered",
+      failure: null,
+      duration_ms: 3310,
+      trace_id: "a".repeat(32),
+      spans: [
+        span({ span_id: "1".repeat(16), kind: "attempt", duration_ms: 3400 }),
+        span({
+          span_id: "2".repeat(16),
+          kind: "runtime",
+          parent_span_id: "1".repeat(16),
+          started_offset_ms: 90,
+          duration_ms: 3310,
+        }),
+        span({
+          span_id: "3".repeat(16),
+          kind: "tool",
+          parent_span_id: "2".repeat(16),
+          started_offset_ms: 1700,
+          duration_ms: 310,
+          sequence: 0,
+          tool: "orders.read_order",
+          tool_version: "v1",
+          tool_outcome: "success",
+        }),
+        span({
+          span_id: "4".repeat(16),
+          kind: "tool",
+          parent_span_id: "2".repeat(16),
+          started_offset_ms: 2600,
+          duration_ms: 420,
+          sequence: 1,
+          tool: "orders.apply_address_change",
+          tool_version: "v1",
+          tool_outcome: "refused",
+        }),
+      ],
+    },
+  ],
+};
+
 let started: Record<string, unknown>[] = [];
 let delivered: Record<string, unknown>[] = [];
 let advanced: string[] = [];
@@ -661,6 +729,8 @@ let filed: string[][] = [];
 let publishedJudges: JudgeConfigurationListResponse = JUDGES;
 /** What an operator has written on this run, as the backend answers every write with it. */
 let annotations: ExperimentAnnotationsResponse = { notes: [], tags: [] };
+/** The spans the lab recorded, which are stored rather than projected from the record. */
+let traced: ExperimentTracesResponse = TRACES;
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -731,6 +801,9 @@ const server = setupServer(
   ),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
     HttpResponse.json(TIMELINE),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/traces`, () =>
+    HttpResponse.json(traced),
   ),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/annotations`, () =>
     HttpResponse.json(annotations),
@@ -831,6 +904,7 @@ afterEach(() => {
   publishedJudges = JUDGES;
   annotations = { notes: [], tags: [] };
   filed = [];
+  traced = TRACES;
 });
 afterAll(() => server.close());
 
@@ -845,6 +919,14 @@ function renderSetup() {
 function renderTimeline() {
   return render(
     <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/timeline`]}>
+      <App />
+    </MemoryRouter>,
+  );
+}
+
+function renderTraces() {
+  return render(
+    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/traces`]}>
       <App />
     </MemoryRouter>,
   );
@@ -1599,6 +1681,130 @@ describe("execution timeline", () => {
 
     await user.click(screen.getByRole("link", { name: "Back to the live bench" }));
     expect(await screen.findByRole("region", { name: "Customer composer" })).toBeVisible();
+  });
+});
+
+describe("traces", () => {
+  it("draws one attempt as a waterfall, each call where inside the attempt it ran", async () => {
+    renderTraces();
+
+    const waterfall = await screen.findByRole("list", { name: "Span waterfall" });
+
+    const rows = within(waterfall).getAllByRole("button");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "run.turn3400 ms",
+      "agent.answer3310 ms",
+      "agent.tool · orders.read_order310 ms",
+      "agent.tool · orders.apply_address_change420 ms",
+    ]);
+  });
+
+  it("reads a span's tool and outcome off the record rather than off the span", async () => {
+    const user = userEvent.setup();
+    renderTraces();
+
+    const waterfall = await screen.findByRole("list", { name: "Span waterfall" });
+    await user.click(
+      within(waterfall).getByRole("button", { name: /orders.apply_address_change/ }),
+    );
+
+    const panel = screen.getByRole("region", { name: "Span" });
+    expect(within(panel).getByText("orders.apply_address_change · v1")).toBeVisible();
+    expect(within(panel).getByText("refused")).toBeVisible();
+    expect(within(panel).getByText("+2600 ms into the attempt")).toBeVisible();
+    expect(within(panel).getByText("a".repeat(32))).toBeVisible();
+  });
+
+  it("offers every recorded attempt and names the arm each one belongs to", async () => {
+    const user = userEvent.setup();
+    traced = {
+      ...TRACES,
+      traces: [
+        {
+          ...TRACES.traces[0],
+          attempt: 1,
+          outcome: "failed",
+          failure: "model_provider",
+          trace_id: "b".repeat(32),
+          spans: TRACES.traces[0].spans.slice(0, 2),
+        },
+        TRACES.traces[0],
+      ],
+    };
+    renderTraces();
+
+    const picker = await screen.findByRole("group", { name: "Traced attempts" });
+    expect(
+      within(picker).getByRole("button", { name: "Arm A · turn 1 · attempt 1 · failed" }),
+    ).toBeVisible();
+
+    await user.click(within(picker).getByRole("button", { name: /failed/ }));
+
+    const waterfall = screen.getByRole("list", { name: "Span waterfall" });
+    expect(within(waterfall).getAllByRole("button")).toHaveLength(2);
+    expect(
+      within(screen.getByRole("region", { name: "Span" })).getByText(
+        /the model provider rejected the request/,
+      ),
+    ).toBeVisible();
+  });
+
+  it("says an attempt was never traced instead of reconstructing one", async () => {
+    traced = {
+      ...TRACES,
+      traces: [{ ...TRACES.traces[0], trace_id: null, spans: [] }],
+    };
+    renderTraces();
+
+    const card = await screen.findByRole("region", { name: "Traces" });
+
+    expect(within(card).getByText(/recorded before the lab traced its runs/)).toBeVisible();
+    expect(within(card).queryByRole("list", { name: "Span waterfall" })).toBeNull();
+  });
+
+  it("says an experiment nobody has run has nothing to trace", async () => {
+    traced = { experiment_id: EXPERIMENT_ID, traces: [] };
+    renderTraces();
+
+    const card = await screen.findByRole("region", { name: "Traces" });
+
+    expect(within(card).getByText(/nothing to trace/)).toBeVisible();
+  });
+
+  it("is a depth tab of the results screen, reached beside the timeline", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    const tabs = await screen.findByRole("navigation", { name: "Results views" });
+    await user.click(within(tabs).getByRole("link", { name: "Traces" }));
+
+    expect(within(tabs).getByRole("link", { name: "Traces" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(await screen.findByRole("region", { name: "Traces" })).toBeVisible();
+    // The header stays across the tabs, as it does for every other depth view.
+    expect(
+      screen.getByRole("heading", { name: "Wrong address — framework comparison" }),
+    ).toBeVisible();
+  });
+
+  it("reports the backend's own reason when the traces cannot be read", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/traces`, () =>
+        HttpResponse.json(
+          {
+            code: "internal_error",
+            message: "the trace store is unavailable",
+            request_id: "req-9",
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderTraces();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("the trace store is unavailable");
   });
 });
 

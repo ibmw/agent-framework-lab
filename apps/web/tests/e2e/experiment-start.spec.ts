@@ -663,6 +663,24 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   const faulted = paths.getByRole("listitem").filter({ hasText: "advance_fulfilment" });
   await expect(faulted).toHaveText(/capability_lab\/domain\/mutation\.py:\d+ · 2 calls/);
 
+  // And the same attempt read as the span tree the lab recorded while it ran: what the
+  // timeline cannot say, which is where inside the attempt each call actually happened.
+  await page.getByRole("link", { name: "Traces" }).click();
+  const traces = card(page, "Traces");
+  const waterfall = traces.getByRole("list", { name: "Span waterfall" });
+  await expect(waterfall.getByRole("button").first()).toContainText("run.turn");
+  await expect(
+    waterfall.getByRole("button").filter({ hasText: "orders.apply_address_change" }),
+  ).toHaveCount(1);
+
+  // A span holds identifiers and milliseconds; which tool it timed and what that tool
+  // answered are joined from the record beside it.
+  await waterfall.getByRole("button").filter({ hasText: "orders.apply_address_change" }).click();
+  const span = card(page, "Span");
+  await expect(span.getByText("orders.apply_address_change · v1")).toBeVisible();
+  await expect(span.getByText("ok")).toBeVisible();
+  await expect(span.getByText(/^[0-9a-f]{32}$/)).toBeVisible();
+
   // And the incident is found again from history — experiment-first, across every shop,
   // with each arm's own count beside what it ran and no total anywhere.
   await openSection(page, "History", "Experiment history");
