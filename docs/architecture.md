@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target architecture with an implemented POC baseline — 2026-09-08
+Status: target architecture with an implemented POC baseline — 2026-09-07
 
 Read `docs/product-direction.md` first. This document distinguishes principles that remain binding,
 the code that exists today, and the target boundaries that future slices must establish. Do not
@@ -361,6 +361,9 @@ from an old one. It clones the snapshot its source froze rather than freezing th
 against them (ADR 0019), so re-freezing after an order moved is different starting state and
 after an order was deleted is no starting state at all — and it pins each arm to the exact
 configuration version that arm ran, because taking a newer one is a fork rather than a replay.
+Reuse is refused in exactly one case: a build that no longer publishes the tool contract set
+that snapshot was frozen against, which is the only way a run's sandbox fingerprint and its
+own envelope could name two different tool sets.
 What drives it is the source's own recorded compositions: the same words, to the same arms, at
 the same depths, with each arm advanced as often as it was advanced then, delivered through the
 scripted participant driver the port has had a type for since ADR 0025. So the derived run
@@ -410,7 +413,8 @@ lab did not measure this" is a real state and a zero would be counted into a tot
 The spans of each attempt live in `experiment_run_spans`, keyed by the arm and the span id and
 holding identifiers, a kind, an offset, and a duration — and nothing that could carry content
 (ADR 0037). That one experiment was derived from another is `experiment_replays`, keyed by the
-derived one because it is derived by the single act that created it (ADR 0038). What an operator writes afterwards is stored beside all of it rather than in it:
+derived one because it is derived by the single act that created it (ADR 0038).
+What an operator writes afterwards is stored beside all of it rather than in it:
 `experiment_notes` is append-only, and `experiment_tags` is keyed by the run and the folded tag so
 the set is a set rather than a rule the writer has to remember (ADR 0036). Experiments and judge
 executions are append-oriented historical evidence. Operational sandbox state is mutable only

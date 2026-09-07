@@ -1,6 +1,6 @@
 # ADR 0038 — The replay: a new experiment, in the world the old one started in
 
-Status: accepted — 2026-09-08
+Status: accepted — 2026-09-07
 
 Delivers the replay third of `docs/PLAN.md` Milestone 5's eighth outcome, which that outcome
 splits from traces (ADR 0037) and fork by name. Records what "replay" means against a record
@@ -86,6 +86,18 @@ command rather than trusting the caller, because those are the columns the exper
 carry: a snapshot of another recipe would produce an experiment whose provenance columns
 describe starting state it is not in, and the fingerprint beside them could not be used to
 tell.
+
+It checks the **tool contract set** too, and that check exists only because of this operation.
+The published tool versions are part of the sandbox fingerprint (ADR 0021) precisely so that a
+build publishing a newer contract counts as different starting state — but reusing a snapshot
+does not re-fingerprint anything, while the `experiment-v1` envelope beside it stamps the
+versions *this* build publishes and the runtime runs this build's handlers. A lab upgraded past
+the recorded contract set and then asked to replay would therefore write the one record in the
+lab whose two fingerprints name two different tool sets, and whose resolution fingerprint
+differs from its source in two inputs rather than the one this ADR claims. Materializing cannot
+produce that pair, because it stamps both halves from one resolution; only reuse can, so only
+reuse refuses it. Reading the frozen set back needed one addition:
+`SandboxSnapshotDocument.tool_contracts`, decoded as strictly as the pins beside it.
 
 The setup gate still runs. Everything it asks — the tone override against the shop the
 scenario pinned, the closure that disagrees with itself, the faults this build can actually
@@ -180,6 +192,14 @@ half-driven experiment nobody asked for; the alternative, keeping the partial ru
 tempting and rejected, because an experiment whose script stopped being applied for a reason
 nothing records is a run whose provenance says something untrue about it.
 
+That unit of work is asked to close **before** the response, which no other route in this
+codebase asks for yet. A `yield` dependency left on the request stack commits after the
+response is on the wire, so a store that refused the commit would leave the caller holding a
+201 for an experiment nothing can read. This is the longest write transaction the lab opens, so
+its dependency is declared `scope="function"` and the commit is part of what the status code
+reports. The sibling write routes have the same shape and much shorter transactions; changing
+them is a sweep this slice deliberately did not make.
+
 ### What a replay reproduces is the input
 
 Against the declared control runtime a replay reproduces its source call for call: the tests
@@ -252,9 +272,11 @@ legend names "replay recorded versions", and the row carries it.
   a derived run holding one arm of a two-arm comparison would be a different experiment
   wearing this one's provenance.
 - **Showing an experiment its own replays.** A derived run names its source; a source does not
-  list what has been derived from it. The index for that read is in the table
-  (`ix_experiment_replays_source`) because it is the only way this table is ever asked from the
-  other end, and the reading is a small addition the day a screen wants it.
+  list what has been derived from it. Neither the reading nor an index on the source column is
+  here: an index for a query that does not exist is the speculative structure this codebase
+  refuses ahead of its caller, and both are one small addition the day a screen wants them. The
+  repository has `get` and `save` and no listing for the same reason — history reads a derived
+  row's origin through the same `get_experiment` it projects every other column from.
 - **Refusing to replay a run that is still being driven.** The script is what the record holds
   at the moment it is read, and a replay of a half-driven run reproduces the half. Refusing
   would need a status rule over a record that deliberately has no status (ADR 0029).
@@ -280,26 +302,38 @@ legend names "replay recorded versions", and the row carries it.
   one arm's, the derived driver recorded as `scripted` with the resolution fingerprint moving
   and the sandbox fingerprint not, the control runtime replaying an arm call for call to the
   same state fingerprint, the arm nobody ran left unrun, the scenario's fault firing again into
-  the derived arm without colliding with the source's firing, the source left byte for byte as
-  it was, the provenance naming the source and a replay of a replay naming *its* source, one
-  run replayed twice as two experiments, the derived run in the shop's listing, the experiment
-  of another shop refused, and the snapshot that does not describe the command it was handed
-  to.
+  the derived arm without colliding with the source's firing, a retried turn advanced as often
+  as it was advanced without claiming the derived arm will fail, a derived arm whose framework
+  keeps failing recording every advance the script asked for and still owing a reply, the source
+  left as it was — its record, both streams, its tool and fault events, its arms' fingerprints
+  and revisions, and its recorded spans — the verdicts and annotations kept on the run they were
+  made about and absent from the derived one, the provenance naming the source and a replay of a
+  replay naming *its* source, one run replayed twice as two experiments, the derived run in the
+  shop's listing, the experiment of another shop refused, the snapshot that does not describe the
+  command it was handed to, and the snapshot frozen against a tool contract set this build no
+  longer publishes.
 - Contract tests (`test_experiment_api.py`) drive the operation: the 201 carrying a new
   experiment with the source's snapshot and fingerprint and the provenance object, the arm the
   source ran re-run and the arm it did not left waiting, the recorded composition reaching the
   derived thread as one composition with `scripted` on its turns, the replayed experiment
   answering byte for byte what it answered before, the derived run in both the shop listing and
-  the cross-shop history with its `replay_of` beside a source whose own is null, and the
-  experiment of another shop answered 404.
-- A migration test (`test_migrations.py`) holds the store to what the service cannot produce:
-  an experiment derived twice, and an experiment derived from itself.
+  the cross-shop history with its `replay_of` beside a source whose own is null, the experiment
+  of another shop answered 404, and a store that refuses the commit answering 500 with nothing
+  stored rather than 201 with an identifier nothing can read.
+- A migration test (`test_migrations.py`) holds the store to what the service cannot produce,
+  over the engine the application actually uses so both foreign keys are live: an experiment
+  derived twice, an experiment derived from itself, and either end naming an experiment this
+  lab never ran.
+- An envelope test (`test_sandbox_snapshot.py`) covers the tool contract set read back off a
+  stored snapshot, and a drifted version refused by its path rather than dropped.
 - Frontend tests (`Experiments.test.tsx`, `History.test.tsx`) cover the surfaces: the results
   header deriving a run and opening what it produced rather than staying on the old one, the
   derived screen naming and linking the run it replays, a refused replay reported without
-  leaving the run being read, the bench offering no composer on a run a script drove, the
-  history row naming its source while the source's row carries no marker, and the row's quick
-  action replaying and leaving the listing for the evidence it produced.
+  leaving the run being read, the bench offering no composer on a run a script drove and
+  naming the run that drove it only where there is one to name — an experiment may be started
+  under a driver by hand — the history row naming its source while the source's row carries no
+  marker, and the row's quick action replaying and leaving the listing for the evidence it
+  produced.
 - The Playwright journey (`experiment-start.spec.ts`) is extended rather than duplicated, as
   every slice since ADR 0026 has been: after finding the incident again in history and opening
   its evidence, the operator replays it, and reads the derived run reaching the same place —
@@ -311,7 +345,7 @@ legend names "replay recorded versions", and the row carries it.
 
 ## Migration
 
-`20260908_0019` adds `experiment_replays`, foreign-keyed to `experiments` at both ends, with
-the distinctness check above. Nothing is backfilled and nothing existing is touched: every
-experiment run before this slice reads back exactly as it did, reporting no origin because it
-has none.
+`20260907_0019` adds `experiment_replays`, foreign-keyed to `experiments` at both ends, with
+the distinctness check above and no index of its own. Nothing is backfilled and nothing
+existing is touched: every experiment run before this slice reads back exactly as it did,
+reporting no origin because it has none.

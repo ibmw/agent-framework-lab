@@ -1,6 +1,6 @@
 # Project plan
 
-Status: current redesign roadmap — 2026-09-08
+Status: current redesign roadmap — 2026-09-07
 
 ## Purpose and authority
 
@@ -768,7 +768,9 @@ leaves no other reading, the starting state reused by fingerprint rather than fr
 the two cases that decide it, the recorded compositions as the script and the trigger
 deliberately left out of it, the composition order reconstructed from the ordinals rather than
 from a clock ADR 0027 already refused to trust, the advance count that is self-limiting
-because advancing is idempotent over an answer, the scripted participant driver ADR 0025 said
+because advancing is idempotent over an answer, the one reuse it refuses — a starting state
+frozen against a tool set this build no longer publishes, which is the only way a run's two
+fingerprints could name two different tool sets — the scripted participant driver ADR 0025 said
 would arrive with its first caller, the honest limit that a deterministic runtime replays
 exactly and a model-backed one does not, and the derivation stored beside two experiments
 because it is part of neither.
