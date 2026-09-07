@@ -13,9 +13,16 @@ import { useExperimentResults } from "./ExperimentResultsLayout";
 
 const UNAVAILABLE = "This experiment's traces are unavailable.";
 
-/** What each kind of span is, in the lab's words rather than a framework's. */
+/**
+ * What each kind of span is, in the lab's words rather than a framework's.
+ *
+ * These are the names the backend gives the spans it exports, letter for letter. The trace
+ * id on this page is what an operator carries into an exporter such as Phoenix, and a span
+ * named one thing here and another there would make that correlation fail exactly when it
+ * is being used.
+ */
 const KINDS: Record<RunTraceSpanSchema["kind"], string> = {
-  attempt: "run.turn",
+  attempt: "experiment.attempt",
   runtime: "agent.answer",
   tool: "agent.tool",
 };
@@ -236,10 +243,11 @@ function Waterfall({
               <span className="relative flex h-3 items-center rounded-sm bg-admin-border/40">
                 <span
                   className="absolute h-3 rounded-sm bg-lab-accent"
-                  style={{
-                    left: `${(span.started_offset_ms / total) * 100}%`,
-                    width: `${Math.max((span.duration_ms / total) * 100, 1)}%`,
-                  }}
+                  // Each interval was rounded to a millisecond on its own, so a child can
+                  // end a millisecond past the parent it sits inside. Clamped here rather
+                  // than in the record: the numbers are the ones the runner measured, and
+                  // only the drawing has to fit inside the track.
+                  style={bar(span.started_offset_ms, span.duration_ms, total)}
                 />
                 <span className="ml-auto pr-1 text-[10px] text-admin-muted">
                   {span.duration_ms} ms
@@ -284,6 +292,15 @@ function Attributes({ trace, span }: { trace: RunTraceSchema; span: RunTraceSpan
       ))}
     </dl>
   );
+}
+
+/** Where a bar starts and how wide it is, never past the end of the track it sits in. */
+function bar(offset: number, duration: number, total: number): { left: string; width: string } {
+  const left = Math.min((offset / total) * 100, 100);
+  return {
+    left: `${left}%`,
+    width: `${Math.min(Math.max((duration / total) * 100, 1), 100 - left)}%`,
+  };
 }
 
 /** A tool span is named by the tool it timed; the other two are named by what they are. */

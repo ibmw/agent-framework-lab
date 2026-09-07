@@ -668,7 +668,7 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await page.getByRole("link", { name: "Traces" }).click();
   const traces = card(page, "Traces");
   const waterfall = traces.getByRole("list", { name: "Span waterfall" });
-  await expect(waterfall.getByRole("button").first()).toContainText("run.turn");
+  await expect(waterfall.getByRole("button").first()).toContainText("experiment.attempt");
   await expect(
     waterfall.getByRole("button").filter({ hasText: "orders.apply_address_change" }),
   ).toHaveCount(1);

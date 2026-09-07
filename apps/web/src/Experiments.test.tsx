@@ -1692,7 +1692,7 @@ describe("traces", () => {
 
     const rows = within(waterfall).getAllByRole("button");
     expect(rows.map((row) => row.textContent)).toEqual([
-      "run.turn3400 ms",
+      "experiment.attempt3400 ms",
       "agent.answer3310 ms",
       "agent.tool · orders.read_order310 ms",
       "agent.tool · orders.apply_address_change420 ms",
@@ -1728,7 +1728,7 @@ describe("traces", () => {
           trace_id: "b".repeat(32),
           spans: TRACES.traces[0].spans.slice(0, 2),
         },
-        TRACES.traces[0],
+        { ...TRACES.traces[0], attempt: 2 },
       ],
     };
     renderTraces();
@@ -1736,6 +1736,9 @@ describe("traces", () => {
     const picker = await screen.findByRole("group", { name: "Traced attempts" });
     expect(
       within(picker).getByRole("button", { name: "Arm A · turn 1 · attempt 1 · failed" }),
+    ).toBeVisible();
+    expect(
+      within(picker).getByRole("button", { name: "Arm A · turn 1 · attempt 2" }),
     ).toBeVisible();
 
     await user.click(within(picker).getByRole("button", { name: /failed/ }));
