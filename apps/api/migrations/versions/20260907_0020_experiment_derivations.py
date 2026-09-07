@@ -36,6 +36,14 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "experiment_id <> source_experiment_id", name="ck_experiment_derivations_distinct"
         ),
+        # The kind is a closed vocabulary, held here as every other one in this schema is
+        # (`ck_experiments_participant_driver_valid`, `ck_run_spans_kind_valid`). A stray
+        # value would not be a bad row in isolation: reading it back raises on the way to a
+        # `DerivationKind`, which would take out the experiment's own screen and the whole
+        # cross-shop listing that projects every run through it.
+        sa.CheckConstraint(
+            "kind IN ('replay', 'fork')", name="ck_experiment_derivations_kind_valid"
+        ),
     )
     # Every row written before this migration was written by the only operation that could
     # write one, so the kind is known rather than defaulted.
@@ -51,6 +59,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # The schema this returns to has no shape for a fork, so it refuses rather than dropping
+    # the rows — the rule ADR 0003's migration set: a downgrade that cannot represent the
+    # data it holds says so instead of quietly discarding it.
+    connection = op.get_bind()
+    if (
+        connection.scalar(sa.text("SELECT 1 FROM experiment_derivations WHERE kind = 'fork'"))
+        is not None
+    ):
+        raise RuntimeError(
+            "refusing to downgrade experiment derivations because the old schema cannot "
+            "represent a fork; delete the forked experiments and their derivation rows "
+            "before retrying"
+        )
     op.create_table(
         "experiment_replays",
         sa.Column("experiment_id", sa.String(length=36), nullable=False),
@@ -63,13 +84,10 @@ def downgrade() -> None:
             "experiment_id <> source_experiment_id", name="ck_experiment_replays_distinct"
         ),
     )
-    # A fork has no shape in the schema this returns to, so it is dropped rather than
-    # rewritten as a replay it never was.
     op.execute(
         sa.text(
             "INSERT INTO experiment_replays (experiment_id, source_experiment_id, created_at) "
-            "SELECT experiment_id, source_experiment_id, created_at "
-            "FROM experiment_derivations WHERE kind = 'replay'"
+            "SELECT experiment_id, source_experiment_id, created_at FROM experiment_derivations"
         )
     )
     op.drop_table("experiment_derivations")

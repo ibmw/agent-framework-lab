@@ -806,6 +806,96 @@ def test_the_derivations_already_recorded_are_carried_over_as_replays(
 
 
 @pytest.mark.migration
+def test_a_derivation_is_one_of_the_two_kinds_this_lab_has(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The closed vocabulary is held by the store, as every other one in this schema is.
+
+    Not a tidiness rule: a value outside it raises on the way back to a `DerivationKind`,
+    which would take out the derived run's own screen *and* the cross-shop listing that
+    projects every experiment in the lab through the same reading."""
+    database_url = f"sqlite:///{tmp_path / 'derivation-vocabulary.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_database_engine(database_url)
+    derived = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac061"
+    source = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac062"
+    insert = text(
+        """
+        INSERT INTO experiment_derivations
+            (experiment_id, source_experiment_id, kind, created_at)
+        VALUES (:experiment_id, :source_experiment_id, :kind, '2026-09-08 12:00:00.000000')
+        """
+    )
+    with engine.begin() as connection:
+        for identifier in (source, derived):
+            connection.execute(
+                text(EXPERIMENT_ROW), {"experiment_id": identifier, "fingerprint": "a" * 64}
+            )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            insert,
+            {"experiment_id": derived, "source_experiment_id": source, "kind": "bogus"},
+        )
+
+    with engine.begin() as connection:
+        connection.execute(
+            insert, {"experiment_id": derived, "source_experiment_id": source, "kind": "fork"}
+        )
+
+
+@pytest.mark.migration
+def test_downgrading_over_a_fork_refuses_rather_than_dropping_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The old schema has no shape for a fork, so it says so instead of discarding the row.
+
+    The rule the generated-scenario migration set: a downgrade that cannot represent the data
+    it holds refuses. A replay-only store downgrades and comes back whole."""
+    database_url = f"sqlite:///{tmp_path / 'derivation-downgrade.db'}"
+    config = alembic_config(database_url, monkeypatch)
+    command.upgrade(config, "head")
+    engine = create_database_engine(database_url)
+    forked = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac071"
+    replayed = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac072"
+    source = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac073"
+    insert = text(
+        """
+        INSERT INTO experiment_derivations
+            (experiment_id, source_experiment_id, kind, created_at)
+        VALUES (:experiment_id, :source_experiment_id, :kind, '2026-09-08 12:00:00.000000')
+        """
+    )
+    with engine.begin() as connection:
+        for identifier in (source, replayed, forked):
+            connection.execute(
+                text(EXPERIMENT_ROW), {"experiment_id": identifier, "fingerprint": "a" * 64}
+            )
+        connection.execute(
+            insert, {"experiment_id": replayed, "source_experiment_id": source, "kind": "replay"}
+        )
+        connection.execute(
+            insert, {"experiment_id": forked, "source_experiment_id": source, "kind": "fork"}
+        )
+
+    with pytest.raises(RuntimeError, match="cannot represent a fork"):
+        command.downgrade(config, "20260907_0019")
+
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM experiment_derivations WHERE experiment_id = :experiment_id"),
+            {"experiment_id": forked},
+        )
+    command.downgrade(config, "20260907_0019")
+
+    with engine.connect() as connection:
+        kept = connection.execute(text("SELECT source_experiment_id FROM experiment_replays")).all()
+    assert [row.source_experiment_id for row in kept] == [source]
+
+
+@pytest.mark.migration
 def test_an_experiment_is_derived_once_and_never_from_itself(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -841,6 +841,10 @@ class ExperimentDerivationModel(Base):
         CheckConstraint(
             "experiment_id <> source_experiment_id", name="ck_experiment_derivations_distinct"
         ),
+        # Held to its closed vocabulary as every other one here is: a stray value would raise
+        # on the way back to a `DerivationKind` and take out both the run's own screen and the
+        # cross-shop listing that projects every run through it.
+        CheckConstraint("kind IN ('replay', 'fork')", name="ck_experiment_derivations_kind_valid"),
     )
 
     experiment_id: Mapped[str] = mapped_column(
