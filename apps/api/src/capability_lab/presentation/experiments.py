@@ -1662,12 +1662,15 @@ class ExperimentRoutes:
             responses={
                 404: {
                     "model": ErrorResponse,
-                    "description": "The experiment is not found in this shop",
+                    "description": "The experiment, or the starting state it froze, is not "
+                    "found in this shop",
                 },
                 422: {
                     "model": ErrorResponse,
-                    "description": "The derived experiment cannot be started, or no runtime "
-                    "for an arm's framework is available here",
+                    "description": "The derived experiment cannot be started — its setup no "
+                    "longer passes, or its starting state was frozen against a tool contract "
+                    "set this build no longer publishes — or no runtime for an arm's "
+                    "framework is available here",
                 },
             },
         )

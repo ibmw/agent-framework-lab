@@ -664,6 +664,16 @@ class ExperimentService:
         row will carry: a snapshot of another recipe, version, or seed would produce an
         experiment whose provenance columns describe starting state it is not in, and the
         fingerprint beside them could not be used to tell.
+
+        The tool contract set is checked for a stronger reason. It is part of the sandbox
+        fingerprint (ADR 0021) precisely so that a build publishing a newer contract counts
+        as different starting state — but a *reused* snapshot is not re-fingerprinted, while
+        the `experiment-v1` envelope beside it records the versions this build publishes and
+        the runtime runs this build's handlers. So a snapshot frozen against a tool set this
+        build no longer publishes would produce the one record in the lab whose two
+        fingerprints disagree about which tools ran. Materializing cannot produce that pair,
+        because it stamps both from the same resolution; only reuse can, so only reuse has to
+        refuse it.
         """
         snapshot = self._snapshots.get_snapshot(shop_id, snapshot_id)
         if (
@@ -674,6 +684,12 @@ class ExperimentService:
             raise ExperimentConfigurationError(
                 f"snapshot {snapshot_id} does not freeze scenario {command.scenario_id} "
                 f"version {command.scenario_version} at seed {command.seed}"
+            )
+        published = tuple(sorted(SANDBOX_TOOL_CONTRACT_VERSIONS.items()))
+        if snapshot.content.tool_contracts != published:
+            raise ExperimentConfigurationError(
+                f"snapshot {snapshot_id} was frozen against a tool contract set this build "
+                "no longer publishes, so it cannot be reused as starting state"
             )
         return snapshot
 

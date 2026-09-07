@@ -312,9 +312,21 @@ def test_a_whole_envelope_round_trips() -> None:
 
     assert restored.seed == 1234
     assert restored.state == sandbox_state()
+    # The tool set this state was frozen against, read back sorted: a caller that reuses a
+    # recorded snapshot has to be able to tell whether this build still publishes it.
+    assert restored.tool_contracts == (("commerce.read_order", "v1"),)
     assert {pin.definition.definition_type.value for pin in restored.pins} == {
         entry["definition_type"] for entry in definitions
     }
+
+
+def test_a_drifted_tool_contract_version_is_refused_rather_than_dropped() -> None:
+    """The tool set is part of the fingerprint, so a version that is not text is corruption."""
+    document = envelope()
+    document["tool_contracts"] = {"commerce.read_order": 1}
+
+    with pytest.raises(CanonicalSerializationError, match=r"tool_contracts\.commerce\.read_order"):
+        sandbox_snapshot_from_document(document)
 
 
 def test_an_envelope_of_another_schema_version_is_refused_by_its_token() -> None:

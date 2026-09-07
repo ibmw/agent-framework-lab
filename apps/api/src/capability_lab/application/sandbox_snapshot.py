@@ -8,12 +8,14 @@ pins alone, `sandbox-v2` carries the frozen state beside them.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import UUID
 
 from capability_lab.application.canonical_document import (
     DocumentReader,
+    require_document_text,
     require_schema_version,
 )
 from capability_lab.application.canonical_json import (
@@ -103,6 +105,13 @@ class SandboxSnapshotDocument:
 
     pins: tuple[ResolvedDefinition, ...]
     seed: int
+    tool_contracts: tuple[tuple[str, str], ...]
+    """The published tool versions this starting state was frozen against, sorted by name.
+
+    Part of the fingerprint since ADR 0021, so a build that publishes a newer contract set
+    freezes different starting state. Read back because a caller that reuses a recorded
+    snapshot rather than freezing a new one has to be able to tell whether this build would
+    still run the tools it names (ADR 0038)."""
     state: SandboxState
 
 
@@ -118,6 +127,7 @@ def sandbox_snapshot_from_document(document: object) -> SandboxSnapshotDocument:
     return SandboxSnapshotDocument(
         pins=sandbox_pins_from_document(reader),
         seed=reader.integer("seed"),
+        tool_contracts=sandbox_tool_contracts_from_document(reader),
         state=sandbox_state_from_document(reader.embedded("state")),
     )
 
@@ -143,6 +153,24 @@ def sandbox_pins_from_document(reader: DocumentReader) -> tuple[ResolvedDefiniti
             )
         )
     return tuple(pins)
+
+
+def sandbox_tool_contracts_from_document(
+    reader: DocumentReader,
+) -> tuple[tuple[str, str], ...]:
+    """The tool contract set this snapshot froze, read back off its own envelope.
+
+    Sorted by name, because the caller compares it with what this build publishes and a
+    mapping's iteration order is not part of what was fingerprinted.
+    """
+    contracts = reader.embedded("tool_contracts")
+    if not isinstance(contracts, Mapping):  # pragma: no cover - `embedded` requires a mapping
+        raise CanonicalSerializationError(f"{reader.path}.tool_contracts must be an object")
+    entries = cast("Mapping[str, object]", contracts)
+    return tuple(
+        (name, require_document_text(entries[name], f"{reader.path}.tool_contracts.{name}"))
+        for name in sorted(entries)
+    )
 
 
 def sandbox_state_from_document(document: object) -> SandboxState:
