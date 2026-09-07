@@ -3255,7 +3255,7 @@ export interface components {
       /** Agent Configuration Name */
       agent_configuration_name: string;
       /** Agent Configuration Latest Version */
-      agent_configuration_latest_version?: number | null;
+      agent_configuration_latest_version: number | null;
       /** Framework Id */
       framework_id: string;
       /** Framework Label */

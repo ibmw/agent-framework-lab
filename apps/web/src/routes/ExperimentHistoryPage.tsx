@@ -2,7 +2,7 @@ import type { ExperimentHistoryEntrySchema, ExperimentHistoryResponse } from "@a
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { listExperimentHistory, replayExperiment } from "../api/experiments";
+import { forkExperiment, listExperimentHistory, replayExperiment } from "../api/experiments";
 import { PageHeader } from "../components/WorkspaceChrome";
 import { OUTCOMES } from "../lib/evidence";
 import {
@@ -80,7 +80,7 @@ export function ExperimentHistoryPage() {
   const [listing, setListing] = useState<ExperimentHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [replaying, setReplaying] = useState<string | null>(null);
+  const [deriving, setDeriving] = useState<string | null>(null);
   const navigate = useNavigate();
 
   /**
@@ -92,7 +92,7 @@ export function ExperimentHistoryPage() {
    */
   const replay = useCallback(
     async (experiment: ExperimentHistoryEntrySchema) => {
-      setReplaying(experiment.experiment_id);
+      setDeriving(experiment.experiment_id);
       setError(null);
       try {
         const derived = await replayExperiment(experiment.shop_id, experiment.experiment_id);
@@ -100,7 +100,39 @@ export function ExperimentHistoryPage() {
       } catch (cause: unknown) {
         setError(describeApiError(cause, "This experiment could not be replayed."));
       } finally {
-        setReplaying(null);
+        setDeriving(null);
+      }
+    },
+    [navigate],
+  );
+
+  /**
+   * Fork a row onto the newest published version of every arm's configuration.
+   *
+   * The row's action takes no choice, which is the difference between it and the results
+   * header's: the legend on the frame says "fork with newer versions", and that is one
+   * decision an operator can make from a listing. Choosing a *different* configuration is a
+   * question about one run, and it is asked on the screen that holds that run's evidence.
+   *
+   * Offered only where something is newer, because a fork that changes nothing is refused
+   * by the backend — a button that can only fail is worse than one that is not there.
+   */
+  const fork = useCallback(
+    async (experiment: ExperimentHistoryEntrySchema) => {
+      setDeriving(experiment.experiment_id);
+      setError(null);
+      try {
+        const derived = await forkExperiment(experiment.shop_id, experiment.experiment_id, {
+          arms: experiment.arms.map((arm) => ({
+            configuration_id: arm.agent_configuration_id,
+            version: arm.agent_configuration_latest_version ?? arm.agent_configuration_version,
+          })),
+        });
+        navigate(`/shops/${experiment.shop_id}/bench/${derived.experiment_id}/results`);
+      } catch (cause: unknown) {
+        setError(describeApiError(cause, "This experiment could not be forked."));
+      } finally {
+        setDeriving(null);
       }
     },
     [navigate],
@@ -371,7 +403,8 @@ export function ExperimentHistoryPage() {
                     key={experiment.experiment_id}
                     experiment={experiment}
                     onReplay={replay}
-                    replaying={replaying === experiment.experiment_id}
+                    onFork={fork}
+                    deriving={deriving === experiment.experiment_id}
                   />
                 ))}
               </tbody>
@@ -414,14 +447,22 @@ export function ExperimentHistoryPage() {
 function HistoryRow({
   experiment,
   onReplay,
-  replaying,
+  onFork,
+  deriving,
 }: {
   experiment: ExperimentHistoryEntrySchema;
   onReplay: (experiment: ExperimentHistoryEntrySchema) => void;
-  replaying: boolean;
+  onFork: (experiment: ExperimentHistoryEntrySchema) => void;
+  deriving: boolean;
 }) {
   const bench = `/shops/${experiment.shop_id}/bench/${experiment.experiment_id}`;
   const meaning = STATUSES[experiment.status];
+  // What the row's fork would actually move. Nothing newer anywhere is nothing to fork onto.
+  const newer = experiment.arms.some(
+    (arm) =>
+      arm.agent_configuration_latest_version !== null &&
+      arm.agent_configuration_latest_version > arm.agent_configuration_version,
+  );
   return (
     <tr>
       <td className={tableCellClasses}>
@@ -463,6 +504,15 @@ function HistoryRow({
             <li key={arm.run_id}>
               <span className="font-semibold">{arm.label}</span> · {arm.agent_configuration_name} v
               {arm.agent_configuration_version}
+              {arm.agent_configuration_latest_version !== null &&
+              arm.agent_configuration_latest_version > arm.agent_configuration_version ? (
+                // Provenance beside the recipe's own: this run stays explained by what it
+                // pinned, and this is what says there is a newer arm to fork it onto.
+                <span className="text-admin-draft-ink">
+                  {" "}
+                  · v{arm.agent_configuration_latest_version} published
+                </span>
+              ) : null}
               <span className="text-admin-muted"> · {arm.framework_label}</span>
             </li>
           ))}
@@ -520,10 +570,23 @@ function HistoryRow({
           <button
             className="text-left text-lab-ink underline-offset-2 hover:underline"
             type="button"
-            disabled={replaying}
+            disabled={deriving}
             onClick={() => onReplay(experiment)}
           >
-            {replaying ? "Replaying…" : "Replay recorded versions"}
+            {deriving ? "Deriving…" : "Replay recorded versions"}
+          </button>
+          <button
+            className="text-left text-lab-ink underline-offset-2 hover:underline disabled:text-admin-muted disabled:no-underline"
+            type="button"
+            disabled={deriving || !newer}
+            title={
+              newer
+                ? undefined
+                : "Every arm already runs the newest published version of its configuration."
+            }
+            onClick={() => onFork(experiment)}
+          >
+            {deriving ? "Deriving…" : "Fork with newer versions"}
           </button>
         </div>
       </td>

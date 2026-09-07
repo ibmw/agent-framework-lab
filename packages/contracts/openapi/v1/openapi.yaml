@@ -8060,6 +8060,7 @@ components:
       - agent_configuration_id
       - agent_configuration_version
       - agent_configuration_name
+      - agent_configuration_latest_version
       - framework_id
       - framework_label
       - model_id

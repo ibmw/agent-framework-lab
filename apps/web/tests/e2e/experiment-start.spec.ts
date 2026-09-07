@@ -760,4 +760,36 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(
     page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
   ).toBeVisible();
+
+  // Forking is the derivation that changes something on purpose. The operator suspects the
+  // prompt, so they run this same incident, in the same world, driven by the same recorded
+  // turns — with arm B moved onto the configuration arm A ran.
+  await page.getByRole("button", { name: "Fork…" }).click();
+  const forkPanel = page.getByRole("region", { name: "Fork this experiment" });
+  // Nothing has moved yet, and a derivation that changes nothing is a replay.
+  await expect(forkPanel.getByRole("button", { name: "Fork this run" })).toBeDisabled();
+  await forkPanel
+    .getByRole("group", { name: new RegExp(`^Arm B · ran ${beacon}`) })
+    .getByRole("combobox", { name: "Agent configuration" })
+    .selectOption({ label: atlas });
+  await forkPanel.getByRole("button", { name: "Fork this run" }).click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique} (fork)` }),
+  ).toBeVisible();
+  // The provenance names the run it came from and the one dimension it moved, which is what
+  // makes "the thing it changed is the only thing that changed" a claim anyone can check.
+  await expect(page.getByText("· changed prompt")).toBeVisible();
+  // And it holds everything else still: the same starting state, and the same script, so the
+  // arms end where the source's did rather than where a different conversation would.
+  await expect(card(page, "Arm A summary").getByText("Completed at turn 2")).toBeVisible();
+  await expect(
+    card(page, "Arm B summary").getByText(/waiting for the customer at turn 1/),
+  ).toBeVisible();
+
+  // The run it forked is untouched, and the listing shows the three as one family.
+  await page.getByRole("link", { name: `Prompt comparison ${unique}` }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
+  ).toBeVisible();
 });

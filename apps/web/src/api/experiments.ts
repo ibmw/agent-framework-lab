@@ -9,6 +9,7 @@ import type {
   ExperimentResponse,
   ExperimentTimelineResponse,
   ExperimentTracesResponse,
+  ForkExperimentRequest,
   ObjectiveResultSchema,
   ParticipantTurnListResponse,
   ParticipantTurnRequest,
@@ -319,6 +320,29 @@ export async function replayExperiment(
     await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/replays`), {
       method: "POST",
       headers: JSON_HEADERS,
+    }),
+  );
+}
+
+/**
+ * Derive a new experiment that runs this one's incident with the arms an operator chose.
+ *
+ * The same snapshot cloned again, the same recipe version at the same seed, and the same
+ * recorded compositions — so the arms are the one thing that moved and a difference in the
+ * answers is about them. At least one arm has to differ from what its source ran: a
+ * derivation that changes nothing is a replay. Deliberately not idempotent, and slow enough
+ * to be worth a pending state, because the derived arms are actually run before it answers.
+ */
+export async function forkExperiment(
+  shopId: string,
+  experimentId: string,
+  command: ForkExperimentRequest,
+): Promise<ExperimentResponse> {
+  return read<ExperimentResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/forks`), {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(command),
     }),
   );
 }

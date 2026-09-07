@@ -68,7 +68,7 @@ class HistoryArmSchema(StrictApiModel):
     agent_configuration_id: UUID
     agent_configuration_version: int
     agent_configuration_name: str
-    agent_configuration_latest_version: int | None = None
+    agent_configuration_latest_version: int | None
     """The newest published version of this arm's configuration, or `null` if it has none.
 
     Beside the version this arm pinned rather than replacing it: the run stays explained by

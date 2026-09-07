@@ -47,6 +47,7 @@ function arm(label: string, name: string, overrides: Partial<HistoryArmSchema> =
     agent_configuration_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5e",
     agent_configuration_version: 4,
     agent_configuration_name: name,
+    agent_configuration_latest_version: 4,
     framework_id: "pydantic-ai",
     framework_label: "Pydantic AI",
     model_id: "gpt-5-mini",
@@ -115,6 +116,7 @@ const DERIVED: ExperimentHistoryEntrySchema = {
     experiment_id: FINISHED_ID,
     label: "Prompt A against prompt B",
     kind: "replay" as const,
+    changed: [],
   },
   tags: [],
   note_count: 0,
@@ -152,6 +154,8 @@ function historyOf(rows: ExperimentHistoryEntrySchema[]): ExperimentHistoryRespo
 let asked: URLSearchParams[] = [];
 let unavailable = false;
 let replayed: string[] = [];
+/** Every fork the listing asked for, as the backend received it. */
+let forked: { configuration_id: string; version: number }[][] = [];
 let rows: ExperimentHistoryEntrySchema[] = EVERY_ROW;
 
 const server = setupServer(
@@ -201,6 +205,13 @@ const server = setupServer(
     replayed.push(FINISHED_ID);
     return HttpResponse.json({ experiment_id: DERIVED_ID }, { status: 201 });
   }),
+  http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${FINISHED_ID}/forks`, async ({ request }) => {
+    const body = (await request.json()) as {
+      arms: { configuration_id: string; version: number }[];
+    };
+    forked.push(body.arms);
+    return HttpResponse.json({ experiment_id: DERIVED_ID }, { status: 201 });
+  }),
   // The derived run's own screen is the results suite's; here it only has to be somewhere
   // this page navigated to, so its three reads answer rather than going unhandled.
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${DERIVED_ID}/*`, () =>
@@ -223,6 +234,7 @@ beforeEach(() => {
   asked = [];
   unavailable = false;
   replayed = [];
+  forked = [];
   rows = EVERY_ROW;
 });
 afterAll(() => server.close());
@@ -335,6 +347,46 @@ describe("experiment history", () => {
     // What came back is a different experiment, so the operator is taken to it rather than
     // left on a listing that now has one more row than it shows.
     expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+  });
+
+  it("forks a row onto the newest published version of every arm it ran", async () => {
+    const user = userEvent.setup();
+    // A newer publication of arm A's configuration, which is what a fork from a listing is.
+    rows = [
+      {
+        ...FINISHED,
+        arms: FINISHED.arms.map((entry, position) =>
+          position === 0 ? { ...entry, agent_configuration_latest_version: 7 } : entry,
+        ),
+      },
+    ];
+    renderHistory();
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+
+    await user.click(within(row).getByRole("button", { name: "Fork with newer versions" }));
+
+    const [first, second] = rows[0].arms;
+    expect(forked).toEqual([
+      [
+        { configuration_id: first.agent_configuration_id, version: 7 },
+        {
+          configuration_id: second.agent_configuration_id,
+          version: second.agent_configuration_version,
+        },
+      ],
+    ]);
+    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+  });
+
+  it("offers no fork on a row whose arms already run the newest versions", async () => {
+    renderHistory();
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+
+    // The backend refuses a derivation that changes nothing, so the row says why rather than
+    // offering a button that can only fail.
+    expect(within(row).getByRole("button", { name: "Fork with newer versions" })).toBeDisabled();
   });
 
   it("narrows by shop, offering every other shop the lab has run in", async () => {

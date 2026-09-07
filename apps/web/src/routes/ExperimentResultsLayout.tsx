@@ -1,5 +1,8 @@
 import type {
+  AgentConfigurationSummarySchema,
   ArmEvaluationSchema,
+  ComparisonDimension,
+  DefinitionVersionSummarySchema,
   ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
   ExperimentResponse,
@@ -7,15 +10,26 @@ import type {
 } from "@agent-lab/contracts";
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import {
+  listAgentConfigurations,
+  listAgentConfigurationVersions,
+} from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
 import {
+  forkExperiment,
   getExperiment,
   getExperimentAnnotations,
   getExperimentEvaluation,
   replayExperiment,
 } from "../api/experiments";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
-import { formatTimestamp, subtleButtonClasses } from "../lib/ui";
+import {
+  fieldControlClasses,
+  fieldLabelClasses,
+  formatTimestamp,
+  inkButtonClasses,
+  subtleButtonClasses,
+} from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
@@ -64,7 +78,8 @@ export function ExperimentResultsLayout() {
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
   const [annotations, setAnnotations] = useState<ExperimentAnnotationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [replaying, setReplaying] = useState(false);
+  const [deriving, setDeriving] = useState(false);
+  const [forking, setForking] = useState(false);
   const navigate = useNavigate();
 
   /**
@@ -75,7 +90,7 @@ export function ExperimentResultsLayout() {
    * success message would hide the only thing that happened.
    */
   const replay = useCallback(async () => {
-    setReplaying(true);
+    setDeriving(true);
     setError(null);
     try {
       const derived = await replayExperiment(shopId, experimentId);
@@ -83,9 +98,31 @@ export function ExperimentResultsLayout() {
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This experiment could not be replayed."));
     } finally {
-      setReplaying(false);
+      setDeriving(false);
     }
   }, [shopId, experimentId, navigate]);
+
+  /**
+   * Derive a new experiment that runs this incident with the arms the operator chose.
+   *
+   * Navigates for the reason the replay does: what came back is a different run, and the
+   * reason to fork one is to read what the arms did instead.
+   */
+  const fork = useCallback(
+    async (arms: { configuration_id: string; version: number }[]) => {
+      setDeriving(true);
+      setError(null);
+      try {
+        const derived = await forkExperiment(shopId, experimentId, { arms });
+        navigate(`/shops/${shopId}/bench/${derived.experiment_id}/results`);
+      } catch (cause: unknown) {
+        setError(describeApiError(cause, "This experiment could not be forked."));
+      } finally {
+        setDeriving(false);
+      }
+    },
+    [shopId, experimentId, navigate],
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -146,14 +183,28 @@ export function ExperimentResultsLayout() {
       <PageHeader
         title={experiment.label}
         actions={
-          <button
-            className={subtleButtonClasses}
-            type="button"
-            onClick={replay}
-            disabled={replaying}
-          >
-            {replaying ? "Replaying…" : "Replay"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className={subtleButtonClasses}
+              type="button"
+              onClick={replay}
+              disabled={deriving}
+            >
+              {deriving ? "Deriving…" : "Replay"}
+            </button>
+            {/* The frame's ellipsis is doing real work: a replay asks nothing because
+                everything it needs is in the record, and a fork asks which versions to
+                take. The panel opens below the header rather than over it — this shell has
+                no modal, and a derivation is read beside the run it derives from. */}
+            <button
+              className={subtleButtonClasses}
+              type="button"
+              aria-expanded={forking}
+              onClick={() => setForking((open) => !open)}
+            >
+              Fork…
+            </button>
+          </div>
         }
         description={
           <>
@@ -174,6 +225,7 @@ export function ExperimentResultsLayout() {
                 >
                   {experiment.derived_from.label}
                 </Link>
+                {describeChange(experiment.derived_from.changed)}
               </>
             ) : null}
           </>
@@ -185,6 +237,8 @@ export function ExperimentResultsLayout() {
           {error}
         </p>
       ) : null}
+
+      {forking ? <ForkPanel experiment={experiment} deriving={deriving} onFork={fork} /> : null}
 
       <div className="mb-4 grid gap-3">
         <div className="grid gap-3 lg:grid-cols-2">
@@ -207,6 +261,201 @@ export function ExperimentResultsLayout() {
 
       <Outlet context={context} />
     </>
+  );
+}
+
+/**
+ * What a derivation moved from the run it came from, said where it names that run.
+ *
+ * Empty for a replay, which pins what its source pinned. More than one dimension is the
+ * setup gate's comparison warning one level out: a fork that moved two things has no claim
+ * that the thing it changed is the only thing that changed, so the sentence says so rather
+ * than leaving it to be noticed months later.
+ */
+function describeChange(changed: ComparisonDimension[]) {
+  if (changed.length === 0) {
+    return null;
+  }
+  const named = changed.map((dimension) => dimension.replace(/_/g, " ")).join(", ");
+  return changed.length === 1 ? (
+    <span className="text-admin-muted">{` · changed ${named}`}</span>
+  ) : (
+    <span className="text-admin-draft-ink">
+      {` · changed ${named} — no difference from that run can be attributed to any one of them`}
+    </span>
+  );
+}
+
+/**
+ * Frame 9's `Fork…`: which published version each arm runs instead.
+ *
+ * Everything else is deliberately not here, because it is not a fork's to change. The
+ * scenario version, the seed, the starting state and the customer's own script are the
+ * source's, which is what makes the derived run a comparison with it rather than a new
+ * experiment — and the arms keep the names this run gave them, because a comparison refers
+ * to an arm by its position.
+ *
+ * The submit is disabled until something has actually moved. The backend refuses a fork that
+ * changes nothing — it is a replay, and there is a button for that beside this one — and a
+ * control that can only fail is worse than one that says why it is not ready.
+ */
+function ForkPanel({
+  experiment,
+  deriving,
+  onFork,
+}: {
+  experiment: ExperimentResponse;
+  deriving: boolean;
+  onFork: (arms: { configuration_id: string; version: number }[]) => void;
+}) {
+  const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
+  const [chosen, setChosen] = useState<ForkDraft[]>(() =>
+    experiment.runs.map((run) => ({
+      configurationId: run.agent_configuration_id,
+      version: run.agent_configuration_version,
+    })),
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listAgentConfigurations(controller.signal)
+      .then((listed) => setConfigurations(listed.configurations))
+      .catch(() => setConfigurations([]));
+    return () => controller.abort();
+  }, []);
+
+  const moved = chosen.some(
+    (arm, position) =>
+      arm.configurationId !== experiment.runs[position].agent_configuration_id ||
+      arm.version !== experiment.runs[position].agent_configuration_version,
+  );
+
+  return (
+    <section
+      aria-label="Fork this experiment"
+      className="mb-4 grid gap-3 rounded-lg border border-admin-border bg-admin-surface px-4 py-3"
+    >
+      <p className="text-xs text-admin-muted">
+        A fork runs this incident again in the world it started in, driven by the turns it recorded,
+        with the arms you choose here. Change at least one — a derivation that changes nothing is a
+        replay.
+      </p>
+      {experiment.runs.map((run, position) => (
+        <ForkArmPicker
+          key={run.run_id}
+          run={run}
+          configurations={configurations}
+          arm={chosen[position]}
+          onChange={(next) =>
+            setChosen((current) =>
+              current.map((entry, index) => (index === position ? next : entry)),
+            )
+          }
+        />
+      ))}
+      <div>
+        <button
+          className={inkButtonClasses}
+          type="button"
+          disabled={deriving || !moved}
+          onClick={() =>
+            onFork(
+              chosen.map((arm) => ({
+                configuration_id: arm.configurationId,
+                version: arm.version,
+              })),
+            )
+          }
+        >
+          {deriving ? "Deriving…" : "Fork this run"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** One arm of a fork as the panel holds it, before it becomes a request. */
+interface ForkDraft {
+  configurationId: string;
+  version: number;
+}
+
+/** One arm: which configuration it will run, and which published version of it. */
+function ForkArmPicker({
+  run,
+  configurations,
+  arm,
+  onChange,
+}: {
+  run: ExperimentRunSchema;
+  configurations: AgentConfigurationSummarySchema[];
+  arm: ForkDraft;
+  onChange: (next: ForkDraft) => void;
+}) {
+  const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listAgentConfigurationVersions(arm.configurationId, controller.signal)
+      .then((listed) => setVersions(listed.versions))
+      .catch(() => setVersions([]));
+    return () => controller.abort();
+  }, [arm.configurationId]);
+
+  return (
+    <fieldset className="grid gap-2 rounded-lg border border-admin-border p-3">
+      <legend className="px-1 text-xs font-semibold text-admin-muted">
+        {run.label} · ran {run.agent_configuration_name} v{run.agent_configuration_version}
+      </legend>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className={fieldLabelClasses}>
+          Agent configuration
+          <select
+            className={fieldControlClasses}
+            value={arm.configurationId}
+            onChange={(event) => {
+              const configurationId = event.target.value;
+              const latest = configurations.find(
+                (entry) => entry.configuration_id === configurationId,
+              )?.latest_published_version;
+              // Defaults to the newest publication of whatever was chosen, because "fork
+              // with newer versions" is the question this panel is usually opened to ask.
+              onChange({ configurationId, version: latest ?? 1 });
+            }}
+          >
+            {configurations.map((configuration) => (
+              <option
+                key={configuration.configuration_id}
+                value={configuration.configuration_id}
+                // An unpublished configuration cannot be pinned, so it is offered as
+                // unavailable rather than hidden.
+                disabled={configuration.latest_published_version === null}
+              >
+                {configuration.name}
+                {configuration.latest_published_version === null ? " (unpublished)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={fieldLabelClasses}>
+          Published version
+          <select
+            className={fieldControlClasses}
+            value={String(arm.version)}
+            disabled={versions.length === 0}
+            onChange={(event) => onChange({ ...arm, version: Number(event.target.value) })}
+          >
+            {[...versions]
+              .sort((left, right) => right.version - left.version)
+              .map((published) => (
+                <option key={published.version} value={String(published.version)}>
+                  v{published.version}
+                </option>
+              ))}
+          </select>
+        </label>
+      </div>
+    </fieldset>
   );
 }
 

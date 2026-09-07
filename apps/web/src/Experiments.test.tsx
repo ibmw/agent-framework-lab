@@ -41,6 +41,8 @@ const BEACON_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 const EXPERIMENT_ID = "9f8e7d6c-5b4a-4392-8817-6f5e4d3c2b1a";
 /** The experiment a replay derives, which is a different run and never this one. */
 const REPLAY_ID = "8e7d6c5b-4a39-4281-9776-5e4d3c2b1a09";
+/** The experiment a fork derives: the same incident, with an arm the operator moved. */
+const FORK_ID = "7d6c5b4a-3928-4170-8665-4d3c2b1a0918";
 const ARM_A = "0a0a0a0a-1111-4222-8333-444444444444";
 const ARM_B = "0b0b0b0b-1111-4222-8333-444444444444";
 const SANDBOX_FINGERPRINT = "a".repeat(64);
@@ -140,6 +142,8 @@ const CONFIGURATIONS: AgentConfigurationListResponse = {
 const CONFIGURATION_VERSIONS: AgentConfigurationVersionListResponse = {
   versions: [
     { version: 1, content_fingerprint: "e".repeat(64), published_at: "2026-08-28T08:00:00+00:00" },
+    // A second publication, because a run pinned v1: what a fork moves to has to exist.
+    { version: 2, content_fingerprint: "f".repeat(64), published_at: "2026-09-01T08:00:00+00:00" },
   ],
 };
 
@@ -568,6 +572,23 @@ function derivedExperiment(): ExperimentResponse {
       experiment_id: EXPERIMENT_ID,
       label: "Wrong address — framework comparison",
       kind: "replay" as const,
+      changed: [],
+    },
+  };
+}
+
+/** What a fork produces: the same run, with one arm moved and a provenance that says so. */
+function forkedExperiment(): ExperimentResponse {
+  return {
+    ...experiment(turns, agentTurns, toolEvents, mutationEvents),
+    experiment_id: FORK_ID,
+    label: "Wrong address — framework comparison (fork)",
+    participant_driver: "scripted",
+    derived_from: {
+      experiment_id: EXPERIMENT_ID,
+      label: "Wrong address — framework comparison",
+      kind: "fork" as const,
+      changed: ["prompt"],
     },
   };
 }
@@ -758,6 +779,8 @@ let traced: ExperimentTracesResponse = TRACES;
 let driver: ExperimentResponse["participant_driver"] = "human";
 let replayed: string[] = [];
 let replayFails = false;
+/** Every fork request the screen made, as the backend received it. */
+let forked: { configuration_id: string; version: number }[][] = [];
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -849,6 +872,22 @@ const server = setupServer(
     }
     return HttpResponse.json(derivedExperiment(), { status: 201 });
   }),
+  http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/forks`, async ({ request }) => {
+    const body = (await request.json()) as {
+      arms: { configuration_id: string; version: number }[];
+    };
+    forked.push(body.arms);
+    return HttpResponse.json(forkedExperiment(), { status: 201 });
+  }),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${FORK_ID}`, () =>
+    HttpResponse.json(forkedExperiment()),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${FORK_ID}/evaluation`, () =>
+    HttpResponse.json(evaluation(turns, agentTurns, toolEvents)),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${FORK_ID}/annotations`, () =>
+    HttpResponse.json({ notes: [], tags: [] } satisfies ExperimentAnnotationsResponse),
+  ),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${REPLAY_ID}`, () =>
     HttpResponse.json(derivedExperiment()),
   ),
@@ -958,6 +997,7 @@ afterEach(() => {
   driver = "human";
   replayed = [];
   replayFails = false;
+  forked = [];
 });
 afterAll(() => server.close());
 
@@ -2012,6 +2052,56 @@ describe("replay", () => {
     expect(
       screen.getByRole("heading", { name: "Wrong address — framework comparison" }),
     ).toBeVisible();
+  });
+
+  it("forks a run onto the version an operator chose and opens what it produced", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+    const [, armB] = within(panel).getAllByLabelText("Published version");
+    await user.selectOptions(armB, "2");
+    await user.click(within(panel).getByRole("button", { name: "Fork this run" }));
+
+    // One arm per arm of the source, in the source's order, with only the chosen one moved.
+    expect(forked).toEqual([
+      [
+        { configuration_id: ATLAS_ID, version: 1 },
+        { configuration_id: BEACON_ID, version: 2 },
+      ],
+    ]);
+    expect(
+      await screen.findByRole("heading", { name: "Wrong address — framework comparison (fork)" }),
+    ).toBeVisible();
+  });
+
+  it("will not fork a run onto the versions it already ran", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+
+    // A derivation that changes nothing is a replay, and there is a button for that beside
+    // this one — so the control says it is not ready rather than sending a request that can
+    // only fail.
+    expect(within(panel).getByRole("button", { name: "Fork this run" })).toBeDisabled();
+    expect(forked).toEqual([]);
+  });
+
+  it("says which run a fork came from and what it changed", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${FORK_ID}/results`]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const back = await screen.findByRole("link", {
+      name: "Wrong address — framework comparison",
+    });
+    expect(back).toHaveAttribute("href", `/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`);
+    expect(await screen.findByText(/fork of/)).toHaveTextContent("changed prompt");
   });
 
   it("offers no composer on a run a script drove, because a person cannot drive it", async () => {
