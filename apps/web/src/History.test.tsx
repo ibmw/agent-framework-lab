@@ -111,7 +111,11 @@ const DERIVED: ExperimentHistoryEntrySchema = {
   experiment_id: DERIVED_ID,
   label: "Prompt A against prompt B (replay)",
   participant_driver: "scripted",
-  replay_of: { experiment_id: FINISHED_ID, label: "Prompt A against prompt B" },
+  derived_from: {
+    experiment_id: FINISHED_ID,
+    label: "Prompt A against prompt B",
+    kind: "replay" as const,
+  },
   tags: [],
   note_count: 0,
   created_at: "2026-09-04T09:15:00+00:00",

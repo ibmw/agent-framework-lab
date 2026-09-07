@@ -564,7 +564,11 @@ function derivedExperiment(): ExperimentResponse {
     experiment_id: REPLAY_ID,
     label: "Wrong address — framework comparison (replay)",
     participant_driver: "scripted",
-    replay_of: { experiment_id: EXPERIMENT_ID, label: "Wrong address — framework comparison" },
+    derived_from: {
+      experiment_id: EXPERIMENT_ID,
+      label: "Wrong address — framework comparison",
+      kind: "replay" as const,
+    },
   };
 }
 

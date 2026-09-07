@@ -42,6 +42,7 @@ from capability_lab.domain.blocks import (
 )
 from capability_lab.domain.experiment import (
     ArmAwaiting,
+    DerivationKind,
     ExperimentConfigurationError,
     ParticipantDriverType,
     ParticipantTurnSource,
@@ -62,11 +63,11 @@ from workspace_factories import (
     author,
     build_agent_configurations,
     build_annotations,
+    build_derivations,
     build_evaluation,
     build_experiments,
     build_judge_service,
     build_orders,
-    build_replays,
     build_runner,
     build_snapshots,
     build_traces,
@@ -239,7 +240,8 @@ async def test_a_replay_starts_in_the_world_its_source_started_in(
     await run_arm(session, source)
     move_the_order(session, workspace)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert derived.record.snapshot_id == source.record.snapshot_id
     assert derived.record.sandbox_fingerprint == source.record.sandbox_fingerprint
@@ -257,7 +259,8 @@ async def test_a_replay_of_a_run_whose_order_has_since_been_deleted_still_runs(
     await run_arm(session, source)
     build_orders(session).delete_order(workspace.shop_id, workspace.order_id)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert derived.record.sandbox_fingerprint == source.record.sandbox_fingerprint
     assert derived.standings[0].awaiting is not ArmAwaiting.AGENT
@@ -278,7 +281,8 @@ async def test_a_replay_runs_the_configuration_version_the_source_pinned(
     )
     republished = configurations.publish(arm.configuration_id)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert republished.published.version > arm.version
     assert derived.runs[0].agent_configuration_id == arm.configuration_id
@@ -292,7 +296,8 @@ async def test_a_derived_experiment_is_a_new_experiment_with_its_own_arms(
     source = start(session, workspace, control_arm(session), control_arm(session))
     await run_arm(session, source)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert derived.record.experiment_id != source.record.experiment_id
     assert {run.run_id for run in derived.runs}.isdisjoint({run.run_id for run in source.runs})
@@ -316,7 +321,8 @@ async def test_the_recorded_compositions_are_what_drives_the_derived_run(
     say(session, reread(session, source), "Any update?", 0, 1)
     say(session, reread(session, source), "Only arm A hears this.", 0)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert thread(derived, 0) == thread(reread(session, source), 0)
     assert thread(derived, 1) == thread(reread(session, source), 1)
@@ -333,7 +339,8 @@ async def test_a_linked_send_is_replayed_as_one_composition_and_an_arm_only_send
     say(session, reread(session, source), "Any update?", 0, 1)
     say(session, reread(session, source), "Only arm A hears this.", 0)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     by_composition: dict[object, set[object]] = {}
     for entry in derived.turns:
@@ -351,7 +358,8 @@ async def test_the_derived_run_says_a_script_drove_it(
     await run_arm(session, source)
     say(session, reread(session, source), "Any update?", 0)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert derived.record.participant_driver is ParticipantDriverType.SCRIPTED
     assert {
@@ -374,7 +382,8 @@ async def test_a_deterministic_runtime_replays_an_arm_call_for_call(
     await run_arm(session, source)
     answered = reread(session, source)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert [turn.turn.body for turn in derived.agent_turns] == [
         turn.turn.body for turn in answered.agent_turns
@@ -394,7 +403,8 @@ async def test_an_arm_the_operator_never_ran_is_not_run_by_the_replay(
     source = start(session, workspace, control_arm(session), control_arm(session))
     await run_arm(session, source, 0)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert derived.standings[0].awaiting is ArmAwaiting.CUSTOMER
     assert derived.standings[1].awaiting is ArmAwaiting.AGENT
@@ -418,7 +428,8 @@ async def test_a_scenario_fault_fires_again_into_the_derived_arm(
     await run_arm(session, source)
     answered = reread(session, source)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert [event.event.mutation_id for event in answered.mutation_events] == [
         "order-moves-under-the-arm"
@@ -449,7 +460,8 @@ async def test_a_retried_turn_is_advanced_as_often_and_records_only_what_happene
     await run_arm(session, source)
     assert [turn.turn.attempt for turn in reread(session, source).agent_turns] == [1, 2]
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     assert [turn.turn.attempt for turn in derived.agent_turns] == [1]
     assert derived.agent_turns[0].turn.outcome is AgentTurnOutcome.ANSWERED
@@ -467,7 +479,7 @@ async def test_a_replay_whose_framework_keeps_failing_records_every_advance_the_
     )
     await run_arm(session, source)
 
-    derived = await build_replays(session, _registry(_FailingRuntime())).replay(
+    derived = await build_derivations(session, _registry(_FailingRuntime())).replay(
         workspace.shop_id, source.record.experiment_id
     )
 
@@ -493,7 +505,7 @@ async def test_replaying_a_run_changes_nothing_about_it(
     before = reread(session, source)
     recorded_traces = build_traces(session).traces(workspace.shop_id, source.record.experiment_id)
 
-    await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    await build_derivations(session).replay(workspace.shop_id, source.record.experiment_id)
     after = reread(session, source)
 
     assert after.record == before.record
@@ -509,7 +521,7 @@ async def test_replaying_a_run_changes_nothing_about_it(
     # opens its own spans, and none of them may land on the arm it was derived from.
     traces = build_traces(session)
     assert traces.traces(workspace.shop_id, source.record.experiment_id) == recorded_traces
-    assert after.replay_of is None
+    assert after.derived_from is None
 
 
 @pytest.mark.asyncio
@@ -534,7 +546,7 @@ async def test_what_a_person_concluded_about_a_run_is_never_copied_onto_the_deri
     annotations.add_note(workspace.shop_id, experiment_id, "Atlas acted before it read.")
     annotations.set_tags(workspace.shop_id, experiment_id, ("read-check-gap",))
 
-    derived = await build_replays(session).replay(workspace.shop_id, experiment_id)
+    derived = await build_derivations(session).replay(workspace.shop_id, experiment_id)
 
     evaluations = build_evaluation(session)
     unscored = evaluations.evaluate(workspace.shop_id, derived.record.experiment_id)
@@ -570,11 +582,13 @@ async def test_a_derived_experiment_names_the_one_it_replays(
     source = start(session, workspace, control_arm(session))
     await run_arm(session, source)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
-    assert derived.replay_of is not None
-    assert derived.replay_of.experiment_id == source.record.experiment_id
-    assert derived.replay_of.label == source.record.label
+    assert derived.derived_from is not None
+    assert derived.derived_from.experiment_id == source.record.experiment_id
+    assert derived.derived_from.label == source.record.label
+    assert derived.derived_from.kind is DerivationKind.REPLAY
     assert derived.record.label == "Wrong shipping address (replay)"
 
 
@@ -585,12 +599,12 @@ async def test_a_replay_of_a_replay_names_the_run_it_was_derived_from(
     """The chain is a chain of derivations, never a claim about the first one."""
     source = start(session, workspace, control_arm(session))
     await run_arm(session, source)
-    first = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    first = await build_derivations(session).replay(workspace.shop_id, source.record.experiment_id)
 
-    second = await build_replays(session).replay(workspace.shop_id, first.record.experiment_id)
+    second = await build_derivations(session).replay(workspace.shop_id, first.record.experiment_id)
 
-    assert second.replay_of is not None
-    assert second.replay_of.experiment_id == first.record.experiment_id
+    assert second.derived_from is not None
+    assert second.derived_from.experiment_id == first.record.experiment_id
     assert second.record.sandbox_fingerprint == source.record.sandbox_fingerprint
 
 
@@ -600,7 +614,7 @@ async def test_replaying_one_run_twice_is_two_derived_experiments(
 ) -> None:
     source = start(session, workspace, control_arm(session))
     await run_arm(session, source)
-    replays = build_replays(session)
+    replays = build_derivations(session)
 
     first = await replays.replay(workspace.shop_id, source.record.experiment_id)
     second = await replays.replay(workspace.shop_id, source.record.experiment_id)
@@ -617,7 +631,8 @@ async def test_a_replay_is_in_the_shop_listing_the_source_is_in(
     source = start(session, workspace, control_arm(session))
     await run_arm(session, source)
 
-    derived = await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+    derivations = build_derivations(session)
+    derived = await derivations.replay(workspace.shop_id, source.record.experiment_id)
 
     listed = build_experiments(session).list_experiments(workspace.shop_id)
     assert {record.experiment_id for record in listed} == {
@@ -633,7 +648,7 @@ async def test_an_experiment_of_another_shop_cannot_be_replayed(
     source = start(session, workspace, control_arm(session))
 
     with pytest.raises(ExperimentNotFoundError):
-        await build_replays(session).replay(uuid4(), source.record.experiment_id)
+        await build_derivations(session).replay(uuid4(), source.record.experiment_id)
 
 
 @pytest.mark.asyncio
@@ -653,7 +668,7 @@ async def test_a_replay_is_refused_when_this_build_no_longer_publishes_the_froze
     monkeypatch.setattr(experiments_module, "SANDBOX_TOOL_CONTRACT_VERSIONS", upgraded)
 
     with pytest.raises(ExperimentConfigurationError, match="no longer publishes"):
-        await build_replays(session).replay(workspace.shop_id, source.record.experiment_id)
+        await build_derivations(session).replay(workspace.shop_id, source.record.experiment_id)
 
 
 def test_a_snapshot_of_another_recipe_cannot_be_the_starting_state_of_a_start(

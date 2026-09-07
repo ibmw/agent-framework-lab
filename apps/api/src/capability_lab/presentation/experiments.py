@@ -49,7 +49,7 @@ from capability_lab.application.experiment_annotations import (
     ExperimentAnnotationService,
     ExperimentNoteRecord,
 )
-from capability_lab.application.experiment_replays import ExperimentReplayService
+from capability_lab.application.experiment_derivations import ExperimentDerivationService
 from capability_lab.application.experiment_runs import ExperimentRunner, RunTurn
 from capability_lab.application.experiment_timeline import (
     ExperimentTimeline,
@@ -105,6 +105,7 @@ from capability_lab.domain.experiment import (
     ArmStanding,
     ComparisonDimension,
     ComparisonVariable,
+    DerivationKind,
     ParticipantDriverType,
     ParticipantTurnSource,
 )
@@ -841,26 +842,28 @@ class RunTurnResponse(StrictApiModel):
 
 
 class ExperimentOriginSchema(StrictApiModel):
-    """The experiment a derived one replays, named as a reader would name it."""
+    """The experiment a derived one came from, named as a reader would name it."""
 
     experiment_id: UUID
     label: str
+    kind: DerivationKind
+    """How this run was derived: `replay` re-ran what the source pinned, `fork` moved it."""
 
     @classmethod
     def from_domain(cls, origin: ExperimentOrigin) -> Self:
-        return cls(experiment_id=origin.experiment_id, label=origin.label)
+        return cls(experiment_id=origin.experiment_id, label=origin.label, kind=origin.kind)
 
 
 class ExperimentResponse(ExperimentSummarySchema):
     """One experiment in full: the versions it pinned, its arms, and their threads."""
 
-    replay_of: ExperimentOriginSchema | None = None
+    derived_from: ExperimentOriginSchema | None = None
     """The experiment this one was derived from, and `null` for one an operator started.
 
     Served on the experiment rather than through an operation of its own — unlike the notes
     beside it (ADR 0036) — because it is a nullable identifier rather than text, and because
     a derived run that did not say what it derives from would be missing the provenance the
-    derivation exists for (ADR 0038)."""
+    derivation exists for (ADR 0038, ADR 0039)."""
 
     sandbox_inputs: list[ResolvedDefinitionSchema]
     arm_inputs: list[list[ResolvedDefinitionSchema]]
@@ -878,10 +881,10 @@ class ExperimentResponse(ExperimentSummarySchema):
         sandboxes = {sandbox.sandbox_id: sandbox for sandbox in detail.sandboxes}
         return cls(
             **ExperimentSummarySchema.from_record(detail.record).model_dump(),
-            replay_of=(
+            derived_from=(
                 None
-                if detail.replay_of is None
-                else ExperimentOriginSchema.from_domain(detail.replay_of)
+                if detail.derived_from is None
+                else ExperimentOriginSchema.from_domain(detail.derived_from)
             ),
             sandbox_inputs=[_resolved(entry) for entry in resolution.sandbox_inputs],
             arm_inputs=[
@@ -1261,7 +1264,7 @@ class ExperimentRoutes:
         service: Callable[[], Generator[ExperimentService, None, None]],
         driver: Callable[[str], ParticipantDriver],
         runner: Callable[[], Generator[ExperimentRunner, None, None]],
-        replays: Callable[[], Generator[ExperimentReplayService, None, None]],
+        derivations: Callable[[], Generator[ExperimentDerivationService, None, None]],
         timeline: Callable[[], Generator[ExperimentTimelineService, None, None]],
         traces: Callable[[], Generator[ExperimentTraceService, None, None]],
         evaluation: Callable[[], Generator[ExperimentEvaluationService, None, None]],
@@ -1271,7 +1274,7 @@ class ExperimentRoutes:
         self._service = service
         self._driver = driver
         self._runner = runner
-        self._replays = replays
+        self._derivations = derivations
         self._timeline = timeline
         self._traces = traces
         self._evaluation = evaluation
@@ -1288,7 +1291,7 @@ class ExperimentRoutes:
         # a store that refused the commit would leave the client holding a 201 for an
         # experiment nothing can read. Ending it around the path operation instead makes the
         # commit part of what the status code reports.
-        replay_dependency = Depends(self._replays, scope="function")
+        derivation_dependency = Depends(self._derivations, scope="function")
         timeline_dependency = Depends(self._timeline)
         traces_dependency = Depends(self._traces)
         evaluation_dependency = Depends(self._evaluation)
@@ -1415,12 +1418,12 @@ class ExperimentRoutes:
         async def replay_experiment(
             shop_id: ShopIdPath,
             experiment_id: ExperimentIdPath,
-            replays: Annotated[ExperimentReplayService, replay_dependency],
+            derivations: Annotated[ExperimentDerivationService, derivation_dependency],
         ) -> ExperimentResponse:
             # The derived experiment, whole: the caller asked to reproduce a run and what
             # they need back is the run that was produced, in the shape every other reading
             # of an experiment arrives in.
-            return ExperimentResponse.from_detail(await replays.replay(shop_id, experiment_id))
+            return ExperimentResponse.from_detail(await derivations.replay(shop_id, experiment_id))
 
         async def advance_run(
             shop_id: ShopIdPath,

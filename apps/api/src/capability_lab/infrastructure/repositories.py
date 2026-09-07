@@ -44,8 +44,8 @@ from capability_lab.application.experiment_traces import (
     SpanKind,
 )
 from capability_lab.application.experiments import (
+    ExperimentDerivation,
     ExperimentRecord,
-    ExperimentReplay,
     ParticipantTurnRecord,
     RunRecord,
 )
@@ -115,6 +115,7 @@ from capability_lab.domain.entities import (
     ScenarioMetadata,
 )
 from capability_lab.domain.experiment import (
+    DerivationKind,
     ParticipantDriverType,
     ParticipantTurn,
     ParticipantTurnSource,
@@ -134,9 +135,9 @@ from capability_lab.infrastructure.models import (
     DefinitionDraftModel,
     DefinitionShopAttachmentModel,
     DefinitionVersionModel,
+    ExperimentDerivationModel,
     ExperimentModel,
     ExperimentNoteModel,
-    ExperimentReplayModel,
     ExperimentRunModel,
     ExperimentTagModel,
     GeneratedScenarioModel,
@@ -2433,21 +2434,22 @@ class SqlAlchemyJudgementRepository:
         )
 
 
-class SqlAlchemyExperimentReplayRepository:
-    """Which experiments were derived from which, one row per derivation."""
+class SqlAlchemyExperimentDerivationRepository:
+    """Which experiments were derived from which, and how, one row per derivation."""
 
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def get(self, experiment_id: UUID) -> ExperimentReplay | None:
-        model = self._session.get(ExperimentReplayModel, str(experiment_id))
+    def get(self, experiment_id: UUID) -> ExperimentDerivation | None:
+        model = self._session.get(ExperimentDerivationModel, str(experiment_id))
         return None if model is None else self._record(model)
 
-    def save(self, record: ExperimentReplay) -> ExperimentReplay:
+    def save(self, record: ExperimentDerivation) -> ExperimentDerivation:
         self._session.add(
-            ExperimentReplayModel(
+            ExperimentDerivationModel(
                 experiment_id=str(record.experiment_id),
                 source_experiment_id=str(record.source_experiment_id),
+                kind=record.kind.value,
                 created_at=record.created_at,
             )
         )
@@ -2455,10 +2457,11 @@ class SqlAlchemyExperimentReplayRepository:
         return record
 
     @staticmethod
-    def _record(model: ExperimentReplayModel) -> ExperimentReplay:
-        return ExperimentReplay(
+    def _record(model: ExperimentDerivationModel) -> ExperimentDerivation:
+        return ExperimentDerivation(
             experiment_id=UUID(model.experiment_id),
             source_experiment_id=UUID(model.source_experiment_id),
+            kind=DerivationKind(model.kind),
             created_at=model.created_at,
         )
 

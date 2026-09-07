@@ -1433,9 +1433,10 @@ async def test_replaying_a_run_answers_with_a_new_experiment_in_the_same_world(
     assert derived["snapshot_id"] == experiment["snapshot_id"]
     assert derived["sandbox_fingerprint"] == experiment["sandbox_fingerprint"]
     assert derived["participant_driver"] == "scripted"
-    assert derived["replay_of"] == {
+    assert derived["derived_from"] == {
         "experiment_id": experiment["experiment_id"],
         "label": experiment["label"],
+        "kind": "replay",
     }
 
 
@@ -1491,7 +1492,7 @@ async def test_replaying_a_run_leaves_the_run_it_replayed_exactly_as_it_was(
     assert (await replay(client, lab, experiment)).status_code == 201
 
     assert (await client.get(reading)).json() == before
-    assert before["replay_of"] is None
+    assert before["derived_from"] is None
 
 
 async def test_a_replay_is_listed_beside_the_run_it_derives_from(
@@ -1510,8 +1511,9 @@ async def test_a_replay_is_listed_beside_the_run_it_derives_from(
     history = await client.get("/api/v1/experiments")
     rows = {row["experiment_id"]: row for row in history.json()["experiments"]}
     derived_row = rows[derived["experiment_id"]]
-    assert derived_row["replay_of"]["experiment_id"] == experiment["experiment_id"]
-    assert rows[experiment["experiment_id"]]["replay_of"] is None
+    assert derived_row["derived_from"]["experiment_id"] == experiment["experiment_id"]
+    assert derived_row["derived_from"]["kind"] == "replay"
+    assert rows[experiment["experiment_id"]]["derived_from"] is None
 
 
 async def test_an_experiment_of_another_shop_cannot_be_replayed(

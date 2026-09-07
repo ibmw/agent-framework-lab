@@ -165,14 +165,14 @@ export function ExperimentResultsLayout() {
             </Link>{" "}
             · {describeStanding(experiment)} · scenario v{experiment.scenario_version} · seed{" "}
             {experiment.seed} · started {formatTimestamp(experiment.created_at)}
-            {experiment.replay_of ? (
+            {experiment.derived_from ? (
               <>
-                {" · replay of "}
+                {` · ${experiment.derived_from.kind} of `}
                 <Link
                   className="font-semibold text-lab-ink"
-                  to={`/shops/${shopId}/bench/${experiment.replay_of.experiment_id}/results`}
+                  to={`/shops/${shopId}/bench/${experiment.derived_from.experiment_id}/results`}
                 >
-                  {experiment.replay_of.label}
+                  {experiment.derived_from.label}
                 </Link>
               </>
             ) : null}

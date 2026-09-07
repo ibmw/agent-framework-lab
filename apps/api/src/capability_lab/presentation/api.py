@@ -63,8 +63,8 @@ from capability_lab.application.experiment_annotations import (
     ExperimentAnnotationService,
     ExperimentTagConflictError,
 )
+from capability_lab.application.experiment_derivations import ExperimentDerivationService
 from capability_lab.application.experiment_history import ExperimentHistoryService
-from capability_lab.application.experiment_replays import ExperimentReplayService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_timeline import ExperimentTimelineService
 from capability_lab.application.experiment_traces import ExperimentTraceService
@@ -211,7 +211,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentAnnotationRepository,
-    SqlAlchemyExperimentReplayRepository,
+    SqlAlchemyExperimentDerivationRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyGeneratedScenarioRepository,
@@ -1764,7 +1764,7 @@ def create_app(
             SqlAlchemyParticipantTurnRepository(session),
             SqlAlchemyAgentTurnRepository(session),
             SqlAlchemyToolEventRepository(session),
-            SqlAlchemyExperimentReplayRepository(session),
+            SqlAlchemyExperimentDerivationRepository(session),
             SandboxSnapshotService(
                 SqlAlchemySandboxSnapshotRepository(session),
                 scenario_repository(session),
@@ -1916,16 +1916,16 @@ def create_app(
         with session_scope(factory) as session:
             yield build_experiment_runner(session)
 
-    def experiment_replay_service() -> Generator[ExperimentReplayService, None, None]:
+    def experiment_derivation_service() -> Generator[ExperimentDerivationService, None, None]:
         with session_scope(factory) as session:
             # One session for the whole derivation: a replay starts an experiment and then
             # drives it, and a failure halfway must leave no half-run behind. Over the same
             # experiment construction the runner and the reading use, so a derived arm is
             # advanced by exactly the code an operator's own advance runs.
-            yield ExperimentReplayService(
+            yield ExperimentDerivationService(
                 build_experiment_service(session),
                 build_experiment_runner(session),
-                SqlAlchemyExperimentReplayRepository(session),
+                SqlAlchemyExperimentDerivationRepository(session),
                 # Composition selects the participant driver, as it does for the human one
                 # beside it; the use case is handed the class and never learns which it is.
                 ScriptedParticipantDriver,
@@ -2325,7 +2325,7 @@ def create_app(
         experiment_service,
         HumanParticipantDriver,
         experiment_runner,
-        experiment_replay_service,
+        experiment_derivation_service,
         experiment_timeline_service,
         experiment_trace_service,
         experiment_evaluation_service,

@@ -1,4 +1,7 @@
-"""Replaying an experiment: a new run of an old one, in the world the old one started in.
+"""Deriving one experiment from another, in the world the first one started in.
+
+One module for both derivations, because they differ in one thing: a replay re-runs the
+versions its source pinned, and everything below is what it holds constant.
 
 An experiment is immutable and everything about it is in the record (ADR 0025, ADR 0029),
 so replaying one cannot mean running it again. It means **deriving a new experiment** that
@@ -47,9 +50,9 @@ from uuid import UUID
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiments import (
     ArmSelection,
+    ExperimentDerivation,
+    ExperimentDerivationRepository,
     ExperimentDetail,
-    ExperimentReplay,
-    ExperimentReplayRepository,
     ExperimentService,
     StartExperiment,
 )
@@ -57,12 +60,13 @@ from capability_lab.application.participants import ScriptedDriverFactory
 from capability_lab.application.ports import Clock
 from capability_lab.domain.content import MAX_LABEL_LENGTH
 from capability_lab.domain.experiment import (
+    DerivationKind,
     ParticipantDriverType,
     ReplayScript,
     replay_script,
 )
 
-__all__ = ["REPLAY_LABEL_SUFFIX", "ExperimentReplayService"]
+__all__ = ["REPLAY_LABEL_SUFFIX", "ExperimentDerivationService"]
 
 # What a derived experiment is called when nobody names it. The source's name plus a marker,
 # because a history row's first column is how a run is recognized and "replay" without the
@@ -70,20 +74,20 @@ __all__ = ["REPLAY_LABEL_SUFFIX", "ExperimentReplayService"]
 REPLAY_LABEL_SUFFIX = " (replay)"
 
 
-class ExperimentReplayService:
+class ExperimentDerivationService:
     """Derive one experiment from another and drive it through what that one recorded."""
 
     def __init__(
         self,
         experiments: ExperimentService,
         runner: ExperimentRunner,
-        replays: ExperimentReplayRepository,
+        derivations: ExperimentDerivationRepository,
         driver: ScriptedDriverFactory,
         clock: Clock,
     ) -> None:
         self._experiments = experiments
         self._runner = runner
-        self._replays = replays
+        self._derivations = derivations
         self._driver = driver
         self._clock = clock
 
@@ -124,10 +128,11 @@ class ExperimentReplayService:
         derived_id = derived.record.experiment_id
         # Written before the script runs rather than after it, so every read of the derived
         # experiment while it is being driven already says what it is.
-        self._replays.save(
-            ExperimentReplay(
+        self._derivations.save(
+            ExperimentDerivation(
                 experiment_id=derived_id,
                 source_experiment_id=experiment_id,
+                kind=DerivationKind.REPLAY,
                 created_at=self._clock.now(),
             )
         )

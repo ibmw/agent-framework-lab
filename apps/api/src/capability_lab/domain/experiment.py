@@ -76,6 +76,7 @@ __all__ = [
     "ArmStanding",
     "ComparisonDimension",
     "ComparisonVariable",
+    "DerivationKind",
     "ExperimentConfigurationError",
     "ExperimentNote",
     "ParticipantDriverType",
@@ -153,6 +154,26 @@ class ParticipantTurnSource(StrEnum):
 
     TRIGGER = "trigger"
     PARTICIPANT = "participant"
+
+
+class DerivationKind(StrEnum):
+    """How one experiment was derived from another.
+
+    Two values because there are two honest ways to reuse a record, and they differ in
+    exactly one thing: a replay re-runs the versions the source pinned, and a fork moves
+    them on purpose. Everything else a derivation holds constant — the starting state, the
+    recipe version, the seed, and the customer's own script — is the same in both, which is
+    what makes the pair one vocabulary rather than two operations that happen to write
+    similar rows.
+
+    Recorded rather than inferred from whether the arms moved: a fork whose chosen versions
+    happen to compare equal along every dimension this lab reads is still a fork, because
+    the operator asked for different published content, and a reader has to be told what was
+    intended rather than what the comparison could recover.
+    """
+
+    REPLAY = "replay"
+    FORK = "fork"
 
 
 @dataclass(frozen=True, slots=True)

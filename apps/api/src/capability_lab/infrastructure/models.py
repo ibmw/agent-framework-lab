@@ -813,14 +813,19 @@ class JudgementModel(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
 
 
-class ExperimentReplayModel(Base):
-    """That one experiment was derived by replaying another.
+class ExperimentDerivationModel(Base):
+    """That one experiment was derived from another, and in which of the two ways.
 
     Beside the experiments rather than a column on them: `experiments` holds the canonical
     document plus the columns read *out of* it, and where a run came from is not one of its
-    inputs — a replay would run identically without knowing. It is also a runtime identifier,
-    which ADR 0012 keeps out of fingerprinted bytes, so it could not have gone into the
-    envelope either.
+    inputs — a derived run would run identically without knowing. It is also a runtime
+    identifier, which ADR 0012 keeps out of fingerprinted bytes, so it could not have gone
+    into the envelope either.
+
+    One table with a `kind` rather than one table per operation. A replay and a fork are the
+    same row — a derived experiment, the run it came from, and when — and every reader of
+    that row asks the same question of it. What differs is one word, and that word is what a
+    reader has to show: "replay of" and "fork of" are not the same sentence.
 
     The derived experiment is the primary key: an experiment is derived once, by the act
     that created it, and a second row would be a second story about where it came from. Both
@@ -831,10 +836,10 @@ class ExperimentReplayModel(Base):
     is the speculative structure this codebase keeps refusing to add ahead of its caller.
     """
 
-    __tablename__ = "experiment_replays"
+    __tablename__ = "experiment_derivations"
     __table_args__ = (
         CheckConstraint(
-            "experiment_id <> source_experiment_id", name="ck_experiment_replays_distinct"
+            "experiment_id <> source_experiment_id", name="ck_experiment_derivations_distinct"
         ),
     )
 
@@ -842,6 +847,7 @@ class ExperimentReplayModel(Base):
         ForeignKey("experiments.experiment_id"), primary_key=True
     )
     source_experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.experiment_id"))
+    kind: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
 
 

@@ -115,8 +115,8 @@ class ExperimentHistoryEntrySchema(StrictApiModel):
 
     Provenance rather than a warning: this experiment stays reproducible from the versions
     it pinned, and running the scenario as it reads today would be running something else."""
-    replay_of: ExperimentOriginSchema | None = None
-    """The experiment this row replays, and `null` for one an operator started (ADR 0038)."""
+    derived_from: ExperimentOriginSchema | None = None
+    """The experiment this row was derived from, and `null` for one an operator started."""
     seed: int
     sandbox_fingerprint: str
     resolution_fingerprint: str
@@ -149,10 +149,10 @@ class ExperimentHistoryEntrySchema(StrictApiModel):
             scenario_name=entry.scenario_name,
             scenario_version=record.scenario_version,
             scenario_superseded=entry.scenario_superseded,
-            replay_of=(
+            derived_from=(
                 None
-                if entry.replay_of is None
-                else ExperimentOriginSchema.from_domain(entry.replay_of)
+                if entry.derived_from is None
+                else ExperimentOriginSchema.from_domain(entry.derived_from)
             ),
             seed=record.seed,
             sandbox_fingerprint=record.sandbox_fingerprint,

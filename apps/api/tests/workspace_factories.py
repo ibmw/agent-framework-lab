@@ -23,7 +23,7 @@ from capability_lab.application.blocks import MutationBlockService, ObjectiveBlo
 from capability_lab.application.customer_profiles import CustomerProfileService
 from capability_lab.application.evaluation import ExperimentEvaluationService
 from capability_lab.application.experiment_annotations import ExperimentAnnotationService
-from capability_lab.application.experiment_replays import ExperimentReplayService
+from capability_lab.application.experiment_derivations import ExperimentDerivationService
 from capability_lab.application.experiment_runs import ExperimentRunner
 from capability_lab.application.experiment_traces import ExperimentTraceService, RunTracer
 from capability_lab.application.experiments import ArmSelection, ExperimentService
@@ -71,7 +71,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyAgentTurnRepository,
     SqlAlchemyDefinitionShopAttachmentRepository,
     SqlAlchemyExperimentAnnotationRepository,
-    SqlAlchemyExperimentReplayRepository,
+    SqlAlchemyExperimentDerivationRepository,
     SqlAlchemyExperimentRepository,
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyJudgementRepository,
@@ -237,7 +237,7 @@ def build_experiments(session: Session) -> ExperimentService:
         SqlAlchemyParticipantTurnRepository(session),
         SqlAlchemyAgentTurnRepository(session),
         SqlAlchemyToolEventRepository(session),
-        SqlAlchemyExperimentReplayRepository(session),
+        SqlAlchemyExperimentDerivationRepository(session),
         build_snapshots(session),
         build_sandboxes(session),
         scenario_repository(session),
@@ -250,20 +250,20 @@ def build_experiments(session: Session) -> ExperimentService:
     )
 
 
-def build_replays(
+def build_derivations(
     session: Session,
     runtimes: SupportAgentRuntimeRegistry | None = None,
     handlers: Mapping[str, ToolHandler] | None = None,
-) -> ExperimentReplayService:
+) -> ExperimentDerivationService:
     """Deriving one experiment from another, over the runner every suite advances with.
 
-    The runtimes and handlers travel through to that runner, so a suite that wants a replay
-    whose arms fail supplies them here rather than reaching inside the service.
+    The runtimes and handlers travel through to that runner, so a suite that wants a derived
+    run whose arms fail supplies them here rather than reaching inside the service.
     """
-    return ExperimentReplayService(
+    return ExperimentDerivationService(
         build_experiments(session),
         build_runner(session, runtimes, handlers),
-        SqlAlchemyExperimentReplayRepository(session),
+        SqlAlchemyExperimentDerivationRepository(session),
         ScriptedParticipantDriver,
         AdvancingClock(),
     )

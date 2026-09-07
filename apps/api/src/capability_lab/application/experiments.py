@@ -109,6 +109,7 @@ from capability_lab.domain.definitions import (
 from capability_lab.domain.experiment import (
     ArmStanding,
     ComparisonVariable,
+    DerivationKind,
     ExperimentConfigurationError,
     ParticipantDriverType,
     ParticipantTurn,
@@ -125,6 +126,8 @@ __all__ = [
     "ArmRuntime",
     "ArmSelection",
     "ExperimentCompletedError",
+    "ExperimentDerivation",
+    "ExperimentDerivationRepository",
     "ExperimentDetail",
     "ExperimentLabelError",
     "ExperimentNotFoundError",
@@ -132,8 +135,6 @@ __all__ = [
     "ExperimentOrigin",
     "ExperimentPreview",
     "ExperimentRecord",
-    "ExperimentReplay",
-    "ExperimentReplayRepository",
     "ExperimentRepository",
     "ExperimentRunNotFoundError",
     "ExperimentRunRepository",
@@ -313,24 +314,29 @@ class ParticipantTurnRepository(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class ExperimentReplay:
-    """That one experiment was derived by replaying another, and when.
+class ExperimentDerivation:
+    """That one experiment was derived from another, in which way, and when.
 
     Stored beside the experiments rather than inside either of them, for the reason a note
     is (ADR 0036): `experiments` is written once because its document is what explains the
-    result, and a derived run's source is not one of its inputs — the replay would run
+    result, and a derived run's source is not one of its inputs — the derived run would run
     identically without knowing where it came from. Putting it in the envelope would also put
     a runtime identifier into fingerprinted bytes, which ADR 0012 keeps out of them.
+
+    One record for both derivations rather than one per operation. A replay and a fork write
+    the same three facts and are read by the same three surfaces; what differs is the word a
+    reader has to be shown, so the word is a column (ADR 0039).
     """
 
     experiment_id: UUID
     source_experiment_id: UUID
+    kind: DerivationKind
     created_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
 class ExperimentOrigin:
-    """The experiment a derived one replays, as a reader needs to name it.
+    """The experiment a derived one came from, as a reader needs to name it.
 
     The label is read from the source row rather than copied at derivation time: an
     experiment is written once, so the name it was started under cannot drift, and a copy
@@ -339,9 +345,10 @@ class ExperimentOrigin:
 
     experiment_id: UUID
     label: str
+    kind: DerivationKind
 
 
-class ExperimentReplayRepository(Protocol):
+class ExperimentDerivationRepository(Protocol):
     """Which experiments were derived from which, written once per derivation.
 
     Two methods and no listing. History reads a derived row's origin through the same
@@ -350,9 +357,9 @@ class ExperimentReplayRepository(Protocol):
     exists because an annotation is *not* on the run, which is the difference.
     """
 
-    def get(self, experiment_id: UUID) -> ExperimentReplay | None: ...
+    def get(self, experiment_id: UUID) -> ExperimentDerivation | None: ...
 
-    def save(self, record: ExperimentReplay) -> ExperimentReplay: ...
+    def save(self, record: ExperimentDerivation) -> ExperimentDerivation: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,12 +418,12 @@ class ExperimentDetail:
     because a client holding both states would otherwise be free to decide for itself what
     "changed" means (ADR 0035).
 
-    `replay_of` is the one field here that is neither an input nor a reading of the run: it
-    is where this experiment came from, and it is `None` for every experiment an operator
+    `derived_from` is the one field here that is neither an input nor a reading of the run:
+    it is where this experiment came from, and it is `None` for every experiment an operator
     started themselves. It travels on the detail rather than through an operation of its own
     — unlike the annotation, which ADR 0036 kept off the run — because it is a nullable
     identifier rather than text, and because a derived run that did not say what it derives
-    from would be exactly the provenance this outcome is named for (ADR 0038).
+    from would be exactly the provenance this outcome is named for (ADR 0038, ADR 0039).
     """
 
     record: ExperimentRecord
@@ -428,7 +435,7 @@ class ExperimentDetail:
     standings: tuple[ArmStanding, ...]
     metrics: tuple[ArmMetrics, ...]
     state_diffs: tuple[ArmStateDiff, ...]
-    replay_of: ExperimentOrigin | None
+    derived_from: ExperimentOrigin | None
     runs: tuple[RunRecord, ...]
     sandboxes: tuple[SandboxRecord, ...]
     turns: tuple[ParticipantTurnRecord, ...]
@@ -447,7 +454,7 @@ class ExperimentService:
         turns: ParticipantTurnRepository,
         agent_turns: AgentTurnRepository,
         tool_events: ToolEventRepository,
-        replays: ExperimentReplayRepository,
+        derivations: ExperimentDerivationRepository,
         snapshots: SandboxSnapshotService,
         sandboxes: SandboxService,
         scenarios: DefinitionRepository[ScenarioPayload],
@@ -463,7 +470,7 @@ class ExperimentService:
         self._turns = turns
         self._agent_turns = agent_turns
         self._tool_events = tool_events
-        self._replays = replays
+        self._derivations = derivations
         self._snapshots = snapshots
         self._sandboxes = sandboxes
         self._scenarios = scenarios
@@ -535,7 +542,7 @@ class ExperimentService:
                 )
                 for run, sandbox in zip(runs, sandboxes, strict=True)
             ),
-            replay_of=self._origin(shop_id, experiment_id),
+            derived_from=self._origin(shop_id, experiment_id),
             runs=runs,
             sandboxes=sandboxes,
             turns=turns,
@@ -805,20 +812,22 @@ class ExperimentService:
             )
 
     def _origin(self, shop_id: UUID, experiment_id: UUID) -> ExperimentOrigin | None:
-        """The experiment this one replays, named by the row it was derived from.
+        """The experiment this one came from, named by the row it was derived through.
 
         A missing source is reported as no origin rather than raised: experiments are
         write-once and never deleted, so this cannot happen in a lab that has one store,
         and a read of an experiment must not fail because a *different* experiment could not
         be found.
         """
-        derivation = self._replays.get(experiment_id)
+        derivation = self._derivations.get(experiment_id)
         if derivation is None:
             return None
         source = self._experiments.get(shop_id, derivation.source_experiment_id)
         if source is None:  # pragma: no cover - an experiment is never deleted
             return None
-        return ExperimentOrigin(experiment_id=source.experiment_id, label=source.label)
+        return ExperimentOrigin(
+            experiment_id=source.experiment_id, label=source.label, kind=derivation.kind
+        )
 
     def _trigger(self, snapshot: SandboxSnapshotRecord) -> str:
         ticket = self._pinned(snapshot, DefinitionType.TICKET, self._tickets).payload

@@ -2687,6 +2687,24 @@ export interface components {
       /** Published At */
       published_at: string;
     };
+    /**
+     * DerivationKind
+     * @description How one experiment was derived from another.
+     *
+     *     Two values because there are two honest ways to reuse a record, and they differ in
+     *     exactly one thing: a replay re-runs the versions the source pinned, and a fork moves
+     *     them on purpose. Everything else a derivation holds constant — the starting state, the
+     *     recipe version, the seed, and the customer's own script — is the same in both, which is
+     *     what makes the pair one vocabulary rather than two operations that happen to write
+     *     similar rows.
+     *
+     *     Recorded rather than inferred from whether the arms moved: a fork whose chosen versions
+     *     happen to compare equal along every dimension this lab reads is still a fork, because
+     *     the operator asked for different published content, and a reader has to be told what was
+     *     intended rather than what the comparison could recover.
+     * @enum {string}
+     */
+    DerivationKind: "replay" | "fork";
     /** ErrorResponse */
     ErrorResponse: {
       /** Code */
@@ -2782,7 +2800,7 @@ export interface components {
       scenario_version: number;
       /** Scenario Superseded */
       scenario_superseded: boolean;
-      replay_of?: components["schemas"]["ExperimentOriginSchema"] | null;
+      derived_from?: components["schemas"]["ExperimentOriginSchema"] | null;
       /** Seed */
       seed: number;
       /** Sandbox Fingerprint */
@@ -2844,7 +2862,7 @@ export interface components {
     };
     /**
      * ExperimentOriginSchema
-     * @description The experiment a derived one replays, named as a reader would name it.
+     * @description The experiment a derived one came from, named as a reader would name it.
      */
     ExperimentOriginSchema: {
       /**
@@ -2854,6 +2872,7 @@ export interface components {
       experiment_id: string;
       /** Label */
       label: string;
+      kind: components["schemas"]["DerivationKind"];
     };
     /**
      * ExperimentPreviewResponse
@@ -2902,7 +2921,7 @@ export interface components {
       canonical_schema_version: string;
       /** Created At */
       created_at: string;
-      replay_of?: components["schemas"]["ExperimentOriginSchema"] | null;
+      derived_from?: components["schemas"]["ExperimentOriginSchema"] | null;
       /** Sandbox Inputs */
       sandbox_inputs: components["schemas"]["ResolvedDefinitionSchema"][];
       /** Arm Inputs */

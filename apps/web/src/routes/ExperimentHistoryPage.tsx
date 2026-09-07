@@ -432,16 +432,17 @@ function HistoryRow({
           {experiment.label}
         </Link>
         <p className="text-xs text-admin-muted">{experiment.shop_name}</p>
-        {experiment.replay_of ? (
+        {experiment.derived_from ? (
           // Provenance rather than a status: a derived run is an experiment like any other,
-          // and this is what says the two rows sharing a fingerprint are related (ADR 0038).
+          // and this is what says the two rows sharing a fingerprint are related. The kind
+          // is the word, because "replay of" and "fork of" are not the same sentence.
           <p className="text-xs text-admin-muted">
-            replay of{" "}
+            {experiment.derived_from.kind} of{" "}
             <Link
               className="text-lab-ink underline-offset-2 hover:underline"
-              to={`/shops/${experiment.shop_id}/bench/${experiment.replay_of.experiment_id}/results`}
+              to={`/shops/${experiment.shop_id}/bench/${experiment.derived_from.experiment_id}/results`}
             >
-              {experiment.replay_of.label}
+              {experiment.derived_from.label}
             </Link>
           </p>
         ) : null}

@@ -271,8 +271,8 @@ export function ExperimentBenchPage() {
               <p className="text-[13px] text-admin-ink-soft">
                 This experiment records its customer turns as {experiment.participant_driver}, so
                 there is nothing to compose here.
-                {experiment.replay_of
-                  ? ` Its thread was driven by the run it was derived from, ${experiment.replay_of.label}.`
+                {experiment.derived_from
+                  ? ` Its thread was driven by the run it was derived from, ${experiment.derived_from.label}.`
                   : ""}
               </p>
             )}

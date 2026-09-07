@@ -56,9 +56,9 @@ DEFINITION_TABLES = {
     # And the one measurement of an attempt the record cannot reproduce: where inside it
     # each part of it ran.
     "experiment_run_spans",
-    # And where a derived experiment came from, which is neither an input of the run nor a
-    # reading of it.
-    "experiment_replays",
+    # And where a derived experiment came from and how, which is neither an input of the run
+    # nor a reading of it.
+    "experiment_derivations",
 }
 POC_TABLES = {
     "action_proposals",
@@ -75,6 +75,19 @@ POC_TABLES = {
     "idempotency_records",
 }
 APPLICATION_TABLES = POC_TABLES | DEFINITION_TABLES
+
+# One experiment row, for the suites that need two ends of a foreign key rather than a run.
+EXPERIMENT_ROW = """
+    INSERT INTO experiments (
+        experiment_id, shop_id, label, scenario_id, scenario_version, seed, snapshot_id,
+        sandbox_fingerprint, resolution_fingerprint, participant_driver, document, created_at
+    )
+    VALUES (
+        :experiment_id, '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0ff', 'Wrong address',
+        '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0fe', 1, 1, '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0fd',
+        :fingerprint, :fingerprint, 'human', '{}', '2026-09-07 12:00:00.000000'
+    )
+"""
 
 
 def alembic_config(database_url: str, monkeypatch: pytest.MonkeyPatch) -> Config:
@@ -747,6 +760,52 @@ def test_a_proposal_is_open_or_closed_and_never_half_of_each(
 
 
 @pytest.mark.migration
+def test_the_derivations_already_recorded_are_carried_over_as_replays(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A row written before there were two kinds of derivation is a replay, and stays one.
+
+    The kind is filled in rather than defaulted: the only operation that could have written
+    one of these rows was the replay, so the migration knows what it is looking at and does
+    not have to guess."""
+    database_url = f"sqlite:///{tmp_path / 'derivation-kind.db'}"
+    config = alembic_config(database_url, monkeypatch)
+    command.upgrade(config, "20260907_0019")
+    engine = create_engine(database_url)
+    derived = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac051"
+    source = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac052"
+    with engine.begin() as connection:
+        for identifier in (source, derived):
+            connection.execute(
+                text(EXPERIMENT_ROW), {"experiment_id": identifier, "fingerprint": "a" * 64}
+            )
+        connection.execute(
+            text(
+                """
+                INSERT INTO experiment_replays
+                    (experiment_id, source_experiment_id, created_at)
+                VALUES (:experiment_id, :source_experiment_id, '2026-09-07 12:00:00.000000')
+                """
+            ),
+            {"experiment_id": derived, "source_experiment_id": source},
+        )
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        carried = connection.execute(
+            text(
+                "SELECT source_experiment_id, kind FROM experiment_derivations "
+                "WHERE experiment_id = :experiment_id"
+            ),
+            {"experiment_id": derived},
+        ).one()
+    assert carried.source_experiment_id == source
+    assert carried.kind == "replay"
+
+
+@pytest.mark.migration
 def test_an_experiment_is_derived_once_and_never_from_itself(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -758,32 +817,20 @@ def test_an_experiment_is_derived_once_and_never_from_itself(
     experiment nobody ran would be provenance pointing at nothing.
 
     The self-reference check is in the table for the reason the span coordinates are: the
-    service cannot produce one, and a row that claimed a run replayed itself would be
+    service cannot produce one, and a row that claimed a run was derived from itself would be
     provenance nobody could follow."""
-    database_url = f"sqlite:///{tmp_path / 'replays.db'}"
+    database_url = f"sqlite:///{tmp_path / 'derivations.db'}"
     command.upgrade(alembic_config(database_url, monkeypatch), "head")
     engine = create_database_engine(database_url)
     derived = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac041"
     source = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac042"
     absent = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac043"
-    experiment = text(
-        """
-        INSERT INTO experiments (
-            experiment_id, shop_id, label, scenario_id, scenario_version, seed, snapshot_id,
-            sandbox_fingerprint, resolution_fingerprint, participant_driver, document,
-            created_at
-        )
-        VALUES (
-            :experiment_id, '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0ff', 'Wrong address',
-            '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0fe', 1, 1, '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac0fd',
-            :fingerprint, :fingerprint, 'human', '{}', '2026-09-07 12:00:00.000000'
-        )
-        """
-    )
+    experiment = text(EXPERIMENT_ROW)
     insert = text(
         """
-        INSERT INTO experiment_replays (experiment_id, source_experiment_id, created_at)
-        VALUES (:experiment_id, :source_experiment_id, '2026-09-07 12:00:00.000000')
+        INSERT INTO experiment_derivations
+            (experiment_id, source_experiment_id, kind, created_at)
+        VALUES (:experiment_id, :source_experiment_id, 'fork', '2026-09-07 12:00:00.000000')
         """
     )
     with engine.begin() as connection:
