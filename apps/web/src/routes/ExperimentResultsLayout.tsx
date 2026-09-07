@@ -1,5 +1,6 @@
 import type {
   ArmEvaluationSchema,
+  ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
   ExperimentResponse,
   ExperimentRunSchema,
@@ -7,7 +8,11 @@ import type {
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useOutletContext, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { getExperiment, getExperimentEvaluation } from "../api/experiments";
+import {
+  getExperiment,
+  getExperimentAnnotations,
+  getExperimentEvaluation,
+} from "../api/experiments";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import { formatTimestamp, subtleButtonClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
@@ -17,18 +22,22 @@ const UNAVAILABLE = "This experiment's results are unavailable.";
 /**
  * What every results tab is handed, so no two of them read the experiment differently.
  *
- * Neither document is nullable: they are read together and the tabs are rendered only once
- * both have arrived. A tab holding an experiment without its evaluation would be a state
- * this screen deliberately never enters — it would render an objective matrix that had not
- * been told anything yet.
+ * None of the three documents is nullable: they are read together and the tabs are rendered
+ * only once all of them have arrived. A tab holding an experiment without its evaluation
+ * would be a state this screen deliberately never enters — it would render an objective
+ * matrix that had not been told anything yet.
  */
 export interface ExperimentResults {
   shopId: string;
   experimentId: string;
   experiment: ExperimentResponse;
   evaluation: ExperimentEvaluationResponse;
+  /** What an operator has written on this run — never a reading of what the run did. */
+  annotations: ExperimentAnnotationsResponse;
   /** Replace the evaluation after a scoring pass answered with the whole of it. */
   onEvaluated: (evaluation: ExperimentEvaluationResponse) => void;
+  /** Replace the annotation after a write answered with the whole of it. */
+  onAnnotated: (annotations: ExperimentAnnotationsResponse) => void;
 }
 
 export function useExperimentResults(): ExperimentResults {
@@ -43,27 +52,33 @@ export function useExperimentResults(): ExperimentResults {
  * the execution timeline is still reading one experiment, and a depth view that reintroduced
  * its own header would let them lose which run they were in.
  *
- * The experiment and its evaluation are read once, here, and handed down. Two tabs fetching
- * the same two documents would be two readings of one run, free to disagree the moment one
- * of them was reloaded and the other was not.
+ * The experiment, its evaluation, and what an operator has written on it are read once,
+ * here, and handed down. Two tabs fetching the same documents would be two readings of one
+ * run, free to disagree the moment one of them was reloaded and the other was not.
  */
 export function ExperimentResultsLayout() {
   const { shopId } = useShopWorkspace();
   const { experimentId = "" } = useParams();
   const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
+  const [annotations, setAnnotations] = useState<ExperimentAnnotationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       // Together, for the reason the bench reads them together: what an arm did and how it
       // is doing against what the recipe asked for are one reading of one record.
-      const [record, judged] = await Promise.all([
+      const [record, judged, written] = await Promise.all([
         getExperiment(shopId, experimentId, signal),
         getExperimentEvaluation(shopId, experimentId, signal),
+        // Read here rather than by the tab that shows it, for the reason the other two are:
+        // one screen, one reading. It is a third request because it is a third document —
+        // annotating a run must not be able to move the record it is about (ADR 0036).
+        getExperimentAnnotations(shopId, experimentId, signal),
       ]);
       setExperiment(record);
       setEvaluation(judged);
+      setAnnotations(written);
     },
     [shopId, experimentId],
   );
@@ -78,7 +93,7 @@ export function ExperimentResultsLayout() {
     return () => controller.abort();
   }, [load]);
 
-  if (experiment === null || evaluation === null) {
+  if (experiment === null || evaluation === null || annotations === null) {
     return (
       <>
         <PageHeader title="Experiment results" />
@@ -98,7 +113,9 @@ export function ExperimentResultsLayout() {
     experimentId,
     experiment,
     evaluation,
+    annotations,
     onEvaluated: setEvaluation,
+    onAnnotated: setAnnotations,
   };
 
   return (

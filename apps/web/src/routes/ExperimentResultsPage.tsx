@@ -1,15 +1,16 @@
 import type {
   ArmEvaluationSchema,
   ArmMetricsSchema,
+  ExperimentAnnotationsResponse,
   ExperimentResponse,
   ExperimentRunSchema,
   JudgementSchema,
   ObjectiveResultSchema,
   ParticipantTurnSchema,
 } from "@agent-lab/contracts";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { describeApiError } from "../api/client";
-import { scoreExperiment } from "../api/experiments";
+import { addExperimentNote, scoreExperiment, setExperimentTags } from "../api/experiments";
 import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
 import {
@@ -23,7 +24,15 @@ import {
   writeLabel,
   writesOf,
 } from "../lib/evidence";
-import { tableCellClasses, tableHeadClasses } from "../lib/ui";
+import {
+  fieldControlClasses,
+  formatTimestamp,
+  outlineButtonClasses,
+  subtleButtonClasses,
+  tableCellClasses,
+  tableHeadClasses,
+  textAreaClasses,
+} from "../lib/ui";
 import { useExperimentResults } from "./ExperimentResultsLayout";
 
 /**
@@ -64,7 +73,8 @@ type Measure = (typeof MEASURES)[number];
  * can never describe a run differently from the bench it was driven on.
  */
 export function ExperimentResultsPage() {
-  const { shopId, experimentId, experiment, evaluation, onEvaluated } = useExperimentResults();
+  const { shopId, experimentId, experiment, evaluation, annotations, onEvaluated, onAnnotated } =
+    useExperimentResults();
   const { judges, judgeId, setJudgeId } = usePublishedJudges();
   const [scoring, setScoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -212,7 +222,189 @@ export function ExperimentResultsPage() {
           ) : null}
         </div>
       </div>
+
+      <div className="mt-4">
+        <NotesAndTags
+          shopId={shopId}
+          experimentId={experimentId}
+          annotations={annotations}
+          onAnnotated={onAnnotated}
+        />
+      </div>
     </>
+  );
+}
+
+/**
+ * Frame 9's notes-and-tags strip: what an operator concluded, beside what the run did.
+ *
+ * The only thing on this screen that is written rather than read, and the only thing that is
+ * not evidence. A note is appended and never edited, because it is what a reviewer thought
+ * when they read this run; the tags are replaced as a set, because how a run is filed is a
+ * current classification rather than a record of what happened to it (ADR 0036).
+ *
+ * Both writes answer with everything written on the run, so this component never merges a
+ * response into a list of its own — the backend's answer replaces what is on screen.
+ */
+function NotesAndTags({
+  shopId,
+  experimentId,
+  annotations,
+  onAnnotated,
+}: {
+  shopId: string;
+  experimentId: string;
+  annotations: ExperimentAnnotationsResponse;
+  onAnnotated: (annotations: ExperimentAnnotationsResponse) => void;
+}) {
+  const [note, setNote] = useState("");
+  const [tag, setTag] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // One writer for both operations: whichever one ran, the answer is the whole annotation,
+  // and a failure leaves what the operator typed in the box rather than swallowing it.
+  const write = async (
+    change: () => Promise<ExperimentAnnotationsResponse>,
+    unavailable: string,
+    clear: () => void,
+  ) => {
+    setBusy(true);
+    setError(null);
+    try {
+      onAnnotated(await change());
+      clear();
+    } catch (cause: unknown) {
+      setError(describeApiError(cause, unavailable));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitNote = (event: FormEvent) => {
+    event.preventDefault();
+    void write(
+      () => addExperimentNote(shopId, experimentId, { body: note.trim() }),
+      "This note could not be saved.",
+      () => setNote(""),
+    );
+  };
+
+  // `clear` is the caller's, because only the caller knows whether the box it would empty is
+  // the one this write came from: adding consumes what was typed, and removing a chip must
+  // leave a half-typed tag beside it alone.
+  const file = (tags: string[], clear: () => void) =>
+    write(
+      () => setExperimentTags(shopId, experimentId, { tags }),
+      "These tags could not be saved.",
+      clear,
+    );
+
+  const submitTag = (event: FormEvent) => {
+    event.preventDefault();
+    // The whole set every time, because that is what the contract takes: the backend folds
+    // what was typed, so a tag already on the run comes back as the one chip it always was.
+    void file([...annotations.tags, tag.trim()], () => setTag(""));
+  };
+
+  return (
+    <Card
+      title="Notes & tags"
+      footer={
+        <p className="text-xs text-admin-muted">
+          What a reviewer concluded, stored beside the record rather than in it — annotating a run
+          never moves the versions or the starting state it pinned. A note is kept as written; the
+          tags are how this run is filed now, and history narrows by them.
+        </p>
+      }
+    >
+      {error ? (
+        <p role="alert" className="text-[13px] text-lab-error">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {annotations.tags.length === 0 ? (
+          <p className="text-[13px] text-admin-muted">Not filed under any tag yet.</p>
+        ) : (
+          annotations.tags.map((entry) => (
+            <span
+              key={entry}
+              className="inline-flex items-center gap-1.5 rounded-full border border-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink"
+            >
+              {entry}
+              <button
+                type="button"
+                aria-label={`Remove tag ${entry}`}
+                disabled={busy}
+                className="text-admin-muted hover:text-lab-error"
+                onClick={() =>
+                  void file(
+                    annotations.tags.filter((kept) => kept !== entry),
+                    () => {},
+                  )
+                }
+              >
+                ×
+              </button>
+            </span>
+          ))
+        )}
+        <form className="flex items-center gap-2" onSubmit={submitTag}>
+          <label className="sr-only" htmlFor="experiment-tag">
+            Add a tag
+          </label>
+          <input
+            id="experiment-tag"
+            className={`${fieldControlClasses} h-8 w-48`}
+            placeholder="read-check-gap"
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+          />
+          <button
+            className={subtleButtonClasses}
+            type="submit"
+            disabled={busy || tag.trim() === ""}
+          >
+            Add tag
+          </button>
+        </form>
+      </div>
+
+      {annotations.notes.length > 0 ? (
+        <ul className="grid gap-2 border-t border-admin-border pt-3">
+          {annotations.notes.map((entry) => (
+            <li key={entry.note_id} className="grid gap-0.5">
+              <p className="text-[13px] text-admin-ink">{entry.body}</p>
+              <p className="text-xs text-admin-muted">{formatTimestamp(entry.created_at)}</p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <form className="grid gap-2 border-t border-admin-border pt-3" onSubmit={submitNote}>
+        <label className="sr-only" htmlFor="experiment-note">
+          Add a note
+        </label>
+        <textarea
+          id="experiment-note"
+          className={textAreaClasses}
+          placeholder="What this run showed, in your own words…"
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+        />
+        <div>
+          <button
+            className={outlineButtonClasses}
+            type="submit"
+            disabled={busy || note.trim() === ""}
+          >
+            Add note
+          </button>
+        </div>
+      </form>
+    </Card>
   );
 }
 

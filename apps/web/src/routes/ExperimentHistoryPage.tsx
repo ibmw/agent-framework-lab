@@ -84,6 +84,7 @@ export function ExperimentHistoryPage() {
   const shopId = params.get("shop") ?? "";
   const scenarioId = params.get("scenario") ?? "";
   const frameworkId = params.get("framework") ?? "";
+  const tag = params.get("tag") ?? "";
   // The closed vocabularies are checked against the values the contract actually publishes:
   // a URL is typed by anyone, and a filter the backend would refuse should narrow nothing
   // rather than turn a shared link into an error page.
@@ -109,6 +110,7 @@ export function ExperimentHistoryPage() {
         shop_id: shopId,
         scenario_id: scenarioId,
         framework_id: frameworkId,
+        tag,
         status,
         outcome,
         started_after: startedAfter(span),
@@ -133,7 +135,7 @@ export function ExperimentHistoryPage() {
         }
       });
     return () => controller.abort();
-  }, [shopId, scenarioId, frameworkId, status, outcome, span, query, page]);
+  }, [shopId, scenarioId, frameworkId, tag, status, outcome, span, query, page]);
 
   function set(key: string, value: string, resetPage: boolean) {
     setParams((current) => {
@@ -196,7 +198,7 @@ export function ExperimentHistoryPage() {
           Search
           <input
             className={fieldControlClasses}
-            placeholder="Name, scenario, shop, or agent configuration…"
+            placeholder="Name, scenario, shop, configuration, tag, or note…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -243,6 +245,21 @@ export function ExperimentHistoryPage() {
           >
             <option value="">All frameworks</option>
             {(listing?.frameworks ?? []).map((facet) => (
+              <option key={facet.id} value={facet.id}>
+                {facet.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={fieldLabelClasses}>
+          Tag
+          <select
+            className={fieldControlClasses}
+            value={tag}
+            onChange={(event) => narrow("tag", event.target.value)}
+          >
+            <option value="">All tags</option>
+            {(listing?.tags ?? []).map((facet) => (
               <option key={facet.id} value={facet.id}>
                 {facet.label}
               </option>
@@ -418,6 +435,26 @@ function HistoryRow({ experiment }: { experiment: ExperimentHistoryEntrySchema }
         >
           {meaning.label}
         </span>
+        {/* What an operator wrote, which is the one thing on a row the run did not produce.
+            The tags because they are what this listing narrows by, and the notes as a count
+            because a note reads as itself only beside the evidence it was written about. */}
+        {experiment.tags.length > 0 || experiment.note_count > 0 ? (
+          <p className="mt-1 flex flex-wrap items-center gap-1">
+            {experiment.tags.map((entry) => (
+              <span
+                key={entry}
+                className="rounded-full border border-admin-border px-2 py-0.5 text-[11px] text-admin-ink"
+              >
+                {entry}
+              </span>
+            ))}
+            {experiment.note_count > 0 ? (
+              <span className="text-[11px] text-admin-muted">
+                {experiment.note_count} note{experiment.note_count === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
       </td>
       <td className={tableCellClasses}>{formatTimestamp(experiment.created_at)}</td>
       <td className={tableCellClasses}>

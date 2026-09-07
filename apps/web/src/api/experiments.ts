@@ -1,4 +1,6 @@
 import type {
+  AddExperimentNoteRequest,
+  ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
   ExperimentHistoryEntrySchema,
   ExperimentHistoryResponse,
@@ -11,6 +13,7 @@ import type {
   ParticipantTurnRequest,
   RunTurnResponse,
   ScoreExperimentRequest,
+  SetExperimentTagsRequest,
   StartExperimentRequest,
 } from "@agent-lab/contracts";
 import { apiPath, JSON_HEADERS, read } from "./client";
@@ -30,6 +33,7 @@ export interface ExperimentHistoryQuery {
   shop_id?: string;
   scenario_id?: string;
   framework_id?: string;
+  tag?: string;
   status?: ExperimentHistoryEntrySchema["status"] | "";
   outcome?: ObjectiveResultSchema["outcome"] | "";
   started_after?: string;
@@ -134,6 +138,68 @@ export async function scoreExperiment(
   return read<ExperimentEvaluationResponse>(
     await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/judgements`), {
       method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(command),
+    }),
+  );
+}
+
+/**
+ * Read what an operator has written on this run: their notes, and the tags they filed it on.
+ *
+ * Separate from `getExperiment` because it is not a reading of the run at all. The standing,
+ * the metrics, and the state diff travel with the experiment because they are projections of
+ * what it did; this is a stored document with its own lifecycle — the run is finished, and
+ * this is not.
+ */
+export async function getExperimentAnnotations(
+  shopId: string,
+  experimentId: string,
+  signal?: AbortSignal,
+): Promise<ExperimentAnnotationsResponse> {
+  return read<ExperimentAnnotationsResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/annotations`), {
+      signal,
+    }),
+  );
+}
+
+/**
+ * Write one note about this run.
+ *
+ * Answers with everything written on it rather than with the note it appended, so the screen
+ * never holds a list it merged itself. Deliberately not idempotent: two reviewers who wrote
+ * the same sentence wrote two notes.
+ */
+export async function addExperimentNote(
+  shopId: string,
+  experimentId: string,
+  command: AddExperimentNoteRequest,
+): Promise<ExperimentAnnotationsResponse> {
+  return read<ExperimentAnnotationsResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/notes`), {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(command),
+    }),
+  );
+}
+
+/**
+ * Replace the tags this run is filed under.
+ *
+ * The whole set, because that is what the operator is looking at: an add-and-remove pair
+ * would let two requests that crossed leave a set neither of them asked for. Each value is
+ * folded to lowercase kebab-case by the backend, so the answer is what was actually stored.
+ */
+export async function setExperimentTags(
+  shopId: string,
+  experimentId: string,
+  command: SetExperimentTagsRequest,
+): Promise<ExperimentAnnotationsResponse> {
+  return read<ExperimentAnnotationsResponse>(
+    await fetch(experimentsPath(shopId, `/${encodeURIComponent(experimentId)}/tags`), {
+      method: "PUT",
       headers: JSON_HEADERS,
       body: JSON.stringify(command),
     }),

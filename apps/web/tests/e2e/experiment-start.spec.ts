@@ -617,6 +617,17 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // The claim the card makes, checked against the whole document rather than assumed.
   await expect(businessState.getByText(/no other state changed/)).toHaveCount(2);
 
+  // And what the operator concluded, written beside the evidence rather than into it: the
+  // shelf this run is filed on and the sentence explaining why.
+  const written = card(page, "Notes & tags");
+  await written.getByLabel("Add a tag").fill("Read check gap");
+  await written.getByRole("button", { name: "Add tag" }).click();
+  // Folded to one spelling, because it is what history narrows by.
+  await expect(written.getByRole("button", { name: "Remove tag read-check-gap" })).toBeVisible();
+  await written.getByLabel("Add a note").fill(`Beacon never opened the policy ${unique}.`);
+  await written.getByRole("button", { name: "Add note" }).click();
+  await expect(written.getByText(`Beacon never opened the policy ${unique}.`)).toBeVisible();
+
   // And the turn only one arm heard is what makes everything after it two conversations.
   const divergence = card(page, "Input divergence");
   await expect(divergence.getByText("Turn 2")).toBeVisible();
@@ -680,6 +691,22 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(listed.getByText(/No experiment matches these filters/)).toBeVisible();
   await page.getByLabel("Search").fill(`Prompt comparison ${unique}`);
   await page.getByRole("button", { name: "Search" }).click();
+  await expect(row).toHaveCount(1);
+
+  // The shelf the operator filed it on is on the row, is a way to narrow the lab, and the
+  // sentence they wrote finds the run even though the listing never shows it.
+  await expect(row.getByText("read-check-gap")).toBeVisible();
+  await expect(row.getByText("1 note")).toBeVisible();
+  await page.getByLabel("Search").fill(`Beacon never opened the policy ${unique}.`);
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(row).toHaveCount(1);
+  const filtered = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/experiments?") &&
+      response.url().includes("tag=read-check-gap"),
+  );
+  await page.getByLabel("Tag").selectOption("read-check-gap");
+  await filtered;
   await expect(row).toHaveCount(1);
 
   // And the row opens the evidence it summarizes.

@@ -284,6 +284,7 @@ describe("experiment history", () => {
 
     await user.selectOptions(screen.getByLabelText("Scenario"), "Wrong shipping address");
     await user.selectOptions(screen.getByLabelText("Framework"), "Pydantic AI");
+    await user.selectOptions(screen.getByLabelText("Tag"), "read-check-gap");
     await user.selectOptions(screen.getByLabelText("Status"), "Completed");
     await user.selectOptions(screen.getByLabelText("Objective outcome"), "missed");
     await user.selectOptions(screen.getByLabelText("Started"), "Last 30 days");
@@ -292,8 +293,25 @@ describe("experiment history", () => {
     const asked = lastAsked();
     expect(asked.get("scenario_id")).toBe(SCENARIO_ID);
     expect(asked.get("framework_id")).toBe("pydantic-ai");
+    expect(asked.get("tag")).toBe("read-check-gap");
     expect(asked.get("status")).toBe("completed");
     expect(asked.get("outcome")).toBe("missed");
+  });
+
+  it("shows the tags a run is filed under and how many notes it carries", async () => {
+    renderHistory();
+
+    const table = await screen.findByRole("table");
+    const annotated = within(table)
+      .getByText("Prompt A against prompt B")
+      .closest("tr") as HTMLElement;
+    const bare = within(table).getByText("Control policy alone").closest("tr") as HTMLElement;
+
+    expect(within(annotated).getByText("read-check-gap")).toBeVisible();
+    expect(within(annotated).getByText("two-arm")).toBeVisible();
+    expect(within(annotated).getByText("2 notes")).toBeVisible();
+    // A run nobody has written on says nothing rather than showing an empty strip.
+    expect(within(bare).queryByText(/note/)).toBeNull();
   });
 
   it("searches on submission rather than on every keystroke", async () => {

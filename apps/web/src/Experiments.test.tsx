@@ -6,6 +6,7 @@ import type {
   ArmStandingSchema,
   ArmStateDiffSchema,
   ComparisonVariableSchema,
+  ExperimentAnnotationsResponse,
   ExperimentEvaluationResponse,
   ExperimentListResponse,
   ExperimentPreviewResponse,
@@ -656,7 +657,10 @@ let runtimeUnavailable = false;
 let scored = false;
 let judgeFailed = false;
 let scoredBy: { judge_id: string }[] = [];
+let filed: string[][] = [];
 let publishedJudges: JudgeConfigurationListResponse = JUDGES;
+/** What an operator has written on this run, as the backend answers every write with it. */
+let annotations: ExperimentAnnotationsResponse = { notes: [], tags: [] };
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -728,6 +732,34 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/timeline`, () =>
     HttpResponse.json(TIMELINE),
   ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/annotations`, () =>
+    HttpResponse.json(annotations),
+  ),
+  http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/notes`, async ({ request }) => {
+    const body = (await request.json()) as { body: string };
+    annotations = {
+      ...annotations,
+      notes: [
+        ...annotations.notes,
+        {
+          note_id: `note-${annotations.notes.length + 1}`,
+          body: body.body,
+          created_at: "2026-09-05T18:20:00+00:00",
+        },
+      ],
+    };
+    return HttpResponse.json(annotations, { status: 201 });
+  }),
+  http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/tags`, async ({ request }) => {
+    const body = (await request.json()) as { tags: string[] };
+    filed.push(body.tags);
+    // Stands in for the backend's fold: lowercased, deduplicated, and in one order.
+    annotations = {
+      ...annotations,
+      tags: [...new Set(body.tags.map((tag) => tag.trim().toLowerCase()))].sort(),
+    };
+    return HttpResponse.json(annotations);
+  }),
   http.get("*/api/v1/judge-configurations", () => HttpResponse.json(publishedJudges)),
   http.post(
     `*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/judgements`,
@@ -797,6 +829,8 @@ afterEach(() => {
   judgeFailed = false;
   scoredBy = [];
   publishedJudges = JUDGES;
+  annotations = { notes: [], tags: [] };
+  filed = [];
 });
 afterAll(() => server.close());
 
@@ -1565,5 +1599,110 @@ describe("execution timeline", () => {
 
     await user.click(screen.getByRole("link", { name: "Back to the live bench" }));
     expect(await screen.findByRole("region", { name: "Customer composer" })).toBeVisible();
+  });
+});
+
+describe("notes and tags", () => {
+  it("says a run has nothing written on it rather than showing an empty strip", async () => {
+    renderResults();
+
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+
+    expect(within(strip).getByText("Not filed under any tag yet.")).toBeVisible();
+    expect(within(strip).queryByRole("listitem")).toBeNull();
+  });
+
+  it("keeps a note as written and answers with everything on the run", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+
+    await user.type(
+      within(strip).getByLabelText("Add a note"),
+      "Beacon acts before reading the policy.",
+    );
+    await user.click(within(strip).getByRole("button", { name: "Add note" }));
+
+    expect(await within(strip).findByText("Beacon acts before reading the policy.")).toBeVisible();
+    // The box empties only because the write was accepted, so nothing typed is ever lost.
+    expect(within(strip).getByLabelText("Add a note")).toHaveValue("");
+  });
+
+  it("files the run by sending the whole tag set, never one tag at a time", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+
+    await user.type(within(strip).getByLabelText("Add a tag"), "read-check-gap");
+    await user.click(within(strip).getByRole("button", { name: "Add tag" }));
+    await within(strip).findByText("read-check-gap");
+    await user.type(within(strip).getByLabelText("Add a tag"), "two-arm");
+    await user.click(within(strip).getByRole("button", { name: "Add tag" }));
+    await within(strip).findByText("two-arm");
+
+    expect(filed).toEqual([["read-check-gap"], ["read-check-gap", "two-arm"]]);
+  });
+
+  it("removes a tag by sending the set without it", async () => {
+    const user = userEvent.setup();
+    annotations = { notes: [], tags: ["read-check-gap", "two-arm"] };
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+
+    await user.click(within(strip).getByRole("button", { name: "Remove tag two-arm" }));
+
+    await waitFor(() => expect(filed).toEqual([["read-check-gap"]]));
+    expect(within(strip).queryByText("two-arm")).toBeNull();
+  });
+
+  it("shows the tag as the backend folded it rather than as it was typed", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+
+    await user.type(within(strip).getByLabelText("Add a tag"), "Read-Check-Gap");
+    await user.click(within(strip).getByRole("button", { name: "Add tag" }));
+
+    expect(await within(strip).findByText("read-check-gap")).toBeVisible();
+  });
+
+  it("leaves a half-typed tag alone when a chip beside it is removed", async () => {
+    const user = userEvent.setup();
+    annotations = { notes: [], tags: ["two-arm"] };
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+
+    await user.type(within(strip).getByLabelText("Add a tag"), "read-check");
+    await user.click(within(strip).getByRole("button", { name: "Remove tag two-arm" }));
+
+    await waitFor(() => expect(filed).toEqual([[]]));
+    // Removing a chip is not what consumed the box, so what was typed is still there.
+    expect(within(strip).getByLabelText("Add a tag")).toHaveValue("read-check");
+  });
+
+  it("says why a note could not be saved and keeps what was typed", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/notes`, () =>
+        HttpResponse.json(
+          {
+            code: "internal_error",
+            message: "the annotation store is unavailable",
+            request_id: "req-4",
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+
+    await user.type(within(strip).getByLabelText("Add a note"), "Worth rerunning.");
+    await user.click(within(strip).getByRole("button", { name: "Add note" }));
+
+    expect(await within(strip).findByRole("alert")).toHaveTextContent(
+      "the annotation store is unavailable",
+    );
+    expect(within(strip).getByLabelText("Add a note")).toHaveValue("Worth rerunning.");
   });
 });
