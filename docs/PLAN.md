@@ -87,7 +87,7 @@ through, whose every row is projected from the record the bench and the results 
 — which also removes the persona-first listings it replaces (ADR 0034) — and then what an
 arm's world actually became: the difference between the bytes its two fingerprints cover,
 field by field, which is the half of "verified, not claimed" a revision counter cannot say
-(ADR 0035), and finally the first thing about a run that the run did not produce: the notes an
+(ADR 0035), then the first thing about a run that the run did not produce: the notes an
 operator writes on it and the shelves they file it under, stored beside the experiment so
 annotating one cannot move the fingerprints it pinned, and offered back as a column, a filter, and
 a search over words the listing never shows (ADR 0036), and finally the one reading of a run that
@@ -729,13 +729,17 @@ never when it happened. A span says only that; which tool it timed and what that
 are joined from the events the thread already shows, because a span with an attribute of its
 own would be the one place synthetic customer content could leave the lab unnoticed. An
 attempt made before the lab traced anything says so rather than showing a waterfall somebody
-reconstructed. ADR 0037 records the trace as the one stored reading beside four projected
+reconstructed, and the calls are listed in the order the agent asked them rather than in the
+order of a clock that can be stepped backwards under a running process. ADR 0037 records the
+trace as the one stored reading beside four projected
 ones and the confirmation that earned it, the coordinate that joins a span to the call it
-timed instead of describing it, the single measurement handed to both the record and the
-trace, the three kinds of span this build can honestly claim to have seen and the model call
-it refuses to invent, the attempt span that is wider than the framework's turn because the
-lab's own resolution is not a framework's cost, and the tracer that mints real
-OpenTelemetry identities after the fact so the runner holds no SDK type.
+timed instead of describing it, the offset that draws a bar and orders nothing, the single
+measurement handed to both the record and the trace, the three kinds of span this build can
+honestly claim to have seen and the model call it refuses to invent, the attempt span that is
+wider than the framework's turn because the lab's own resolution is not a framework's cost,
+the exported allowlist that carries an arm's position rather than the name an operator gave
+it, and the tracer that mints real OpenTelemetry identities after the fact so the runner
+holds no SDK type.
 
 History evidence (frame 10): an operator who has driven an incident to its end leaves the shop
 they ran it in and finds it again in the lab's own listing — every run this lab has made, whichever

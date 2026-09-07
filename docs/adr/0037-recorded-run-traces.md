@@ -74,6 +74,15 @@ table enforce it: a `tool` span carries the sequence of the call it timed and no
 does, and the `attempt` span is the only root. Without that, a stored span would be a timing
 attached to nothing.
 
+It is also what the reading **orders by**. The offset decides where a bar is drawn and
+nothing else: within one attempt the spans are listed by kind and then by the sequence the
+agent asked in, and the store's own read order is stable rather than chronological. Sorting
+by the offset would have put a second ordering authority beside the sequence — the thing
+ADR 0027 removed — and it would have shown: an operational clock stepped backwards under a
+running process leaves every offset clamped at zero (ADR 0032), and a trace sorted by them
+would list a later call above an earlier one while the timeline beside it listed the
+opposite.
+
 ### One measurement, two readers
 
 A tool span's `duration_ms` is the number its tool event carries, and the runtime span's is
@@ -133,9 +142,21 @@ can never leave a span open in an evidence record.
 
 The exported half is held to the same rule as the stored half by writing its attributes rather
 than filtering them, as `SanitizedTracingAgentAdapter` already does: the lab's identifiers
-pseudonymized, the arm, the turn, the framework, and the published tool name and version. The
-stored row keeps none of those words, and joins for them instead — which is also what stops
-the two views of one execution from drifting into naming a call differently.
+pseudonymized, the arm's **position**, the turn, the framework, and the published tool name
+and version. The position rather than the label, because a label is text an operator typed
+and `docs/observability.md` allows no free-form content out of the process; which arm a span
+belongs to is already the pseudonymized run id beside it. For the same reason a span carries
+no name of its own across the port: an exported span's name is decided from its kind, and the
+only other word on it is a tool name the lab publishes.
+
+Those names are the ones the Traces tab renders, letter for letter. The trace id on the page
+is the correlation an operator carries into an exporter, and a span called one thing in the
+lab and another in Phoenix would break that correlation exactly when it is being used.
+
+The root span is opened in an **empty** context rather than the ambient one. `None` would
+resolve to whatever span happened to be current, and a root silently parented into an
+unrelated trace would be exported under a parent the stored row says it does not have —
+which is the "stored tree equals exported tree" claim this section rests on.
 
 Because an arm now traces on every advance, `create_app` constructs telemetry unconditionally
 where it used to build one only alongside the POC's agent registry. A tracer is composition's
@@ -174,6 +195,17 @@ reports `trace_id: null` and no spans, which says nobody watched rather than not
 - **A link into Phoenix.** The frame's "Export: Phoenix ↗" chip needs a base URL for a service
   that is optional, replaceable, and usually absent. The trace id is on the page, which is the
   correlation; a link to a host nobody configured would be a dead chip.
+- **The span panel's two deep links.** The frame offers "Show in Execution timeline" and "Open
+  source location in Code paths", and the canvas annotation names that chain — General to a
+  timeline event to a trace span to the raising line — as the point of the depth tabs. Neither
+  is here, because neither destination has an anchor to land on: the timeline tab renders one
+  stream with no per-entry target, and the code excerpt of frame 9c is a separate open outcome.
+  Adding anchors is one slice across both tabs and belongs with the excerpt rather than in
+  front of it; a link that scrolled to the top of a tab would be worse than no link.
+- **A time axis over the waterfall.** The frame rules the attempt into five labelled columns.
+  Each bar carries its own duration and the root's is the scale, so the axis adds a reading
+  aid rather than a fact; it waits until the tab has been used against a run long enough to
+  say what the ticks should be.
 - **Trace search, and traces across experiments.** A trace is read beside the run it explains.
   A cross-experiment span search is a trace backend's job, which is what the exporter is for.
 - **Backfilling the attempts that predate this revision.** They have no spans because none
@@ -186,31 +218,36 @@ reports `trace_id: null` and no spans, which says nobody watched rather than not
 - Trace tests (`test_experiment_traces.py`) cover the reading and the rules: one attempt
   recorded as one rooted trace with a span per call, only the attempt span without a parent
   and every call hanging off the runtime span, the calls at increasing offsets with a
-  measurable gap between each pair — the fact the record cannot supply — each span carrying
-  the measurement the record already holds rather than a second one, the attempt span wider
-  than the framework's turn inside it, a span naming the call the record says it timed, a
-  refusal kept as a refusal, no word anyone said anywhere in the reading, the arm beside it
-  recording nothing, a failed attempt traced and its retry traced beside it, an attempt whose
+  measurable gap between each pair — the fact the record cannot supply — the calls listed in
+  the order the agent asked even when a clock stepped backwards has flattened every offset to
+  zero, each span carrying the measurement the record already holds rather than a second one,
+  the attempt span wider than the framework's turn inside it, a span naming the call the
+  record says it timed, a refusal kept as a refusal, no word anyone said anywhere in the
+  reading, two arms driven to the same place holding two traces that share no span, the arm
+  that was never run recording nothing, a failed attempt traced and its retry traced beside
+  it, an attempt whose
   spans were never written reported as untraced rather than reconstructed, and the experiment
   this shop does not hold. The value object's own rules are covered too: exactly a tool span
   carries a sequence, exactly the attempt span is a root, an identifier that no exporter could
   have produced is refused, and nothing runs for a negative number of milliseconds.
 - Exporter tests (same file) cover the half that leaves the machine: the three span names, the
-  run identifier hashed rather than carried, the attribute set held to the allowlist, the
-  stored tree equal span-for-span to the exported one, and a span lasting exactly as long as
-  the runner measured.
+  run identifier hashed rather than carried, the arm reported by position, the attribute set
+  held to the allowlist, the stored tree equal span-for-span to the exported one, and a span
+  lasting exactly as long as the runner measured.
 - Contract tests (`test_experiment_api.py`) drive the operation: an advance recording the span
   tree of the attempt it made with the calls named in the order they were asked, the offsets
   and the runtime span's agreement with the attempt's own duration, the response carrying no
   message body — asserted against the rendered text, because the contract is what an export
   will read — an arm that has not run contributing no trace, and the traces of an experiment
   another shop holds.
-- A migration test (`test_migrations.py`) holds the store to the two coordinate rules and the
-  non-negative durations, for the reason ADR 0032's usage constraints are in the table: the
+- A migration test (`test_migrations.py`) holds the store to the two coordinate rules and to
+  both non-negative measurements — a span that starts before the attempt does and one that
+  lasts a negative time — for the reason ADR 0032's usage constraints are in the table: the
   value object raises on the way out, where the constraint refuses the row on the way in.
 - Frontend tests (`Experiments.test.tsx`) cover the tab: one attempt drawn as a waterfall with
-  each bar named and measured, a span's tool and outcome read off the record rather than off
-  the span, every recorded attempt offered with the arm and the failure that ended it, an
+  each bar named and measured with the names the exporter uses, a span's tool and outcome read
+  off the record rather than off the span, a failed attempt and the retry beside it both
+  offered with the arm and the failure that ended one of them, an
   untraced attempt saying so instead of showing a reconstruction, an experiment nobody has run
   having nothing to trace, the tab marked as the current page with the header still naming the
   experiment, and a backend that cannot answer reported with its own reason.

@@ -347,7 +347,9 @@ and only the three the lab itself can see: the advance, the framework's turn ins
 each tool call. A stored span has no attribute column at all — which tool it timed and what
 that tool answered are joined from the tool events through the coordinate it carries — so a
 trace cannot become the way synthetic customer content leaves the lab, and a framework's own
-instrumentation is never swept into the record even where an SDK emits it. Each duration is
+instrumentation is never swept into the record even where an SDK emits it. The offset draws a
+bar and orders nothing: a trace is listed by the coordinates the calls are numbered by, so a
+clock stepped backwards cannot make it disagree with the timeline. Each duration is
 one measurement handed to both the record and the trace rather than taken twice, and the spans
 are real OpenTelemetry spans opened after the fact from those measurements, so the runner
 holds no SDK type and an exporter sees exactly the tree that was stored (ADR 0037).
