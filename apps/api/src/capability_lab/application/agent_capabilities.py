@@ -1,10 +1,26 @@
-"""What the lab has actually proven a framework can do, declared apart from the adapters.
+"""What the lab has proven a framework can do, declared apart from the adapters.
 
 `PLAN.md` Milestone 3 requires that a requested configuration be validated against proven
-adapter capabilities. "Proven" is a property of this project, not of an SDK's marketing: it
-means the lab has run the combination and has tests that keep running it. So the catalog is
-a declaration table, in the same spirit as `sandbox_tool_contracts` — the publish gate reads
-it without importing an adapter, an SDK, or a model provider, and stays testable offline.
+adapter capabilities. "Proven" is a property of this project rather than of an SDK's
+marketing, and it means two different things about the two halves of an entry.
+
+A **capability** is proven in the strong sense: there is an implementation in this repository
+and a required suite that keeps exercising it offline. A capability nothing exercises is not
+declared, which is why a framework the lab reaches only through `SupportAgentRuntime` claims
+less than one with a conversation adapter behind it — that port answers with text, so nothing
+about it proves structured output (ADR 0041).
+
+A **provider and model** is a different claim: the combination an author may select this
+framework for, and the one the lab's own live smoke tests are written against. It is
+deliberately *not* "somebody made a call with it today". Whether a live call has ever been
+made depends on a credential, which is a fact about the machine — and keeping machine facts
+out of this table is the whole reason it is separate from the adapter registry below. Which
+frameworks have actually been run against a provider, and when, belongs in their ADRs where
+it can be dated (ADR 0024, amended).
+
+So the catalog is a declaration table, in the same spirit as `sandbox_tool_contracts` — the
+publish gate reads it without importing an adapter, an SDK, or a model provider, and stays
+testable offline.
 
 The table is deliberately not the adapter registry. The registry answers "can this process
 run it right now", which depends on an API key and an environment; the catalog answers "may
@@ -20,10 +36,10 @@ framework added for experiments alone therefore declares less than the two POC a
 which is the catalog working: it records what was run, not what an SDK advertises
 (ADR 0041).
 
-A provider is proven or it is not — an unproven one is a publish error, because nothing in
-the lab could execute it. A *model* within a proven provider is a softer claim: the lab
-cannot run every model of a provider it supports, so an unlisted model is a warning that
-names what has actually been exercised.
+A provider a framework is not published for is a publish error, because nothing in the lab
+could execute it. A *model* within a published provider is softer still: the lab does not
+publish a framework for every model of a provider it supports, so an unlisted model is a
+warning naming the ones it does.
 """
 
 from __future__ import annotations

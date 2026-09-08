@@ -2,6 +2,16 @@
 
 Status: accepted — 2026-08-28
 
+Amendment: 2026-09-08 — "an unlisted model is a warning that names what has actually been
+exercised" is narrowed to *what the framework is published for*. The capability half of an
+entry keeps its strong meaning — an implementation with a required suite that keeps
+exercising it offline — but the provider and model half now claims the combination an author
+may select and the lab's live smoke tests are written against, not that a live call has been
+made. Whether one has depends on a credential, which is exactly the machine fact this table
+was separated from the adapter registry to keep out; where a framework has actually been run
+live belongs in its own ADR, where it can be dated. ADR 0041 records the case that forced
+the distinction.
+
 Implements `docs/PLAN.md` Milestone 3's first three outcomes — draft/published agent configurations,
 validation against proven adapter capabilities, and the separation of deterministic from live-model
 tests — under the definition lifecycle of ADR 0012, the permission model of ADR 0014, the tool
@@ -93,9 +103,10 @@ loudly rather than misleading an author. This is the same shape as ADR 0021's se
 declarations from the handlers, and for the same reason: the gate reads a table, not an object graph.
 
 A provider outside the framework's proven set is an **error** — nothing in the lab could execute it.
-An unlisted *model* of a proven provider is a **warning** that names what has actually been
-exercised: the lab cannot run every model of a provider it supports, and refusing one would be a
-stronger claim than the evidence carries. Memory is checked the same way: `durable` memory asks for
+An unlisted *model* of a proven provider is a **warning** that names the models the framework is
+published for (amended 2026-09-08; see the header): the lab does not publish a framework for every
+model of a provider it supports, and refusing one would be a stronger claim than the evidence
+carries. Memory is checked the same way: `durable` memory asks for
 `DURABLE_MEMORY`, which neither adapter proves, so publishing it is refused today and will stop
 being refused on the day an adapter proves it — with no change to this rule.
 

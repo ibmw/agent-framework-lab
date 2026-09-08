@@ -246,9 +246,20 @@ the Studio runs on.
 - **A live-model run of the new framework.** The smoke tests are written, swept over both
   model-backed frameworks, and gated on `AGENT_LAB_RUN_LIVE_MODEL_TESTS` and a local credential
   exactly as the existing one was. No credential was available in this slice, so they have not
-  been executed here, and this ADR claims only the offline evidence below. The catalog entry is
-  worded to match: it says which provider and model the framework is published for, not that a
-  live run has proven it.
+  been executed here, and this ADR claims only the offline evidence below.
+
+  That forced a distinction ADR 0024 had left implicit and is amended for. Its catalog defined
+  "proven" as having run the combination, and a new entry listing a provider and model nothing
+  had called with would have quietly weakened the word for every entry. But "has anyone made a
+  live call" depends on a credential, which is the machine fact the catalog was separated from
+  the adapter registry to keep out — a table that answered it would refuse a publication the day
+  a key expired. So the two halves of an entry now say different things: a **capability** is
+  proven in the strong sense, with an implementation and a suite that keeps exercising it
+  offline, while a **provider and model** is the combination the framework is published for and
+  the live smoke tests are written against. Where a framework has actually been run live is
+  recorded here, dated, which is this paragraph. The live sweep asserts each framework is asked
+  on a combination the catalog declares for it, so the published-for claim has a test rather
+  than a convention behind it.
 - **A second architecture.** Still one member of `AgentArchitecture`, still for ADR 0024's
   reason. LangGraph is named above as the candidate when that dimension is opened.
 - **Framework-internal source locations.** ADR 0027 resolves project-owned symbols and answers

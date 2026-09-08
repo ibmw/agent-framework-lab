@@ -35,10 +35,13 @@ when a roadmap slice authorizes another.
 9. Report usage through ADR 0032's neutral shape — the three counts every provider bills in, and
    nothing SDK-specific. A framework that does not meter itself reports `None`, which the record
    keeps as nothing. Never a zero: zero is what the control arm means.
-10. Declare only the `AgentCapability` values the framework has actually been run for, and add it
-    to `PROVEN_FRAMEWORKS` with the providers and models it is published for. A framework behind
-    the runtime port alone declares less than the POC's conversation adapters do — the port answers
-    with text, so nothing about it proves structured output.
+10. Declare only the `AgentCapability` values a required suite actually exercises, and add the
+    framework to `PROVEN_FRAMEWORKS` with the providers and models it is published for — the
+    combinations an author may select and the live smoke tests are written against, which is
+    what that half of an entry claims (ADR 0024, amended). Record in the ADR whether a live run
+    has actually been made, and date it. A framework behind the runtime port alone declares fewer
+    capabilities than the POC's conversation adapters do — the port answers with text, so nothing
+    about it proves structured output.
 11. Join the sweeps rather than adding tests beside them. `test_agent_runtimes.py`,
     `test_experiment_runs.py` and `test_live_model_runtimes.py` each assert their table against
     `PROVEN_FRAMEWORKS`, so a framework declared without an entry fails there rather than being
