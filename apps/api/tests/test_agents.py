@@ -213,12 +213,18 @@ def test_action_lifecycle_trace_uses_only_sanitized_stable_attributes() -> None:
 SDK_PACKAGES = ("pydantic_ai", "agents", "openai")
 
 # Every place an SDK is allowed to be imported at all: the framework adapters that run an
-# arm, and the judge adapter that scores one (ADR 0031). All are infrastructure modules a
-# port stands in front of, and the list is exhaustive on purpose — a new caller has to be
-# added here deliberately rather than by an import nobody noticed.
+# arm, the offline model each of them is handed for a run with no provider behind it, and
+# the judge adapter that scores one (ADR 0031). All are infrastructure modules a port stands
+# in front of, and the list is exhaustive on purpose — a new caller has to be added here
+# deliberately rather than by an import nobody noticed.
+#
+# The scripted entry names one file rather than its directory, because the declaration
+# beside it must keep reaching for no framework: what the agent decides is one script both
+# arms walk, and `test_framework_comparison.py` asserts that structurally.
 SDK_MODULES = (
     "infrastructure/agents/pydantic_ai/",
     "infrastructure/agents/openai_agents/",
+    "infrastructure/agents/scripted/runtimes.py",
     "infrastructure/judges/pydantic_ai.py",
 )
 
