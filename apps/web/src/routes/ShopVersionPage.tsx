@@ -109,9 +109,16 @@ export function ShopVersionPage() {
                   {product.attributes.map((attribute) => (
                     <li key={attribute.key}>
                       <span className="font-semibold">{attribute.label}</span>{" "}
+                      <EntryId value={attribute.key} />{" "}
                       <span className="text-admin-muted">({attribute.attribute_type})</span>{" "}
                       {attribute.value}
                       {attribute.unit ? ` ${attribute.unit}` : ""}
+                      {attribute.choices.length > 0 ? (
+                        <span className="text-admin-muted">
+                          {" "}
+                          one of {attribute.choices.join(", ")}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

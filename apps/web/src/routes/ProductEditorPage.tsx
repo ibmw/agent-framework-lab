@@ -10,7 +10,7 @@ type Currency = ShopContentSchema["identity"]["currencies"][number];
 
 import { type FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Card, IssueList, PageHeader, VersionChips } from "../components/WorkspaceChrome";
+import { Card, EntryId, IssueList, PageHeader, VersionChips } from "../components/WorkspaceChrome";
 import {
   findProduct,
   issuesForProduct,
@@ -205,6 +205,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
         {product.options.map((option) => (
           <li key={option.key} className="flex items-center gap-2">
             <span className="font-semibold">{option.name}</span>
+            <EntryId value={option.key} />
             <span className="text-admin-muted">{option.values.join(" · ")}</span>
             <button
               className={`${subtleButtonClasses} ml-auto`}
@@ -570,8 +571,9 @@ function AttributesCard({ product, onChange }: EditorProps) {
     <Card title="Custom attributes (typed)">
       <ul className="grid gap-1.5 text-[13px]">
         {product.attributes.map((attribute) => (
-          <li key={attribute.key} className="flex items-center gap-2">
+          <li key={attribute.key} className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{attribute.label}</span>
+            <EntryId value={attribute.key} />
             <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
               {attribute.attribute_type}
             </span>
@@ -579,6 +581,9 @@ function AttributesCard({ product, onChange }: EditorProps) {
               {attribute.value}
               {attribute.unit ? ` ${attribute.unit}` : ""}
             </span>
+            {attribute.choices.length > 0 ? (
+              <span className="text-admin-muted">one of {attribute.choices.join(", ")}</span>
+            ) : null}
             <button
               className={`${subtleButtonClasses} ml-auto`}
               type="button"

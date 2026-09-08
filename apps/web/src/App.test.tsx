@@ -69,7 +69,16 @@ const READY_CONTENT: ShopDraftResponse["content"] = {
         },
       ],
       media: [],
-      attributes: [],
+      attributes: [
+        {
+          key: "waterproofing",
+          label: "Waterproofing",
+          attribute_type: "choice",
+          value: "20k",
+          unit: null,
+          choices: ["10k", "20k", "30k"],
+        },
+      ],
       reviews: [{ id: "one", author_display_name: "Camille", rating: 5, body: "Dry." }],
       ratings: { review_count: 1, average_rating: "5.0" },
     },
@@ -269,6 +278,16 @@ describe("shop workspace", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled());
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows a typed attribute's key and the choices it is constrained to", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const attributes = await screen.findByRole("region", { name: "Custom attributes (typed)" });
+    expect(within(attributes).getByText("Waterproofing")).toBeVisible();
+    expect(within(attributes).getByText("waterproofing", { selector: "code" })).toBeVisible();
+    // Without the legal choices, "20k" says nothing about what else the attribute accepts.
+    expect(within(attributes).getByText("one of 10k, 20k, 30k")).toBeVisible();
   });
 
   it("refuses to publish while the workspace holds unsaved edits", async () => {
