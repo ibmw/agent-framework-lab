@@ -40,7 +40,7 @@ make migrate        # bring var/agent-lab.db to the current schema
 make seed           # fill an empty database with one complete demo, offline
 make dev-api        # API at http://localhost:8000
 make dev-web        # frontend at http://localhost:5173
-make test-e2e       # targeted Playwright journeys
+make test-e2e       # targeted Playwright journeys, on their own stack (8001/5174)
 ```
 
 Before running `make dev-api` or `make dev-web`, check whether the corresponding server is already

@@ -62,3 +62,27 @@ healthy stack. A restart must have an identified reason and be announced.
 The Vite development server proxies same-origin `/api` requests to `http://localhost:8000`, matching
 the production reverse-proxy shape. `VITE_API_BASE_URL` is optional and reserved for frontend build
 environments that intentionally use a different API origin.
+
+## Two stacks
+
+There are two stacks, and they never share a port or a database. The developer stack is the one
+`make dev-api` and `make dev-web` bring up: the API on 8000, Vite on 5173, both reading `.env` and
+so writing `var/agent-lab.db`. The E2E stack is the one `pnpm test:e2e` brings up for itself: the
+API on 8001, Vite on 5174, migrated onto a fresh temporary SQLite file named per run under the
+system temporary directory and discarded with it.
+
+Playwright starts both of the E2E stack's servers itself and reuses neither, in CI and locally
+alike. Reusing a server that answers on the expected port was how a local run came to drive the
+developer's API — and write hundreds of rows into the developer's database — while still reporting
+green, because the isolated database it had prepared was never the one being served. Refusing to
+reuse costs a few seconds of startup and removes the whole class of failure; the price is that a
+stale process left on 8001 or 5174 makes the run fail loudly rather than quietly borrowing it.
+
+Two variables carry the difference, both read by `apps/web/vite.config.ts`, both defaulting to the
+developer stack so no development command needs them: `AGENT_LAB_WEB_PORT` is the port Vite binds
+(strictly — an occupied port is an error, not a silent increment), and `AGENT_LAB_API_ORIGIN` is
+the origin it proxies `/api` to. `apps/web/playwright.config.ts` sets both, alongside the
+`AGENT_LAB_` settings that point the E2E API at its temporary database.
+
+Run the suite with the developer stack up and nothing about it should move: same processes on 8000
+and 5173, and `var/agent-lab.db` byte for byte as it was.

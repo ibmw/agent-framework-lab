@@ -11,9 +11,11 @@ Choose the fastest test that proves the behavior:
    and resume, split-view interaction, or confirmed actions.
 
 Unit tests depend on no server. Integration tests create temporary resources and document every
-external dependency. Playwright reuses the local server when it already responds; in CI it starts an
-isolated instance. Initialize synthetic generators from the recorded generation context, and use
-factory-boy to express relevant variants rather than hide asserted values.
+external dependency. Playwright starts its own API and frontend on their own ports and reuses
+neither, locally as in CI, so a suite is never served by a developer's stack or writing to a
+developer's database (`docs/development.md`). Initialize synthetic generators from the recorded
+generation context, and use factory-boy to express relevant variants rather than hide asserted
+values.
 
 Two shapes of test carry more weight than their size suggests, and both are load-bearing (ADR 0023).
 **Recorded fingerprints** pin the canonical serializer's bytes and the `sandbox-v2` and
