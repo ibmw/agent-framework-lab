@@ -8,12 +8,14 @@ import { defineConfig, devices } from "@playwright/test";
 // the developer's database — just because one happens to answer on the usual port.
 const apiPort = 8001;
 const webPort = 5174;
+export const DATABASE_FILE_PREFIX = "agent-framework-lab-playwright-";
 const apiOrigin = `http://localhost:${apiPort}`;
 const webOrigin = `http://localhost:${webPort}`;
-const databaseUrl = `sqlite:///${join(tmpdir(), `agent-framework-lab-playwright-${randomUUID()}.db`)}`;
+const databaseUrl = `sqlite:///${join(tmpdir(), `${DATABASE_FILE_PREFIX}${randomUUID()}.db`)}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalTeardown: "./playwright.teardown.ts",
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: "html",

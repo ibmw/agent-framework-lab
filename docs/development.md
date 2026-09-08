@@ -68,8 +68,9 @@ environments that intentionally use a different API origin.
 There are two stacks, and they never share a port or a database. The developer stack is the one
 `make dev-api` and `make dev-web` bring up: the API on 8000, Vite on 5173, both reading `.env` and
 so writing `var/agent-lab.db`. The E2E stack is the one `pnpm test:e2e` brings up for itself: the
-API on 8001, Vite on 5174, migrated onto a fresh temporary SQLite file named per run under the
-system temporary directory and discarded with it.
+API on 8001, Vite on 5174, migrated onto a temporary SQLite file named per run under the system
+temporary directory, which the run's global teardown removes along with any that a killed run
+left behind.
 
 Playwright starts both of the E2E stack's servers itself and reuses neither, in CI and locally
 alike. Reusing a server that answers on the expected port was how a local run came to drive the
