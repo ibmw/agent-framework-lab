@@ -447,12 +447,16 @@ def _shown_to_pydantic_ai() -> tuple[SupportAgentRuntime, list[str]]:
     shown: list[str] = []
 
     def respond(messages: list[ModelMessage], _info: Any) -> ModelResponse:
+        # What this SDK would put in front of the provider, asked of the part itself rather
+        # than filtered for text. A probe that kept only strings would see nothing at all
+        # from an adapter that returned the document, and the turn would run the tool until
+        # the budget was spent — a failure that says nothing about the rendering.
         shown[:] = [
-            part.content
+            part.model_response_str()
             for message in messages
             if isinstance(message, ModelRequest)
             for part in message.parts
-            if isinstance(part, ToolReturnPart) and isinstance(part.content, str)
+            if isinstance(part, ToolReturnPart)
         ]
         if shown:
             return ModelResponse(parts=[TextPart(content="I have read it.")])

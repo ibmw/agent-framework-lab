@@ -73,16 +73,17 @@ def _pydantic_ai_incident() -> FunctionModel:
 def _returns(messages: Sequence[ModelMessage]) -> list[dict[str, CanonicalValue]]:
     """Every tool result this turn has seen, in the order the calls were made.
 
-    Text, because the adapter renders the `tool-result-v1` document itself rather than
-    letting the SDK choose a serialization (`tool_json_schema`). Read back here exactly as
-    the other framework's driver reads it, which is the point of rendering it once.
+    Asked of the part rather than filtered for text: the adapter renders the document itself
+    (`tool_json_schema`), so the two are the same string today, and a driver that kept only
+    strings would go blind against an adapter that stopped rendering — spending the tool
+    budget instead of reporting the rendering it found.
     """
     return [
-        parse_result(part.content)
+        parse_result(part.model_response_str())
         for message in messages
         if isinstance(message, ModelRequest)
         for part in message.parts
-        if isinstance(part, ToolReturnPart) and isinstance(part.content, str)
+        if isinstance(part, ToolReturnPart)
     ]
 
 
