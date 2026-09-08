@@ -2,6 +2,16 @@
 
 Status: accepted — 2026-09-08
 
+Amendment: 2026-09-08 — "No credential was available in this slice" is corrected to what this
+record is entitled to say: the live smoke tests were not run. Whether a credential exists on a
+machine is not something an ADR can assert, and this one asserted it while `.env` had held a
+value for `AGENT_LAB_OPENAI_API_KEY` since long before the slice. The suite skips regardless,
+because it is gated on the *process* environment and `.env` does not populate that — which is
+the honest reading of what happened, and a different statement from "there was none". The claim
+that matters is unchanged and was always the narrower one: nothing here has been executed
+against a provider, so this ADR records offline evidence only. ADR 0042 makes the same
+correction to its own wording for the same reason.
+
 Implements `docs/PLAN.md` Milestone 6's first four outcomes: the choice of what the first
 controlled comparison changes, a second framework behind the shared target contracts, evidence
 from it that is indistinguishable in shape from the first's, and this record of the glue code,
@@ -257,8 +267,9 @@ the Studio runs on.
   an adapter and an experiment as one thing.
 - **A live-model run of the new framework.** The smoke tests are written, swept over both
   model-backed frameworks, and gated on `AGENT_LAB_RUN_LIVE_MODEL_TESTS` and a local credential
-  exactly as the existing one was. No credential was available in this slice, so they have not
-  been executed here, and this ADR claims only the offline evidence below.
+  exactly as the existing one was. They were not run here (amended 2026-09-08; see the header —
+  the original said no credential was available, which is a claim about a machine rather than
+  about this repository), and this ADR claims only the offline evidence below.
 
   That forced a distinction ADR 0024 had left implicit and is amended for. Its catalog defined
   "proven" as having run the combination, and a new entry listing a provider and model nothing
