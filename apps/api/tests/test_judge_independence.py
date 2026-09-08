@@ -42,7 +42,10 @@ from capability_lab.application.agent_capabilities import (
     PROVEN_FRAMEWORKS_BY_ID,
     ProvenFramework,
 )
-from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
+from capability_lab.application.agent_runtime import (
+    SupportAgentRuntime,
+    SupportAgentRuntimeRegistry,
+)
 from capability_lab.application.canonical_json import CanonicalValue, canonical_json_bytes
 from capability_lab.application.evaluation import ExperimentEvaluation
 from capability_lab.application.experiments import (
@@ -87,6 +90,7 @@ from capability_lab.domain.judge import (
 from capability_lab.domain.judgement import JudgeFailure, Judgement
 from capability_lab.domain.scenario import BoundObjective, ScenarioBinding
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
+from capability_lab.infrastructure.agents.openai_agents import OpenAiAgentsSupportAgentRuntime
 from capability_lab.infrastructure.agents.pydantic_ai import PydanticAiSupportAgentRuntime
 from capability_lab.infrastructure.database import (
     Base,
@@ -255,12 +259,19 @@ def control_arm(session: Session) -> ArmSelection:
 
 
 def runtimes() -> SupportAgentRuntimeRegistry:
-    """Every framework the catalog declares, each running offline in this process."""
-    control = FakeSupportAgentRuntime()
-    pydantic = PydanticAiSupportAgentRuntime.for_test()
-    return SupportAgentRuntimeRegistry(
-        {control.framework_id: control, pydantic.framework_id: pydantic}
+    """Every framework the catalog declares, each running offline in this process.
+
+    Built by hand rather than through composition so the sweep below fails loudly when a
+    framework joins the catalog with nothing here to run it: an arm the registry cannot
+    answer for is refused before anything is recorded (ADR 0026), which would leave the
+    anonymity sweep proving nothing about the framework it just declared.
+    """
+    registered: tuple[SupportAgentRuntime, ...] = (
+        FakeSupportAgentRuntime(),
+        PydanticAiSupportAgentRuntime.for_test(),
+        OpenAiAgentsSupportAgentRuntime.for_test(),
     )
+    return SupportAgentRuntimeRegistry({runtime.framework_id: runtime for runtime in registered})
 
 
 def start(session: Session, workspace: Workspace, *arms: ArmSelection) -> ExperimentDetail:

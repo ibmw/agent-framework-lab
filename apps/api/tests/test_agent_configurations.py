@@ -356,6 +356,7 @@ def test_the_resources_offer_only_what_a_configuration_may_name(lab: Lab) -> Non
     assert [option.shop_id for option in resources.preview_shops] == [lab.shop_id]
     assert {framework.framework_id for framework in resources.frameworks} == {
         "pydantic-ai",
+        "openai-agents",
         "fake",
     }
     assert WRITE_TOOL in {contract.name for contract in resources.tools}

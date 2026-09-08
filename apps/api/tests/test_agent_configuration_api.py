@@ -259,6 +259,7 @@ async def test_the_resources_publish_the_frameworks_tools_and_variables(
 
     assert {framework["framework_id"] for framework in body["frameworks"]} == {
         "pydantic-ai",
+        "openai-agents",
         "fake",
     }
     write = next(tool for tool in body["tools"] if tool["name"] == WRITE_TOOL)

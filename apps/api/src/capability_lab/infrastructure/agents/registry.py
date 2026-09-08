@@ -8,6 +8,10 @@ from capability_lab.application.conversations import AgentRegistry, FrameworkDec
 from capability_lab.application.judge_runtime import JudgeRuntime, JudgeRuntimeRegistry
 from capability_lab.application.ports import AgentAdapter
 from capability_lab.infrastructure.agents.fake import FakeAgentAdapter, FakeSupportAgentRuntime
+from capability_lab.infrastructure.agents.openai_agents import (
+    OpenAiAgentsSupportAgentRuntime,
+    create_openai_agents_model,
+)
 from capability_lab.infrastructure.agents.pydantic_ai import (
     PydanticAiAgentAdapter,
     PydanticAiSupportAgentRuntime,
@@ -90,18 +94,27 @@ def create_support_agent_runtimes(settings: Settings) -> SupportAgentRuntimeRegi
     control = FakeSupportAgentRuntime()
     runtimes: dict[str, SupportAgentRuntime] = {control.framework_id: control}
     if settings.environment == "test":
-        pydantic_runtime = PydanticAiSupportAgentRuntime.for_test()
+        modelled: tuple[SupportAgentRuntime, ...] = (
+            PydanticAiSupportAgentRuntime.for_test(),
+            OpenAiAgentsSupportAgentRuntime.for_test(),
+        )
     elif settings.openai_api_key is not None:
         api_key = settings.openai_api_key.get_secret_value()
         # The model comes from each arm's published configuration, not from this process:
         # what an experiment ran is an authored input (ADR 0024), and a runtime that
         # substituted the environment's model would make two arms unexplainable.
-        pydantic_runtime = PydanticAiSupportAgentRuntime(
-            lambda model_id: create_openai_model(model_id, api_key)
+        modelled = (
+            PydanticAiSupportAgentRuntime(lambda model_id: create_openai_model(model_id, api_key)),
+            OpenAiAgentsSupportAgentRuntime(
+                lambda model_id: create_openai_agents_model(model_id, api_key)
+            ),
         )
     else:
+        # Both model-backed frameworks reach the same provider under the same credential,
+        # so they appear and disappear together. An arm neither of them can run is refused
+        # when it is advanced rather than recorded as a failed turn.
         return SupportAgentRuntimeRegistry(runtimes)
-    runtimes[pydantic_runtime.framework_id] = pydantic_runtime
+    runtimes.update({runtime.framework_id: runtime for runtime in modelled})
     return SupportAgentRuntimeRegistry(runtimes)
 
 

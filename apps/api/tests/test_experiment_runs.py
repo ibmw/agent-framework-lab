@@ -1,7 +1,7 @@
 """Advancing one arm: what the agent answered, what it called, what it moved, where it
 now stands, and what it cost (ADR 0026, ADR 0028, ADR 0029, ADR 0032)."""
 
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from agent_factories import READ_TOOL_NAMES, model_settings
 from capability_lab.application.agent_capabilities import (
     FAKE_FRAMEWORK_ID,
+    OPENAI_AGENTS_FRAMEWORK_ID,
+    PROVEN_FRAMEWORKS,
     PYDANTIC_AI_FRAMEWORK_ID,
 )
 from capability_lab.application.agent_runtime import (
@@ -25,7 +27,7 @@ from capability_lab.application.agent_runtime import (
     SupportAgentRuntimeRegistry,
     SupportAgentUnavailableError,
 )
-from capability_lab.application.canonical_json import CanonicalValue
+from capability_lab.application.canonical_json import CanonicalValue, canonical_json_bytes
 from capability_lab.application.experiment_runs import RunTurn
 from capability_lab.application.experiments import (
     ArmSelection,
@@ -43,6 +45,7 @@ from capability_lab.application.sandbox_tool_contracts import (
     CUSTOMER_PROFILE,
     INTERACTION_CONTEXT,
     ORDER_DETAIL,
+    TOOL_CONTRACT_VERSIONS,
 )
 from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxNotFoundError
@@ -51,6 +54,8 @@ from capability_lab.domain.agent_turn import AgentTurnFailure, AgentTurnOutcome
 from capability_lab.domain.blocks import MutationEffect
 from capability_lab.domain.experiment import ArmAwaiting
 from capability_lab.domain.scenario import BoundMutation, ScenarioBinding
+from capability_lab.infrastructure.agents.openai_agents import OpenAiAgentsSupportAgentRuntime
+from capability_lab.infrastructure.agents.pydantic_ai import PydanticAiSupportAgentRuntime
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -860,6 +865,124 @@ async def test_a_fault_is_the_scenario_s_time_and_never_charged_to_the_call_befo
 
     assert fired(produced) == ["order-moves-under-the-arm"]
     assert {event.event.duration_ms for event in produced.tool_events} == {1000}
+
+
+# -- the record two frameworks leave -------------------------------------------
+
+MODEL_BACKED_RUNTIMES: tuple[tuple[str, Callable[[], SupportAgentRuntime]], ...] = (
+    (PYDANTIC_AI_FRAMEWORK_ID, PydanticAiSupportAgentRuntime.for_test),
+    (OPENAI_AGENTS_FRAMEWORK_ID, OpenAiAgentsSupportAgentRuntime.for_test),
+)
+BACKED_IDS = [framework_id for framework_id, _ in MODEL_BACKED_RUNTIMES]
+
+
+def modelled_arm(session: Session, framework_id: str) -> ArmSelection:
+    """One published configuration for a model-backed framework, reading only.
+
+    Read tools only, so what a comparison of these two arms reads is what each framework
+    chose to look at rather than what an offline model happened to write into the world.
+
+    Two of them rather than all eight, for a reason worth writing down: the offline model
+    behind Pydantic AI answers by echoing every tool result it received, so a wide set
+    produces a reply longer than a turn may hold and the arm records a failed attempt
+    instead of words (ADR 0026). Two tools keep both frameworks contributing both halves of
+    a record — what it said and what it called.
+    """
+    return published_configuration(
+        session,
+        published_identity(session),
+        framework_id=framework_id,
+        model=model_settings(max_tool_rounds=24),
+        tools=(INTERACTION_CONTEXT, ORDER_DETAIL),
+    )
+
+
+def test_the_sweep_below_runs_every_framework_that_calls_a_model() -> None:
+    """Non-vacuity, and the tie to the catalog: a third framework joins here or fails here."""
+    modelled = {
+        framework.framework_id
+        for framework in PROVEN_FRAMEWORKS
+        if framework.framework_id != FAKE_FRAMEWORK_ID
+    }
+
+    assert set(BACKED_IDS) == modelled
+    for framework_id, factory in MODEL_BACKED_RUNTIMES:
+        assert factory().framework_id == framework_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("framework_id", "factory"), MODEL_BACKED_RUNTIMES, ids=BACKED_IDS)
+async def test_every_framework_leaves_a_record_of_the_same_shape(
+    session: Session,
+    workspace: Workspace,
+    framework_id: str,
+    factory: Callable[[], SupportAgentRuntime],
+) -> None:
+    """The claim a two-arm comparison rests on, made against the stored record (ADR 0041).
+
+    Not against the adapters: what a comparison reads is the answered turn, the tool events
+    the invoker wrote, the coordinates they are numbered by, and the meter beside them. Two
+    frameworks are meant to differ in *what* they did; a difference in how any of it is
+    recorded would be a difference between two integrations, and nothing a reviewer could
+    attribute to either framework.
+    """
+    runtime = factory()
+    detail = start(session, workspace, modelled_arm(session, framework_id))
+
+    produced = await advance(session, detail, runtimes=_registry(runtime))
+
+    assert produced.turn.turn.outcome is AgentTurnOutcome.ANSWERED
+    assert produced.turn.turn.body.strip()
+    assert produced.turn.turn.attempt == 1
+    assert produced.tool_events
+    assert [event.event.sequence for event in produced.tool_events] == list(
+        range(len(produced.tool_events))
+    )
+    for event in produced.tool_events:
+        assert event.event.tool in TOOL_CONTRACT_VERSIONS
+        assert event.event.version == TOOL_CONTRACT_VERSIONS[event.event.tool]
+        assert isinstance(event.event.outcome, ToolOutcome)
+        assert event.event.duration_ms is not None
+    assert isinstance(produced.turn.usage, ModelUsage)
+    assert produced.turn.duration_ms is not None
+
+    reading = metrics(session, detail)
+    assert reading.tool_calls == len(produced.tool_events)
+    assert reading.attempts == 1
+    assert reading.model_requests is not None
+    assert reading.estimated_cost is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("framework_id", "factory"), MODEL_BACKED_RUNTIMES, ids=BACKED_IDS)
+async def test_no_framework_names_itself_anywhere_in_what_it_recorded(
+    session: Session,
+    workspace: Workspace,
+    framework_id: str,
+    factory: Callable[[], SupportAgentRuntime],
+) -> None:
+    """Milestone 4's standing criterion, held against the second framework too.
+
+    An SDK's own event objects have nowhere to go — the invoker writes the event — so this
+    asserts the outcome rather than the mechanism: nothing the lab recorded about a call
+    spells the framework that made it, the provider's spelling of the tool name included.
+
+    The reply is held to less, deliberately. It is the agent's own words, recorded verbatim
+    because a lab that edited what an arm said would be comparing arms on its own editing —
+    and an offline model that quotes its tool names back at the customer is quoting them
+    into the transcript, not into the record.
+    """
+    detail = start(session, workspace, modelled_arm(session, framework_id))
+
+    produced = await advance(session, detail, runtimes=_registry(factory()))
+
+    assert produced.tool_events
+    recorded = canonical_json_bytes(
+        {"events": [event.event.document for event in produced.tool_events]}
+    ).decode()
+    assert framework_id not in recorded
+    assert "__" not in recorded
+    assert framework_id not in produced.turn.turn.body
 
 
 # -- what the run cost ---------------------------------------------------------

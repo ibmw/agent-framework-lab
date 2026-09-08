@@ -206,34 +206,49 @@ def test_action_lifecycle_trace_uses_only_sanitized_stable_attributes() -> None:
     assert str(session_id) not in repr(attributes)
 
 
-# Every place an SDK is allowed to be imported at all: the framework adapter that runs an
-# arm, and the judge adapter that scores one (ADR 0031). Both are infrastructure modules a
+# The top-level package of every agent or model SDK this project depends on. `openai` is
+# here as well as the two agent frameworks because both of them speak to the provider
+# through it, and an application module that reached for a provider error class directly
+# would have crossed the same line as importing the framework.
+SDK_PACKAGES = ("pydantic_ai", "agents", "openai")
+
+# Every place an SDK is allowed to be imported at all: the framework adapters that run an
+# arm, and the judge adapter that scores one (ADR 0031). All are infrastructure modules a
 # port stands in front of, and the list is exhaustive on purpose — a new caller has to be
 # added here deliberately rather than by an import nobody noticed.
-SDK_MODULES = ("infrastructure/agents/pydantic_ai/", "infrastructure/judges/pydantic_ai.py")
+SDK_MODULES = (
+    "infrastructure/agents/pydantic_ai/",
+    "infrastructure/agents/openai_agents/",
+    "infrastructure/judges/pydantic_ai.py",
+)
+
+
+def imported_packages(tree: ast.Module) -> set[str]:
+    """The top-level package of every import in one module."""
+    packages: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
+            packages.add(node.module.partition(".")[0])
+        elif isinstance(node, ast.Import):
+            packages.update(alias.name.partition(".")[0] for alias in node.names)
+    return packages
 
 
 def test_agent_sdk_imports_are_isolated_to_framework_adapters() -> None:
     source_root = Path(__file__).parents[1] / "src" / "capability_lab"
     offenders: list[str] = []
+    importers: set[str] = set()
     for path in source_root.rglob("*.py"):
-        tree = ast.parse(path.read_text())
-        imports_sdk = any(
-            (
-                isinstance(node, ast.ImportFrom)
-                and node.module is not None
-                and node.module.startswith("pydantic_ai")
-            )
-            or (
-                isinstance(node, ast.Import)
-                and any(alias.name.startswith("pydantic_ai") for alias in node.names)
-            )
-            for node in ast.walk(tree)
-        )
-        if not imports_sdk:
+        imported = imported_packages(ast.parse(path.read_text())) & set(SDK_PACKAGES)
+        if not imported:
             continue
         relative = path.relative_to(source_root).as_posix()
-        if not relative.startswith(SDK_MODULES):
+        if relative.startswith(SDK_MODULES):
+            importers |= imported
+        else:
             offenders.append(relative)
 
     assert offenders == []
+    # Non-vacuity: a sweep that found no SDK import anywhere would pass while the adapters
+    # were deleted. Every declared SDK is actually imported by an allowed module.
+    assert importers == set(SDK_PACKAGES)

@@ -9,8 +9,16 @@ it without importing an adapter, an SDK, or a model provider, and stays testable
 The table is deliberately not the adapter registry. The registry answers "can this process
 run it right now", which depends on an API key and an environment; the catalog answers "may
 an author publish it at all", which must not change with the machine the Studio runs on. A
-test asserts the two agree on capabilities, so a catalog that drifts from the adapters fails
-rather than misleads.
+test asserts the two agree, so a catalog that drifts from the code fails rather than
+misleads: every declared framework is one this lab has an implementation for, and one that
+implements the POC's `AgentAdapter` declares exactly the capabilities that adapter does.
+
+A framework may reach the catalog through either port. The POC's conversation adapter proves
+one set; `SupportAgentRuntime` — the port an experiment arm actually runs through (ADR 0026)
+— proves a narrower one, because it answers with text rather than a typed object. A
+framework added for experiments alone therefore declares less than the two POC adapters do,
+which is the catalog working: it records what was run, not what an SDK advertises
+(ADR 0041).
 
 A provider is proven or it is not — an unproven one is a publish error, because nothing in
 the lab could execute it. A *model* within a proven provider is a softer claim: the lab
@@ -38,6 +46,7 @@ __all__ = [
     "DEFAULT_MODEL_SETTINGS",
     "FAKE_FRAMEWORK_ID",
     "MEMORY_CAPABILITIES",
+    "OPENAI_AGENTS_FRAMEWORK_ID",
     "PROVEN_FRAMEWORKS",
     "PROVEN_FRAMEWORKS_BY_ID",
     "PYDANTIC_AI_FRAMEWORK_ID",
@@ -48,6 +57,7 @@ __all__ = [
 
 FAKE_FRAMEWORK_ID = "fake"
 PYDANTIC_AI_FRAMEWORK_ID = "pydantic-ai"
+OPENAI_AGENTS_FRAMEWORK_ID = "openai-agents"
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,14 +78,28 @@ class ProvenFramework:
 
 _SINGLE_AGENT = frozenset({AgentArchitecture.SINGLE_AGENT})
 
-# The capability set both adapters declare today. Kept as one name so the catalog and the
+# What the two POC conversation adapters declare. Kept as one name so the catalog and the
 # adapters cannot be edited apart without the agreement test noticing.
-_PROVEN_CAPABILITIES = frozenset(
+_ADAPTER_CAPABILITIES = frozenset(
     {
         AgentCapability.TOOL_CALLS,
         AgentCapability.CONVERSATION_MEMORY,
         AgentCapability.SESSION_RESUME,
         AgentCapability.STRUCTURED_OUTPUT,
+    }
+)
+
+# What a framework proven only through `SupportAgentRuntime` can claim. Narrower by exactly
+# one member, and the difference is the point: the runtime port answers with text, because
+# every fact an arm touched is already the tool event that produced it (ADR 0026). A
+# framework the lab has never asked for a typed object has not proven it can return one, and
+# a catalog that said otherwise would be advertising an SDK's feature list rather than the
+# lab's evidence.
+_RUNTIME_CAPABILITIES = frozenset(
+    {
+        AgentCapability.TOOL_CALLS,
+        AgentCapability.CONVERSATION_MEMORY,
+        AgentCapability.SESSION_RESUME,
     }
 )
 
@@ -86,8 +110,20 @@ PROVEN_FRAMEWORKS: tuple[ProvenFramework, ...] = (
         architectures=_SINGLE_AGENT,
         providers=frozenset({"openai"}),
         models=("gpt-5-mini",),
-        capabilities=_PROVEN_CAPABILITIES,
+        capabilities=_ADAPTER_CAPABILITIES,
         summary="The lab's first support adapter, proven end to end against a live model.",
+    ),
+    ProvenFramework(
+        framework_id=OPENAI_AGENTS_FRAMEWORK_ID,
+        label="OpenAI Agents SDK",
+        architectures=_SINGLE_AGENT,
+        providers=frozenset({"openai"}),
+        models=("gpt-5-mini",),
+        capabilities=_RUNTIME_CAPABILITIES,
+        summary=(
+            "The lab's second experiment framework, on the same provider and model as the "
+            "first so a two-arm run moves only the framework."
+        ),
     ),
     ProvenFramework(
         framework_id=FAKE_FRAMEWORK_ID,
@@ -95,7 +131,7 @@ PROVEN_FRAMEWORKS: tuple[ProvenFramework, ...] = (
         architectures=_SINGLE_AGENT,
         providers=frozenset({"fake"}),
         models=("deterministic",),
-        capabilities=_PROVEN_CAPABILITIES,
+        capabilities=_ADAPTER_CAPABILITIES,
         summary="Offline adapter with no model call; the control arm for deterministic runs.",
     ),
 )
