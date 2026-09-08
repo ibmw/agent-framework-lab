@@ -31,6 +31,7 @@ that a fake cannot support. It acts on the state of the world, which it can actu
 
 from __future__ import annotations
 
+from capability_lab.application.agent_capabilities import FAKE_FRAMEWORK_ID
 from capability_lab.application.agent_runtime import (
     AgentAnswer,
     AgentTurnRequest,
@@ -50,7 +51,8 @@ from capability_lab.application.sandbox_tools import ToolOutcome
 
 __all__ = ["FAKE_RUNTIME_FRAMEWORK_ID", "FakeSupportAgentRuntime"]
 
-FAKE_RUNTIME_FRAMEWORK_ID = "fake"
+FAKE_RUNTIME_FRAMEWORK_ID = FAKE_FRAMEWORK_ID
+"""Named out of the capability catalog rather than spelled again here (ADR 0041)."""
 
 
 class FakeSupportAgentRuntime(SupportAgentRuntime):

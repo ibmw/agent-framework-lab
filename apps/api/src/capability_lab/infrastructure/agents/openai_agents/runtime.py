@@ -43,11 +43,12 @@ it changes the request the provider receives, and the arm beside this one does n
 two arms asked different questions is the confound this framework was selected to avoid
 (ADR 0041).
 
-**The SDK's own tracing is switched off process-wide.** It exports spans carrying tool
-arguments and model output to a provider endpoint by default. The lab records the three
-spans it opens itself and never sweeps a framework's instrumentation into the record
-(`docs/observability.md`), and it cannot promise the sanitization of an attribute it did not
-write — so this one is not merely ignored, it is disabled.
+**The SDK's own tracing is switched off process-wide.** It builds spans carrying tool
+arguments and model output and hands them to an exporter that posts them to a vendor endpoint
+whenever `OPENAI_API_KEY` is set — which this lab never sets, since its credential has another
+name. Disabled rather than left to that: the lab records the three spans it opens itself and
+never sweeps a framework's instrumentation into the record (`docs/observability.md`), and a
+rule that holds only while an environment variable happens to be unset is not a rule.
 """
 
 from __future__ import annotations
@@ -74,6 +75,7 @@ from agents.tool_context import ToolContext
 from agents.usage import Usage
 from openai import APIConnectionError, APIStatusError
 
+from capability_lab.application.agent_capabilities import OPENAI_AGENTS_FRAMEWORK_ID
 from capability_lab.application.agent_runtime import (
     AgentAnswer,
     AgentRole,
@@ -98,7 +100,13 @@ __all__ = [
     "create_openai_agents_model",
 ]
 
-OPENAI_AGENTS_RUNTIME_FRAMEWORK_ID = "openai-agents"
+OPENAI_AGENTS_RUNTIME_FRAMEWORK_ID = OPENAI_AGENTS_FRAMEWORK_ID
+"""Named out of the capability catalog rather than spelled again here.
+
+The two must agree — an arm names its framework by the id its published configuration
+carries — and a table the publish gate reads is the one place that decides what the id
+is. The catalog is application code and this is infrastructure, so the dependency runs
+the way it already does for the tool contracts and the usage shape."""
 
 # The wire name of a tool, separated from its contract name by a spelling providers accept.
 _NAMESPACE_SEPARATOR = "__"

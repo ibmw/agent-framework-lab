@@ -167,12 +167,16 @@ attributed by the metrics card to "the framework". That is the same argument tha
 schemas off, applied to the request rather than to the tool. The SDK-side limit already gives the
 lab everything it needs, and the ordering test passes through that path alone.
 
-**The SDK's own tracing is disabled process-wide.** It exports spans carrying tool arguments and
-model output to a provider endpoint by default. `docs/observability.md` says a framework's own
+**The SDK's own tracing is disabled process-wide.** It builds spans carrying tool arguments and
+model output and hands them to an exporter that posts them to a vendor endpoint whenever
+`OPENAI_API_KEY` is set. Nothing was in fact leaving this machine — the lab's credential is
+`AGENT_LAB_OPENAI_API_KEY`, it never calls `set_default_openai_key`, and no credential existed
+here at all — so the export is one environment variable away rather than in progress.
+That is the reason to disable rather than ignore. `docs/observability.md` says a framework's own
 instrumentation is never swept into the record, because the lab cannot promise the sanitization
-of an attribute it did not write. Ignoring those spans would not have been enough — they were
-leaving the process — so composition switches them off at the moment it decides this framework
-runs here.
+of an attribute it did not write, and a rule that holds only while a variable happens to be
+unset is not a rule. Composition switches tracing off at the moment it decides this framework
+runs here, and a probe processor asserts nothing reaches an exporter across a whole turn.
 
 ### The offline model is the SDK's; the script it follows is the lab's
 
@@ -333,11 +337,13 @@ the Studio runs on.
 `openai-agents` joins `apps/api`'s dependencies through `uv`, and resolves against the `openai`
 client Pydantic AI already brings. It pulls fourteen transitive packages with it — `mcp` and its
 `jsonschema`, `cryptography`, `sse-starlette` and `python-multipart` chain among them, none of
-which this lab uses — and it pinned `websockets` back one minor version to satisfy its own bound.
-Both are worth naming: the first because a framework's dependency surface is part of what a
-comparison costs, and the second because it is the first time a framework the lab added moved a
-dependency something else had already chosen. Nothing in the lock needs a network once installed,
-and no test reaches one.
+which this lab uses — and it pinned `websockets` from 17.0.1 back to 16.1.1 to satisfy its own
+`<17` bound, which is a major version in that project's scheme rather than the minor step it
+looks like. Both are worth naming: the first because a framework's dependency surface is part of
+what a comparison costs, and the second because it is the first time a framework the lab added
+moved a dependency something else had already chosen. The blast radius is nil — `uvicorn` is its
+only consumer here and the development server is unaffected — but the next framework's may not
+be. Nothing in the lock needs a network once installed, and no test reaches one.
 
 `httpx2` joins the dev dependencies. The OpenAI client carries its own HTTP client, and the
 provider-status test has to build a response of the class `APIStatusError` will accept — the

@@ -55,6 +55,7 @@ from pydantic_ai.settings import ModelSettings as PydanticModelSettings
 from pydantic_ai.tools import Tool
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from capability_lab.application.agent_capabilities import PYDANTIC_AI_FRAMEWORK_ID
 from capability_lab.application.agent_runtime import (
     AgentAnswer,
     AgentRole,
@@ -74,7 +75,8 @@ from capability_lab.application.tool_json_schema import tool_json_schema
 
 __all__ = ["PYDANTIC_AI_RUNTIME_FRAMEWORK_ID", "PydanticAiSupportAgentRuntime"]
 
-PYDANTIC_AI_RUNTIME_FRAMEWORK_ID = "pydantic-ai"
+PYDANTIC_AI_RUNTIME_FRAMEWORK_ID = PYDANTIC_AI_FRAMEWORK_ID
+"""Named out of the capability catalog rather than spelled again here (ADR 0041)."""
 
 # The wire name of a tool, separated from its contract name by a spelling providers accept.
 _NAMESPACE_SEPARATOR = "__"
