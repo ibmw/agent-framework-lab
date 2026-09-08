@@ -20,10 +20,20 @@ handful of behaviors that belong to exactly one of them.
 
 from collections.abc import Callable, Mapping
 from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
 import httpx2
 import pytest
+from agents import (
+    Span,
+    Trace,
+    TracingProcessor,
+    custom_span,
+    set_trace_processors,
+    set_tracing_disabled,
+    trace,
+)
 from agents.exceptions import UserError
 from agents.testing import ModelStep, ScriptedModel, function_call
 from openai import APIStatusError
@@ -695,6 +705,64 @@ async def test_the_sdks_turn_ceiling_is_the_configurations_tool_allowance() -> N
         await runtime.answer(
             request(CONTRACTS[INTERACTION_CONTEXT], max_tool_rounds=2), StubInvoker()
         )
+
+
+class _TraceProbe(TracingProcessor):
+    """Everything this SDK would hand its own exporter, counted and thrown away."""
+
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def on_trace_start(self, trace: Trace) -> None:
+        self.seen.append("trace")
+
+    def on_trace_end(self, trace: Trace) -> None:
+        return None
+
+    def on_span_start(self, span: Span[Any]) -> None:
+        self.seen.append("span")
+
+    def on_span_end(self, span: Span[Any]) -> None:
+        return None
+
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_the_sdk_emits_no_trace_of_its_own_once_the_runtime_exists() -> None:
+    """The lab records the three spans it opens and sweeps in no framework's own.
+
+    This SDK traces by default, and what it puts on a span is tool arguments and model
+    output — content the lab cannot promise the sanitization of, because it did not write it
+    (`docs/observability.md`). Constructing the runtime turns that off process-wide, which is
+    one line of composition that nothing else would notice missing.
+
+    The probe is proved to work first, on a trace the test opens itself while tracing is
+    still on. Without that, a probe that had quietly stopped receiving anything would report
+    silence as success — which is the same failure the test exists to catch, one level up.
+    """
+    probe = _TraceProbe()
+    set_tracing_disabled(False)
+    set_trace_processors([probe])
+    try:
+        with trace("probe"), custom_span("inner"):
+            pass
+        assert probe.seen == ["trace", "span"], "the probe sees nothing even with tracing on"
+        probe.seen.clear()
+
+        answer = await OpenAiAgentsSupportAgentRuntime.for_test().answer(
+            request(CONTRACTS[INTERACTION_CONTEXT], CONTRACTS[ORDER_DETAIL]), StubInvoker()
+        )
+
+        assert answer.body.strip()
+        assert probe.seen == []
+    finally:
+        set_trace_processors([])
+        set_tracing_disabled(True)
 
 
 @pytest.mark.asyncio
