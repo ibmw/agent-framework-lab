@@ -158,8 +158,8 @@ fits in two turns, so the cap is set to the number the story needs.
 The two arms declare `pydantic-ai` and `openai-agents`, and the runtimes composed for them
 are the real adapters — schema derivation, wire naming, serial execution, message mapping,
 usage accounting, failure translation — with a double only at each SDK's own
-provider-neutral model seam. No credential is read, nothing leaves the machine, and the
-record is the same one every time.
+provider-neutral model seam. No credential is read, nothing reaches a provider, and two runs
+of the command tell the same story with the same timestamps, durations and figures.
 
 The alternative was to register the declared control policy under the two frameworks' names,
 which would need nothing moved out of the test tree. It was refused as a lie the record would
@@ -167,10 +167,42 @@ carry: the timeline points at the adapter that produced each turn (ADR 0027), th
 filter offers what the runs themselves name (ADR 0034), and a demo whose comparison screen
 attributed one framework's output to another is worse than a demo with no comparison in it.
 
-What this costs is stated plainly, in the seed and here: because both arms walk one
-declaration, the demo shows two frameworks producing *the same decisions*, and nothing in it
-is evidence that either chooses better. Only a live run shows that, which is ADR 0042's
-distinction and this seed inherits it whole.
+What this costs is stated on the run itself, and the next decision is that statement.
+
+### The run says on its own surfaces that its figures are a double's
+
+Because both arms walk one declaration, the demo shows two frameworks producing *the same
+decisions*, and nothing in it is evidence that either chooses better — ADR 0042's limit,
+inherited whole. The seed carries a second and sharper version of it.
+
+Each offline model reports what it "spent", and the two report differently: Pydantic AI's
+`FunctionModel` estimates usage from message length while the scripted model beside it
+returns a flat count per provider call. Those figures travel the whole cost path exactly as a
+provider's would — `metrics.usage`, the model-request count, and an `estimated_cost` priced
+at the dated real rate — and the results screen's Quantitative card renders them as "Input
+tokens 7.8k against 1.3k" under two named frameworks. Read without a word beside it, the demo
+manufactures the one thing this product refuses to compute: a global finding that one
+framework costs almost three times what the other does. ADR 0032 built that reading so a
+measurement could never be mistaken for an absence; a demo that let an invention be mistaken
+for a measurement is the same failure from the other side.
+
+The qualification therefore goes where a viewer reads it, not into a docstring:
+
+- the experiment's **label** ends in `(offline demo)`, and every surface that names a run
+  renders that string — the history row, the bench header, and the results header directly
+  above the cost card;
+- the run is **tagged** `offline-scripted`, so the chip is on it in the listing before
+  anybody opens it;
+- the run's **first note** says in full sentences that both arms followed one scripted
+  incident through each SDK's offline test model, that the tokens, provider calls and money
+  are figures the doubles reported about themselves, and that only a live run answers what
+  either framework would actually spend.
+
+Equalizing the two doubles' meters was considered and rejected. It would put the arms' usage
+back into agreement at the cost of `test_framework_comparison.py`'s assertion that what each
+framework metered is free to differ — which is that suite's evidence that the record can
+still tell two frameworks apart. Labelling is both cheaper and more honest: the numbers are
+what they are, and the run says what they are.
 
 ### The clock steps rather than ticks
 
@@ -183,6 +215,13 @@ every timestamp, so a screenshot of the story would never match. A frozen clock 
 for the opposite reason: duration is measured over this clock, and an arm reported as having
 taken no time is a measurement rather than an absence, and a false one (ADR 0032).
 
+What that buys is the same story, the same timestamps and the same figures — and
+deliberately not the same fingerprints. A snapshot's identity covers documents that embed the
+identifiers of the definitions they pin, and those are drawn per row, so two seeded databases
+agree on every number and disagree on every hash. Making them agree would mean minting
+definition identifiers from their content, which is a change to the definition lifecycle
+rather than to a seed, and it is not attempted here.
+
 ### It refuses a database it did not find empty, and one that is not at the head
 
 Two gates sit in front of the seed, and both refuse rather than repair.
@@ -191,13 +230,19 @@ The first is the migration head. The database must carry the schema and be stamp
 build's head revision, read from the checkout's own migration tree. A database four
 migrations behind — the exact state the deleted development database was in — would otherwise
 be seeded into a schema the build no longer describes, and the failure would surface later as
-something unrelated.
+something unrelated. When the migration tree cannot be located at all — the package can be
+installed without it — the *comparison* is not made, because refusing over a missing file
+would be refusing for the wrong reason; the schema check still stands, and the command says
+out loud that the head went unchecked rather than passing over it in silence.
 
-The second is emptiness, counted over the eighteen tables the story writes. If any of them
+The second is emptiness, counted over every mapped table but the prototype's. That set is
+derived from the metadata rather than listed, so a new evidence table is guarded the day it
+lands: a hand-kept list goes stale exactly where staleness is invisible, since a table
+missing from it is one neither this check nor the schema check above looks at. If any of them
 holds a row the command names them with their counts, says that it never merges, overwrites
 or deletes, and tells the operator to delete the database file and migrate again. The POC's
-own tables are deliberately not counted: the seed writes none of them, so prototype rows are
-not something it would be overwriting.
+own tables are the named exception: the seed writes none of them, so a database holding only
+persona-first prototype rows is still empty as far as this command is concerned.
 
 Wiping was rejected because a command that can silently destroy an afternoon of authoring is
 a command nobody should run without reading it first, and upserting was rejected because
@@ -261,9 +306,16 @@ into a layer that must not perform it.
   present in both arms, every turn answered, the fault fired exactly once into each arm with
   the revision moving, and a state diff carrying the values — Bordeaux to Lyon, the address
   entry the redirect came from, and the fulfilment the fault advanced.
-- The cost cards are asserted to be measured and above zero on both arms and to differ between
-  them, which is the distinction ADR 0032 exists to keep: an unmeasured arm and a zero-cost arm
-  mean different things, and a demo showing either would demonstrate the wrong one.
+- The cost cards are asserted to be measured and above zero on both arms, which is the
+  distinction ADR 0032 exists to keep: an unmeasured arm and a zero-cost arm mean different
+  things, and a demo showing either would demonstrate the wrong one. That the two arms *differ*
+  is deliberately not asserted — they do, and it is an artefact of two doubles metering
+  themselves differently, so requiring it would enshrine the artefact as a property the demo
+  has to preserve.
+- The qualification is asserted on the three surfaces a viewer reads rather than on the
+  constants that produce it: the label as the history row and the experiment detail both serve
+  it, the tag as a chip on the run, and the first note for the words that say what the numbers
+  are. A demo that qualified only its own source fails here.
 - The judge is asserted through the row it decided, not through the pass that ran: the
   judge-assessed objective carries a verdict in both arms, beside the two rule-decided rows.
   A demo whose objectives were all deterministic would leave the rubric, the scoring pass and
@@ -284,7 +336,19 @@ into a layer that must not perform it.
   the process's, so no credential reaches it: composed against the ordinary framework registry,
   neither model-backed framework would be available without one and the first advance would be
   refused, which makes completing without a key a statement about which runtimes composition
-  chose. Sockets are then removed for the duration of the run.
+  chose. Sockets are then removed for the duration of the run, and the result is read back for
+  two *completed*, unfailed arms with four answered turns — not merely for two run identifiers.
+  That distinction is the whole test: the runner records an unrecognized exception from a
+  runtime as a failed attempt and carries on (ADR 0026), and a turn counts as delivered whether
+  or not it was ever answered, so an arm that had reached for a socket would still have produced
+  a run identifier. Driven with runtimes that raise, the assertion fails on both arms awaiting
+  their agent.
+- The guarded table set is asserted as a partition of the mapped metadata, with the prototype's
+  half asserted to still be mapped, so a renamed POC table surfaces here rather than being
+  quietly counted as authored state. A database holding only prototype rows is asserted to seed
+  successfully, which is the other half of that decision.
+- The skipped head check is asserted to be announced: run with no migration configuration, the
+  seed completes and logs that the head went unchecked.
 - The command itself is covered where it is worth covering: it prints the thirteen distinct
   identifiers it wrote and exits zero, and on a second run it prints nothing to stdout, says
   why on stderr, and exits one.

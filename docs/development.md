@@ -35,7 +35,17 @@ note and three tags. It goes through the same application services the API's rou
 publish gate and the setup gate apply to it exactly as they apply to an operator.
 
 The seed needs no credential and contacts no provider: both arms run their real framework adapters
-against a double at each SDK's own model seam, so the run costs nothing and is the same every time.
+against a double at each SDK's own model seam, so the run costs nothing and tells the same story with
+the same timestamps and figures every time. It does use the process's configured telemetry, so if
+`AGENT_LAB_OTEL_EXPORTER_OTLP_ENDPOINT` is set the demo's spans are exported to that collector like
+any other run's — deliberately, so a local Phoenix has something in it too.
+
+Because both arms follow one scripted incident, the demo shows two frameworks making the same
+decisions, and the token counts and cost beside them are figures the two offline models reported
+about themselves. They show that each framework's meter is wired through to the record and say
+nothing about what either would spend on a real provider. The run says so itself: its label ends in
+`(offline demo)`, it is tagged `offline-scripted`, and its first note spells it out. Keep that
+qualification on the run if you re-author the seed's copy.
 
 It refuses rather than merging. A database that is not at the migration head, or that already holds
 seeded rows, is left untouched and the reason is printed. To start again, delete the database file

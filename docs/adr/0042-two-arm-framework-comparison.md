@@ -2,6 +2,16 @@
 
 Status: accepted — 2026-09-08
 
+Amendment: 2026-09-08 — `tests/incident_script.py` and `tests/incident_runtimes.py` are now
+`infrastructure/agents/scripted/incident.py` and `infrastructure/agents/scripted/runtimes.py`,
+named below at the paths they were written at. They moved out of the test tree unchanged so
+that the demo seed could compose them as well (ADR 0043); nothing this record asserts about
+what they do, what they prove, or what they deliberately cannot prove is affected. The one
+consequence worth noting is that their two SDK imports now sit in the source tree, so the
+isolation sweep names the runtime file explicitly — and the structural check that the
+declaration beside it reaches for no framework reads the module it imports rather than a
+sibling path.
+
 Closes `docs/PLAN.md` Milestone 6's last outcome — "prove the wrong-address scenario in a
 two-arm comparison" — and with it the milestone and the last open implementation outcome on
 this roadmap. It consumes ADR 0041's second framework, ADR 0025's experiment envelope and
