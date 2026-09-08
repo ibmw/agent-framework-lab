@@ -160,7 +160,7 @@ const PAID_ORDER: ShopOrderResponse = {
       line2: null,
       postal_code: "33800",
       city: "Bordeaux",
-      region: null,
+      region: "Nouvelle-Aquitaine",
       country: "FR",
     },
     events: [
@@ -388,6 +388,9 @@ describe("order editor", () => {
     // The label appears on the frozen card and as the selected address-book entry.
     expect(within(shipping).getAllByText("Bordeaux — previous flat")).toHaveLength(2);
     expect(within(shipping).getByText(/42 cours de la Marne/)).toBeVisible();
+    // Every field the frozen copy kept, region included: a tool answering with this address
+    // returns one the author cannot read back here otherwise.
+    expect(within(shipping).getByText(/33800 Bordeaux · Nouvelle-Aquitaine · FR/)).toBeVisible();
     expect(within(shipping).getByText("Frozen copy")).toBeVisible();
     expect(within(shipping).getByText(/address-book edits never change this order/)).toBeVisible();
     // The mismatch the wrong-address scenario exploits is visible to the author.

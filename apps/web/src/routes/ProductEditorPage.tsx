@@ -210,10 +210,12 @@ function OptionsCard({ product, onChange }: EditorProps) {
     <Card title="Options">
       <ul className="grid gap-1.5 text-[13px]">
         {product.options.map((option) => (
-          <li key={option.key} className="flex items-center gap-2">
+          <li key={option.key} className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{option.name}</span>
             <EntryId value={option.key} />
-            <span className="text-admin-muted">{option.values.join(" · ")}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere] text-admin-muted">
+              {option.values.join(" · ")}
+            </span>
             <button
               className={`${subtleButtonClasses} ml-auto`}
               type="button"

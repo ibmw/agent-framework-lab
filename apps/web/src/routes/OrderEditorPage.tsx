@@ -630,7 +630,8 @@ export function OrderEditorPage() {
                 <div className="mt-1">
                   {address.recipient} · {address.line1}
                   {address.line2 ? ` · ${address.line2}` : ""} · {address.postal_code}{" "}
-                  {address.city} · {address.country}
+                  {address.city}
+                  {address.region ? ` · ${address.region}` : ""} · {address.country}
                 </div>
                 <p className="mt-1 text-xs text-admin-muted">
                   Selected {formatTimestamp(address.selected_at)} · address-book edits never change
