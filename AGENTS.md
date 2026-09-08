@@ -19,6 +19,8 @@ roadmap slice explicitly requires it.
   when a covered journey changes.
 - Before starting, stopping or restarting a server, inspect ports 8000/5173 and reuse a healthy
   existing process. Do not change a developer-owned process without an identified reason.
+- Ports 8001/5174 belong to Playwright, which starts and stops both itself. Never reuse or serve
+  from them: anything found listening there is a leftover to remove, not a stack to adopt.
 - Before editing, confirm the work is on a short-lived branch created from an up-to-date `main`.
   Keep changes cohesive and do not mix future frameworks or phases into a task.
 
