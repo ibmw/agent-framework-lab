@@ -19,6 +19,32 @@ an AI assistant, a generation tool, or an attribution trailer. Use the project-l
 `create-git-commit` skill to prepare, split, or create commits, and create no commit without an
 explicit user request or approval.
 
+## Local data
+
+`make migrate` brings the local SQLite database at `var/agent-lab.db` to the current head. It creates
+the schema and nothing else, and every screen of the Studio reads a chain that starts at a published
+shop and ends at a run with evidence on it — so a freshly migrated database shows empty lists
+everywhere.
+
+`make seed` fills it with one complete example: the wrong-address incident, authored end to end and
+driven to completion under both agent frameworks (ADR 0043). It writes a shop with a catalog, policies
+and a voice, the customer and the order the incident is about, the published ticket and recipe, two
+agent configurations differing only in the framework, a published judge, and one finished two-arm
+experiment carrying tool calls, a fired fault, decided objectives, a judge verdict, measured cost, a
+note and three tags. It goes through the same application services the API's routes call, so every
+publish gate and the setup gate apply to it exactly as they apply to an operator.
+
+The seed needs no credential and contacts no provider: both arms run their real framework adapters
+against a double at each SDK's own model seam, so the run costs nothing and is the same every time.
+
+It refuses rather than merging. A database that is not at the migration head, or that already holds
+seeded rows, is left untouched and the reason is printed. To start again, delete the database file
+and run `make migrate` before `make seed`:
+
+```sh
+rm -f var/agent-lab.db && make migrate && make seed
+```
+
 The `prek` hooks run Ruff, Pyright, Biome, and TypeScript without a server, real database, E2E test,
 or network call. Before any development-server command, inspect ports 8000 and 5173 and reuse a
 healthy stack. A restart must have an identified reason and be announced.

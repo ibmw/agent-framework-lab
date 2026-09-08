@@ -36,6 +36,8 @@ uv run prek install
 make check          # complete fast quality gate
 make test           # Python and frontend tests
 make test-migrations
+make migrate        # bring var/agent-lab.db to the current schema
+make seed           # fill an empty database with one complete demo, offline
 make dev-api        # API at http://localhost:8000
 make dev-web        # frontend at http://localhost:5173
 make test-e2e       # targeted Playwright journeys
@@ -43,6 +45,10 @@ make test-e2e       # targeted Playwright journeys
 
 Before running `make dev-api` or `make dev-web`, check whether the corresponding server is already
 running. Commands must never start, stop, or restart a service implicitly.
+
+`make seed` refuses a database that is not at the migration head or that already holds seeded rows,
+and never merges with or overwrites what is there; see
+[`docs/development.md`](docs/development.md) for the reset path.
 
 ## Documentation
 

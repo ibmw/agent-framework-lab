@@ -15,7 +15,7 @@ apps/
       domain/             current retail/session entities and invariants
       application/        current use cases and ports
       infrastructure/     SQLAlchemy, configuration, traces, and agents
-      presentation/       HTTP routes and schemas
+      presentation/       HTTP routes and schemas, and the demo seed command
   web/                    React/Vite Studio workspace
 packages/
   contracts/              OpenAPI v1 contract and generated shared types
@@ -70,7 +70,9 @@ presentation ──> application ──> domain
 - `infrastructure` implements ports. Infrastructure adapters do not import one another to compose
   workflows.
 - `presentation` translates HTTP/UI interactions and performs composition; it does not implement
-  business rules.
+  business rules. A command is an entry point of the same kind rather than a layer of its own: the
+  demo seed composes there and reaches the world only through application services, so no gate has
+  a second way around it (ADR 0043).
 - Composition is the only place allowed to select databases, agent frameworks, model providers,
   participant drivers, judge providers, or trace exporters.
 
