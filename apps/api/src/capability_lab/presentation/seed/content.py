@@ -985,7 +985,11 @@ JUDGE_RUBRIC = (
     "them."
 )
 
-JUDGE_DESCRIPTION = "Reads a resolved incident the way the customer who opened it would."
+JUDGE_DESCRIPTION = (
+    "Reads a resolved incident the way the customer who opened it would. Runs on the lab's "
+    "own control judge rather than a model, so its verdicts are reproducible and no "
+    "credential is needed to score a run — the provenance on every judged row says so."
+)
 
 
 def judge_payload() -> JudgeConfigurationPayload:

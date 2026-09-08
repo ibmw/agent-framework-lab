@@ -51,8 +51,11 @@ __all__ = [
 ]
 
 # The reference the ticket's trigger quotes, and the shop document the recipe puts in
-# context. Both are the workspace's own fixture values (`workspace_factories`); the script
-# quotes them rather than deriving them, so what each arm asks for is fixed by this file.
+# context. The script quotes them rather than deriving them, so what each arm asks for is
+# fixed by this file — which means every world it is run against has to hold them under
+# these names. Two do: the suites' workspace (`tests/workspace_factories.py`) and the demo
+# seed's shop (`presentation/seed/content.py`, which names them back). A third would join
+# them by matching these values, not by changing them.
 ORDER_REFERENCE = "NS-10482"
 POLICY_DOCUMENT = "shipping"
 

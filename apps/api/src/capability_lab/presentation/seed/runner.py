@@ -13,6 +13,7 @@ does not run.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,6 +40,8 @@ from capability_lab.presentation.seed.demo import DemoSeed, seed_demo
 from capability_lab.presentation.seed.services import build_services
 
 __all__ = [
+    "POC_TABLES",
+    "SEEDED_TABLES",
     "DatabaseNotEmptyError",
     "DatabaseNotMigratedError",
     "SeedRefusedError",
@@ -48,33 +51,46 @@ __all__ = [
     "run_seed",
 ]
 
+_logger = logging.getLogger(__name__)
+
 DEMO_STARTS_AT = datetime(2026, 8, 24, 9, 0, tzinfo=UTC)
 """When the demo's run happened: three days after the customer opened the ticket."""
 
-# Every table the story writes, in the order the chain builds them. The seed refuses if any
-# of them holds a row, and names the ones that do. The POC's own tables are deliberately not
-# here: the seed writes none of them, so rows left over from the persona-first prototype are
-# not something it would be overwriting.
-SEEDED_TABLES: tuple[str, ...] = (
-    "definition_drafts",
-    "definition_versions",
-    "definition_shop_attachments",
-    "shop_order_fixtures",
-    "sandbox_snapshots",
-    "sandboxes",
-    "sandbox_action_proposals",
-    "experiments",
-    "experiment_runs",
-    "experiment_participant_turns",
-    "experiment_agent_turns",
-    "experiment_tool_events",
-    "experiment_mutation_events",
-    "experiment_run_spans",
-    "experiment_judgements",
-    "experiment_derivations",
-    "experiment_notes",
-    "experiment_tags",
+POC_TABLES: frozenset[str] = frozenset(
+    {
+        "customers",
+        "products",
+        "orders",
+        "conversation_sessions",
+        "conversation_turns",
+        "memory_records",
+        "idempotency_records",
+        "personas",
+        "generated_scenarios",
+        "generated_scenario_products",
+        "generated_scenario_orders",
+        "action_proposals",
+    }
 )
+"""The persona-first prototype's own tables, which the seed neither writes nor counts.
+
+Rows left over from the POC are not something a demo would be overwriting, so a database
+holding only those is still empty as far as this command is concerned (`docs/architecture.md`
+on what the POC is). Named exhaustively rather than by prefix because they share no prefix,
+and asserted against the mapped metadata by `test_demo_seed.py` so a rename cannot leave a
+POC table silently counted as authored state.
+"""
+
+SEEDED_TABLES: tuple[str, ...] = tuple(
+    sorted(set(models.CustomerModel.metadata.tables) - POC_TABLES)
+)
+"""Every table the story can write. The seed refuses if any holds a row, and names it.
+
+Derived from the mapped metadata rather than listed, so the day a new evidence table lands
+it is counted without anybody remembering to add it. A hand-kept list would go stale exactly
+where staleness is invisible: both the emptiness check and the schema check below read this,
+and a table missing from it is one neither of them looks at.
+"""
 
 
 class SeedRefusedError(RuntimeError):
@@ -125,7 +141,17 @@ def _require_migrated(engine: Engine, alembic_config: Path | None) -> None:
         stamped = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalars()
         revisions = set(stamped.all())
     expected = head_revision(alembic_config)
-    if expected is not None and revisions != {expected}:
+    if expected is None:
+        # Said out loud rather than passed over: the operator asked for a check that could
+        # not be made, and a check that quietly does not happen is worse than one that does
+        # not exist. The schema check above still stands, so what is unverified is narrow —
+        # whether this database is at the *latest* revision, not whether it has one.
+        _logger.warning(
+            "could not locate alembic.ini, so the migration head was not checked; the "
+            "schema was accepted on the tables it holds"
+        )
+        return
+    if revisions != {expected}:
         raise DatabaseNotMigratedError(
             f"this database is stamped {sorted(revisions) or ['nothing']} but this build's "
             f"migration head is {expected}. Run `make migrate` first, and delete the "
@@ -138,8 +164,8 @@ def head_revision(alembic_config: Path | None) -> str | None:
 
     Returned rather than raised when the configuration is not where it was expected: the
     package can legitimately be installed without the migration tree beside it, and a seed
-    that refused to run because it could not find a file it only wanted for a warning would
-    be refusing for the wrong reason. The schema check above still stands in that case.
+    that refused to run because it could not find a file would be refusing for the wrong
+    reason. The caller says so on the way past, so the skip is visible rather than silent.
     """
     if alembic_config is None or not alembic_config.is_file():
         return None
@@ -175,10 +201,15 @@ def _compose() -> _Composition:
 
     Exactly the two model-backed frameworks and nothing else, because the demo's whole
     point is a comparison between them. Each runs its real adapter against a double at its
-    own provider-neutral seam (`infrastructure/agents/scripted`), so no credential is read,
-    no request leaves the machine, and the record is the same one every time. Composition is
-    the only place that could have chosen otherwise, which is why this is the only place it
-    is decided.
+    own provider-neutral seam (`infrastructure/agents/scripted`), so no credential is read
+    and no request reaches a provider. Two runs then tell the same story with the same
+    timestamps, durations and figures — not the same fingerprints, which cover documents
+    embedding per-row identifiers. Composition is the only place that could have chosen
+    otherwise, which is why this is the only place it is decided.
+
+    What each double reported having spent is a figure it invented, so the usage and cost
+    the record carries prove the meters are wired and prove nothing about either framework.
+    The demo says so where a viewer reads it, on the run's own label, tag and notes.
     """
     return _Composition(
         runtimes=SupportAgentRuntimeRegistry(

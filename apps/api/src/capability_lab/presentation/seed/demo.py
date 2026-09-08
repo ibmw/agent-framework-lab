@@ -43,8 +43,14 @@ from capability_lab.presentation.seed.services import SeedServices
 __all__ = ["DemoSeed", "seed_demo"]
 
 # The seed the starting state is frozen at. Fixed rather than drawn, because a snapshot is
-# identified by what it froze (ADR 0019) and a demo that produced a different fingerprint on
-# every machine would make two operators' screenshots disagree about the same story.
+# identified by what it froze (ADR 0019): two runs of this command tell the same story, with
+# the same timestamps, durations and figures, rather than a story that drifts with the clock.
+#
+# The fingerprints still differ between databases, and deliberately nothing here tries to
+# stop that. A snapshot's identity covers documents that embed the identifiers of the
+# definitions they pin, and those are drawn per row; making them stable would mean minting
+# every definition identifier from the content, which is a change to the lifecycle rather
+# than to a seed.
 SNAPSHOT_SEED = 20260824
 
 

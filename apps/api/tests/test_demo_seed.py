@@ -16,6 +16,7 @@ asserted in a docstring.
 
 from __future__ import annotations
 
+import logging
 import socket
 from collections.abc import Iterator
 from pathlib import Path
@@ -42,6 +43,7 @@ from capability_lab.domain.agent_turn import AgentTurnOutcome
 from capability_lab.domain.blocks import ObjectiveAssessment
 from capability_lab.domain.evaluation import ExperimentStatus, ObjectiveOutcome
 from capability_lab.domain.experiment import ArmAwaiting, ComparisonDimension
+from capability_lab.infrastructure import models
 from capability_lab.infrastructure.agents.scripted import INCIDENT_TOOLS, incident_runtimes
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.config import Settings, get_default_settings
@@ -57,6 +59,8 @@ from capability_lab.presentation.seed import content
 from capability_lab.presentation.seed.cli import main
 from capability_lab.presentation.seed.demo import DemoSeed
 from capability_lab.presentation.seed.runner import (
+    POC_TABLES,
+    SEEDED_TABLES,
     DatabaseNotEmptyError,
     DatabaseNotMigratedError,
     default_alembic_config,
@@ -473,6 +477,64 @@ async def test_the_seed_refuses_a_database_that_already_holds_one(
         assert page.entries[0].record.experiment_id == seeded.experiment_id
 
 
+def test_the_tables_the_seed_guards_are_derived_from_the_mapped_schema() -> None:
+    """The emptiness check looks at every table but the prototype's, and keeps doing so.
+
+    A hand-kept list is the failure this replaces: the day a new evidence table lands, both
+    the emptiness check and the schema check would silently stop looking at it and a seed
+    would happily write beside somebody's run. Asserted as a partition of the mapped
+    metadata, and the prototype's half is asserted to still *be* mapped, so a renamed POC
+    table shows up here rather than being counted as authored state.
+    """
+    mapped = set(models.CustomerModel.metadata.tables)
+
+    assert mapped >= POC_TABLES
+    assert set(SEEDED_TABLES) == mapped - POC_TABLES
+    assert {"definition_drafts", "definition_versions", "experiments"} <= set(SEEDED_TABLES)
+    assert set(SEEDED_TABLES).isdisjoint(POC_TABLES)
+
+
+async def test_a_database_holding_only_prototype_rows_is_still_empty(
+    tmp_path: Path, alembic_config: Path
+) -> None:
+    """Rows the seed does not write are not rows it would be overwriting.
+
+    The persona-first prototype's tables are the one thing a stale development database is
+    likely to hold that this command has no opinion about (ADR 0043).
+    """
+    url = _database(tmp_path / "poc.db", stamp=head_revision(alembic_config))
+    engine = create_database_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO customers (id, email, display_name, created_at) "
+                "VALUES ('11111111-1111-1111-1111-111111111111', 'poc@example.org', "
+                "'Prototype customer', '2026-01-01T00:00:00')"
+            )
+        )
+    engine.dispose()
+
+    seeded, _url = await run_seed(settings_for(url), alembic_config=alembic_config)
+
+    assert len(seeded.run_ids) == 2
+
+
+async def test_a_head_check_that_cannot_be_made_is_announced_rather_than_skipped(
+    migrated: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A check that quietly does not happen is worse than one that does not exist.
+
+    The package can legitimately be installed without the migration tree beside it, so the
+    head comparison is not a refusal in that case — but the operator asked for it, and what
+    stays unverified is narrow enough to be worth naming out loud.
+    """
+    with caplog.at_level(logging.WARNING):
+        seeded, _url = await run_seed(settings_for(migrated), alembic_config=None)
+
+    assert len(seeded.run_ids) == 2
+    assert [record.message for record in caplog.records if "alembic.ini" in record.message]
+
+
 async def test_the_seed_refuses_a_database_with_no_schema(
     tmp_path: Path, alembic_config: Path
 ) -> None:
@@ -533,6 +595,17 @@ async def test_the_seed_runs_the_whole_story_with_the_network_removed(
 
     assert url == migrated
     assert len(seeded.run_ids) == 2
+    # Both arms answered, which is what makes this a test rather than a formality. The
+    # runner records an unrecognized exception from a runtime as a failed attempt and moves
+    # on (ADR 0026), and a turn counts as delivered whether or not it was ever answered — so
+    # an arm that had reached for a socket would still have produced a run identifier here.
+    for services in read(migrated):
+        entry = services.history.history(ExperimentHistoryQuery()).entries[0]
+        assert [arm.awaiting for arm in entry.arms] == [ArmAwaiting.COMPLETED] * 2
+        assert [arm.failed for arm in entry.arms] == [False, False]
+        detail = services.experiments.get_experiment(seeded.shop_id, seeded.experiment_id)
+        assert len(detail.agent_turns) == 4
+        assert {turn.turn.outcome for turn in detail.agent_turns} == {AgentTurnOutcome.ANSWERED}
 
 
 # -- the command itself --------------------------------------------------------
