@@ -204,11 +204,12 @@ scripted assertion could not settle it anyway, because a model's choices are not
 and the finding is a person's reading of two records, which is what `docs/PLAN.md`'s "factual
 report, never a global score" has meant since Milestone 6 was written.
 
-**No live comparison test was written here, and ADR 0041's live smoke tests remain unrun.**
-They are still gated on `AGENT_LAB_RUN_LIVE_MODEL_TESTS` and a local credential, and no
-credential has been available in this repository through either slice. Writing a second
-credential-gated suite that constructs a whole experiment, and shipping it unexecuted, would
-add unverified code to make an unverifiable claim look covered.
+**No live comparison test was written here, and ADR 0041's live smoke tests were not run in
+this slice.** They stay gated on `AGENT_LAB_RUN_LIVE_MODEL_TESTS` and a local credential, and
+whether either has been executed since remains what it was made to be: an operator's decision,
+recorded in an ADR where it can be dated, rather than something a suite reports. Writing a
+second credential-gated suite that constructs a whole experiment, and shipping it unexecuted,
+would add unverified code to make an unverifiable claim look covered.
 
 ## Deliberately not here
 
