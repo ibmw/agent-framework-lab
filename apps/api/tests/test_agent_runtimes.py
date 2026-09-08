@@ -63,6 +63,7 @@ from capability_lab.application.sandbox_tool_contracts import (
     ToolContract,
 )
 from capability_lab.application.sandbox_tools import ToolOutcome
+from capability_lab.application.sandboxes import SandboxNotFoundError
 from capability_lab.domain.agent_configuration import ModelSettings
 from capability_lab.domain.agent_turn import AgentTurnFailure
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
@@ -291,6 +292,50 @@ async def test_the_labs_own_budget_ends_the_turn_through_every_runtime(
     """
     with pytest.raises(AgentToolBudgetExceededError):
         await factory().answer(request(*every_tool()), _ExhaustingInvoker())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("framework_id", "factory"), EVERY_RUNTIME, ids=FRAMEWORK_IDS)
+async def test_a_broken_lab_escapes_every_runtime_as_the_thing_that_broke(
+    framework_id: str, factory: RuntimeFactory
+) -> None:
+    """An arm whose world stopped resolving is not a framework behaving badly.
+
+    `SandboxToolService.execute` raises a `DefinitionResolutionError` when the arm, its
+    snapshot, or a version it pinned has gone — and the runner re-raises that *without
+    recording anything*, because writing it down would put a broken lab into a comparison as
+    this framework's behavior (`experiment_runs`). That decision belongs to the runner, so
+    every adapter has to let the exception through as the object it was.
+
+    Asserted by identity rather than by type: an adapter that caught this and raised its own
+    equivalent would pass a type check while having taken the decision anyway.
+    """
+    broken = _BrokenWorldInvoker(SandboxNotFoundError("this arm's sandbox is gone"))
+
+    with pytest.raises(SandboxNotFoundError) as raised:
+        await factory().answer(request(*every_tool(), max_tool_rounds=WHOLE_SET_ROUNDS), broken)
+
+    assert raised.value is broken.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("framework_id", "factory"), EVERY_RUNTIME, ids=FRAMEWORK_IDS)
+async def test_a_fault_no_runtime_understands_escapes_every_runtime_unchanged(
+    framework_id: str, factory: RuntimeFactory
+) -> None:
+    """One classifier for the unclassifiable, and it is the runner's rather than each SDK's.
+
+    The runner logs an unrecognized exception by type alone and records `framework`
+    (`experiment_runs`). An adapter that classified it first would do that quietly, without
+    the log, and differently per framework — so an infrastructure fault would read as one
+    thing in one arm and another beside it.
+    """
+    broken = _BrokenWorldInvoker(RuntimeError("the database went away mid-call"))
+
+    with pytest.raises(RuntimeError) as raised:
+        await factory().answer(request(*every_tool(), max_tool_rounds=WHOLE_SET_ROUNDS), broken)
+
+    assert raised.value is broken.error
 
 
 @pytest.mark.asyncio
@@ -654,6 +699,21 @@ async def test_a_framework_fault_the_lab_cannot_classify_says_only_that() -> Non
 
     with pytest.raises(SupportAgentFrameworkError):
         await runtime.answer(request(CONTRACTS[INTERACTION_CONTEXT]), StubInvoker())
+
+
+class _BrokenWorldInvoker(SandboxToolInvoker):
+    """Fails the way the lab fails, rather than the way an agent does.
+
+    The real invoker reaches `SandboxToolService`, which raises rather than refusing when the
+    arm's world cannot be resolved at all. Nothing about that is an answer the agent could
+    act on, which is why it is not a refusal (ADR 0021) and not a classified turn failure.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def invoke(self, tool: str, arguments: Mapping[str, str]) -> dict[str, CanonicalValue]:
+        raise self.error
 
 
 class _ExhaustingInvoker(SandboxToolInvoker):

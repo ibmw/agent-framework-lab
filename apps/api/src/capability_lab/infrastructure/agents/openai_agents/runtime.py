@@ -26,11 +26,14 @@ lab's names carry a domain namespace, so the dot is rewritten for the wire and n
 it back: each tool's closure knows which contract it stands for, so the recorded event
 carries the contract name.
 
-**The SDK relabels anything a tool raises.** A tool that raises something the SDK does not
+**The SDK relabels anything a tool raises.** A tool that raises what the SDK does not
 recognize comes back as `UserError("Error running tool ...")` with the original on
-`__cause__`. Left alone, that would record the lab's own tool budget — a finding about the
-configuration an author chose — as a fault of the framework. So the cause is unwrapped
-before anything else is classified.
+`__cause__`, and *anything* means anything: the lab's own tool budget, but also a sandbox
+that stopped resolving and a database that broke underneath one. So the cause is re-raised
+unchanged whenever there is one, and only a `UserError` carrying nothing is reported as the
+framework failing. Deciding here what an arbitrary exception means would put a broken lab
+into a comparison as this framework's behavior — the exact thing the runner refuses to
+record (`experiment_runs`).
 
 **Tool calls are serialized in the SDK, not at the provider.**
 `max_function_tool_concurrency=1` makes the SDK start each call only after the previous one
@@ -163,12 +166,10 @@ class OpenAiAgentsSupportAgentRuntime(SupportAgentRuntime):
                 ),
             )
         except UserError as error:
+            # Everything the lab raises inside a tool arrives here wrapped, so this is the
+            # only place its own errors can be recovered — and the only place a fault that
+            # is nobody's business but the lab's can be let go.
             raise _unwrapped(error) from error
-        except SupportAgentRuntimeError:
-            # Already classified — the lab's own budget, or a tool the arm was never
-            # offered. Re-raised unchanged so the mapping below cannot relabel a finding
-            # about the configuration as a fault of the provider.
-            raise
         except MaxTurnsExceeded as error:
             raise AgentToolBudgetExceededError(
                 "the agent used every tool round this configuration allows"
@@ -191,16 +192,28 @@ class OpenAiAgentsSupportAgentRuntime(SupportAgentRuntime):
         )
 
 
-def _unwrapped(error: UserError) -> SupportAgentRuntimeError:
+def _unwrapped(error: UserError) -> BaseException:
     """What the SDK was actually carrying when a tool raised inside its loop.
 
     Anything a tool raises that the SDK does not recognize is re-raised as `UserError` with
-    the original on `__cause__`. The lab's own errors travel that way — the spent tool
-    budget above all — and a budget that arrived here as "the framework could not execute
-    this turn" would be a finding about the configuration recorded as a fault of the SDK.
+    the original on `__cause__`, so the cause is what happened and the wrapper is the SDK's
+    opinion of it. The cause is handed back untouched, whatever it is.
+
+    Two kinds travel this way and classifying either here ruins it. The lab's own errors —
+    the spent tool budget above all — are findings about the *configuration*, and a budget
+    reported as "the framework could not execute this turn" would read as the lab breaking.
+    And an arm whose snapshot or pins stopped resolving raises a `DefinitionResolutionError`
+    from inside the tool: the runner re-raises that without recording anything, precisely so
+    a broken lab does not enter a comparison as this framework's behavior, and an adapter
+    that renamed it `framework` would take that decision away from the one place that makes
+    it. An exception the lab has no name for at all is the runner's too — it logs the type
+    and records `framework`, once, rather than differently per SDK.
+
+    Only a `UserError` with no cause is this framework failing: the SDK itself objected, and
+    there is nothing underneath it to defer to.
     """
     cause = error.__cause__
-    if isinstance(cause, SupportAgentRuntimeError):
+    if cause is not None:
         return cause
     return SupportAgentFrameworkError("the agent framework could not execute this turn")
 

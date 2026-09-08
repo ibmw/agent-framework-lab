@@ -133,11 +133,24 @@ mistakes.
 
 **Anything a tool raises comes back relabelled.** A tool that raises what the SDK does not
 recognize surfaces as its own `UserError("Error running tool …")`, with the original on
-`__cause__`. Left alone, the lab's spent tool budget — a finding about a setting an author chose
-— would have been recorded as `framework`, which reads as the lab breaking rather than as the
-configuration doing what it was told. The adapter unwraps the cause before it classifies anything
-else. This is the failure the slice actually hit, and the test for it asserts the recorded code
-rather than the exception type.
+`__cause__`. The adapter re-raises that cause untouched, whatever it is, and reports the
+framework failing only for a `UserError` carrying nothing.
+
+Two things travel that path and both are ruined by naming them here. The lab's spent tool budget
+is a finding about a setting an author chose, and recorded as `framework` it reads as the lab
+breaking. And `SandboxToolService` raises a `DefinitionResolutionError` when the arm, its
+snapshot, or a version it pinned has gone — which the runner deliberately re-raises *without
+recording anything*, because "recording it here would put a broken lab into a comparison as this
+framework's behavior" (ADR 0026). An adapter that renamed it took that decision away from the one
+place entitled to make it, and did so in one arm only: the same fault propagates cleanly out of
+Pydantic AI, so a database that broke mid-call would have read as an infrastructure error beside
+one arm and as a framework failure in the other. The same goes for an exception the lab has no
+name for at all — the runner logs its type and records `framework`, once, rather than each SDK
+deciding for itself and skipping the log.
+
+Both are held by a sweep over every runtime, asserting the escaping exception is the same object
+rather than the same class: an adapter that caught one and raised its own equivalent would pass a
+type check while having taken the decision anyway.
 
 **Tool calls are serialized in the SDK, and deliberately not at the provider.**
 `max_function_tool_concurrency=1` makes the SDK start each call only after the previous one
