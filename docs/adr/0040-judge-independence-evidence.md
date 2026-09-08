@@ -209,7 +209,9 @@ is the property the fingerprint exists for, stated so it can fail.
 - Coverage tests (`test_judge_independence.py`) hold the sweeps to what they claim: the failure
   table covers `JudgeFailure` exactly, contains every classified error the port declares, and
   contains at least one it does not; the anonymity terms carry every declared framework's id,
-  label, models and providers; and the reading being compared is the rows no judge owns.
+  label, models and providers; and the reading being compared is read off a real experiment —
+  three rows no judge owns, one of each shape ADR 0030 decides, each at the outcome it actually
+  reached, with the rendering shown to tell two arms' versions of one row apart.
 - Standing-verdict tests cover the defect and the cases around it: a failure after a verdict, in
   each of the five ways, leaving the verdict standing at attempt 1 with both executions kept; a
   row only ever failed on reading as unscored and reporting the *newer* outage; and a verdict
