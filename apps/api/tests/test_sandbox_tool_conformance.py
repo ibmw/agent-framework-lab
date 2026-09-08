@@ -40,6 +40,7 @@ from capability_lab.application.sandbox_tools import (
     ToolOutcome,
 )
 from capability_lab.application.sandboxes import SandboxRecord
+from capability_lab.application.tool_json_schema import tool_json_schema
 from capability_lab.domain.shop import ShopDocumentKind
 from capability_lab.domain.support_identity import READ_PERMISSIONS
 from capability_lab.infrastructure.database import (
@@ -330,6 +331,50 @@ def test_every_argument_is_text_a_framework_adapter_can_generate_a_schema_from(
         if argument.kind is ToolArgumentKind.ENUM:
             assert argument.choices
             assert len(set(argument.choices)) == len(argument.choices)
+
+
+@pytest.mark.parametrize("contract", SANDBOX_TOOL_CONTRACTS, ids=by_name)
+def test_every_published_tool_renders_as_the_json_schema_its_contract_declares(
+    contract: ToolContract,
+) -> None:
+    """The one schema every framework adapter is handed, checked against the declaration.
+
+    Derived once rather than per adapter (ADR 0041), so that "both arms were offered the
+    same tools" is a property of the code. What is asserted here is the derivation, not a
+    dialect: the properties are exactly the declared arguments, every one of them a string
+    because every argument is text, an enum carries its choices, and `required` lists the
+    required arguments and only those — the last of which is what a strict provider dialect
+    would silently widen to all of them.
+    """
+    schema = tool_json_schema(contract)
+    properties = schema["properties"]
+
+    assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
+    assert set(properties) == {argument.name for argument in contract.arguments}
+    assert schema["required"] == [
+        argument.name for argument in contract.arguments if argument.required
+    ]
+    for argument in contract.arguments:
+        rendered = properties[argument.name]
+        assert rendered["type"] == "string"
+        assert rendered["description"] == argument.description
+        assert rendered.get("enum") == (
+            list(argument.choices) if argument.kind is ToolArgumentKind.ENUM else None
+        )
+
+
+def test_the_derived_schemas_cover_every_kind_of_argument_the_table_declares() -> None:
+    """Non-vacuity for the sweep above: a table of only free text would prove less.
+
+    Every argument kind and both sides of `required` actually occur, so the assertions about
+    enums and about the required list are made against real cases rather than about an empty
+    branch.
+    """
+    arguments = [argument for contract in SANDBOX_TOOL_CONTRACTS for argument in contract.arguments]
+
+    assert {argument.kind for argument in arguments} == set(ToolArgumentKind)
+    assert {argument.required for argument in arguments} == {True, False}
 
 
 def test_the_document_collections_a_tool_offers_are_the_shops_own() -> None:

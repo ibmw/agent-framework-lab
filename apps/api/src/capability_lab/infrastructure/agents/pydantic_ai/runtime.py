@@ -9,9 +9,11 @@ comparison later reads is identical in shape to what the deterministic control a
 Five things are worth stating.
 
 **The tool schema is derived, never authored twice.** `sandbox_tool_contracts` exists to be
-the one description a framework generates its own dialect from (ADR 0021). This builds the
-JSON Schema from that table, which is why adding a tool to the lab adds it to this framework
-without touching this file.
+the one description a framework generates its own dialect from (ADR 0021), and
+`tool_json_schema` renders it — shared with every other adapter that speaks JSON Schema, so
+that both arms of a framework comparison are offered the same document rather than two
+similar ones (ADR 0041). Adding a tool to the lab adds it to this framework without touching
+this file.
 
 **A tool's SDK name is not its contract name.** Providers accept `[A-Za-z0-9_-]` in a tool
 name and the lab's names carry a domain namespace (`orders.read_order`), so the dot is
@@ -67,11 +69,8 @@ from capability_lab.application.agent_runtime import (
     SupportAgentTransientError,
 )
 from capability_lab.application.model_cost import ModelUsage
-from capability_lab.application.sandbox_tool_contracts import (
-    ToolArgument,
-    ToolArgumentKind,
-    ToolContract,
-)
+from capability_lab.application.sandbox_tool_contracts import ToolContract
+from capability_lab.application.tool_json_schema import tool_json_schema
 
 __all__ = ["PYDANTIC_AI_RUNTIME_FRAMEWORK_ID", "PydanticAiSupportAgentRuntime"]
 
@@ -174,7 +173,7 @@ def _tool(contract: ToolContract, tools: SandboxToolInvoker) -> Tool[None]:
         call,
         name=contract.name.replace(".", _NAMESPACE_SEPARATOR),
         description=contract.summary,
-        json_schema=_schema(contract),
+        json_schema=tool_json_schema(contract),
         # One call at a time. Two reasons, and either alone would be enough: a write is
         # guarded by the revision it was proposed against (ADR 0022), so calls that raced
         # would refuse each other for no reason the agent could act on; and the recorded
@@ -182,28 +181,6 @@ def _tool(contract: ToolContract, tools: SandboxToolInvoker) -> Tool[None]:
         # make a matter of which finished first.
         sequential=True,
     )
-
-
-def _schema(contract: ToolContract) -> dict[str, Any]:
-    """The contract's argument table as JSON Schema.
-
-    Every argument is text (ADR 0021), so the mapping is mechanical: an enum lists its
-    choices, a required argument joins `required`, and nothing else is accepted — a model
-    that invents an argument is refused by the tool rather than silently ignored here.
-    """
-    return {
-        "type": "object",
-        "properties": {argument.name: _property(argument) for argument in contract.arguments},
-        "required": [argument.name for argument in contract.arguments if argument.required],
-        "additionalProperties": False,
-    }
-
-
-def _property(argument: ToolArgument) -> dict[str, Any]:
-    schema: dict[str, Any] = {"type": "string", "description": argument.description}
-    if argument.kind is ToolArgumentKind.ENUM:
-        schema["enum"] = list(argument.choices)
-    return schema
 
 
 def _history(request: AgentTurnRequest) -> list[ModelMessage]:
