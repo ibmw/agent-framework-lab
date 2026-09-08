@@ -1125,7 +1125,7 @@ export interface paths {
     put?: never;
     /**
      * Score every objective this scenario left to a judge, in every arm
-     * @description Runs one published judge over each arm's own record, one execution per objective per arm, and answers with the whole evaluation as it now reads. Each execution is shown an anonymized brief carrying what that arm did and said and nothing about what ran it, and the verdict is recorded with the judge version, the model, and the fingerprint of that exact input. Scoring again writes a new attempt beside the last rather than over it, so a rerun is readable as a rerun. A judge execution that fails is recorded and leaves its objective deferred — the lab's own outage never counts against an arm — while a provider this lab cannot reach at all is a 422 and records nothing.
+     * @description Runs one published judge over each arm's own record, one execution per objective per arm, and answers with the whole evaluation as it now reads. Each execution is shown an anonymized brief carrying what that arm did and said and nothing about what ran it, and the verdict is recorded with the judge version, the model, and the fingerprint of that exact input. Scoring again writes a new attempt beside the last rather than over it, so a rerun is readable as a rerun. A judge execution that fails is recorded and leaves its objective exactly where it stood — deferred while nothing has ever scored it, and carrying the verdict that already stands where something has, because the lab's own outage says nothing about an arm — while a provider this lab cannot reach at all is a 422 and records nothing.
      */
     post: operations["scoreExperiment"];
     delete?: never;

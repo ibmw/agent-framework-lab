@@ -14,14 +14,15 @@ version 2, on this model, shown this exact input, said missed" is.
 
 **A rerun is an attempt beside the last, never over it.** Judging is nondeterministic and
 rerunnable by design (`docs/PLAN.md` Milestone 5), so attempts count from one within
-`(run, objective)` and the record keeps every one. What an evaluation reads is the latest;
-what an operator can audit is all of them.
+`(run, objective)` and the record keeps every one. What an evaluation reads is the latest
+attempt that carries a verdict; what an operator can audit is all of them.
 
 **A failed execution is a row too, and it is not a verdict.** A judge the provider refused
 says nothing about the arm, so the outcome is absent and a classified failure takes its
-place. An evaluation reading a failed attempt leaves the objective deferred — exactly where
-it stood before anyone tried — which is what keeps the lab's own outage off the arm's
-scorecard.
+place. An evaluation reading a failed attempt leaves the objective exactly where it stood —
+deferred while nothing has ever scored it, and still carrying the verdict that already
+stands where something has (ADR 0040) — which is what keeps the lab's own outage off the
+arm's scorecard, whether that outage would have made a miss or erased a reading.
 
 **The rationale is the judge's words, and it is bounded.** It exists because a verdict with
 no reason is a score, which is the one thing this lab refuses to produce. It is not parsed,

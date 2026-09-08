@@ -3619,8 +3619,10 @@ paths:
         version, the model, and the fingerprint of that exact input. Scoring again
         writes a new attempt beside the last rather than over it, so a rerun is readable
         as a rerun. A judge execution that fails is recorded and leaves its objective
-        deferred — the lab's own outage never counts against an arm — while a provider
-        this lab cannot reach at all is a 422 and records nothing.
+        exactly where it stood — deferred while nothing has ever scored it, and carrying
+        the verdict that already stands where something has, because the lab's own
+        outage says nothing about an arm — while a provider this lab cannot reach
+        at all is a 422 and records nothing.
       operationId: scoreExperiment
       parameters:
       - name: shop_id
