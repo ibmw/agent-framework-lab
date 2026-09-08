@@ -100,7 +100,12 @@ derivation that changes something on purpose: a fork, which holds the world, the
 arm positions and the recorded script still and moves only which published configuration
 version each arm runs — so the one thing it changed is the only thing that changed, and the
 difference between the two records is attributable to it (ADR 0039), which completes the
-milestone's traces, replay, and fork outcome.
+milestone's traces, replay, and fork outcome, and finally the evidence that holds the
+evaluation together: every way a judge can fail or be rerun swept from the port's own
+declarations, the rule-decided reading of a whole experiment compared as bytes across each of
+them, and the brief checked against an arm run under every framework the catalog declares —
+which found and fixed a judge failure that was shadowing the verdict standing beside it
+(ADR 0040), and completes Milestone 5.
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -659,7 +664,9 @@ Turn completed runs into durable, searchable comparison evidence.
   compositions that source recorded (ADR 0038), and a fork derives one the same way while
   moving the pinned configuration versions on purpose — which is the only thing it moves, so
   the difference between the two records is attributable to it (ADR 0039).
-- [ ] Test judge failure/rerun separately from deterministic outcome calculation.
+- [x] Test judge failure/rerun separately from deterministic outcome calculation. An
+  evidence slice in ADR 0023's sense, and it found one defect: a failed execution was
+  shadowing the verdict standing on its row (ADR 0040).
 
 Frames: 9 · Experiment results — General tab, 9b · Traces tab, the code excerpt of 9c · Code paths
 tab, and 10 · History; frame 9's notes-and-tags strip and frame 10's tag filter arrived with the
@@ -834,6 +841,30 @@ vocabulary and why "unclear" is one of its three values, the evidence scope as a
 whose absence is visible in the fingerprint, the anonymity rule the publish gate enforces from the
 framework catalog, the executions kept as records where the deterministic evaluation is a
 projection, and the third runtime port with a declared control judge behind it.
+
+Judge-independence evidence (no frame; it is what frames 8, 9 and 10 are checked
+against): an operator scores a run, the provider is down that afternoon, and nothing about
+the run moves — every row a rule decided reads byte for byte as it did before anyone tried,
+the judged rows say a judge has not decided them yet rather than counting against an arm, and
+the verdict recorded this morning is still the verdict, because a provider that refused said
+nothing about the arm and an outage is an absence of new information rather than new
+information. That last part was not true when this slice started: reading the latest attempt
+meant a failure after a verdict flipped a met row back to deferred while the verdict sat
+unread underneath it, which is the deterministic evaluation's own rule about the lab's limits
+broken one level up. The judge is anonymous the same way the gate is: what a brief may not
+name is read off the framework catalog and checked against an arm actually run under each
+declared framework, so the second framework is covered the day it is proven rather than the
+day someone remembers the sweep. And every verdict names the four things that make it
+auditable — the model, the rubric that is its prompt, the published version that froze that
+rubric, and the fingerprint of the exact bytes it read, which is shown to move when the record
+moves and to hold when it does not. ADR 0040 records the failure taxonomy swept from the port's
+own declarations rather than from a list and the deliberately unclassified case beside them,
+the rule-decided reading compared as the canonical bytes of every field of every row so a field
+authored tomorrow joins the comparison, the standing-verdict fix and why the amendment to
+ADR 0031 is a narrowing rather than a reversal, the one code path by which judge state could
+reach a deterministic row exercised rather than argued about, and what it deliberately leaves
+out — a timeout nothing configures, an attempt history no frame asks for, and a golden for a
+brief that identifies one execution rather than a starting state.
 
 ### Acceptance criteria
 

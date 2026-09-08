@@ -30,7 +30,12 @@ reproducible capability evidence in CI.
 LLM-judge integration tests use an injected deterministic judge. Live judge calls are optional and
 credential-gated. Tests must prove that deterministic outcomes do not change when a judge fails or
 is rerun, anonymized inputs omit framework labels, and every judge result records its configuration
-and input fingerprint.
+and input fingerprint. Those three are held as properties rather than as examples (ADR 0040): the
+failure sweep is over the port's own error classes and the recorded failure taxonomy, the anonymity
+sweep is over `PROVEN_FRAMEWORKS` and runs an arm per declared framework, and "unchanged" is the
+canonical bytes of every field of every rule-decided row rather than an equality over the fields
+somebody chose. Each sweep asserts what it covered, for the reason every registry-driven sweep
+does.
 
 CI starts from a clean environment, installs from `uv.lock` and `pnpm-lock.yaml`, then runs lint,
 formatting, type checking, tests, migrations, build, and E2E. Coverage helps identify gaps; no global
