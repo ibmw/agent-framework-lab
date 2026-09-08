@@ -161,10 +161,12 @@ Three implementations stand behind that port, and only two of them are framework
 control policy, which is the lab's own code and is what makes the rest of the lab falsifiable,
 and Pydantic AI and the OpenAI Agents SDK, which run the same single-agent shape on the same
 provider and model so that a two-arm run moves the framework and nothing else (ADR 0041). Both
-derive their tool schema from one rendering of the published argument table, and what they leave
-behind is held to one shape — the same call vocabulary, string arguments, classified failures,
-neutral usage, and stored record — while what they said, chose and spent is free to differ,
-because that difference is what a comparison reads. Where an SDK's defaults disagree with that,
+derive their tool schema from one rendering of the published argument table and render a tool
+result through one canonical serialization, so neither the question an arm is asked nor the
+answer it is shown is left to a library's own convention (ADR 0042). What they leave behind is
+held to one shape — the same call vocabulary, string arguments, classified failures, neutral
+usage, and stored record — while what they said, chose and spent is free to differ, because
+that difference is what a comparison reads. Where an SDK's defaults disagree with that,
 the adapter overrides them: a strict schema dialect that would make an optional argument
 mandatory, an error wrapper that would relabel a fault of the lab as a fault of the framework,
 concurrent tool execution that would race a revision-guarded write, and a vendor trace exporter
