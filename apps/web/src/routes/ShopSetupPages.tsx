@@ -78,10 +78,20 @@ function SetupPage({ title, children }: { title: string; children: ReactNode }) 
   );
 }
 
+/**
+ * The entry's name belongs in the accessible name, not in the visible label: a policy may be
+ * titled a paragraph long, and a button that renders it stretches the row it sits on. Every
+ * other editor in the workspace already names its Remove this way.
+ */
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button className={subtleButtonClasses} type="button" onClick={onClick}>
-      Remove {label}
+    <button
+      className={subtleButtonClasses}
+      type="button"
+      aria-label={`Remove ${label}`}
+      onClick={onClick}
+    >
+      Remove
     </button>
   );
 }

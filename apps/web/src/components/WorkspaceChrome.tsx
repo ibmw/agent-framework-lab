@@ -108,10 +108,13 @@ export function EntryCard({
   children?: ReactNode;
 }) {
   return (
-    <li className="grid gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
+    // A grid item defaults to min-width:auto, so an unbreakable token in the body would
+    // widen the row past the card — which clips, taking every sibling's actions with it.
+    // The row may shrink, and its text breaks anywhere rather than only at whitespace.
+    <li className="grid min-w-0 gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
         {lead}
-        <span className="text-[13px] font-semibold">{title}</span>
+        <h3 className="min-w-0 [overflow-wrap:anywhere] text-[13px] font-semibold">{title}</h3>
         {chips}
         {actions ? <div className="ml-auto flex items-center gap-1.5">{actions}</div> : null}
       </div>
@@ -137,12 +140,14 @@ export function EntryId({ value }: { value: string }) {
  */
 export function EntryText({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1">
-      <span className="text-xs font-semibold text-admin-muted">{label}</span>
-      <p className="rounded-lg border border-admin-border bg-admin-surface p-3 text-[13px] leading-relaxed whitespace-pre-wrap text-admin-ink-soft">
+    // A description list ties the field name to the text it names; a bare caption above a
+    // paragraph reads as a label but is not one.
+    <dl className="grid min-w-0 gap-1">
+      <dt className="text-xs font-semibold text-admin-muted">{label}</dt>
+      <dd className="min-w-0 rounded-lg border border-admin-border bg-admin-surface p-3 text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] text-admin-ink-soft">
         {value}
-      </p>
-    </div>
+      </dd>
+    </dl>
   );
 }
 

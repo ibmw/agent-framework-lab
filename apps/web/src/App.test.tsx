@@ -363,10 +363,16 @@ describe("shop workspace", () => {
     expect(within(policies).getByText("shipping-policy", { selector: "code" })).toBeVisible();
     const body = within(policies).getByText(/Standard delivery is 2 to 5 working days/);
     expect(body).toBeVisible();
-    // The blank line the author typed survives to the page rather than collapsing.
+    // The blank line the author typed reaches the DOM rather than being stripped, and the
+    // rule that renders it as a blank line is on the element. jsdom computes no layout, so
+    // the Tailwind class is the only part of that contract a unit test can see.
     expect(body.textContent).toBe(
       "Standard delivery is 2 to 5 working days.\n\nExpress is next working day.",
     );
+    expect(body).toHaveClass("whitespace-pre-wrap");
+    // An unbreakable token — a pasted returns-portal URL — must break inside the card
+    // instead of widening the row until every entry's Remove is clipped away.
+    expect(body).toHaveClass("[overflow-wrap:anywhere]");
 
     const faq = screen.getByRole("region", { name: "FAQ" });
     expect(within(faq).getByText("When will my order arrive?")).toBeVisible();
@@ -449,9 +455,12 @@ describe("shop workspace", () => {
     // A frozen version has to be readable, not merely counted: the documents an agent
     // could have read at v1 are the evidence a later run is compared against.
     const policies = screen.getByRole("region", { name: "Policies" });
-    expect(within(policies).getByText(/Standard delivery is 2 to 5 working days/).textContent).toBe(
+    const frozenBody = within(policies).getByText(/Standard delivery is 2 to 5 working days/);
+    expect(frozenBody.textContent).toBe(
       "Standard delivery is 2 to 5 working days.\n\nExpress is next working day.",
     );
+    expect(frozenBody).toHaveClass("whitespace-pre-wrap");
+    expect(frozenBody).toHaveClass("[overflow-wrap:anywhere]");
     expect(
       within(screen.getByRole("region", { name: "FAQ" })).getByText(
         "Standard delivery arrives in 2 to 5 working days.",
