@@ -153,12 +153,22 @@ def request(
     message: str = "This is going to my old address.",
     history: tuple[AgentMessage, ...] = (),
     max_tool_rounds: int = 8,
+    model: ModelSettings | None = None,
 ) -> AgentTurnRequest:
+    """One turn's request, on a model nothing in this file will actually call.
+
+    The default names the offline control's provider and model, because every runtime here
+    is given an injected test double and a `model_id` that reached a provider would be a
+    live call this suite promises not to make. A caller that *does* mean to reach one —
+    `test_live_model_runtimes.py` — passes a real `ModelSettings`, because both adapters
+    forward `model_id` verbatim to the provider they build.
+    """
     return AgentTurnRequest(
         run_id=uuid4(),
         arm_label="Arm A",
         instructions="You are a support representative for Northstar Outfitters.",
-        model=ModelSettings(
+        model=model
+        or ModelSettings(
             provider="fake",
             model_id="deterministic",
             temperature=Decimal("0.20"),

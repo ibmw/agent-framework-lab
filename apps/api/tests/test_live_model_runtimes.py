@@ -17,10 +17,12 @@ from collections.abc import Callable
 
 import pytest
 
+from agent_factories import model_settings
 from capability_lab.application.agent_capabilities import (
     FAKE_FRAMEWORK_ID,
     OPENAI_AGENTS_FRAMEWORK_ID,
     PROVEN_FRAMEWORKS,
+    PROVEN_FRAMEWORKS_BY_ID,
     PYDANTIC_AI_FRAMEWORK_ID,
 )
 from capability_lab.application.agent_runtime import SupportAgentRuntime
@@ -29,6 +31,7 @@ from capability_lab.application.sandbox_tool_contracts import (
     ORDER_DETAIL,
     SANDBOX_TOOL_CONTRACTS,
 )
+from capability_lab.domain.agent_configuration import ModelSettings
 from capability_lab.infrastructure.agents.openai_agents import (
     OpenAiAgentsSupportAgentRuntime,
     create_openai_agents_model,
@@ -64,11 +67,30 @@ LIVE_RUNTIMES: tuple[tuple[str, LiveRuntime], ...] = (
 LIVE_IDS = [framework_id for framework_id, _ in LIVE_RUNTIMES]
 
 
+def live_model(framework_id: str) -> ModelSettings:
+    """The provider and model this framework is published for, as a real run's settings.
+
+    Named out of the catalog rather than typed here. Both adapters forward `model_id`
+    verbatim to the client they build, so the offline suite's default — the control arm's
+    `fake`/`deterministic` — would ask OpenAI for a model called "deterministic" and fail
+    for a reason that says nothing about either framework.
+    """
+    framework = PROVEN_FRAMEWORKS_BY_ID[framework_id]
+    return model_settings(
+        provider=next(iter(sorted(framework.providers))),
+        model_id=framework.models[0],
+        max_tool_rounds=8,
+    )
+
+
 def test_every_framework_that_calls_a_provider_has_a_live_smoke_test() -> None:
     """Runs offline, and is the reason the sweep below cannot quietly cover one framework.
 
     Read off the catalog rather than a literal: every declared framework except the offline
-    control reaches a provider, and every one of those is asked the question below.
+    control reaches a provider, every one of those is asked the questions below, and each is
+    asked them on a combination the catalog says it is published for. That last check is
+    what ties the catalog's claim to something: a framework listed against a provider and
+    model nothing ever calls with is a claim with no test behind it.
     """
     modelled = {
         framework.framework_id
@@ -77,6 +99,11 @@ def test_every_framework_that_calls_a_provider_has_a_live_smoke_test() -> None:
     }
 
     assert set(LIVE_IDS) == modelled
+    for framework_id in LIVE_IDS:
+        declared = PROVEN_FRAMEWORKS_BY_ID[framework_id]
+        asked = live_model(framework_id)
+        assert asked.provider in declared.providers
+        assert asked.model_id in declared.models
 
 
 @pytest.mark.live_model
@@ -101,6 +128,7 @@ async def test_a_live_model_discovers_the_order_through_the_sandbox_tools(
             CONTRACTS[INTERACTION_CONTEXT],
             CONTRACTS[ORDER_DETAIL],
             message="I just noticed this is going to my old address. Which one is on it?",
+            model=live_model(framework_id),
         ),
         tools,
     )
@@ -126,6 +154,9 @@ async def test_the_credentialed_model_each_framework_builds_answers_at_all(
     """
     runtime = build(os.environ["AGENT_LAB_OPENAI_API_KEY"])
 
-    reply = await runtime.answer(request(message="Reply with the single word OK."), StubInvoker())
+    reply = await runtime.answer(
+        request(message="Reply with the single word OK.", model=live_model(framework_id)),
+        StubInvoker(),
+    )
 
     assert reply.body.strip()
