@@ -294,7 +294,10 @@ the Studio runs on.
   or fails it — for the answer being words and a neutral meter and nothing else, every call
   reaching the world under its contract name, every argument being a declared name carried as
   text, the lab's own budget ending the turn through the framework it is raised inside, and an
-  arm with a thread behind it still being answered. A further sweep over the two model-backed
+  arm with a thread behind it still being answered. Two further sweeps cover what must *not* be
+  classified by an adapter: an arm whose world stopped resolving and a fault the lab has no name
+  for both escape every runtime as the same object they were raised as, asserted by identity so
+  that catching one and raising an equivalent would not pass. A sweep over the two model-backed
   frameworks covers every enabled tool arriving, and one test runs both over one world and
   asserts what a comparison rests on: the same recorded shape, while what they said, what they
   chose and what they spent stay free to differ.
@@ -304,13 +307,18 @@ the Studio runs on.
 - Framework-specific tests cover, for the OpenAI Agents SDK, calls made in the order they were
   asked, the budget surviving the wrapper the SDK puts around a tool failure, argument text that
   is not an object at all ending the attempt as an unusable answer, the turn ceiling reporting the
-  configuration's allowance, an unclassified SDK fault reported as the framework failing, and the
-  metering asymmetry above stated as a passing run rather than as a comment; and, for Pydantic AI,
-  its own tool-call limit still mapping to the same finding.
+  configuration's allowance, an unclassified SDK fault reported as the framework failing, the
+  metering asymmetry above stated as a passing run rather than as a comment, and a probe
+  processor seeing nothing the SDK traced across a whole turn — proving itself first on a trace
+  the test opens while tracing is still on, because a probe that had stopped receiving anything
+  would report silence as success. Each of the three that guard a decision fails against the
+  behavior it replaced. For Pydantic AI, its own tool-call limit still maps to the same finding.
 - Runner tests (`test_experiment_runs.py`) advance a real arm per model-backed framework through
   the real invoker and assert the record rather than the adapter: an answered turn, tool events
   numbered from zero and versioned from the published table, a duration on every call, usage and
-  duration on the attempt, and metrics that count what the events say. A second sweep asserts
+  duration on the attempt, metrics that count what the events say, and an estimated cost above
+  zero rather than merely present — the reading that separates an arm which called a provider
+  from one which called none. A second sweep asserts
   Milestone 4's standing criterion for the new framework — nothing the lab recorded about a call
   names the framework that made it or spells a tool the provider's way — and deliberately holds
   the *reply* to less, because an arm's words are recorded verbatim.
@@ -329,8 +337,12 @@ the Studio runs on.
   framework declared without one would fail there rather than silently sweep two arms.
 - Live smoke tests (`test_live_model_runtimes.py`, renamed from `test_live_pydantic_ai.py`) are
   swept over both model-backed frameworks, with an offline test asserting that every framework
-  reaching a provider has one — so the live suite cannot quietly cover half of a comparison. They
-  remain opt-in and were not run in this slice.
+  reaching a provider has one, and that each is asked on a provider and model the catalog
+  declares for it — so the live suite cannot quietly cover half of a comparison, and the
+  published-for claim has a test rather than a convention behind it. Their model settings are
+  read from the catalog rather than from the offline suite's default, which names the control
+  arm's `fake`/`deterministic` and would have asked OpenAI for a model called "deterministic".
+  They remain opt-in and were not run in this slice.
 
 ## Dependencies
 
