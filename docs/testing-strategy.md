@@ -35,6 +35,15 @@ call vocabulary, the string arguments, the classified failures, the neutral usag
 record — because what a comparison reads is the difference between two arms, and a difference in
 shape would be a difference between two adapters.
 
+`test_framework_comparison.py` is the one suite that runs an experiment rather than an adapter
+(ADR 0042): two arms differing only in framework, driven through the whole wrong-address incident
+and read through every surface the lab serves. Offline it can only hold the arms' *decisions*
+identical — both follow one declared script through each SDK's own model seam — so what it proves
+is that identical decisions leave identical evidence, that what each framework contributed is
+separately attributable, and that neither arm's world or vocabulary reaches the other. Two models
+choosing differently is what the credential-gated live suite is for, and no offline suite may be
+read as having shown it.
+
 LLM-judge integration tests use an injected deterministic judge. Live judge calls are optional and
 credential-gated. Tests must prove that deterministic outcomes do not change when a judge fails or
 is rerun, anonymized inputs omit framework labels, and every judge result records its configuration
