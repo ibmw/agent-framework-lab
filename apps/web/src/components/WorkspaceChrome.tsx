@@ -87,6 +87,65 @@ export function Card({
   );
 }
 
+/**
+ * One saved entry in an editor's list. A row that carries only a title and a Remove button
+ * cannot be read back — the configuration becomes write-only — so the identifying line and
+ * the stored fields live in the same component, and every list that has fields to show uses
+ * it rather than inventing its own row.
+ */
+export function EntryCard({
+  lead,
+  title,
+  chips,
+  actions,
+  children,
+}: {
+  /** A control that selects the entry, such as the default-tone radio. */
+  lead?: ReactNode;
+  title: ReactNode;
+  chips?: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <li className="grid gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {lead}
+        <span className="text-[13px] font-semibold">{title}</span>
+        {chips}
+        {actions ? <div className="ml-auto flex items-center gap-1.5">{actions}</div> : null}
+      </div>
+      {children}
+    </li>
+  );
+}
+
+/** The identifier a scenario binding or a tool read names, shown where the entry is read. */
+export function EntryId({ value }: { value: string }) {
+  return (
+    <code className="rounded bg-admin-border/60 px-1.5 py-0.5 font-mono text-[11px] text-admin-ink-soft">
+      {value}
+    </code>
+  );
+}
+
+/**
+ * Stored prose, shown whole and with its authored line breaks intact. The shell has one
+ * treatment for long text — the resolved-prompt panel — and this is it, so a policy body
+ * reads the same wherever it is inspected rather than being clamped on one page and
+ * folded away on another.
+ */
+export function EntryText({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <span className="text-xs font-semibold text-admin-muted">{label}</span>
+      <p className="rounded-lg border border-admin-border bg-admin-surface p-3 text-[13px] leading-relaxed whitespace-pre-wrap text-admin-ink-soft">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export function IssueList({ issues }: { issues: DefinitionIssueSchema[] }) {
   if (issues.length === 0) {
     return (

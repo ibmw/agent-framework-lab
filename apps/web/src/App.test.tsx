@@ -74,8 +74,36 @@ const READY_CONTENT: ShopDraftResponse["content"] = {
       ratings: { review_count: 1, average_rating: "5.0" },
     },
   ],
+  policies: [
+    {
+      id: "shipping-policy",
+      title: "Shipping and delivery",
+      kind: "shipping",
+      // Authored with a paragraph break, so the rendering has to keep one.
+      body: "Standard delivery is 2 to 5 working days.\n\nExpress is next working day.",
+    },
+  ],
+  faq: [
+    {
+      id: "delivery-times",
+      question: "When will my order arrive?",
+      answer: "Standard delivery arrives in 2 to 5 working days.",
+    },
+  ],
+  support_guidelines: [
+    {
+      id: "escalation",
+      title: "When to escalate",
+      body: "Escalate to tier 2 for any refund above 200 EUR.",
+    },
+  ],
   tone_of_voice_guidelines: [
-    { id: "warm", name: "Warm and precise", guidance: "Be kind.", is_default: true },
+    {
+      id: "warm",
+      name: "Warm and precise",
+      guidance: "Lead with the fact, then the action, then what happens next.",
+      is_default: true,
+    },
   ],
   default_tone_of_voice_id: "warm",
 };
@@ -307,6 +335,64 @@ describe("shop workspace", () => {
     });
   });
 
+  it("shows the body of every saved policy and FAQ entry, not only its title", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+
+    const policies = await screen.findByRole("region", { name: "Policies" });
+    expect(within(policies).getByText("Shipping and delivery")).toBeVisible();
+    expect(within(policies).getByText("shipping", { selector: "span" })).toBeVisible();
+    expect(within(policies).getByText("shipping-policy", { selector: "code" })).toBeVisible();
+    const body = within(policies).getByText(/Standard delivery is 2 to 5 working days/);
+    expect(body).toBeVisible();
+    // The blank line the author typed survives to the page rather than collapsing.
+    expect(body.textContent).toBe(
+      "Standard delivery is 2 to 5 working days.\n\nExpress is next working day.",
+    );
+
+    const faq = screen.getByRole("region", { name: "FAQ" });
+    expect(within(faq).getByText("When will my order arrive?")).toBeVisible();
+    expect(
+      within(faq).getByText("Standard delivery arrives in 2 to 5 working days."),
+    ).toBeVisible();
+    expect(within(faq).getByText("delivery-times", { selector: "code" })).toBeVisible();
+  });
+
+  it("shows the body of a saved support guideline and the text of a tone of voice", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/support`);
+
+    expect(
+      await screen.findByText("Escalate to tier 2 for any refund above 200 EUR."),
+    ).toBeVisible();
+    expect(screen.getByText("escalation", { selector: "code" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("link", { name: "Tone of voice" }));
+
+    expect(
+      await screen.findByText("Lead with the fact, then the action, then what happens next."),
+    ).toBeVisible();
+    expect(screen.getByText("warm", { selector: "code" })).toBeVisible();
+  });
+
+  it("keeps adding and removing an entry working now that the body is on the row", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+
+    const faq = await screen.findByRole("region", { name: "FAQ" });
+    await userEvent.click(
+      within(faq).getByRole("button", { name: "Remove When will my order arrive?" }),
+    );
+
+    expect(within(faq).queryByText("When will my order arrive?")).toBeNull();
+    expect(within(faq).queryByText("Standard delivery arrives in 2 to 5 working days.")).toBeNull();
+
+    await userEvent.type(within(faq).getByLabelText("ID"), "sizing");
+    await userEvent.type(within(faq).getByLabelText("Question"), "Does it run small?");
+    await userEvent.type(within(faq).getByLabelText("Answer"), "It runs roomy over a mid-layer.");
+    await userEvent.click(within(faq).getByRole("button", { name: "Add FAQ entry" }));
+
+    expect(within(faq).getByText("Does it run small?")).toBeVisible();
+    expect(within(faq).getByText("It runs roomy over a mid-layer.")).toBeVisible();
+  });
+
   it("shows a published version as read-only frozen content", async () => {
     versions = {
       versions: [
@@ -340,5 +426,27 @@ describe("shop workspace", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText("NS-ASJ-OB-M")).toBeVisible();
     expect(within(table).getByText("249.00 EUR")).toBeVisible();
+
+    // A frozen version has to be readable, not merely counted: the documents an agent
+    // could have read at v1 are the evidence a later run is compared against.
+    const policies = screen.getByRole("region", { name: "Policies" });
+    expect(within(policies).getByText(/Standard delivery is 2 to 5 working days/).textContent).toBe(
+      "Standard delivery is 2 to 5 working days.\n\nExpress is next working day.",
+    );
+    expect(
+      within(screen.getByRole("region", { name: "FAQ" })).getByText(
+        "Standard delivery arrives in 2 to 5 working days.",
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: "Support guidelines" })).getByText(
+        "Escalate to tier 2 for any refund above 200 EUR.",
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: "Tone of voice" })).getByText(
+        "Lead with the fact, then the action, then what happens next.",
+      ),
+    ).toBeVisible();
   });
 });

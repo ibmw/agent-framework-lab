@@ -8,7 +8,15 @@ import type {
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useState } from "react";
-import { Card, IssueList, PageHeader, VersionChips } from "../components/WorkspaceChrome";
+import {
+  Card,
+  EntryCard,
+  EntryId,
+  EntryText,
+  IssueList,
+  PageHeader,
+  VersionChips,
+} from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -72,9 +80,25 @@ function SetupPage({ title, children }: { title: string; children: ReactNode }) 
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button className={`${subtleButtonClasses} ml-auto`} type="button" onClick={onClick}>
+    <button className={subtleButtonClasses} type="button" onClick={onClick}>
       Remove {label}
     </button>
+  );
+}
+
+/**
+ * The authoring form sits below the saved entries it adds to. Now that an entry carries its
+ * body, the rule is what tells an author where the saved configuration ends and the blank
+ * form begins.
+ */
+const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
+
+/** A muted classification chip — a policy's kind, a payment method's rail. */
+function KindChip({ value }: { value: string }) {
+  return (
+    <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
+      {value}
+    </span>
   );
 }
 
@@ -214,44 +238,52 @@ function PaymentAndFulfilmentCards() {
   return (
     <>
       <Card title="Payment methods">
-        <ul className="grid gap-1.5 text-[13px]">
+        <ul className="grid gap-2 text-[13px]">
           {content.payment_methods.map((method) => (
-            <li key={method.id} className="flex items-center gap-2">
-              <span className="font-semibold">{method.name}</span>
-              <span className="text-admin-muted">{method.kind}</span>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={method.enabled}
-                  onChange={() =>
+            <EntryCard
+              key={method.id}
+              title={method.name}
+              chips={
+                <>
+                  <KindChip value={method.kind} />
+                  <EntryId value={method.id} />
+                  <label className="flex items-center gap-1.5 text-[12px] text-admin-muted">
+                    <input
+                      type="checkbox"
+                      checked={method.enabled}
+                      onChange={() =>
+                        edit({
+                          ...content,
+                          payment_methods: content.payment_methods.map((entry) =>
+                            entry.id === method.id ? { ...entry, enabled: !entry.enabled } : entry,
+                          ),
+                        })
+                      }
+                    />
+                    enabled
+                  </label>
+                </>
+              }
+              actions={
+                <RemoveButton
+                  label={method.name}
+                  onClick={() =>
                     edit({
                       ...content,
-                      payment_methods: content.payment_methods.map((entry) =>
-                        entry.id === method.id ? { ...entry, enabled: !entry.enabled } : entry,
+                      payment_methods: content.payment_methods.filter(
+                        (entry) => entry.id !== method.id,
                       ),
                     })
                   }
                 />
-                enabled
-              </label>
-              <RemoveButton
-                label={method.name}
-                onClick={() =>
-                  edit({
-                    ...content,
-                    payment_methods: content.payment_methods.filter(
-                      (entry) => entry.id !== method.id,
-                    ),
-                  })
-                }
-              />
-            </li>
+              }
+            />
           ))}
           {content.payment_methods.length === 0 ? (
             <li className="text-admin-muted">No payment method yet.</li>
           ) : null}
         </ul>
-        <form className="grid gap-2 sm:grid-cols-4" onSubmit={addPayment}>
+        <form className={`${addFormClasses} sm:grid-cols-4`} onSubmit={addPayment}>
           <label className={fieldLabelClasses}>
             ID
             <input
@@ -297,31 +329,39 @@ function PaymentAndFulfilmentCards() {
       </Card>
 
       <Card title="Fulfilment methods">
-        <ul className="grid gap-1.5 text-[13px]">
+        <ul className="grid gap-2 text-[13px]">
           {content.fulfilment_methods.map((method) => (
-            <li key={method.id} className="flex items-center gap-2">
-              <span className="font-semibold">{method.name}</span>
-              <span className="text-admin-muted">
-                {method.carrier} · {method.min_transit_days}–{method.max_transit_days} days
-              </span>
-              <RemoveButton
-                label={method.name}
-                onClick={() =>
-                  edit({
-                    ...content,
-                    fulfilment_methods: content.fulfilment_methods.filter(
-                      (entry) => entry.id !== method.id,
-                    ),
-                  })
-                }
-              />
-            </li>
+            <EntryCard
+              key={method.id}
+              title={method.name}
+              chips={
+                <>
+                  <span className="text-[12px] text-admin-muted">
+                    {method.carrier} · {method.min_transit_days}–{method.max_transit_days} days
+                  </span>
+                  <EntryId value={method.id} />
+                </>
+              }
+              actions={
+                <RemoveButton
+                  label={method.name}
+                  onClick={() =>
+                    edit({
+                      ...content,
+                      fulfilment_methods: content.fulfilment_methods.filter(
+                        (entry) => entry.id !== method.id,
+                      ),
+                    })
+                  }
+                />
+              }
+            />
           ))}
           {content.fulfilment_methods.length === 0 ? (
             <li className="text-admin-muted">No fulfilment method yet.</li>
           ) : null}
         </ul>
-        <form className="grid gap-2 sm:grid-cols-5" onSubmit={addFulfilment}>
+        <form className={`${addFormClasses} sm:grid-cols-5`} onSubmit={addFulfilment}>
           <label className={fieldLabelClasses}>
             ID
             <input
@@ -409,29 +449,37 @@ export function PoliciesAndFaqPage() {
   return (
     <SetupPage title="Policies & FAQ">
       <Card title="Policies">
-        <ul className="grid gap-1.5 text-[13px]">
+        <ul className="grid gap-2 text-[13px]">
           {content.policies.map((entry) => (
-            <li key={entry.id} className="flex items-start gap-2">
-              <span className="font-semibold">{entry.title}</span>
-              <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
-                {entry.kind}
-              </span>
-              <RemoveButton
-                label={entry.title}
-                onClick={() =>
-                  edit({
-                    ...content,
-                    policies: content.policies.filter((item) => item.id !== entry.id),
-                  })
-                }
-              />
-            </li>
+            <EntryCard
+              key={entry.id}
+              title={entry.title}
+              chips={
+                <>
+                  <KindChip value={entry.kind} />
+                  <EntryId value={entry.id} />
+                </>
+              }
+              actions={
+                <RemoveButton
+                  label={entry.title}
+                  onClick={() =>
+                    edit({
+                      ...content,
+                      policies: content.policies.filter((item) => item.id !== entry.id),
+                    })
+                  }
+                />
+              }
+            >
+              <EntryText label="Body" value={entry.body} />
+            </EntryCard>
           ))}
           {content.policies.length === 0 ? (
             <li className="text-admin-muted">No policy yet.</li>
           ) : null}
         </ul>
-        <form className="grid gap-2" onSubmit={addPolicy}>
+        <form className={addFormClasses} onSubmit={addPolicy}>
           <div className="grid gap-2 sm:grid-cols-3">
             <label className={fieldLabelClasses}>
               ID
@@ -485,23 +533,29 @@ export function PoliciesAndFaqPage() {
       </Card>
 
       <Card title="FAQ">
-        <ul className="grid gap-1.5 text-[13px]">
+        <ul className="grid gap-2 text-[13px]">
           {content.faq.map((entry) => (
-            <li key={entry.id} className="flex items-start gap-2">
-              <span className="font-semibold">{entry.question}</span>
-              <RemoveButton
-                label={entry.question}
-                onClick={() =>
-                  edit({ ...content, faq: content.faq.filter((item) => item.id !== entry.id) })
-                }
-              />
-            </li>
+            <EntryCard
+              key={entry.id}
+              title={entry.question}
+              chips={<EntryId value={entry.id} />}
+              actions={
+                <RemoveButton
+                  label={entry.question}
+                  onClick={() =>
+                    edit({ ...content, faq: content.faq.filter((item) => item.id !== entry.id) })
+                  }
+                />
+              }
+            >
+              <EntryText label="Answer" value={entry.answer} />
+            </EntryCard>
           ))}
           {content.faq.length === 0 ? (
             <li className="text-admin-muted">No FAQ entry yet.</li>
           ) : null}
         </ul>
-        <form className="grid gap-2" onSubmit={addFaq}>
+        <form className={addFormClasses} onSubmit={addFaq}>
           <div className="grid gap-2 sm:grid-cols-2">
             <label className={fieldLabelClasses}>
               ID
@@ -548,29 +602,35 @@ export function SupportGuidelinesPage() {
   return (
     <SetupPage title="Support guidelines">
       <Card title="Guidelines">
-        <ul className="grid gap-1.5 text-[13px]">
+        <ul className="grid gap-2 text-[13px]">
           {content.support_guidelines.map((entry) => (
-            <li key={entry.id} className="flex items-start gap-2">
-              <span className="font-semibold">{entry.title}</span>
-              <RemoveButton
-                label={entry.title}
-                onClick={() =>
-                  edit({
-                    ...content,
-                    support_guidelines: content.support_guidelines.filter(
-                      (item) => item.id !== entry.id,
-                    ),
-                  })
-                }
-              />
-            </li>
+            <EntryCard
+              key={entry.id}
+              title={entry.title}
+              chips={<EntryId value={entry.id} />}
+              actions={
+                <RemoveButton
+                  label={entry.title}
+                  onClick={() =>
+                    edit({
+                      ...content,
+                      support_guidelines: content.support_guidelines.filter(
+                        (item) => item.id !== entry.id,
+                      ),
+                    })
+                  }
+                />
+              }
+            >
+              <EntryText label="Body" value={entry.body} />
+            </EntryCard>
           ))}
           {content.support_guidelines.length === 0 ? (
             <li className="text-admin-muted">No support guideline yet.</li>
           ) : null}
         </ul>
         <form
-          className="grid gap-2"
+          className={addFormClasses}
           onSubmit={(event) => {
             event.preventDefault();
             const entry: SupportGuidelineSchema = guideline;
@@ -640,44 +700,53 @@ export function ToneOfVoicePage() {
       <Card title="Guidelines">
         <ul className="grid gap-2 text-[13px]">
           {content.tone_of_voice_guidelines.map((entry) => (
-            <li key={entry.id} className="flex items-start gap-2">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  name="default-tone"
-                  checked={entry.is_default}
-                  onChange={() => setDefault(entry.id)}
+            <EntryCard
+              key={entry.id}
+              lead={
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="default-tone"
+                    checked={entry.is_default}
+                    onChange={() => setDefault(entry.id)}
+                  />
+                  <span className="sr-only">Make {entry.name} the shop default</span>
+                </label>
+              }
+              title={entry.name}
+              chips={
+                <>
+                  <EntryId value={entry.id} />
+                  {entry.is_default ? (
+                    <span className="rounded-full bg-admin-published px-2 py-0.5 text-[11px] font-semibold text-admin-published-ink">
+                      ● shop default
+                    </span>
+                  ) : null}
+                </>
+              }
+              actions={
+                <RemoveButton
+                  label={entry.name}
+                  onClick={() =>
+                    edit({
+                      ...content,
+                      tone_of_voice_guidelines: content.tone_of_voice_guidelines.filter(
+                        (item) => item.id !== entry.id,
+                      ),
+                    })
+                  }
                 />
-                <span className="sr-only">Make {entry.name} the shop default</span>
-              </label>
-              <div>
-                <span className="font-semibold">{entry.name}</span>
-                {entry.is_default ? (
-                  <span className="ml-2 rounded-full bg-admin-published px-2 py-0.5 text-[11px] font-semibold text-admin-published-ink">
-                    ● shop default
-                  </span>
-                ) : null}
-                <p className="text-admin-muted">{entry.guidance}</p>
-              </div>
-              <RemoveButton
-                label={entry.name}
-                onClick={() =>
-                  edit({
-                    ...content,
-                    tone_of_voice_guidelines: content.tone_of_voice_guidelines.filter(
-                      (item) => item.id !== entry.id,
-                    ),
-                  })
-                }
-              />
-            </li>
+              }
+            >
+              <EntryText label="Guidance" value={entry.guidance} />
+            </EntryCard>
           ))}
           {content.tone_of_voice_guidelines.length === 0 ? (
             <li className="text-admin-muted">No tone-of-voice guideline yet.</li>
           ) : null}
         </ul>
         <form
-          className="grid gap-2"
+          className={addFormClasses}
           onSubmit={(event) => {
             event.preventDefault();
             const entry: ToneOfVoiceSchema = {

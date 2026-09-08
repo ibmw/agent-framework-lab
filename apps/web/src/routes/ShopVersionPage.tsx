@@ -3,7 +3,14 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { getShopVersion } from "../api/shops";
-import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
+import {
+  Card,
+  EntryCard,
+  EntryId,
+  EntryText,
+  Fingerprint,
+  PageHeader,
+} from "../components/WorkspaceChrome";
 import { ratingLabel, variantOptionLabel, variantPriceLabel } from "../lib/shop";
 import { formatTimestamp, tableCellClasses, tableHeadClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
@@ -111,6 +118,56 @@ export function ShopVersionPage() {
               ) : null}
             </Card>
           ))}
+
+          <Card title="Policies">
+            <DocumentList
+              entries={content.policies.map((entry) => ({
+                id: entry.id,
+                title: entry.title,
+                kind: entry.kind,
+                label: "Body",
+                text: entry.body,
+              }))}
+              empty="This version froze no policy."
+            />
+          </Card>
+
+          <Card title="FAQ">
+            <DocumentList
+              entries={content.faq.map((entry) => ({
+                id: entry.id,
+                title: entry.question,
+                label: "Answer",
+                text: entry.answer,
+              }))}
+              empty="This version froze no FAQ entry."
+            />
+          </Card>
+
+          <Card title="Support guidelines">
+            <DocumentList
+              entries={content.support_guidelines.map((entry) => ({
+                id: entry.id,
+                title: entry.title,
+                label: "Body",
+                text: entry.body,
+              }))}
+              empty="This version froze no support guideline."
+            />
+          </Card>
+
+          <Card title="Tone of voice">
+            <DocumentList
+              entries={content.tone_of_voice_guidelines.map((entry) => ({
+                id: entry.id,
+                title: entry.name,
+                kind: entry.is_default ? "shop default" : undefined,
+                label: "Guidance",
+                text: entry.guidance,
+              }))}
+              empty="This version froze no tone-of-voice guideline."
+            />
+          </Card>
         </div>
 
         <div className="grid content-start gap-4">
@@ -128,13 +185,14 @@ export function ShopVersionPage() {
             <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
               {content.payment_methods.map((method) => (
                 <li key={method.id}>
-                  {method.name} · {method.kind} · {method.enabled ? "enabled" : "disabled"}
+                  {method.name} · {method.kind} · {method.enabled ? "enabled" : "disabled"} ·{" "}
+                  <EntryId value={method.id} />
                 </li>
               ))}
               {content.fulfilment_methods.map((method) => (
                 <li key={method.id}>
                   {method.name} · {method.carrier} · {method.min_transit_days}–
-                  {method.max_transit_days} days
+                  {method.max_transit_days} days · <EntryId value={method.id} />
                 </li>
               ))}
             </ul>
@@ -142,5 +200,47 @@ export function ShopVersionPage() {
         </div>
       </div>
     </>
+  );
+}
+
+interface FrozenDocument {
+  id: string;
+  title: string;
+  /** A classification worth naming beside the title: a policy kind, the default tone. */
+  kind?: string;
+  label: string;
+  text: string;
+}
+
+/**
+ * The frozen documents an agent could read at this version, shown in full. A published
+ * version that reported only how many documents it held could not be compared against the
+ * draft that succeeded it, which is the whole point of freezing one.
+ */
+function DocumentList({ entries, empty }: { entries: FrozenDocument[]; empty: string }) {
+  if (entries.length === 0) {
+    return <p className="text-[13px] text-admin-muted">{empty}</p>;
+  }
+  return (
+    <ul className="grid gap-2">
+      {entries.map((entry) => (
+        <EntryCard
+          key={entry.id}
+          title={entry.title}
+          chips={
+            <>
+              {entry.kind ? (
+                <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
+                  {entry.kind}
+                </span>
+              ) : null}
+              <EntryId value={entry.id} />
+            </>
+          }
+        >
+          <EntryText label={entry.label} value={entry.text} />
+        </EntryCard>
+      ))}
+    </ul>
   );
 }
