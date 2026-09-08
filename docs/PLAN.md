@@ -118,7 +118,18 @@ dimension; both adapters now derive their tool schema from one rendering of the 
 so "both arms were offered the same tools" is a property rather than a resemblance; and what the
 two leave behind is swept as one shape — the same call vocabulary, string arguments, classified
 failures, neutral usage and stored record — while what they said, chose and spent stays free to
-differ, which is the whole of what a comparison reads (ADR 0041).
+differ, which is the whole of what a comparison reads (ADR 0041). And finally the question the
+whole roadmap was built to ask, asked: one wrong-address recipe, one canonical snapshot, two
+arms differing in the framework and in nothing else, both driven through the reads, the redirect
+under its proposal and confirmation, and the fault firing between them — read back through every
+surface the lab serves and asserted to agree in all of it, while each framework's own
+contribution stays separately attributable and neither arm's world or vocabulary reaches the
+other. Offline that holds the two arms' *decisions* identical by construction, so what it
+establishes is the evidence model rather than a difference between frameworks; how two models
+actually choose is what a credentialed run adds, and no such run has been made here. Proving it
+found the defect an adapter sweep could not: one SDK was showing its model a Python repr of the
+tool result where the other showed JSON, so the two arms were being asked the same question in
+two notations — now rendered once, by the lab, for both (ADR 0042), which completes Milestone 6.
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -900,9 +911,39 @@ environment, scenario, runner, and evidence model are proven.
 - [x] Implement it behind the shared target contracts and conformance suite.
 - [x] Produce equivalent normalized tools, events, traces, and evaluation inputs.
 - [x] Document project-owned glue code, constraints, failures, and observed behavior.
-- [ ] Prove the wrong-address scenario in a two-arm comparison.
+- [x] Prove the wrong-address scenario in a two-arm comparison. Proved offline, where the two
+  arms' decisions are held identical by construction, so what it establishes is the evidence
+  model and not a behavioral difference between frameworks; what only a credentialed run can
+  show is named in ADR 0042 rather than claimed here.
 
 Frames: none new; this milestone reuses the Milestone 3–5 surfaces (frames 5, 7–10).
+
+Comparison evidence (frames 9 and 9b, and the bench that fills them): the lab is asked its own
+question. One published wrong-address recipe, one canonical snapshot, and two arms whose
+configurations agree on the identity, the model, the prompt, the tools and the architecture and
+disagree on one thing — so the setup matrix shows a single difference and the gate's
+comparison-variable warning stays silent. Both arms are driven through the incident: they read
+where the conversation started, read the order the customer quotes, read the shipping policy,
+read the address book, propose the redirect and apply the confirmation the proposal answered
+with, while the scenario's fault moves the order under them between two of those calls. Then
+every surface is read arm beside arm and has to agree: the same calls under the same published
+names and versions, the same normalized stream in the lab's own words, the same span tree, both
+objectives met from the two readings that decide them — a call that answered and a world that
+moved — the same fields moving in both diffs, and a cost that is measured in both and zero in
+neither. Nothing one arm did reaches the other: they claim one starting-state fingerprint,
+advancing one leaves the other byte-identical at revision zero, and the confirmation each mints
+authorizes only its own world. And no framework names itself anywhere in what either arm left,
+swept against the whole catalog rather than the two under test — over the readings, and again
+over what the API serves, where the word appears only under the fields that exist to declare it.
+The limit is stated where it belongs: offline both arms follow one declared script through each
+SDK's own model seam, so identical decisions are the premise rather than a finding, and two
+models choosing differently is what a credentialed run adds. ADR 0042 records the split between
+what the offline comparison establishes and what it cannot, the one declaration both arms are
+driven from and why it imports no SDK, the shape comparison that gains a field the day one is
+authored, the framework named only where the contract declares it, and the defect a two-arm run
+found that an adapter sweep could not — one SDK rendering a tool result as a Python repr where
+the other rendered JSON, so the arms were shown the same facts in two notations, now rendered
+once by the lab for both.
 
 The Vercel AI SDK was evaluated and rejected for this comparison: the lab's evidence guarantees
 are properties of a Python call path, and re-establishing them across a Node process boundary
