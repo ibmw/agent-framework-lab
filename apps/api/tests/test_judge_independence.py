@@ -50,7 +50,7 @@ from capability_lab.application.experiments import (
     ExperimentDetail,
     StartExperiment,
 )
-from capability_lab.application.judge_brief import ArmRecord, judge_brief
+from capability_lab.application.judge_brief import judge_brief_fingerprint
 from capability_lab.application.judge_capabilities import OPENAI_JUDGE_PROVIDER
 from capability_lab.application.judge_configurations import JudgeConfigurationService
 from capability_lab.application.judge_runtime import (
@@ -325,10 +325,14 @@ def evaluate(session: Session, detail: ExperimentDetail) -> tuple[ArmEvaluation,
     )
 
 
+def stored(session: Session, detail: ExperimentDetail) -> tuple[JudgementRecord, ...]:
+    """Every execution the store holds for this experiment, bound to the arm that read it."""
+    return SqlAlchemyJudgementRepository(session).list_for_experiment(detail.record.experiment_id)
+
+
 def executions(session: Session, detail: ExperimentDetail) -> tuple[Judgement, ...]:
-    """Every execution the store holds for this experiment, whatever it produced."""
-    stored = SqlAlchemyJudgementRepository(session).list_for_experiment(detail.record.experiment_id)
-    return tuple(record.judgement for record in stored)
+    """The same, narrowed to what each execution produced."""
+    return tuple(record.judgement for record in stored(session, detail))
 
 
 def row(evaluation: ArmEvaluation, objective_id: str) -> ObjectiveResult:
@@ -461,25 +465,44 @@ RECORDED_FAILURES: Mapping[str, tuple[Exception, JudgeFailure]] = MappingProxyTy
     }
 )
 
-CLASSIFIED_ERRORS: tuple[type[JudgeRuntimeError], ...] = (
-    JudgeRuntimeError,
-    *JudgeRuntimeError.__subclasses__(),
-)
+
+def classified_errors() -> set[type[JudgeRuntimeError]]:
+    """Every error class the port declares, walked to the leaves.
+
+    Recursive rather than `__subclasses__()` alone, because the port's whole design is that
+    an adapter classifies by subclassing: a refinement under `JudgeTransientError` — a
+    timeout, say — is exactly the shape a future adapter adds, and a direct-children check
+    would let it in without ever being raised through the recorder.
+
+    Resolved when the test runs rather than at import, so this set is the port's own
+    declarations plus whatever the *running suite* has defined under them. A subclass
+    written in another module to stand in for a provider is then a subclass this sweep is
+    asked about, which is the honest reading of "every classified error this lab has".
+    """
+    found: set[type[JudgeRuntimeError]] = {JudgeRuntimeError}
+    pending = [JudgeRuntimeError]
+    while pending:
+        for subclass in pending.pop().__subclasses__():
+            if subclass not in found:
+                found.add(subclass)
+                pending.append(subclass)
+    return found
 
 
 def test_the_failure_sweep_covers_every_way_an_execution_can_end_without_a_verdict() -> None:
     """The non-vacuity check ADR 0023 made a rule: a sweep asserts what it swept.
 
     Two claims. Every code the record can carry is exercised, so a failure this lab can
-    write is never outside these tests; and every classified error the port declares is
-    raised through the recorder, so an error class added beside them fails here rather than
-    quietly going untested.
+    write is never outside these tests; and every classified error the port declares —
+    including one declared under another — is raised through the recorder, so an error class
+    added beside them fails here rather than quietly going untested.
     """
     assert RECORDED_FAILURES
     assert {failure for _, failure in RECORDED_FAILURES.values()} == set(JudgeFailure)
     raised = {type(error) for error, _ in RECORDED_FAILURES.values()}
-    assert set(CLASSIFIED_ERRORS) <= raised
-    assert raised - set(CLASSIFIED_ERRORS), "a sweep of declared errors alone never sees a bug"
+    declared = classified_errors()
+    assert declared <= raised
+    assert raised - declared, "a sweep of declared errors alone never sees a bug"
 
 
 @pytest.mark.asyncio
@@ -856,45 +879,34 @@ def test_the_anonymity_sweep_is_over_the_catalog_and_not_over_a_list() -> None:
 async def test_the_brief_of_an_arm_names_nothing_the_catalog_declares_about_it(
     session: Session, workspace: Workspace, framework: ProvenFramework
 ) -> None:
-    """One arm per proven framework, actually run, and its brief read word by word.
+    """One arm per proven framework, actually run, and the brief it was scored on.
 
-    Built from the arm's own record through the same service that scores it, so the claim is
-    about what a judge is handed rather than about a fixture. A framework proven tomorrow is
-    swept the day it is declared, and until this test runs its arm nothing here can pass by
-    saying "framework" is absent from a document nobody produced.
+    Read off a real scoring pass rather than rebuilt beside one. A helper that narrowed the
+    arm's record itself would be the same *type* through different code, so a change to how
+    the pass narrows an arm would never reach this sweep — and what the criterion is about is
+    what a judge is actually handed. So the arm is scored with a judge published to see
+    everything there is to see, and the sweep reads the documents the runtime received.
+
+    A framework proven tomorrow is swept the day it is declared, and until this test runs its
+    arm nothing here can pass by saying "framework" is absent from a document nobody produced.
     """
     detail = start(session, workspace, arm(session, framework, SWEPT_TOOLS))
-    written = brief_words(session, await advance(session, detail))
+    detail = await advance(session, detail)
+    stub = StubJudge()
 
-    assert written, "an arm that produced no brief proves nothing about anonymity"
+    await score(session, detail, published_omniscient_judge(session), stub)
+
+    shown = [request.brief for request in stub.requests]
+    assert shown, "an arm that was never scored proves nothing about anonymity"
+    assert all(brief.get("agent_replies") and brief.get("tool_calls") for brief in shown), (
+        "this arm recorded neither words nor calls to be judged on"
+    )
+    written = " ".join(leaf for brief in shown for leaf in leaves(dict(brief))).casefold()
     for term in framework_identity_terms():
         assert term.casefold() not in written
     assert detail.runs[0].label.casefold() not in written
     assert str(detail.runs[0].run_id) not in written
     assert str(detail.record.experiment_id) not in written
-
-
-def brief_words(session: Session, detail: ExperimentDetail) -> str:
-    """The judged brief of this experiment's first arm, flattened to searchable text."""
-    run = detail.runs[0]
-    record = ArmRecord(
-        turns=tuple(entry.turn for entry in detail.turns if entry.run_id == run.run_id),
-        replies=tuple(entry.turn for entry in detail.agent_turns if entry.run_id == run.run_id),
-        calls=tuple(entry.event for entry in detail.tool_events if entry.run_id == run.run_id),
-    )
-    shown = judge_brief(
-        BoundObjective(id=RESOLVED, block_id=run.run_id),
-        publishable_objective(
-            name=RESOLVED,
-            assessment=ObjectiveAssessment.JUDGE,
-            evidence=ObjectiveEvidence.DIMENSION,
-            parameters=(),
-        ),
-        publishable_judge(evidence=tuple(JudgeEvidenceScope)),
-        record,
-    )
-    assert record.replies and record.calls, "this arm recorded nothing to be judged on"
-    return " ".join(leaves(shown)).casefold()
 
 
 # -- every verdict names what produced it ----------------------------------------
@@ -922,6 +934,23 @@ async def test_every_verdict_names_the_rubric_the_model_and_the_bytes_it_read(
     ).get_version(judge_id, 1)
     recorded = executions(session, detail)
     assert len(recorded) == len(JUDGED_ROWS) * len(detail.runs)
+    # The fingerprint of the bytes the runtime was *actually handed*, on the row that was
+    # handed them. A length check passes on a digest of the wrong brief, and a comparison of
+    # unaddressed sets passes on two rows whose fingerprints were swapped; pairing is what
+    # makes "this verdict was produced from this input" the thing being asserted. The pass
+    # asks arm by arm and, within an arm, objective by objective (`judge_runs.score`), which
+    # is what lets a request be addressed at all.
+    handed = {
+        (run.run_id, asked_about(request)): judge_brief_fingerprint(request.brief)
+        for run, request in zip(
+            [run for run in detail.runs for _ in JUDGED_ROWS], stub.requests, strict=True
+        )
+    }
+    assert handed == {
+        (record.run_id, record.judgement.objective_id): record.judgement.brief_fingerprint
+        for record in stored(session, detail)
+    }
+    assert len(handed) == len(recorded)
     for judgement in recorded:
         assert judgement.judge_id == judge_id
         assert judgement.judge_version == 1
@@ -996,6 +1025,11 @@ async def test_a_judge_answers_about_the_row_it_was_shown_and_cannot_move_the_on
 
 def published_control_judge(session: Session) -> UUID:
     return published(session, publishable_judge())
+
+
+def published_omniscient_judge(session: Session) -> UUID:
+    """A judge declared to see every scope there is, so the sweep reads the widest brief."""
+    return published(session, publishable_judge(evidence=tuple(JudgeEvidenceScope)))
 
 
 def published_openai_judge(session: Session) -> UUID:

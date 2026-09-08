@@ -98,9 +98,14 @@ sweep over it is held to two coverage checks in ADR 0023's spirit:
 
 - every member of `JudgeFailure` is produced by some entry, so a code the record can carry is
   never outside these tests; and
-- every classified error the port declares — `JudgeRuntimeError` and each of its subclasses,
-  read off `__subclasses__` rather than listed — is raised through the recorder, so an adapter
-  that gains a new way to break joins the sweep on the day it declares it.
+- every classified error the port declares — `JudgeRuntimeError` and every class beneath it,
+  walked recursively rather than listed — is raised through the recorder, so an adapter that
+  gains a new way to break joins the sweep on the day it declares it. Recursively because the
+  port's whole design is that an adapter classifies by subclassing: a refinement under
+  `JudgeTransientError`, a timeout being the obvious one, is exactly the shape a future
+  adapter adds, and a direct-children check would let it in unexercised. The set is resolved
+  when the test runs rather than at import, so a stand-in subclass written in another module
+  is a subclass this sweep is asked about.
 
 The table also carries one entry the port does *not* declare: a bare exception an adapter never
 classified. The coverage check asserts that it is there — a sweep of declared errors alone can
@@ -123,10 +128,13 @@ That is the ADR 0023 rule applied to the half of ADR 0031 that was still a list.
 proven tomorrow is checked the day it is declared, on both sides: the gate refuses its name in a
 rubric, and the brief is asserted not to carry it.
 
-Two details are load-bearing. The brief is built from an arm that actually ran, through the same
-`ArmRecord` the scoring pass narrows, so the claim is about what a judge is handed rather than
-about a fixture somebody wrote to pass. And the sweep asserts the arm produced both halves of a
-brief — words and calls — because a brief with nothing in it is anonymous for the wrong reason.
+Two details are load-bearing. The briefs are the ones a real scoring pass produced — the arm is
+scored with a judge published to see every scope there is, and the sweep reads the documents the
+runtime received — rather than rebuilt beside the pass by a helper that narrows the arm itself. A
+helper would be the same *type* through different code, so a change to how the pass narrows an arm
+would never reach the sweep, and what the criterion is about is what a judge is actually handed.
+And the sweep asserts each brief carries both halves, words and calls, because a brief with
+nothing in it is anonymous for the wrong reason.
 
 The swept arms are offered two tools rather than the full read set, and that is a compromise
 worth naming: the offline model behind the Pydantic AI runtime answers by echoing every tool
@@ -156,10 +164,13 @@ rubric *is* the prompt, so the test resolves the recorded version back out of th
 store and asserts the rubric the runtime was handed is the one that version froze. It is asserted
 over every row a pass filled rather than over one.
 
-A fingerprint that never moved would tie a verdict to nothing, so it is shown to move for the
-right reason: rescoring an arm that has not changed produces the same fingerprint at a new
-attempt, and rescoring after the customer has said one more thing produces a different one. That
-is the property the fingerprint exists for, stated so it can fail.
+The fingerprint is asserted to be the digest of the bytes the runtime was *actually handed*, on
+the row that was handed them — paired by arm and objective, because a length check passes on a
+digest of the wrong brief and an unaddressed set comparison passes on two rows whose fingerprints
+were swapped. And a fingerprint that never moved would tie a verdict to nothing, so it is shown to
+move for the right reason: rescoring an arm that has not changed produces the same fingerprint at
+a new attempt, and rescoring after the customer has said one more thing produces a different one.
+That is the property the fingerprint exists for, stated so it can fail.
 
 ## Consequences
 
@@ -223,17 +234,24 @@ is the property the fingerprint exists for, stated so it can fail.
 - Separation tests sweep the closed verdict vocabulary — every value a judge may return leaves the
   rule-decided reading unmoved — and write a judgement addressed at a deterministic row directly
   into the store to prove it does not reach it.
-- Anonymity tests run one arm per proven framework and read every string of its brief against the
-  catalog's own terms, plus the arm's label, its run identifier, and its experiment's.
+- Anonymity tests run one arm per proven framework, score it with a judge published to see every
+  scope, and read every string of the briefs the runtime received against the catalog's own terms,
+  plus the arm's label, its run identifier, and its experiment's.
 - Provenance tests cover every row of a pass naming its judge, version, provider, model and
-  fingerprint, with the rubric resolved back out of the published version; the fingerprint
+  fingerprint, with the rubric resolved back out of the published version and each fingerprint
+  paired against the digest of the brief that row's runtime call actually carried; the fingerprint
   unchanged when the record is and moved when the record moves; and a pass scoring two judged rows
   landing each verdict on the row whose brief asked for it.
-- Existing suites are extended rather than duplicated where the property already had a home:
-  nothing in `test_judge_runs.py`, `test_judge_brief.py`, `test_judge_runtimes.py` or
-  `test_evaluation.py` is restated here, and all of them still pass against the changed reading.
+- Existing suites are not re-derived: the mechanisms `test_judge_runs.py`,
+  `test_judge_brief.py`, `test_judge_runtimes.py` and `test_evaluation.py` already pin are read
+  as given, and all of them still pass against the changed reading. Two cases here do stand
+  where one of theirs does — the unreachable provider and the rerun after a failure — because
+  each gains the byte comparison beside it, which is the whole of what this slice adds to a case
+  that was previously asserted on one row.
 - No frontend or Playwright change. The reading's shape is unchanged — a row still carries at most
-  one judgement — so no consumer, contract, or journey moves.
+  one judgement — so no consumer or journey moves. The contract's own description of what a failed
+  execution does to a row is corrected in place, which is a documentation change to a published
+  operation rather than a change to it.
 
 ## Migration
 
