@@ -1,4 +1,4 @@
-.PHONY: install check check-contracts lint typecheck test test-migrations test-e2e contracts dev-api dev-web migrate
+.PHONY: install check check-contracts lint typecheck test test-migrations test-e2e contracts dev-api dev-web migrate seed
 
 install:
 	uv sync --all-packages
@@ -41,3 +41,6 @@ dev-web:
 migrate:
 	mkdir -p var
 	uv run alembic -c apps/api/alembic.ini upgrade head
+
+seed:
+	uv run python -m capability_lab.presentation.seed.cli
