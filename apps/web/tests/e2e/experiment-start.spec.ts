@@ -701,7 +701,10 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
       response.url().includes("/api/v1/experiments?") &&
       response.url().includes("framework_id=fake"),
   );
-  await page.getByLabel("Framework").selectOption({ label: "Deterministic fake" });
+  // Exact, like every other filter here: the Tag select's label carries its option text, so
+  // a seeded `framework-comparison` tag substring-matches "Framework" and the locator
+  // resolves to two elements.
+  await page.getByLabel("Framework", { exact: true }).selectOption({ label: "Deterministic fake" });
   await narrowed;
   await expect(row).toHaveCount(1);
   await page.getByLabel("Search").fill("a name nothing was given");

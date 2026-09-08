@@ -246,6 +246,9 @@ export function ExperimentHistoryPage() {
         </p>
       ) : null}
 
+      {/* Each control names itself. A select wrapped in a label takes its accessible name
+          from the whole label, options included, so "Framework" was announced — and matched
+          by tests — as "Framework All frameworks Deterministic fake …". */}
       <form
         aria-label="Narrow history"
         className="mb-4 flex flex-wrap items-end gap-3"
@@ -254,6 +257,7 @@ export function ExperimentHistoryPage() {
         <label className={`${fieldLabelClasses} min-w-64 flex-1`}>
           Search
           <input
+            aria-label="Search"
             className={fieldControlClasses}
             placeholder="Name, scenario, shop, configuration, tag, or note…"
             value={search}
@@ -266,6 +270,7 @@ export function ExperimentHistoryPage() {
         <label className={fieldLabelClasses}>
           Shop
           <select
+            aria-label="Shop"
             className={fieldControlClasses}
             value={shopId}
             onChange={(event) => narrow("shop", event.target.value)}
@@ -281,6 +286,7 @@ export function ExperimentHistoryPage() {
         <label className={fieldLabelClasses}>
           Scenario
           <select
+            aria-label="Scenario"
             className={fieldControlClasses}
             value={scenarioId}
             onChange={(event) => narrow("scenario", event.target.value)}
@@ -296,6 +302,7 @@ export function ExperimentHistoryPage() {
         <label className={fieldLabelClasses}>
           Framework
           <select
+            aria-label="Framework"
             className={fieldControlClasses}
             value={frameworkId}
             onChange={(event) => narrow("framework", event.target.value)}
@@ -311,6 +318,7 @@ export function ExperimentHistoryPage() {
         <label className={fieldLabelClasses}>
           Tag
           <select
+            aria-label="Tag"
             className={fieldControlClasses}
             value={tag}
             onChange={(event) => narrow("tag", event.target.value)}
@@ -326,6 +334,7 @@ export function ExperimentHistoryPage() {
         <label className={fieldLabelClasses}>
           Status
           <select
+            aria-label="Status"
             className={fieldControlClasses}
             value={status}
             onChange={(event) => narrow("status", event.target.value)}
@@ -341,6 +350,7 @@ export function ExperimentHistoryPage() {
         <label className={fieldLabelClasses}>
           Objective outcome
           <select
+            aria-label="Objective outcome"
             className={fieldControlClasses}
             value={outcome}
             onChange={(event) => narrow("outcome", event.target.value)}
@@ -356,6 +366,7 @@ export function ExperimentHistoryPage() {
         <label className={fieldLabelClasses}>
           Started
           <select
+            aria-label="Started"
             className={fieldControlClasses}
             value={span}
             onChange={(event) => narrow("span", event.target.value)}
