@@ -139,11 +139,20 @@ configuration doing what it was told. The adapter unwraps the cause before it cl
 else. This is the failure the slice actually hit, and the test for it asserts the recorded code
 rather than the exception type.
 
-**Tool calls are serialized twice over.** `parallel_tool_calls=False` asks the provider not to
-emit concurrent calls, and `max_function_tool_concurrency=1` stops the SDK starting them
-concurrently if it does anyway. A write is guarded by the revision it was proposed against
-(ADR 0022), so racing calls would refuse each other for no reason the agent could act on, and the
-recorded sequence is meant to be the order the agent asked rather than which call returned first.
+**Tool calls are serialized in the SDK, and deliberately not at the provider.**
+`max_function_tool_concurrency=1` makes the SDK start each call only after the previous one
+returned. A write is guarded by the revision it was proposed against (ADR 0022), so racing calls
+would refuse each other for no reason the agent could act on, and the recorded sequence is meant
+to be the order the agent asked rather than which call returned first.
+
+The SDK also offers `parallel_tool_calls=False`, which it forwards to the provider whenever tools
+are offered, and it is **not** set. Pydantic AI's `sequential=True` is an executor setting that
+emits no such flag, so sending it here would ask the two arms' model two different questions: one
+arm free to emit three reads in one response, the other forbidden to and needing three model
+requests for them — more requests, more cost, more duration, more budget spent, every one of it
+attributed by the metrics card to "the framework". That is the same argument that turns strict
+schemas off, applied to the request rather than to the tool. The SDK-side limit already gives the
+lab everything it needs, and the ordering test passes through that path alone.
 
 **The SDK's own tracing is disabled process-wide.** It exports spans carrying tool arguments and
 model output to a provider endpoint by default. `docs/observability.md` says a framework's own

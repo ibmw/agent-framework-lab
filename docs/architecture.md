@@ -166,9 +166,12 @@ behind is held to one shape — the same call vocabulary, string arguments, clas
 neutral usage, and stored record — while what they said, chose and spent is free to differ,
 because that difference is what a comparison reads. Where an SDK's defaults disagree with that,
 the adapter overrides them: a strict schema dialect that would make an optional argument
-mandatory, an error wrapper that would relabel the lab's own tool budget as a framework fault,
+mandatory, an error wrapper that would relabel a fault of the lab as a fault of the framework,
 concurrent tool execution that would race a revision-guarded write, and a vendor trace exporter
-the lab cannot promise the sanitization of.
+the lab cannot promise the sanitization of. What is deliberately *not* overridden is anything
+that would change the request the provider receives: an adapter that sent a setting its
+counterpart does not send would have the two arms asking different questions, and every reading
+downstream would attribute the difference to the framework.
 
 What an agent *is* for one experiment is authored rather than composed: a published agent
 configuration carries the framework, architecture, model and runtime settings, system prompt, tool

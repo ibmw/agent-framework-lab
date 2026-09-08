@@ -32,10 +32,13 @@ recognize comes back as `UserError("Error running tool ...")` with the original 
 configuration an author chose — as a fault of the framework. So the cause is unwrapped
 before anything else is classified.
 
-**Tools run one at a time, twice over.** `parallel_tool_calls=False` asks the provider not
-to emit concurrent calls, and `max_function_tool_concurrency=1` stops the SDK starting them
-concurrently if it does anyway. A write is guarded by the revision it was proposed against
-(ADR 0022), and the recorded sequence is meant to be the order the agent asked.
+**Tool calls are serialized in the SDK, not at the provider.**
+`max_function_tool_concurrency=1` makes the SDK start each call only after the previous one
+returned, which is what a revision-guarded write (ADR 0022) and a recorded sequence meant to
+be the order the agent asked actually need. `parallel_tool_calls` is deliberately *not* set:
+it changes the request the provider receives, and the arm beside this one does not send it —
+two arms asked different questions is the confound this framework was selected to avoid
+(ADR 0041).
 
 **The SDK's own tracing is switched off process-wide.** It exports spans carrying tool
 arguments and model output to a provider endpoint by default. The lab records the three
@@ -140,10 +143,11 @@ class OpenAiAgentsSupportAgentRuntime(SupportAgentRuntime):
             instructions=request.instructions,
             output_type=str,
             model=self._model(request.model.model_id),
-            model_settings=AgentsModelSettings(
-                temperature=float(request.model.temperature),
-                parallel_tool_calls=False,
-            ),
+            # Temperature and nothing else, which is exactly what the Pydantic AI arm
+            # sends. Every additional setting is a difference in the request the provider
+            # receives, and a difference there is attributed to the framework by everything
+            # downstream that reads the two arms.
+            model_settings=AgentsModelSettings(temperature=float(request.model.temperature)),
             tools=[_tool(contract, tools) for contract in request.tools],
         )
         try:
