@@ -106,7 +106,8 @@ async def seed_demo(services: SeedServices) -> DemoSeed:
     await services.scoring.score(shop_id, experiment_id, judge_id)
 
     services.annotations.set_tags(shop_id, experiment_id, content.DEMO_TAGS)
-    services.annotations.add_note(shop_id, experiment_id, content.DEMO_NOTE)
+    for note in content.DEMO_NOTES:
+        services.annotations.add_note(shop_id, experiment_id, note)
 
     return DemoSeed(
         shop_id=shop_id,

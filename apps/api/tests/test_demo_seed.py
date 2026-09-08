@@ -287,9 +287,17 @@ def test_the_seeded_cost_cards_are_measured_for_both_arms_and_zero_for_neither(
 ) -> None:
     """ADR 0032's reading, and the distinction it exists to keep.
 
-    An arm that reported nothing would read as unmeasured and an arm that reported zeros
-    would read as one that called no provider at all. The demo's cost cards must be neither,
-    or the screen they are on demonstrates nothing.
+    That distinction is measured against unmeasured against zero. An arm that reported
+    nothing would read as unmeasured and an arm that reported zeros would read as one that
+    called no provider at all, so a demo whose cost cards were either would demonstrate the
+    wrong thing.
+
+    What is deliberately *not* asserted is that the two arms differ. They do, because two
+    offline doubles invent their own figures — one estimates from message length and the
+    other reports a flat count per call — and that difference is an artefact of the doubles
+    rather than anything either framework did. Requiring it here would enshrine the artefact
+    as a property the demo has to keep, and the run's own label, tag and notes exist to tell
+    a reader not to read it as one.
     """
     detail = services.experiments.get_experiment(seeded.shop_id, seeded.experiment_id)
 
@@ -300,7 +308,6 @@ def test_the_seeded_cost_cards_are_measured_for_both_arms_and_zero_for_neither(
         assert metrics.estimated_cost is not None and metrics.estimated_cost.amount > 0
         assert metrics.duration_ms is not None and metrics.duration_ms > 0
         assert metrics.tool_writes == 1
-    assert detail.metrics[0].usage != detail.metrics[1].usage
 
 
 def test_the_seeded_evaluation_holds_a_judge_verdict_beside_the_rule_decided_rows(
@@ -336,7 +343,37 @@ def test_the_seeded_run_carries_the_note_and_the_tags_an_operator_would_have_wri
     annotations = services.annotations.get(seeded.shop_id, seeded.experiment_id)
 
     assert annotations.tags == tuple(sorted(content.DEMO_TAGS))
-    assert [note.body for note in annotations.notes] == [content.DEMO_NOTE]
+    assert [note.body for note in annotations.notes] == list(content.DEMO_NOTES)
+
+
+def test_the_seeded_run_says_on_its_own_surfaces_that_its_figures_are_a_doubles(
+    services: SeedServices, seeded: DemoSeed
+) -> None:
+    """The qualification, on the three surfaces a viewer reads rather than in a docstring.
+
+    Both arms walked one scripted incident against a double at each SDK's model seam, so the
+    tokens, the provider-call counts and the money the results screen prices them at are
+    figures the doubles invented. Shown without a word beside them they read as a framework
+    finding — precisely the global claim this product refuses to compute, off numbers ADR
+    0032 requires never to be mistakable for ones a provider billed.
+
+    Three places, because each reaches a different reader: the label is rendered on the
+    history row, the bench header and the results header that carries the cost card; the tag
+    is a chip on the run before anybody opens it; and the note is the sentence that says
+    what the numbers actually are. The label is asserted through the reading the screens
+    take rather than through the constant, so a demo that qualified only its source fails.
+    """
+    entry = services.history.history(ExperimentHistoryQuery()).entries[0]
+    detail = services.experiments.get_experiment(seeded.shop_id, seeded.experiment_id)
+    annotations = services.annotations.get(seeded.shop_id, seeded.experiment_id)
+
+    assert "offline demo" in entry.record.label.lower()
+    assert entry.record.label == detail.record.label
+    assert "offline-scripted" in entry.tags
+
+    qualification = annotations.notes[0].body.lower()
+    for word in ("offline", "test model", "cost", "live run"):
+        assert word in qualification
 
 
 def test_the_seeded_run_recorded_a_span_tree_and_a_timeline_for_every_arm(

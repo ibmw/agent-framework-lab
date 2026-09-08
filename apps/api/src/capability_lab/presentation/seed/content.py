@@ -120,7 +120,16 @@ SHOP_NAME = "Northstar Outfitters"
 TICKET_REFERENCE = "T-2041"
 TICKET_SUBJECT = "Order is going to my old address"
 SCENARIO_NAME = "Wrong shipping address before dispatch"
-EXPERIMENT_LABEL = "Wrong shipping address — Pydantic AI vs OpenAI Agents SDK"
+EXPERIMENT_LABEL = "Wrong shipping address — Pydantic AI vs OpenAI Agents SDK (offline demo)"
+"""What the run is called on every surface that names it.
+
+The parenthetical is load-bearing rather than decorative. Both arms walked one scripted
+incident against a double at each SDK's model seam, so the figures beside them — token
+counts, provider calls, and the money the results screen prices them at — are what two
+offline models reported about themselves. The history row, the bench header and the results
+header all render this string, which makes it the only place a qualification reaches a
+viewer who is being shown the screen rather than reading the source.
+"""
 IDENTITY_NAME = "Northstar tier 1"
 JUDGE_NAME = "Resolution quality"
 
@@ -134,13 +143,36 @@ REDIRECT_OBJECTIVE = "redirect-the-order"
 EXPLAINED_OBJECTIVE = "explain-the-change-to-the-customer"
 FAULT = "warehouse-picks-the-order"
 
-DEMO_TAGS: tuple[str, ...] = ("framework-comparison", "wrong-address", "milestone-6")
-DEMO_NOTE = (
-    "Both arms read the policy, proposed the redirect and applied their own confirmation, "
-    "so the write path is the same under either SDK. The warehouse pick fired while each "
-    "arm was still reading the order and neither noticed it — worth a second look at "
-    "whether the reply should mention that fulfilment had already started."
+DEMO_TAGS: tuple[str, ...] = ("framework-comparison", "offline-scripted", "wrong-address")
+"""How the run is filed.
+
+`offline-scripted` is here for the same reason the label carries its parenthetical: it is
+the chip that tells a reader filtering the history what kind of run this is before they open
+it and start reading numbers off it.
+"""
+
+DEMO_NOTES: tuple[str, ...] = (
+    (
+        "Read the cost and usage on this run as plumbing rather than as a finding. Both "
+        "arms followed one scripted incident through each SDK's own offline test model, so "
+        "the token counts, the provider-call counts and the money they are priced at are "
+        "figures the two doubles reported about themselves — they show that each "
+        "framework's meter is wired through to the record, and they say nothing about what "
+        "either framework would spend on a real provider. Only a live run can answer that."
+    ),
+    (
+        "Both arms read the policy, proposed the redirect and applied their own "
+        "confirmation, so the write path is the same under either SDK. The warehouse pick "
+        "fired while each arm was still reading the order and neither noticed it — worth a "
+        "second look at whether the reply should mention that fulfilment had already "
+        "started."
+    ),
 )
+"""The thread an operator left on the run, oldest first.
+
+Two notes rather than one, because they are two different statements: what the reader has to
+know before believing the screen, and what the reader might conclude from it.
+"""
 
 
 # -- the shop ------------------------------------------------------------------
