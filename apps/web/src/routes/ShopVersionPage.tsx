@@ -7,6 +7,7 @@ import {
   Card,
   EntryCard,
   EntryId,
+  EntryKind,
   EntryText,
   Fingerprint,
   PageHeader,
@@ -236,11 +237,7 @@ function DocumentList({ entries, empty }: { entries: FrozenDocument[]; empty: st
           title={entry.title}
           chips={
             <>
-              {entry.kind ? (
-                <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
-                  {entry.kind}
-                </span>
-              ) : null}
+              {entry.kind ? <EntryKind value={entry.kind} /> : null}
               <EntryId value={entry.id} />
             </>
           }

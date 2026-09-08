@@ -10,7 +10,14 @@ type Currency = ShopContentSchema["identity"]["currencies"][number];
 
 import { type FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Card, EntryId, IssueList, PageHeader, VersionChips } from "../components/WorkspaceChrome";
+import {
+  Card,
+  EntryId,
+  EntryKind,
+  IssueList,
+  PageHeader,
+  VersionChips,
+} from "../components/WorkspaceChrome";
 import {
   findProduct,
   issuesForProduct,
@@ -574,9 +581,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
           <li key={attribute.key} className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{attribute.label}</span>
             <EntryId value={attribute.key} />
-            <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
-              {attribute.attribute_type}
-            </span>
+            <EntryKind value={attribute.attribute_type} />
             <span>
               {attribute.value}
               {attribute.unit ? ` ${attribute.unit}` : ""}

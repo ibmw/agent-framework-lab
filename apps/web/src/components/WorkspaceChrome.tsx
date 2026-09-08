@@ -123,6 +123,15 @@ export function EntryCard({
   );
 }
 
+/** What an entry is classified as: a policy's kind, a payment rail, an attribute's type. */
+export function EntryKind({ value }: { value: string }) {
+  return (
+    <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
+      {value}
+    </span>
+  );
+}
+
 /** The identifier a scenario binding or a tool read names, shown where the entry is read. */
 export function EntryId({ value }: { value: string }) {
   return (

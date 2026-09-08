@@ -12,6 +12,7 @@ import {
   Card,
   EntryCard,
   EntryId,
+  EntryKind,
   EntryText,
   IssueList,
   PageHeader,
@@ -102,15 +103,6 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
  * form begins.
  */
 const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
-
-/** A muted classification chip — a policy's kind, a payment method's rail. */
-function KindChip({ value }: { value: string }) {
-  return (
-    <span className="rounded bg-admin-canvas px-1.5 py-0.5 text-[11px] text-admin-muted">
-      {value}
-    </span>
-  );
-}
 
 export function ShopIdentityPage() {
   const { content, edit } = useShopWorkspace();
@@ -255,7 +247,7 @@ function PaymentAndFulfilmentCards() {
               title={method.name}
               chips={
                 <>
-                  <KindChip value={method.kind} />
+                  <EntryKind value={method.kind} />
                   <EntryId value={method.id} />
                   <label className="flex items-center gap-1.5 text-[12px] text-admin-muted">
                     <input
@@ -466,7 +458,7 @@ export function PoliciesAndFaqPage() {
               title={entry.title}
               chips={
                 <>
-                  <KindChip value={entry.kind} />
+                  <EntryKind value={entry.kind} />
                   <EntryId value={entry.id} />
                 </>
               }
