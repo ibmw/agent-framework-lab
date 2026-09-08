@@ -312,6 +312,16 @@ def _input(request: AgentTurnRequest) -> list[TResponseInputItem]:
     return items
 
 
+# What the offline model reports having spent per provider call. Invented, and so are the
+# numbers Pydantic AI's own test model reports — no offline model can meter a call it did
+# not make. What matters is that they are not *zero*: an arm that called a model twice and
+# reported no tokens estimates at $0.00, which is the reading `model_cost` reserves for an
+# arm that called no provider at all, and an offline two-arm run would show this framework
+# as free beside a metered one. Round rather than plausible, so nobody mistakes it for a
+# measurement.
+_SCRIPTED_USAGE_PER_CALL = Usage(requests=1, input_tokens=100, output_tokens=25, total_tokens=125)
+
+
 def _scripted_model() -> Model:
     """The SDK's scripted model, driven to call every offered tool once and then answer.
 
@@ -335,7 +345,10 @@ def _scripted_model() -> Model:
             ]
         return [assistant_message("I have checked what this conversation is about.")]
 
-    return ScriptedModel([ModelStep.respond(respond), ModelStep.respond(respond)])
+    return ScriptedModel(
+        [ModelStep.respond(respond), ModelStep.respond(respond)],
+        default_usage=_SCRIPTED_USAGE_PER_CALL,
+    )
 
 
 def _sample(schema: Mapping[str, Any]) -> dict[str, str]:

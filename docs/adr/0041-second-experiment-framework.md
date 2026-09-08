@@ -209,6 +209,14 @@ meter themselves, and both are asked only for the three counts every provider bi
 Agents SDK also knows — cached input, reasoning tokens, a per-request breakdown — is dropped,
 which is not lost evidence but evidence the lab does not claim to compare.
 
+Offline, the scripted model is given a per-call token figure rather than left at its default of
+none. Both offline models invent their counts — no model that made no call can meter one — but
+zero is the one invention that is *read* as something: an arm that called a provider twice and
+estimated $0.00 says exactly what `model_cost` reserves for an arm that called no provider at
+all, and an offline two-arm run would show this framework as free beside the other. The figure
+is round rather than plausible so that nobody mistakes it for a measurement, and the record-shape
+sweep asserts the estimate is above zero.
+
 ### The catalog declares less for this framework than for the others, on purpose
 
 `PROVEN_FRAMEWORKS` now has three entries, and the new one claims `tool_calls`,

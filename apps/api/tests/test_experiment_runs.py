@@ -946,11 +946,19 @@ async def test_every_framework_leaves_a_record_of_the_same_shape(
     assert isinstance(produced.turn.usage, ModelUsage)
     assert produced.turn.duration_ms is not None
 
+    assert produced.turn.usage.input_tokens > 0
+    assert produced.turn.usage.output_tokens > 0
+
     reading = metrics(session, detail)
     assert reading.tool_calls == len(produced.tool_events)
     assert reading.attempts == 1
     assert reading.model_requests is not None
     assert reading.estimated_cost is not None
+    # Above zero, which is the half that matters. Both offline models invent their token
+    # counts, but an arm that called a provider twice and estimated $0.00 would read as the
+    # one thing `model_cost` reserves for an arm that called no provider at all — and an
+    # offline two-arm run would show one framework as free beside the other.
+    assert reading.estimated_cost.amount > 0
 
 
 @pytest.mark.asyncio
