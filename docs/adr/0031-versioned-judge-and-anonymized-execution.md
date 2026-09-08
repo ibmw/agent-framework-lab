@@ -2,6 +2,13 @@
 
 Status: accepted — 2026-09-01
 
+Amendment: 2026-09-08 — "The matrix reads the latest attempt" is narrowed to *the latest
+attempt that carries a verdict*. A failed execution is still recorded and still readable as
+the attempt it was, but it no longer shadows a verdict already standing on the row. The rule
+below was written contemplating a rerun that succeeds; a failure arriving after a verdict was
+an unconsidered case, and reading it would have let a provider outage delete evidence a model
+had actually produced. ADR 0040 records the finding and the change.
+
 Delivers `docs/PLAN.md` Milestone 5's second outcome: a versioned judge configuration and
 anonymized, structured LLM-judge execution. Records the judge as a definition, the closed
 verdict vocabulary and why "unclear" is one of its three values, the evidence scope as a
@@ -120,7 +127,11 @@ provider and model, the brief's fingerprint, and either an outcome with a ration
 classified failure — never both, which the schema enforces. Nothing is ever updated:
 **scoring again writes the next attempt** and the previous verdict stays exactly as recorded,
 so "the judge changed its mind when we reran it" is a readable fact rather than a lost one.
-The matrix reads the latest attempt.
+The matrix reads the latest attempt **that carries a verdict** (amended 2026-09-08; see
+ADR 0040). A failed execution stands on a row nothing has ever scored and is replaced by the
+next failure, so a row waiting for a judge still says so; where a verdict already stands, the
+failure is recorded beside it and the verdict goes on being read. An outage is an absence of
+new information rather than new information, and the reading says so.
 
 Two passes running at once number the same attempt, because each counts one past the highest
 it read, and the second insert meets the primary key. That is the store keeping its rule, so

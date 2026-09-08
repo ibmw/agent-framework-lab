@@ -288,9 +288,12 @@ anonymized `judge-brief-v1` document per objective per arm — what that arm did
 ran it and never the data its tools answered with — and records the verdict with the judge version,
 the model, and the fingerprint of that exact input. A verdict is the one part of an evaluation that
 is *stored*, because a model's reading cannot be re-derived from the record; scoring again writes
-the next attempt beside the last, and a failed or unreachable judge leaves its row deferred rather
-than counting against an arm. A third framework-neutral port (`JudgeRuntime`, keyed by provider)
-carries a declared control judge and Pydantic AI over structured output (ADR 0031).
+the next attempt beside the last, and a failed or unreachable judge leaves its row where it stood
+rather than counting against an arm — deferred while nothing has ever scored it, and carrying the
+verdict that already stands where something has, because an outage is an absence of new
+information rather than new information (ADR 0040). A third framework-neutral port
+(`JudgeRuntime`, keyed by provider) carries a declared control judge and Pydantic AI over
+structured output (ADR 0031).
 
 What a run *cost* is the same shape of reading. Two things about an attempt cannot be
 recovered once it returns — how long it took, and what the provider metered — so those are

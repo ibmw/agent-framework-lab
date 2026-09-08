@@ -29,7 +29,9 @@ ADR 0026 gave — a missing API key is a fact about the machine, not about the a
 
 **Nothing is overwritten.** Attempts count from one within `(run, objective)`, so scoring
 again after editing the rubric — or simply to see whether the verdict holds — writes a new
-row beside the old one and the evaluation reads the latest.
+row beside the old one and the evaluation reads the latest *verdict*. A failed attempt is
+recorded like any other and stays readable, but it cannot shadow a verdict that already
+stands: a provider that refused said nothing about the arm (ADR 0040).
 """
 
 from __future__ import annotations

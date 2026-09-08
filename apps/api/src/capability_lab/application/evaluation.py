@@ -392,12 +392,13 @@ def _judged(
     version: int,
     judgement: Judgement | None,
 ) -> ObjectiveResult:
-    """The row a judge owns: what the recorded verdict says, or that none has been made.
+    """The row a judge owns: what the standing verdict says, or that none has been made.
 
-    An execution that failed leaves the row exactly where it stood — deferred, waiting for a
-    judge — because a provider that refused said nothing about the arm. Reporting the lab's
-    own outage as a miss is the mistake ADR 0030 built `deferred` and `undecidable` to
-    prevent, and a failed judge is the clearest case of it.
+    An execution that failed leaves the row exactly where it stood — deferred while nothing
+    has ever scored it, and carrying the verdict that already stands when something has
+    (`latest_judgements`) — because a provider that refused said nothing about the arm.
+    Reporting the lab's own outage as a miss is the mistake ADR 0030 built `deferred` and
+    `undecidable` to prevent, and a failed judge is the clearest case of it.
     """
     if judgement is None:
         return _undecided(
@@ -532,20 +533,45 @@ def evaluate_arm(
 def latest_judgements(
     records: tuple[JudgementRecord, ...], run_id: UUID
 ) -> Mapping[str, Judgement]:
-    """The verdict that stands for each of one arm's rows: the highest attempt, per row.
+    """The execution that stands for each of one arm's rows: the latest that said anything.
 
-    Every attempt is kept (ADR 0031), and what the matrix reads is the last one — scoring
-    again is how an operator answers "does the verdict hold", and the answer is the new one.
+    Every attempt is kept (ADR 0031), and what the matrix reads is the newest *verdict* —
+    scoring again is how an operator answers "does the verdict hold", and the answer is the
+    new one.
+
+    A failed attempt is the exception, and it is ADR 0030's own exception one level up: a
+    provider that refused said **nothing about the arm**. An outage is an absence of new
+    information rather than new information, so it can no more unmake a verdict than it can
+    make a miss — the verdict already recorded goes on standing, and the failure stays
+    readable as the attempt beside it. Reading the latest attempt unconditionally would let
+    a provider that was briefly down silently delete evidence an operator paid a model to
+    produce, on a row a judge had actually decided. A row whose executions have *only* ever
+    failed still reads as unscored, which is the case that rule started from (ADR 0040
+    narrows ADR 0031's "the matrix reads the latest attempt" to exactly this).
     """
     standing: dict[str, Judgement] = {}
     for entry in records:
         if entry.run_id != run_id:
             continue
         judgement = entry.judgement
-        current = standing.get(judgement.objective_id)
-        if current is None or judgement.attempt >= current.attempt:
+        if _supersedes(judgement, standing.get(judgement.objective_id)):
             standing[judgement.objective_id] = judgement
     return standing
+
+
+def _supersedes(candidate: Judgement, standing: Judgement | None) -> bool:
+    """Whether one execution replaces the one currently standing on a row.
+
+    A verdict is replaced only by a later verdict; a failure stands only until something is
+    actually scored, and is replaced by a later failure while nothing has been. Which is
+    what keeps "the judge was unreachable this afternoon" from reading as "this row was
+    never decided".
+    """
+    if standing is None:
+        return True
+    if candidate.scored is not standing.scored:
+        return candidate.scored
+    return candidate.attempt >= standing.attempt
 
 
 def pinned_objective_templates(
