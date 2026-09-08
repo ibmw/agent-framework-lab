@@ -22,11 +22,12 @@ slice authorizes another.
    arguments as mandatory and changes what one arm is asked.
 5. Render the tool *result* with `tool_result_text` and return the text, rather than handing the
    SDK the document and letting it serialize. Every SDK has its own rule and they disagree:
-   Pydantic AI writes JSON, and the OpenAI Agents SDK falls through to `str(output)` — a Python
-   repr, so one arm's model read `{"applied": false}` where the other's read `{'applied': False}`
-   (ADR 0042). Both are text an SDK passes along untouched, so one rendering makes "both arms
-   were shown the same answers" a property in the same way the schema makes it one for the
-   questions.
+   Pydantic AI writes insertion-ordered JSON, and the OpenAI Agents SDK falls through to
+   `str(output)` — a Python repr, so one arm's model read `{"applied":false}` where the other's
+   read `{'applied': False}` (ADR 0042). Both are text an SDK passes along untouched, so one
+   rendering makes "both arms were shown the same answers" a property in the same way the schema
+   makes it one for the questions. Expect it to move an existing arm's model input as well as
+   the new one's: sorted canonical text is not what either SDK was producing.
 6. Map the arm's thread onto the SDK's message shape, and translate the SDK's failures into the
    runtime's classified errors. Never reach past the supplied invoker: it is bound to one arm and
    one actor, and it is what records the evidence.

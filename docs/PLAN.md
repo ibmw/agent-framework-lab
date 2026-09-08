@@ -121,11 +121,12 @@ failures, neutral usage and stored record — while what they said, chose and sp
 differ, which is the whole of what a comparison reads (ADR 0041). And finally the question the
 whole roadmap was built to ask, asked: one wrong-address recipe, one canonical snapshot, two
 arms differing in the framework and in nothing else, both driven through the reads, the redirect
-under its proposal and confirmation, and the fault firing between them — read back through every
-surface the lab serves and asserted to agree in all of it, while each framework's own
-contribution stays separately attributable and neither arm's world or vocabulary reaches the
-other. Offline that holds the two arms' *decisions* identical by construction, so what it
-establishes is the evidence model rather than a difference between frameworks; how two models
+under its proposal and confirmation, and the fault firing into the order while they are still
+reading it — read back through every surface the lab serves and asserted to agree in all of it,
+while each framework's own contribution stays separately attributable and neither arm's world
+or vocabulary reaches the other. Offline that holds the two arms' *decisions* identical by
+construction, so what it establishes is the evidence model rather than a difference between
+frameworks; how two models
 actually choose is what a credentialed run adds, and no such run has been made here. Proving it
 found the defect an adapter sweep could not: one SDK was showing its model a Python repr of the
 tool result where the other showed JSON, so the two arms were being asked the same question in

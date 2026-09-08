@@ -23,12 +23,13 @@ the tool with a code it can act on rather than silently dropped here.
 The *answer* is rendered here for the same reason and it is the half that was missing. A
 tool hands back a `tool-result-v1` document, and every SDK turns that object into the text
 the provider actually receives by whatever rule it happens to have: Pydantic AI serializes
-it as JSON, and the OpenAI Agents SDK falls through to Python's `str()` unless the tool
-returns text already — which would have shown one arm `{"applied": false}` and the other
-`{'applied': False}`. Two arms shown the same facts in two notations are not being asked
-the same question, and no reading of the record downstream could attribute the difference
-to anything (ADR 0042). So both adapters render the result themselves, through the lab's
-own canonical serializer, and hand their SDK text it passes along untouched.
+it as JSON in the order the handler built it, and the OpenAI Agents SDK falls through to
+Python's `str()` unless the tool returns text already — which would have shown one arm
+`{"applied":false}` and the other `{'applied': False}`. Two arms shown the same facts in
+two notations are not being asked the same question, and no reading of the record
+downstream could attribute the difference to anything (ADR 0042). So both adapters render
+the result themselves, through the lab's own canonical serializer, and hand their SDK text
+it passes along untouched.
 """
 
 from __future__ import annotations
@@ -75,6 +76,14 @@ def tool_result_text(document: dict[str, CanonicalValue]) -> str:
     An adapter calls this and returns the text, rather than returning the document and
     letting the SDK decide: that is the only way a framework's own convention cannot become
     a difference between two arms.
+
+    Reusing the fingerprint's serialization couples the two directions, and the second one is
+    the one to notice: a revision of `canonical_json` now changes what every arm's model is
+    shown, and a wish to change *this* rendering — dropping the schema token the model does
+    not need, spacing it, trimming it for token economy — is a decision about the bytes a
+    snapshot is identified by rather than a presentation choice. Both arms move together
+    either way, which is what a comparison needs; separating them is a deliberate act and
+    should stay one (ADR 0042).
     """
     return canonical_json_text(document)
 

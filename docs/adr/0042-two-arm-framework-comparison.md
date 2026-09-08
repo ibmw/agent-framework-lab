@@ -112,10 +112,17 @@ differently is attributable to the framework.
 
 A tool answers with a `tool-result-v1` document, and the adapter hands it to the SDK, which
 turns it into the text the provider actually receives. Each SDK has its own rule for that and
-they disagree. Pydantic AI serializes a returned object as JSON. The OpenAI Agents SDK converts
-anything that is not already text with `str(output)` — Python's repr. So one arm's model was
-reading `{"applied": false, "confirmation": "…"}` and the other's was reading
+they disagree. Pydantic AI serializes a returned object as JSON, in the order the handler
+happened to build it. The OpenAI Agents SDK converts anything that is not already text with
+`str(output)` — Python's repr, because a `tool-result-v1` document carries no `"type"` key for
+its structured-output detection to recognize. So one arm's model was reading
+`{"applied":false,"confirmation":"…"}` and the other's was reading
 `{'applied': False, 'confirmation': '…'}`.
+
+The blast radius is slightly wider than the repr, and worth naming: the fix moves the *Pydantic
+AI* arm too. Its rendering was already JSON, but insertion-ordered, and canonical text is
+sorted — so both arms' model input changed, which is the honest way round for a fix whose whole
+claim is that neither arm is shown a rendering the other is not.
 
 This is exactly the class of confound ADR 0041 went looking for and found three of — strict
 schemas rewriting `required`, `parallel_tool_calls` changing the request, an SDK relabelling
@@ -136,6 +143,17 @@ object. Both adapters call it and return text, which every SDK passes along unto
 Rendering it in the lab rather than fixing the one adapter is deliberate: a rule that lives in
 one adapter holds until the next SDK arrives with a third convention, and the next author is
 now told to render rather than to check (`docs/adding-agent-framework.md`).
+
+Reusing the fingerprint's own serialization has a cost that is worth writing down rather than
+discovering later. It couples two things that had no reason to move together: from here on, a
+revision of the canonical serializer silently changes what every arm's model is shown, and any
+wish to change the model-facing rendering — dropping `canonical_schema_version` from what the
+model reads, spacing it for legibility, trimming it for token economy — is a decision about the
+bytes a snapshot is identified by rather than a presentation choice. The coupling is contained
+in the direction that matters for a comparison, because both arms move together and neither can
+drift from the other, and ADR 0023's recorded fingerprints already fail loudly if the serializer
+moves at all. But an author who wants the two to differ will have to separate them deliberately,
+and should read this paragraph before deciding the rendering is theirs to change.
 
 ### The record names a framework only where it declares one
 
@@ -197,6 +215,16 @@ Agents SDK and Pydantic AI differ when a real model is choosing: which tools eac
 for, in what order, whether either proposes without reading, how many provider calls each
 framework's loop costs for the same work, and what that is worth at the published rates.
 
+There is a second limit, narrower and easier to miss. Both doubles sit at each SDK's *model*
+seam, which is where a framework hands over and a provider client takes on. Everything below
+that seam is therefore unexercised offline: how each SDK places the instructions, what item
+shapes it wraps a tool call and its result in, and every request field it sets that the two
+ADR 0041 named are not. So "both arms were asked the same question" is established at the
+model interface and not on the wire, and `tool_result_text` guarantees the same text is handed
+*down* rather than that the same bytes leave the process. The live smoke suite is the only
+place this build reaches the wire at all, and closing that gap properly would mean recording
+what each framework actually sent — which is a slice, not a sentence.
+
 What that needs is not another assertion. It is the product: publish the two configurations,
 start the experiment with a credential configured, drive both arms from the bench, and read
 frame 9 — which is precisely what every surface this slice exercised was built to serve. A
@@ -205,9 +233,11 @@ and the finding is a person's reading of two records, which is what `docs/PLAN.m
 report, never a global score" has meant since Milestone 6 was written.
 
 **No live comparison test was written here, and ADR 0041's live smoke tests were not run in
-this slice.** They stay gated on `AGENT_LAB_RUN_LIVE_MODEL_TESTS` and a local credential, and
-whether either has been executed since remains what it was made to be: an operator's decision,
-recorded in an ADR where it can be dated, rather than something a suite reports. Writing a
+this slice.** They stay gated on `AGENT_LAB_RUN_LIVE_MODEL_TESTS` and a local credential, both
+read from the *process* environment — so a value sitting in `.env` does not enable them, and
+running them stays the explicit act `docs/m2-provider-and-test-policy.md` describes. Whether
+either has been executed since remains what it was made to be: an operator's decision, recorded
+in an ADR where it can be dated, rather than something a suite reports. Writing a
 second credential-gated suite that constructs a whole experiment, and shipping it unexecuted,
 would add unverified code to make an unverifiable claim look covered.
 
@@ -259,8 +289,14 @@ would add unverified code to make an unverifiable claim look covered.
   import no SDK, so neither arm can acquire a decision of its own.
 - `test_agent_runtimes.py` gains the fix's own test: both frameworks are run with a probe at
   their model seam and the text each was shown is asserted to be exactly `tool_result_text` of
-  the document the invoker returned, and then to be identical between them. It fails against the
-  behavior it replaced, reporting the Python repr the SDK was producing.
+  the document the invoker returned, and then to be identical between them. Run against the two
+  adapters as they were, it fails on the Pydantic AI arm first — reporting its insertion-ordered
+  JSON against the sorted text — and on the Agents arm with the repr, which is both renderings
+  the fix replaced rather than only the one that motivated it. Each probe asks the SDK what it
+  would put in front of the provider rather than filtering the part for text, deliberately: a
+  probe that kept only strings would have seen nothing at all from an adapter returning the
+  document, and the turn would have run the tool until the budget was spent — a failure that
+  says nothing about a rendering.
 - The full suite passes offline with no provider key. The live smoke suite was not run.
 
 ## Migration
