@@ -9,9 +9,12 @@ evidence is not about the adapter (ADR 0041).
 
 Six things this SDK made the lab decide.
 
-**The tool schema is not derived here.** `tool_json_schema` renders the published argument
-table, and both runtimes hand their SDK the same document. Deriving it twice would have made
-"the two arms were offered the same tools" a coincidence.
+**Neither half of what a tool looks like is decided here.** `tool_json_schema` renders the
+published argument table and `tool_result_text` renders the answer, and both runtimes hand
+their SDK the same documents. Deriving either twice would have made "the two arms were asked
+the same thing" a coincidence — and the answer is the half this SDK would have decided for
+itself, since it turns a tool return that is not already text into `str(output)`, which is a
+Python repr rather than JSON (ADR 0042).
 
 **Strict function schemas are turned off, on purpose.** The SDK's strict mode rewrites a
 schema so that *every* property appears in `required`, which would advertise the lab's
@@ -89,10 +92,9 @@ from capability_lab.application.agent_runtime import (
     SupportAgentRuntimeError,
     SupportAgentTransientError,
 )
-from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.sandbox_tool_contracts import ToolContract
-from capability_lab.application.tool_json_schema import tool_json_schema
+from capability_lab.application.tool_json_schema import tool_json_schema, tool_result_text
 
 __all__ = [
     "OPENAI_AGENTS_RUNTIME_FRAMEWORK_ID",
@@ -262,8 +264,13 @@ def _tool(contract: ToolContract, tools: SandboxToolInvoker) -> FunctionTool:
     the version, and the recording are supplied by the invoker it cannot see.
     """
 
-    async def call(_context: ToolContext[Any], arguments: str) -> dict[str, CanonicalValue]:
-        return tools.invoke(contract.name, _arguments(arguments))
+    async def call(_context: ToolContext[Any], arguments: str) -> str:
+        # Rendered here rather than left to the SDK, which turns anything that is not
+        # already text into `str(output)` — a Python repr, not JSON. That would have shown
+        # this arm's model `{'applied': False}` where the arm beside it reads
+        # `{"applied":false}`, which is two arms asked the same question in two notations
+        # (`tool_json_schema`, ADR 0042). Text is passed along untouched.
+        return tool_result_text(tools.invoke(contract.name, _arguments(arguments)))
 
     return FunctionTool(
         name=contract.name.replace(".", _NAMESPACE_SEPARATOR),

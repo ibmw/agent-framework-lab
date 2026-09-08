@@ -18,9 +18,10 @@ the control policy's steps, each SDK's own second guard on the tool allowance, a
 handful of behaviors that belong to exactly one of them.
 """
 
+import json
 from collections.abc import Callable, Mapping
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx2
@@ -35,10 +36,23 @@ from agents import (
     trace,
 )
 from agents.exceptions import UserError
-from agents.testing import ModelStep, ScriptedModel, function_call
+from agents.testing import (
+    ModelCall,
+    ModelStep,
+    ScriptedModel,
+    assistant_message,
+    function_call,
+)
 from openai import APIStatusError
 from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelResponse
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+)
 from pydantic_ai.models.function import FunctionModel
 
 from capability_lab.application.agent_capabilities import (
@@ -74,6 +88,7 @@ from capability_lab.application.sandbox_tool_contracts import (
 )
 from capability_lab.application.sandbox_tools import ToolOutcome
 from capability_lab.application.sandboxes import SandboxNotFoundError
+from capability_lab.application.tool_json_schema import tool_result_text
 from capability_lab.domain.agent_configuration import ModelSettings
 from capability_lab.domain.agent_turn import AgentTurnFailure
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
@@ -425,6 +440,93 @@ async def test_two_frameworks_answering_one_world_leave_evidence_of_the_same_sha
         assert isinstance(answer.usage, ModelUsage)
         assert answer.usage.model_requests >= 1
     assert swept == BACKED_IDS
+
+
+def _shown_to_pydantic_ai() -> tuple[SupportAgentRuntime, list[str]]:
+    """A Pydantic AI runtime that records the tool-result text its model was shown."""
+    shown: list[str] = []
+
+    def respond(messages: list[ModelMessage], _info: Any) -> ModelResponse:
+        shown[:] = [
+            part.content
+            for message in messages
+            if isinstance(message, ModelRequest)
+            for part in message.parts
+            if isinstance(part, ToolReturnPart) and isinstance(part.content, str)
+        ]
+        if shown:
+            return ModelResponse(parts=[TextPart(content="I have read it.")])
+        return ModelResponse(parts=[ToolCallPart(tool_name="interaction__read_context", args={})])
+
+    return PydanticAiSupportAgentRuntime(lambda _model_id: FunctionModel(respond)), shown
+
+
+def _shown_to_openai_agents() -> tuple[SupportAgentRuntime, list[str]]:
+    """An OpenAI Agents runtime that records the tool-result text its model was shown."""
+    shown: list[str] = []
+
+    def respond(call: ModelCall) -> list[Any]:
+        shown[:] = _tool_outputs(call.input)
+        if shown:
+            return [assistant_message("I have read it.")]
+        return [function_call("interaction__read_context", {}, call_id="call-0")]
+
+    scripted = ScriptedModel([ModelStep.respond(respond), ModelStep.respond(respond)])
+    return OpenAiAgentsSupportAgentRuntime(lambda _model_id: scripted), shown
+
+
+def _tool_outputs(items: object) -> list[str]:
+    """The text this SDK put in front of the model for each tool it ran."""
+    if not isinstance(items, list):  # pragma: no cover - the adapter always sends a list
+        return []
+    outputs: list[str] = []
+    for entry in cast("list[object]", items):
+        if not isinstance(entry, dict):
+            continue
+        item = cast("dict[str, object]", entry)
+        output = item.get("output")
+        if item.get("type") == "function_call_output" and isinstance(output, str):
+            outputs.append(output)
+    return outputs
+
+
+SHOWN_RESULTS: tuple[tuple[str, Callable[[], tuple[SupportAgentRuntime, list[str]]]], ...] = (
+    (PYDANTIC_AI_FRAMEWORK_ID, _shown_to_pydantic_ai),
+    (OPENAI_AGENTS_FRAMEWORK_ID, _shown_to_openai_agents),
+)
+
+
+@pytest.mark.asyncio
+async def test_a_tool_result_reaches_both_frameworks_models_as_one_rendering() -> None:
+    """The other half of "the two arms were asked the same thing" (ADR 0042).
+
+    `tool_json_schema` already makes the *question* one document. The answer was left to
+    each SDK until a two-arm run went looking: Pydantic AI serializes a tool return as JSON
+    and the OpenAI Agents SDK falls through to `str(output)`, so one arm's model read
+    `{"applied": false}` and the other's read `{'applied': False}` — the same facts in two
+    notations, and a confound no reading of the record could have attributed to anything.
+
+    Both adapters now render the result themselves, through the lab's own canonical
+    serializer. Asserted against `tool_result_text` and then across the two frameworks,
+    because equality with the expected text is what fails on a repr and equality between the
+    arms is the property a comparison actually rests on.
+    """
+    expected = tool_result_text(_envelope(INTERACTION_CONTEXT, ToolOutcome.SUCCESS, CONTEXT))
+    swept: dict[str, list[str]] = {}
+
+    for framework_id, factory in SHOWN_RESULTS:
+        runtime, shown = factory()
+
+        await runtime.answer(request(CONTRACTS[INTERACTION_CONTEXT]), StubInvoker())
+
+        assert shown == [expected], framework_id
+        # Text a model reads as data rather than as prose: a Python repr would parse as
+        # neither, which is what this failed on before both adapters rendered it.
+        assert json.loads(shown[0])["tool"] == INTERACTION_CONTEXT
+        swept[framework_id] = list(shown)
+
+    assert list(swept) == BACKED_IDS
+    assert swept[PYDANTIC_AI_FRAMEWORK_ID] == swept[OPENAI_AGENTS_FRAMEWORK_ID]
 
 
 # -- the deterministic control arm ---------------------------------------------

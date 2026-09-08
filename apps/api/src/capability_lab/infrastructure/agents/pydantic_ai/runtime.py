@@ -8,12 +8,13 @@ comparison later reads is identical in shape to what the deterministic control a
 
 Five things are worth stating.
 
-**The tool schema is derived, never authored twice.** `sandbox_tool_contracts` exists to be
-the one description a framework generates its own dialect from (ADR 0021), and
+**Neither half of what a tool looks like is authored twice.** `sandbox_tool_contracts` exists
+to be the one description a framework generates its own dialect from (ADR 0021), and
 `tool_json_schema` renders it — shared with every other adapter that speaks JSON Schema, so
 that both arms of a framework comparison are offered the same document rather than two
-similar ones (ADR 0041). Adding a tool to the lab adds it to this framework without touching
-this file.
+similar ones (ADR 0041). `tool_result_text` does the same for the answer, so a result reaches
+both arms' models as one rendering instead of whatever each library's serializer settles on
+(ADR 0042). Adding a tool to the lab adds it to this framework without touching this file.
 
 **A tool's SDK name is not its contract name.** Providers accept `[A-Za-z0-9_-]` in a tool
 name and the lab's names carry a domain namespace (`orders.read_order`), so the dot is
@@ -71,7 +72,7 @@ from capability_lab.application.agent_runtime import (
 )
 from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.sandbox_tool_contracts import ToolContract
-from capability_lab.application.tool_json_schema import tool_json_schema
+from capability_lab.application.tool_json_schema import tool_json_schema, tool_result_text
 
 __all__ = ["PYDANTIC_AI_RUNTIME_FRAMEWORK_ID", "PydanticAiSupportAgentRuntime"]
 
@@ -165,10 +166,16 @@ def _tool(contract: ToolContract, tools: SandboxToolInvoker) -> Tool[None]:
     the version, and the recording are supplied by the invoker it cannot see.
     """
 
-    def call(**arguments: Any) -> dict[str, Any]:
-        return tools.invoke(
-            contract.name,
-            {name: str(value) for name, value in arguments.items() if value is not None},
+    def call(**arguments: Any) -> str:
+        # Rendered here rather than left to the SDK. Both frameworks hand their model the
+        # lab's canonical text of the same document, so a tool result reads identically in
+        # both arms instead of in whatever each library's serializer settles on
+        # (`tool_json_schema`, ADR 0042). Pydantic AI passes a string through untouched.
+        return tool_result_text(
+            tools.invoke(
+                contract.name,
+                {name: str(value) for name, value in arguments.items() if value is not None},
+            )
         )
 
     return Tool.from_schema(
