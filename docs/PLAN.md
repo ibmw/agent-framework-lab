@@ -105,7 +105,20 @@ evaluation together: every way a judge can fail or be rerun swept from the port'
 declarations, the rule-decided reading of a whole experiment compared as bytes across each of
 them, and the brief checked against an arm run under every framework the catalog declares —
 which found and fixed a judge failure that was shadowing the verdict standing beside it
-(ADR 0040), and completes Milestone 5.
+(ADR 0040), and completes Milestone 5. Milestone 6 has begun with the thing the whole
+record was built to hold two of: a second framework. What the first controlled comparison
+changes is the framework rather than the architecture — the lab's vocabulary, its capability
+catalog and its comparison warning are all keyed by framework, while `AgentArchitecture` still
+has one member and nothing implements a second — and the framework is the OpenAI Agents SDK,
+chosen over a TypeScript SDK whose bridge would have become the subject of the comparison and
+over a graph framework whose distinctive half is the architecture dimension this slice
+deliberately leaves alone. It runs behind the same port, the same recording invoker and the same
+published tool contracts as the first, on the same provider and model so a two-arm run moves one
+dimension; both adapters now derive their tool schema from one rendering of the argument table,
+so "both arms were offered the same tools" is a property rather than a resemblance; and what the
+two leave behind is swept as one shape — the same call vocabulary, string arguments, classified
+failures, neutral usage and stored record — while what they said, chose and spent stays free to
+differ, which is the whole of what a comparison reads (ADR 0041).
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -883,15 +896,20 @@ environment, scenario, runner, and evidence model are proven.
 
 ### Outcomes
 
-- [ ] Select whether the first controlled comparison changes framework or architecture.
-- [ ] Implement it behind the shared target contracts and conformance suite.
-- [ ] Produce equivalent normalized tools, events, traces, and evaluation inputs.
-- [ ] Document project-owned glue code, constraints, failures, and observed behavior.
+- [x] Select whether the first controlled comparison changes framework or architecture.
+- [x] Implement it behind the shared target contracts and conformance suite.
+- [x] Produce equivalent normalized tools, events, traces, and evaluation inputs.
+- [x] Document project-owned glue code, constraints, failures, and observed behavior.
 - [ ] Prove the wrong-address scenario in a two-arm comparison.
 
 Frames: none new; this milestone reuses the Milestone 3–5 surfaces (frames 5, 7–10).
 
-Vercel AI SDK remains a candidate, not an automatic next task.
+The Vercel AI SDK was evaluated and rejected for this comparison: the lab's evidence guarantees
+are properties of a Python call path, and re-establishing them across a Node process boundary
+would have made the bridge the subject of the comparison. It returns as a candidate only when
+comparing a TypeScript runtime as such is the point (ADR 0041). LangGraph is the named candidate
+for the architecture dimension, which stays closed until something implements a second
+`AgentArchitecture` member.
 
 ## Deferred decision triggers
 

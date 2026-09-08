@@ -157,6 +157,19 @@ nowhere to leak. A runtime chooses a tool, never a version: the tool contract se
 of the experiment. Agent SDK types never enter the domain, stored neutral event format, public API,
 or shared UI.
 
+Three implementations stand behind that port, and only two of them are frameworks: the declared
+control policy, which is the lab's own code and is what makes the rest of the lab falsifiable,
+and Pydantic AI and the OpenAI Agents SDK, which run the same single-agent shape on the same
+provider and model so that a two-arm run moves the framework and nothing else (ADR 0041). Both
+derive their tool schema from one rendering of the published argument table, and what they leave
+behind is held to one shape — the same call vocabulary, string arguments, classified failures,
+neutral usage, and stored record — while what they said, chose and spent is free to differ,
+because that difference is what a comparison reads. Where an SDK's defaults disagree with that,
+the adapter overrides them: a strict schema dialect that would make an optional argument
+mandatory, an error wrapper that would relabel the lab's own tool budget as a framework fault,
+concurrent tool execution that would race a revision-guarded write, and a vendor trace exporter
+the lab cannot promise the sanitization of.
+
 What an agent *is* for one experiment is authored rather than composed: a published agent
 configuration carries the framework, architecture, model and runtime settings, system prompt, tool
 bindings, memory, and the support-identity version it adopts (ADR 0024). Its prompt is a template

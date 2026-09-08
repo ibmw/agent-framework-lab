@@ -27,6 +27,14 @@ Required agent-adapter suites use an injected deterministic test double and make
 Provider smoke tests are optional, explicitly marked, credential-gated, and separate from
 reproducible capability evidence in CI.
 
+Every framework the lab can run an arm with is swept the same way the tools are (ADR 0041): the
+runtime conformance suite, the runner's record-shape suite and the live smoke suite each assert
+their table against `PROVEN_FRAMEWORKS`, so a framework declared publishable either joins all
+three or fails them. What the sweeps hold constant is the *shape* of a framework's evidence — the
+call vocabulary, the string arguments, the classified failures, the neutral usage, the stored
+record — because what a comparison reads is the difference between two arms, and a difference in
+shape would be a difference between two adapters.
+
 LLM-judge integration tests use an injected deterministic judge. Live judge calls are optional and
 credential-gated. Tests must prove that deterministic outcomes do not change when a judge fails or
 is rerun, anonymized inputs omit framework labels, and every judge result records its configuration

@@ -29,7 +29,10 @@ advance, the framework's turn inside it, and each tool call. A framework's own i
 is never captured into the store — the lab cannot promise the sanitization of an attribute it
 did not write — so a model call inside an SDK's loop reaches an exporter if one is configured
 and reaches the record as the measurable gap between two recorded spans, never as a bar the
-lab invented.
+lab invented. An SDK that *exports* its own spans to a vendor endpoint by default is switched
+off rather than ignored, at the moment composition decides it runs here: ignoring it would
+leave tool arguments and model output leaving the process by a path the lab does not control
+(ADR 0041).
 
 A stored span has no attribute column. It carries a span and trace identifier, its parent, its
 kind, its offset from the start of the attempt, its duration, and the `(run, ordinal, attempt,

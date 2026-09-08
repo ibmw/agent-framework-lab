@@ -5,12 +5,17 @@ here is the adapter — which tools it asks for, in what order, and how a framew
 becomes a classified one — and the runner's own tests already prove that a call through the
 real invoker reaches the real arm.
 
-The file has three parts. First a sweep over every framework the catalog declares, holding
-each to what the port promises regardless of what runs it: contract names, string arguments,
-the lab's budget, the arm's thread, and an answer of words and a meter. That sweep is what
-makes a two-arm comparison about the framework — evidence that differed in *shape* between
-arms would be evidence about the adapters. Then the behavior of each framework in turn,
-which is where they are allowed to differ.
+The file opens with a sweep over every framework the catalog declares, holding each to what
+the port promises regardless of what runs it: contract names, string arguments, the lab's
+budget, the arm's thread, and an answer of words and a meter. That sweep is what makes a
+two-arm comparison about the framework — evidence that differed in *shape* between arms
+would be evidence about the adapters, and nothing a reviewer could attribute to either.
+A second sweep does the same for the failure taxonomy, because an operator comparing two
+arms' failure codes has to be comparing one vocabulary.
+
+Everything after that is one framework at a time, which is where they are allowed to differ:
+the control policy's steps, each SDK's own second guard on the tool allowance, and the
+handful of behaviors that belong to exactly one of them.
 """
 
 from collections.abc import Callable, Mapping
