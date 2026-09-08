@@ -44,6 +44,10 @@ export default defineConfig({
       env: {
         AGENT_LAB_WEB_PORT: String(webPort),
         AGENT_LAB_API_ORIGIN: apiOrigin,
+        // The command inherits this process's environment, and a `VITE_` variable exported in a
+        // developer's shell reaches the client bundle. `VITE_API_BASE_URL` would send the browser
+        // straight to whatever origin it names, past this stack's proxy; empty means same-origin.
+        VITE_API_BASE_URL: "",
       },
       url: webOrigin,
       reuseExistingServer: false,
