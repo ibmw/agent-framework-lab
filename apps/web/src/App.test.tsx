@@ -68,7 +68,7 @@ const READY_CONTENT: ShopDraftResponse["content"] = {
           price: null,
         },
       ],
-      media: [],
+      media: [{ reference: "media/alpine-shell.jpg", alt_text: "Hood up in the rain" }],
       attributes: [
         {
           key: "waterproofing",
@@ -83,6 +83,7 @@ const READY_CONTENT: ShopDraftResponse["content"] = {
       ratings: { review_count: 1, average_rating: "5.0" },
     },
   ],
+  payment_methods: [{ id: "visa", name: "Card", kind: "card", enabled: true }],
   policies: [
     {
       id: "shipping-policy",
@@ -476,5 +477,30 @@ describe("shop workspace", () => {
         "Lead with the fact, then the action, then what happens next.",
       ),
     ).toBeVisible();
+    // The tone the version resolves to reads as the same chip the draft shows, not as a
+    // classification.
+    expect(
+      within(screen.getByRole("region", { name: "Tone of voice" })).getByText(/shop default/),
+    ).toBeVisible();
+
+    // The catalog a frozen version pinned is more than its variants: an agent's catalog
+    // tools answer with the category, the options, the media and the reviews too.
+    expect(screen.getByText("Jackets")).toBeVisible();
+    expect(screen.getByText("Ocean Blue")).toBeVisible();
+    expect(screen.getByText("media/alpine-shell.jpg")).toBeVisible();
+    expect(screen.getByText("Hood up in the rain")).toBeVisible();
+    expect(screen.getByText(/“Dry\.” — Camille/)).toBeVisible();
+
+    // And the identity, which the draft edits field by field and the version showed only
+    // as a page title.
+    const identity = screen.getByRole("region", { name: "Shop identity" });
+    expect(within(identity).getByText("northstar")).toBeVisible();
+    expect(within(identity).getByText("en-GB")).toBeVisible();
+    expect(within(identity).getByText("EUR")).toBeVisible();
+    expect(within(identity).getByText("chat")).toBeVisible();
+
+    const payment = screen.getByRole("region", { name: "Payment methods" });
+    expect(within(payment).getByText("Card")).toBeVisible();
+    expect(within(payment).getByText("visa", { selector: "code" })).toBeVisible();
   });
 });

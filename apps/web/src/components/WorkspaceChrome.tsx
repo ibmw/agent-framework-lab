@@ -132,6 +132,18 @@ export function EntryKind({ value }: { value: string }) {
   );
 }
 
+/**
+ * The guideline a shop resolves `{{shop.tone_of_voice}}` to. Like every state chip in the
+ * workspace it pairs its colour with a written label, and the glyph is decorative.
+ */
+export function DefaultToneChip() {
+  return (
+    <span className="rounded-full bg-admin-published px-2 py-0.5 text-[11px] font-semibold text-admin-published-ink">
+      <span aria-hidden>●</span> shop default
+    </span>
+  );
+}
+
 /** The identifier a scenario binding or a tool read names, shown where the entry is read. */
 export function EntryId({ value }: { value: string }) {
   return (

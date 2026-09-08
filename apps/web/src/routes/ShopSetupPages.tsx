@@ -10,6 +10,7 @@ import type {
 import { type FormEvent, type ReactNode, useState } from "react";
 import {
   Card,
+  DefaultToneChip,
   EntryCard,
   EntryId,
   EntryKind,
@@ -719,11 +720,7 @@ export function ToneOfVoicePage() {
               chips={
                 <>
                   <EntryId value={entry.id} />
-                  {entry.is_default ? (
-                    <span className="rounded-full bg-admin-published px-2 py-0.5 text-[11px] font-semibold text-admin-published-ink">
-                      ● shop default
-                    </span>
-                  ) : null}
+                  {entry.is_default ? <DefaultToneChip /> : null}
                 </>
               }
               actions={

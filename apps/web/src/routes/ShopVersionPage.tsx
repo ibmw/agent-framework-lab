@@ -5,6 +5,7 @@ import { LabApiError } from "../api/client";
 import { getShopVersion } from "../api/shops";
 import {
   Card,
+  DefaultToneChip,
   EntryCard,
   EntryId,
   EntryKind,
@@ -81,7 +82,22 @@ export function ShopVersionPage() {
         <div className="grid gap-4">
           {content.products.map((product) => (
             <Card key={product.handle} title={`${product.title} · ${product.status}`}>
+              <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                <EntryId value={product.handle} />
+                <EntryKind value={product.category} />
+              </div>
               <p className="text-[13px] text-admin-ink-soft">{product.description}</p>
+              {product.options.length > 0 ? (
+                <ul className="grid gap-1 text-[13px]">
+                  {product.options.map((option) => (
+                    <li key={option.key} className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{option.name}</span>
+                      <EntryId value={option.key} />
+                      <span className="text-admin-muted">{option.values.join(" · ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <table className="w-full border-collapse text-[13px]">
                 <thead>
                   <tr>
@@ -104,7 +120,31 @@ export function ShopVersionPage() {
                   ))}
                 </tbody>
               </table>
+              {product.media.length > 0 ? (
+                <ul className="grid gap-1 text-[13px]">
+                  {product.media.map((entry) => (
+                    <li key={entry.reference} className="flex flex-wrap items-center gap-2">
+                      <code className="min-w-0 [overflow-wrap:anywhere] font-mono text-[12px]">
+                        {entry.reference}
+                      </code>
+                      <span className="text-admin-muted">{entry.alt_text}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <p className="text-[13px] text-admin-muted">{ratingLabel(product)}</p>
+              {product.reviews.length > 0 ? (
+                <ul className="grid gap-1 text-[13px]">
+                  {product.reviews.map((review) => (
+                    <li key={review.id} className="flex flex-wrap items-start gap-2">
+                      <span className="font-semibold">{review.rating}★</span>
+                      <span className="min-w-0 [overflow-wrap:anywhere] text-admin-ink-soft">
+                        “{review.body}” — {review.author_display_name}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               {product.attributes.length > 0 ? (
                 <ul className="grid gap-1 text-[13px]">
                   {product.attributes.map((attribute) => (
@@ -169,7 +209,7 @@ export function ShopVersionPage() {
               entries={content.tone_of_voice_guidelines.map((entry) => ({
                 id: entry.id,
                 title: entry.name,
-                kind: entry.is_default ? "shop default" : undefined,
+                isDefault: entry.is_default,
                 label: "Guidance",
                 text: entry.guidance,
               }))}
@@ -179,29 +219,58 @@ export function ShopVersionPage() {
         </div>
 
         <div className="grid content-start gap-4">
-          <Card title="Support knowledge">
-            <p className="text-[13px] text-admin-ink-soft">
-              {content.policies.length} policy document(s), {content.faq.length} FAQ entr
-              {content.faq.length === 1 ? "y" : "ies"}, {content.support_guidelines.length} support
-              guideline(s).
-            </p>
-            <p className="text-[13px] text-admin-muted">
-              Default tone of voice: {content.default_tone_of_voice_id ?? "none"}
-            </p>
-          </Card>
-          <Card title="Commerce configuration">
-            <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
-              {content.payment_methods.map((method) => (
-                <li key={method.id}>
-                  {method.name} · {method.kind} · {method.enabled ? "enabled" : "disabled"} ·{" "}
-                  <EntryId value={method.id} />
-                </li>
+          <Card title="Shop identity">
+            <dl className="grid gap-1 text-[13px]">
+              {(
+                [
+                  ["Name", content.identity.name],
+                  ["Slug", content.identity.slug],
+                  ["Locale", content.identity.locale],
+                  ["Currencies", content.identity.currencies.join(" · ")],
+                  ["Support channels", content.identity.channels.join(" · ")],
+                ] as const
+              ).map(([term, value]) => (
+                <div key={term} className="flex items-baseline gap-2">
+                  <dt className="w-32 shrink-0 text-admin-muted">{term}</dt>
+                  <dd className="min-w-0 [overflow-wrap:anywhere] text-admin-ink-soft">{value}</dd>
+                </div>
               ))}
+            </dl>
+          </Card>
+          <Card title="Payment methods">
+            <ul className="grid gap-2 text-[13px]">
+              {content.payment_methods.map((method) => (
+                <EntryCard
+                  key={method.id}
+                  title={method.name}
+                  chips={
+                    <>
+                      <EntryKind value={method.kind} />
+                      <EntryId value={method.id} />
+                      <span className="text-[12px] text-admin-muted">
+                        {method.enabled ? "enabled" : "disabled"}
+                      </span>
+                    </>
+                  }
+                />
+              ))}
+            </ul>
+          </Card>
+          <Card title="Fulfilment methods">
+            <ul className="grid gap-2 text-[13px]">
               {content.fulfilment_methods.map((method) => (
-                <li key={method.id}>
-                  {method.name} · {method.carrier} · {method.min_transit_days}–
-                  {method.max_transit_days} days · <EntryId value={method.id} />
-                </li>
+                <EntryCard
+                  key={method.id}
+                  title={method.name}
+                  chips={
+                    <>
+                      <span className="text-[12px] text-admin-muted">
+                        {method.carrier} · {method.min_transit_days}–{method.max_transit_days} days
+                      </span>
+                      <EntryId value={method.id} />
+                    </>
+                  }
+                />
               ))}
             </ul>
           </Card>
@@ -214,8 +283,10 @@ export function ShopVersionPage() {
 interface FrozenDocument {
   id: string;
   title: string;
-  /** A classification worth naming beside the title: a policy kind, the default tone. */
+  /** A policy's kind; the other collections are not classified. */
   kind?: string;
+  /** The tone this version resolved `{{shop.tone_of_voice}}` to. */
+  isDefault?: boolean;
   label: string;
   text: string;
 }
@@ -239,6 +310,7 @@ function DocumentList({ entries, empty }: { entries: FrozenDocument[]; empty: st
             <>
               {entry.kind ? <EntryKind value={entry.kind} /> : null}
               <EntryId value={entry.id} />
+              {entry.isDefault ? <DefaultToneChip /> : null}
             </>
           }
         >
