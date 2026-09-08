@@ -65,7 +65,12 @@ from capability_lab.application.judge_runtime import (
     JudgeVerdict,
 )
 from capability_lab.application.judgements import JudgementRecord
-from capability_lab.application.sandbox_tool_contracts import INTERACTION_CONTEXT, ORDER_DETAIL
+from capability_lab.application.sandbox_tool_contracts import (
+    ADDRESS_CHANGE_APPLY,
+    ADDRESS_CHANGE_PROPOSE,
+    INTERACTION_CONTEXT,
+    ORDER_DETAIL,
+)
 from capability_lab.domain.blocks import (
     BlockParameterKind,
     ObjectiveAssessment,
@@ -238,9 +243,15 @@ def arm(
 SWEPT_TOOLS: tuple[str, ...] = (INTERACTION_CONTEXT, ORDER_DETAIL)
 
 
+# What the control arm may do. The write tools are here so the scenario's state row is a row
+# something actually decides: an arm that can only read never moves its world, and a
+# "unchanged" proved over three pending rows would be proved over the easy case.
+CONTROL_TOOLS: tuple[str, ...] = (*READ_TOOL_NAMES, ADDRESS_CHANGE_PROPOSE, ADDRESS_CHANGE_APPLY)
+
+
 def control_arm(session: Session) -> ArmSelection:
     """The offline framework, named out of the catalog like every other arm here."""
-    return arm(session, PROVEN_FRAMEWORKS_BY_ID[FAKE_FRAMEWORK_ID])
+    return arm(session, PROVEN_FRAMEWORKS_BY_ID[FAKE_FRAMEWORK_ID], CONTROL_TOOLS)
 
 
 def runtimes() -> SupportAgentRuntimeRegistry:
@@ -471,10 +482,33 @@ def test_the_failure_sweep_covers_every_way_an_execution_can_end_without_a_verdi
     assert raised - set(CLASSIFIED_ERRORS), "a sweep of declared errors alone never sees a bug"
 
 
-def test_the_deterministic_rows_are_the_ones_no_judge_owns() -> None:
-    """The other half of non-vacuity: the reading being compared is not empty."""
+@pytest.mark.asyncio
+async def test_the_reading_these_sweeps_compare_is_three_rows_a_rule_actually_decided(
+    session: Session, workspace: Workspace
+) -> None:
+    """The other half of non-vacuity: bytes that never held anything cannot change.
+
+    Asserted against a real experiment rather than against the constants above, because what
+    the sweeps compare is what this scenario produces — three rows no judge owns, one of each
+    shape ADR 0030 reads, and none of them silently absent.
+    """
+    detail = start(session, workspace, control_arm(session), control_arm(session))
+    detail = await advance(session, detail)
+    arms = evaluate(session, detail)
+
+    rows = deterministic_rows(arms)
+    assert len(rows) == len(DETERMINISTIC_ROWS) * len(arms)
+    assert {result.objective_id for result in rows} == set(DETERMINISTIC_ROWS)
+    assert all(result.assessment is not ObjectiveAssessment.JUDGE for result in rows)
     assert set(DETERMINISTIC_ROWS) & set(JUDGED_ROWS) == set()
-    assert len(DETERMINISTIC_ROWS) == 3
+    driven = arms[0]
+    assert row(driven, READ_POLICY).outcome is ObjectiveOutcome.PENDING
+    assert row(driven, IDENTIFIED).outcome is ObjectiveOutcome.MET
+    assert row(driven, REDIRECTED).outcome is ObjectiveOutcome.MET
+    # And the rendering is sensitive to what it renders: the arm nobody drove holds the same
+    # row at a different outcome, and the bytes say so. A comparison that could not tell these
+    # two apart could not have told any of the sweeps above apart either.
+    assert _row(row(driven, IDENTIFIED)) != _row(row(arms[1], IDENTIFIED))
 
 
 # -- a judge that failed changed nothing ----------------------------------------
