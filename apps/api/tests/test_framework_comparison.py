@@ -4,7 +4,8 @@ The question this lab was built to answer is whether two agent frameworks, given
 identical incident and the identical tools, leave evidence a reader can attribute. This
 module asks it end to end: one published recipe, one canonical snapshot, two arms that
 differ in the framework and in nothing else, both driven through the reads, the redirect
-under its proposal and confirmation, and the fault the scenario fires between them.
+under its proposal and confirmation, and the fault the scenario fires into the order
+while they are still reading it.
 
 **What it can prove offline, and what it cannot.** Both arms run their real adapters
 against a model that is a double at each SDK's own provider-neutral seam, walking the one
@@ -564,12 +565,19 @@ async def test_the_state_diff_reports_the_same_fields_moving_in_both_arms(
     detail = await driven(session, workspace)
 
     left, right = detail.state_diffs
-    moved = {change.path for change in left.orders[0].changes}
+    moved = {(change.path, change.before, change.after) for change in left.orders[0].changes}
 
     assert [entry.reference for entry in left.orders] == ["NS-10482"]
-    assert {change.path for change in right.orders[0].changes} == moved
-    assert any(path.startswith("shipping_address") for path in moved)
-    assert any(path.startswith("fulfilment") for path in moved)
+    # Values, not only paths. Both arms redirect to the same address-book entry from one
+    # starting state and are faulted by one schedule, so their worlds became the *same*
+    # world — which is a stronger statement than "the same fields moved", and the one an
+    # operator reading the two cards side by side is actually making.
+    assert {
+        (change.path, change.before, change.after) for change in right.orders[0].changes
+    } == moved
+    assert ("shipping_address.city", "Bordeaux", "Lyon") in moved
+    assert ("shipping_address.source_address_id", "bordeaux-previous-flat", "home") in moved
+    assert ("fulfilment.status", "unfulfilled", "partially_fulfilled") in moved
     assert shape(left) == shape(right)
 
 
@@ -734,7 +742,16 @@ async def test_no_framework_names_itself_anywhere_in_the_evidence_either_arm_lef
     named = {framework.framework_id for framework in PROVEN_FRAMEWORKS} | {
         framework.label for framework in PROVEN_FRAMEWORKS
     }
-    assert not [word for word in spoken if any(name in word for name in named)]
+    # Two checks, because the names are two kinds of word. Every name is checked for
+    # equality; the ones no prose could contain — they carry a hyphen or a space — are
+    # checked for containment as well, so a leaf that merely quotes one fails. The control
+    # framework is called `fake`, and a substring rule would have failed the day a shop
+    # policy or a persona note used the word, which would be the sweep punishing a fixture
+    # for saying something true.
+    quotable = {name for name in named if "-" in name or " " in name}
+    assert quotable
+    assert not [word for word in spoken if word in named]
+    assert not [word for word in spoken if any(name in word for name in quotable)]
     assert not [word for word in spoken if "__" in word]
 
 
@@ -802,21 +819,38 @@ async def test_the_public_contract_names_a_framework_only_where_it_declares_one(
             response = await client.get(f"{root}{surface}")
             assert response.status_code == 200, response.text
             served[surface or "experiment"] = cast("object", response.json())
+        # The cross-shop listing too, because it is the fifth surface that reads a run and
+        # the one where an arm's framework is a *row* rather than a detail (ADR 0034).
+        listed = await client.get("/api/v1/experiments")
+        assert listed.status_code == 200, listed.text
+        served["history"] = cast("object", listed.json())
 
     declared = {framework.framework_id for framework in PROVEN_FRAMEWORKS}
     named = {key for key, value in leaves(served) if value in declared}
 
-    # Two keys, and both are places the contract exists to say which framework ran: the
-    # arm's own runtime block and each trace's, and the comparison matrix's row for the
-    # framework dimension — which is the setup gate saying out loud what these arms differ
-    # in (ADR 0025). Nothing in a tool event, a span, a timeline entry or an evaluation row.
-    assert named == {"framework_id", "values"}
+    # Three keys, and each is a place the contract exists to say which framework ran: the
+    # arm's own runtime block and each trace's, the comparison matrix's row for the framework
+    # dimension — the setup gate saying out loud what these arms differ in (ADR 0025) — and
+    # the history listing's filter facet, which offers the frameworks the runs themselves
+    # name (ADR 0034). Nothing in a tool event, a span, a timeline entry or an evaluation row.
+    assert named == {"framework_id", "values", "id"}
     assert [
         value
         for key, value in leaves(served["experiment"])
         if key == "values" and value in declared
     ] == [PYDANTIC_AI_FRAMEWORK_ID, OPENAI_AGENTS_FRAMEWORK_ID]
+    # Where the generic `id` leaves come from, pinned rather than assumed: the facet block,
+    # offering exactly the frameworks these runs were made with.
+    assert sorted(
+        value for _key, value in leaves(_facets(served["history"])) if value in declared
+    ) == sorted([OPENAI_AGENTS_FRAMEWORK_ID, PYDANTIC_AI_FRAMEWORK_ID])
     assert not [value for _key, value in leaves(served) if "__" in value]
+
+
+def _facets(history: object) -> object:
+    """The framework filter options one history page offers."""
+    assert isinstance(history, dict)
+    return cast("dict[str, object]", history)["frameworks"]
 
 
 def leaves(value: object, key: str = "") -> list[tuple[str, str]]:
