@@ -1,6 +1,6 @@
 """Each framework's offline model, driven by the one incident declaration beside it.
 
-`incident_script` says what the agent decides; this says how each SDK is told. The two are
+`incident` beside it says what the agent decides; this says how each SDK is told. The two are
 separate files on purpose: the declaration imports no SDK, so neither framework can quietly
 acquire a decision of its own, and a reviewer can see that the two arms of the offline
 comparison are reading the same script by reading one of them.
@@ -39,7 +39,7 @@ from capability_lab.application.agent_runtime import SupportAgentRuntime
 from capability_lab.application.canonical_json import CanonicalValue
 from capability_lab.infrastructure.agents.openai_agents import OpenAiAgentsSupportAgentRuntime
 from capability_lab.infrastructure.agents.pydantic_ai import PydanticAiSupportAgentRuntime
-from incident_script import (
+from capability_lab.infrastructure.agents.scripted.incident import (
     INCIDENT_REPLY,
     INCIDENT_SCRIPT,
     IncidentDriver,

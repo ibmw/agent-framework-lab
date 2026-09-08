@@ -9,16 +9,17 @@ while they are still reading it.
 
 **What it can prove offline, and what it cannot.** Both arms run their real adapters
 against a model that is a double at each SDK's own provider-neutral seam, walking the one
-declaration in `incident_script`. That holds the *decisions* identical by construction, so
-nothing here is evidence that one framework chooses better than the other — and it is
-exactly what makes the rest falsifiable. Given the same decisions, everything the lab
-records about an arm has to read the same: the same call vocabulary, the same versions, the
-same normalized stream, the same span tree, the same rule-decided rows, the same field-level
-diff, and a cost that is measured rather than absent in both. What is left free to differ is
-what each framework actually contributed — how often it called the provider, what it
-metered, and which project-owned adapter produced the turn — and that is asserted to differ
-rather than assumed to. Only a live run can show two *models* choosing differently, which is
-what `test_live_model_runtimes.py` is for and what ADR 0042 records was not run here.
+declaration in `agents/scripted/incident`. That holds the *decisions* identical by
+construction, so nothing here is evidence that one framework chooses better than the
+other — and it is exactly what makes the rest falsifiable. Given the same decisions,
+everything the lab records about an arm has to read the same: the same call vocabulary, the
+same versions, the same normalized stream, the same span tree, the same rule-decided rows,
+the same field-level diff, and a cost that is measured rather than absent in both. What is
+left free to differ is what each framework actually contributed — how often it called the
+provider, what it metered, and which project-owned adapter produced the turn — and that is
+asserted to differ rather than assumed to. Only a live run can show two *models* choosing
+differently, which is what `test_live_model_runtimes.py` is for and what ADR 0042 records
+was not run here.
 """
 
 from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
@@ -63,6 +64,13 @@ from capability_lab.domain.blocks import BlockParameterKind, ObjectiveEvidence
 from capability_lab.domain.evaluation import ObjectiveOutcome
 from capability_lab.domain.experiment import ComparisonDimension
 from capability_lab.domain.scenario import BoundMutation, BoundObjective, ScenarioBinding
+from capability_lab.infrastructure.agents.scripted import (
+    INCIDENT_REPLY,
+    INCIDENT_RUNTIMES,
+    INCIDENT_TOOLS,
+    incident_runtimes,
+)
+from capability_lab.infrastructure.agents.scripted import incident as incident_declaration
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -70,8 +78,6 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.infrastructure.participants.human import HumanParticipantDriver
-from incident_runtimes import INCIDENT_RUNTIMES, incident_runtimes
-from incident_script import INCIDENT_REPLY, INCIDENT_TOOLS
 from workspace_factories import (
     SEED,
     Workspace,
@@ -873,7 +879,7 @@ def test_the_incident_declaration_reaches_for_no_framework() -> None:
     """
     import ast
 
-    source = Path(__file__).with_name("incident_script.py").read_text()
+    source = Path(incident_declaration.__file__).read_text()
     imported = {
         node.module.partition(".")[0]
         for node in ast.walk(ast.parse(source))
