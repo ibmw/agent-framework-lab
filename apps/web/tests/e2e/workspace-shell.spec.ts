@@ -18,7 +18,7 @@ const SECTIONS = [
   ["Policies & FAQ", "Policies & FAQ"],
   ["Support guidelines", "Support guidelines"],
   ["Tone of voice", "Tone of voice"],
-  ["Settings", "Settings"],
+  ["Shop details", "Shop details"],
   ["Orders", "Orders"],
   ["Products", "Products"],
 ] as const;
@@ -44,8 +44,8 @@ test("the rail keeps its controls on screen in every section", async ({ page }) 
   await createShop.getByRole("button", { name: "Create shop" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 
-  // Enough authored content that Settings runs past a short window.
-  await page.getByRole("link", { name: "Settings" }).click();
+  // Enough authored content that shop details runs past a short window.
+  await page.getByRole("link", { name: "Shop details" }).click();
   const payments = page.getByRole("region", { name: "Payment methods" });
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");

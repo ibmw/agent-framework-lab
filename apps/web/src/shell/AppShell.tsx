@@ -11,8 +11,8 @@ import {
   MessageSquare,
   Play,
   Scale,
-  Settings,
   Shapes,
+  Store,
   Tag,
   Target,
   UserCog,
@@ -90,7 +90,7 @@ function studioSections(shopId: string): NavSection[] {
           icon: <ClipboardList size={15} />,
         },
         { label: "Tone of voice", to: `${base}/setup/tone`, icon: <Shapes size={15} /> },
-        { label: "Settings", to: `${base}/setup/identity`, icon: <Settings size={15} /> },
+        { label: "Shop details", to: `${base}/setup/identity`, icon: <Store size={15} /> },
       ],
     },
     {

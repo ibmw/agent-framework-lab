@@ -123,7 +123,7 @@ export function ShopIdentityPage() {
   }
 
   return (
-    <SetupPage title="Settings">
+    <SetupPage title="Shop details">
       <Card title="Shop identity">
         <label className={fieldLabelClasses}>
           Name

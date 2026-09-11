@@ -39,7 +39,7 @@ async function publishShop(page: Page, unique: string) {
   await tone.getByRole("button", { name: "Add tone of voice" }).click();
   await saveDraft(page);
 
-  await openSection(page, "Settings", "Settings");
+  await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");

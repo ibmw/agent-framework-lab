@@ -44,7 +44,7 @@ test("an author builds a paid order shipping to the customer's stale address", a
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 
   // An order selects its payment and fulfilment method from the shop's configuration.
-  await openSection(page, "Settings", "Settings");
+  await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");

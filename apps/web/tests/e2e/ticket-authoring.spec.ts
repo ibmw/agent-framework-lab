@@ -51,7 +51,7 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await policies.getByRole("button", { name: "Add policy" }).click();
   await saveDraft(page);
 
-  await openSection(page, "Settings", "Settings");
+  await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");

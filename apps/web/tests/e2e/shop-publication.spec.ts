@@ -47,7 +47,7 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await policies.getByRole("button", { name: "Add policy" }).click();
   await saveDraft(page);
 
-  await openSection(page, "Settings", "Settings");
+  await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");
   await payments.getByLabel("ID", { exact: true }).fill("visa");
   await payments.getByLabel("Name", { exact: true }).fill("Visa");
