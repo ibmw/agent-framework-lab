@@ -15,6 +15,7 @@ import {
   replaceShopDraft,
 } from "../api/shops";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { writeLastVisitedShop } from "../lib/preferences";
 import { toPayload } from "../lib/shop";
 import { AppShell } from "./AppShell";
 
@@ -76,6 +77,17 @@ export function ShopWorkspace() {
     void refreshShops(controller.signal);
     return () => controller.abort();
   }, [refreshShops]);
+
+  // Leaving shop scope for `/settings` or `/guides` costs the operator their place, so the
+  // shop they were last standing in is what those surfaces offer a way back to. Recorded only
+  // once the shop has actually loaded: a stale bookmark to a removed shop would otherwise
+  // overwrite a good remembered id with one that resolves to nothing.
+  const loaded = editor.content !== null;
+  useEffect(() => {
+    if (loaded) {
+      writeLastVisitedShop(shopId);
+    }
+  }, [loaded, shopId]);
 
   // The switcher shows each shop's authored name, so the list follows any write that can
   // change it.

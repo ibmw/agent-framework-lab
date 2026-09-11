@@ -1,5 +1,6 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import {
+  BookOpen,
   Bot,
   Boxes,
   ChevronLeft,
@@ -11,6 +12,7 @@ import {
   MessageSquare,
   Play,
   Scale,
+  Settings,
   Shapes,
   Store,
   Tag,
@@ -21,6 +23,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { readNavigationCollapsed, writeNavigationCollapsed } from "../lib/preferences";
 
 interface NavEntry {
   label: string;
@@ -170,6 +173,19 @@ function SidebarEntry({
   );
 }
 
+/**
+ * The lab's own surfaces, which are not a shop's. They sit in the header rather than in the
+ * rail because the rail only exists inside a shop workspace, and the first thing a new
+ * operator has to do is create the shop they do not have yet (ADR 0044).
+ */
+const labEntries = [
+  { label: "Guides", to: "/guides", icon: <BookOpen size={13} /> },
+  { label: "Settings", to: "/settings", icon: <Settings size={13} /> },
+] as const;
+
+const headerLinkClasses =
+  "flex items-center gap-1.5 rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold no-underline transition";
+
 interface AppShellProps {
   shops: ShopSummarySchema[];
   currentShopId?: string;
@@ -181,8 +197,14 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
   const current = shops.find((shop) => shop.shop_id === currentShopId);
   // One rail for every section, collapsed only when the author says so. Routes deliberately
   // do not override this: a navigation that folded the menu on its own would make the same
-  // control mean different things depending on where you happened to be standing.
-  const [collapsed, setCollapsed] = useState(false);
+  // control mean different things depending on where you happened to be standing. What the
+  // author says is now remembered between visits rather than reset by every reload.
+  const [collapsed, setCollapsed] = useState(readNavigationCollapsed);
+
+  function chooseCollapsed(next: boolean) {
+    setCollapsed(next);
+    writeNavigationCollapsed(next);
+  }
 
   return (
     // The shell owns the viewport and the two panes scroll inside it. With the page doing the
@@ -215,7 +237,23 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
             </select>
           </label>
         ) : null}
-        <span className="ml-auto rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold text-[#b9cdc5]">
+        <nav aria-label="Lab" className="ml-auto flex items-center gap-2">
+          {labEntries.map((entry) => (
+            <NavLink
+              key={entry.label}
+              to={entry.to}
+              className={({ isActive }) =>
+                isActive
+                  ? `${headerLinkClasses} border-white/50 bg-white/15 text-white`
+                  : `${headerLinkClasses} text-[#b9cdc5] hover:bg-white/10 hover:text-white`
+              }
+            >
+              {entry.icon}
+              {entry.label}
+            </NavLink>
+          ))}
+        </nav>
+        <span className="rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold text-[#b9cdc5]">
           Synthetic sandbox
         </span>
       </header>
@@ -262,7 +300,7 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
                 className={`${entryClasses} w-full ${collapsed ? "justify-center" : ""}`}
                 aria-expanded={!collapsed}
                 aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-                onClick={() => setCollapsed(!collapsed)}
+                onClick={() => chooseCollapsed(!collapsed)}
               >
                 {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
                 {collapsed ? null : <span>Collapse</span>}

@@ -26,6 +26,7 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
+import { ARCHITECTURE_LABELS, ARCHITECTURES } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import {
   accentButtonClasses,
@@ -302,7 +303,11 @@ export function AgentConfigurationEditorPage() {
                   })
                 }
               >
-                <option value="single_agent">Single agent</option>
+                {ARCHITECTURES.map((value) => (
+                  <option key={value} value={value}>
+                    {ARCHITECTURE_LABELS[value]}
+                  </option>
+                ))}
               </select>
             </label>
             <label className={fieldLabelClasses}>

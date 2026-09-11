@@ -12,8 +12,10 @@ import { ExperimentResultsPage } from "./routes/ExperimentResultsPage";
 import { ExperimentSetupPage } from "./routes/ExperimentSetupPage";
 import { ExperimentTimelinePage } from "./routes/ExperimentTimelinePage";
 import { ExperimentTracesPage } from "./routes/ExperimentTracesPage";
+import { GuidesPage } from "./routes/GuidesPage";
 import { JudgeConfigurationEditorPage } from "./routes/JudgeConfigurationEditorPage";
 import { JudgeConfigurationsPage } from "./routes/JudgeConfigurationsPage";
+import { LabSettingsPage } from "./routes/LabSettingsPage";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
 import { OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
@@ -40,6 +42,10 @@ export function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/shops" replace />} />
       <Route path="/shops" element={<ShopsPage />} />
+      {/* Lab-level surfaces sit beside /shops rather than inside one: the first step of the
+          guided path is creating the shop a new operator does not have yet (ADR 0044). */}
+      <Route path="/settings" element={<LabSettingsPage />} />
+      <Route path="/guides" element={<GuidesPage />} />
       <Route path="/shops/:shopId" element={<ShopWorkspace />}>
         <Route index element={<ShopHomePage />} />
         <Route path="products" element={<ProductsPage />} />
