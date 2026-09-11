@@ -304,3 +304,5 @@ export type CreateJudgeConfigurationRequest =
   components["schemas"]["CreateJudgeConfigurationRequest"];
 export type ReplaceJudgeConfigurationDraftRequest =
   components["schemas"]["ReplaceJudgeConfigurationDraftRequest"];
+export type LabStatusResponse = components["schemas"]["LabStatusResponse"];
+export type LabRunMode = components["schemas"]["LabRunMode"];

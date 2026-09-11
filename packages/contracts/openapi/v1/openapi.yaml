@@ -16,7 +16,11 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
   /api/v1/agent-frameworks:
     get:
-      summary: List agent frameworks and proven capabilities
+      summary: List the agent frameworks this process has registered
+      description: Which conversation adapters this process could run right now, which
+        depends on the machine's configuration. What an author may publish is a different
+        question, answered by the proven-framework catalog that readAgentConfigurationResources
+        serves.
       operationId: listAgentFrameworks
       responses:
         '200':
@@ -4357,6 +4361,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/lab-status:
+    get:
+      summary: Report how this process is composed to run
+      description: Whether a provider credential is configured, the model name this
+        process would reach for, and whether traces are exported anywhere. Reports
+        no fact about the credential beyond the run mode, and never the exporter endpoint.
+      operationId: getLabStatus
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabStatusResponse'
   /api/v1/objective-blocks:
     get:
       summary: List the shared objective-block library with version provenance
@@ -8511,6 +8529,31 @@ components:
         lab refuses
 
         to report.'
+    LabRunMode:
+      type: string
+      enum:
+      - offline
+      - credentialed
+      title: LabRunMode
+      description: Whether this build can reach a model provider at all.
+    LabStatusResponse:
+      properties:
+        run_mode:
+          $ref: '#/components/schemas/LabRunMode'
+        model_id:
+          type: string
+          title: Model Id
+        trace_export_configured:
+          type: boolean
+          title: Trace Export Configured
+      additionalProperties: false
+      type: object
+      required:
+      - run_mode
+      - model_id
+      - trace_export_configured
+      title: LabStatusResponse
+      description: Three facts about composition, and deliberately no fourth.
     LoyaltyTier:
       type: string
       enum:

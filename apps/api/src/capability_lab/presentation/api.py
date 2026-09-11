@@ -252,6 +252,7 @@ from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.experiments import ExperimentRoutes
 from capability_lab.presentation.history import ExperimentHistoryRoutes
 from capability_lab.presentation.judge_configurations import JudgeConfigurationRoutes
+from capability_lab.presentation.lab_status import LabStatusRoutes
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
@@ -2146,7 +2147,13 @@ def create_app(
         methods=["GET"],
         response_model=AgentFrameworkListResponse,
         operation_id="listAgentFrameworks",
-        summary="List agent frameworks and proven capabilities",
+        summary="List the agent frameworks this process has registered",
+        description=(
+            "Which conversation adapters this process could run right now, which depends on "
+            "the machine's configuration. What an author may publish is a different question, "
+            "answered by the proven-framework catalog that readAgentConfigurationResources "
+            "serves."
+        ),
     )
     router.add_api_route(
         "/conversations",
@@ -2334,6 +2341,7 @@ def create_app(
         experiment_annotation_service,
     ).register(router)
     JudgeConfigurationRoutes(judge_configuration_service).register(router)
+    LabStatusRoutes(settings).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)

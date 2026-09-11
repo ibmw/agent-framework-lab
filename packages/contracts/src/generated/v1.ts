@@ -28,7 +28,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List agent frameworks and proven capabilities */
+    /**
+     * List the agent frameworks this process has registered
+     * @description Which conversation adapters this process could run right now, which depends on the machine's configuration. What an author may publish is a different question, answered by the proven-framework catalog that readAgentConfigurationResources serves.
+     */
     get: operations["listAgentFrameworks"];
     put?: never;
     post?: never;
@@ -1380,6 +1383,26 @@ export interface paths {
     };
     /** Retrieve one immutable published judge version */
     get: operations["getJudgeConfigurationVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/lab-status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Report how this process is composed to run
+     * @description Whether a provider credential is configured, the model name this process would reach for, and whether traces are exported anywhere. Reports no fact about the credential beyond the run mode, and never the exporter endpoint.
+     */
+    get: operations["getLabStatus"];
     put?: never;
     post?: never;
     delete?: never;
@@ -3497,6 +3520,23 @@ export interface components {
       attempt: number;
       outcome: components["schemas"]["JudgeOutcome"] | null;
       failure: components["schemas"]["JudgeFailure"] | null;
+    };
+    /**
+     * LabRunMode
+     * @description Whether this build can reach a model provider at all.
+     * @enum {string}
+     */
+    LabRunMode: "offline" | "credentialed";
+    /**
+     * LabStatusResponse
+     * @description Three facts about composition, and deliberately no fourth.
+     */
+    LabStatusResponse: {
+      run_mode: components["schemas"]["LabRunMode"];
+      /** Model Id */
+      model_id: string;
+      /** Trace Export Configured */
+      trace_export_configured: boolean;
     };
     /**
      * LoyaltyTier
@@ -11041,6 +11081,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getLabStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LabStatusResponse"];
         };
       };
     };
