@@ -131,7 +131,22 @@ actually choose is what a credentialed run adds, and no such run has been made h
 found the defect an adapter sweep could not: one SDK was showing its model a Python repr of the
 tool result where the other showed JSON, so the two arms were being asked the same question in
 two notations — now rendered once, by the lab, for both (ADR 0042), which completes Milestone 6.
-The POC's remaining conversation, persona, and order-action HTTP contracts
+Milestone 7 has begun on the person operating all of that rather than on what the lab records: a
+settings surface at `/settings`, outside shop scope because the first step of a guided path is
+creating the shop a new operator does not have yet, reporting the frameworks this build has proven
+it can run and the envelope each was proven inside, the run mode and model it is composed for, and
+whether an exporter is installed. All four are reports rather than controls: a credential and a
+collector URL are environment, and a field for either would mean this application storing a secret
+`docs/observability.md` forbids it from so much as recording. The one additive route behind them
+serves three composition facts and deliberately no fourth — no prefix, suffix, length or hash of
+the key, and no endpoint. While no credential is configured the surface carries the standing limit
+ADR 0042 established and ADR 0043 could only write onto one seeded run: only the deterministic
+control arm can be advanced here, and a comparison whose arms decide identically by construction
+establishes the evidence model rather than a difference between frameworks. The shop-scoped entry
+that was also called Settings is renamed to shop details, and the rail's default state and the
+last-visited shop become preferences in the operator's browser rather than rows in the database
+whose every other row is evidence an experiment pins (ADR 0044). The POC's remaining conversation,
+persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
 
@@ -952,6 +967,87 @@ would have made the bridge the subject of the comparison. It returns as a candid
 comparing a TypeScript runtime as such is the point (ADR 0041). LangGraph is the named candidate
 for the architecture dimension, which stays closed until something implements a second
 `AgentArchitecture` member.
+
+## Milestone 7 — Guided setup and lab settings
+
+### Goal
+
+Make the lab operable by somebody who has not read the roadmap. Every milestone before this one
+was about what the lab records; this one is about the person operating it.
+
+### Slice 1 — Lab settings and what this build can do
+
+- [x] Add `/settings` as a top-level route outside shop scope, reached from the header, with the
+  guides beside it at `/guides`.
+- [x] Rename the shop-scoped "Settings" navigation entry to shop details, leaving its route
+  unchanged.
+- [x] Report what this build can run, its run mode and model, and whether trace export is
+  configured, through one additive read-only route.
+- [x] State the offline limit as a property of the build rather than only of a seeded run.
+- [x] Store the navigation rail's default state and the last-visited shop as browser preferences.
+
+Frames: none. `/settings` and `/guides` are lab-level surfaces outside the eighteen-frame
+shop-workspace set, like the shops index, the four shop-setup pages and the support-identity and
+judge listings already shipped; they are built from the existing chrome primitives and invent no
+layout language (ADR 0044).
+
+Slice evidence: an operator who has just cloned the repository opens the lab and reads, in one
+place, which frameworks it has actually proven it can run and at which models, that it is running
+offline and what that means for any comparison it produces, and that no trace exporter is
+configured — with the Phoenix path when they want one. Nothing on the page edits a provider
+credential or an exporter endpoint, because both are composition rather than preference, and the
+route that reports them serves the run mode and the model name and never a fact about the key.
+ADR 0044 records the placement decision and the naming collision it resolves, the read-outs as
+reports rather than controls, the narrow status payload and why an endpoint is not in it, and the
+standing offline qualification that ADR 0042 established and ADR 0043 could only write onto one run.
+
+### Slice 2 — Guide mode and the derived next step
+
+- [ ] Add guide mode, defaulted from the record and overridden by a stored preference.
+- [ ] Project the setup path's progress from the listings the product already serves, storing
+  nothing.
+- [ ] Render the blocking reason from the publish gate rather than from a second explanation.
+- [ ] Add the glossary, sourced from one module carrying this document's stable vocabulary.
+
+Frames: one new frame for the guide strip, designed before the slice lands. It is a cross-cutting
+band across the top of frames 1, 4, 7 and 9, which were designed without one, and is the half of
+this milestone that is inside the authoritative set (ADR 0044). `docs/design-direction.md` gains
+the revision paragraph recording both halves of that split.
+
+Slice evidence: an operator with an empty database is told to create a shop; having created one and
+left its tone of voice unset, they are told what the publish gate itself says is missing, in the
+gate's own words; having published it they are told what comes next. Nothing was written when any
+of those steps completed, so the same reading holds for a database somebody filled with `make seed`
+and for one filled in a different order by hand, and a draft edited after publication leaves its
+step complete because the version an experiment would pin is still there. Guide mode is on before
+anybody turned it on and off once the lab holds a completed experiment, and an operator who
+disagrees with either is remembered.
+
+### Slice 3 — From nothing to a two-arm comparison
+
+- [ ] Write the setup guide covering the full chain in dependency order, from an empty database to
+  a driven experiment.
+- [ ] Name `make seed` as the fast path, as a command.
+- [ ] Add the inline explainers on the surfaces whose vocabulary is not transferable from a
+  commerce admin.
+
+Frames: none new; the explainers use the strip from Slice 2 and the existing chrome.
+
+Slice evidence: a reader who has never seen this product is walked from an empty database to a
+comparison they can read — eight kinds of definition, twelve published versions, and a dependency
+order in which nearly every gate refuses until the one before it is satisfied, which is the
+afternoon of clicking ADR 0043 measured. The guide offers `make seed` as a command to run in a
+terminal and exposes no control that performs it: ADR 0043 decided the seed is a command and never
+a route, and a convenience button would be that route reintroduced. Every other step links to the
+surface where the work is done, so the guide reads the chain and gains no privilege over it.
+
+### Acceptance criteria
+
+- No step of the guide is stored, and no surface reports progress the record does not support.
+- The lab states its offline limit without an operator having to read an ADR to learn it.
+- Nothing in the settings surface or the guide can populate, reset, or overwrite a database.
+- Provider credentials and exporter endpoints stay in the environment, and no route reports a fact
+  about either secret.
 
 ## Deferred decision triggers
 

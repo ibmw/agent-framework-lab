@@ -55,6 +55,15 @@ and run `make migrate` before `make seed`:
 rm -f var/agent-lab.db && make migrate && make seed
 ```
 
+`/settings` in the Studio reports what the running build is composed to do: the frameworks it has
+proven it can run and the envelope each was proven inside, whether a provider credential is
+configured and with which model, and whether traces are exported anywhere. It edits none of them.
+The proven-framework table is a code constant deliberately kept apart from the machine, so that
+what an author may publish does not change with where the Studio runs; the credential and the
+exporter are read from the environment when the API starts. While no credential is configured the
+page states what that means for what this lab can advance and for any comparison it holds
+(ADR 0044).
+
 The `prek` hooks run Ruff, Pyright, Biome, and TypeScript without a server, real database, E2E test,
 or network call. Before any development-server command, inspect ports 8000 and 5173 and reuse a
 healthy stack. A restart must have an identified reason and be announced.

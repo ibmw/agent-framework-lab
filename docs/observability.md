@@ -53,3 +53,12 @@ For local POC visualization, start `infra/phoenix/compose.yaml`, set
 `AGENT_LAB_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006/v1/traces`, and open
 `http://localhost:6006`. The HTTP endpoint must include `/v1/traces`. Leaving the setting unset
 keeps the application functional with an in-process no-export tracer.
+
+Whether that setting is configured is reported on the lab's own settings surface, as a boolean and
+never as an address: `GET /api/v1/lab-status` serves no endpoint, because a collector URL is a place
+a deployment can put a token and a route that serves one serves that token the day somebody does.
+It reports what this process reads the setting as rather than what the variable holds — a blank
+value installs no exporter, and the read-out says so. The surface shows the Phoenix path above when
+nothing is configured, so the way to a local collector is readable from the application rather than
+only from this file, and it reports the allowlist as covering the spans the lab itself opens, which
+is the only sanitization this project is in a position to promise (ADR 0044).
