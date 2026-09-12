@@ -250,6 +250,18 @@ The same rule governs every other action the guide names: it links to the surfac
 done and never performs the work. The guide is a reader of the chain, and gains no privilege over
 it.
 
+> Narrowed (2026-09-12). The shops list now offers *Use an example shop*, which fills the create
+> form's four fields with a ready-made identity. This decision stands: the seed is still a command,
+> still has no route, and nothing in the application performs it. What the control does is smaller
+> than the thing that was refused, in the two ways that made the refusal necessary. It **creates**
+> and never overwrites, so no running lab is a request away from losing what it holds; and it is
+> scoped to one empty draft shop rather than to every table, so it is not a fixture at all — it is
+> the first step of the chain, typed for you. The seed's own gate is the evidence that these are
+> different things: `make seed` refuses unless every table in `SEEDED_TABLES` is empty, which is
+> why it could never have been the *Create a shop* control this narrowing describes. It writes a
+> deliberately different identity from the seed's `northstar-outfitters`, so a shops list never
+> shows an empty draft wearing the name of the published worked example.
+
 ### The settings surface reports composition and never edits it
 
 `/settings` carries four read-outs, and none of them is a control.

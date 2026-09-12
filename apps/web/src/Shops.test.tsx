@@ -44,6 +44,76 @@ async function createShopCard() {
   return within(card as HTMLElement);
 }
 
+describe("creating a shop from an example", () => {
+  it("fills every field the form requires, so the example is publishable as typed", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.click(card.getByRole("button", { name: "Use an example shop" }));
+
+    expect(card.getByLabelText("Name")).toHaveValue("Harbour Lane Supply");
+    expect(card.getByLabelText("Slug")).toHaveValue("harbour-lane-supply");
+    expect(card.getByLabelText("Locale")).toHaveValue("en-GB");
+    expect(card.getByLabelText("Currency")).toHaveValue("EUR");
+  });
+
+  it("creates nothing until the operator presses Create shop", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.click(card.getByRole("button", { name: "Use an example shop" }));
+
+    expect(created).toBeNull();
+  });
+
+  it("writes what the form holds rather than the example, and the slug follows a rename", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.click(card.getByRole("button", { name: "Use an example shop" }));
+    await user.clear(card.getByLabelText("Name"));
+    await user.type(card.getByLabelText("Name"), "Rivermouth Goods");
+    await user.click(card.getByRole("button", { name: "Create shop" }));
+
+    // The example answers the name, not the slug, so renaming it carries the slug along rather
+    // than leaving a shop called one thing addressed as another.
+    expect(created).toEqual({
+      identity: {
+        name: "Rivermouth Goods",
+        slug: "rivermouth-goods",
+        locale: "en-GB",
+        currencies: ["EUR"],
+        channels: ["chat"],
+      },
+    });
+  });
+
+  it("does not claim the identity the seed writes, which arrives with content behind it", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.click(card.getByRole("button", { name: "Use an example shop" }));
+
+    expect(card.getByLabelText("Slug")).not.toHaveValue("northstar-outfitters");
+  });
+
+  it("says the example is filled in rather than created", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.click(card.getByRole("button", { name: "Use an example shop" }));
+
+    expect(card.getByRole("status")).toHaveTextContent(
+      /nothing is created until you press Create shop/i,
+    );
+  });
+});
+
 describe("the slug a name suggests", () => {
   it("writes itself as the name is typed", async () => {
     const user = userEvent.setup();

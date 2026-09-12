@@ -10,6 +10,7 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
+  outlineButtonClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -17,6 +18,22 @@ import {
 import { AppShell } from "../shell/AppShell";
 
 const CURRENCIES = ["EUR", "USD", "GBP"] as const;
+
+/** A ready-made identity for the form, for an operator who came to see the product rather than
+ * to name a shop. It fills the four fields and creates nothing: what gets written is still
+ * whatever is in the form when *Create shop* is pressed, so the example can be read and edited
+ * first, and pressing this by mistake costs nothing.
+ *
+ * Deliberately not `northstar-outfitters`, which `make seed` writes. That shop arrives published,
+ * with a catalog, a scenario and a finished comparison behind it; this one is an empty draft. Two
+ * different things under one name would make the shops list lie about which of them you are
+ * looking at.
+ */
+const EXAMPLE_SHOP = {
+  name: "Harbour Lane Supply",
+  locale: "en-GB",
+  currency: "EUR",
+} as const satisfies { currency: (typeof CURRENCIES)[number] } & Record<string, string>;
 
 export function ShopsPage() {
   const navigate = useNavigate();
@@ -28,6 +45,7 @@ export function ShopsPage() {
   const [locale, setLocale] = useState("en-GB");
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>("EUR");
   const [creating, setCreating] = useState(false);
+  const [filled, setFilled] = useState(false);
   // The slug follows the name until somebody answers the slug themselves, and then it stops:
   // a field that overwrote a deliberate answer on the next keystroke in another field would be
   // worse than one that never helped. Emptying it hands it back, which is the way out for a
@@ -44,6 +62,17 @@ export function ShopsPage() {
   function changeSlug(value: string) {
     setSlug(value);
     setSlugEdited(value !== "");
+  }
+
+  function fillWithExample() {
+    setName(EXAMPLE_SHOP.name);
+    setSlug(shopSlugFromName(EXAMPLE_SHOP.name));
+    setLocale(EXAMPLE_SHOP.locale);
+    setCurrency(EXAMPLE_SHOP.currency);
+    // The example's slug is what its name derives, so this is filling the pair in rather than
+    // answering the slug: renaming the example afterwards still carries the slug along.
+    setSlugEdited(false);
+    setFilled(true);
   }
 
   useEffect(() => {
@@ -198,6 +227,24 @@ export function ShopsPage() {
                 A new shop starts as an empty draft. Catalog and support content are added in the
                 workspace, then published together.
               </p>
+              {/* Below the control it assists rather than beside it: this fills the form in, so it
+                  reads as an alternative to typing the four fields, not as a second way to
+                  create. `type="button"` because everything else in this form submits it. */}
+              <div className="grid gap-1.5 border-t border-admin-border pt-3">
+                <button
+                  className={outlineButtonClasses}
+                  type="button"
+                  disabled={creating}
+                  onClick={fillWithExample}
+                >
+                  Use an example shop
+                </button>
+                <p className="text-xs text-admin-muted" role="status">
+                  {filled
+                    ? `Filled in ${EXAMPLE_SHOP.name}. Change anything you like — nothing is created until you press Create shop.`
+                    : "Fills the fields above with a ready-made shop, for when you want to look around rather than name one. It creates nothing on its own."}
+                </p>
+              </div>
             </form>
           </Card>
         </div>

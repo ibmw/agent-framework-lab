@@ -40,6 +40,7 @@ export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
     body: [
       "A [[shop]] is the synthetic commerce platform an incident happens inside: the catalog, the policies and FAQ the agent reaches through tools, the payment and fulfilment methods an order can use, and the named tone-of-voice guidelines it answers in. Nothing else in this chain exists outside one — every later step is either authored in a shop or published against one.",
       "The shop's home lists whatever its publish gate is still refusing, and those words are the gate's own rather than a second opinion. Publishing freezes the draft as version 1; the draft stays yours to keep editing, and nothing that pinned v1 moves when you do.",
+      "If you have no name in mind, the create form offers “Use an example shop”, which fills its four fields with a ready-made identity you can edit before creating. It is a convenience on the first step only: the shop it makes is the same empty draft as one you typed, and every gate below applies to it unchanged.",
     ],
     gate: "Until a shop has one published version, a ticket cannot be published against it.",
   },
@@ -193,10 +194,13 @@ export function SetupGuidePage() {
             rm -f var/agent-lab.db && make migrate && make seed
           </pre>
           <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-            There is no button for any of this, here or anywhere else in the application, and there
-            deliberately never will be. A running lab must never be one request away from being
-            overwritten with a fixture, and the refusal a seed can hit — a database that is not
-            empty — is one you have to be able to read and act on in a shell anyway.
+            Nothing in the application performs this, here or anywhere else, and nothing ever will.
+            A running lab must never be one request away from being overwritten with a fixture, and
+            the refusal a seed can hit — a database that is not empty — is one you have to be able
+            to read and act on in a shell anyway. What the shops list does offer is narrower and
+            additive: <em>Use an example shop</em> fills the create form with a ready-made identity
+            so step 1 below costs no invention. It writes one empty draft shop when you press
+            Create, overwrites nothing, and leaves the other nine steps exactly where they are.
           </p>
         </Card>
 
