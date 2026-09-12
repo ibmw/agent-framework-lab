@@ -193,6 +193,21 @@ function draft(blockId: string, content: unknown) {
 }
 
 const server = setupServer(
+  // The inline explainers read guide mode, which is derived from whether this lab holds a
+  // completed comparison. An empty history leaves it on, so the notes render in these
+  // journeys rather than being quietly absent from them (ADR 0044).
+  http.get("*/api/v1/experiments", () =>
+    HttpResponse.json({
+      experiments: [],
+      page: 1,
+      page_size: 1,
+      total: 0,
+      shops: [],
+      scenarios: [],
+      frameworks: [],
+      tags: [],
+    }),
+  ),
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
@@ -268,6 +283,7 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   server.resetHandlers();
+  window.localStorage.clear();
   currentObjective = OBJECTIVE_CONTENT;
   currentMutation = MUTATION_CONTENT;
   savedPayloads = [];
@@ -327,6 +343,35 @@ describe("block libraries", () => {
     expect(screen.getByRole("link", { name: "Objective blocks" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Mutation blocks" })).toBeVisible();
     expect(screen.getByRole("link", { name: "All scenarios" })).toBeVisible();
+  });
+
+  it("says what a block is while guide mode is on, and stops saying it once it is off", async () => {
+    // The vocabulary these two screens use is the lab's own — a template with open parameters
+    // is not a thing a commerce admin has — so each library carries its own note (ADR 0044).
+    const objectives = renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    const objectiveNote = await screen.findByRole("region", {
+      name: "Guide note: What an objective block is",
+    });
+    expect(within(objectiveNote).getByRole("link", { name: "objective block" })).toHaveAttribute(
+      "href",
+      "/guides/glossary#objective-block",
+    );
+    objectives.unmount();
+
+    const mutations = renderAt(`/shops/${SHOP_ID}/mutation-blocks`);
+    expect(
+      await screen.findByRole("region", { name: "Guide note: What a mutation block is" }),
+    ).toBeVisible();
+    mutations.unmount();
+
+    // One preference, read by the band and by every note: turning the guide off turns these
+    // off too, rather than leaving a second mode to find.
+    window.localStorage.setItem("agent-lab.guide-mode", "off");
+    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    // Awaited on a row rather than the heading: the heading is on the first frame, where
+    // every note is absent anyway, and the rows arrive after a request has come back.
+    await screen.findByRole("link", { name: "read-required-document" });
+    expect(screen.queryByRole("region", { name: /Guide note/ })).toBeNull();
   });
 });
 

@@ -337,16 +337,20 @@ describe("lab settings", () => {
     expect(preference).toBeChecked();
   });
 
-  it("promises nothing the guides do not yet deliver", async () => {
+  it("indexes the guides that exist and promises none that do not", async () => {
     renderAt("/guides");
 
     expect(await screen.findByRole("heading", { name: "Guides" })).toBeVisible();
-    // The glossary is here; the written walk-through is not, and the page says which.
-    expect(screen.getByRole("link", { name: "Open the glossary" })).toBeVisible();
-    expect(
-      screen.getByText(/is the next piece of work rather than something this build/),
-    ).toBeVisible();
-    // And it hands over the command rather than offering to run it.
+    expect(screen.getByRole("link", { name: "Open the setup guide" })).toHaveAttribute(
+      "href",
+      "/guides/setup",
+    );
+    expect(screen.getByRole("link", { name: "Open the glossary" })).toHaveAttribute(
+      "href",
+      "/guides/glossary",
+    );
+    // The index hands over the command rather than offering to run it, like every other
+    // surface that names it.
     expect(screen.getByText("make seed", { selector: "code" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /seed|demo data|populate/i })).toBeNull();
   });

@@ -23,6 +23,7 @@ import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
 import { ScenarioEditorPage } from "./routes/ScenarioEditorPage";
 import { ScenariosPage } from "./routes/ScenariosPage";
+import { SetupGuidePage } from "./routes/SetupGuidePage";
 import { ShopHomePage } from "./routes/ShopHomePage";
 import {
   PoliciesAndFaqPage,
@@ -47,6 +48,7 @@ export function App() {
           guided path is creating the shop a new operator does not have yet (ADR 0044). */}
       <Route path="/settings" element={<LabSettingsPage />} />
       <Route path="/guides" element={<GuidesPage />} />
+      <Route path="/guides/setup" element={<SetupGuidePage />} />
       <Route path="/guides/glossary" element={<GlossaryPage />} />
       <Route path="/shops/:shopId" element={<ShopWorkspace />}>
         <Route index element={<ShopHomePage />} />

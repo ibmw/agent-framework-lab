@@ -15,6 +15,7 @@ import {
   listSandboxSnapshots,
   materializeSandboxSnapshot,
 } from "../api/snapshots";
+import { Explainer } from "../components/Explainer";
 import { SandboxToolConsole } from "../components/SandboxToolConsole";
 import {
   Card,
@@ -157,6 +158,8 @@ export function SnapshotsPage() {
           </>
         }
       />
+
+      <Explainer id="snapshots" />
 
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">

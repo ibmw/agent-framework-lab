@@ -273,6 +273,21 @@ function draft(content: ScenarioContentSchema): ScenarioDraftResponse {
 }
 
 const server = setupServer(
+  // The inline explainers read guide mode, which is derived from whether this lab holds a
+  // completed comparison. An empty history leaves it on, so the notes render in these
+  // journeys rather than being quietly absent from them (ADR 0044).
+  http.get("*/api/v1/experiments", () =>
+    HttpResponse.json({
+      experiments: [],
+      page: 1,
+      page_size: 1,
+      total: 0,
+      shops: [],
+      scenarios: [],
+      frameworks: [],
+      tags: [],
+    }),
+  ),
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
@@ -412,6 +427,20 @@ describe("scenario editor", () => {
     expect(
       screen.getByText("a published scenario must assert something", { exact: false }),
     ).toBeVisible();
+  });
+
+  it("says what it composes while guide mode is on", async () => {
+    // "Recipe", "binding" and "hidden fact" are this lab's words, not a commerce admin's, so
+    // the editor carries a note that defines them where they are used (ADR 0044).
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    const note = await screen.findByRole("region", {
+      name: "Guide note: What this editor composes",
+    });
+    expect(within(note).getByRole("link", { name: "scenario" })).toHaveAttribute(
+      "href",
+      "/guides/glossary#scenario",
+    );
   });
 
   it("binds a template to this shop's own objects rather than to typed text", async () => {

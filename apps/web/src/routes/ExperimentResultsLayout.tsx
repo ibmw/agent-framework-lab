@@ -22,6 +22,7 @@ import {
   getExperimentEvaluation,
   replayExperiment,
 } from "../api/experiments";
+import { Explainer } from "../components/Explainer";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   fieldControlClasses,
@@ -245,6 +246,8 @@ export function ExperimentResultsLayout() {
           </>
         }
       />
+
+      <Explainer id="results" />
 
       {error ? (
         <p role="alert" className="mb-3 text-[13px] text-lab-error">

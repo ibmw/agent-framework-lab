@@ -794,6 +794,21 @@ let replayFails = false;
 let forked: { configuration_id: string; version: number }[][] = [];
 
 const server = setupServer(
+  // The bench and the results screen carry an inline explainer, which reads guide mode from
+  // whether this lab holds a completed comparison. An empty history leaves it on, so the notes
+  // render in these journeys rather than being quietly absent from them (ADR 0044).
+  http.get("*/api/v1/experiments", () =>
+    HttpResponse.json({
+      experiments: [],
+      page: 1,
+      page_size: 1,
+      total: 0,
+      shops: [],
+      scenarios: [],
+      frameworks: [],
+      tags: [],
+    }),
+  ),
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
@@ -1158,6 +1173,18 @@ describe("live bench", () => {
     expect(within(armA).getByText(TRIGGER)).toBeVisible();
     expect(within(armB).getByText(TRIGGER)).toBeVisible();
     expect(within(armA).getByText("Trigger")).toBeVisible();
+  });
+
+  it("says what the operator is looking at and doing, while guide mode is on", async () => {
+    renderBench();
+
+    const note = await screen.findByRole("region", {
+      name: "Guide note: What you are looking at, and what you are doing",
+    });
+    expect(within(note).getByRole("link", { name: "participant driver" })).toHaveAttribute(
+      "href",
+      "/guides/glossary#participant-driver",
+    );
   });
 
   it("sends one composition to both arms by default", async () => {
@@ -1698,6 +1725,18 @@ describe("experiment results", () => {
     // appears: the card's "no other state changed" is otherwise unfalsifiable.
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Changed outside every order: interaction.ticket_reference: T-204 → T-999",
+    );
+  });
+
+  it("says how to read the comparison, while guide mode is on", async () => {
+    renderResults();
+
+    const note = await screen.findByRole("region", {
+      name: "Guide note: How to read this comparison",
+    });
+    expect(within(note).getByRole("link", { name: "judge" })).toHaveAttribute(
+      "href",
+      "/guides/glossary#judge-configuration",
     );
   });
 });

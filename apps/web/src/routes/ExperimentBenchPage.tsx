@@ -20,6 +20,7 @@ import {
   getExperimentEvaluation,
   scoreExperiment,
 } from "../api/experiments";
+import { Explainer } from "../components/Explainer";
 import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -222,6 +223,8 @@ export function ExperimentBenchPage() {
           </Link>
         }
       />
+
+      <Explainer id="bench" />
 
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">

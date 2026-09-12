@@ -297,6 +297,21 @@ let arms: SandboxListResponse = { sandboxes: [] };
 let cloned: Record<string, unknown>[] = [];
 
 const server = setupServer(
+  // The inline explainers read guide mode, which is derived from whether this lab holds a
+  // completed comparison. An empty history leaves it on, so the notes render in these
+  // journeys rather than being quietly absent from them (ADR 0044).
+  http.get("*/api/v1/experiments", () =>
+    HttpResponse.json({
+      experiments: [],
+      page: 1,
+      page_size: 1,
+      total: 0,
+      shops: [],
+      scenarios: [],
+      frameworks: [],
+      tags: [],
+    }),
+  ),
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get("*/api/v1/tools", () => HttpResponse.json(TOOLS)),
   http.get("*/api/v1/support-identities", () => HttpResponse.json(IDENTITIES)),
@@ -412,6 +427,18 @@ describe("starting states", () => {
 
     await waitFor(() => expect(materialized).toHaveLength(1));
     expect(materialized[0]).toEqual({ seed: 20260825, version: "2" });
+  });
+
+  it("says what a starting state is while guide mode is on", async () => {
+    renderPage();
+
+    const note = await screen.findByRole("region", {
+      name: "Guide note: What a starting state is",
+    });
+    expect(within(note).getByRole("link", { name: "snapshot" })).toHaveAttribute(
+      "href",
+      "/guides/glossary#sandbox-snapshot",
+    );
   });
 
   it("separates what the snapshot pinned from what it copied", async () => {

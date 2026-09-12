@@ -1,15 +1,14 @@
 import { Link } from "react-router-dom";
 import { Card } from "../components/WorkspaceChrome";
 import { GLOSSARY_TERMS } from "../lib/glossary";
+import { SETUP_CHAIN } from "../lib/setupPath";
 import { LabSurface, useLabSurface } from "../shell/LabSurface";
 
 /**
- * What the lab can currently explain about itself: the vocabulary, and where the next step
- * comes from.
+ * What the lab can explain about itself: the chain, and the words it speaks along the way.
  *
- * The written setup guide — the whole chain in dependency order, with `make seed` named as the
- * fast path at its top — is the piece of work after this one. Saying so is better than a page
- * that implied the guide is here.
+ * Two guides ADR 0044 names — reading a comparison, and replay and fork — are deliberately not
+ * written yet. Saying so is better than an index that implies a page exists behind every idea.
  */
 export function GuidesPage() {
   const surface = useLabSurface();
@@ -19,7 +18,25 @@ export function GuidesPage() {
       title="Guides"
       description="The path from an empty database to a two-arm comparison, and the words the application uses along the way — beside the lab's settings rather than inside a shop."
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,560px)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,640px)]">
+        <Card title="From nothing to a two-arm comparison">
+          <p className="text-[13px] leading-relaxed text-admin-ink-soft">
+            The whole chain in dependency order: {SETUP_CHAIN.length} steps from an empty database
+            to an experiment you have driven yourself, each one explaining what it is and what
+            refuses until it is satisfied. It opens with the fast path —{" "}
+            <code className="font-mono">make seed</code>, a command to run in a terminal, which
+            fills an empty database with one complete worked example.
+          </p>
+          <p className="text-[13px]">
+            <Link
+              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+              to="/guides/setup"
+            >
+              Open the setup guide
+            </Link>
+          </p>
+        </Card>
+
         <Card title="Glossary">
           <p className="text-[13px] leading-relaxed text-admin-ink-soft">
             {GLOSSARY_TERMS.length} terms: what a definition, a block, a snapshot, an arm and a
@@ -36,23 +53,15 @@ export function GuidesPage() {
           </p>
         </Card>
 
-        <Card title="The setup path">
+        <Card title="Guide mode">
           <p className="text-[13px] leading-relaxed text-admin-ink-soft">
             With guide mode on, a band at the top of the shops index and each shop's home names the
             one step that unblocks the chain, with the publish gate's own reason underneath when
-            something is blocking it. Nothing about that reading is stored: a step is complete
-            because the thing it asks for exists in a listing, so a lab filled by hand and one
-            filled in a different order read the same.
-          </p>
-          <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-            The written walk-through of that chain — eight kinds of definition and twelve published
-            versions in dependency order — is the next piece of work rather than something this
-            build already does. Until it lands,{" "}
-            <code className="font-mono">docs/development.md</code> documents{" "}
-            <code className="font-mono">make seed</code>, which fills an empty database with one
-            complete worked example, and the three commands that reset it. Run it in a terminal:
-            there is no button anywhere in this application that populates the lab, and a running
-            lab must never be one request away from being overwritten with a fixture.
+            something is blocking it, and the screens whose vocabulary is particular to this lab —
+            the block libraries, the scenario editor, the starting states, the bench and the results
+            — carry a note saying what they are. Nothing about any of that reading is stored: a step
+            is complete because the thing it asks for exists in a listing, so a lab filled by hand
+            and one filled in a different order read the same.
           </p>
           <p className="text-[13px] text-admin-ink-soft">
             <Link
