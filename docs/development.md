@@ -61,8 +61,10 @@ rather than the checkout: ten steps in dependency order, what each one is, and w
 it is satisfied. It names `make seed` at the top as a command and the reset above as three, and it
 exposes no control that performs either — the seed is a command and never a route (ADR 0043), so
 there is no button anywhere in the application that populates, resets or reseeds a database.
-`/guides/glossary` defines the vocabulary those steps use, and while guide mode is on the screens
-that speak it carry the same definitions inline.
+`/guides/glossary` defines the vocabulary those steps use, and the screens that speak it each carry
+a *Show me around* control in their header that walks that one screen with the same definitions in
+it. The control is on every one of those screens, for everybody: there is no mode to turn it on
+(ADR 0046).
 
 `/settings` in the Studio reports what the running build is composed to do: the frameworks it has
 proven it can run and the envelope each was proven inside, whether a provider credential is

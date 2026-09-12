@@ -1,6 +1,6 @@
 # ADR 0044 — Lab settings, and a guide that reads the record rather than remembering the reader
 
-Status: accepted, partially superseded by ADR 0045 — 2026-09-11
+Status: accepted, partially superseded by ADR 0045 and ADR 0046 — 2026-09-11
 
 Opens Milestone 7. Every milestone before it was about what the lab records; this one is the first
 about the person operating it. It adds a lab-level settings surface outside shop scope, a guide
@@ -23,6 +23,12 @@ are not shop settings, that the stored preference is an override rather than a s
 settings surface reports composition and never edits it — stand untouched, as do the
 command-not-a-route rule and the glossary. The narrowing notes below say what each of the three
 leaves standing.
+
+ADR 0046 then **voids the third**: guide mode is removed outright and the *Show me around* controls
+are unconditional, so there is no override left to be an override rather than a state. What survives
+of that decision is its reasoning about where a browser preference lives, which now governs the two
+view preferences this ADR introduced alongside the mode — the rail's default collapsed state and the
+last-visited shop — and those are unchanged. The notes below mark what ADR 0046 reaches.
 
 ## Context
 
@@ -132,6 +138,17 @@ first.
 
 ### The toggle stores an override, not a state
 
+> Voided by ADR 0046 (2026-09-12). Guide mode is removed: the controls it gated do nothing until
+> they are pressed, and a mode whose only remaining job was to hide a button hid it from a seeded
+> lab's operator — the reader least likely to find the switch that brings it back. There is no
+> override because there is no state to disagree with. What still stands is the *second* half of
+> this subsection, which is about storage rather than about the mode: the two view preferences that
+> remain — the rail's default collapsed state and the last-visited shop — live in `localStorage` for
+> exactly the reasons given below, and a `lab_settings` table is still refused on both of them.
+> The stale `agent-lab.guide-mode` key is left in the browsers that hold it, unread, because
+> erasing it would be a migration mechanism for a browser preference and these values were put in
+> `localStorage` so that none would ever be owed (ADR 0046).
+
 Guide mode's default is derived like everything else: on while the lab holds no completed
 experiment, off once it does. What is stored is only an operator's disagreement with that default —
 the explicit on or the explicit off — together with the two view preferences the settings page
@@ -155,6 +172,10 @@ survive a browser, the derived half already does, and only the override would ha
 > around* control that runs a tour of that one screen; the glossary, and the rule that a term has
 > one definition, are unchanged. The paragraphs below stay as the record of what was built and of
 > the reasoning the replacement had to answer.
+
+> Narrowed again by ADR 0046 (2026-09-12). Guide mode decides nothing, because it is gone: the
+> *Show me around* control is on every surface that has a tour, unconditionally. The glossary and
+> its one-definition rule are still unchanged.
 
 With guide mode on, three things appear, and they are the same three whichever surface is open:
 
@@ -345,6 +366,11 @@ records which surfaces host which.
 > removed with the code they covered; the glossary's own coverage assertion survives over the tour
 > copy that replaced the notes. Everything about `getLabStatus`, the offline qualification and the
 > setup guide is unchanged and still asserted.
+
+> Narrowed again by ADR 0046 (2026-09-12). The guide-mode bullet — the derived default asserted in
+> both directions and the stored override asserted to win over both — goes with the mode. What
+> replaces it asserts the other thing: that the launch control is present on every surface in the
+> tour table and that mounting it reads nothing at all.
 
 - The derived checklist is tested over mocked listings rather than over a stored flag: an empty lab
   reports "create a shop"; a lab holding a published shop and nothing else reports the next step and

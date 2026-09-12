@@ -1,6 +1,6 @@
 # ADR 0045 — A tour of the screen you are on, and what the derived strip took with it
 
-Status: accepted — 2026-09-12
+Status: accepted, partially superseded by ADR 0046 — 2026-09-12
 
 Reopens Milestone 7 after it closed. It replaces both of the guide's on-screen readings — the
 derived next-step strip of Slice 2 and the six inline explainer bands of Slice 3 — with a stepped
@@ -12,6 +12,13 @@ was correct is answered by a test rather than argued away, that a tour is per-su
 on demand rather than a walkthrough spanning routes, that the loss of the derived strip is a
 deliberate cost and not a benefit, that the overlay is a dependency rather than a component this
 repository writes, and that guide mode stays as the one preference gating what the guide shows.
+
+ADR 0046 voids the last of those five. Guide mode is removed and the *Show me around* controls are
+unconditional: the reasoning below asked whether a preference still earned its keep once nothing
+appeared unbidden and answered yes, without checking what the mode had become in practice — which
+was a switch that hid the guide from any lab holding a completed comparison, including every lab
+filled by `make seed`. The other four decisions are untouched, and so is everything about the tours
+themselves. The narrowing notes below mark what ADR 0046 reaches.
 
 ## Context
 
@@ -159,6 +166,17 @@ decision and is unchanged. There is one renderer of guide copy and one module th
 
 ### Guide mode stays, and now gates the launch control
 
+> Voided by ADR 0046 (2026-09-12). The mode is removed and the launch controls are unconditional.
+> Both arguments below are about the mode rather than about what it was now gating. The first —
+> that one preference keeps the guide one thing rather than seven — was answering a question
+> nothing asks of a header button: seven buttons that do nothing until pressed are not seven things
+> an operator has to manage. The second — that a lab with no completed comparison is a lab somebody
+> is still learning — is the one that failed on a real machine: `make seed` writes a completed
+> comparison, so the derived default took the guide away from every operator who followed the
+> setup guide's own fast path, and the switch that brings it back was itself on a page they had to
+> already know about. The refusal of a second mode, a second store and a per-tour dismissal stands
+> and is inherited by ADR 0046: none of the three is added in place of what is removed.
+
 Guide mode is unchanged: derived on while the lab holds no completed experiment, off once it does,
 with only an operator's disagreement stored, offered as the same three choices on `/settings`. What
 it now decides is whether the **Show me around** controls are shown at all.
@@ -196,7 +214,8 @@ reading the record, which is the thing being removed rather than relocated.
 - **A tour that spans routes**, and with it any stored position, step counter, or completion flag.
   All three are the stored second shape ADR 0044 refused, and this slice adds none of them.
 - **A "don't show this again" per tour.** Guide mode is the one preference; seven of them would be
-  seven things to keep in agreement.
+  seven things to keep in agreement. *(ADR 0046 removes guide mode too; the refusal of the seven
+  stands, and nothing replaces the one.)*
 - **Any control inside a popover that performs the work it describes.** A tour points at the control
   and the reader clicks it. ADR 0043's refusal and ADR 0044's reading of it are unchanged: the guide
   gains no privilege over the chain.
@@ -247,7 +266,9 @@ reading the record, which is the thing being removed rather than relocated.
   to a definition — the same assertion the explainers carried, over the copy that replaced them.
 - The launch control is asserted present while guide mode is on and absent when it is off, and
   asserted to read nothing at all when an operator has stored the disagreement, so a build that
-  spent a request to decide not to show a button fails.
+  spent a request to decide not to show a button fails. *(Narrowed by ADR 0046: the mode is gone,
+  so the control is asserted present on every surface in `TOURS` and the request assertion becomes
+  unconditional — mounting a launch control makes no request at all.)*
 - One Playwright journey runs a tour end to end: launch, the first step's popover naming the first
   step, forward, back, focus inside the dialog, Escape dismissing it, and the overlay gone
   afterwards. What `driver.js` promises about focus and keys is asserted rather than assumed.
@@ -264,3 +285,7 @@ column, canonical document, fingerprint, tool contract, published-version semant
 changes, and the only stored preference involved is the guide-mode override this slice does not
 touch. A browser that stored `off` before this change still reads as `off` after it, and what it
 hides is now the launch controls rather than the band.
+
+> Narrowed by ADR 0046 (2026-09-12). That last sentence is what went wrong, and it stops being true
+> there: the override is removed, the key is left in the browsers that hold it and read by nothing,
+> and a browser that stored `off` now sees the same controls as one that stored nothing.

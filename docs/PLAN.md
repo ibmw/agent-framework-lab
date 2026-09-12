@@ -215,6 +215,22 @@ in the application now tells an operator returning to a half-built lab which ste
 — `/guides/setup` walks the ten steps without knowing which of them this lab has reached
 (ADR 0045).
 
+Then guide mode itself went. Slice 2 built it and Slice 4 kept it, and both were right about the
+guide they were looking at: a mode is what you need when the guide **draws itself** on screen, and
+until Slice 4 the band and the six notes did exactly that. Once every reading became a button that
+does nothing until it is pressed, the mode had one remaining job — hiding that button — and it did
+it worst for the reader who needed it most. Its derived default was *off once the lab holds a
+completed comparison*, which is the first thing `make seed` writes, so anybody who took the setup
+guide's own fast path landed in a populated lab with the guide silently switched off and the switch
+that brings it back on a settings page they had to already know about. So the mode is deleted, not
+re-defaulted: there is no `lib/guide.ts`, no stored `agent-lab.guide-mode`, and no guide-mode
+control on `/settings`, which keeps the rail preference and the last-visited shop. The seven *Show
+me around* controls are simply there. What that costs is that no operator can turn them off
+lab-wide, which is recorded as a cost and accepted for what it covers: seven buttons in a header
+slot that was already carrying buttons, none of which does anything until it is pressed. The stale
+key is left in the browsers that hold it rather than erased, because a reader kept alive to erase a
+browser preference is a migration mechanism for a browser preference (ADR 0046).
+
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -1073,6 +1089,9 @@ standing offline qualification that ADR 0042 established and ADR 0043 could only
 ### Slice 2 — Guide mode and the derived next step
 
 - [x] Add guide mode, defaulted from the record and overridden by a stored preference.
+  *Superseded by Slice 5: once the guide appeared only on request the mode's derived default hid it
+  from every lab `make seed` fills, so the controls are unconditional and the mode, its store and
+  its settings control are gone (ADR 0046).*
 - [x] Project the setup path's progress from the listings the product already serves, storing
   nothing.
 - [x] Render the blocking reason from the publish gate rather than from a second explanation.
@@ -1091,7 +1110,8 @@ of those steps completed, so the same reading holds for a database somebody fill
 and for one filled in a different order by hand, and a draft edited after publication leaves its
 step complete because the version an experiment would pin is still there. Guide mode is on before
 anybody turned it on and off once the lab holds a completed experiment, and an operator who
-disagrees with either is remembered.
+disagrees with either is remembered. *Superseded by Slice 5: there is no guide mode, so nothing
+about this reading is left to be on or off (ADR 0046).*
 
 ### Slice 3 — From nothing to a two-arm comparison
 
@@ -1131,6 +1151,7 @@ what that costs.
 - [x] Delete the projection the strip alone kept alive, keeping the chain the written setup guide
   walks.
 - [x] Keep guide mode as the one preference, now deciding whether a surface offers its tour.
+  *Superseded by Slice 5: the mode is removed and every surface with a tour offers it (ADR 0046).*
 
 Frames: none, and one retired. The authoritative set returns to **eighteen**: the nineteenth frame
 existed because the band was a shape drawn into surfaces designed without one, and a tour adds no
@@ -1153,9 +1174,43 @@ rather than dressed up: the derived reading is deleted, so nothing in the applic
 operator returning to a half-built lab which step of the chain is still missing, and `/guides/setup`
 walks the ten steps without knowing which of them this lab has reached.
 
+### Slice 5 — The guide stops being a mode
+
+Milestone 7 had closed twice. Slice 4 replaced what the guide showed; this slice removes the one
+thing Slice 2 built that survived it, because the shape it was built for is gone.
+
+- [x] Remove guide mode: the module that derived it, the three choices on `/settings`, the stored
+  override and its key.
+- [x] Show the *Show me around* control on every surface that declares a tour, to everybody, with
+  no reading of any kind behind it.
+- [x] Keep the two view preferences the settings page was also introduced for — the rail's default
+  collapsed state and the last-visited shop — and the rest of the Workspace card.
+- [x] Drop the one "absent when the mode is off" assertion the suite had, and take the mode out of
+  the titles and handlers of the presence assertions that never had a negative half, keeping what
+  each was actually protecting.
+
+Frames: none. The control was already in `PageHeader`'s existing actions slot on every surface that
+has a tour; what changes is that it is there whatever the lab holds. `docs/design-direction.md`'s
+paragraph on the three headers that gained a control loses the clause that made it conditional.
+
+Slice evidence: an operator runs `make seed`, opens the lab, and finds *Show me around* in the
+header of each of the seven screens that has a tour — which is the case that was broken, because the
+seeded lab's completed comparison derived guide mode off and hid every one of them, with the switch
+that brings them back on a settings page nobody who needed it had reason to open. Nothing is read to
+decide whether to draw the button: the suite that covers it registers no HTTP handlers at all, so a
+build that spent a request on the decision fails rather than passing quietly. A browser still
+holding `agent-lab.guide-mode` from the old build gets the control anyway, which is what makes
+"left unread" a claim the tests carry rather than an assurance — and it is that unit suite, not the
+browser sweep, that proves the seeded case, because the lab the sweep builds never completes an
+experiment of its own. What is lost is stated rather than
+tidied away: nothing can turn the controls off lab-wide any more, and that is accepted for a header
+button that does nothing until it is pressed (ADR 0046).
+
 ### Acceptance criteria
 
 - No step of the guide is stored, and no surface reports progress the record does not support.
+- Nothing decides whether the guide can be found. The control that offers a tour is on every
+  surface that has one, and reads nothing to be there.
 - The lab states its offline limit without an operator having to read an ADR to learn it.
 - Nothing in the settings surface or the guide can populate, reset, or overwrite a database.
 - Provider credentials and exporter endpoints stay in the environment, and no route reports a fact

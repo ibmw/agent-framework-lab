@@ -261,11 +261,10 @@ What the tour does add to a surface is one control, in `PageHeader`'s existing a
 slot that already holds *Save draft* and *Publish* on frame 4, *Results* on frame 8, and *Replay*
 and *Fork* on frame 9. On those frames nothing new is drawn. On three surfaces it is new: the two
 block libraries (frames 4a and 4b) and the frameless starting-states page had no header actions at
-all before this, so with guide mode on — which is the default in a lab that has not yet produced a
-comparison — those three headers now carry a control their frames never drew. That is a chip-sized
-addition to a slot the header component already lays out, made of the same subtle button the
-workspace uses everywhere; it is named here rather than glossed over, and it is not the kind of
-cross-cutting shape the band was. **The tour therefore does not get a frame, and no frame is
+all before this, so those three headers now carry a control their frames never drew. That is a
+chip-sized addition to a slot the header component already lays out, made of the same subtle
+button the workspace uses everywhere; it is named here rather than glossed over, and it is not the
+kind of cross-cutting shape the band was. **The tour therefore does not get a frame, and no frame is
 redrawn for it.** What would change that is a tour that left a persistent shape behind — a progress
 rail, a docked panel, a badge that stays once the tour ends — and the day one of those is wanted is
 the day this reasoning stops applying and the set has to grow rather than be worked around.
@@ -282,8 +281,11 @@ the day this reasoning stops applying and the set has to grow rather than be wor
   around* — so a reader who finds it once finds it everywhere. What differs is only its accessible
   name, which says which screen it would walk.
 - Nothing starts unbidden and nothing is remembered. There is no first-run tour, no auto-start, no
-  step counter that survives a dismissal, and no per-screen "don't show me this again": guide mode
-  is the one preference, and it takes the control off every surface at once.
+  step counter that survives a dismissal, and no per-screen "don't show me this again". Nor is
+  there a lab-wide mode: the control is on every surface that has a tour, always. It was gated by
+  one until that gate hid the guide from any lab holding a completed comparison — which is every
+  lab `make seed` fills — and a control that does nothing until it is pressed has nothing to opt
+  out of (ADR 0046).
 - A popover explains the control beside it and never performs its work — ADR 0043's refusal and
   ADR 0044's reading of it are unchanged — and each tour ends on the surface it started on.
 - What keeps the pattern honest is not a frame but a test. Every step of every tour is declared in
