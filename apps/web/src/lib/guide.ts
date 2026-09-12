@@ -1,28 +1,22 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { listAgentConfigurations } from "../api/agentConfigurations";
-import { objectiveBlocks } from "../api/blocks";
-import { listCustomerProfiles } from "../api/customerProfiles";
 import { listExperimentHistory } from "../api/experiments";
-import { listJudgeConfigurations } from "../api/judgeConfigurations";
-import { listOrders } from "../api/orders";
-import { listScenarios } from "../api/scenarios";
-import { listShops } from "../api/shops";
-import { listSupportIdentities } from "../api/supportIdentities";
-import { listTickets } from "../api/tickets";
 import {
   type GuideModeOverride,
   readGuideModeOverride,
   writeGuideModeOverride,
 } from "./preferences";
-import type { SetupListings } from "./setupPath";
 
 /**
- * Guide mode and the listings the setup path is read from.
+ * Guide mode: whether the surfaces that have a tour offer to show you around.
  *
  * The mode itself is derived — on while the lab holds no completed experiment, off once it
  * does — and what an operator stores is only their disagreement with that. Choosing "follow
  * the lab" therefore stores nothing at all, which is why the three choices are not three
  * stored values (ADR 0044).
+ *
+ * There is one mode and one store. A per-surface "don't show me this again" would be seven
+ * preferences to keep in agreement with each other, and a second mode would be a second
+ * default to keep in agreement with the record (ADR 0045).
  */
 
 export type GuideModeChoice = "follow" | GuideModeOverride;
@@ -51,8 +45,8 @@ function serverChoice(): GuideModeChoice {
 }
 
 /**
- * The stored choice, shared by every surface that offers it, so the strip's own control and
- * the settings page can never show two different answers at once.
+ * The stored choice, shared by every surface that offers it, so two surfaces can never show
+ * two different answers at once.
  */
 export function useGuideModeChoice(): [GuideModeChoice, (next: GuideModeChoice) => void] {
   const choice = useSyncExternalStore(subscribe, readChoice, serverChoice);
@@ -76,131 +70,13 @@ export function resolveGuideMode(
   return !holdsCompletedExperiment;
 }
 
-/** Everything the path is derived from, minus the shop the host surface supplies. */
-export type GuideListings = Omit<SetupListings, "shop">;
-
-const EMPTY_LISTINGS: GuideListings = {
-  shops: [],
-  profiles: [],
-  orders: [],
-  tickets: [],
-  objectiveBlocks: [],
-  scenarios: [],
-  supportIdentities: [],
-  agentConfigurations: [],
-  judges: [],
-  experiments: [],
-  experimentCount: 0,
-};
-
-async function readListings(shopId: string | null, signal: AbortSignal): Promise<GuideListings> {
-  if (shopId === null) {
-    // Outside a shop only the first step is readable, so only the first step's listing is read.
-    const shops = await listShops(signal);
-    return { ...EMPTY_LISTINGS, shops: shops.shops };
-  }
-  const [
-    history,
-    profiles,
-    orders,
-    tickets,
-    objectives,
-    scenarios,
-    supportIdentities,
-    agentConfigurations,
-    judges,
-  ] = await Promise.all([
-    listExperimentHistory({ page_size: 1 }, signal),
-    listCustomerProfiles(shopId, signal),
-    listOrders(shopId, signal),
-    listTickets(shopId, signal),
-    objectiveBlocks.list(signal),
-    listScenarios(shopId, signal),
-    listSupportIdentities(signal),
-    listAgentConfigurations(signal),
-    listJudgeConfigurations(signal),
-  ]);
-  return {
-    shops: [],
-    profiles: profiles.profiles,
-    orders: orders.orders,
-    tickets: tickets.tickets,
-    objectiveBlocks: objectives.blocks,
-    scenarios: scenarios.scenarios,
-    supportIdentities: supportIdentities.identities,
-    agentConfigurations: agentConfigurations.configurations,
-    judges: judges.judges,
-    experiments: history.experiments,
-    experimentCount: history.total,
-  };
-}
-
-export interface GuideReading {
-  /** Whether guide mode is on, once the record has answered. */
-  on: boolean;
-  listings: GuideListings | null;
-  /** What the derived default reads, reported so a surface can say why the mode is what it is. */
-  holdsCompletedExperiment: boolean;
-}
-
-const HIDDEN: GuideReading = { on: false, listings: null, holdsCompletedExperiment: false };
-
 /**
- * Read guide mode and, when it is on, the listings the setup path is derived from.
+ * Whether this surface offers its tour.
  *
- * Nothing is read while an operator has turned guide mode off: a band nobody is going to see
- * is not worth a request. Otherwise the completed-experiment reading comes first, because it
- * is what decides whether the rest is worth reading at all.
- *
- * A listing that fails leaves the strip unrendered rather than showing a step it could not
- * check. The surface underneath reports its own failures; a guide that guessed at a next step
- * from half a reading would be worse than one that says nothing.
- */
-export function useGuideReading(shopId: string | null): GuideReading {
-  const [choice] = useGuideModeChoice();
-  const [reading, setReading] = useState<GuideReading>(HIDDEN);
-
-  useEffect(() => {
-    if (choice === "off") {
-      setReading(HIDDEN);
-      return;
-    }
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const completed = await listExperimentHistory(
-          { status: "completed", page_size: 1 },
-          controller.signal,
-        );
-        const holdsCompletedExperiment = completed.total > 0;
-        if (!resolveGuideMode(choice, holdsCompletedExperiment)) {
-          if (!controller.signal.aborted) {
-            setReading({ ...HIDDEN, holdsCompletedExperiment });
-          }
-          return;
-        }
-        const listings = await readListings(shopId, controller.signal);
-        if (!controller.signal.aborted) {
-          setReading({ on: true, listings, holdsCompletedExperiment });
-        }
-      } catch {
-        if (!controller.signal.aborted) {
-          setReading(HIDDEN);
-        }
-      }
-    })();
-    return () => controller.abort();
-  }, [choice, shopId]);
-
-  return reading;
-}
-
-/**
- * Guide mode alone, for a surface that wants an explainer rather than the whole path.
- *
- * The strip needs ten listings; an inline explainer needs one fact — whether guide mode is on.
- * A stored disagreement answers without reading anything at all, which is why an operator who
- * has turned the guide off costs the application no request on any surface.
+ * One fact, and a stored disagreement answers it without reading anything at all — which is
+ * why an operator who has turned the guide off costs the application no request on any
+ * surface. A reading that failed is not a reading that the lab holds a completed comparison:
+ * the control stays away rather than appearing on a guess.
  */
 export function useGuideMode(): boolean {
   const [choice] = useGuideModeChoice();
@@ -219,8 +95,6 @@ export function useGuideMode(): boolean {
         }
       })
       .catch(() => {
-        // A reading that failed is not a reading that the lab holds a completed comparison.
-        // The explainer stays away rather than appearing on a guess.
         if (!controller.signal.aborted) {
           setOn(false);
         }

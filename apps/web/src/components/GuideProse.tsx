@@ -5,10 +5,10 @@ import { glossaryTerm, parseGlossaryProse } from "../lib/glossary";
  * Guide copy, with the words the glossary defines rendered as hover definitions.
  *
  * The copy itself is plain text carrying `[[term-id]]` references (`lib/glossary.ts`), which is
- * what lets a test read every word an explainer sends a reader to the glossary for and check
- * that each of them resolves. A term that resolved to nothing would otherwise render as a link
- * to an anchor nobody wrote, which is exactly the failure ADR 0044 asked to be caught by a test
- * rather than by a reader.
+ * what lets a test read every word a tour step or a guide step sends a reader to the glossary for
+ * and check that each of them resolves. A term that resolved to nothing would otherwise render as
+ * a link to an anchor nobody wrote, which is exactly the failure ADR 0044 asked to be caught by a
+ * test rather than by a reader.
  *
  * The definition shown on hover is the same sentence `/guides/glossary` renders — there is one
  * copy of it, in the module both read.

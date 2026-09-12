@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { readAgentConfigurationResources } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
 import { getLabStatus } from "../api/labStatus";
-import { GuideModeChoices } from "../components/GuideStrip";
+import { GuideModeChoices } from "../components/GuideModeChoices";
 import { Card, EntryCard, EntryId, EntryKind } from "../components/WorkspaceChrome";
 import { describeArchitecture, readableTerm } from "../lib/agents";
 import { readNavigationCollapsed, writeNavigationCollapsed } from "../lib/preferences";
@@ -221,7 +221,7 @@ export function LabSettingsPage() {
           <Card title="Workspace">
             <GuideModeChoices
               idPrefix="settings"
-              description="The setup-path band above the shops index and each shop's home. It is on while this lab holds no completed comparison and off afterwards; only a disagreement with that is remembered, and only in this browser."
+              description="Whether the screens whose vocabulary is particular to this lab offer to show you around. It is on while this lab holds no completed comparison and off afterwards; only a disagreement with that is remembered, and only in this browser."
             />
             <label className="flex items-start gap-2 border-t border-admin-border pt-3 text-[13px] text-admin-ink-soft">
               <input

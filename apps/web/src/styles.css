@@ -78,3 +78,123 @@
     animation-iteration-count: 1;
   }
 }
+
+/*
+ * The product tour (ADR 0045). `driver.js` ships a skin and it is not used: the library provides
+ * the overlay geometry and the keyboard behaviour, and everything a reader sees is restated here
+ * in the tokens above. No token is added for it — the popover is the lab's paper, pine ink and
+ * admin border, and the forward button is the same ink button the workspace uses everywhere else.
+ */
+.driver-popover.lab-tour {
+  max-width: 360px;
+  padding: 16px 18px 14px;
+  color: var(--color-admin-ink);
+  background-color: var(--color-lab-paper);
+  border: 1px solid var(--color-admin-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(22 51 45 / 18%);
+}
+
+.driver-popover.lab-tour .driver-popover-title {
+  padding-right: 22px;
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-lab-ink);
+}
+
+.driver-popover.lab-tour .lab-tour-paragraph {
+  margin: 8px 0 0;
+  /* `.driver-popover` is `all: unset` plus a font stack of the library's own, so a body that
+     only set size and colour would read in Helvetica against a page set in Inter. */
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--color-admin-ink-soft);
+}
+
+.driver-popover.lab-tour a {
+  font-weight: 600;
+  color: var(--color-lab-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.driver-popover.lab-tour .driver-popover-close-btn {
+  color: var(--color-admin-muted);
+}
+
+.driver-popover.lab-tour .driver-popover-close-btn:hover,
+.driver-popover.lab-tour .driver-popover-close-btn:focus {
+  color: var(--color-lab-ink);
+}
+
+.driver-popover.lab-tour .driver-popover-footer {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-admin-border);
+}
+
+.driver-popover.lab-tour .driver-popover-progress-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-admin-muted);
+}
+
+.driver-popover.lab-tour .driver-popover-footer-btn {
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-admin-ink);
+  background-color: transparent;
+  border: 1px solid var(--color-admin-border);
+  border-radius: 6px;
+}
+
+.driver-popover.lab-tour .driver-popover-footer-btn:hover,
+.driver-popover.lab-tour .driver-popover-footer-btn:focus {
+  background-color: var(--color-admin-canvas);
+}
+
+/*
+ * `driver.css` sets `outline: 0` on its footer buttons and `all: unset` on its close button, so
+ * without these a reader stepping through a tour by keyboard would have nothing but a colour
+ * shift to tell them where they are — which is the one thing this design says status may never
+ * be. The ring is the accent already used for field focus.
+ */
+.driver-popover.lab-tour .driver-popover-footer-btn:focus-visible,
+.driver-popover.lab-tour .driver-popover-close-btn:focus-visible {
+  outline: 2px solid var(--color-lab-accent);
+  outline-offset: 2px;
+}
+
+.driver-popover.lab-tour .driver-popover-next-btn {
+  color: var(--color-lab-canvas-top);
+  background-color: var(--color-lab-ink);
+  border-color: var(--color-lab-ink);
+}
+
+.driver-popover.lab-tour .driver-popover-next-btn:hover,
+.driver-popover.lab-tour .driver-popover-next-btn:focus {
+  background-color: var(--color-lab-ink-hover);
+}
+
+/* Only the one side the library leaves opaque takes the popover's own ground. */
+.driver-popover.lab-tour .driver-popover-arrow-side-left {
+  border-left-color: var(--color-lab-paper);
+}
+
+.driver-popover.lab-tour .driver-popover-arrow-side-right {
+  border-right-color: var(--color-lab-paper);
+}
+
+.driver-popover.lab-tour .driver-popover-arrow-side-top {
+  border-top-color: var(--color-lab-paper);
+}
+
+.driver-popover.lab-tour .driver-popover-arrow-side-bottom {
+  border-bottom-color: var(--color-lab-paper);
+}

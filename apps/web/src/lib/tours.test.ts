@@ -1,0 +1,134 @@
+import { describe, expect, it } from "vitest";
+import { SETUP_GUIDE_STEPS } from "../routes/SetupGuidePage";
+import { glossaryTerm, parseGlossaryProse, referencedTerms } from "./glossary";
+import { SETUP_CHAIN } from "./setupPath";
+import { TOUR_IDS, TOURS } from "./tours";
+
+/**
+ * The tour table, held to what it claims.
+ *
+ * These are the assertions the explainers carried, over the copy that replaced them: a term a
+ * popover sends a reader to look up resolves to a definition, and no step restates one. What is
+ * new is the shape of the anchors — a tour's whole risk is that it goes on pointing at something
+ * that has moved, so an anchor's *form* is checked here and its *resolution* is swept on the
+ * real surfaces by `tests/e2e/tour-anchors.spec.ts` (ADR 0045).
+ */
+
+const STEPS = TOUR_IDS.flatMap((id) => TOURS[id].steps.map((step) => [id, step] as const));
+
+/**
+ * Every piece of copy in this application written in `[[term-id]]` markup, in one list.
+ *
+ * The written setup guide is read here beside the tours because `GlossaryTermLink` renders a bare
+ * word when a reference resolves to nothing: copy left out of this loop is copy where that can
+ * happen unnoticed, whichever surface it is on. This list is what the explainers' own tests held,
+ * carried onto the copy that replaced them.
+ */
+const MARKED_UP_COPY: [string, readonly string[]][] = [
+  ...STEPS.map(
+    ([id, step]) => [`tour ${id} · ${step.title}`, step.body] as [string, readonly string[]],
+  ),
+  ...Object.entries(SETUP_GUIDE_STEPS).map(
+    ([id, step]) => [`guide step ${id}`, [...step.body, step.gate]] as [string, readonly string[]],
+  ),
+];
+
+describe("the tour table", () => {
+  it("declares a surface's tour as something a reader can actually be walked through", () => {
+    // A parameterized suite over a table that became empty reports as passing, which is the one
+    // way everything below could stop proving anything without anybody noticing (ADR 0023).
+    expect(TOUR_IDS.length).toBeGreaterThan(0);
+    expect(STEPS.length).toBeGreaterThan(TOUR_IDS.length);
+
+    for (const id of TOUR_IDS) {
+      const tour = TOURS[id];
+      expect(tour.surface, `${id} does not say what it is a tour of`).not.toBe("");
+      expect(tour.steps.length, `${id} has no steps`).toBeGreaterThan(0);
+      for (const step of tour.steps) {
+        expect(step.title, `a step of ${id} has no title`).not.toBe("");
+        expect(step.body.length, `${step.title} has no body`).toBeGreaterThan(0);
+        for (const paragraph of step.body) {
+          expect(paragraph.trim(), `${step.title} has an empty paragraph`).not.toBe("");
+        }
+      }
+    }
+  });
+
+  it("anchors on a name the page carries or a hook it was given, never on a position", () => {
+    // Either the element's own accessible name — renaming which is a visible change that fails
+    // the sweep on purpose — or an explicit `data-tour` hook where the page names nothing.
+    const named = /^[a-z]*\[(aria-label|data-tour)="[^"]+"\]$/;
+    for (const [id, step] of STEPS) {
+      expect(step.anchor, `${id}: ${step.anchor} is not a stable anchor`).toMatch(named);
+    }
+  });
+
+  it("points each step of a tour at a different element", () => {
+    // A tour that lit the same box twice would be a tour with a step it did not need, and the
+    // sweep below cannot tell the two occurrences apart.
+    for (const id of TOUR_IDS) {
+      const anchors = TOURS[id].steps.map((step) => step.anchor);
+      expect(new Set(anchors).size, `${id} lights the same element twice`).toBe(anchors.length);
+    }
+  });
+
+  it("names only vocabulary the glossary defines, here and in the written guide", () => {
+    const referenced = MARKED_UP_COPY.flatMap(([where, paragraphs]) =>
+      paragraphs.flatMap((paragraph) =>
+        referencedTerms(paragraph).map((term) => [where, term] as const),
+      ),
+    );
+
+    expect(referenced.length).toBeGreaterThan(20);
+    for (const [where, term] of referenced) {
+      expect(glossaryTerm(term), `${where} names ${term}, which has no definition`).toBeDefined();
+    }
+  });
+
+  it("points at the definitions rather than restating them", () => {
+    // `glossary.ts` exists so a term has one definition. Copy that repeated one would be the
+    // second copy that module was written to prevent.
+    for (const [where, paragraphs] of MARKED_UP_COPY) {
+      for (const paragraph of paragraphs) {
+        for (const term of referencedTerms(paragraph)) {
+          const sentence = (glossaryTerm(term)?.definition ?? "").split(". ")[0];
+          expect(paragraph, `${where} restates ${term}`).not.toContain(sentence);
+        }
+      }
+    }
+  });
+
+  it("speaks the vocabulary the chain's own steps speak", () => {
+    // The tours and the written setup guide are two readings of one lab, so a word that appears
+    // in a popover and in no step of the chain — or the other way round — is a sign they have
+    // drifted apart.
+    const inTours = new Set<string>(
+      STEPS.flatMap(([, step]) => step.body.flatMap(referencedTerms)),
+    );
+    const inChain = new Set<string>(SETUP_CHAIN.flatMap((step) => step.terms));
+
+    for (const term of ["objective-block", "mutation-block", "scenario", "sandbox-snapshot"]) {
+      expect(inTours.has(term), `${term} is missing from the tours`).toBe(true);
+      expect(inChain.has(term), `${term} is missing from the chain`).toBe(true);
+    }
+  });
+});
+
+describe("guide copy", () => {
+  it("splits a reference out of the prose around it", () => {
+    expect(parseGlossaryProse("A [[scenario]] is a recipe.")).toEqual([
+      "A ",
+      { id: "scenario", label: "scenario" },
+      " is a recipe.",
+    ]);
+  });
+
+  it("uses the word as the sentence writes it when the sentence says so", () => {
+    expect(parseGlossaryProse("Two [[run|arms]]")).toEqual(["Two ", { id: "run", label: "arms" }]);
+  });
+
+  it("leaves prose with no references alone", () => {
+    expect(parseGlossaryProse("Nothing is defined here.")).toEqual(["Nothing is defined here."]);
+    expect(referencedTerms("Nothing is defined here.")).toEqual([]);
+  });
+});
