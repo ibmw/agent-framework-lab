@@ -172,3 +172,42 @@ ElevenLabs' agent configuration) adapted to the lab's template model:
   shop fails validation at experiment setup, and any override is reported as a configuration
   variable in comparisons. ADR 0012 formalized this decision and aligned
   `docs/product-direction.md` with it.
+
+## Revision — lab-level surfaces and the guide strip (2026-09-12)
+
+Milestone 7 adds surfaces that are not scoped to a shop, and the eighteen-frame claim above has to
+keep meaning what it says once they exist. ADR 0044 splits them in two.
+
+**Lab-level surfaces sit outside the authoritative set.** `/settings`, `/guides` and the glossary
+belong to the lab rather than to a shop workspace, and they are built the way the shops index, the
+four shop-setup pages, and the support-identity and judge listings were already built: out of
+`PageHeader`, `Card`, `IssueList`, and the chips and tokens in `components/WorkspaceChrome.tsx` and
+`styles.css`, without a frame and without anyone treating it as an exception. They invent no layout
+language. A lab-level page that needed one would be the signal that this reasoning has stopped
+applying and that the set has to grow rather than be worked around.
+
+**The guide strip is inside it.** The strip is not a surface but a band across the top of the
+content column on frames 1, 4, 7 and 9, which were designed without one, and a cross-cutting
+element each page invents for itself is exactly the kind that goes wrong. It therefore gets a frame
+of its own, drawn before the slice that builds it: `GuideStrip.dc.html`, shown in context on frame
+1 and carrying the readings the record produces — an empty lab naming the one action that unblocks
+the chain, a step blocked by a publish gate showing the gate's own finding in the gate's own
+vocabulary, and a chain with nothing left to unblock — together with the control that turns guide
+mode off, which reads as a preference because what it stores is an operator's disagreement with the
+derived default rather than the dismissal of one step. The band adds no token, no component shape
+and no theme: it is the lab-note pine on cream already used for the sandbox notice, the workspace's
+own chips, and `IssueList`'s reading of a publish-gate finding. It shows no completion percentage
+and no step count, offers no per-step dismissal, and its action links to the surface where the work
+is done instead of performing it — a band that could populate the lab would be the seed route
+ADR 0043 refused, returning as a convenience.
+
+The authoritative set is therefore nineteen frames: the eighteen shop-workspace surfaces, and one
+band that crosses four of them. UI-bearing slices keep citing the frames they implement.
+
+Where it is hosted today is narrower than where it is drawn. Milestone 7 Slice 2 mounts the band on
+frame 1 and on the shops index — which is not a frame, and is where an operator with no shop is
+actually standing — because those two are what the slice's evidence needs. The component is built
+so that frames 4, 7 and 9 can host it without displacing their headers, and mounting it there is a
+later slice's work. Outside a shop it reads the first step only: the order, ticket and scenario
+steps are shop-scoped, so a surface with no shop in scope names what it can check and draws no
+chain.

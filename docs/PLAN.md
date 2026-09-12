@@ -145,7 +145,31 @@ control arm can be advanced here, and a comparison whose arms decide identically
 establishes the evidence model rather than a difference between frameworks. The shop-scoped entry
 that was also called Settings is renamed to shop details, and the rail's default state and the
 last-visited shop become preferences in the operator's browser rather than rows in the database
-whose every other row is evidence an experiment pins (ADR 0044). The POC's remaining conversation,
+whose every other row is evidence an experiment pins (ADR 0044). Slice 2 turns that outward onto
+the chain itself: a band inside the content column of the shops index and of each shop's home,
+naming the one step that unblocks the path from an empty database to a two-arm comparison and
+linking to the surface where that work is done. Every step of it is read off the listings the
+product already serves — a published shop version, a published customer profile attached to the
+shop, an order fixture, a published ticket, a stocked objective library, a published recipe, a
+support identity, two published agent configurations, a judge, and a row in the history listing —
+so nothing is written when a step completes, and a database filled by hand, filled in a different
+order, or filled by `make seed` all read the same. A draft edited after publication leaves its step
+complete, because what an experiment would pin is still there. Where a step is blocked the words
+are the publish gate's own: the band renders that shop's `preview.issues` through the same
+`IssueList` and `PublishReasons` its authoring surface renders, and opens the shop-setup page the
+gate's first finding names, so there is no second explanation of why a shop cannot be published to
+keep in agreement with the first. Guide mode is derived the same way — on while the lab holds no
+completed experiment, off once it does — and what a browser stores is only a disagreement with
+that, a third preference beside the rail's default state and the last-visited shop, offered as the
+same three choices on the band and on the settings page. Completed is the status's own word: a run
+whose arms finished but missed something the recipe required is `failed`, so a lab that has only
+ever produced those keeps the band until one comes back clean, and an operator who disagrees says
+so once. The words all of it speaks now have one
+home: a glossary module carrying this document's stable target vocabulary, rendered at
+`/guides/glossary` and referenced by the steps rather than restated by them. The band shows no
+percentage and no step count, offers no per-step dismissal, and exposes no control that populates
+the lab — `make seed` is text to run in a terminal, which is where ADR 0043's refusal would have
+been most tempting to relax. The POC's remaining conversation,
 persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -1003,11 +1027,11 @@ standing offline qualification that ADR 0042 established and ADR 0043 could only
 
 ### Slice 2 — Guide mode and the derived next step
 
-- [ ] Add guide mode, defaulted from the record and overridden by a stored preference.
-- [ ] Project the setup path's progress from the listings the product already serves, storing
+- [x] Add guide mode, defaulted from the record and overridden by a stored preference.
+- [x] Project the setup path's progress from the listings the product already serves, storing
   nothing.
-- [ ] Render the blocking reason from the publish gate rather than from a second explanation.
-- [ ] Add the glossary, sourced from one module carrying this document's stable vocabulary.
+- [x] Render the blocking reason from the publish gate rather than from a second explanation.
+- [x] Add the glossary, sourced from one module carrying this document's stable vocabulary.
 
 Frames: one new frame for the guide strip, designed before the slice lands. It is a cross-cutting
 band across the top of frames 1, 4, 7 and 9, which were designed without one, and is the half of

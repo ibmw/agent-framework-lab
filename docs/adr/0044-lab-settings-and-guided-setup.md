@@ -232,6 +232,16 @@ that goes wrong when each page invents its own. It gets one frame on the canvas 
 `docs/design-direction.md` gains a revision paragraph recording both halves of this split so the
 eighteen-frame claim keeps meaning what it says.
 
+Where it is *drawn* and where it is first *mounted* are deliberately not the same list, and the two
+sentences above about the strip's placement — "the shop home and the shops index" under what the
+guide changes, and "frames 1, 4, 7 and 9" here — are both true of different things. Frames 1, 4, 7
+and 9 are the surfaces the band is designed to be able to host on, which is why it gets a frame of
+its own rather than four. The shop home (frame 1) and the shops index are where it is mounted first,
+because they are what a first run walks through and the shops index is where an operator with no
+shop is standing; the shops index is not itself a frame, and hosting the band there invents no
+layout for the same reason the other lab-level surfaces invent none. Frames 4, 7 and 9 host it in a
+later slice.
+
 ## Deliberately not here
 
 - **A seed route, or any button that populates the lab.** ADR 0043's refusal is load-bearing and is
