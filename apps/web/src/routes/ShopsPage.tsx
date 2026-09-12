@@ -1,8 +1,9 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import { type FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
+import { GuideStrip } from "../components/GuideStrip";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -19,6 +20,7 @@ const CURRENCIES = ["EUR", "USD", "GBP"] as const;
 
 export function ShopsPage() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [shops, setShops] = useState<ShopSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +68,8 @@ export function ShopsPage() {
 
   return (
     <AppShell shops={shops}>
+      {/* The one step a surface outside shop scope can read: whether a shop exists at all. */}
+      <GuideStrip shop={null} currentPath={pathname} />
       <PageHeader
         title="Shops"
         description="Every shop is a synthetic simulation environment. Publishing a shop freezes an immutable version that scenarios and experiments pin."
@@ -122,63 +126,67 @@ export function ShopsPage() {
           )}
         </section>
 
-        <Card title="Create a shop">
-          <form className="grid gap-3" onSubmit={submit}>
-            <label className={fieldLabelClasses}>
-              Name
-              <input
-                className={fieldControlClasses}
-                value={name}
-                required
-                maxLength={200}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Slug
-              <input
-                className={fieldControlClasses}
-                value={slug}
-                required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                title="Lowercase kebab-case, for example northstar-outfitters"
-                onChange={(event) => setSlug(event.target.value)}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Locale
-              <input
-                className={fieldControlClasses}
-                value={locale}
-                required
-                pattern="[a-z]{2}(-[A-Z]{2})?"
-                title="For example en or en-GB"
-                onChange={(event) => setLocale(event.target.value)}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Currency
-              <select
-                className={fieldControlClasses}
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value as (typeof CURRENCIES)[number])}
-              >
-                {CURRENCIES.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className={accentButtonClasses} type="submit" disabled={creating}>
-              {creating ? "Creating…" : "Create shop"}
-            </button>
-            <p className="text-xs text-admin-muted">
-              A new shop starts as an empty draft. Catalog and support content are added in the
-              workspace, then published together.
-            </p>
-          </form>
-        </Card>
+        <div id="create-shop">
+          <Card title="Create a shop">
+            <form className="grid gap-3" onSubmit={submit}>
+              <label className={fieldLabelClasses}>
+                Name
+                <input
+                  className={fieldControlClasses}
+                  value={name}
+                  required
+                  maxLength={200}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </label>
+              <label className={fieldLabelClasses}>
+                Slug
+                <input
+                  className={fieldControlClasses}
+                  value={slug}
+                  required
+                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                  title="Lowercase kebab-case, for example northstar-outfitters"
+                  onChange={(event) => setSlug(event.target.value)}
+                />
+              </label>
+              <label className={fieldLabelClasses}>
+                Locale
+                <input
+                  className={fieldControlClasses}
+                  value={locale}
+                  required
+                  pattern="[a-z]{2}(-[A-Z]{2})?"
+                  title="For example en or en-GB"
+                  onChange={(event) => setLocale(event.target.value)}
+                />
+              </label>
+              <label className={fieldLabelClasses}>
+                Currency
+                <select
+                  className={fieldControlClasses}
+                  value={currency}
+                  onChange={(event) =>
+                    setCurrency(event.target.value as (typeof CURRENCIES)[number])
+                  }
+                >
+                  {CURRENCIES.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className={accentButtonClasses} type="submit" disabled={creating}>
+                {creating ? "Creating…" : "Create shop"}
+              </button>
+              <p className="text-xs text-admin-muted">
+                A new shop starts as an empty draft. Catalog and support content are added in the
+                workspace, then published together.
+              </p>
+            </form>
+          </Card>
+        </div>
       </div>
     </AppShell>
   );

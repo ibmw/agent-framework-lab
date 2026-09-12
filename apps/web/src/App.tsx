@@ -12,6 +12,7 @@ import { ExperimentResultsPage } from "./routes/ExperimentResultsPage";
 import { ExperimentSetupPage } from "./routes/ExperimentSetupPage";
 import { ExperimentTimelinePage } from "./routes/ExperimentTimelinePage";
 import { ExperimentTracesPage } from "./routes/ExperimentTracesPage";
+import { GlossaryPage } from "./routes/GlossaryPage";
 import { GuidesPage } from "./routes/GuidesPage";
 import { JudgeConfigurationEditorPage } from "./routes/JudgeConfigurationEditorPage";
 import { JudgeConfigurationsPage } from "./routes/JudgeConfigurationsPage";
@@ -46,6 +47,7 @@ export function App() {
           guided path is creating the shop a new operator does not have yet (ADR 0044). */}
       <Route path="/settings" element={<LabSettingsPage />} />
       <Route path="/guides" element={<GuidesPage />} />
+      <Route path="/guides/glossary" element={<GlossaryPage />} />
       <Route path="/shops/:shopId" element={<ShopWorkspace />}>
         <Route index element={<ShopHomePage />} />
         <Route path="products" element={<ProductsPage />} />

@@ -14,6 +14,7 @@
 
 const NAVIGATION_COLLAPSED_KEY = "agent-lab.navigation-collapsed";
 const LAST_VISITED_SHOP_KEY = "agent-lab.last-visited-shop";
+const GUIDE_MODE_KEY = "agent-lab.guide-mode";
 
 function readStored(key: string): string | null {
   try {
@@ -29,6 +30,14 @@ function writeStored(key: string, value: string): void {
   } catch {
     // A preference that cannot be remembered is still a preference for this session; the
     // caller holds it in component state either way.
+  }
+}
+
+function clearStored(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Same as a write that could not be made: the caller holds the choice for this session.
   }
 }
 
@@ -52,4 +61,29 @@ export function readLastVisitedShop(): string | null {
 
 export function writeLastVisitedShop(shopId: string): void {
   writeStored(LAST_VISITED_SHOP_KEY, shopId);
+}
+
+/**
+ * What an operator decided about guide mode, which is *only* their disagreement with the
+ * derived default.
+ *
+ * Guide mode itself is derived — on while the lab holds no completed experiment, off once it
+ * does — so the stored value is an override rather than a state: `null` means "follow the
+ * lab" and is stored as nothing at all. Choosing it deletes the key rather than writing a
+ * third word, so a browser that never disagreed and one that disagreed and changed its mind
+ * are the same browser (ADR 0044).
+ */
+export type GuideModeOverride = "on" | "off";
+
+export function readGuideModeOverride(): GuideModeOverride | null {
+  const stored = readStored(GUIDE_MODE_KEY);
+  return stored === "on" || stored === "off" ? stored : null;
+}
+
+export function writeGuideModeOverride(override: GuideModeOverride | null): void {
+  if (override === null) {
+    clearStored(GUIDE_MODE_KEY);
+    return;
+  }
+  writeStored(GUIDE_MODE_KEY, override);
 }

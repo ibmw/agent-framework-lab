@@ -1,8 +1,9 @@
 import type { DefinitionVersionSummarySchema } from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { listShopVersions } from "../api/shops";
+import { GuideStrip } from "../components/GuideStrip";
 import {
   Card,
   canPublish,
@@ -25,6 +26,7 @@ import { useShopWorkspace } from "../shell/ShopWorkspace";
 export function ShopHomePage() {
   const { shopId, content, preview, publish, publishing, save, saving, dirty, error } =
     useShopWorkspace();
+  const { pathname } = useLocation();
   const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
   const [versionsError, setVersionsError] = useState<string | null>(null);
   const [published, setPublished] = useState<number | null>(null);
@@ -65,6 +67,17 @@ export function ShopHomePage() {
 
   return (
     <>
+      {/* Inside the content column and above the header, never spanning the rail (ADR 0044). */}
+      <GuideStrip
+        shop={{
+          shopId,
+          name: content.identity.name,
+          gate: preview,
+          dirty,
+          latestPublishedVersion: preview?.latest_published_version ?? null,
+        }}
+        currentPath={pathname}
+      />
       <PageHeader
         title="Home"
         chips={<VersionChips preview={preview} />}

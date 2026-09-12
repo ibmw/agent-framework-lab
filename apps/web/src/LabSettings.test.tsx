@@ -13,6 +13,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { AppShell } from "./shell/AppShell";
+import { guideListingHandlers } from "./test/guideListings";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -115,6 +116,7 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/versions`, () => HttpResponse.json({ versions: [] })),
   http.get("*/api/v1/lab-status", () => HttpResponse.json(currentStatus)),
   http.get("*/api/v1/agent-configurations/resources", () => HttpResponse.json(resources)),
+  ...guideListingHandlers(SHOP_ID),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -339,7 +341,14 @@ describe("lab settings", () => {
     renderAt("/guides");
 
     expect(await screen.findByRole("heading", { name: "Guides" })).toBeVisible();
-    expect(screen.getByText(/There are no guides on this page yet/)).toBeVisible();
+    // The glossary is here; the written walk-through is not, and the page says which.
+    expect(screen.getByRole("link", { name: "Open the glossary" })).toBeVisible();
+    expect(
+      screen.getByText(/is the next piece of work rather than something this build/),
+    ).toBeVisible();
+    // And it hands over the command rather than offering to run it.
+    expect(screen.getByText("make seed", { selector: "code" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /seed|demo data|populate/i })).toBeNull();
   });
 });
 
