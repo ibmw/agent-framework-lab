@@ -127,3 +127,42 @@ export type GlossaryTermId = (typeof GLOSSARY_TERMS)[number]["id"];
 export function glossaryTerm(id: string): GlossaryTerm | undefined {
   return GLOSSARY_TERMS.find((entry) => entry.id === id);
 }
+
+/**
+ * A reference to a defined word inside guide copy, written `[[objective-block]]` — or
+ * `[[run|arms]]` where the sentence needs the word in another form.
+ *
+ * Guide copy is plain text so that the words an explainer uses can be read back by a test:
+ * every reference in it is parsed out and checked against this module, which is what keeps a
+ * term added to an explainer from rendering as a bare word nobody defined (ADR 0044).
+ */
+const REFERENCE = /\[\[([a-z-]+)(?:\|([^\]]+))?\]\]/g;
+
+export interface GlossaryReference {
+  id: string;
+  /** The word as the sentence writes it, which is the term's own name unless one was given. */
+  label: string;
+}
+
+/** Guide copy split into the prose between references and the references themselves. */
+export function parseGlossaryProse(text: string): (string | GlossaryReference)[] {
+  const segments: (string | GlossaryReference)[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(REFERENCE)) {
+    const [marker, id, label] = match;
+    if (match.index > cursor) {
+      segments.push(text.slice(cursor, match.index));
+    }
+    segments.push({ id, label: label ?? glossaryTerm(id)?.term.toLowerCase() ?? id });
+    cursor = match.index + marker.length;
+  }
+  if (cursor < text.length) {
+    segments.push(text.slice(cursor));
+  }
+  return segments;
+}
+
+/** Every word a piece of guide copy sends a reader to the glossary for. */
+export function referencedTerms(text: string): string[] {
+  return [...text.matchAll(REFERENCE)].map((match) => match[1]);
+}

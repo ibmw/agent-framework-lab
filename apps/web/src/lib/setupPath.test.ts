@@ -12,7 +12,13 @@ import type {
 } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
 import { glossaryTerm } from "./glossary";
-import { deriveSetupPath, type ScopedShop, type SetupListings } from "./setupPath";
+import {
+  deriveSetupPath,
+  type ScopedShop,
+  SETUP_CHAIN,
+  type SetupListings,
+  type SetupStepId,
+} from "./setupPath";
 
 /**
  * The setup path is a reading of listings, so it is tested over listings.
@@ -211,6 +217,64 @@ const SEEDED: SetupListings = {
   experimentCount: 1,
 };
 
+/**
+ * Each step's listing holding the thing it asks for, once without a published version and once
+ * with one.
+ *
+ * This is what makes `publishes` a claim rather than a label. The written guide counts that
+ * flag and chips each step with it, so what it has to mean is: over a listing that holds the
+ * thing unpublished, a step that publishes stays open and a step that does not is already
+ * satisfied.
+ */
+const READINGS: Record<
+  SetupStepId,
+  { unpublished: Partial<SetupListings>; published: Partial<SetupListings> }
+> = {
+  shop: {
+    unpublished: { shop: scoped() },
+    published: { shop: scoped({ latestPublishedVersion: 1 }) },
+  },
+  customer: {
+    unpublished: { profiles: [PROFILE] },
+    published: { profiles: [publishedEntry(PROFILE)] },
+  },
+  order: { unpublished: { orders: [ORDER] }, published: { orders: [ORDER] } },
+  ticket: {
+    unpublished: { tickets: [TICKET] },
+    published: { tickets: [publishedEntry(TICKET)] },
+  },
+  blocks: {
+    unpublished: { objectiveBlocks: [BLOCK] },
+    published: { objectiveBlocks: [publishedEntry(BLOCK)] },
+  },
+  scenario: {
+    unpublished: { scenarios: [SCENARIO] },
+    published: { scenarios: [publishedEntry(SCENARIO)] },
+  },
+  "support-identity": {
+    unpublished: { supportIdentities: [IDENTITY] },
+    published: { supportIdentities: [publishedEntry(IDENTITY)] },
+  },
+  "agent-configurations": {
+    // Two of them, so what the second reading adds is the publication rather than the arm.
+    unpublished: {
+      agentConfigurations: [CONFIGURATION, { ...CONFIGURATION, configuration_id: "c2" }],
+    },
+    published: {
+      agentConfigurations: [
+        publishedEntry(CONFIGURATION),
+        publishedEntry({ ...CONFIGURATION, configuration_id: "c2" }),
+      ],
+    },
+  },
+  judge: { unpublished: { judges: [JUDGE] }, published: { judges: [publishedEntry(JUDGE)] } },
+  // An experiment is a record rather than a definition: the row is all there is to hold.
+  experiment: {
+    unpublished: { experiments: [EXPERIMENT], experimentCount: 1 },
+    published: { experiments: [EXPERIMENT], experimentCount: 1 },
+  },
+};
+
 describe("the setup path", () => {
   it("tells an empty lab to create the shop every other definition is authored inside", () => {
     const path = deriveSetupPath(EMPTY);
@@ -221,6 +285,18 @@ describe("the setup path", () => {
     // Outside a shop the chain is not drawn: nine of its ten steps were never read.
     expect(path.scoped).toBe(false);
     expect(path.steps).toHaveLength(0);
+  });
+
+  it("speaks the chain's vocabulary from the first step, before there is a shop to read", () => {
+    // The unscoped reading is the same chain entry as the scoped one, so the words it offers
+    // a first-time reader are the words the step has — not a shorter list for a surface that
+    // happens to have less to say.
+    const unscoped = deriveSetupPath(EMPTY).nextStep;
+
+    expect(unscoped?.terms).toEqual(SETUP_CHAIN[0].terms);
+    for (const term of unscoped?.terms ?? []) {
+      expect(glossaryTerm(term), `${term} has no definition`).toBeDefined();
+    }
   });
 
   it("hands over a command where the product refuses a route", () => {
@@ -332,6 +408,25 @@ describe("the setup path", () => {
 
     expect(path.nextStep?.action.href).toBe(`/shops/${SHOP_ID}/setup/tone`);
     expect(path.nextStep?.action.linkLabel).toBe("Open tone of voice");
+  });
+
+  it("waits for a publication exactly where the chain says the step publishes", () => {
+    for (const step of SETUP_CHAIN) {
+      const reading = READINGS[step.id];
+      const unpublished = deriveSetupPath({ ...SEEDED, ...reading.unpublished });
+      const published = deriveSetupPath({ ...SEEDED, ...reading.published });
+
+      expect(
+        unpublished.steps.find((entry) => entry.id === step.id)?.complete,
+        step.publishes
+          ? `${step.id} is satisfied by a draft, so it does not publish`
+          : `${step.id} waits for a publication, so it does publish`,
+      ).toBe(!step.publishes);
+      expect(
+        published.steps.find((entry) => entry.id === step.id)?.complete,
+        `${step.id} is not satisfied by what it asks for`,
+      ).toBe(true);
+    }
   });
 
   it("names only vocabulary the glossary defines", () => {

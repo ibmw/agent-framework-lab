@@ -55,14 +55,156 @@ export interface SetupAction {
   linkLabel: string | null;
 }
 
-export interface SetupStep {
+/**
+ * One step of the chain, independent of any record: what it is called, where it is done, and
+ * the vocabulary it speaks.
+ *
+ * This is the half of a step that a surface with nothing to read can still say — which is what
+ * the written setup guide needs, since it is read outside shop scope and often before the
+ * database holds anything at all. It is deliberately the same table `deriveSetupPath` builds
+ * its readings from, so the guide and the strip cannot disagree about what the chain is or what
+ * order it comes in.
+ */
+export interface SetupStepShape {
   id: SetupStepId;
   /** The word the chain row shows. */
   label: string;
-  complete: boolean;
-  action: SetupAction;
+  /** The surface the work is done on, relative to a shop. Empty for the shop's own home. */
+  surface: string;
+  /**
+   * What a link to that surface is called. The strip overrides it for the shop step, whose
+   * action follows the publish gate's first finding onto a shop-setup page instead; every
+   * other reading of the chain — the strip's and the guide's — uses this one, so a reader is
+   * never sent to the same place under two names.
+   */
+  linkLabel: string;
+  /**
+   * Whether the step ends in a published version. Eight of the ten do; the order fixture is
+   * authored rather than published, and the experiment is a record rather than a definition.
+   */
+  publishes: boolean;
   /** The vocabulary this step's sentences use, defined in `glossary.ts`. */
   terms: readonly GlossaryTermId[];
+}
+
+export interface SetupStep extends SetupStepShape {
+  complete: boolean;
+  action: SetupAction;
+}
+
+/**
+ * The chain, in dependency order: nearly every one of these refuses until the one before it is
+ * satisfied.
+ *
+ * One list, read twice — by the strip, which decorates it with what the record satisfies, and
+ * by the setup guide, which walks it for a reader who has nothing to read yet.
+ */
+export const SETUP_CHAIN = [
+  {
+    id: "shop",
+    label: "Shop",
+    surface: "",
+    linkLabel: "Open the shop's home",
+    publishes: true,
+    terms: ["shop", "definition"],
+  },
+  {
+    id: "customer",
+    label: "Customer",
+    surface: "customers",
+    linkLabel: "Open customers",
+    publishes: true,
+    terms: ["customer-profile", "ticket"],
+  },
+  {
+    id: "order",
+    label: "Order",
+    surface: "orders",
+    linkLabel: "Open orders",
+    publishes: false,
+    terms: ["order", "sandbox-snapshot"],
+  },
+  {
+    id: "ticket",
+    label: "Ticket",
+    surface: "tickets",
+    linkLabel: "Open tickets",
+    publishes: true,
+    terms: ["ticket"],
+  },
+  {
+    id: "blocks",
+    label: "Blocks",
+    surface: "objective-blocks",
+    linkLabel: "Open objective blocks",
+    publishes: true,
+    terms: ["objective-block", "mutation-block", "scenario"],
+  },
+  {
+    id: "scenario",
+    label: "Scenario",
+    surface: "scenarios",
+    linkLabel: "Open scenarios",
+    publishes: true,
+    terms: ["scenario", "objective-block", "mutation-block"],
+  },
+  {
+    id: "support-identity",
+    label: "Support identity",
+    surface: "support-identities",
+    linkLabel: "Open support identities",
+    publishes: true,
+    terms: ["support-identity", "shop"],
+  },
+  {
+    id: "agent-configurations",
+    label: "Agent configurations",
+    surface: "agent-configurations",
+    linkLabel: "Open agent configurations",
+    publishes: true,
+    terms: ["agent-configuration", "support-identity", "run"],
+  },
+  {
+    id: "judge",
+    label: "Judge",
+    surface: "judges",
+    linkLabel: "Open judges",
+    publishes: true,
+    terms: ["judge-configuration", "evaluation", "objective-block"],
+  },
+  {
+    id: "experiment",
+    label: "Experiment",
+    surface: "bench",
+    linkLabel: "Open the bench",
+    publishes: false,
+    terms: ["experiment", "sandbox-snapshot", "participant-driver"],
+  },
+] as const satisfies readonly SetupStepShape[];
+
+/**
+ * The route a step's work is done on, inside one shop.
+ *
+ * One composition of the path, read by the strip's actions and by the written guide's links,
+ * so the two cannot send a reader to two different places for one step.
+ */
+export function stepHref(step: SetupStepShape, shopId: string): string {
+  const base = `/shops/${shopId}`;
+  return step.surface === "" ? base : `${base}/${step.surface}`;
+}
+
+/**
+ * The chain's entry for one step, by identifier.
+ *
+ * The readings below spread it rather than restating a label, a surface or a term, so the
+ * table above is the only place the chain is written down.
+ */
+function shape(id: SetupStepId): SetupStepShape {
+  const found = SETUP_CHAIN.find((step) => step.id === id);
+  if (found === undefined) {
+    throw new Error(`the setup chain has no step called ${id}`);
+  }
+  return found;
 }
 
 export interface SetupPath {
@@ -162,7 +304,7 @@ function unscopedShopStep(shops: ShopSummarySchema[]): SetupStep {
           href: null,
           linkLabel: null,
         };
-  return { id: "shop", label: "Shop", complete: false, action, terms: ["shop"] };
+  return { ...shape("shop"), complete: false, action };
 }
 
 function shopStep(shop: ScopedShop): SetupStep {
@@ -175,10 +317,9 @@ function shopStep(shop: ScopedShop): SetupStep {
   const surface =
     errors.length > 0
       ? shopIssueSurface(errors[0].path, shop.shopId)
-      : { href: base, linkLabel: "Open the shop's home" };
+      : { href: base, linkLabel: shape("shop").linkLabel };
   return {
-    id: "shop",
-    label: "Shop",
+    ...shape("shop"),
     complete: latest !== null,
     action: {
       headline: `Publish ${shop.name} so a scenario can pin a shop version`,
@@ -188,7 +329,6 @@ function shopStep(shop: ScopedShop): SetupStep {
       href: surface.href,
       linkLabel: surface.linkLabel,
     },
-    terms: ["shop", "definition"],
   };
 }
 
@@ -206,7 +346,6 @@ export function deriveSetupPath(listings: SetupListings): SetupPath {
     return { scoped: false, steps: [], nextStep: step, complete: false, latestExperiment };
   }
 
-  const base = `/shops/${shop.shopId}`;
   const publishedProfiles = published(listings.profiles);
   const publishedTickets = published(listings.tickets);
   const publishedObjectives = published(listings.objectiveBlocks);
@@ -218,8 +357,7 @@ export function deriveSetupPath(listings: SetupListings): SetupPath {
   const steps: SetupStep[] = [
     shopStep(shop),
     {
-      id: "customer",
-      label: "Customer",
+      ...shape("customer"),
       complete: publishedProfiles.length > 0,
       action: {
         headline:
@@ -227,26 +365,22 @@ export function deriveSetupPath(listings: SetupListings): SetupPath {
             ? "Attach a customer profile to this shop and publish it"
             : "Publish a customer profile so a ticket can pin a customer version",
         body: "A ticket can only name a profile attached to this shop, and pins the version it was authored against.",
-        href: `${base}/customers`,
-        linkLabel: "Open customers",
+        href: stepHref(shape("customer"), shop.shopId),
+        linkLabel: shape("customer").linkLabel,
       },
-      terms: ["customer-profile", "ticket"],
     },
     {
-      id: "order",
-      label: "Order",
+      ...shape("order"),
       complete: listings.orders.length > 0,
       action: {
         headline: "Add the order the incident is about",
         body: "The recipe names the order; the copy is taken later, when a snapshot is materialized, so an order edited in between changes the next run's starting state.",
-        href: `${base}/orders`,
-        linkLabel: "Open orders",
+        href: stepHref(shape("order"), shop.shopId),
+        linkLabel: shape("order").linkLabel,
       },
-      terms: ["order", "sandbox-snapshot"],
     },
     {
-      id: "ticket",
-      label: "Ticket",
+      ...shape("ticket"),
       complete: publishedTickets.length > 0,
       action: {
         headline:
@@ -254,26 +388,22 @@ export function deriveSetupPath(listings: SetupListings): SetupPath {
             ? "Write the ticket the incident arrives on, then publish it"
             : "Publish a ticket so a scenario can be built on it",
         body: "A scenario is built on one published ticket, and every arm of an experiment opens on the message it carries.",
-        href: `${base}/tickets`,
-        linkLabel: "Open tickets",
+        href: stepHref(shape("ticket"), shop.shopId),
+        linkLabel: shape("ticket").linkLabel,
       },
-      terms: ["ticket"],
     },
     {
-      id: "blocks",
-      label: "Blocks",
+      ...shape("blocks"),
       complete: publishedObjectives.length > 0,
       action: {
         headline: "Publish an objective block for the scenario to bind",
         body: "A scenario with no objectives decides nothing, so the library needs one to bind. The mutation library beside it is optional — a recipe with no fault is one where nothing goes wrong mid-incident.",
-        href: `${base}/objective-blocks`,
-        linkLabel: "Open objective blocks",
+        href: stepHref(shape("blocks"), shop.shopId),
+        linkLabel: shape("blocks").linkLabel,
       },
-      terms: ["objective-block", "mutation-block", "scenario"],
     },
     {
-      id: "scenario",
-      label: "Scenario",
+      ...shape("scenario"),
       complete: publishedScenarios.length > 0,
       action: {
         headline:
@@ -281,26 +411,22 @@ export function deriveSetupPath(listings: SetupListings): SetupPath {
             ? "Compose the scenario on that ticket, then publish it"
             : "Publish a scenario so an experiment can pin a recipe",
         body: "An experiment pins one published scenario version, and through it every version that recipe froze.",
-        href: `${base}/scenarios`,
-        linkLabel: "Open scenarios",
+        href: stepHref(shape("scenario"), shop.shopId),
+        linkLabel: shape("scenario").linkLabel,
       },
-      terms: ["scenario", "objective-block", "mutation-block"],
     },
     {
-      id: "support-identity",
-      label: "Support identity",
+      ...shape("support-identity"),
       complete: publishedIdentities.length > 0,
       action: {
         headline: "Publish the support identity the agent will adopt",
         body: "An agent configuration adopts one published support identity, which is what authorizes the writes its tools may make.",
-        href: `${base}/support-identities`,
-        linkLabel: "Open support identities",
+        href: stepHref(shape("support-identity"), shop.shopId),
+        linkLabel: shape("support-identity").linkLabel,
       },
-      terms: ["support-identity", "shop"],
     },
     {
-      id: "agent-configurations",
-      label: "Agent configurations",
+      ...shape("agent-configurations"),
       complete: publishedConfigurations.length > 1,
       action: {
         headline:
@@ -308,34 +434,29 @@ export function deriveSetupPath(listings: SetupListings): SetupPath {
             ? "Publish an agent configuration for the first arm"
             : "Publish a second agent configuration so a comparison has two arms",
         body: "A comparison should move one dimension — the framework, the architecture, or the configuration — and the lab warns when an experiment's arms differ in more than one.",
-        href: `${base}/agent-configurations`,
-        linkLabel: "Open agent configurations",
+        href: stepHref(shape("agent-configurations"), shop.shopId),
+        linkLabel: shape("agent-configurations").linkLabel,
       },
-      terms: ["agent-configuration", "support-identity", "run"],
     },
     {
-      id: "judge",
-      label: "Judge",
+      ...shape("judge"),
       complete: publishedJudges.length > 0,
       action: {
         headline: "Publish a judge for the rows no rule decides",
         body: "Deterministic objectives do not need one; the dimensions a rule cannot decide do.",
-        href: `${base}/judges`,
-        linkLabel: "Open judges",
+        href: stepHref(shape("judge"), shop.shopId),
+        linkLabel: shape("judge").linkLabel,
       },
-      terms: ["judge-configuration", "evaluation", "objective-block"],
     },
     {
-      id: "experiment",
-      label: "Experiment",
+      ...shape("experiment"),
       complete: listings.experimentCount > 0,
       action: {
         headline: "Start the experiment and drive both arms",
         body: "Starting one clones an arm per configuration from a single snapshot, and you play the customer. The history listing is cross-shop, so a run started in any shop satisfies this step.",
-        href: `${base}/bench`,
-        linkLabel: "Open the bench",
+        href: stepHref(shape("experiment"), shop.shopId),
+        linkLabel: shape("experiment").linkLabel,
       },
-      terms: ["experiment", "sandbox-snapshot", "participant-driver"],
     },
   ];
 

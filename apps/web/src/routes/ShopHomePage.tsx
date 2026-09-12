@@ -18,6 +18,7 @@ import {
   accentButtonClasses,
   formatTimestamp,
   inkButtonClasses,
+  labNoteClasses,
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
@@ -95,7 +96,7 @@ export function ShopHomePage() {
         }
       />
 
-      <p className="mb-4 rounded-[10px] border border-[#b7d9cc] bg-[#eaf4f0] px-3.5 py-3 text-[12.5px] leading-relaxed">
+      <p className={`mb-4 px-3.5 py-3 text-[12.5px] leading-relaxed ${labNoteClasses}`}>
         This entire shop is a synthetic simulation environment — every product, policy, and support
         document is fictional test data.
       </p>

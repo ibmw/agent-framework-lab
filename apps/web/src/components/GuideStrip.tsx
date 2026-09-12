@@ -5,7 +5,8 @@ import { Link } from "react-router-dom";
 import { glossaryTerm } from "../lib/glossary";
 import { type GuideModeChoice, useGuideModeChoice, useGuideReading } from "../lib/guide";
 import { deriveSetupPath, type ScopedShop, type SetupPath, type SetupStep } from "../lib/setupPath";
-import { inkButtonClasses, outlineButtonClasses } from "../lib/ui";
+import { inkButtonClasses, labNoteClasses, outlineButtonClasses } from "../lib/ui";
+import { GlossaryTermLink } from "./GuideProse";
 import { canPublish, IssueList, PublishReasons } from "./WorkspaceChrome";
 
 /**
@@ -153,7 +154,7 @@ function ChainRow({ steps, nextStep }: { steps: SetupStep[]; nextStep: SetupStep
   );
 }
 
-/** The words this step uses, each linking to the one place they are defined. */
+/** The words this step uses, each hovering the one place they are defined. */
 function GlossaryReferences({ terms }: { terms: readonly string[] }) {
   const defined = terms.map(glossaryTerm).filter((term) => term !== undefined);
   if (defined.length === 0) {
@@ -165,12 +166,7 @@ function GlossaryReferences({ terms }: { terms: readonly string[] }) {
       {defined.map((term, index) => (
         <span key={term.id}>
           {index > 0 ? ", " : null}
-          <Link
-            className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-            to={`/guides/glossary#${term.id}`}
-          >
-            {term.term}
-          </Link>
+          <GlossaryTermLink id={term.id} label={term.term} />
         </span>
       ))}
     </p>
@@ -268,7 +264,7 @@ export function GuideStrip({ shop, currentPath }: GuideStripProps) {
   return (
     <section
       aria-label="Setup path"
-      className={`mb-4 grid gap-2.5 rounded-[10px] border border-[#b7d9cc] border-l-[3px] bg-[#eaf4f0] px-4 py-3 ${
+      className={`mb-4 grid gap-2.5 border-l-[3px] px-4 py-3 ${labNoteClasses} ${
         path.complete ? "border-l-lab-success" : "border-l-lab-ink"
       }`}
     >

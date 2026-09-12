@@ -194,3 +194,39 @@ export function useGuideReading(shopId: string | null): GuideReading {
 
   return reading;
 }
+
+/**
+ * Guide mode alone, for a surface that wants an explainer rather than the whole path.
+ *
+ * The strip needs ten listings; an inline explainer needs one fact — whether guide mode is on.
+ * A stored disagreement answers without reading anything at all, which is why an operator who
+ * has turned the guide off costs the application no request on any surface.
+ */
+export function useGuideMode(): boolean {
+  const [choice] = useGuideModeChoice();
+  const [on, setOn] = useState(choice === "on");
+
+  useEffect(() => {
+    if (choice !== "follow") {
+      setOn(choice === "on");
+      return;
+    }
+    const controller = new AbortController();
+    listExperimentHistory({ status: "completed", page_size: 1 }, controller.signal)
+      .then((page) => {
+        if (!controller.signal.aborted) {
+          setOn(resolveGuideMode("follow", page.total > 0));
+        }
+      })
+      .catch(() => {
+        // A reading that failed is not a reading that the lab holds a completed comparison.
+        // The explainer stays away rather than appearing on a guess.
+        if (!controller.signal.aborted) {
+          setOn(false);
+        }
+      });
+    return () => controller.abort();
+  }, [choice]);
+
+  return on;
+}
