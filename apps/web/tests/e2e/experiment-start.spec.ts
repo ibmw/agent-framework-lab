@@ -1,4 +1,20 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect as baseExpect, type Page, test } from "@playwright/test";
+
+/**
+ * This journey's assertions wait longer than the suite's default, and only this journey's.
+ *
+ * It is the heaviest writer in a suite that runs every journey at once against one API process
+ * and one SQLite file — it publishes nine definitions, starts an experiment, drives both arms and
+ * scores a judge — and since the tour sweep joined the suite and began building a chain of its
+ * own, a write this journey is waiting on can queue behind one of those. Nothing below is
+ * relaxed, removed or narrowed; the wait is the stack's and is scoped to the file that needs it
+ * rather than lengthening every assertion in every spec.
+ *
+ * It is not a fix for a write that queues past SQLite's own five-second busy timeout: that
+ * surfaces as a refused request and a wrong page, which no wait repairs. `docs/PLAN.md` carries
+ * that as a deferred trigger.
+ */
+const expect = baseExpect.configure({ timeout: 15_000 });
 
 /**
  * The paired-experiment acceptance journey (ADR 0025, ADR 0026, ADR 0029): an operator starts

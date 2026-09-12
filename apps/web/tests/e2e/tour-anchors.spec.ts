@@ -1,0 +1,96 @@
+import { test as base, expect } from "@playwright/test";
+import { TOUR_IDS, TOURS, type TourId } from "../../src/lib/tours";
+import { type BuiltLab, buildLab } from "./support/lab";
+
+/**
+ * The anchor sweep: one case per surface with a tour, driven off the tour table itself.
+ *
+ * This is the answer to the objection ADR 0044 raised against coach marks and ADR 0045 accepted
+ * as correct — that a tour goes stale silently when a control moves, and that staleness in a tour
+ * was invisible to every test this project ran. It is no longer invisible. A control that is
+ * renamed, moved behind a tab, hidden, or rendered twice fails here, naming the surface and the
+ * step; and a step declared in `src/lib/tours.ts` joins this sweep the day it is declared, because
+ * the cases below are that table's rows rather than a list kept beside them (ADR 0023's shape).
+ *
+ * The route and the state each surface needs are deliberately *here* rather than in the product
+ * module, keyed exhaustively by the tour identifier, so a tour added without a way to reach it
+ * fails to compile instead of being silently swept over.
+ */
+
+const SURFACES: Record<TourId, (lab: BuiltLab) => string> = {
+  "shop-home": (lab) => `/shops/${lab.shopId}`,
+  "objective-blocks": (lab) => `/shops/${lab.shopId}/objective-blocks`,
+  "mutation-blocks": (lab) => `/shops/${lab.shopId}/mutation-blocks`,
+  scenario: (lab) => `/shops/${lab.shopId}/scenarios/${lab.scenarioId}`,
+  snapshots: (lab) => `/shops/${lab.shopId}/scenarios/${lab.scenarioId}/snapshots`,
+  bench: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}`,
+  results: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}/results`,
+};
+
+/**
+ * The whole chain, built once and shared by every case in this worker.
+ *
+ * The bench and the results screen are the end of a ten-step dependency order, so reaching them
+ * costs a shop, a customer, an order, a ticket, both libraries, a published recipe, an identity,
+ * two published configurations and a started experiment. That is a great deal of writing against
+ * the one SQLite file this suite shares, and it is worth doing once rather than once per surface.
+ */
+const test = base.extend<object, { lab: BuiltLab }>({
+  lab: [
+    async ({ playwright }, use, workerInfo) => {
+      const api = await playwright.request.newContext({
+        baseURL: workerInfo.project.use.baseURL,
+      });
+      await use(await buildLab(api));
+      await api.dispose();
+    },
+    { scope: "worker" },
+  ],
+});
+
+// One worker, in order, because "once per worker" is only once while the cases stay together.
+// `default` rather than `serial`: a rename that loosens two surfaces should report both, so a
+// failed case must not skip the ones after it.
+test.describe.configure({ mode: "default" });
+
+// Guide mode is derived from a lab this suite shares with every other journey, so the sweep
+// states its own answer instead of depending on what another journey has left behind. What the
+// derived default reads is a unit concern (`src/GuideMode.test.tsx`).
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("agent-lab.guide-mode", "on"));
+});
+
+test("has a tour to sweep at all", () => {
+  // A parameterized sweep that became empty would report as passing, which is the one way the
+  // cases below could stop proving anything without anybody noticing (ADR 0023). A `for` loop
+  // over an empty table declares no tests at all, so the guard cannot itself be a case.
+  expect(TOUR_IDS.length).toBeGreaterThan(0);
+  for (const id of TOUR_IDS) {
+    expect(TOURS[id].steps.length, `${id} declares no steps`).toBeGreaterThan(0);
+  }
+});
+
+for (const id of TOUR_IDS) {
+  test(`every step of the ${id} tour points at exactly one visible thing on its surface`, async ({
+    page,
+    lab,
+  }) => {
+    const tour = TOURS[id];
+    await page.goto(SURFACES[id](lab));
+
+    // The surface offers the tour at all: a tour declared for a screen that never mounts its
+    // control is as stale as one pointing at a control that moved.
+    await expect(
+      page.getByRole("button", { name: `Show me around ${tour.surface}` }),
+      `${id} does not offer its tour`,
+    ).toBeVisible();
+
+    for (const step of tour.steps) {
+      const anchor = page.locator(step.anchor);
+      const where = `${id} · ${step.title} · ${step.anchor}`;
+      // Soft, so one surface reports every step that has come loose rather than only its first.
+      await expect.soft(anchor, `${where} matches more or fewer than one element`).toHaveCount(1);
+      await expect.soft(anchor, `${where} matches something nobody can see`).toBeVisible();
+    }
+  });
+}

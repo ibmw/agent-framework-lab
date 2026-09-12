@@ -7,5 +7,13 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "playwright.teardown.ts", "tests/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "playwright.teardown.ts",
+    "tests/**/*.ts",
+    // The anchor sweep is driven off the application's own tour table rather than a list kept
+    // beside it (ADR 0045), so the one module it reads is in this project too.
+    "src/lib/tours.ts"
+  ]
 }
