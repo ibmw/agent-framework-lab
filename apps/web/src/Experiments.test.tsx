@@ -795,21 +795,6 @@ let replayFails = false;
 let forked: { configuration_id: string; version: number }[][] = [];
 
 const server = setupServer(
-  // The bench and the results screen offer a tour, whose control reads guide mode from
-  // whether this lab holds a completed comparison. An empty history leaves it on, so the control
-  // appears in these journeys rather than being quietly absent from them (ADR 0044).
-  http.get("*/api/v1/experiments", () =>
-    HttpResponse.json({
-      experiments: [],
-      page: 1,
-      page_size: 1,
-      total: 0,
-      shops: [],
-      scenarios: [],
-      frameworks: [],
-      tags: [],
-    }),
-  ),
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
@@ -1176,7 +1161,7 @@ describe("live bench", () => {
     expect(within(armA).getByText("Trigger")).toBeVisible();
   });
 
-  it("offers to show a reader around, while guide mode is on", async () => {
+  it("offers to show a reader around", async () => {
     renderBench();
 
     expect(
@@ -1728,7 +1713,7 @@ describe("experiment results", () => {
     );
   });
 
-  it("offers to show a reader around the comparison, while guide mode is on", async () => {
+  it("offers to show a reader around the comparison", async () => {
     renderResults();
 
     expect(

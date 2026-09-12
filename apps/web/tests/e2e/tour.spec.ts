@@ -18,10 +18,6 @@ test("a tour walks the screen it was launched from, and leaves when it is told t
 }) => {
   const unique = Date.now().toString(36);
 
-  // Guide mode is derived from a lab this suite shares with every other journey; this browser
-  // states its own answer rather than depending on what another journey left behind.
-  await page.addInitScript(() => window.localStorage.setItem("agent-lab.guide-mode", "on"));
-
   await page.goto("/shops");
   const createShop = page.getByRole("region", { name: "Create a shop" });
   await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);

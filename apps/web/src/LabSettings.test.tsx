@@ -13,7 +13,6 @@ import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { AppShell } from "./shell/AppShell";
-import { guideModeHandlers } from "./test/guideMode";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -116,7 +115,6 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/versions`, () => HttpResponse.json({ versions: [] })),
   http.get("*/api/v1/lab-status", () => HttpResponse.json(currentStatus)),
   http.get("*/api/v1/agent-configurations/resources", () => HttpResponse.json(resources)),
-  ...guideModeHandlers(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -353,6 +351,18 @@ describe("lab settings", () => {
     // surface that names it.
     expect(screen.getByText("make seed", { selector: "code" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /seed|demo data|populate/i })).toBeNull();
+  });
+
+  it("defines the words the application uses on screen", async () => {
+    renderAt("/guides/glossary");
+
+    expect(await screen.findByRole("heading", { name: "Glossary" })).toBeVisible();
+    const terms = screen.getByRole("region", { name: "Vocabulary" });
+    expect(within(terms).getByText("Objective block")).toBeVisible();
+    expect(
+      within(terms).getByText(/shop-independent objective template/, { exact: false }),
+    ).toBeVisible();
+    expect(within(terms).getByText("Sandbox snapshot")).toBeVisible();
   });
 });
 

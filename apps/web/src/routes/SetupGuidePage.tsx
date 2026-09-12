@@ -215,8 +215,8 @@ export function SetupGuidePage() {
             your lab. Most of the screens it links to are ordinary authoring surfaces and say what
             they are; the ones whose vocabulary is this lab's own — the shop's home and the
             objective-block library here, and the scenario editor, the starting states, the bench
-            and the results screen further along — offer to show you around while guide mode is on.
-            What any of the words below mean is in the glossary.
+            and the results screen further along — each offer to show you around. What any of the
+            words below mean is in the glossary.
           </p>
           <ol className="grid gap-5">
             {SETUP_CHAIN.map((step, index) => (
@@ -250,8 +250,7 @@ export function SetupGuidePage() {
             >
               glossary
             </Link>{" "}
-            defines every word those screens use, and each of them offers to show you around while
-            guide mode is on.
+            defines every word those screens use, and each of them offers to show you around.
           </p>
         </Card>
 

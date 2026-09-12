@@ -53,13 +53,6 @@ const test = base.extend<object, { lab: BuiltLab }>({
 // failed case must not skip the ones after it.
 test.describe.configure({ mode: "default" });
 
-// Guide mode is derived from a lab this suite shares with every other journey, so the sweep
-// states its own answer instead of depending on what another journey has left behind. What the
-// derived default reads is a unit concern (`src/GuideMode.test.tsx`).
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => window.localStorage.setItem("agent-lab.guide-mode", "on"));
-});
-
 test("has a tour to sweep at all", () => {
   // A parameterized sweep that became empty would report as passing, which is the one way the
   // cases below could stop proving anything without anybody noticing (ADR 0023). A `for` loop

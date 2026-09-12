@@ -274,21 +274,6 @@ function draft(content: ScenarioContentSchema): ScenarioDraftResponse {
 }
 
 const server = setupServer(
-  // The tour's launch control reads guide mode, which is derived from whether this lab holds a
-  // completed comparison. An empty history leaves it on, so the control appears in these
-  // journeys rather than being quietly absent from them (ADR 0044).
-  http.get("*/api/v1/experiments", () =>
-    HttpResponse.json({
-      experiments: [],
-      page: 1,
-      page_size: 1,
-      total: 0,
-      shops: [],
-      scenarios: [],
-      frameworks: [],
-      tags: [],
-    }),
-  ),
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
@@ -430,7 +415,7 @@ describe("scenario editor", () => {
     ).toBeVisible();
   });
 
-  it("offers to show a reader around what it composes, while guide mode is on", async () => {
+  it("offers to show a reader around what it composes", async () => {
     // "Recipe", "binding" and "hidden fact" are this lab's words, not a commerce admin's, so
     // the editor has a tour that says what they mean where they are used (ADR 0045).
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);

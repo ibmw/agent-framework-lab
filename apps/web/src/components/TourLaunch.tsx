@@ -3,7 +3,6 @@ import "driver.js/dist/driver.css";
 import { Compass } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useGuideMode } from "../lib/guide";
 import { TOURS, type TourId, type TourStep } from "../lib/tours";
 import { subtleButtonClasses } from "../lib/ui";
 import { GuideProse } from "./GuideProse";
@@ -17,10 +16,17 @@ import { GuideProse } from "./GuideProse";
  * its position across the move, and the second of those is the stored progress ADR 0044 refused
  * and ADR 0045 still refuses.
  *
- * Guide mode is the one from `lib/guide.ts` — derived from the record, overridden by an
- * operator's stored disagreement — and not a second mode. An operator who turned the guide off
- * turned these controls off on every surface at once, and a stored disagreement answers without
- * reading anything at all.
+ * The control is unconditional: every surface with a tour offers it, to everybody, always. It
+ * used to be gated by guide mode — a lab-wide preference, derived from whether the lab held a
+ * completed comparison. That mode was written for a guide that drew itself on screen unbidden,
+ * and once every reading became an offer there was nothing left for it to protect: a lab filled
+ * by `make seed` derived the mode off and hid the offer from precisely the reader who had not
+ * found it yet (ADR 0046). A control that does nothing until it is pressed needs no opt-out.
+ *
+ * So this component reads nothing to decide whether to appear. It issues no request, consults no
+ * stored preference, and renders the same on the first frame as on every one after it. The one
+ * thing it does read is `prefers-reduced-motion`, and that is read when a tour starts rather than
+ * when the control is drawn.
  *
  * The overlay itself is `driver.js`, skinned in this application's own tokens by the `.lab-tour`
  * block in `styles.css` rather than shipped as it comes (ADR 0045).
@@ -51,7 +57,6 @@ function TourBody({ step }: { step: TourStep }) {
 }
 
 export function TourLaunch({ id }: { id: TourId }) {
-  const on = useGuideMode();
   const tour = TOURS[id];
   const active = useRef<Driver | null>(null);
   const launcher = useRef<HTMLButtonElement | null>(null);
@@ -122,23 +127,21 @@ export function TourLaunch({ id }: { id: TourId }) {
 
   return (
     <>
-      {/* Rendered whether or not a tour is running, and whether or not one can be: the
-          containers are detached, so their content is in place before the popover measures
-          itself against it, and an empty popover never has to be re-positioned afterwards. */}
+      {/* Rendered whether or not a tour is running: the containers are detached, so their
+          content is in place before the popover measures itself against it, and an empty
+          popover never has to be re-positioned afterwards. */}
       {hosts.map((host, index) =>
         createPortal(<TourBody step={tour.steps[index]} />, host, `${id}-${index}`),
       )}
-      {on ? (
-        <button
-          ref={launcher}
-          type="button"
-          className={subtleButtonClasses}
-          onClick={start}
-          aria-label={`Show me around ${tour.surface}`}
-        >
-          <Compass size={13} aria-hidden /> Show me around
-        </button>
-      ) : null}
+      <button
+        ref={launcher}
+        type="button"
+        className={subtleButtonClasses}
+        onClick={start}
+        aria-label={`Show me around ${tour.surface}`}
+      >
+        <Compass size={13} aria-hidden /> Show me around
+      </button>
     </>
   );
 }

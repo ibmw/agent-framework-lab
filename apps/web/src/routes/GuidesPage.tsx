@@ -53,13 +53,14 @@ export function GuidesPage() {
           </p>
         </Card>
 
-        <Card title="Guide mode">
+        <Card title="Show me around">
           <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-            With guide mode on, the screens whose vocabulary is particular to this lab — each shop's
-            home, the two block libraries, the scenario editor, the starting states, the bench and
-            the results — offer to show you around: a short walk through that one screen, lighting
-            one thing at a time and saying what it is in the lab's own words. Nothing starts on its
-            own, no tour crosses a screen, and nothing about where you got to is stored.
+            The screens whose vocabulary is particular to this lab — each shop's home, the two block
+            libraries, the scenario editor, the starting states, the bench and the results — each
+            carry a <em>Show me around</em> control in their header. It walks that one screen,
+            lighting one thing at a time and saying what it is in the lab's own words. Nothing
+            starts on its own, no tour crosses a screen, and nothing about where you got to is
+            stored.
           </p>
           <p className="text-[13px] text-admin-ink-soft">
             <Link
@@ -68,8 +69,8 @@ export function GuidesPage() {
             >
               Lab settings
             </Link>{" "}
-            reports what this build can run, and is where guide mode is turned on or off for every
-            screen at once.
+            reports what this build can run, how it is composed to run it, and what this browser
+            remembers.
           </p>
         </Card>
       </div>

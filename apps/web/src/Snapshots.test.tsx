@@ -298,21 +298,6 @@ let arms: SandboxListResponse = { sandboxes: [] };
 let cloned: Record<string, unknown>[] = [];
 
 const server = setupServer(
-  // The tour's launch control reads guide mode, which is derived from whether this lab holds a
-  // completed comparison. An empty history leaves it on, so the control appears in these
-  // journeys rather than being quietly absent from them (ADR 0044).
-  http.get("*/api/v1/experiments", () =>
-    HttpResponse.json({
-      experiments: [],
-      page: 1,
-      page_size: 1,
-      total: 0,
-      shops: [],
-      scenarios: [],
-      frameworks: [],
-      tags: [],
-    }),
-  ),
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
   http.get("*/api/v1/tools", () => HttpResponse.json(TOOLS)),
   http.get("*/api/v1/support-identities", () => HttpResponse.json(IDENTITIES)),
@@ -430,7 +415,7 @@ describe("starting states", () => {
     expect(materialized[0]).toEqual({ seed: 20260825, version: "2" });
   });
 
-  it("offers to show a reader around, while guide mode is on", async () => {
+  it("offers to show a reader around", async () => {
     renderPage();
 
     expect(

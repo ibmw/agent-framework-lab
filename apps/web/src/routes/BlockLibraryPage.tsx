@@ -19,7 +19,7 @@ import {
 
 interface LibraryCopy {
   title: string;
-  /** The tour this library offers while guide mode is on. */
+  /** The tour this library offers. */
   tour: TourId;
   description: string;
   /** What the library is, shown above the index the way frames 4a and 4b state it. */
