@@ -4,13 +4,13 @@
  * `docs/PLAN.md` carries the lab's stable target vocabulary — objective block, mutation block,
  * canonical snapshot, arm, participant driver — and nothing a reader of the application could
  * reach defined any of them. This module is that vocabulary, in one place, so a term has one
- * definition: the glossary page renders it, the guide strip's steps reference it, and the
- * inline explainers will hover it. A second copy of any of these sentences would be a second
- * thing to keep in agreement with `docs/PLAN.md` (ADR 0044).
+ * definition: the glossary page renders it, the written setup guide's steps reference it, and a
+ * tour popover hovers it. A second copy of any of these sentences would be a second thing to keep
+ * in agreement with `docs/PLAN.md` (ADR 0044).
  */
 
 export interface GlossaryTerm {
-  /** Stable identifier a guide step or an explainer references. */
+  /** Stable identifier a guide step or a tour step references. */
   readonly id: string;
   readonly term: string;
   readonly definition: string;

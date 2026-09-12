@@ -3,10 +3,10 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { describeApiError } from "../api/client";
-import { Explainer } from "../components/Explainer";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { toSlug } from "../lib/blocks";
-import type { ExplainerId } from "../lib/explainers";
+import type { TourId } from "../lib/tours";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -19,8 +19,8 @@ import {
 
 interface LibraryCopy {
   title: string;
-  /** The note this library shows while guide mode is on. */
-  explainer: ExplainerId;
+  /** The tour this library offers while guide mode is on. */
+  tour: TourId;
   description: string;
   /** What the library is, shown above the index the way frames 4a and 4b state it. */
   premise: string;
@@ -32,7 +32,7 @@ interface LibraryCopy {
 
 const OBJECTIVE_COPY: LibraryCopy = {
   title: "Objective blocks",
-  explainer: "objective-blocks",
+  tour: "objective-blocks",
   description:
     "What an experiment asserts, authored once and composed by any scenario. A scenario binds a template's parameters to its own shop's objects.",
   premise:
@@ -45,7 +45,7 @@ const OBJECTIVE_COPY: LibraryCopy = {
 
 const MUTATION_COPY: LibraryCopy = {
   title: "Mutation blocks",
-  explainer: "mutation-blocks",
+  tour: "mutation-blocks",
   description:
     "What the scenario runtime injects into a run's sandbox. A scenario binds a template's parameters and its trigger time.",
   premise:
@@ -119,6 +119,7 @@ function BlockLibrary({
             <span aria-hidden>⇄</span> Shared across shops
           </span>
         }
+        actions={<TourLaunch id={copy.tour} />}
         description={copy.description}
       />
 
@@ -130,10 +131,9 @@ function BlockLibrary({
 
       <p className="mb-4 max-w-3xl text-[13px] text-admin-ink-soft">{copy.premise}</p>
 
-      <Explainer id={copy.explainer} />
-
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className={`${surfaceClasses} overflow-hidden`}>
+        {/* The index has no name of its own, so it carries the tour's anchor (ADR 0045). */}
+        <section data-tour="block-index" className={`${surfaceClasses} overflow-hidden`}>
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading blocks…</p>
           ) : blocks.length === 0 ? (

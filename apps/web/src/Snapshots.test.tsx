@@ -20,6 +20,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { TOURS } from "./lib/tours";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -297,8 +298,8 @@ let arms: SandboxListResponse = { sandboxes: [] };
 let cloned: Record<string, unknown>[] = [];
 
 const server = setupServer(
-  // The inline explainers read guide mode, which is derived from whether this lab holds a
-  // completed comparison. An empty history leaves it on, so the notes render in these
+  // The tour's launch control reads guide mode, which is derived from whether this lab holds a
+  // completed comparison. An empty history leaves it on, so the control appears in these
   // journeys rather than being quietly absent from them (ADR 0044).
   http.get("*/api/v1/experiments", () =>
     HttpResponse.json({
@@ -429,16 +430,15 @@ describe("starting states", () => {
     expect(materialized[0]).toEqual({ seed: 20260825, version: "2" });
   });
 
-  it("says what a starting state is while guide mode is on", async () => {
+  it("offers to show a reader around, while guide mode is on", async () => {
     renderPage();
 
-    const note = await screen.findByRole("region", {
-      name: "Guide note: What a starting state is",
-    });
-    expect(within(note).getByRole("link", { name: "snapshot" })).toHaveAttribute(
-      "href",
-      "/guides/glossary#sandbox-snapshot",
-    );
+    expect(
+      await screen.findByRole("button", { name: `Show me around ${TOURS.snapshots.surface}` }),
+    ).toBeVisible();
+    for (const step of TOURS.snapshots.steps) {
+      expect(document.querySelectorAll(step.anchor), step.anchor).toHaveLength(1);
+    }
   });
 
   it("separates what the snapshot pinned from what it copied", async () => {

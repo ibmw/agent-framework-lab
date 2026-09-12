@@ -33,6 +33,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { TOURS } from "./lib/tours";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -794,9 +795,9 @@ let replayFails = false;
 let forked: { configuration_id: string; version: number }[][] = [];
 
 const server = setupServer(
-  // The bench and the results screen carry an inline explainer, which reads guide mode from
-  // whether this lab holds a completed comparison. An empty history leaves it on, so the notes
-  // render in these journeys rather than being quietly absent from them (ADR 0044).
+  // The bench and the results screen offer a tour, whose control reads guide mode from
+  // whether this lab holds a completed comparison. An empty history leaves it on, so the control
+  // appears in these journeys rather than being quietly absent from them (ADR 0044).
   http.get("*/api/v1/experiments", () =>
     HttpResponse.json({
       experiments: [],
@@ -1175,16 +1176,15 @@ describe("live bench", () => {
     expect(within(armA).getByText("Trigger")).toBeVisible();
   });
 
-  it("says what the operator is looking at and doing, while guide mode is on", async () => {
+  it("offers to show a reader around, while guide mode is on", async () => {
     renderBench();
 
-    const note = await screen.findByRole("region", {
-      name: "Guide note: What you are looking at, and what you are doing",
-    });
-    expect(within(note).getByRole("link", { name: "participant driver" })).toHaveAttribute(
-      "href",
-      "/guides/glossary#participant-driver",
-    );
+    expect(
+      await screen.findByRole("button", { name: `Show me around ${TOURS.bench.surface}` }),
+    ).toBeVisible();
+    for (const step of TOURS.bench.steps) {
+      expect(document.querySelectorAll(step.anchor), step.anchor).toHaveLength(1);
+    }
   });
 
   it("sends one composition to both arms by default", async () => {
@@ -1728,16 +1728,15 @@ describe("experiment results", () => {
     );
   });
 
-  it("says how to read the comparison, while guide mode is on", async () => {
+  it("offers to show a reader around the comparison, while guide mode is on", async () => {
     renderResults();
 
-    const note = await screen.findByRole("region", {
-      name: "Guide note: How to read this comparison",
-    });
-    expect(within(note).getByRole("link", { name: "judge" })).toHaveAttribute(
-      "href",
-      "/guides/glossary#judge-configuration",
-    );
+    expect(
+      await screen.findByRole("button", { name: `Show me around ${TOURS.results.surface}` }),
+    ).toBeVisible();
+    for (const step of TOURS.results.steps) {
+      expect(document.querySelectorAll(step.anchor), step.anchor).toHaveLength(1);
+    }
   });
 });
 

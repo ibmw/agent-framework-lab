@@ -12,7 +12,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
-import { guideListingHandlers } from "./test/guideListings";
+import { guideModeHandlers } from "./test/guideMode";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -216,7 +216,7 @@ const server = setupServer(
     });
     return HttpResponse.json(published, { status: 201 });
   }),
-  ...guideListingHandlers(SHOP_ID),
+  ...guideModeHandlers(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -303,7 +303,7 @@ describe("shop workspace", () => {
 
     const publish = await screen.findByRole("button", { name: "Publish v1" });
     expect(publish).toBeDisabled();
-    // Scoped to the card: the guide strip reads the same gate, so it carries the same refusal.
+    // Scoped to the card, which is the one place the publish gate's refusal is rendered.
     expect(
       within(screen.getByRole("region", { name: "Publish" })).getByText(
         /Save the draft first — publishing freezes the saved draft/,

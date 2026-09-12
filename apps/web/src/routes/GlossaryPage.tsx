@@ -8,7 +8,7 @@ import { LabSurface, useLabSurface } from "../shell/LabSurface";
  *
  * These words are `docs/PLAN.md`'s stable target vocabulary, which until now was defined
  * nowhere a reader of the application could reach. The page holds no definitions of its own:
- * a term has one definition, and the explainers that will hover it read the same module
+ * a term has one definition, and the tour popovers that hover it read the same module
  * (ADR 0044).
  */
 export function GlossaryPage() {

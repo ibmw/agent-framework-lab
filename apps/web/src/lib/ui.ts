@@ -1,8 +1,4 @@
-/**
- * The lab note: the pine-on-cream band the synthetic-sandbox notice, the setup strip and the
- * inline explainers are all drawn on. One reading of the same surface, so a guide that appears
- * on six screens looks like one thing rather than six (ADR 0044).
- */
+/** The lab note: the pine-on-cream band the synthetic-sandbox notices are drawn on. */
 export const labNoteClasses = "rounded-[10px] border border-[#b7d9cc] bg-[#eaf4f0]";
 
 export const surfaceClasses =

@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { TOURS } from "./lib/tours";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -273,8 +274,8 @@ function draft(content: ScenarioContentSchema): ScenarioDraftResponse {
 }
 
 const server = setupServer(
-  // The inline explainers read guide mode, which is derived from whether this lab holds a
-  // completed comparison. An empty history leaves it on, so the notes render in these
+  // The tour's launch control reads guide mode, which is derived from whether this lab holds a
+  // completed comparison. An empty history leaves it on, so the control appears in these
   // journeys rather than being quietly absent from them (ADR 0044).
   http.get("*/api/v1/experiments", () =>
     HttpResponse.json({
@@ -429,18 +430,17 @@ describe("scenario editor", () => {
     ).toBeVisible();
   });
 
-  it("says what it composes while guide mode is on", async () => {
+  it("offers to show a reader around what it composes, while guide mode is on", async () => {
     // "Recipe", "binding" and "hidden fact" are this lab's words, not a commerce admin's, so
-    // the editor carries a note that defines them where they are used (ADR 0044).
+    // the editor has a tour that says what they mean where they are used (ADR 0045).
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
 
-    const note = await screen.findByRole("region", {
-      name: "Guide note: What this editor composes",
-    });
-    expect(within(note).getByRole("link", { name: "scenario" })).toHaveAttribute(
-      "href",
-      "/guides/glossary#scenario",
-    );
+    expect(
+      await screen.findByRole("button", { name: `Show me around ${TOURS.scenario.surface}` }),
+    ).toBeVisible();
+    for (const step of TOURS.scenario.steps) {
+      expect(document.querySelectorAll(step.anchor), step.anchor).toHaveLength(1);
+    }
   });
 
   it("binds a template to this shop's own objects rather than to typed text", async () => {

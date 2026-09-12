@@ -13,7 +13,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { AppShell } from "./shell/AppShell";
-import { guideListingHandlers } from "./test/guideListings";
+import { guideModeHandlers } from "./test/guideMode";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -116,7 +116,7 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/versions`, () => HttpResponse.json({ versions: [] })),
   http.get("*/api/v1/lab-status", () => HttpResponse.json(currentStatus)),
   http.get("*/api/v1/agent-configurations/resources", () => HttpResponse.json(resources)),
-  ...guideListingHandlers(SHOP_ID),
+  ...guideModeHandlers(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

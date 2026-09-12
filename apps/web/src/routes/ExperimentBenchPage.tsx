@@ -20,8 +20,8 @@ import {
   getExperimentEvaluation,
   scoreExperiment,
 } from "../api/experiments";
-import { Explainer } from "../components/Explainer";
 import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   describeFailure,
@@ -215,16 +215,17 @@ export function ExperimentBenchPage() {
           </>
         }
         actions={
-          <Link
-            className={outlineButtonClasses}
-            to={`/shops/${shopId}/bench/${experimentId}/results`}
-          >
-            Results
-          </Link>
+          <>
+            <TourLaunch id="bench" />
+            <Link
+              className={outlineButtonClasses}
+              to={`/shops/${shopId}/bench/${experimentId}/results`}
+            >
+              Results
+            </Link>
+          </>
         }
       />
-
-      <Explainer id="bench" />
 
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
@@ -234,7 +235,8 @@ export function ExperimentBenchPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid min-w-0 content-start gap-4">
-          <div className="grid gap-4 lg:grid-cols-2">
+          {/* The pair of arms is what a tour points at, and the pair has no name of its own. */}
+          <div data-tour="bench-arms" className="grid gap-4 lg:grid-cols-2">
             {experiment.runs.map((run) => (
               <Card key={run.run_id} title={run.label}>
                 <p className="text-xs text-admin-muted">

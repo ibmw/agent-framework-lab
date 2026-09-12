@@ -1,9 +1,8 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import { type FormEvent, useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
-import { GuideStrip } from "../components/GuideStrip";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -20,7 +19,6 @@ const CURRENCIES = ["EUR", "USD", "GBP"] as const;
 
 export function ShopsPage() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
   const [shops, setShops] = useState<ShopSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +66,6 @@ export function ShopsPage() {
 
   return (
     <AppShell shops={shops}>
-      {/* The one step a surface outside shop scope can read: whether a shop exists at all. */}
-      <GuideStrip shop={null} currentPath={pathname} />
       <PageHeader
         title="Shops"
         description="Every shop is a synthetic simulation environment. Publishing a shop freezes an immutable version that scenarios and experiments pin."

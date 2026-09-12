@@ -19,7 +19,7 @@ import {
   publishScenario,
   replaceScenarioDraft,
 } from "../api/scenarios";
-import { Explainer } from "../components/Explainer";
+import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
@@ -205,6 +205,7 @@ export function ScenarioEditorPage() {
         }
         actions={
           <>
+            <TourLaunch id="scenario" />
             <button
               className={outlineButtonClasses}
               type="button"
@@ -226,8 +227,6 @@ export function ScenarioEditorPage() {
           </>
         }
       />
-
-      <Explainer id="scenario" />
 
       {editor.error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">

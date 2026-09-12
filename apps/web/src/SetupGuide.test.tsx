@@ -1,21 +1,19 @@
 import type { ShopListResponse } from "@agent-lab/contracts";
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
-import { Explainer } from "./components/Explainer";
-import { EXPLAINERS } from "./lib/explainers";
 import { SETUP_CHAIN } from "./lib/setupPath";
 
 /**
- * The written setup guide and the notes that carry its vocabulary onto the surfaces.
+ * The written setup guide: the chain in dependency order, for a reader with nothing to read yet.
  *
  * Two refusals are held here. ADR 0043 decided the seed is a command and never a route, so the
  * guide is asserted to name it and to expose nothing that performs it. And what the guide says
- * the chain is, is asserted against `lib/setupPath.ts` rather than against a second list, so
- * the guide and the strip cannot come to disagree about it (ADR 0044).
+ * the chain is, is asserted against `lib/setupPath.ts`'s own table rather than against a second
+ * list, so the page and the table it walks cannot come to disagree about it (ADR 0044).
  */
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -95,7 +93,7 @@ describe("the setup guide", () => {
     }
   });
 
-  it("walks the chain the strip reads, in the order that module puts it in", async () => {
+  it("walks the chain that module holds, in the order it puts it in", async () => {
     renderAt("/guides/setup");
 
     const chain = await screen.findByRole("region", {
@@ -105,9 +103,8 @@ describe("the setup guide", () => {
       .getAllByRole("heading", { level: 3 })
       .map((heading) => heading.textContent ?? "");
 
-    // Asserted against `SETUP_CHAIN` rather than a list written out here: the guide and the
-    // band are two readings of one table, and a second list is a second thing to keep in
-    // agreement with the first.
+    // Asserted against `SETUP_CHAIN` rather than a list written out here: a second list is a
+    // second thing to keep in agreement with the first.
     expect(headings).toHaveLength(SETUP_CHAIN.length);
     SETUP_CHAIN.forEach((step, index) => {
       expect(headings[index]).toContain(`${index + 1}.`);
@@ -150,8 +147,8 @@ describe("the setup guide", () => {
   });
 
   it("says how many steps publish by counting the ones that do", async () => {
-    // The sentence and the chips are both read off `publishes`, and what that flag means is
-    // asserted against `deriveSetupPath` in `lib/setupPath.test.ts` rather than here.
+    // The sentence and the chips are both read off `publishes`, so neither can drift from the
+    // table while the other stays put.
     const publishing = SETUP_CHAIN.filter((step) => step.publishes).length;
     renderAt("/guides/setup");
 
@@ -166,91 +163,3 @@ describe("the setup guide", () => {
     expect(within(chain).getAllByText("ends in a published version")).toHaveLength(publishing);
   });
 });
-
-describe("an inline explainer", () => {
-  it("appears while guide mode is on, and carries hover definitions of the words it uses", async () => {
-    render(
-      <MemoryRouter>
-        <Explainer id="snapshots" />
-      </MemoryRouter>,
-    );
-
-    const note = await screen.findByRole("region", {
-      name: `Guide note: ${EXPLAINERS.snapshots.title}`,
-    });
-    const term = within(note).getByRole("link", { name: "snapshot" });
-    expect(term).toHaveAttribute("href", "/guides/glossary#sandbox-snapshot");
-    // The definition shown on hover is the one `/guides/glossary` renders — one copy, in the
-    // module both read — and it is the link's accessible description rather than only a shape.
-    expect(term).toHaveAccessibleDescription(/canonical immutable starting state/);
-  });
-
-  it("is absent once an operator has turned the guide off, and reads nothing to find out", async () => {
-    const requested: string[] = [];
-    server.events.on("request:start", ({ request }) => requested.push(request.url));
-    window.localStorage.setItem("agent-lab.guide-mode", "off");
-
-    render(
-      <MemoryRouter>
-        <Explainer id="bench" />
-      </MemoryRouter>,
-    );
-    await settle();
-
-    expect(screen.queryByRole("region", { name: /Guide note/ })).toBeNull();
-    // A stored disagreement answers on its own. An implementation that read the record
-    // anyway would fail here even though the note is correctly absent.
-    expect(requested).toEqual([]);
-  });
-
-  it("is absent once the lab holds a completed comparison and nobody disagreed", async () => {
-    completedExperiments = 1;
-    const answered = completedReadingAnswered();
-
-    render(
-      <MemoryRouter>
-        <Explainer id="results" />
-      </MemoryRouter>,
-    );
-
-    await answered;
-    await settle();
-    expect(screen.queryByRole("region", { name: /Guide note/ })).toBeNull();
-
-    // And the same render with the same code shows the note when the record reads the other
-    // way, so the absence above is the reading rather than a component that never renders.
-    completedExperiments = 0;
-    const again = completedReadingAnswered();
-    render(
-      <MemoryRouter>
-        <Explainer id="results" />
-      </MemoryRouter>,
-    );
-    await again;
-    expect(await screen.findByRole("region", { name: /Guide note/ })).toBeVisible();
-  });
-});
-
-/** Resolved once the reading that decides guide mode has come back from the server. */
-function completedReadingAnswered(): Promise<void> {
-  return new Promise((resolve) => {
-    server.events.on("response:mocked", ({ request }) => {
-      if (request.url.includes("status=completed")) {
-        resolve();
-      }
-    });
-  });
-}
-
-/**
- * Let every queued microtask run and React flush what they produced.
- *
- * An explainer starts hidden and is shown by a promise chain, so "the note is absent" is true
- * of the first frame of every render. Without this the negative assertions below would hold
- * against an implementation that ignored the stored override or the record entirely.
- */
-async function settle(): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}

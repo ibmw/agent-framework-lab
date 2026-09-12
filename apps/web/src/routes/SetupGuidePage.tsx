@@ -8,11 +8,13 @@ import { LabSurface, useLabSurface } from "../shell/LabSurface";
 /**
  * The written setup guide: an empty database to a two-arm comparison, in dependency order.
  *
- * The chain it walks is `lib/setupPath.ts`'s, not a second list — the same table the guide
- * strip decorates with what the record satisfies. This page reads it with nothing to decorate
- * it with, which is the reading a person who has not created anything yet needs. A step added
- * to that table and not explained here fails to compile, because the copy below is keyed
- * exhaustively by its identifier.
+ * The chain it walks is `lib/setupPath.ts`'s own table rather than a second list, and this page
+ * is now its only reader: nothing in the application projects a lab's progress along it any
+ * more (ADR 0045). What that leaves is the reading a person who has not created anything yet
+ * needs — what the ten steps are and what refuses until each is satisfied — and what it costs
+ * is that somebody returning to a half-built lab is not told here which of them they reached.
+ * A step added to that table and not explained here fails to compile, because the copy below is
+ * keyed exhaustively by its identifier.
  *
  * `make seed` is at the top, as a command to run in a terminal, and there is no control on this
  * page that performs it or anything else. ADR 0043 decided the seed is a command and never a
@@ -30,8 +32,8 @@ export interface StepCopy {
 }
 
 /**
- * Exported so the same test that reads the explainers' vocabulary reads this page's, since a
- * term here resolving to nothing would render as a bare word exactly as it would there.
+ * Exported so the same test that reads the tours' vocabulary reads this page's, since a term
+ * here resolving to nothing would render as a bare word exactly as it would there.
  */
 export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
   shop: {
@@ -209,9 +211,12 @@ export function SetupGuidePage() {
               : shop === null
                 ? "There is no shop in this lab yet, so the links below start where the chain does."
                 : `The links below open ${shop.name}.`}{" "}
-            With guide mode on, the band at the top of the shops index and of each shop's home says
-            which of these steps this lab has already satisfied — read off the listings themselves,
-            so nothing here remembers where you got to.
+            Nothing on this page knows how far you have got: it is the chain rather than a report on
+            your lab. Most of the screens it links to are ordinary authoring surfaces and say what
+            they are; the ones whose vocabulary is this lab's own — the shop's home and the
+            objective-block library here, and the scenario editor, the starting states, the bench
+            and the results screen further along — offer to show you around while guide mode is on.
+            What any of the words below mean is in the glossary.
           </p>
           <ol className="grid gap-5">
             {SETUP_CHAIN.map((step, index) => (
@@ -245,8 +250,8 @@ export function SetupGuidePage() {
             >
               glossary
             </Link>{" "}
-            defines every word those screens use, and the note at the top of each of them says what
-            it is while guide mode is on.
+            defines every word those screens use, and each of them offers to show you around while
+            guide mode is on.
           </p>
         </Card>
 

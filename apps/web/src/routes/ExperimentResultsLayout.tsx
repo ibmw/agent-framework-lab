@@ -22,7 +22,7 @@ import {
   getExperimentEvaluation,
   replayExperiment,
 } from "../api/experiments";
-import { Explainer } from "../components/Explainer";
+import { TourLaunch } from "../components/TourLaunch";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   fieldControlClasses,
@@ -198,6 +198,7 @@ export function ExperimentResultsLayout() {
         title={experiment.label}
         actions={
           <div className="flex items-center gap-2">
+            <TourLaunch id="results" />
             <button
               className={subtleButtonClasses}
               type="button"
@@ -247,8 +248,6 @@ export function ExperimentResultsLayout() {
         }
       />
 
-      <Explainer id="results" />
-
       {error ? (
         <p role="alert" className="mb-3 text-[13px] text-lab-error">
           {error}
@@ -258,7 +257,7 @@ export function ExperimentResultsLayout() {
       {forking ? <ForkPanel experiment={experiment} deriving={deriving} onFork={fork} /> : null}
 
       <div className="mb-4 grid gap-3">
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div data-tour="results-arms" className="grid gap-3 lg:grid-cols-2">
           {experiment.runs.map((run) => (
             <ArmSummary
               key={run.run_id}
@@ -567,7 +566,10 @@ function ArmSummary({ run, arm }: { run: ExperimentRunSchema; arm: ArmEvaluation
 function Provenance({ experiment }: { experiment: ExperimentResponse }) {
   const differences = experiment.comparison.filter((variable) => variable.differs);
   return (
-    <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-admin-ink-soft">
+    <div
+      data-tour="results-provenance"
+      className="flex flex-wrap items-center gap-2 text-[11.5px] text-admin-ink-soft"
+    >
       <span className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold">
         scenario v{experiment.scenario_version}
       </span>

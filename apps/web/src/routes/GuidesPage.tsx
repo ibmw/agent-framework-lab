@@ -55,13 +55,11 @@ export function GuidesPage() {
 
         <Card title="Guide mode">
           <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-            With guide mode on, a band at the top of the shops index and each shop's home names the
-            one step that unblocks the chain, with the publish gate's own reason underneath when
-            something is blocking it, and the screens whose vocabulary is particular to this lab —
-            the block libraries, the scenario editor, the starting states, the bench and the results
-            — carry a note saying what they are. Nothing about any of that reading is stored: a step
-            is complete because the thing it asks for exists in a listing, so a lab filled by hand
-            and one filled in a different order read the same.
+            With guide mode on, the screens whose vocabulary is particular to this lab — each shop's
+            home, the two block libraries, the scenario editor, the starting states, the bench and
+            the results — offer to show you around: a short walk through that one screen, lighting
+            one thing at a time and saying what it is in the lab's own words. Nothing starts on its
+            own, no tour crosses a screen, and nothing about where you got to is stored.
           </p>
           <p className="text-[13px] text-admin-ink-soft">
             <Link
@@ -70,8 +68,8 @@ export function GuidesPage() {
             >
               Lab settings
             </Link>{" "}
-            reports what this build can run, and carries the same guide-mode choices the band
-            offers.
+            reports what this build can run, and is where guide mode is turned on or off for every
+            screen at once.
           </p>
         </Card>
       </div>

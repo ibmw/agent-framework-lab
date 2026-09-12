@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { TOURS } from "./lib/tours";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OBJECTIVE_ID = "1a2b3c4d-5e6f-4708-9a0b-1c2d3e4f5a6b";
@@ -193,8 +194,8 @@ function draft(blockId: string, content: unknown) {
 }
 
 const server = setupServer(
-  // The inline explainers read guide mode, which is derived from whether this lab holds a
-  // completed comparison. An empty history leaves it on, so the notes render in these
+  // The tour's launch control reads guide mode, which is derived from whether this lab holds a
+  // completed comparison. An empty history leaves it on, so the control appears in these
   // journeys rather than being quietly absent from them (ADR 0044).
   http.get("*/api/v1/experiments", () =>
     HttpResponse.json({
@@ -345,33 +346,38 @@ describe("block libraries", () => {
     expect(screen.getByRole("link", { name: "All scenarios" })).toBeVisible();
   });
 
-  it("says what a block is while guide mode is on, and stops saying it once it is off", async () => {
+  it("offers to show a reader around, and stops offering once the guide is off", async () => {
     // The vocabulary these two screens use is the lab's own — a template with open parameters
-    // is not a thing a commerce admin has — so each library carries its own note (ADR 0044).
+    // is not a thing a commerce admin has — so each library has a tour of its own (ADR 0045).
     const objectives = renderAt(`/shops/${SHOP_ID}/objective-blocks`);
-    const objectiveNote = await screen.findByRole("region", {
-      name: "Guide note: What an objective block is",
-    });
-    expect(within(objectiveNote).getByRole("link", { name: "objective block" })).toHaveAttribute(
-      "href",
-      "/guides/glossary#objective-block",
-    );
+    expect(
+      await screen.findByRole("button", {
+        name: `Show me around ${TOURS["objective-blocks"].surface}`,
+      }),
+    ).toBeVisible();
+    // Every element that tour lights is on this page, exactly once. The same reading is swept
+    // in a real browser by `tests/e2e/tour-anchors.spec.ts`; this is the cheap half of it.
+    for (const step of TOURS["objective-blocks"].steps) {
+      expect(document.querySelectorAll(step.anchor), step.anchor).toHaveLength(1);
+    }
     objectives.unmount();
 
     const mutations = renderAt(`/shops/${SHOP_ID}/mutation-blocks`);
     expect(
-      await screen.findByRole("region", { name: "Guide note: What a mutation block is" }),
+      await screen.findByRole("button", {
+        name: `Show me around ${TOURS["mutation-blocks"].surface}`,
+      }),
     ).toBeVisible();
     mutations.unmount();
 
-    // One preference, read by the band and by every note: turning the guide off turns these
-    // off too, rather than leaving a second mode to find.
+    // One preference, read by every surface: turning the guide off turns these off too,
+    // rather than leaving a second mode to find.
     window.localStorage.setItem("agent-lab.guide-mode", "off");
     renderAt(`/shops/${SHOP_ID}/objective-blocks`);
-    // Awaited on a row rather than the heading: the heading is on the first frame, where
-    // every note is absent anyway, and the rows arrive after a request has come back.
+    // Awaited on a row rather than the heading: the heading is on the first frame, where the
+    // control is absent anyway, and the rows arrive after a request has come back.
     await screen.findByRole("link", { name: "read-required-document" });
-    expect(screen.queryByRole("region", { name: /Guide note/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Show me around/ })).toBeNull();
   });
 });
 
