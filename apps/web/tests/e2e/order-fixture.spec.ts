@@ -16,7 +16,8 @@ async function saveDraft(page: Page) {
 }
 
 async function openSection(page: Page, link: string, heading: string) {
-  await page.getByRole("link", { name: link }).click();
+  // Scoped to the rail: the guide strip on the shop home links to the same sections by name.
+  await page.getByLabel("Shop workspace").getByRole("link", { name: link }).click();
   await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
 }
 

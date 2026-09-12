@@ -45,7 +45,7 @@ test("the rail keeps its controls on screen in every section", async ({ page }) 
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 
   // Enough authored content that shop details runs past a short window.
-  await page.getByRole("link", { name: "Shop details" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Shop details" }).click();
   const payments = page.getByRole("region", { name: "Payment methods" });
   await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");
@@ -59,7 +59,8 @@ test("the rail keeps its controls on screen in every section", async ({ page }) 
   await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
 
   for (const [link, heading] of SECTIONS) {
-    await page.getByRole("link", { name: link }).click();
+    // Scoped to the rail: the guide strip on the shop home links to sections by name too.
+    await page.getByLabel("Shop workspace").getByRole("link", { name: link }).click();
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
     await expectRailControlOnScreen(page, heading);
   }
@@ -77,11 +78,11 @@ test("the rail collapses only when the author asks, in every section", async ({ 
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 
   // Arriving anywhere — the helpdesk included — leaves the rail as the author left it.
-  await page.getByRole("link", { name: "Tickets" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
   await expect(page.getByRole("button", { name: "Collapse navigation" })).toBeVisible();
 
   await page.getByRole("button", { name: "Collapse navigation" }).click();
-  await page.getByRole("link", { name: "Orders" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Orders" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
 
   // ...and the choice survives moving between sections.

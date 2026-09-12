@@ -27,7 +27,7 @@ test("an author publishes a customer profile with an address book and persona", 
   await createShop.getByRole("button", { name: "Create shop" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 
-  await page.getByRole("link", { name: "Customers" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Customers" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Customers" })).toBeVisible();
 
   const newCustomer = card(page, "New customer");

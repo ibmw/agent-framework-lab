@@ -149,7 +149,7 @@ async function buildIncident(page: Page, unique: string) {
   await page.getByRole("button", { name: "Save order" }).click();
   await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
 
-  await page.getByRole("link", { name: "Tickets" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
   const list = card(page, "Tickets");
   await list.getByLabel("Reference", { exact: true }).fill("T-204");
   await list.getByLabel("Subject", { exact: true }).fill("Wrong address concern");

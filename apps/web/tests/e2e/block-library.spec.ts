@@ -33,7 +33,7 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
 
   await openWorkspace(page, unique);
 
-  await page.getByRole("link", { name: "Objective blocks" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Objective blocks" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Objective blocks" })).toBeVisible();
   await expect(page.getByText("Shared across shops")).toBeVisible();
 
@@ -92,7 +92,7 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
   await saveDraft(page);
   await expect(page.getByText(/Draft v2 in progress/)).toBeVisible();
 
-  await page.getByRole("link", { name: "Objective blocks" }).first().click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Objective blocks" }).click();
   const row = page.getByRole("row").filter({ hasText: name });
   await expect(row.getByText("v1 · 1 version(s)")).toBeVisible();
   await expect(row.getByText("deterministic · event")).toBeVisible();
@@ -105,7 +105,7 @@ test("a mutation block cannot be published until it says when it fires", async (
 
   await openWorkspace(page, unique);
 
-  await page.getByRole("link", { name: "Mutation blocks" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Mutation blocks" }).click();
   const create = card(page, "New mutation block");
   await create.getByLabel("Name", { exact: true }).fill(name);
   await create.getByRole("button", { name: "Create block" }).click();

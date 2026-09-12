@@ -17,7 +17,8 @@ async function saveDraft(page: Page) {
 }
 
 async function openSection(page: Page, link: string, heading: string) {
-  await page.getByRole("link", { name: link }).click();
+  // Scoped to the rail: the guide strip on the shop home links to the same sections by name.
+  await page.getByLabel("Shop workspace").getByRole("link", { name: link }).click();
   await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
 }
 
@@ -138,7 +139,7 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
 
   // The incident itself.
-  await page.getByRole("link", { name: "Tickets" }).click();
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
   const list = card(page, "Tickets");
   await expect(list.getByRole("heading", { name: "Tickets" })).toBeVisible();
   await list.getByLabel("Reference", { exact: true }).fill("T-204");
