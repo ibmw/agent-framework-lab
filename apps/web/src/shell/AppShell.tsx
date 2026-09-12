@@ -253,9 +253,6 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
             </NavLink>
           ))}
         </nav>
-        <span className="rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold text-[#b9cdc5]">
-          Synthetic sandbox
-        </span>
       </header>
 
       <div className="flex min-h-0 flex-1">

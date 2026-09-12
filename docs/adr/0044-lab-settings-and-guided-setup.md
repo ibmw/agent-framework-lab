@@ -81,6 +81,13 @@ header next to the `Synthetic sandbox` badge. It renders through `AppShell` with
 which is the no-rail layout `ShopsPage` already uses. The guides live beside it at `/guides`, on the
 same footing.
 
+> Landmark stale (2026-09-12). The `Synthetic sandbox` badge is gone from the header. It was a pill
+> the size and shape of the two controls beside it that never changed and could not be pressed, and
+> it named a distinction the lab does not draw: every shop, order and customer here is synthetic by
+> construction and there is no live mode to tell it apart from, while the model calls a run makes
+> are not synthetic at all. The controls this decision placed are unchanged; they are now simply
+> last in the header.
+
 The rejected alternative was a fourth sidebar section — a "Lab" group under "Experiment lab ·
 cross-shop", at `/shops/:shopId/settings`. It is not obviously wrong: that section is itself the
 precedent, since support identities, agent configurations and judges are all shop-*independent*
