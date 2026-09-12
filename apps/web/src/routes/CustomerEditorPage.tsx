@@ -21,6 +21,7 @@ import {
   replaceCustomerProfileDraft,
   toProfilePayload,
 } from "../api/customerProfiles";
+import { LocaleField } from "../components/LocaleField";
 import {
   Card,
   canPublish,
@@ -344,19 +345,12 @@ export function CustomerEditorPage() {
                   }
                 />
               </label>
-              <label className={fieldLabelClasses}>
-                Locale
-                <input
-                  className={fieldControlClasses}
-                  value={content.identity.locale}
-                  onChange={(event) =>
-                    edit({
-                      ...content,
-                      identity: { ...content.identity, locale: event.target.value },
-                    })
-                  }
-                />
-              </label>
+              <LocaleField
+                value={content.identity.locale}
+                onChange={(locale) =>
+                  edit({ ...content, identity: { ...content.identity, locale } })
+                }
+              />
             </div>
           </Card>
 

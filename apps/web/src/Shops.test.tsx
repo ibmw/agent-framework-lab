@@ -172,3 +172,32 @@ describe("the slug a name suggests", () => {
     });
   });
 });
+
+describe("the locale a shop is given", () => {
+  it("suggests the locales the lab knows, keyed by the tag that gets written", async () => {
+    renderShops();
+    const card = await createShopCard();
+    const field = card.getByLabelText("Locale");
+
+    const suggestions = document.getElementById(field.getAttribute("list") ?? "");
+    const french = suggestions?.querySelector<HTMLOptionElement>('option[value="fr-FR"]');
+
+    // The tag is the value, so picking a suggestion writes `fr-FR` and not "French (France)".
+    expect(french?.label).toBe("French (France)");
+  });
+
+  it("still accepts a locale the suggestions leave out, which the lab would have taken", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.type(card.getByLabelText("Name"), "Reykjavik Supply");
+    await user.clear(card.getByLabelText("Locale"));
+    await user.type(card.getByLabelText("Locale"), "is-IS");
+    await user.click(card.getByRole("button", { name: "Create shop" }));
+
+    // The shortlist is a suggestion and not the permitted set: a form that refused what the API
+    // accepts would be a second, stricter rule nobody wrote down.
+    expect(created).toMatchObject({ identity: { locale: "is-IS" } });
+  });
+});

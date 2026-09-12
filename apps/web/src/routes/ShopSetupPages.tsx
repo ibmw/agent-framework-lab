@@ -8,6 +8,7 @@ import type {
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useState } from "react";
+import { LocaleField } from "../components/LocaleField";
 import {
   Card,
   DefaultToneChip,
@@ -146,16 +147,10 @@ export function ShopIdentityPage() {
               }
             />
           </label>
-          <label className={fieldLabelClasses}>
-            Locale
-            <input
-              className={fieldControlClasses}
-              value={identity.locale}
-              onChange={(event) =>
-                edit({ ...content, identity: { ...identity, locale: event.target.value } })
-              }
-            />
-          </label>
+          <LocaleField
+            value={identity.locale}
+            onChange={(locale) => edit({ ...content, identity: { ...identity, locale } })}
+          />
         </div>
         <fieldset className="grid gap-1.5">
           <legend className="text-xs font-semibold text-admin-muted">Currencies</legend>

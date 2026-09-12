@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
+import { LocaleField } from "../components/LocaleField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { shopSlugFromName } from "../lib/shop";
 import {
@@ -193,17 +194,7 @@ export function ShopsPage() {
                   onChange={(event) => changeSlug(event.target.value)}
                 />
               </label>
-              <label className={fieldLabelClasses}>
-                Locale
-                <input
-                  className={fieldControlClasses}
-                  value={locale}
-                  required
-                  pattern="[a-z]{2}(-[A-Z]{2})?"
-                  title="For example en or en-GB"
-                  onChange={(event) => setLocale(event.target.value)}
-                />
-              </label>
+              <LocaleField value={locale} required onChange={setLocale} />
               <label className={fieldLabelClasses}>
                 Currency
                 <select
