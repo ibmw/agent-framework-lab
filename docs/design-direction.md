@@ -175,6 +175,12 @@ ElevenLabs' agent configuration) adapted to the lab's template model:
 
 ## Revision — lab-level surfaces and the guide strip (2026-09-12)
 
+> Partly superseded by the revision below (2026-09-12). The band this section adds to the
+> authoritative set — and the explainer reading drawn on it — was replaced by a per-surface product
+> tour, and the set returned to eighteen frames. The half about `/settings`, `/guides` and the
+> glossary sitting outside the set is unchanged, and the paragraphs below stay as the record of
+> what the nineteenth frame was and why it was drawn.
+
 Milestone 7 adds surfaces that are not scoped to a shop, and the eighteen-frame claim above has to
 keep meaning what it says once they exist. ADR 0044 splits them in two.
 
@@ -232,3 +238,60 @@ element, and no frame gained a shape that is not already drawn. The note carries
 own — those screens are where the work is done, and a note that offered an action would be offering
 the page beneath it — only the vocabulary, each defined word hovering the one definition
 `/guides/glossary` renders, and a link out to the setup guide.
+
+## Revision — the guide becomes a tour, and the set returns to eighteen (2026-09-12)
+
+The band is removed. Both readings drawn on it — the derived next-step strip across the top of the
+content column, and the inline explainer below each page header — are replaced by a **product
+tour**: a control in the page header, and, when an operator asks for it, an overlay that dims the
+surface, cuts one element out of the dim, and explains that element in a popover beside it, with
+*Back*, *Next* and a step count. Seven surfaces have one — each shop's home, the two block
+libraries, the scenario editor, the starting states, the live bench and the results screen — and no
+tour crosses a screen (ADR 0045).
+
+**The authoritative set is eighteen frames again.** The nineteenth existed for one reason: the band
+was a shape drawn *into* surfaces that were designed without it, displacing a header on four of
+them and sitting under a header on six, and a cross-cutting shape each page invents for itself is
+exactly the kind that goes wrong. The tour's overlay has none of that property: it is above the
+page rather than in it, it changes no surface's composition, it moves nothing on the canvas, and
+when it is dismissed the screen underneath is the screen that was designed. There is nothing there
+for a frame to place.
+
+What the tour does add to a surface is one control, in `PageHeader`'s existing actions slot — the
+slot that already holds *Save draft* and *Publish* on frame 4, *Results* on frame 8, and *Replay*
+and *Fork* on frame 9. On those frames nothing new is drawn. On three surfaces it is new: the two
+block libraries (frames 4a and 4b) and the frameless starting-states page had no header actions at
+all before this, so with guide mode on — which is the default in a lab that has not yet produced a
+comparison — those three headers now carry a control their frames never drew. That is a chip-sized
+addition to a slot the header component already lays out, made of the same subtle button the
+workspace uses everywhere; it is named here rather than glossed over, and it is not the kind of
+cross-cutting shape the band was. **The tour therefore does not get a frame, and no frame is
+redrawn for it.** What would change that is a tour that left a persistent shape behind — a progress
+rail, a docked panel, a badge that stays once the tour ends — and the day one of those is wanted is
+the day this reasoning stops applying and the set has to grow rather than be worked around.
+
+**The pattern's own rules**, which are what a frame would otherwise have carried:
+
+- The tour ships no token and no component shape of its own. It is `driver.js` for the overlay
+  geometry and the keyboard behaviour, skinned in `apps/web/src/styles.css` from the tokens above:
+  the popover is lab paper with the admin border, its title is the Georgia display face in pine
+  ink, its body is the same 12.5px admin-ink-soft the explainers used, its forward button is the
+  ink button the workspace uses everywhere, and the dim is the lab's own pine rather than the
+  library's black.
+- The launch control is the same subtle button on every surface and says the same words — *Show me
+  around* — so a reader who finds it once finds it everywhere. What differs is only its accessible
+  name, which says which screen it would walk.
+- Nothing starts unbidden and nothing is remembered. There is no first-run tour, no auto-start, no
+  step counter that survives a dismissal, and no per-screen "don't show me this again": guide mode
+  is the one preference, and it takes the control off every surface at once.
+- A popover explains the control beside it and never performs its work — ADR 0043's refusal and
+  ADR 0044's reading of it are unchanged — and each tour ends on the surface it started on.
+- What keeps the pattern honest is not a frame but a test. Every step of every tour is declared in
+  one table, and a Playwright sweep walks that table asserting each step's anchor still resolves to
+  exactly one visible element on its surface. A control that is renamed or moved fails it, which is
+  the objection ADR 0044 raised against coach marks, answered.
+
+**What is lost with the band** is recorded here as a cost rather than a tidying. The strip read the
+listings the product already serves and named the one step a half-built lab had not satisfied, in
+the publish gate's own words, with nothing stored. No surface says that now. `/guides/setup` still
+walks the chain in dependency order, but it walks it without knowing where a reader has got to.

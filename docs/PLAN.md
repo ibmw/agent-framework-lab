@@ -186,8 +186,36 @@ words, with each of those words hovering the definition `/guides/glossary` rende
 restating it. The notes read Slice 2's guide mode rather than a second one, so an operator who
 turned the guide off turned these off too, and their copy is plain text carrying glossary
 references, which is what lets a test read back every word a note sends a reader to look up and
-fail when one of them resolves to nothing (ADR 0044), and completes Milestone 7. The POC's remaining conversation,
-persona, and order-action HTTP contracts
+fail when one of them resolves to nothing (ADR 0044), and completes Milestone 7.
+
+Then what the guide *shows* was changed. The band and the six notes are gone, and each of the
+screens they covered — plus each shop's home — carries a control that walks you around that one
+screen instead, dimming it and lighting one element at a time beside a popover that says what it
+is. Nothing starts unbidden, no tour crosses a screen, and the copy is the notes' own, with every
+defined word still hovering the one definition the glossary renders.
+
+ADR 0044 had refused exactly this, on three grounds: that it pins the guide to geometry still being
+designed, that it goes stale silently when a control moves, and that staleness in a tour is
+invisible to every test this project runs. The first was overruled. The second is true and is
+conceded. The third is closed: every tour is one declarative table of surfaces, anchors and copy,
+and a Playwright sweep builds the whole chain and walks that table with a case per surface,
+asserting each step still resolves to exactly one visible element on its own screen. A renamed or
+moved control fails naming the step, and a step declared today joins the sweep today — which is
+what ADR 0023's registry-driven conformance did for the eleventh tool.
+
+The overlay is `driver.js`, pinned, MIT and dependency-free, skinned out of the tokens this project
+already fixed rather than shipped as it comes: what a coach mark actually needs is a positioning
+rule, and this work is no more entitled to invent one than the glossary's hover definitions were.
+Guide mode stays as the one preference, deciding whether those seven controls appear at all, and
+the authoritative frame set returns to eighteen, because a tour adds a control to a slot the
+frames already specify and draws nothing that survives being dismissed.
+
+What it costs is written down rather than tidied away: the derived reading is deleted, and nothing
+in the application now tells an operator returning to a half-built lab which step is still missing
+— `/guides/setup` walks the ten steps without knowing which of them this lab has reached
+(ADR 0045).
+
+The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
 
@@ -1053,7 +1081,8 @@ standing offline qualification that ADR 0042 established and ADR 0043 could only
 Frames: one new frame for the guide strip, designed before the slice lands. It is a cross-cutting
 band across the top of frames 1, 4, 7 and 9, which were designed without one, and is the half of
 this milestone that is inside the authoritative set (ADR 0044). `docs/design-direction.md` gains
-the revision paragraph recording both halves of that split.
+the revision paragraph recording both halves of that split. *Superseded by Slice 4: the band and
+its frame are removed and the authoritative set is eighteen again (ADR 0045).*
 
 Slice evidence: an operator with an empty database is told to create a shop; having created one and
 left its tone of voice unset, they are told what the publish gate itself says is missing, in the
@@ -1076,7 +1105,8 @@ Frames: none new. The explainers are drawn on the band Slice 2's frame already s
 below each page header on frames 4, 4a, 4b, 8 and 9 and on the frameless starting-states page —
 which is a different list from the frames that band was drawn to carry the next-step reading on.
 `docs/design-direction.md` records which surfaces host which, and the set stays at nineteen because
-the band is one element in both readings (ADR 0044).
+the band is one element in both readings (ADR 0044). *Superseded by Slice 4: the notes are replaced
+by a tour of each of those screens (ADR 0045).*
 
 Slice evidence: a reader who has never seen this product is walked from an empty database to a
 comparison they can read — nine kinds of definition, twelve published versions, and a dependency
@@ -1086,6 +1116,43 @@ terminal and exposes no control that performs it: ADR 0043 decided the seed is a
 a route, and a convenience button would be that route reintroduced. Every other step links to the
 surface where the work is done, so the guide reads the chain and gains no privilege over it.
 
+### Slice 4 — Show me around this screen
+
+Milestone 7 closed, and then what the guide *shows* was changed. Slices 2 and 3 stay above as the
+record of what they delivered; this slice replaces both of their on-screen readings and records
+what that costs.
+
+- [x] Replace the derived next-step strip and the six inline explainer bands with a stepped tour
+  of one screen, launched from that screen and never spanning two.
+- [x] Declare every tour in one table — surface, ordered steps, each step's anchor, title and body
+  — and sweep that table in the browser so a step that has come loose from its control fails.
+- [x] Carry the explainers' reviewed copy and the glossary's hover definitions into the tour
+  popovers rather than writing either again.
+- [x] Delete the projection the strip alone kept alive, keeping the chain the written setup guide
+  walks.
+- [x] Keep guide mode as the one preference, now deciding whether a surface offers its tour.
+
+Frames: none, and one retired. The authoritative set returns to **eighteen**: the nineteenth frame
+existed because the band was a shape drawn into surfaces designed without one, and a tour adds no
+shape — one control in `PageHeader`'s existing actions slot, and an overlay that is above the page
+rather than in it and leaves nothing behind when it is dismissed. `docs/design-direction.md` argues
+that position and records the pattern's own rules in place of a frame (ADR 0045).
+
+Slice evidence: an operator standing on the live bench asks to be shown around and is walked through
+the two arms and the composer they drive them from, one lit element at a time, in the words those
+notes already used and with every defined term still hovering the single definition
+`/guides/glossary` renders. Seven screens offer it and none offers it unbidden; nothing crosses a
+route, nothing is stored about where a reader got to, and no popover performs the work of the
+control it is explaining. ADR 0044 refused this pattern on the grounds that a tour goes stale
+silently when a control moves and that staleness was invisible to every test this project ran: the
+first half is conceded and the second is closed, because every step of every tour is now swept in a
+real browser off the table the tours are declared in — the sweep builds the whole chain to reach
+the bench and the results screen, and a step whose anchor has come loose fails naming the surface
+and the step, the shape ADR 0023 established for the tool registry. What this costs is recorded
+rather than dressed up: the derived reading is deleted, so nothing in the application now tells an
+operator returning to a half-built lab which step of the chain is still missing, and `/guides/setup`
+walks the ten steps without knowing which of them this lab has reached.
+
 ### Acceptance criteria
 
 - No step of the guide is stored, and no surface reports progress the record does not support.
@@ -1093,6 +1160,8 @@ surface where the work is done, so the guide reads the chain and gains no privil
 - Nothing in the settings surface or the guide can populate, reset, or overwrite a database.
 - Provider credentials and exporter endpoints stay in the environment, and no route reports a fact
   about either secret.
+- Every element a tour points at is checked against the surface it describes, off the one table the
+  tours are declared in, so a control that moves fails a test rather than a reader.
 
 ## Deferred decision triggers
 
@@ -1111,6 +1180,17 @@ SQLite. Preserve SQLAlchemy/Alembic portability until then.
 
 Evaluate when experiments must survive process failure or coordinate long waits/retries beyond
 stored run recovery. Do not add one solely to demonstrate a framework feature.
+
+### SQLite write concurrency under the parallel browser suite
+
+`infrastructure/database.py` composes the engine with no `busy_timeout` and no WAL journal, so a
+write that queues behind another for longer than SQLite's own five-second default is refused rather
+than delayed — which reaches a browser as a failed request and a wrong page, not as a slow one. The
+Playwright suite runs every journey at once against one API process and one database file, and two
+of those journeys now build a whole chain apiece, so the margin is narrower than it was. Evaluate a
+`busy_timeout` and `journal_mode=WAL` when a suite run produces a `database is locked` failure, or
+when a third chain-building journey joins the suite. Do not change the engine to make a test wait
+longer: a wait is the suite's business and belongs in the suite.
 
 ### Deeper benchmark integration
 

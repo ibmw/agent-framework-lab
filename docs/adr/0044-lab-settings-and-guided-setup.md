@@ -1,6 +1,6 @@
 # ADR 0044 — Lab settings, and a guide that reads the record rather than remembering the reader
 
-Status: accepted — 2026-09-11
+Status: accepted, partially superseded by ADR 0045 — 2026-09-11
 
 Opens Milestone 7. Every milestone before it was about what the lab records; this one is the first
 about the person operating it. It adds a lab-level settings surface outside shop scope, a guide
@@ -12,6 +12,17 @@ preference is an override rather than a state, that the guide hands over a comma
 product deliberately refuses a route, that the settings surface reports composition and never edits
 it, and that lab-level surfaces sit outside the 18-frame shop-workspace set while the guide strip
 does not.
+
+ADR 0045 changes three of them, in three different ways, and "reverses" is only right about one.
+What it **reverses** is the refusal recorded under "Deliberately not here": the overlay product
+tour is built. What it **voids** is the second decision above — the guide's progress was projected
+from the record rather than stored, and there is now no guide progress at all, because the reading
+was deleted rather than relocated. What it **retires** is the second half of the sixth: the strip's
+frame leaves the authoritative set, which returns to eighteen. The other three — that lab settings
+are not shop settings, that the stored preference is an override rather than a state, and that the
+settings surface reports composition and never edits it — stand untouched, as do the
+command-not-a-route rule and the glossary. The narrowing notes below say what each of the three
+leaves standing.
 
 ## Context
 
@@ -86,6 +97,14 @@ label change, not a migration.
 
 ### The guide's progress is projected from the record, never stored
 
+> Voided by ADR 0045 (2026-09-12), and not into its opposite: no progress is stored, because no
+> progress is read. `deriveSetupPath` and the ten listing reads behind it are deleted with the
+> strip, so nothing in the application projects how far a lab has walked the chain — the written
+> setup guide at `/guides/setup` walks the ten steps without knowing which of them this lab has
+> satisfied. ADR 0045 records that as the cost of the reversal rather than as a simplification.
+> The reasoning below is why the reading was a projection rather than a checklist, and it stands
+> as the argument to return to if the reading is ever wanted back.
+
 A checklist with stored checkbox state is the obvious implementation and it is the wrong one here,
 for the reason this project has already given twice. ADR 0027 refused to store the execution
 timeline because "a second stored shape is a second chance to disagree with the first"; ADR 0034
@@ -131,6 +150,12 @@ survive a browser, the derived half already does, and only the override would ha
 
 ### What the guide changes, and what it refuses to be
 
+> Narrowed by ADR 0045 (2026-09-12). The next-step strip and the inline explainers described in
+> this subsection are removed. Guide mode now decides whether each surface offers a *Show me
+> around* control that runs a tour of that one screen; the glossary, and the rule that a term has
+> one definition, are unchanged. The paragraphs below stay as the record of what was built and of
+> the reasoning the replacement had to answer.
+
 With guide mode on, three things appear, and they are the same three whichever surface is open:
 
 - a **next-step strip** at the top of the shop home and the shops index, naming the one action that
@@ -173,6 +198,14 @@ What it is not is an overlay tour. Coach marks that highlight a control and adva
 were rejected: they pin the guide to the exact geometry of surfaces that are still being designed,
 they go stale silently when a control moves, and staleness in a tour is invisible to every test this
 project runs. A derived strip cannot go stale in that way, because the thing it reads is the record.
+
+> Reversed by ADR 0045 (2026-09-12). The first clause was overruled by the product owner. The
+> second and third were correct as written and are answered rather than withdrawn: a tour does go
+> stale when a control moves, and staleness *was* invisible to every test this project ran, so
+> ADR 0045 makes the tours one declarative table and sweeps every step's anchor in Playwright the
+> way ADR 0023 sweeps the tool registry. The last sentence stands, and is now the recorded cost of
+> the reversal rather than an argument against it: the derived reading could not go stale, and it
+> is gone.
 
 ### The guide hands over a command wherever the product refuses a route
 
@@ -245,6 +278,11 @@ the build rather than about a run.
 
 ### Lab-level surfaces are outside the 18-frame set; the guide strip is not
 
+> Narrowed by ADR 0045 (2026-09-12). The band is removed, and with it the nineteenth frame it was
+> drawn for; `docs/design-direction.md` records the set returning to eighteen and why the tour does
+> not ask for a frame of its own. The half of this subsection about `/settings`, `/guides` and the
+> glossary being outside the authoritative set is unchanged.
+
 `docs/PLAN.md` requires every UI-bearing slice to name the frames it implements from the Milestone
 0.5 authoritative set. That set, read back from `tmp/design-frames/canvas.json`, is eighteen
 *shop-workspace* frames, and several shipped surfaces already sit outside it: the shops index, the
@@ -291,7 +329,8 @@ records which surfaces host which.
   stored second shape this ADR exists to refuse.
 - **Any table, migration, canonical document or fingerprint change.**
 - **Per-user preferences.** There is no user. Tenancy is deferred.
-- **An overlay product tour.** Rejected above, on staleness.
+- **An overlay product tour.** Rejected above, on staleness. *(Built by ADR 0045, which answers
+  the staleness half with an anchor sweep driven off the tour table.)*
 - **Theme, dark mode, or a density scale.** The visual language is fixed by
   `docs/design-direction.md`; a theme switcher is a design decision wearing a settings control.
 - **Reset, wipe, or reseed.** `docs/development.md` owns the reset path and it is three commands.
@@ -300,6 +339,12 @@ records which surfaces host which.
   this product.
 
 ## Verification
+
+> Narrowed by ADR 0045 (2026-09-12). The first four bullets and the glossary-coverage bullet
+> describe the derived strip, the explainers and the targeted first-run journey, all of which are
+> removed with the code they covered; the glossary's own coverage assertion survives over the tour
+> copy that replaced the notes. Everything about `getLabStatus`, the offline qualification and the
+> setup guide is unchanged and still asserted.
 
 - The derived checklist is tested over mocked listings rather than over a stored flag: an empty lab
   reports "create a shop"; a lab holding a published shop and nothing else reports the next step and
