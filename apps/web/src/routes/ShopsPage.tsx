@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { shopSlugFromName } from "../lib/shop";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -27,6 +28,23 @@ export function ShopsPage() {
   const [locale, setLocale] = useState("en-GB");
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>("EUR");
   const [creating, setCreating] = useState(false);
+  // The slug follows the name until somebody answers the slug themselves, and then it stops:
+  // a field that overwrote a deliberate answer on the next keystroke in another field would be
+  // worse than one that never helped. Emptying it hands it back, which is the way out for a
+  // reader who edited it and wants the suggestion again without reloading the page.
+  const [slugEdited, setSlugEdited] = useState(false);
+
+  function changeName(value: string) {
+    setName(value);
+    if (!slugEdited) {
+      setSlug(shopSlugFromName(value));
+    }
+  }
+
+  function changeSlug(value: string) {
+    setSlug(value);
+    setSlugEdited(value !== "");
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -132,7 +150,7 @@ export function ShopsPage() {
                   value={name}
                   required
                   maxLength={200}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) => changeName(event.target.value)}
                 />
               </label>
               <label className={fieldLabelClasses}>
@@ -142,8 +160,8 @@ export function ShopsPage() {
                   value={slug}
                   required
                   pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                  title="Lowercase kebab-case, for example northstar-outfitters"
-                  onChange={(event) => setSlug(event.target.value)}
+                  title="Lowercase kebab-case, for example northstar-outfitters. Written from the name until you change it; empty it to have it follow the name again."
+                  onChange={(event) => changeSlug(event.target.value)}
                 />
               </label>
               <label className={fieldLabelClasses}>

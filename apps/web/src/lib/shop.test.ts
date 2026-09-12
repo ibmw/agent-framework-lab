@@ -5,6 +5,7 @@ import {
   issuesForProduct,
   ratingLabel,
   replaceProduct,
+  shopSlugFromName,
   toPayload,
   variantOptionLabel,
   variantPriceLabel,
@@ -124,5 +125,47 @@ describe("ratingLabel", () => {
         ratings: { review_count: 0, average_rating: null },
       }),
     ).toBe("No reviews");
+  });
+});
+
+describe("the slug a shop name suggests", () => {
+  it("writes the spelling the identity rule accepts", () => {
+    expect(shopSlugFromName("Harbour Lane Supply")).toBe("harbour-lane-supply");
+  });
+
+  it("transliterates accents the way an entry ID does", () => {
+    expect(shopSlugFromName("Café Noël")).toBe("cafe-noel");
+  });
+
+  it("collapses punctuation and spacing rather than emitting it", () => {
+    expect(shopSlugFromName("  Smith & Sons, Ltd.  ")).toBe("smith-sons-ltd");
+  });
+
+  it("leaves the field empty when a name transliterates to nothing", () => {
+    // Not "entry": a word nobody typed is one they can publish by not noticing it.
+    expect(shopSlugFromName("株式会社")).toBe("");
+  });
+
+  it("cuts to the length the domain accepts, without ending on a hyphen", () => {
+    const slug = shopSlugFromName("a".repeat(70));
+    expect(slug).toHaveLength(64);
+
+    // The cut can land where a hyphen was, and a trailing hyphen is what the pattern refuses.
+    const onBoundary = shopSlugFromName(`${"a".repeat(64)} tail`);
+    expect(onBoundary).toBe("a".repeat(64));
+  });
+
+  it("only ever produces something the shop identity pattern accepts", () => {
+    const pattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+    for (const name of [
+      "Harbour Lane Supply",
+      "Café Noël",
+      "  Smith & Sons, Ltd.  ",
+      "--- weird ---",
+      "123",
+      `${"a".repeat(64)} tail`,
+    ]) {
+      expect(shopSlugFromName(name)).toMatch(pattern);
+    }
   });
 });

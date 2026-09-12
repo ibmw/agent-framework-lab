@@ -6,6 +6,25 @@ import type {
   ShopPayloadSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
+import { slugify } from "./entryIds";
+
+/** `MAX_SLUG_LENGTH` in `domain/content.py`, which rejects a longer one. */
+const MAX_SLUG_LENGTH = 64;
+
+/**
+ * The slug a shop name suggests, in the spelling the shop identity rule accepts.
+ *
+ * The transliteration is `slugify`'s rather than a second one, so "Écoles" loses its accent
+ * here exactly as it does in an entry ID. What differs is the two ends. The fallback is empty
+ * rather than a word, because this fills a field a person is looking at: a name written in a
+ * script with no ASCII to keep — where `slugify` has nothing to return — should leave the field
+ * blank for them to answer, not put "entry" in it and let them publish that by not noticing.
+ * And the result is cut to the length the domain accepts, then stripped again, since a cut can
+ * land on a hyphen and a trailing hyphen is the one thing the pattern refuses.
+ */
+export function shopSlugFromName(name: string): string {
+  return slugify(name, "").slice(0, MAX_SLUG_LENGTH).replace(/-+$/, "");
+}
 
 /**
  * The API answers with derived read-only evidence (ratings, the resolved default tone)
