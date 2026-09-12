@@ -169,7 +169,24 @@ home: a glossary module carrying this document's stable target vocabulary, rende
 `/guides/glossary` and referenced by the steps rather than restated by them. The band shows no
 percentage and no step count, offers no per-step dismissal, and exposes no control that populates
 the lab — `make seed` is text to run in a terminal, which is where ADR 0043's refusal would have
-been most tempting to relax. The POC's remaining conversation,
+been most tempting to relax. Slice 3 writes the chain down. The setup guide at
+`/guides/setup` walks it in dependency order for somebody who has nothing to read yet — ten steps,
+eight of which end in a published version, each saying what it is and what refuses until it is
+satisfied — and it walks the same table the band decorates rather than a second list, so the two
+cannot come to disagree about what the chain is or what order it comes in; a step added to that
+table and left unexplained on the page fails to compile. The fast path is at the top and is a
+command: `make seed` as text to run in a terminal, beside the three commands that start an empty
+database again, and nothing on the page performs either. ADR 0043 decided the seed is a command and
+never a route, and a *load demo data* button is that route returning as a convenience, so the page
+is asserted to carry no button in any of its cards; every other step is a link to the surface where
+the work is done, composed by the same module the band's own actions are composed by. The screens whose vocabulary is not transferable from a commerce admin — the two block
+libraries, the scenario composition editor, the starting states, the bench and the results — carry
+an inline note on the band the strip already uses, saying what that screen is in the lab's own
+words, with each of those words hovering the definition `/guides/glossary` renders rather than
+restating it. The notes read Slice 2's guide mode rather than a second one, so an operator who
+turned the guide off turned these off too, and their copy is plain text carrying glossary
+references, which is what lets a test read back every word a note sends a reader to look up and
+fail when one of them resolves to nothing (ADR 0044), and completes Milestone 7. The POC's remaining conversation,
 persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -1049,16 +1066,20 @@ disagrees with either is remembered.
 
 ### Slice 3 — From nothing to a two-arm comparison
 
-- [ ] Write the setup guide covering the full chain in dependency order, from an empty database to
+- [x] Write the setup guide covering the full chain in dependency order, from an empty database to
   a driven experiment.
-- [ ] Name `make seed` as the fast path, as a command.
-- [ ] Add the inline explainers on the surfaces whose vocabulary is not transferable from a
+- [x] Name `make seed` as the fast path, as a command.
+- [x] Add the inline explainers on the surfaces whose vocabulary is not transferable from a
   commerce admin.
 
-Frames: none new; the explainers use the strip from Slice 2 and the existing chrome.
+Frames: none new. The explainers are drawn on the band Slice 2's frame already specifies, hosted
+below each page header on frames 4, 4a, 4b, 8 and 9 and on the frameless starting-states page —
+which is a different list from the frames that band was drawn to carry the next-step reading on.
+`docs/design-direction.md` records which surfaces host which, and the set stays at nineteen because
+the band is one element in both readings (ADR 0044).
 
 Slice evidence: a reader who has never seen this product is walked from an empty database to a
-comparison they can read — eight kinds of definition, twelve published versions, and a dependency
+comparison they can read — nine kinds of definition, twelve published versions, and a dependency
 order in which nearly every gate refuses until the one before it is satisfied, which is the
 afternoon of clicking ADR 0043 measured. The guide offers `make seed` as a command to run in a
 terminal and exposes no control that performs it: ADR 0043 decided the seed is a command and never

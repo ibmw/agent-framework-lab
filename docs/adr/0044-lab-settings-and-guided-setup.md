@@ -19,8 +19,11 @@ The chain a first-time operator has to walk is the one ADR 0043 measured when it
 shop with a catalog and a default tone of voice, a customer profile, an order, a ticket, three
 objective templates and a fault template, a composed recipe, a support identity, two agent
 configurations differing in one dimension, a judge, and then an experiment driven to completion.
-Eight kinds of definition, twelve published versions, and a dependency order in which almost every
-gate refuses until the one before it has been satisfied. ADR 0043 called doing it by hand "roughly
+Nine kinds of definition, twelve published versions, and a dependency order in which almost every
+gate refuses until the one before it has been satisfied. (Nine is the number of definitions the
+contract publishes; the guided path below walks ten steps, eight of which end in a publication,
+because the two block libraries are one step and the order fixture and the experiment are not
+definitions.) ADR 0043 called doing it by hand "roughly
 an afternoon of clicking through gates in dependency order", and built `make seed` so that nobody in
 this repository would have to.
 
@@ -138,6 +141,34 @@ With guide mode on, three things appear, and they are the same three whichever s
 - **glossary terms**, sourced from one module carrying `docs/PLAN.md`'s stable vocabulary, rendered
   as definitions on `/guides/glossary` and as hover definitions in the explainers.
 
+The setup guide is a page under `/guides`, at `/guides/setup`, with `/guides` indexing it beside
+the glossary. `/guides` is already a namespace rather than a page — the glossary has lived at
+`/guides/glossary` since the slice that introduced it — and the two follow-up guides below get
+routes of their own without that index having to be rebuilt around them.
+
+What the guide walks is `lib/setupPath.ts`'s own table of the chain, not a restatement of it. That
+module already had to know what the steps are and what order they come in, because the strip reads
+them; the guide adds the half a surface with nothing to read can still say — the label, the surface
+the work is done on, and the vocabulary the step speaks — and reads it with no record to decorate
+it with. A step added to the table and not explained by the guide fails to compile, because the
+guide's copy is keyed exhaustively by the step's identifier.
+
+The explainers are written as plain text carrying `[[term-id]]` references into the glossary
+module, rather than as markup with the terms already resolved. That is what makes the verification
+below mechanical: every word a note sends a reader to look up can be read back out of the copy and
+checked against the one module that defines it, so a term added to a note without a definition
+fails a test instead of rendering as a link to an anchor nobody wrote. The notes are drawn on the
+band the strip introduced rather than on a shape of their own, so a guide that appears on six
+screens reads as one thing.
+
+A term's hover definition is the element's own `title`, and the word is a link to its full entry
+beside it. A panel of this project's own would have to be positioned against a word that can sit
+anywhere on a line, inside cards that hide their overflow and a content column that scrolls, and
+the first thing it would need is the layout rule this slice is explicitly not entitled to invent.
+The browser places a `title` where it fits, no surface can clip it, it is the link's accessible
+description rather than only a drawn shape, and the link is the way in for a reader with no
+pointer.
+
 What it is not is an overlay tour. Coach marks that highlight a control and advance to the next one
 were rejected: they pin the guide to the exact geometry of surfaces that are still being designed,
 they go stale silently when a control moves, and staleness in a tour is invisible to every test this
@@ -241,6 +272,14 @@ because they are what a first run walks through and the shops index is where an 
 shop is standing; the shops index is not itself a frame, and hosting the band there invents no
 layout for the same reason the other lab-level surfaces invent none. Frames 4, 7 and 9 host it in a
 later slice.
+
+Slice 3 hosts the band again, for the other reading: the inline explainers are drawn on it, below
+each page's header rather than above it. The surfaces they land on are this decision's list of
+untransferable vocabulary rather than the frames the band was drawn on, and the two lists differ —
+the notes reach frames 4, 4a, 4b, 8 and 9 and the frameless starting-states page, while frame 7
+carries none and the next-step reading is still mounted only on frame 1 and the shops index. The
+set stays at nineteen because the band is one element in both readings; `docs/design-direction.md`
+records which surfaces host which.
 
 ## Deliberately not here
 

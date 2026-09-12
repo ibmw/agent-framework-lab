@@ -211,3 +211,24 @@ so that frames 4, 7 and 9 can host it without displacing their headers, and moun
 later slice's work. Outside a shop it reads the first step only: the order, ticket and scenario
 steps are shop-scoped, so a surface with no shop in scope names what it can check and draws no
 chain.
+
+**The inline explainers are the same band, not a second one.** Milestone 7 Slice 3 puts a note on
+the surfaces whose vocabulary is particular to this lab, and draws it on the band the strip already
+established: the same lab-note pine on cream, the same left rule, the same content column. It sits
+*below* the page header rather than above it, which is the one way the two readings differ in
+placement — the next-step strip displaces the header because it is about what to do instead of
+reading this page, while a note that says what this page is belongs under its title.
+
+Which surfaces those are is ADR 0044's list of untransferable vocabulary, and it is not the same
+list as the frames the band was drawn on. The notes land on frames 4, 4a and 4b (the scenario
+editor and the two block libraries), frame 8 (the live bench), frame 9 (the results screen), and
+the starting-states page, which has no frame — built, like the other frameless surfaces above, out
+of the existing chrome. Frame 7, the experiment setup, carries no note today even though the
+guide's last step links to it; frames 1 and 10 carry none either. The next-step reading is still
+mounted only on frame 1 and the shops index, exactly as the paragraph above says.
+
+The set therefore stays at nineteen. What hosts the band grew; the band did not become a second
+element, and no frame gained a shape that is not already drawn. The note carries no control of its
+own — those screens are where the work is done, and a note that offered an action would be offering
+the page beneath it — only the vocabulary, each defined word hovering the one definition
+`/guides/glossary` renders, and a link out to the setup guide.

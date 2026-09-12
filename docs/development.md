@@ -47,13 +47,22 @@ nothing about what either would spend on a real provider. The run says so itself
 `(offline demo)`, it is tagged `offline-scripted`, and its first note spells it out. Keep that
 qualification on the run if you re-author the seed's copy.
 
-It refuses rather than merging. A database that is not at the migration head, or that already holds
-seeded rows, is left untouched and the reason is printed. To start again, delete the database file
-and run `make migrate` before `make seed`:
+It refuses rather than merging. A database that is not at the migration head, or that holds any row
+in a table the story writes — seeded before, or authored by hand — is left untouched, and the tables
+that stopped it are named. To start again, delete the database file and run `make migrate` before
+`make seed`:
 
 ```sh
 rm -f var/agent-lab.db && make migrate && make seed
 ```
+
+`/guides/setup` in the Studio is the same chain written down for somebody operating the product
+rather than the checkout: ten steps in dependency order, what each one is, and what refuses until
+it is satisfied. It names `make seed` at the top as a command and the reset above as three, and it
+exposes no control that performs either — the seed is a command and never a route (ADR 0043), so
+there is no button anywhere in the application that populates, resets or reseeds a database.
+`/guides/glossary` defines the vocabulary those steps use, and while guide mode is on the screens
+that speak it carry the same definitions inline.
 
 `/settings` in the Studio reports what the running build is composed to do: the frameworks it has
 proven it can run and the envelope each was proven inside, whether a provider credential is
