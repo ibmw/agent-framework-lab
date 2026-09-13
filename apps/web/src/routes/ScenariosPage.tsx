@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createScenario, listScenarios } from "../api/scenarios";
 import { listTickets } from "../api/tickets";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -83,6 +84,7 @@ export function ScenariosPage() {
       <PageHeader
         title="Scenarios"
         description="An experiment recipe: one ticket, the documents that matter for it, the objectives it is judged by, and the faults the runtime injects."
+        actions={<TourLaunch id="scenarios" />}
       />
 
       {error ? (

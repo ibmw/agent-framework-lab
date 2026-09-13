@@ -3,7 +3,7 @@ import "driver.js/dist/driver.css";
 import { Compass } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { TOURS, type TourId, type TourStep } from "../lib/tours";
+import { TOURS, type TourId, type TourStep, tourSteps } from "../lib/tours";
 import { subtleButtonClasses } from "../lib/ui";
 import { GuideProse } from "./GuideProse";
 
@@ -58,12 +58,15 @@ function TourBody({ step }: { step: TourStep }) {
 
 export function TourLaunch({ id }: { id: TourId }) {
   const tour = TOURS[id];
+  // The chain step is composed rather than declared, so what this walks is the table's
+  // answer for this surface and not the rows as they were typed.
+  const steps = useMemo(() => tourSteps(id), [id]);
   const active = useRef<Driver | null>(null);
   const launcher = useRef<HTMLButtonElement | null>(null);
 
   // One container per step, created once. `driver.js` discards its popover between steps, so a
   // container React owns has to outlive the popover that borrows it.
-  const hosts = useMemo(() => tour.steps.map(() => document.createElement("div")), [tour.steps]);
+  const hosts = useMemo(() => steps.map(() => document.createElement("div")), [steps]);
 
   const stop = useCallback(() => {
     active.current?.destroy();
@@ -90,7 +93,7 @@ export function TourLaunch({ id }: { id: TourId }) {
       nextBtnText: "Next",
       prevBtnText: "Back",
       doneBtnText: "Done",
-      steps: tour.steps.map((step, index) => ({
+      steps: steps.map((step, index) => ({
         element: step.anchor,
         popover: {
           title: step.title,
@@ -123,7 +126,7 @@ export function TourLaunch({ id }: { id: TourId }) {
     });
     active.current = instance;
     instance.drive();
-  }, [hosts, stop, tour.steps]);
+  }, [hosts, stop, steps]);
 
   return (
     <>
@@ -131,7 +134,7 @@ export function TourLaunch({ id }: { id: TourId }) {
           content is in place before the popover measures itself against it, and an empty
           popover never has to be re-positioned afterwards. */}
       {hosts.map((host, index) =>
-        createPortal(<TourBody step={tour.steps[index]} />, host, `${id}-${index}`),
+        createPortal(<TourBody step={steps[index]} />, host, `${id}-${index}`),
       )}
       <button
         ref={launcher}

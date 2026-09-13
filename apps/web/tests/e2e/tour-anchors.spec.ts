@@ -1,5 +1,5 @@
 import { test as base, expect } from "@playwright/test";
-import { TOUR_IDS, TOURS, type TourId } from "../../src/lib/tours";
+import { TOUR_IDS, TOURS, type TourId, tourSteps } from "../../src/lib/tours";
 import { type BuiltLab, buildLab } from "./support/lab";
 
 /**
@@ -19,10 +19,17 @@ import { type BuiltLab, buildLab } from "./support/lab";
 
 const SURFACES: Record<TourId, (lab: BuiltLab) => string> = {
   "shop-home": (lab) => `/shops/${lab.shopId}`,
+  customers: (lab) => `/shops/${lab.shopId}/customers`,
+  orders: (lab) => `/shops/${lab.shopId}/orders`,
+  tickets: (lab) => `/shops/${lab.shopId}/tickets`,
   "objective-blocks": (lab) => `/shops/${lab.shopId}/objective-blocks`,
   "mutation-blocks": (lab) => `/shops/${lab.shopId}/mutation-blocks`,
+  scenarios: (lab) => `/shops/${lab.shopId}/scenarios`,
   scenario: (lab) => `/shops/${lab.shopId}/scenarios/${lab.scenarioId}`,
   snapshots: (lab) => `/shops/${lab.shopId}/scenarios/${lab.scenarioId}/snapshots`,
+  "support-identities": (lab) => `/shops/${lab.shopId}/support-identities`,
+  "agent-configurations": (lab) => `/shops/${lab.shopId}/agent-configurations`,
+  judges: (lab) => `/shops/${lab.shopId}/judges`,
   bench: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}`,
   results: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}/results`,
 };
@@ -59,7 +66,7 @@ test("has a tour to sweep at all", () => {
   // over an empty table declares no tests at all, so the guard cannot itself be a case.
   expect(TOUR_IDS.length).toBeGreaterThan(0);
   for (const id of TOUR_IDS) {
-    expect(TOURS[id].steps.length, `${id} declares no steps`).toBeGreaterThan(0);
+    expect(tourSteps(id).length, `${id} declares no steps`).toBeGreaterThan(0);
   }
 });
 
@@ -78,7 +85,10 @@ for (const id of TOUR_IDS) {
       `${id} does not offer its tour`,
     ).toBeVisible();
 
-    for (const step of tour.steps) {
+    // The composed chain step is swept exactly as a written one is: it lights a real
+    // element on a real surface, and `data-tour="page-name"` is as capable of coming loose as
+    // any other hook.
+    for (const step of tourSteps(id)) {
       const anchor = page.locator(step.anchor);
       const where = `${id} · ${step.title} · ${step.anchor}`;
       // Soft, so one surface reports every step that has come loose rather than only its first.

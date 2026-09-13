@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { TOURS } from "../../src/lib/tours";
+import { TOURS, tourSteps } from "../../src/lib/tours";
 
 /**
  * One tour, run the way an operator runs it (ADR 0045).
@@ -11,7 +11,8 @@ import { TOURS } from "../../src/lib/tours";
  * promise a dependency makes is worth asserting rather than assuming.
  */
 
-const STEPS = TOURS["shop-home"].steps;
+// What the tour actually walks, chain step first, rather than the rows as declared.
+const STEPS = tourSteps("shop-home");
 
 test("a tour walks the screen it was launched from, and leaves when it is told to", async ({
   page,
@@ -42,17 +43,19 @@ test("a tour walks the screen it was launched from, and leaves when it is told t
   // Focus is inside the dialog, so a reader with a keyboard is where the tour is.
   await expect(popover.locator(":focus")).toHaveCount(1);
 
-  // The glossary reaches inside the popover: the word is a link to its entry, and the hover
-  // definition is the link's own accessible description (ADR 0044's decision, unchanged).
-  const term = popover.getByRole("link", { name: "shop", exact: true });
-  await expect(term).toHaveAttribute("href", "/guides/glossary#shop");
-  await expect(term).toHaveAttribute("title", /Shop — /);
-
   // Forward, then back, and the tour is where it started.
   await popover.getByRole("button", { name: "Next" }).click();
   await expect(popover).toContainText(STEPS[1].title);
   await expect(popover).toContainText(`2 of ${STEPS.length}`);
   await expect(page.locator(STEPS[1].anchor)).toHaveClass(/driver-active-element/);
+
+  // The glossary reaches inside the popover: the word is a link to its entry, and the hover
+  // definition is the link's own accessible description (ADR 0044's decision, unchanged).
+  // Asserted on this step rather than the first, which is the composed chain step and states a
+  // position rather than naming any of the lab's vocabulary.
+  const term = popover.getByRole("link", { name: "shop", exact: true });
+  await expect(term).toHaveAttribute("href", "/guides/glossary#shop");
+  await expect(term).toHaveAttribute("title", /Shop — /);
 
   await popover.getByRole("button", { name: "Back" }).click();
   await expect(popover).toContainText(STEPS[0].title);
@@ -91,6 +94,11 @@ test("a tour walks the screen it was launched from, and leaves when it is told t
   // And a tour walks one screen: leaving the surface is the end of it, not a step of it.
   await launch.click();
   await expect(popover).toBeVisible();
+  // Onto the step that lights the rail. Everything the overlay dims is genuinely unclickable —
+  // that is the overlay working — so the way out has to be through the step's own cut-out, and
+  // the opening step lights the page's name rather than the way out of it.
+  await popover.getByRole("button", { name: "Next" }).click();
+  await expect(page.locator(STEPS[1].anchor)).toHaveClass(/driver-active-element/);
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Orders" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
   await expect(popover).toHaveCount(0);

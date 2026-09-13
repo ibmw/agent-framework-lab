@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createSupportIdentity, listSupportIdentities } from "../api/supportIdentities";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -66,6 +67,7 @@ export function SupportIdentitiesPage() {
       <PageHeader
         title="Support identities"
         description="What the support agent is and what it may do. Identities are cross-shop; tone of voice comes from the shop, and an agent configuration adopts one published identity."
+        actions={<TourLaunch id="support-identities" />}
       />
 
       {error ? (

@@ -7,6 +7,7 @@ import {
   createCustomerProfile,
   listCustomerProfiles,
 } from "../api/customerProfiles";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -122,6 +123,7 @@ export function CustomersPage() {
       <PageHeader
         title="Customers"
         description="Profiles attached to this shop. A profile — identity, persona, and address book — is reusable across shops; orders, tickets, and support history stay here."
+        actions={<TourLaunch id="customers" />}
       />
 
       {error ? (

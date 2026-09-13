@@ -22,6 +22,7 @@ import {
   publishTicket,
   replaceTicketDraft,
 } from "../api/tickets";
+import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
@@ -128,7 +129,10 @@ export function TicketsPage() {
     <div className="grid min-h-0 gap-4 xl:grid-cols-[262px_minmax(0,1fr)]">
       <section className={`${surfaceClasses} overflow-hidden`} aria-label="Tickets">
         <div className="flex items-center gap-2 border-b border-admin-border px-3 py-2.5">
-          <h1 className="text-sm font-bold">Tickets</h1>
+          <h1 className="text-sm font-bold" data-tour="page-name">
+            Tickets
+          </h1>
+          <TourLaunch id="tickets" />
           <label className="ml-auto text-xs">
             <span className="sr-only">Filter tickets</span>
             <select

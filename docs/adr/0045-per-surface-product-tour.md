@@ -193,6 +193,12 @@ ADR 0044 refused, and none is added.
 
 ### Seven surfaces, and no new route
 
+> Extended by ADR 0048 (2026-09-13). Fourteen surfaces now, because every one of the chain's ten
+> steps offers a tour. Seven of those ten had nothing to launch, and what they now open with is a
+> *composed* step — its position in the chain, its neighbours, and the gate sentence
+> `/guides/setup` already holds for it — so the reach is bought without seven more pieces of copy
+> to keep true. The paragraph below about the shops index still stands: it is not on the chain.
+
 The tours are on the six surfaces that had an explainer — the objective-block library, the
 mutation-block library, the scenario composition editor, the starting-states listing, the live bench
 and the results screen — plus the shop home, which had the strip instead. Seven tours, seventeen

@@ -21,12 +21,21 @@
  * and checked against the one module that defines it.
  */
 
+import { chainPlacement, type SetupStepId } from "./setupPath";
+
 export type TourId =
   | "shop-home"
+  | "customers"
+  | "orders"
+  | "tickets"
   | "objective-blocks"
   | "mutation-blocks"
+  | "scenarios"
   | "scenario"
   | "snapshots"
+  | "support-identities"
+  | "agent-configurations"
+  | "judges"
   | "bench"
   | "results";
 
@@ -50,12 +59,69 @@ export interface TourStep {
 export interface Tour {
   /** What the tour is of, used as the launch control's accessible name. */
   surface: string;
+  /**
+   * Where this surface sits in the setup chain, for the ten surfaces that sit on it.
+   *
+   * The step's copy is not written here: `chainPlacement` composes it from the chain table and
+   * the written guide's own gate sentences, so the answer a popover gives is the answer
+   * `/guides/setup` gives. What is declared here is only the anchor, which keeps every element
+   * a tour lights in this table and under the sweep.
+   */
+  chain?: { step: SetupStepId; anchor: string };
+  /** The walk around the surface itself. Empty where the chain step is the whole tour. */
   steps: readonly TourStep[];
+}
+
+/** Every surface on the chain lights its own name, which is the element all ten have. */
+const PAGE_NAME = '[data-tour="page-name"]';
+
+/**
+ * The chain step a tour opens with, composed rather than written.
+ *
+ * A reader who pressed *Show me around* on the sixth of ten screens is owed the same two facts
+ * wherever they are standing: which link of the chain this is, and what stays refused until the
+ * work here is done. Writing that once per surface would have been fourteen chances to phrase
+ * the same fact differently and ten places for it to go stale.
+ */
+function chainStepFor(tour: Tour): TourStep | null {
+  if (tour.chain === undefined) {
+    return null;
+  }
+  const placement = chainPlacement(tour.chain.step);
+  const neighbours = [
+    placement.after === null ? null : `after ${placement.after}`,
+    placement.before === null ? null : `before ${placement.before}`,
+  ]
+    .filter((part) => part !== null)
+    .join(", ");
+  return {
+    anchor: tour.chain.anchor,
+    title: `Step ${placement.position} of ${placement.total} · ${placement.label}`,
+    body: [
+      `This is one link of the chain from an empty lab to a two-arm comparison, ${neighbours}. ` +
+        "Nearly every link refuses until the one before it is satisfied, which is why the order " +
+        "is the guide.",
+      placement.unlocks,
+    ],
+  };
+}
+
+/**
+ * What a tour actually walks: its chain step, where it has one, and then its own steps.
+ *
+ * Every reader of the table goes through here — the launch control, the copy tests, and the
+ * end-to-end anchor sweep — so a composed step is held to exactly what a written one is held to.
+ */
+export function tourSteps(id: TourId): readonly TourStep[] {
+  const tour = TOURS[id];
+  const chain = chainStepFor(tour);
+  return chain === null ? tour.steps : [chain, ...tour.steps];
 }
 
 export const TOURS: Record<TourId, Tour> = {
   "shop-home": {
     surface: "this shop",
+    chain: { step: "shop", anchor: PAGE_NAME },
     steps: [
       {
         anchor: 'nav[aria-label="Shop workspace"]',
@@ -83,6 +149,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   "objective-blocks": {
     surface: "the objective-block library",
+    chain: { step: "blocks", anchor: PAGE_NAME },
     steps: [
       {
         anchor: '[aria-label="New objective block"]',
@@ -170,6 +237,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   bench: {
     surface: "the live bench",
+    chain: { step: "experiment", anchor: PAGE_NAME },
     steps: [
       {
         anchor: '[data-tour="bench-arms"]',
@@ -215,6 +283,48 @@ export const TOURS: Record<TourId, Tour> = {
         ],
       },
     ],
+  },
+
+  customers: {
+    surface: "customers",
+    chain: { step: "customer", anchor: PAGE_NAME },
+    steps: [],
+  },
+
+  orders: {
+    surface: "orders",
+    chain: { step: "order", anchor: PAGE_NAME },
+    steps: [],
+  },
+
+  tickets: {
+    surface: "tickets",
+    chain: { step: "ticket", anchor: PAGE_NAME },
+    steps: [],
+  },
+
+  scenarios: {
+    surface: "scenarios",
+    chain: { step: "scenario", anchor: PAGE_NAME },
+    steps: [],
+  },
+
+  "support-identities": {
+    surface: "support identities",
+    chain: { step: "support-identity", anchor: PAGE_NAME },
+    steps: [],
+  },
+
+  "agent-configurations": {
+    surface: "agent configurations",
+    chain: { step: "agent-configurations", anchor: PAGE_NAME },
+    steps: [],
+  },
+
+  judges: {
+    surface: "judges",
+    chain: { step: "judge", anchor: PAGE_NAME },
+    steps: [],
   },
 };
 

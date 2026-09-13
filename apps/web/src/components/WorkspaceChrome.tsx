@@ -54,7 +54,11 @@ export function PageHeader({
   return (
     <header className="mb-4 grid gap-2">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+        {/* The chain step of a tour lights the page's own name: it is the one element
+            every surface has, and it is what the step is about — where you have arrived. */}
+        <h1 className="text-xl font-bold tracking-tight" data-tour="page-name">
+          {title}
+        </h1>
         {chips}
         {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
       </div>

@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createJudgeConfiguration, listJudgeConfigurations } from "../api/judgeConfigurations";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -64,6 +65,7 @@ export function JudgeConfigurationsPage() {
       <PageHeader
         title="Judges"
         description="What scores the objectives no rule can decide: a rubric, a model, and the parts of an arm's record the judge is shown. Judges are cross-shop, and every verdict records the exact version that produced it — so a result stays explainable after the rubric moves on."
+        actions={<TourLaunch id="judges" />}
       />
 
       {error ? (

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listCustomerProfiles } from "../api/customerProfiles";
 import { createOrder, listOrders } from "../api/orders";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { fulfilmentLabel, paymentLabel, todayInput } from "../lib/orders";
 import {
@@ -111,6 +112,7 @@ export function OrdersPage() {
       <PageHeader
         title="Orders"
         description="Orders are authored fixture state for this shop. Starting an experiment snapshots them into each arm's sandbox — live runs mutate isolated clones, never this data."
+        actions={<TourLaunch id="orders" />}
       />
 
       {error ? (

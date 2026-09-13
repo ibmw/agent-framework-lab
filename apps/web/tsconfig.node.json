@@ -13,7 +13,11 @@
     "playwright.teardown.ts",
     "tests/**/*.ts",
     // The anchor sweep is driven off the application's own tour table rather than a list kept
-    // beside it (ADR 0045), so the one module it reads is in this project too.
-    "src/lib/tours.ts"
+    // beside it (ADR 0045), so the modules it reads are in this project too. A tour's chain step
+    // is composed from the setup chain and the written guide's gates, which is why those come
+    // with it, and the chain carries the vocabulary its steps speak.
+    "src/lib/tours.ts",
+    "src/lib/setupPath.ts",
+    "src/lib/glossary.ts"
   ]
 }

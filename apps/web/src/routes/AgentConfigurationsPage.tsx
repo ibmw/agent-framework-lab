@@ -10,6 +10,7 @@ import {
   readAgentConfigurationResources,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -79,6 +80,7 @@ export function AgentConfigurationsPage() {
       <PageHeader
         title="Agent configurations"
         description="What runs the support agent: framework, architecture, model, prompt, tools, and the support identity it adopts. Configurations are cross-shop — prompt variables resolve at experiment start and the resolved configuration is pinned to the run."
+        actions={<TourLaunch id="agent-configurations" />}
       />
 
       {error ? (

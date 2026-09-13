@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { SETUP_GUIDE_STEPS } from "../routes/SetupGuidePage";
 import { glossaryTerm, parseGlossaryProse, referencedTerms } from "./glossary";
-import { SETUP_CHAIN } from "./setupPath";
-import { TOUR_IDS, TOURS } from "./tours";
+import { chainPlacement, SETUP_CHAIN, SETUP_GUIDE_STEPS } from "./setupPath";
+import { TOUR_IDS, TOURS, tourSteps } from "./tours";
 
 /**
  * The tour table, held to what it claims.
@@ -14,7 +13,7 @@ import { TOUR_IDS, TOURS } from "./tours";
  * real surfaces by `tests/e2e/tour-anchors.spec.ts` (ADR 0045).
  */
 
-const STEPS = TOUR_IDS.flatMap((id) => TOURS[id].steps.map((step) => [id, step] as const));
+const STEPS = TOUR_IDS.flatMap((id) => tourSteps(id).map((step) => [id, step] as const));
 
 /**
  * Every piece of copy in this application written in `[[term-id]]` markup, in one list.
@@ -43,8 +42,8 @@ describe("the tour table", () => {
     for (const id of TOUR_IDS) {
       const tour = TOURS[id];
       expect(tour.surface, `${id} does not say what it is a tour of`).not.toBe("");
-      expect(tour.steps.length, `${id} has no steps`).toBeGreaterThan(0);
-      for (const step of tour.steps) {
+      expect(tourSteps(id).length, `${id} has no steps`).toBeGreaterThan(0);
+      for (const step of tourSteps(id)) {
         expect(step.title, `a step of ${id} has no title`).not.toBe("");
         expect(step.body.length, `${step.title} has no body`).toBeGreaterThan(0);
         for (const paragraph of step.body) {
@@ -67,7 +66,7 @@ describe("the tour table", () => {
     // A tour that lit the same box twice would be a tour with a step it did not need, and the
     // sweep below cannot tell the two occurrences apart.
     for (const id of TOUR_IDS) {
-      const anchors = TOURS[id].steps.map((step) => step.anchor);
+      const anchors = tourSteps(id).map((step) => step.anchor);
       expect(new Set(anchors).size, `${id} lights the same element twice`).toBe(anchors.length);
     }
   });
@@ -130,5 +129,55 @@ describe("guide copy", () => {
   it("leaves prose with no references alone", () => {
     expect(parseGlossaryProse("Nothing is defined here.")).toEqual(["Nothing is defined here."]);
     expect(referencedTerms("Nothing is defined here.")).toEqual([]);
+  });
+});
+
+describe("the chain a tour opens with", () => {
+  it("reaches every one of the chain's ten steps, each from exactly one surface", () => {
+    // The point of the whole arrangement: an operator standing anywhere on the path from an
+    // empty lab to a comparison can ask where they are. A step nothing claims is a screen that
+    // cannot answer, and a step two tours claim is two answers to one question.
+    const claimed = TOUR_IDS.flatMap((id) => {
+      const chain = TOURS[id].chain;
+      return chain === undefined ? [] : [chain.step];
+    });
+
+    expect([...claimed].sort()).toEqual(SETUP_CHAIN.map((step) => step.id).sort());
+  });
+
+  it("opens the tour, because where you are comes before what is on the screen", () => {
+    for (const id of TOUR_IDS) {
+      const chain = TOURS[id].chain;
+      if (chain === undefined) {
+        continue;
+      }
+      const [first] = tourSteps(id);
+      const placement = chainPlacement(chain.step);
+
+      expect(first.title, `${id} does not open on its place in the chain`).toBe(
+        `Step ${placement.position} of ${placement.total} · ${placement.label}`,
+      );
+      // The gate is the guide's own sentence, so the popover and `/guides/setup` cannot come to
+      // disagree about what stays refused until this step is done.
+      expect(first.body).toContain(SETUP_GUIDE_STEPS[chain.step].gate);
+    }
+  });
+
+  it("names the neighbours the chain puts either side, and invents none at the ends", () => {
+    const first = chainPlacement(SETUP_CHAIN[0].id);
+    const last = chainPlacement(SETUP_CHAIN[SETUP_CHAIN.length - 1].id);
+
+    expect(first.after).toBeNull();
+    expect(first.before).toBe(SETUP_CHAIN[1].label);
+    expect(last.before).toBeNull();
+    expect(last.after).toBe(SETUP_CHAIN[SETUP_CHAIN.length - 2].label);
+    expect(tourSteps("shop-home")[0].body[0]).not.toContain("after");
+  });
+
+  it("is the whole tour on a surface with nothing of its own to walk", () => {
+    // Seven of the ten had no tour at all. They are not owed invented copy about their own
+    // controls to justify the control appearing: one honest step is what they have to say.
+    expect(TOURS.customers.steps).toHaveLength(0);
+    expect(tourSteps("customers")).toHaveLength(1);
   });
 });
