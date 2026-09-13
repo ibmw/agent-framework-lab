@@ -1,5 +1,5 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listShops } from "../api/shops";
@@ -18,6 +18,12 @@ export interface LabSurfaceValue {
    */
   loading: boolean;
   error: string | null;
+  /**
+   * Read the shop list again. For a surface that just changed what the lab holds: the rail and
+   * the switcher are drawn from this list, and a page that populated the lab and then went on
+   * showing an empty one would be reporting a state it had itself just ended.
+   */
+  refresh: () => void;
 }
 
 /**
@@ -33,28 +39,33 @@ export function useLabSurface(): LabSurfaceValue {
   const [error, setError] = useState<string | null>(null);
   const [rememberedId] = useState(readLastVisitedShop);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    listShops(controller.signal)
+  const load = useCallback((signal?: AbortSignal) => {
+    listShops(signal)
       .then((response) => setShops(response.shops))
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
+        if (!signal?.aborted) {
           setError(describeApiError(cause, "The lab could not list its shops."));
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) {
+        if (!signal?.aborted) {
           setLoading(false);
         }
       });
-    return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
   return {
     shops,
     rememberedShop: shops.find((shop) => shop.shop_id === rememberedId) ?? null,
     loading,
     error,
+    refresh: () => load(),
   };
 }
 

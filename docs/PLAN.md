@@ -1117,7 +1117,9 @@ about this reading is left to be on or off (ADR 0046).*
 
 - [x] Write the setup guide covering the full chain in dependency order, from an empty database to
   a driven experiment.
-- [x] Name `make seed` as the fast path, as a command.
+- [x] Name `make seed` as the fast path, as a command. *Amended by ADR 0047: the fast
+  path is also a button on lab settings, and the guide names both. The guide itself still
+  performs nothing.*
 - [x] Add the inline explainers on the surfaces whose vocabulary is not transferable from a
   commerce admin.
 

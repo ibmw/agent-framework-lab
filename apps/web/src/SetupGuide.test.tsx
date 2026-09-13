@@ -10,10 +10,12 @@ import { SETUP_CHAIN } from "./lib/setupPath";
 /**
  * The written setup guide: the chain in dependency order, for a reader with nothing to read yet.
  *
- * Two refusals are held here. ADR 0043 decided the seed is a command and never a route, so the
- * guide is asserted to name it and to expose nothing that performs it. And what the guide says
- * the chain is, is asserted against `lib/setupPath.ts`'s own table rather than against a second
- * list, so the page and the table it walks cannot come to disagree about it (ADR 0044).
+ * Two refusals are held here. The seed now has a route and a button, on lab settings (ADR
+ * 0047), and this page still performs nothing: the guide reads the chain and links to where each
+ * step is done, so it is asserted to name the command and to expose no control of its own. And
+ * what the guide says the chain is, is asserted against `lib/setupPath.ts`'s own table rather
+ * than against a second list, so the page and the table it walks cannot come to disagree about
+ * it (ADR 0044).
  */
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -70,10 +72,10 @@ function renderAt(path: string) {
 }
 
 describe("the setup guide", () => {
-  it("hands over make seed as a command and exposes no control that performs it", async () => {
+  it("hands over make seed as a command and exposes no control of its own", async () => {
     renderAt("/guides/setup");
 
-    const fast = await screen.findByRole("region", { name: "The fast path is a command" });
+    const fast = await screen.findByRole("region", { name: "The fast path" });
     expect(within(fast).getByText("make seed", { selector: "pre" })).toBeVisible();
     // The reset path is `docs/development.md`'s three commands, and is also text.
     expect(
@@ -81,10 +83,11 @@ describe("the setup guide", () => {
         selector: "pre",
       }),
     ).toBeVisible();
-    // ADR 0043's refusal: there is nothing on this page that populates, resets or reseeds a
-    // lab. The named query is document-wide — a control like this must not appear in the
-    // chrome either — while the count is taken over the guide's own cards, which are allowed
-    // to gain nothing at all and where a future header control would be a false failure.
+    // The guide gains no privilege over the chain it reads: the seed's button lives on the
+    // settings surface and nothing on this page populates, resets or reseeds a lab. The named
+    // query is document-wide — a control like this must not appear in the chrome either —
+    // while the count is taken over the guide's own cards, which are allowed to gain nothing
+    // at all and where a future header control would be a false failure.
     expect(
       screen.queryByRole("button", { name: /seed|demo data|populate|load sample|reset|wipe/i }),
     ).toBeNull();

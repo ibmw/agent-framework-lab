@@ -4361,6 +4361,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/lab-seed:
+    post:
+      summary: Write the demo into an empty lab
+      description: 'Writes one complete worked example — the wrong-address incident,
+        authored end to end and driven to completion under two agent frameworks —
+        through the same application services the screens call. Needs no provider
+        credential and contacts no provider. Refuses with 409 rather than merging:
+        a database that is not at the migration head, or that holds any row in a table
+        the story writes, is left untouched and the tables that stopped it are named.
+        Nothing here overwrites, wipes or reseeds.'
+      operationId: seedLab
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabSeedResponse'
   /api/v1/lab-status:
     get:
       summary: Report how this process is composed to run
@@ -8543,6 +8561,86 @@ components:
       - credentialed
       title: LabRunMode
       description: Whether this build can reach a model provider at all.
+    LabSeedResponse:
+      properties:
+        shop_id:
+          type: string
+          format: uuid
+          title: Shop Id
+        customer_id:
+          type: string
+          format: uuid
+          title: Customer Id
+        support_identity_id:
+          type: string
+          format: uuid
+          title: Support Identity Id
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        ticket_id:
+          type: string
+          format: uuid
+          title: Ticket Id
+        scenario_id:
+          type: string
+          format: uuid
+          title: Scenario Id
+        scenario_version:
+          type: integer
+          title: Scenario Version
+        snapshot_id:
+          type: string
+          format: uuid
+          title: Snapshot Id
+        judge_id:
+          type: string
+          format: uuid
+          title: Judge Id
+        configuration_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Configuration Ids
+        experiment_id:
+          type: string
+          format: uuid
+          title: Experiment Id
+        run_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Run Ids
+      additionalProperties: false
+      type: object
+      required:
+      - shop_id
+      - customer_id
+      - support_identity_id
+      - order_id
+      - ticket_id
+      - scenario_id
+      - scenario_version
+      - snapshot_id
+      - judge_id
+      - configuration_ids
+      - experiment_id
+      - run_ids
+      title: LabSeedResponse
+      description: 'What the seed wrote, by identifier, so a caller can open any of
+        it.
+
+
+        The same listing the command prints to a terminal. Identifiers rather than
+        a message,
+
+        because the screen that asked for this has somewhere to send a reader afterwards
+        and a
+
+        sentence of prose would make it parse one.'
     LabStatusResponse:
       properties:
         run_mode:

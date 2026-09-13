@@ -1391,6 +1391,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/lab-seed": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Write the demo into an empty lab
+     * @description Writes one complete worked example — the wrong-address incident, authored end to end and driven to completion under two agent frameworks — through the same application services the screens call. Needs no provider credential and contacts no provider. Refuses with 409 rather than merging: a database that is not at the migration head, or that holds any row in a table the story writes, is left untouched and the tables that stopped it are named. Nothing here overwrites, wipes or reseeds.
+     */
+    post: operations["seedLab"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/lab-status": {
     parameters: {
       query?: never;
@@ -3527,6 +3547,67 @@ export interface components {
      * @enum {string}
      */
     LabRunMode: "offline" | "credentialed";
+    /**
+     * LabSeedResponse
+     * @description What the seed wrote, by identifier, so a caller can open any of it.
+     *
+     *     The same listing the command prints to a terminal. Identifiers rather than a message,
+     *     because the screen that asked for this has somewhere to send a reader afterwards and a
+     *     sentence of prose would make it parse one.
+     */
+    LabSeedResponse: {
+      /**
+       * Shop Id
+       * Format: uuid
+       */
+      shop_id: string;
+      /**
+       * Customer Id
+       * Format: uuid
+       */
+      customer_id: string;
+      /**
+       * Support Identity Id
+       * Format: uuid
+       */
+      support_identity_id: string;
+      /**
+       * Order Id
+       * Format: uuid
+       */
+      order_id: string;
+      /**
+       * Ticket Id
+       * Format: uuid
+       */
+      ticket_id: string;
+      /**
+       * Scenario Id
+       * Format: uuid
+       */
+      scenario_id: string;
+      /** Scenario Version */
+      scenario_version: number;
+      /**
+       * Snapshot Id
+       * Format: uuid
+       */
+      snapshot_id: string;
+      /**
+       * Judge Id
+       * Format: uuid
+       */
+      judge_id: string;
+      /** Configuration Ids */
+      configuration_ids: string[];
+      /**
+       * Experiment Id
+       * Format: uuid
+       */
+      experiment_id: string;
+      /** Run Ids */
+      run_ids: string[];
+    };
     /**
      * LabStatusResponse
      * @description Three facts about composition, and deliberately no fourth.
@@ -11081,6 +11162,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  seedLab: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LabSeedResponse"];
         };
       };
     };

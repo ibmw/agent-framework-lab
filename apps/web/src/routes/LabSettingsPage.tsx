@@ -1,12 +1,19 @@
-import type { LabStatusResponse, ProvenFrameworkSchema } from "@agent-lab/contracts";
+import type {
+  LabSeedResponse,
+  LabStatusResponse,
+  ProvenFrameworkSchema,
+  ShopSummarySchema,
+} from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { readAgentConfigurationResources } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
+import { seedLab } from "../api/labSeed";
 import { getLabStatus } from "../api/labStatus";
 import { Card, EntryCard, EntryId, EntryKind } from "../components/WorkspaceChrome";
 import { describeArchitecture, readableTerm } from "../lib/agents";
 import { readNavigationCollapsed, writeNavigationCollapsed } from "../lib/preferences";
+import { accentButtonClasses, outlineButtonClasses } from "../lib/ui";
 import { LabSurface, useLabSurface } from "../shell/LabSurface";
 
 function FrameworkRow({ framework }: { framework: ProvenFrameworkSchema }) {
@@ -28,6 +35,100 @@ function FrameworkRow({ framework }: { framework: ProvenFrameworkSchema }) {
         </dd>
       </dl>
     </EntryCard>
+  );
+}
+
+/**
+ * The one control in this application that populates the lab (ADR 0047).
+ *
+ * ADR 0043 refused this a route on the grounds that "a running lab must never be one request
+ * away from being overwritten with a fixture", and ADR 0047 keeps that sentence: what makes
+ * the seed safe is its refusal, which the route inherits whole. A lab holding anything at all
+ * gets 409 and keeps every row. So the danger this guards against is not lost data but a
+ * pointless wait, and the guard is proportionate — one confirmation press, because a button
+ * that writes a dozen published versions should take more than a stray click, and no typed
+ * phrase, because there is nothing here to lose.
+ */
+function SeedCard({ shops, onSeeded }: { shops: ShopSummarySchema[]; onSeeded: () => void }) {
+  const [arming, setArming] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [seeded, setSeeded] = useState<LabSeedResponse | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  // A lab with a shop in it will be refused, and saying so before the press is kinder than
+  // spending a request to be told. It is a hint and not the gate: the server counts every
+  // table the story writes, and this browser can only see one of them.
+  const occupied = shops.length > 0;
+
+  async function write() {
+    setArming(false);
+    setRunning(true);
+    setRefusal(null);
+    try {
+      setSeeded(await seedLab());
+      onSeeded();
+    } catch (cause: unknown) {
+      setRefusal(describeApiError(cause, "The demo could not be written."));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <Card title="The fast path">
+      <p className="text-[13px] leading-relaxed text-admin-ink-soft">
+        Creates a demo to look around: a shop with a catalog, a customer with an incident, and a
+        finished comparison of two agent frameworks. It works on an empty lab only, and never
+        touches a lab that already holds something.
+      </p>
+      {seeded === null ? (
+        <div className="grid gap-1.5">
+          <button
+            className={arming ? accentButtonClasses : outlineButtonClasses}
+            type="button"
+            disabled={running || occupied}
+            onClick={() => (arming ? write() : setArming(true))}
+          >
+            {running
+              ? "Creating the demo…"
+              : arming
+                ? "Press again to create it"
+                : "Create the demo"}
+          </button>
+          <p className="text-xs text-admin-muted" role="status">
+            {occupied
+              ? "This lab is not empty, so there is nothing to create here."
+              : arming
+                ? "Nothing is created until you press again."
+                : "The same thing make seed does in a terminal."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-1.5 border-t border-admin-border pt-3">
+          <p className="text-[13px] text-admin-ink-soft">
+            Written. The comparison is on the history screen.
+          </p>
+          <p className="flex flex-wrap gap-3 text-[13px]">
+            <Link
+              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+              to={`/shops/${seeded.shop_id}`}
+            >
+              Open the shop
+            </Link>
+            <Link
+              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+              to={`/shops/${seeded.shop_id}/bench/${seeded.experiment_id}/results`}
+            >
+              Read the comparison
+            </Link>
+          </p>
+        </div>
+      )}
+      {refusal === null ? null : (
+        <p role="alert" className="text-[13px] leading-relaxed text-lab-error">
+          {refusal}
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -213,6 +314,7 @@ export function LabSettingsPage() {
             )}
           </Card>
           <RunModeCard reading={status} />
+          <SeedCard shops={surface.shops} onSeeded={surface.refresh} />
         </div>
 
         <div className="grid content-start gap-4">

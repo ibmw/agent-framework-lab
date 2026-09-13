@@ -257,6 +257,13 @@ failure into a database that must be deleted.
 
 ### It is a command, and never a route
 
+> Superseded by ADR 0047 (2026-09-13). The seed is now also `POST /api/v1/lab-seed`, called by a
+> button on lab settings. What that ADR keeps is everything below except the conclusion: the route
+> awaits this same `run_seed`, is subject to both gates unchanged, and merges, upserts and wipes
+> exactly as little. The argument it makes against the paragraph below is that the emptiness gate
+> had already answered it — a running lab cannot be overwritten by a seed that refuses every
+> database holding a row, so the fixture reaches only a database with nothing in it to lose.
+
 `make seed` runs a CLI in the API package. Nothing about the seed is reachable over HTTP,
 `packages/contracts` is unchanged, and no schema, route or generated type moves. A running
 lab must never be one request away from being overwritten with a fixture, and a seed on the

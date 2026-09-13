@@ -172,11 +172,18 @@ export function SetupGuidePage() {
       description="The whole chain, in the order it has to be walked. Nearly every step here refuses until the one before it is satisfied, which is why the order is the guide."
     >
       <div className="grid max-w-3xl gap-4">
-        <Card title="The fast path is a command">
+        <Card title="The fast path">
           <p className="text-[13px] leading-relaxed text-admin-ink-soft">
             Walking the chain by hand is roughly an afternoon of clicking through gates in
             dependency order. If what you want is to see the product with something in it, run this
-            in a terminal in the checkout instead:
+            in a terminal in the checkout instead — or press <em>Create the demo</em> on{" "}
+            <Link
+              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+              to="/settings"
+            >
+              lab settings
+            </Link>
+            , which does the same thing to the same database:
           </p>
           <pre className="overflow-x-auto rounded-lg border border-admin-border bg-admin-canvas px-3.5 py-2.5 font-mono text-[13px] text-admin-ink">
             make seed
@@ -194,13 +201,15 @@ export function SetupGuidePage() {
             rm -f var/agent-lab.db && make migrate && make seed
           </pre>
           <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-            Nothing in the application performs this, here or anywhere else, and nothing ever will.
-            A running lab must never be one request away from being overwritten with a fixture, and
-            the refusal a seed can hit — a database that is not empty — is one you have to be able
-            to read and act on in a shell anyway. What the shops list does offer is narrower and
-            additive: <em>Use an example shop</em> fills the create form with a ready-made identity
-            so step 1 below costs no invention. It writes one empty draft shop when you press
-            Create, overwrites nothing, and leaves the other nine steps exactly where they are.
+            A running lab is still never one request away from being overwritten, because the
+            refusal above is what secures that and the button inherits it whole: a lab holding
+            anything at all is declined and keeps every row (ADR 0047). This guide performs nothing
+            itself — it reads the chain and links to where each step is done — and the reset path
+            stays in a shell, because deleting a database file is not an operation a page should
+            offer. The shops list offers something narrower again: <em>Use an example shop</em>{" "}
+            fills the create form with a ready-made identity so step 1 below costs no invention. It
+            writes one empty draft shop when you press Create, overwrites nothing, and leaves the
+            other nine steps exactly where they are.
           </p>
         </Card>
 

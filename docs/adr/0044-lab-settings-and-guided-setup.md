@@ -246,6 +246,13 @@ grew a *Load demo data* action would be exactly the HTTP seed route that ADR ref
 as a convenience, and the refusal it is subject to — an empty database at migration head — is one an
 operator has to be able to read and act on in a shell anyway.
 
+> Amended by ADR 0047 (2026-09-13). The route exists and settings calls it, on the grounds that the
+> refusal quoted above is what secures the lab and the route inherits it whole. The first sentence
+> of this section still stands unchanged: the guide performs nothing, links to the settings button
+> alongside the command, and its cards are still asserted to hold no control at all. What has gone
+> is the reason given for it — the guide carries no button because it is a reader of the chain, not
+> because nowhere may.
+
 The same rule governs every other action the guide names: it links to the surface where the work is
 done and never performs the work. The guide is a reader of the chain, and gains no privilege over
 it.
@@ -362,7 +369,9 @@ records which surfaces host which.
 ## Deliberately not here
 
 - **A seed route, or any button that populates the lab.** ADR 0043's refusal is load-bearing and is
-  not relaxed by being inconvenient.
+  not relaxed by being inconvenient. *Reversed by ADR 0047: the refusal is load-bearing and is kept
+  whole, and it is the refusal rather than the missing route that carries the load. Settings has the
+  button; the guide below still has none.*
 - **Editable credentials, model selection, or OTLP endpoint.** Process configuration stays in the
   environment; the page reads it.
 - **Stored guide progress, per-step dismissal, or a completion percentage.** All three are the

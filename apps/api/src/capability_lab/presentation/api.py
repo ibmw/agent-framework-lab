@@ -252,10 +252,12 @@ from capability_lab.presentation.definitions import DefinitionIssueSchema
 from capability_lab.presentation.experiments import ExperimentRoutes
 from capability_lab.presentation.history import ExperimentHistoryRoutes
 from capability_lab.presentation.judge_configurations import JudgeConfigurationRoutes
+from capability_lab.presentation.lab_seed import LabSeedRoutes
 from capability_lab.presentation.lab_status import LabStatusRoutes
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
+from capability_lab.presentation.seed.runner import SeedRefusedError
 from capability_lab.presentation.shops import ShopRoutes
 from capability_lab.presentation.snapshots import SandboxSnapshotRoutes
 from capability_lab.presentation.support_identities import SupportIdentityRoutes
@@ -693,6 +695,21 @@ async def _generated_scenario_deleted_handler(request: Request, _error: Exceptio
         status_code=409,
         code="generated_scenario_deleted",
         message="The generated persona was permanently deleted and cannot be recreated",
+    )
+
+
+async def _seed_refused_handler(request: Request, error: Exception) -> JSONResponse:
+    """A refusal is the seed working, so it is reported with its own reason and not as a 500.
+
+    409 rather than 422: nothing about the request is malformed. The database is in a state
+    this route will not write into, and `SeedRefusedError` already says which state and what
+    to do about it (ADR 0043 on why it refuses rather than repairs).
+    """
+    return _error_response(
+        request,
+        status_code=409,
+        code="seed_refused",
+        message=str(error),
     )
 
 
@@ -1467,6 +1484,7 @@ def create_app(
         GeneratedScenarioDeletedError,
         _generated_scenario_deleted_handler,
     )
+    application.add_exception_handler(SeedRefusedError, _seed_refused_handler)
     application.add_exception_handler(IdempotencyConflictError, _idempotency_conflict_handler)
     application.add_exception_handler(
         InvalidIdempotencyKeyError,
@@ -2341,6 +2359,7 @@ def create_app(
         experiment_annotation_service,
     ).register(router)
     JudgeConfigurationRoutes(judge_configuration_service).register(router)
+    LabSeedRoutes(settings).register(router)
     LabStatusRoutes(settings).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)

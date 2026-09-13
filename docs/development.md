@@ -56,11 +56,18 @@ that stopped it are named. To start again, delete the database file and run `mak
 rm -f var/agent-lab.db && make migrate && make seed
 ```
 
+The same seed is a button, on `/settings` under *The fast path* (ADR 0047). It posts to
+`/api/v1/lab-seed`, which awaits the function the command awaits and is subject to both refusals
+unchanged, so a lab holding anything at all is declined with its occupied tables named and keeps
+every row. Use whichever is in front of you; the command is what CI and `test_demo_seed.py` run.
+The reset above stays a terminal operation — deleting a database file is not something a page
+should offer — which makes it the thing to go looking for when the button refuses.
+
 `/guides/setup` in the Studio is the same chain written down for somebody operating the product
 rather than the checkout: ten steps in dependency order, what each one is, and what refuses until
-it is satisfied. It names `make seed` at the top as a command and the reset above as three, and it
-exposes no control that performs either — the seed is a command and never a route (ADR 0043), so
-there is no button anywhere in the application that populates, resets or reseeds a database.
+it is satisfied. It names `make seed` at the top as a command, links to the settings button beside
+it, and names the reset above as three commands. The guide itself performs nothing: it reads the
+chain and links to where each step is done, so no card on it carries a control.
 `/guides/glossary` defines the vocabulary those steps use, and the screens that speak it each carry
 a *Show me around* control in their header that walks that one screen with the same definitions in
 it. The control is on every one of those screens, for everybody: there is no mode to turn it on

@@ -408,3 +408,88 @@ describe("workspace shell", () => {
     expect(screen.getByRole("button", { name: "Expand navigation" })).toBeVisible();
   });
 });
+
+describe("the fast path", () => {
+  const SEEDED = {
+    shop_id: SHOP_ID,
+    customer_id: "11111111-1111-4111-8111-111111111111",
+    support_identity_id: "22222222-2222-4222-8222-222222222222",
+    order_id: "33333333-3333-4333-8333-333333333333",
+    ticket_id: "44444444-4444-4444-8444-444444444444",
+    scenario_id: "55555555-5555-4555-8555-555555555555",
+    scenario_version: 1,
+    snapshot_id: "66666666-6666-4666-8666-666666666666",
+    judge_id: "77777777-7777-4777-8777-777777777777",
+    configuration_ids: ["88888888-8888-4888-8888-888888888888"],
+    experiment_id: "99999999-9999-4999-8999-999999999999",
+    run_ids: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+  };
+
+  function emptyLab() {
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] })));
+  }
+
+  it("declines to offer the seed to a lab that already holds a shop", async () => {
+    renderAt("/settings");
+
+    const card = within(await screen.findByRole("region", { name: "The fast path" }));
+
+    expect(card.getByRole("button", { name: /create the demo/i })).toBeDisabled();
+    expect(card.getByRole("status")).toHaveTextContent(/not empty/i);
+  });
+
+  it("creates nothing on the first press, and the demo on the second", async () => {
+    const user = userEvent.setup();
+    emptyLab();
+    let posted = 0;
+    server.use(
+      http.post("*/api/v1/lab-seed", () => {
+        posted += 1;
+        return HttpResponse.json(SEEDED, { status: 201 });
+      }),
+    );
+    renderAt("/settings");
+    const card = within(await screen.findByRole("region", { name: "The fast path" }));
+
+    await user.click(card.getByRole("button", { name: "Create the demo" }));
+
+    // A button that writes a dozen published versions should not do it on a stray click.
+    expect(posted).toBe(0);
+
+    await user.click(card.getByRole("button", { name: "Press again to create it" }));
+
+    expect(posted).toBe(1);
+    expect(await card.findByRole("link", { name: "Read the comparison" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/bench/${SEEDED.experiment_id}/results`,
+    );
+  });
+
+  it("reads back the refusal rather than reporting a failure of its own", async () => {
+    const user = userEvent.setup();
+    emptyLab();
+    server.use(
+      http.post("*/api/v1/lab-seed", () =>
+        HttpResponse.json(
+          {
+            code: "seed_refused",
+            message:
+              "sqlite:///var/agent-lab.db already holds seeded data: definition_drafts (3). " +
+              "To start again, delete the database file this URL points at.",
+            request_id: "r",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderAt("/settings");
+    const card = within(await screen.findByRole("region", { name: "The fast path" }));
+
+    await user.click(card.getByRole("button", { name: "Create the demo" }));
+    await user.click(card.getByRole("button", { name: "Press again to create it" }));
+
+    // The tables that stopped it and the remedy, which is the whole point of the refusal.
+    expect(await card.findByRole("alert")).toHaveTextContent(/definition_drafts \(3\)/);
+    expect(card.getByRole("alert")).toHaveTextContent(/delete the database file/);
+  });
+});
