@@ -6552,9 +6552,16 @@ components:
     Currency:
       type: string
       enum:
-      - EUR
       - USD
+      - EUR
+      - JPY
       - GBP
+      - CNY
+      - AUD
+      - CAD
+      - CHF
+      - HKD
+      - SGD
       title: Currency
       description: Currencies the lab can express; extend deliberately, never from
         authored input.

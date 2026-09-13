@@ -63,12 +63,27 @@ _require_decimal_text = partial(require_decimal_text, error=ShopConfigurationErr
 _require_locale = partial(require_locale, error=ShopConfigurationError)
 
 
+# The docstring below is published as the contract's description, so the reasoning stays here.
+# The membership rule is "the ten most traded currencies, in that order": a later reader can
+# apply it, where a list grown one request at a time can only be added to.
+#
+# Every amount is still canonicalized to two decimals. JPY is quoted in whole yen in the world
+# and as `1200.00` here, and the lab would accept `1200.50` from an author. Teaching `Money`
+# each currency's minor unit would change `canonical_amount` for every amount ever written, and
+# so every fingerprint taken over one: a migration, not a line in this enum.
 class Currency(StrEnum):
     """Currencies the lab can express; extend deliberately, never from authored input."""
 
-    EUR = "EUR"
     USD = "USD"
+    EUR = "EUR"
+    JPY = "JPY"
     GBP = "GBP"
+    CNY = "CNY"
+    AUD = "AUD"
+    CAD = "CAD"
+    CHF = "CHF"
+    HKD = "HKD"
+    SGD = "SGD"
 
 
 @dataclass(frozen=True, slots=True)

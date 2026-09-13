@@ -2470,7 +2470,7 @@ export interface components {
      * @description Currencies the lab can express; extend deliberately, never from authored input.
      * @enum {string}
      */
-    Currency: "EUR" | "USD" | "GBP";
+    Currency: "USD" | "EUR" | "JPY" | "GBP" | "CNY" | "AUD" | "CAD" | "CHF" | "HKD" | "SGD";
     /** CustomerIdentitySchema */
     CustomerIdentitySchema: {
       /** Given Name */

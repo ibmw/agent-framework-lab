@@ -87,6 +87,27 @@ def test_malformed_stored_documents_report_the_failing_path() -> None:
         shop_payload_from_document(document)
 
 
+def test_every_currency_the_lab_expresses_can_be_declared_and_priced_in() -> None:
+    """The enum is the set an author may use, not a label on the three the seed happens to use.
+
+    A currency that parses but cannot be priced in would be a currency the lab advertises and
+    then refuses, so each one is taken through the boundary it would really cross.
+    """
+    for currency in Currency:
+        payload = publishable_shop(
+            identity=identity(currencies=(currency,)),
+            products=(
+                product(variants=(variant(variant_price=Money(Decimal("250.00"), currency)),)),
+            ),
+        )
+        document = json.loads(shop_payload_canonical_json(payload))
+
+        restored = shop_payload_from_document(document)
+
+        assert restored.identity.currencies == (currency,)
+        assert restored.products[0].variants[0].price == Money(Decimal("250.00"), currency)
+
+
 def test_unsupported_enum_values_are_rejected_rather_than_silently_dropped() -> None:
     document = json.loads(shop_payload_canonical_json(publishable_shop()))
     document["identity"]["currencies"] = ["XBT"]
