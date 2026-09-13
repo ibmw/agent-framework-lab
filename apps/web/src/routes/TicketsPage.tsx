@@ -28,6 +28,7 @@ import {
   canPublish,
   Fingerprint,
   IssueList,
+  PageHeader,
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
@@ -123,98 +124,123 @@ export function TicketsPage() {
     return () => controller.abort();
   }, [reload]);
 
-  const visible = tickets.filter((ticket) => matches(ticket, filter));
+  const visible = useMemo(
+    () => tickets.filter((ticket) => matches(ticket, filter)),
+    [tickets, filter],
+  );
+
+  // The list is a way in rather than a waiting room: an operator who opens Tickets is shown the
+  // one they touched last instead of an empty pane telling them to pick something. Only when no
+  // ticket is named — a reader who navigated to one, or who filtered until nothing matched, is
+  // not moved — and `replace`, so the way back out is the page they came from and not this
+  // redirect happening again.
+  useEffect(() => {
+    if (ticketId !== undefined || loading || visible.length === 0) {
+      return;
+    }
+    const latest = visible.reduce((newest, ticket) =>
+      ticket.updated_at > newest.updated_at ? ticket : newest,
+    );
+    navigate(`/shops/${shopId}/tickets/${latest.ticket_id}`, { replace: true });
+  }, [ticketId, loading, visible, navigate, shopId]);
 
   return (
-    <div className="grid min-h-0 gap-4 xl:grid-cols-[262px_minmax(0,1fr)]">
-      <section className={`${surfaceClasses} overflow-hidden`} aria-label="Tickets">
-        <div className="flex items-center gap-2 border-b border-admin-border px-3 py-2.5">
-          <h1 className="text-sm font-bold" data-tour="page-name">
-            Tickets
-          </h1>
-          <TourLaunch id="tickets" />
-          <label className="ml-auto text-xs">
-            <span className="sr-only">Filter tickets</span>
-            <select
-              aria-label="Filter tickets"
-              className="h-7 rounded-md border border-admin-border bg-admin-surface px-1.5 text-[12px] font-semibold text-admin-ink-soft"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as Filter)}
-            >
-              {FILTERS.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label} ({tickets.filter((ticket) => matches(ticket, entry.id)).length})
-                </option>
+    <>
+      {/* The page's own header, like every other surface in the workspace. This screen used to
+          put its name inside the list panel, which left it the one page whose title and tour
+          control sat somewhere different from everywhere else. */}
+      <PageHeader
+        title="Tickets"
+        description="An incident as it arrived: the thread, the customer it is about, and the order it concerns. A scenario is composed on a published ticket."
+        actions={<TourLaunch id="tickets" />}
+      />
+      <div className="grid min-h-0 gap-4 xl:grid-cols-[262px_minmax(0,1fr)]">
+        <section className={`${surfaceClasses} overflow-hidden`} aria-label="Tickets">
+          <div className="flex items-center gap-2 border-b border-admin-border px-3 py-2.5">
+            <h2 className="text-sm font-bold">Tickets</h2>
+            <label className="ml-auto text-xs">
+              <span className="sr-only">Filter tickets</span>
+              <select
+                aria-label="Filter tickets"
+                className="h-7 rounded-md border border-admin-border bg-admin-surface px-1.5 text-[12px] font-semibold text-admin-ink-soft"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as Filter)}
+              >
+                {FILTERS.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label} ({tickets.filter((ticket) => matches(ticket, entry.id)).length})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {listError ? (
+            <p role="alert" className="p-3 text-[13px] text-lab-error">
+              {listError}
+            </p>
+          ) : null}
+
+          {loading ? (
+            <p className="p-3 text-[13px] text-admin-muted">Loading tickets…</p>
+          ) : visible.length === 0 ? (
+            <p className="p-3 text-[13px] text-admin-muted">
+              No ticket here yet. A ticket is one customer's incident — a scenario is built on it.
+            </p>
+          ) : (
+            <ul className="grid">
+              {visible.map((ticket) => (
+                <li key={ticket.ticket_id}>
+                  <Link
+                    to={`../tickets/${ticket.ticket_id}`}
+                    relative="path"
+                    className={`grid gap-1 border-b border-admin-border/60 px-3 py-2.5 text-[13px] no-underline ${
+                      ticket.ticket_id === ticketId ? "bg-[#e8f0ed]" : "hover:bg-admin-canvas"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-admin-border text-[10px] font-bold text-admin-ink-soft">
+                        {initials(ticket.customer_display_name)}
+                      </span>
+                      <span className="font-semibold text-lab-ink">
+                        {ticket.customer_display_name}
+                      </span>
+                      <span className="ml-auto text-[11px] text-admin-muted">
+                        {ticket.opened_at ? messageDay(ticket.opened_at).slice(5) : "—"}
+                      </span>
+                    </div>
+                    <div className="font-semibold text-admin-ink">{ticket.subject}</div>
+                    <div className="truncate text-admin-muted">{ticket.preview}</div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-admin-muted">
+                      <StatusBadge status={ticket.status} />
+                      <span>{channelLabel(ticket.channel).toLowerCase()}</span>
+                      <span>·</span>
+                      <span>{originLabel(ticket.origin_kind)}</span>
+                    </div>
+                  </Link>
+                </li>
               ))}
-            </select>
-          </label>
-        </div>
+            </ul>
+          )}
 
-        {listError ? (
-          <p role="alert" className="p-3 text-[13px] text-lab-error">
-            {listError}
-          </p>
-        ) : null}
+          <NewTicketForm
+            shopId={shopId}
+            onCreated={async (created) => {
+              await reload();
+              navigate(`/shops/${shopId}/tickets/${created}`);
+            }}
+          />
+        </section>
 
-        {loading ? (
-          <p className="p-3 text-[13px] text-admin-muted">Loading tickets…</p>
-        ) : visible.length === 0 ? (
-          <p className="p-3 text-[13px] text-admin-muted">
-            No ticket here yet. A ticket is one customer's incident — a scenario is built on it.
-          </p>
+        {ticketId ? (
+          <TicketWorkspace shopId={shopId} ticketId={ticketId} onSaved={() => void reload()} />
         ) : (
-          <ul className="grid">
-            {visible.map((ticket) => (
-              <li key={ticket.ticket_id}>
-                <Link
-                  to={`../tickets/${ticket.ticket_id}`}
-                  relative="path"
-                  className={`grid gap-1 border-b border-admin-border/60 px-3 py-2.5 text-[13px] no-underline ${
-                    ticket.ticket_id === ticketId ? "bg-[#e8f0ed]" : "hover:bg-admin-canvas"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-admin-border text-[10px] font-bold text-admin-ink-soft">
-                      {initials(ticket.customer_display_name)}
-                    </span>
-                    <span className="font-semibold text-lab-ink">
-                      {ticket.customer_display_name}
-                    </span>
-                    <span className="ml-auto text-[11px] text-admin-muted">
-                      {ticket.opened_at ? messageDay(ticket.opened_at).slice(5) : "—"}
-                    </span>
-                  </div>
-                  <div className="font-semibold text-admin-ink">{ticket.subject}</div>
-                  <div className="truncate text-admin-muted">{ticket.preview}</div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-admin-muted">
-                    <StatusBadge status={ticket.status} />
-                    <span>{channelLabel(ticket.channel).toLowerCase()}</span>
-                    <span>·</span>
-                    <span>{originLabel(ticket.origin_kind)}</span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <p className="text-[13px] text-admin-muted">
+            {loading ? "Loading tickets…" : "No tickets yet. Open one to start an incident."}
+          </p>
         )}
-
-        <NewTicketForm
-          shopId={shopId}
-          onCreated={async (created) => {
-            await reload();
-            navigate(`/shops/${shopId}/tickets/${created}`);
-          }}
-        />
-      </section>
-
-      {ticketId ? (
-        <TicketWorkspace shopId={shopId} ticketId={ticketId} onSaved={() => void reload()} />
-      ) : (
-        <p className="text-[13px] text-admin-muted">
-          Select a ticket to read its thread, or open a new one.
-        </p>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 

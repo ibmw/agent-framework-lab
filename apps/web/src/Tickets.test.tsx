@@ -350,16 +350,48 @@ describe("ticket list", () => {
     expect(within(list).getByRole("option", { name: "Open (1)" })).toBeVisible();
   });
 
+  it("opens on the incident touched most recently, not the first one listed", async () => {
+    // Listed second and updated later, so a page that opened on the head of the list would pass
+    // this by accident. What the operator wants back is the one they were last working on.
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json({
+          tickets: [
+            { ...TICKETS.tickets[1], updated_at: "2026-08-24T09:00:00+00:00" },
+            { ...TICKETS.tickets[0], updated_at: "2026-08-25T17:30:00+00:00" },
+          ],
+        }),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    expect(
+      await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ }),
+    ).toBeVisible();
+  });
+
+  it("says so rather than opening something when the shop has no incidents", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () => HttpResponse.json({ tickets: [] })),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    expect(await screen.findByText(/No tickets yet/)).toBeVisible();
+  });
+
   it("opens a ticket for a customer attached to this shop", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets`);
     await screen.findByRole("region", { name: "Tickets" });
 
-    await screen.findByRole("option", { name: "Maya Laurent" });
-    await user.type(screen.getByLabelText("Reference"), "t-900");
-    await user.type(screen.getByLabelText("Subject"), "Late delivery");
-    await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
-    await user.click(screen.getByRole("button", { name: "Open ticket" }));
+    // Scoped to the list panel: the page opens on the most recently updated ticket, so the
+    // editor's own Subject is on screen beside this form's.
+    const list = within(screen.getByRole("region", { name: "Tickets" }));
+    await list.findByRole("option", { name: "Maya Laurent" });
+    await user.type(list.getByLabelText("Reference"), "t-900");
+    await user.type(list.getByLabelText("Subject"), "Late delivery");
+    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
+    await user.click(list.getByRole("button", { name: "Open ticket" }));
 
     await waitFor(() => expect(createdTickets).toHaveLength(1));
     expect(createdTickets[0]).toMatchObject({
