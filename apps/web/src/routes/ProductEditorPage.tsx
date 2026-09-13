@@ -2,12 +2,8 @@ import type {
   AttributeSchema,
   OptionSchema,
   ProductViewSchema,
-  ShopContentSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-
-type Currency = ShopContentSchema["identity"]["currencies"][number];
-
 import { type FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -18,6 +14,7 @@ import {
   PageHeader,
   VersionChips,
 } from "../components/WorkspaceChrome";
+import type { Currency } from "../lib/currencies";
 import {
   findProduct,
   issuesForProduct,

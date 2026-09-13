@@ -5,6 +5,8 @@ import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
 import { LocaleField } from "../components/LocaleField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { CURRENCIES, type Currency } from "../lib/currencies";
+import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
 import { shopSlugFromName } from "../lib/shop";
 import {
   accentButtonClasses,
@@ -18,8 +20,6 @@ import {
 } from "../lib/ui";
 import { AppShell } from "../shell/AppShell";
 
-const CURRENCIES = ["EUR", "USD", "GBP"] as const;
-
 /** A ready-made identity for the form, for an operator who came to see the product rather than
  * to name a shop. It fills the four fields and creates nothing: what gets written is still
  * whatever is in the form when *Create shop* is pressed, so the example can be read and edited
@@ -29,12 +29,15 @@ const CURRENCIES = ["EUR", "USD", "GBP"] as const;
  * with a catalog, a scenario and a finished comparison behind it; this one is an empty draft. Two
  * different things under one name would make the shops list lie about which of them you are
  * looking at.
+ *
+ * It answers a name and a locale only. The slug and the currency are derived from those by the
+ * same code that derives them while somebody types, so the example cannot drift into showing a
+ * pairing the form itself would never suggest.
  */
 const EXAMPLE_SHOP = {
   name: "Harbour Lane Supply",
   locale: "en-GB",
-  currency: "EUR",
-} as const satisfies { currency: (typeof CURRENCIES)[number] } & Record<string, string>;
+} as const satisfies Record<string, string>;
 
 export function ShopsPage() {
   const navigate = useNavigate();
@@ -43,8 +46,8 @@ export function ShopsPage() {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [locale, setLocale] = useState("en-GB");
-  const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>("EUR");
+  const [locale, setLocale] = useState(DEFAULT_LOCALE.tag);
+  const [currency, setCurrency] = useState<Currency>(DEFAULT_LOCALE.currency);
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
   // The slug follows the name until somebody answers the slug themselves, and then it stops:
@@ -52,6 +55,10 @@ export function ShopsPage() {
   // worse than one that never helped. Emptying it hands it back, which is the way out for a
   // reader who edited it and wants the suggestion again without reloading the page.
   const [slugEdited, setSlugEdited] = useState(false);
+  // The currency follows the locale on the same terms, and stops for the same reason. It has no
+  // way back, because a dropdown cannot be emptied the way the slug can: choosing a currency is
+  // the last word on it, and the way to hand it back is to reload the empty form.
+  const [currencyEdited, setCurrencyEdited] = useState(false);
 
   function changeName(value: string) {
     setName(value);
@@ -65,14 +72,31 @@ export function ShopsPage() {
     setSlugEdited(value !== "");
   }
 
+  function changeLocale(value: string) {
+    setLocale(value);
+    const suggested = currencyForLocale(value);
+    // Nothing is proposed for a locale the shortlist does not name, so a hand-typed `is-IS`
+    // leaves the currency where it stands rather than reaching for the nearest guess.
+    if (!currencyEdited && suggested) {
+      setCurrency(suggested);
+    }
+  }
+
+  function changeCurrency(value: string) {
+    setCurrency(value as Currency);
+    setCurrencyEdited(true);
+  }
+
   function fillWithExample() {
     setName(EXAMPLE_SHOP.name);
     setSlug(shopSlugFromName(EXAMPLE_SHOP.name));
     setLocale(EXAMPLE_SHOP.locale);
-    setCurrency(EXAMPLE_SHOP.currency);
-    // The example's slug is what its name derives, so this is filling the pair in rather than
-    // answering the slug: renaming the example afterwards still carries the slug along.
+    setCurrency(currencyForLocale(EXAMPLE_SHOP.locale) ?? DEFAULT_LOCALE.currency);
+    // The example's slug and currency are what its name and locale derive, so this is filling
+    // the pairs in rather than answering either: renaming or relocating the example afterwards
+    // still carries them along.
     setSlugEdited(false);
+    setCurrencyEdited(false);
     setFilled(true);
   }
 
@@ -194,19 +218,17 @@ export function ShopsPage() {
                   onChange={(event) => changeSlug(event.target.value)}
                 />
               </label>
-              <LocaleField value={locale} required onChange={setLocale} />
+              <LocaleField value={locale} required onChange={changeLocale} />
               <label className={fieldLabelClasses}>
                 Currency
                 <select
                   className={fieldControlClasses}
                   value={currency}
-                  onChange={(event) =>
-                    setCurrency(event.target.value as (typeof CURRENCIES)[number])
-                  }
+                  onChange={(event) => changeCurrency(event.target.value)}
                 >
                   {CURRENCIES.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.code} value={option.code}>
+                      {option.code} — {option.label}
                     </option>
                   ))}
                 </select>

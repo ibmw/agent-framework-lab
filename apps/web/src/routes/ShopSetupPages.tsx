@@ -20,6 +20,7 @@ import {
   PageHeader,
   VersionChips,
 } from "../components/WorkspaceChrome";
+import { CURRENCIES } from "../lib/currencies";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -46,7 +47,6 @@ const PAYMENT_KINDS: PaymentMethodSchema["kind"][] = [
 ];
 
 const CHANNELS: ShopContentSchema["identity"]["channels"][number][] = ["chat", "email", "phone"];
-const CURRENCIES: ShopContentSchema["identity"]["currencies"][number][] = ["EUR", "USD", "GBP"];
 
 function SetupPage({ title, children }: { title: string; children: ReactNode }) {
   const { preview, save, saving, dirty, error } = useShopWorkspace();
@@ -155,23 +155,23 @@ export function ShopIdentityPage() {
         <fieldset className="grid gap-1.5">
           <legend className="text-xs font-semibold text-admin-muted">Currencies</legend>
           <div className="flex flex-wrap gap-3 text-[13px]">
-            {CURRENCIES.map((currency) => (
-              <label key={currency} className="flex items-center gap-1.5">
+            {CURRENCIES.map(({ code, label }) => (
+              <label key={code} className="flex items-center gap-1.5" title={label}>
                 <input
                   type="checkbox"
-                  checked={identity.currencies.includes(currency)}
-                  disabled={isLastSelected(identity.currencies, currency)}
+                  checked={identity.currencies.includes(code)}
+                  disabled={isLastSelected(identity.currencies, code)}
                   onChange={() =>
                     edit({
                       ...content,
                       identity: {
                         ...identity,
-                        currencies: toggle([...identity.currencies], currency),
+                        currencies: toggle([...identity.currencies], code),
                       },
                     })
                   }
                 />
-                {currency}
+                {code}
               </label>
             ))}
           </div>

@@ -55,7 +55,7 @@ describe("creating a shop from an example", () => {
     expect(card.getByLabelText("Name")).toHaveValue("Harbour Lane Supply");
     expect(card.getByLabelText("Slug")).toHaveValue("harbour-lane-supply");
     expect(card.getByLabelText("Locale")).toHaveValue("en-GB");
-    expect(card.getByLabelText("Currency")).toHaveValue("EUR");
+    expect(card.getByLabelText("Currency")).toHaveValue("GBP");
   });
 
   it("creates nothing until the operator presses Create shop", async () => {
@@ -85,7 +85,7 @@ describe("creating a shop from an example", () => {
         name: "Rivermouth Goods",
         slug: "rivermouth-goods",
         locale: "en-GB",
-        currencies: ["EUR"],
+        currencies: ["GBP"],
         channels: ["chat"],
       },
     });
@@ -166,7 +166,7 @@ describe("the slug a name suggests", () => {
         name: "Café Noël",
         slug: "cafe-noel",
         locale: "en-GB",
-        currencies: ["EUR"],
+        currencies: ["GBP"],
         channels: ["chat"],
       },
     });
@@ -199,5 +199,55 @@ describe("the locale a shop is given", () => {
     // The shortlist is a suggestion and not the permitted set: a form that refused what the API
     // accepts would be a second, stricter rule nobody wrote down.
     expect(created).toMatchObject({ identity: { locale: "is-IS" } });
+  });
+});
+
+describe("the currency a locale implies", () => {
+  it("answers the currency as the locale is chosen", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.clear(card.getByLabelText("Locale"));
+    await user.type(card.getByLabelText("Locale"), "ja-JP");
+
+    expect(card.getByLabelText("Currency")).toHaveValue("JPY");
+  });
+
+  it("stops following once the operator answers the currency themselves", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.selectOptions(card.getByLabelText("Currency"), "USD");
+    await user.clear(card.getByLabelText("Locale"));
+    await user.type(card.getByLabelText("Locale"), "ja-JP");
+
+    // A shop priced for a market it does not speak the language of is a real thing to author,
+    // so the deliberate answer stands rather than being corrected on the next keystroke.
+    expect(card.getByLabelText("Currency")).toHaveValue("USD");
+  });
+
+  it("leaves the currency alone for a locale it has no currency for", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.clear(card.getByLabelText("Locale"));
+    await user.type(card.getByLabelText("Locale"), "is-IS");
+
+    // Iceland prices in krona, which the lab cannot express. Proposing the nearest currency
+    // would be inventing an answer; the standing one is at least one somebody can see.
+    expect(card.getByLabelText("Currency")).toHaveValue("GBP");
+  });
+
+  it("offers every currency the lab can express, named as well as coded", async () => {
+    renderShops();
+    const card = await createShopCard();
+
+    const options = within(card.getByLabelText("Currency")).getAllByRole("option");
+
+    expect(options).toHaveLength(10);
+    expect(options[0]).toHaveTextContent("USD — US dollar");
   });
 });
