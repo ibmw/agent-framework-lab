@@ -150,9 +150,8 @@ export function stepHref(step: SetupStepShape, shopId: string): string {
  *
  * Here rather than beside the page that renders it, because it is no longer read by one surface.
  * `/guides/setup` walks all ten in order for somebody who has nothing yet; a tour on any one of
- * those ten surfaces reads that step's `gate` — and the previous step's — to say where a reader
- * has arrived and what it is standing in front of. One table means the guide and the popover
- * cannot come to disagree about what refuses until what.
+ * those ten surfaces reads that step's own `gate` to say what stays refused until the work there
+ * is done. One table means the guide and the popover cannot come to disagree about it.
  */
 export interface StepCopy {
   /** What this link of the chain is, in `[[term-id]]` markup. */

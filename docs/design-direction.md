@@ -245,7 +245,7 @@ The band is removed. Both readings drawn on it — the derived next-step strip a
 content column, and the inline explainer below each page header — are replaced by a **product
 tour**: a control in the page header, and, when an operator asks for it, an overlay that dims the
 surface, cuts one element out of the dim, and explains that element in a popover beside it, with
-*Back*, *Next* and a step count. Fourteen surfaces have one, and no tour crosses a screen (ADR
+*Back*, *Next* and a step count. Fifteen surfaces have one, and no tour crosses a screen (ADR
 0045). Seven were written as walks of the screen itself — each shop's home, the two block libraries,
 the scenario editor, the starting states, the live bench and the results screen. The other seven are
 the steps of the setup chain that had none, and every surface on that chain — those seven plus the

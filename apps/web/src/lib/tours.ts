@@ -36,6 +36,7 @@ export type TourId =
   | "support-identities"
   | "agent-configurations"
   | "judges"
+  | "bench-setup"
   | "bench"
   | "results";
 
@@ -237,7 +238,6 @@ export const TOURS: Record<TourId, Tour> = {
 
   bench: {
     surface: "the live bench",
-    chain: { step: "experiment", anchor: PAGE_NAME },
     steps: [
       {
         anchor: '[data-tour="bench-arms"]',
@@ -324,6 +324,15 @@ export const TOURS: Record<TourId, Tour> = {
   judges: {
     surface: "judges",
     chain: { step: "judge", anchor: PAGE_NAME },
+    steps: [],
+  },
+
+  "bench-setup": {
+    surface: "the bench",
+    // The chain's tenth step is `/bench`, which is this page. The live bench is where an
+    // experiment is *watched*, and a reader only reaches it by starting one — so a chain step
+    // there would be an answer offered after the question had stopped being asked.
+    chain: { step: "experiment", anchor: PAGE_NAME },
     steps: [],
   },
 };

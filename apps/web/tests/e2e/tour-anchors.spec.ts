@@ -1,4 +1,5 @@
 import { test as base, expect } from "@playwright/test";
+import { SETUP_CHAIN, stepHref } from "../../src/lib/setupPath";
 import { TOUR_IDS, TOURS, type TourId, tourSteps } from "../../src/lib/tours";
 import { type BuiltLab, buildLab } from "./support/lab";
 
@@ -30,6 +31,7 @@ const SURFACES: Record<TourId, (lab: BuiltLab) => string> = {
   "support-identities": (lab) => `/shops/${lab.shopId}/support-identities`,
   "agent-configurations": (lab) => `/shops/${lab.shopId}/agent-configurations`,
   judges: (lab) => `/shops/${lab.shopId}/judges`,
+  "bench-setup": (lab) => `/shops/${lab.shopId}/bench`,
   bench: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}`,
   results: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}/results`,
 };
@@ -67,6 +69,27 @@ test("has a tour to sweep at all", () => {
   expect(TOUR_IDS.length).toBeGreaterThan(0);
   for (const id of TOUR_IDS) {
     expect(tourSteps(id).length, `${id} declares no steps`).toBeGreaterThan(0);
+  }
+});
+
+test("mounts each chain step on the surface the chain sends a reader to", () => {
+  // The defect this catches, having already happened once: the tenth step is `/bench`, and its
+  // chain step sat on the live bench at `/bench/:experimentId` — a page reached only by starting
+  // an experiment, so the reading arrived after the question had stopped being asked. Every
+  // anchor still resolved and every case still passed, because "is it on the right screen" was
+  // nowhere asserted.
+  const SHOP = "11111111-1111-4111-8111-111111111111";
+  for (const id of TOUR_IDS) {
+    const chain = TOURS[id].chain;
+    if (chain === undefined) {
+      continue;
+    }
+    const step = SETUP_CHAIN.find((entry) => entry.id === chain.step);
+    expect(step, `${id} claims a chain step the chain does not have`).toBeDefined();
+    expect(
+      SURFACES[id]({ shopId: SHOP } as BuiltLab),
+      `${id} carries the ${chain.step} step but is not the surface the guide links to`,
+    ).toBe(stepHref(step!, SHOP));
   }
 });
 

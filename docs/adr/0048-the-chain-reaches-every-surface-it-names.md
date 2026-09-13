@@ -25,8 +25,11 @@ where somebody is most likely to be lost, because they are where the work is don
 
 ## Decision
 
-**Every step of the chain offers a tour, and opens on its place in it.** Fourteen surfaces now
-have a launch control. The ten on the chain open with a step titled `Step N of 10 · Label`, which
+**Every step of the chain offers a tour, and opens on its place in it.** Fifteen surfaces now
+have a launch control. The tenth step is `/bench` — the page an experiment is *started* on — and
+not the live bench it is watched on, which a reader reaches only by starting one; a chain step
+there would answer a question after it had stopped being asked. The live bench keeps its own walk
+and carries no chain step. The ten on the chain open with a step titled `Step N of 10 · Label`, which
 says which neighbours the chain puts either side and then gives that step's gate.
 
 **That step is composed, not written.** `chainPlacement` reads the position and the labels from

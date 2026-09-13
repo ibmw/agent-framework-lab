@@ -16,6 +16,7 @@ import {
 import { describeApiError, LabApiError } from "../api/client";
 import { listExperiments, previewExperiment, startExperiment } from "../api/experiments";
 import { listScenarios, listScenarioVersions } from "../api/scenarios";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -240,6 +241,7 @@ export function ExperimentSetupPage() {
     <>
       <PageHeader
         title="New experiment"
+        actions={<TourLaunch id="bench-setup" />}
         description="One scenario, one or two agent configurations, isolated arms. Every referenced version is pinned at start."
       />
 
