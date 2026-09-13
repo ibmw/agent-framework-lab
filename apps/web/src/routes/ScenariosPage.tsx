@@ -4,12 +4,12 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createScenario, listScenarios } from "../api/scenarios";
 import { listTickets } from "../api/tickets";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   surfaceClasses,
   tableCellClasses,
@@ -30,7 +30,8 @@ export function ScenariosPage() {
   const [scenarios, setScenarios] = useState<ScenarioSummarySchema[]>([]);
   const [tickets, setTickets] = useState<TicketSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [ticketId, setTicketId] = useState("");
@@ -43,6 +44,7 @@ export function ScenariosPage() {
       ]);
       setScenarios(scenarioList.scenarios);
       setTickets(ticketList.tickets);
+      setLoadError(null);
     },
     [shopId],
   );
@@ -53,7 +55,7 @@ export function ScenariosPage() {
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -67,13 +69,19 @@ export function ScenariosPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
-    setError(null);
+    setFormError(null);
     try {
       await createScenario(shopId, { name, ticket_id: ticketId });
       setName("");
+    } catch (cause: unknown) {
+      setFormError(describeApiError(cause, "The scenario could not be created."));
+      setCreating(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The scenario could not be created."));
+      setLoadError(describeApiError(cause, UNAVAILABLE));
     } finally {
       setCreating(false);
     }
@@ -87,9 +95,9 @@ export function ScenariosPage() {
         actions={<TourLaunch id="scenarios" />}
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -164,8 +172,7 @@ export function ScenariosPage() {
             </p>
           ) : (
             <form className="grid gap-3" onSubmit={submit}>
-              <label className={fieldLabelClasses}>
-                Name
+              <FieldHint label="Name" hint="How this scenario is listed.">
                 <input
                   className={fieldControlClasses}
                   value={name}
@@ -173,11 +180,12 @@ export function ScenariosPage() {
                   placeholder="Wrong shipping address"
                   onChange={(event) => setName(event.target.value)}
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Built on ticket
+              </FieldHint>
+              <FieldHint
+                label="Built on ticket"
+                hint="Fixed here. Context, bindings, and hidden facts all describe this incident."
+              >
                 <select
-                  aria-label="Built on ticket"
                   className={fieldControlClasses}
                   value={ticketId}
                   required
@@ -190,7 +198,12 @@ export function ScenariosPage() {
                     </option>
                   ))}
                 </select>
-              </label>
+              </FieldHint>
+              {formError ? (
+                <p role="alert" className="text-[13px] text-lab-error">
+                  {formError}
+                </p>
+              ) : null}
               <button className={accentButtonClasses} type="submit" disabled={creating}>
                 {creating ? "Creating…" : "Create scenario"}
               </button>

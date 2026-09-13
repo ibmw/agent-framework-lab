@@ -10,12 +10,13 @@ import {
   readAgentConfigurationResources,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   surfaceClasses,
   tableCellClasses,
@@ -28,7 +29,8 @@ export function AgentConfigurationsPage() {
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
   const [identities, setIdentities] = useState<SupportIdentityOptionSchema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [identityId, setIdentityId] = useState("");
@@ -41,6 +43,7 @@ export function AgentConfigurationsPage() {
     setConfigurations(listed.configurations);
     setIdentities(resources.support_identities);
     setIdentityId((current) => current || (resources.support_identities[0]?.identity_id ?? ""));
+    setLoadError(null);
   }, []);
 
   useEffect(() => {
@@ -49,7 +52,7 @@ export function AgentConfigurationsPage() {
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -63,13 +66,19 @@ export function AgentConfigurationsPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
-    setError(null);
+    setFormError(null);
     try {
       await createAgentConfiguration({ name, support_identity_id: identityId });
       setName("");
+    } catch (cause: unknown) {
+      setFormError(describeApiError(cause, "The agent configuration could not be created."));
+      setCreating(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The agent configuration could not be created."));
+      setLoadError(describeApiError(cause, UNAVAILABLE));
     } finally {
       setCreating(false);
     }
@@ -83,9 +92,9 @@ export function AgentConfigurationsPage() {
         actions={<TourLaunch id="agent-configurations" />}
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -141,24 +150,25 @@ export function AgentConfigurationsPage() {
         <Card title="New agent configuration">
           {identities.length === 0 ? (
             <p className="text-[13px] text-admin-muted">
-              Author a support identity first: a configuration adopts exactly one, and publishing
-              pins the version it was published against.
+              Author a support identity first: a configuration adopts exactly one.{" "}
+              {SUPPORT_IDENTITY_PIN_RULE}
             </p>
           ) : (
             <form className="grid gap-3" onSubmit={submit}>
-              <label className={fieldLabelClasses}>
-                Name
+              <FieldHint
+                label="Name"
+                hint="How this configuration is listed on the bench and in history."
+              >
                 <input
                   className={fieldControlClasses}
                   value={name}
                   required
+                  placeholder="Frontline single agent"
                   onChange={(event) => setName(event.target.value)}
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Support identity
+              </FieldHint>
+              <FieldHint label="Support identity" hint={SUPPORT_IDENTITY_PIN_RULE}>
                 <select
-                  aria-label="Support identity"
                   className={fieldControlClasses}
                   value={identityId}
                   onChange={(event) => setIdentityId(event.target.value)}
@@ -169,7 +179,12 @@ export function AgentConfigurationsPage() {
                     </option>
                   ))}
                 </select>
-              </label>
+              </FieldHint>
+              {formError ? (
+                <p role="alert" className="text-[13px] text-lab-error">
+                  {formError}
+                </p>
+              ) : null}
               <button className={accentButtonClasses} type="submit" disabled={creating}>
                 {creating ? "Creating…" : "Create configuration"}
               </button>

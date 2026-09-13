@@ -406,10 +406,100 @@ describe("ticket list", () => {
     renderAt(`/shops/${SHOP_ID}/tickets`);
     await screen.findByRole("region", { name: "Tickets" });
 
-    const channel = screen.getByLabelText("Channel");
+    const list = within(screen.getByRole("region", { name: "Tickets" }));
+    const channel = list.getByLabelText("Channel");
     expect(
       Array.from(channel.querySelectorAll("option")).map((entry) => entry.textContent),
     ).toEqual(["Chat", "Email"]);
+  });
+
+  it("puts each new-ticket field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+    expect(list.getByLabelText("Reference")).toHaveAccessibleDescription(
+      /uppercase letters, digits, and hyphens.*named in scenarios/i,
+    );
+    expect(list.getByLabelText("Subject")).toHaveAccessibleDescription(
+      /the incident as the customer would describe it/i,
+    );
+    expect(list.getByLabelText("Customer")).toHaveAccessibleDescription(
+      /only customers attached to this shop/i,
+    );
+    expect(list.getByLabelText("Channel")).toHaveAccessibleDescription(
+      /the channel the incident arrived on/i,
+    );
+  });
+
+  it("shows a refused create beside the button that failed, not as a listing load error", async () => {
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json(
+          {
+            code: "conflict",
+            message: "A ticket with this reference already exists.",
+            request_id: "r",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+
+    await list.findByRole("option", { name: "Maya Laurent" });
+    await user.type(list.getByLabelText("Reference"), "t-900");
+    await user.type(list.getByLabelText("Subject"), "Late delivery");
+    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
+    await user.click(list.getByRole("button", { name: "Open ticket" }));
+
+    expect(await list.findByRole("alert")).toHaveTextContent(/reference already exists/i);
+    expect(createdTickets).toHaveLength(0);
+  });
+
+  it("reports a failed listing reload as a load error, not a failed create", async () => {
+    let created = false;
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/tickets`, async ({ request }) => {
+        createdTickets.push((await request.json()) as Record<string, unknown>);
+        created = true;
+        return HttpResponse.json(
+          {
+            ticket_id: TICKET_ID,
+            shop_id: SHOP_ID,
+            lifecycle_state: "draft",
+            content: currentContent,
+            created_at: "2026-08-24T12:00:00+00:00",
+            updated_at: "2026-08-24T12:00:00+00:00",
+          } satisfies TicketDraftResponse,
+          { status: 201 },
+        );
+      }),
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () => {
+        if (created) {
+          return HttpResponse.json(
+            { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+            { status: 503 },
+          );
+        }
+        return HttpResponse.json(TICKETS);
+      }),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+
+    await list.findByRole("option", { name: "Maya Laurent" });
+    await user.type(list.getByLabelText("Reference"), "t-900");
+    await user.type(list.getByLabelText("Subject"), "Late delivery");
+    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
+    await user.click(list.getByRole("button", { name: "Open ticket" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
+    const form = list.getByRole("button", { name: "Open ticket" }).closest("form");
+    expect(form).not.toBeNull();
+    expect(within(form as HTMLElement).queryByRole("alert")).toBeNull();
   });
 });
 

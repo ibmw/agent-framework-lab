@@ -288,6 +288,161 @@ describe("customer workspace", () => {
     expect(screen.queryByRole("link", { name: "Tomás Rivera" })).toBeNull();
   });
 
+  it("puts each new-customer field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    const card = within(await screen.findByRole("region", { name: "New customer" }));
+    expect(card.getByLabelText("Given name")).toHaveAccessibleDescription(
+      /display name on tickets and orders/i,
+    );
+    expect(card.getByLabelText("Family name")).toHaveAccessibleDescription(
+      /display name on tickets and orders/i,
+    );
+    expect(card.getByLabelText("Email")).toHaveAccessibleDescription(
+      /fictional address.*reusable across shops/i,
+    );
+    expect(card.getByLabelText("Customer since")).toHaveAccessibleDescription(
+      /the day this fictional customer first bought/i,
+    );
+  });
+
+  it("shows a refused create beside the button, not above the customer list", async () => {
+    server.use(
+      http.post("*/api/v1/customer-profiles", () =>
+        HttpResponse.json(
+          {
+            code: "conflict",
+            message: "A profile with this email already exists.",
+            request_id: "r",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    const card = within(await screen.findByRole("region", { name: "New customer" }));
+
+    await user.type(card.getByLabelText("Given name"), "Maya");
+    await user.type(card.getByLabelText("Family name"), "Laurent");
+    await user.type(card.getByLabelText("Email"), "maya.laurent@example.org");
+    await user.click(card.getByRole("button", { name: "Create and attach" }));
+
+    expect(await card.findByRole("alert")).toHaveTextContent(/email already exists/i);
+    expect(screen.getByRole("heading", { name: "Customers" }).closest("div")).not.toBeNull();
+    const listing = screen.getByRole("link", { name: "Maya Laurent" }).closest("section");
+    expect(listing).not.toBeNull();
+    expect(within(listing as HTMLElement).queryByRole("alert")).toBeNull();
+  });
+
+  it("reports a failed listing reload as a load error, not a failed create", async () => {
+    let created = false;
+    server.use(
+      http.post("*/api/v1/customer-profiles", () => {
+        created = true;
+        return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
+      }),
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        if (created) {
+          return HttpResponse.json(
+            { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+            { status: 503 },
+          );
+        }
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    const card = within(await screen.findByRole("region", { name: "New customer" }));
+
+    await user.type(card.getByLabelText("Given name"), "Camille");
+    await user.type(card.getByLabelText("Family name"), "Dupont");
+    await user.type(card.getByLabelText("Email"), "camille.dupont@example.org");
+    await user.click(card.getByRole("button", { name: "Create and attach" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
+    expect(card.queryByRole("alert")).toBeNull();
+  });
+
+  it("clears a page-level load error when a later listing reload succeeds", async () => {
+    let created = 0;
+    server.use(
+      http.post("*/api/v1/customer-profiles", () => {
+        created += 1;
+        return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
+      }),
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        if (created === 1) {
+          return HttpResponse.json(
+            { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+            { status: 503 },
+          );
+        }
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    const card = within(await screen.findByRole("region", { name: "New customer" }));
+
+    await user.type(card.getByLabelText("Given name"), "Camille");
+    await user.type(card.getByLabelText("Family name"), "Dupont");
+    await user.type(card.getByLabelText("Email"), "camille.dupont@example.org");
+    await user.click(card.getByRole("button", { name: "Create and attach" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
+
+    await user.type(card.getByLabelText("Given name"), "Jules");
+    await user.type(card.getByLabelText("Family name"), "Martin");
+    await user.type(card.getByLabelText("Email"), "jules.martin@example.org");
+    await user.click(card.getByRole("button", { name: "Create and attach" }));
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("clears an initial load error when a later listing reload succeeds", async () => {
+    let listings = 0;
+    server.use(
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        listings += 1;
+        if (listings <= 2) {
+          return HttpResponse.json(
+            {
+              code: "unavailable",
+              message: "The customer service is unavailable.",
+              request_id: "r",
+            },
+            { status: 503 },
+          );
+        }
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+      http.post("*/api/v1/customer-profiles", () =>
+        HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/customer service is unavailable/i);
+
+    const card = within(screen.getByRole("region", { name: "New customer" }));
+    await user.type(card.getByLabelText("Given name"), "Camille");
+    await user.type(card.getByLabelText("Family name"), "Dupont");
+    await user.type(card.getByLabelText("Email"), "camille.dupont@example.org");
+    await user.click(card.getByRole("button", { name: "Create and attach" }));
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
   it("offers the unattached profiles to attach, and attaches one to this shop", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/customers`);

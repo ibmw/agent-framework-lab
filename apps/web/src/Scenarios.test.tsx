@@ -398,6 +398,18 @@ describe("scenario index", () => {
       expect(created).toEqual([{ name: "Damaged delivery", ticket_id: TICKET_ID }]),
     );
   });
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+
+    const card = within(await screen.findByRole("region", { name: "New scenario" }));
+    expect(await card.findByLabelText("Name")).toHaveAccessibleDescription(
+      /how this scenario is listed/i,
+    );
+    expect(card.getByLabelText("Built on ticket")).toHaveAccessibleDescription(
+      /fixed here.*this incident/i,
+    );
+  });
 });
 
 describe("scenario editor", () => {

@@ -28,6 +28,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { ARCHITECTURE_LABELS, ARCHITECTURES } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -588,9 +589,9 @@ export function AgentConfigurationEditorPage() {
 
           <Card title="Reproducibility">
             <p className="text-[13px] text-admin-ink-soft">
-              Publishing pins the support-identity version this draft names. Starting an experiment
-              records the resolved prompt, tone of voice, model, and tool bindings, so a published
-              version keeps explaining a past run while the template stays reusable.
+              {SUPPORT_IDENTITY_PIN_RULE} Starting an experiment records the resolved prompt, tone
+              of voice, model, and tool bindings, so a published version keeps explaining a past run
+              while the template stays reusable.
             </p>
           </Card>
         </div>

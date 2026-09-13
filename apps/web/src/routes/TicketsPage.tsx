@@ -22,6 +22,7 @@ import {
   publishTicket,
   replaceTicketDraft,
 } from "../api/tickets";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
@@ -33,6 +34,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { REFERENCE_PATTERN, TICKET_REFERENCE_RULE } from "../lib/fieldRules";
 import { fromLocalInput, toLocalInput } from "../lib/orders";
 import {
   appendMessage,
@@ -103,6 +105,7 @@ export function TicketsPage() {
   const reload = useCallback(
     async (signal?: AbortSignal) => {
       setTickets((await listTickets(shopId, signal)).tickets);
+      setListError(null);
     },
     [shopId],
   );
@@ -226,7 +229,11 @@ export function TicketsPage() {
           <NewTicketForm
             shopId={shopId}
             onCreated={async (created) => {
-              await reload();
+              try {
+                await reload();
+              } catch (cause: unknown) {
+                setListError(describeApiError(cause, UNAVAILABLE));
+              }
               navigate(`/shops/${shopId}/tickets/${created}`);
             }}
           />
@@ -289,6 +296,7 @@ function NewTicketForm({
     event.preventDefault();
     setBusy(true);
     setError(null);
+    let createdId: string;
     try {
       const created = await createTicket(shopId, {
         reference,
@@ -298,9 +306,16 @@ function NewTicketForm({
       });
       setReference("");
       setSubject("");
-      await onCreated(created.ticket_id);
+      createdId = created.ticket_id;
     } catch (cause: unknown) {
       setError(describeApiError(cause, "The ticket could not be opened."));
+      setBusy(false);
+      return;
+    }
+    try {
+      await onCreated(createdId);
+    } catch {
+      // The ticket exists. Listing and navigation errors must not read as a failed open.
     } finally {
       setBusy(false);
     }
@@ -309,34 +324,31 @@ function NewTicketForm({
   return (
     <form className="grid gap-2 border-t border-admin-border p-3" onSubmit={submit}>
       <h2 className="text-xs font-bold tracking-wide text-admin-muted uppercase">New ticket</h2>
-      {error ? (
-        <p role="alert" className="text-[12px] text-lab-error">
-          {error}
-        </p>
-      ) : null}
-      <label className={fieldLabelClasses}>
-        Reference
+      <FieldHint label="Reference" hint={TICKET_REFERENCE_RULE}>
         <input
           className={fieldControlClasses}
           value={reference}
           required
+          pattern={REFERENCE_PATTERN}
+          title={TICKET_REFERENCE_RULE}
           placeholder="T-204"
           onChange={(event) => setReference(event.target.value.toUpperCase())}
         />
-      </label>
-      <label className={fieldLabelClasses}>
-        Subject
+      </FieldHint>
+      <FieldHint label="Subject" hint="The incident as the customer would describe it.">
         <input
           className={fieldControlClasses}
           value={subject}
           required
+          placeholder="Wrong address concern"
           onChange={(event) => setSubject(event.target.value)}
         />
-      </label>
-      <label className={fieldLabelClasses}>
-        Customer
+      </FieldHint>
+      <FieldHint
+        label="Customer"
+        hint="Only customers attached to this shop can raise a ticket here."
+      >
         <select
-          aria-label="Customer"
           className={fieldControlClasses}
           value={customerId}
           required
@@ -349,11 +361,12 @@ function NewTicketForm({
             </option>
           ))}
         </select>
-      </label>
-      <label className={fieldLabelClasses}>
-        Channel
+      </FieldHint>
+      <FieldHint
+        label="Channel"
+        hint="The channel the incident arrived on. Must be one the shop accepts."
+      >
         <select
-          aria-label="Channel"
           className={fieldControlClasses}
           value={channel}
           onChange={(event) => setChannel(event.target.value as SupportChannel)}
@@ -364,14 +377,16 @@ function NewTicketForm({
             </option>
           ))}
         </select>
-      </label>
+      </FieldHint>
+      {error ? (
+        <p role="alert" className="text-[12px] text-lab-error">
+          {error}
+        </p>
+      ) : null}
       <button className={accentButtonClasses} type="submit" disabled={busy}>
         {busy ? "Opening…" : "Open ticket"}
       </button>
-      <p className="text-xs text-admin-muted">
-        Only customers attached to this shop can raise a ticket here. The first message is authored
-        in the thread.
-      </p>
+      <p className="text-xs text-admin-muted">The first message is authored in the thread.</p>
     </form>
   );
 }

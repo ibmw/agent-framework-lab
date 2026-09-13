@@ -7,6 +7,7 @@ import {
   createCustomerProfile,
   listCustomerProfiles,
 } from "../api/customerProfiles";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -35,7 +36,9 @@ export function CustomersPage() {
   const [attached, setAttached] = useState<CustomerProfileSummarySchema[]>([]);
   const [everything, setEverything] = useState<CustomerProfileSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [givenName, setGivenName] = useState("");
   const [familyName, setFamilyName] = useState("");
@@ -51,6 +54,7 @@ export function CustomersPage() {
       ]);
       setAttached(scoped.profiles);
       setEverything(all.profiles);
+      setLoadError(null);
     },
     [shopId],
   );
@@ -61,7 +65,7 @@ export function CustomersPage() {
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -75,7 +79,7 @@ export function CustomersPage() {
   async function addProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
-    setError(null);
+    setCreateError(null);
     try {
       await createCustomerProfile({
         identity: {
@@ -91,9 +95,15 @@ export function CustomersPage() {
       setGivenName("");
       setFamilyName("");
       setEmail("");
+    } catch (cause: unknown) {
+      setCreateError(describeApiError(cause, "The profile could not be created."));
+      setBusy(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The profile could not be created."));
+      setLoadError(describeApiError(cause, UNAVAILABLE));
     } finally {
       setBusy(false);
     }
@@ -102,13 +112,19 @@ export function CustomersPage() {
   async function attach(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
-    setError(null);
+    setAttachError(null);
     try {
       await attachCustomerProfileToShop(attachId, shopId);
       setAttachId("");
+    } catch (cause: unknown) {
+      setAttachError(describeApiError(cause, "The profile could not be attached."));
+      setBusy(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The profile could not be attached."));
+      setLoadError(describeApiError(cause, UNAVAILABLE));
     } finally {
       setBusy(false);
     }
@@ -126,9 +142,9 @@ export function CustomersPage() {
         actions={<TourLaunch id="customers" />}
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -188,36 +204,41 @@ export function CustomersPage() {
         <div className="grid content-start gap-4">
           <Card title="New customer">
             <form className="grid gap-3" onSubmit={addProfile}>
-              <label className={fieldLabelClasses}>
-                Given name
+              <FieldHint label="Given name" hint="Part of the display name on tickets and orders.">
                 <input
                   className={fieldControlClasses}
                   value={givenName}
                   required
+                  placeholder="Maya"
                   onChange={(event) => setGivenName(event.target.value)}
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Family name
+              </FieldHint>
+              <FieldHint label="Family name" hint="Part of the display name on tickets and orders.">
                 <input
                   className={fieldControlClasses}
                   value={familyName}
                   required
+                  placeholder="Laurent"
                   onChange={(event) => setFamilyName(event.target.value)}
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Email
+              </FieldHint>
+              <FieldHint
+                label="Email"
+                hint="A fictional address used to identify the profile. The profile is reusable across shops."
+              >
                 <input
                   className={fieldControlClasses}
                   type="email"
                   value={email}
                   required
+                  placeholder="maya.laurent@example.org"
                   onChange={(event) => setEmail(event.target.value)}
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Customer since
+              </FieldHint>
+              <FieldHint
+                label="Customer since"
+                hint="The day this fictional customer first bought."
+              >
                 <input
                   className={fieldControlClasses}
                   type="date"
@@ -225,7 +246,12 @@ export function CustomersPage() {
                   required
                   onChange={(event) => setCustomerSince(event.target.value)}
                 />
-              </label>
+              </FieldHint>
+              {createError ? (
+                <p role="alert" className="text-[13px] text-lab-error">
+                  {createError}
+                </p>
+              ) : null}
               <button className={accentButtonClasses} type="submit" disabled={busy}>
                 Create and attach
               </button>
@@ -255,6 +281,11 @@ export function CustomersPage() {
                   ))}
                 </select>
               </label>
+              {attachError ? (
+                <p role="alert" className="text-[13px] text-lab-error">
+                  {attachError}
+                </p>
+              ) : null}
               <button
                 className={outlineButtonClasses}
                 type="submit"

@@ -3,12 +3,12 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createJudgeConfiguration, listJudgeConfigurations } from "../api/judgeConfigurations";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   surfaceClasses,
   tableCellClasses,
@@ -20,12 +20,14 @@ const UNAVAILABLE = "The judge service is unavailable.";
 export function JudgeConfigurationsPage() {
   const [judges, setJudges] = useState<JudgeConfigurationSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     setJudges((await listJudgeConfigurations(signal)).judges);
+    setLoadError(null);
   }, []);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export function JudgeConfigurationsPage() {
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -48,13 +50,19 @@ export function JudgeConfigurationsPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
-    setError(null);
+    setFormError(null);
     try {
       await createJudgeConfiguration({ name });
       setName("");
+    } catch (cause: unknown) {
+      setFormError(describeApiError(cause, "The judge could not be created."));
+      setCreating(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The judge could not be created."));
+      setLoadError(describeApiError(cause, UNAVAILABLE));
     } finally {
       setCreating(false);
     }
@@ -68,9 +76,9 @@ export function JudgeConfigurationsPage() {
         actions={<TourLaunch id="judges" />}
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -123,15 +131,23 @@ export function JudgeConfigurationsPage() {
 
         <Card title="New judge">
           <form className="grid gap-3" onSubmit={submit}>
-            <label className={fieldLabelClasses}>
-              Name
+            <FieldHint
+              label="Name"
+              hint="How this judge is listed. The rubric is written in the editor."
+            >
               <input
                 className={fieldControlClasses}
                 value={name}
                 required
+                placeholder="Resolution quality"
                 onChange={(event) => setName(event.target.value)}
               />
-            </label>
+            </FieldHint>
+            {formError ? (
+              <p role="alert" className="text-[13px] text-lab-error">
+                {formError}
+              </p>
+            ) : null}
             <button className={accentButtonClasses} type="submit" disabled={creating}>
               {creating ? "Creating…" : "Create judge"}
             </button>

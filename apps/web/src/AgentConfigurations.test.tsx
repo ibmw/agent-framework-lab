@@ -349,6 +349,42 @@ describe("agent configuration workspace", () => {
     expect(screen.getByText("Never published")).toBeVisible();
   });
 
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/agent-configurations`);
+
+    const card = within(await screen.findByRole("region", { name: "New agent configuration" }));
+    expect(await card.findByLabelText("Name")).toHaveAccessibleDescription(
+      /listed on the bench and in history/i,
+    );
+    expect(card.getByLabelText("Support identity")).toHaveAccessibleDescription(
+      /publishing pins the support-identity version a configuration names/i,
+    );
+  });
+
+  it("repeats the pinning sentence on the editor", async () => {
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    expect(
+      await screen.findByText(
+        /publishing pins the support-identity version a configuration names/i,
+      ),
+    ).toBeVisible();
+  });
+
+  it("repeats the pinning sentence when no support identity exists yet", async () => {
+    server.use(
+      http.get("*/api/v1/agent-configurations/resources", () =>
+        HttpResponse.json({ ...RESOURCES, support_identities: [] }),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/agent-configurations`);
+    expect(
+      await screen.findByText(
+        /publishing pins the support-identity version a configuration names/i,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("Support identity")).toBeNull();
+  });
+
   it("renders each prompt variable as a chip carrying its resolved value", async () => {
     renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
 

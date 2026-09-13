@@ -3,12 +3,12 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createSupportIdentity, listSupportIdentities } from "../api/supportIdentities";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   surfaceClasses,
   tableCellClasses,
@@ -20,13 +20,15 @@ const UNAVAILABLE = "The support-identity service is unavailable.";
 export function SupportIdentitiesPage() {
   const [identities, setIdentities] = useState<SupportIdentitySummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     setIdentities((await listSupportIdentities(signal)).identities);
+    setLoadError(null);
   }, []);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ export function SupportIdentitiesPage() {
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -49,14 +51,20 @@ export function SupportIdentitiesPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
-    setError(null);
+    setFormError(null);
     try {
       await createSupportIdentity({ role: { name, title, description: "" } });
       setName("");
       setTitle("");
+    } catch (cause: unknown) {
+      setFormError(describeApiError(cause, "The support identity could not be created."));
+      setCreating(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The support identity could not be created."));
+      setLoadError(describeApiError(cause, UNAVAILABLE));
     } finally {
       setCreating(false);
     }
@@ -70,9 +78,9 @@ export function SupportIdentitiesPage() {
         actions={<TourLaunch id="support-identities" />}
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -124,24 +132,32 @@ export function SupportIdentitiesPage() {
 
         <Card title="New support identity">
           <form className="grid gap-3" onSubmit={submit}>
-            <label className={fieldLabelClasses}>
-              Name
+            <FieldHint
+              label="Name"
+              hint="How the identity is listed. Agent configurations adopt a published identity."
+            >
               <input
                 className={fieldControlClasses}
                 value={name}
                 required
+                placeholder="Northstar tier 1"
                 onChange={(event) => setName(event.target.value)}
               />
-            </label>
-            <label className={fieldLabelClasses}>
-              Role title
+            </FieldHint>
+            <FieldHint label="Role title" hint="The role the support agent presents as.">
               <input
                 className={fieldControlClasses}
                 value={title}
                 required
+                placeholder="Customer support representative"
                 onChange={(event) => setTitle(event.target.value)}
               />
-            </label>
+            </FieldHint>
+            {formError ? (
+              <p role="alert" className="text-[13px] text-lab-error">
+                {formError}
+              </p>
+            ) : null}
             <button className={accentButtonClasses} type="submit" disabled={creating}>
               {creating ? "Creating…" : "Create identity"}
             </button>

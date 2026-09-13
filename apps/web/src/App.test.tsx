@@ -234,6 +234,23 @@ function renderAt(path: string) {
   );
 }
 
+describe("adding a product", () => {
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/products`);
+
+    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+    expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
+      /lowercase with hyphens.*tools address the product/i,
+    );
+    expect(card.getByLabelText("Title")).toHaveAccessibleDescription(
+      /the name customers and the catalog see/i,
+    );
+    expect(card.getByLabelText("Category")).toHaveAccessibleDescription(
+      /groups the product in the catalog/i,
+    );
+  });
+});
+
 describe("shop workspace", () => {
   it("lists shops with their published provenance", async () => {
     renderAt("/shops");

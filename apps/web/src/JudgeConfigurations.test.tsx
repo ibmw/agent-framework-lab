@@ -224,6 +224,15 @@ describe("judge workspace", () => {
     await waitFor(() => expect(created).toEqual([{ name: "Tone" }]));
   });
 
+  it("puts the name hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/judges`);
+
+    const card = within(await screen.findByRole("region", { name: "New judge" }));
+    expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
+      /how this judge is listed.*rubric is written in the editor/i,
+    );
+  });
+
   it("shows what each kind of evidence puts in front of the judge", async () => {
     renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
 

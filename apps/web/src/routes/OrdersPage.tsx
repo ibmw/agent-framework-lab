@@ -4,13 +4,14 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listCustomerProfiles } from "../api/customerProfiles";
 import { createOrder, listOrders } from "../api/orders";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
+import { ORDER_REFERENCE_RULE, REFERENCE_PATTERN } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel, todayInput } from "../lib/orders";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   surfaceClasses,
   tableCellClasses,
@@ -49,7 +50,8 @@ export function OrdersPage() {
   const [customers, setCustomers] = useState<CustomerProfileSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [reference, setReference] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -63,6 +65,7 @@ export function OrdersPage() {
       ]);
       setOrders(listed.orders);
       setCustomers(attached.profiles);
+      setLoadError(null);
     },
     [shopId],
   );
@@ -73,7 +76,7 @@ export function OrdersPage() {
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -87,7 +90,7 @@ export function OrdersPage() {
   async function addOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
-    setError(null);
+    setFormError(null);
     try {
       // The date the author picks is a calendar day in their own zone; the contract wants
       // an explicit offset, so the browser resolves it once here.
@@ -97,9 +100,15 @@ export function OrdersPage() {
         placed_at: new Date(`${placedOn}T12:00`).toISOString(),
       });
       setReference("");
+    } catch (cause: unknown) {
+      setFormError(describeApiError(cause, "The order could not be created."));
+      setBusy(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The order could not be created."));
+      setLoadError(describeApiError(cause, UNAVAILABLE));
     } finally {
       setBusy(false);
     }
@@ -115,9 +124,9 @@ export function OrdersPage() {
         actions={<TourLaunch id="orders" />}
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -202,10 +211,11 @@ export function OrdersPage() {
 
         <Card title="Create order">
           <form className="grid gap-3" onSubmit={addOrder}>
-            <label className={fieldLabelClasses}>
-              Customer
+            <FieldHint
+              label="Customer"
+              hint="An order belongs to a customer attached to this shop."
+            >
               <select
-                aria-label="Customer"
                 className={fieldControlClasses}
                 value={customerId}
                 required
@@ -218,20 +228,22 @@ export function OrdersPage() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className={fieldLabelClasses}>
-              Reference
+            </FieldHint>
+            <FieldHint label="Reference" hint={ORDER_REFERENCE_RULE}>
               <input
                 className={fieldControlClasses}
                 value={reference}
                 required
-                pattern="[A-Z0-9]+(-[A-Z0-9]+)*"
-                title="Uppercase alphanumeric, for example NS-10482"
+                pattern={REFERENCE_PATTERN}
+                title={ORDER_REFERENCE_RULE}
+                placeholder="NS-10482"
                 onChange={(event) => setReference(event.target.value.toUpperCase())}
               />
-            </label>
-            <label className={fieldLabelClasses}>
-              Placed on
+            </FieldHint>
+            <FieldHint
+              label="Placed on"
+              hint="The calendar day the fixture was placed, in your timezone."
+            >
               <input
                 className={fieldControlClasses}
                 type="date"
@@ -239,7 +251,12 @@ export function OrdersPage() {
                 required
                 onChange={(event) => setPlacedOn(event.target.value)}
               />
-            </label>
+            </FieldHint>
+            {formError ? (
+              <p role="alert" className="text-[13px] text-lab-error">
+                {formError}
+              </p>
+            ) : null}
             <button
               className={accentButtonClasses}
               type="submit"

@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { describeApiError } from "../api/client";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { toSlug } from "../lib/blocks";
@@ -10,7 +11,6 @@ import type { TourId } from "../lib/tours";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   surfaceClasses,
   tableCellClasses,
@@ -28,6 +28,7 @@ interface LibraryCopy {
   createLabel: string;
   typeHeading: string;
   unavailable: string;
+  namePlaceholder: string;
 }
 
 const OBJECTIVE_COPY: LibraryCopy = {
@@ -41,6 +42,7 @@ const OBJECTIVE_COPY: LibraryCopy = {
   createLabel: "New objective block",
   typeHeading: "Assessment · evidence",
   unavailable: "The objective-block library is unavailable.",
+  namePlaceholder: "read-required-document",
 };
 
 const MUTATION_COPY: LibraryCopy = {
@@ -54,6 +56,7 @@ const MUTATION_COPY: LibraryCopy = {
   createLabel: "New mutation block",
   typeHeading: "Effect",
   unavailable: "The mutation-block library is unavailable.",
+  namePlaceholder: "tool-timeout",
 };
 
 function BlockLibrary({
@@ -67,13 +70,15 @@ function BlockLibrary({
 }) {
   const [blocks, setBlocks] = useState<BlockSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
       setBlocks((await list(signal)).blocks);
+      setLoadError(null);
     },
     [list],
   );
@@ -84,7 +89,7 @@ function BlockLibrary({
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, copy.unavailable));
+          setLoadError(describeApiError(cause, copy.unavailable));
         }
       })
       .finally(() => {
@@ -98,13 +103,19 @@ function BlockLibrary({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
-    setError(null);
+    setFormError(null);
     try {
       await create({ name: toSlug(name) });
       setName("");
+    } catch (cause: unknown) {
+      setFormError(describeApiError(cause, "The block could not be created."));
+      setCreating(false);
+      return;
+    }
+    try {
       await reload();
     } catch (cause: unknown) {
-      setError(describeApiError(cause, "The block could not be created."));
+      setLoadError(describeApiError(cause, copy.unavailable));
     } finally {
       setCreating(false);
     }
@@ -123,9 +134,9 @@ function BlockLibrary({
         description={copy.description}
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -197,19 +208,28 @@ function BlockLibrary({
 
         <Card title={copy.createLabel}>
           <form className="grid gap-3" onSubmit={submit}>
-            <label className={fieldLabelClasses}>
-              Name
+            <FieldHint
+              label="Name"
+              hint="Saved as a lowercase slug. A scenario binds this template to its own shop's objects."
+              extra={
+                name && toSlug(name) !== name ? (
+                  <>
+                    Saved as <code className="font-mono">{toSlug(name)}</code>.
+                  </>
+                ) : undefined
+              }
+            >
               <input
                 className={fieldControlClasses}
                 value={name}
                 required
-                placeholder="read-required-document"
+                placeholder={copy.namePlaceholder}
                 onChange={(event) => setName(event.target.value)}
               />
-            </label>
-            {name && toSlug(name) !== name ? (
-              <p className="text-xs text-admin-muted">
-                Saved as <code className="font-mono">{toSlug(name)}</code>.
+            </FieldHint>
+            {formError ? (
+              <p role="alert" className="text-[13px] text-lab-error">
+                {formError}
               </p>
             ) : null}
             <button className={accentButtonClasses} type="submit" disabled={creating}>

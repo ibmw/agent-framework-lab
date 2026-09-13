@@ -1,17 +1,18 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
+import { FieldHint } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { CURRENCIES, type Currency } from "../lib/currencies";
+import { KEBAB_PATTERN, SHOP_SLUG_RULE } from "../lib/fieldRules";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
 import { shopSlugFromName } from "../lib/shop";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
   surfaceClasses,
@@ -43,7 +44,8 @@ export function ShopsPage() {
   const navigate = useNavigate();
   const [shops, setShops] = useState<ShopSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [locale, setLocale] = useState(DEFAULT_LOCALE.tag);
@@ -100,13 +102,17 @@ export function ShopsPage() {
     setFilled(true);
   }
 
+  const reload = useCallback(async (signal?: AbortSignal) => {
+    setShops((await listShops(signal)).shops);
+    setLoadError(null);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    listShops(controller.signal)
-      .then((response) => setShops(response.shops))
+    reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(cause instanceof LabApiError ? cause.message : "The lab is unavailable.");
+          setLoadError(cause instanceof LabApiError ? cause.message : "The lab is unavailable.");
         }
       })
       .finally(() => {
@@ -115,12 +121,12 @@ export function ShopsPage() {
         }
       });
     return () => controller.abort();
-  }, []);
+  }, [reload]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreating(true);
-    setError(null);
+    setFormError(null);
     try {
       const created = await createShop({
         name,
@@ -131,7 +137,7 @@ export function ShopsPage() {
       });
       navigate(`/shops/${created.shop_id}`);
     } catch (cause: unknown) {
-      setError(cause instanceof LabApiError ? cause.message : "The shop could not be created.");
+      setFormError(cause instanceof LabApiError ? cause.message : "The shop could not be created.");
       setCreating(false);
     }
   }
@@ -143,9 +149,9 @@ export function ShopsPage() {
         description="Every shop is a synthetic simulation environment. Publishing a shop freezes an immutable version that scenarios and experiments pin."
       />
 
-      {error ? (
+      {loadError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError}
         </p>
       ) : null}
 
@@ -197,30 +203,32 @@ export function ShopsPage() {
         <div id="create-shop">
           <Card title="Create a shop">
             <form className="grid gap-3" onSubmit={submit}>
-              <label className={fieldLabelClasses}>
-                Name
+              <FieldHint
+                label="Name"
+                hint="The shop's public name. Publishing freezes it with the rest of the shop."
+              >
                 <input
                   className={fieldControlClasses}
                   value={name}
                   required
                   maxLength={200}
+                  placeholder="Harbour Lane Supply"
                   onChange={(event) => changeName(event.target.value)}
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Slug
+              </FieldHint>
+              <FieldHint label="Slug" hint={SHOP_SLUG_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={slug}
                   required
-                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                  title="Lowercase kebab-case, for example northstar-outfitters. Written from the name until you change it; empty it to have it follow the name again."
+                  pattern={KEBAB_PATTERN}
+                  title={SHOP_SLUG_RULE}
+                  placeholder="harbour-lane-supply"
                   onChange={(event) => changeSlug(event.target.value)}
                 />
-              </label>
+              </FieldHint>
               <LocaleField value={locale} required onChange={changeLocale} />
-              <label className={fieldLabelClasses}>
-                Currency
+              <FieldHint label="Currency" hint="The shop starts with this one currency.">
                 <select
                   className={fieldControlClasses}
                   value={currency}
@@ -232,7 +240,12 @@ export function ShopsPage() {
                     </option>
                   ))}
                 </select>
-              </label>
+              </FieldHint>
+              {formError ? (
+                <p role="alert" className="text-[13px] text-lab-error">
+                  {formError}
+                </p>
+              ) : null}
               <button className={accentButtonClasses} type="submit" disabled={creating}>
                 {creating ? "Creating…" : "Create shop"}
               </button>

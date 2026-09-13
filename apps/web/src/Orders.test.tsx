@@ -377,6 +377,21 @@ describe("order index", () => {
     // The contract wants an explicit offset; the browser resolves the picked day once.
     expect(String(createdOrders[0].placed_at)).toMatch(/Z$/);
   });
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    const form = within(await screen.findByRole("region", { name: "Create order" }));
+    expect(form.getByLabelText("Customer")).toHaveAccessibleDescription(
+      /belongs to a customer attached to this shop/i,
+    );
+    expect(form.getByLabelText("Reference")).toHaveAccessibleDescription(
+      /uppercase letters, digits, and hyphens.*named in tickets/i,
+    );
+    expect(form.getByLabelText("Placed on")).toHaveAccessibleDescription(
+      /calendar day the fixture was placed/i,
+    );
+  });
 });
 
 describe("order editor", () => {

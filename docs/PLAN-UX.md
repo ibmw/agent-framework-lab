@@ -78,15 +78,15 @@ a publish-gate error the form could have caught.
 
 ### Slice 1 — Guidance lives under the field
 
-- [ ] Add `FieldHint` and a required-field convention: the minority is marked, "(optional)" as the
+- [x] Add `FieldHint` and a required-field convention: the minority is marked, "(optional)" as the
   product editor already writes on price, and the convention is written once in
   `docs/design-direction.md`.
-- [ ] Rewrite every create form on it: Shops, Products, Customers, Orders, Tickets, Scenarios,
+- [x] Rewrite every create form on it: Shops, Products, Customers, Orders, Tickets, Scenarios,
   Support identities, Agent configurations, Judges, the two block libraries. Each free-text field
   gets a placeholder that is a realistic example, and each `title=`-only rule on those forms moves
   into the hint.
-- [ ] Render a create form's error inside its card, keeping the page-level alert for load errors.
-- [ ] Record the guidance convention: tours explain a surface, hints explain a field, `title=` is
+- [x] Render a create form's error inside its card, keeping the page-level alert for load errors.
+- [x] Record the guidance convention: tours explain a surface, hints explain a field, `title=` is
   never the only carrier of a rule.
 
 Frames: none. The create forms are the frameless cards in the right column of each index.

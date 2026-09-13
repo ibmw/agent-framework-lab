@@ -309,3 +309,28 @@ walks the chain in dependency order, but it walks it without knowing where a rea
 
 > Narrowed by ADR 0049 (2026-09-13). That page is gone too. Each surface's tour still names its
 > own place in the chain; nothing lists all ten steps in one place.
+
+## Revision — field hints and the required-field convention (2026-09-13)
+
+Create forms carry their own guidance. The convention is written here once — Slice 1's first
+bullet names this file as that place — and applied on every create form; later surfaces adopt
+the same words rather than inventing a second rule. ADR 0050 records that this section is the
+decision, and does not restate it. Slices that PLAN-UX tells to record a router migration or a
+confirm policy still write an ADR of their own (Slices 8 and 13).
+
+**The minority is marked.** When most fields on a form are required, optional fields are
+labeled "(optional)", as the product editor already writes on price. Required fields are not
+starred. A form of only required fields therefore carries no marker.
+
+**Placeholders.** Each free-text field on a create form carries a placeholder that is a
+realistic example, not a restatement of the label.
+
+**Guidance has one carrier per job.** Tours explain a surface. Hints explain a field.
+`title=` is never the only carrier of a rule: a format or a consequence is a `FieldHint` —
+one muted line under the control, tied to it by `aria-describedby` — so a reader without a
+pointer has the same rule. `title=` may still feed the browser's native validity message; it
+does not replace the hint.
+
+**LocaleField.** The locale rule lives on `LocaleField` itself, so every surface that uses
+the field — the shop create form, Shop details, and the customer editor — shows the same
+hint. Slice 1 does not rewrite those other surfaces; they inherit the field's own rule.

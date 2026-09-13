@@ -1,13 +1,14 @@
 import type { ProductViewSchema } from "@agent-lab/contracts";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, VersionChips } from "../components/WorkspaceChrome";
+import { KEBAB_PATTERN, PRODUCT_HANDLE_RULE } from "../lib/fieldRules";
 import { issuesForProduct, ratingLabel } from "../lib/shop";
 import {
   accentButtonClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -132,35 +133,38 @@ export function ProductsPage() {
 
         <Card title="Add a product">
           <form className="grid gap-3" onSubmit={addProduct}>
-            <label className={fieldLabelClasses}>
-              Handle
+            <FieldHint label="Handle" hint={PRODUCT_HANDLE_RULE}>
               <input
                 className={fieldControlClasses}
                 value={handle}
                 required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                title="Lowercase kebab-case, for example alpine-shell-jacket"
+                pattern={KEBAB_PATTERN}
+                title={PRODUCT_HANDLE_RULE}
+                placeholder="alpine-shell-jacket"
                 onChange={(event) => setHandle(event.target.value)}
               />
-            </label>
-            <label className={fieldLabelClasses}>
-              Title
+            </FieldHint>
+            <FieldHint label="Title" hint="The name customers and the catalog see.">
               <input
                 className={fieldControlClasses}
                 value={title}
                 required
+                placeholder="Alpine Shell Jacket"
                 onChange={(event) => setTitle(event.target.value)}
               />
-            </label>
-            <label className={fieldLabelClasses}>
-              Category
+            </FieldHint>
+            <FieldHint
+              label="Category"
+              hint="Groups the product in the catalog, for example Jackets."
+            >
               <input
                 className={fieldControlClasses}
                 value={category}
                 required
+                placeholder="Jackets"
                 onChange={(event) => setCategory(event.target.value)}
               />
-            </label>
+            </FieldHint>
             <button className={accentButtonClasses} type="submit">
               Add to draft
             </button>

@@ -7,7 +7,7 @@ import type {
   SupportIdentityPreviewResponse,
   SupportIdentityVersionResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -188,6 +188,18 @@ describe("support identity workspace", () => {
     expect(await screen.findByRole("heading", { name: "Support identities" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Northstar tier 1" })).toBeVisible();
     expect(screen.getByText("Never published")).toBeVisible();
+  });
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/support-identities`);
+
+    const card = within(await screen.findByRole("region", { name: "New support identity" }));
+    expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
+      /how the identity is listed.*adopt a published identity/i,
+    );
+    expect(card.getByLabelText("Role title")).toHaveAccessibleDescription(
+      /the role the support agent presents as/i,
+    );
   });
 
   it("shows why an order mutation without read access blocks publication", async () => {

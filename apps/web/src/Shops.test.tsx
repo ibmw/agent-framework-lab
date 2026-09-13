@@ -251,3 +251,45 @@ describe("the currency a locale implies", () => {
     expect(options[0]).toHaveTextContent("USD — US dollar");
   });
 });
+
+describe("create-form guidance", () => {
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderShops();
+    const card = await createShopCard();
+
+    expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
+      /the shop's public name.*publishing freezes/i,
+    );
+    expect(card.getByLabelText("Slug")).toHaveAccessibleDescription(
+      /lowercase with hyphens.*follows the name until you edit it/i,
+    );
+    expect(card.getByLabelText("Locale")).toHaveAccessibleDescription(
+      /pick a locale from the list/i,
+    );
+    expect(card.getByLabelText("Currency")).toHaveAccessibleDescription(
+      /the shop starts with this one currency/i,
+    );
+  });
+
+  it("shows a refused create beside the button, not above the shop list", async () => {
+    server.use(
+      http.post("*/api/v1/shops", () =>
+        HttpResponse.json(
+          { code: "conflict", message: "A shop with this slug already exists.", request_id: "r" },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
+    await user.click(card.getByRole("button", { name: "Create shop" }));
+
+    expect(await card.findByRole("alert")).toHaveTextContent(/slug already exists/i);
+    const listing = screen.getByRole("heading", { name: "All shops" }).closest("section");
+    expect(listing).not.toBeNull();
+    expect(within(listing as HTMLElement).queryByRole("alert")).toBeNull();
+  });
+});

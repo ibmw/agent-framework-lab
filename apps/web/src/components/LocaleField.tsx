@@ -1,6 +1,8 @@
 import { useId } from "react";
+import { LOCALE_RULE } from "../lib/fieldRules";
 import { LOCALE_PATTERN, LOCALES } from "../lib/locales";
-import { fieldControlClasses, fieldLabelClasses } from "../lib/ui";
+import { fieldControlClasses } from "../lib/ui";
+import { FieldHint } from "./FieldHint";
 
 /**
  * The Locale field, wherever an identity carries one.
@@ -24,23 +26,25 @@ export function LocaleField({
 }) {
   const listId = useId();
   return (
-    <label className={fieldLabelClasses}>
-      Locale
-      <input
-        className={fieldControlClasses}
-        list={listId}
-        value={value}
-        required={required}
-        pattern={LOCALE_PATTERN}
-        title="Pick a locale from the list, or type another shaped like en or en-GB."
-        autoComplete="off"
-        onChange={(event) => onChange(event.target.value)}
-      />
+    <div>
+      <FieldHint label="Locale" hint={LOCALE_RULE}>
+        <input
+          className={fieldControlClasses}
+          list={listId}
+          value={value}
+          required={required}
+          pattern={LOCALE_PATTERN}
+          title={LOCALE_RULE}
+          placeholder="en-GB"
+          autoComplete="off"
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </FieldHint>
       <datalist id={listId}>
         {LOCALES.map((locale) => (
           <option key={locale.tag} value={locale.tag} label={locale.label} />
         ))}
       </datalist>
-    </label>
+    </div>
   );
 }

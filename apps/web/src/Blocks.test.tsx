@@ -317,9 +317,25 @@ describe("block libraries", () => {
     await screen.findByRole("heading", { name: "Objective blocks" });
     await user.type(screen.getByLabelText("Name"), "Identify entity");
     expect(screen.getByText("identify-entity")).toBeVisible();
+    expect(screen.getByLabelText("Name")).toHaveAccessibleDescription(/saved as identify-entity/i);
     await user.click(screen.getByRole("button", { name: "Create block" }));
 
     await waitFor(() => expect(createdNames).toEqual(["identify-entity"]));
+  });
+
+  it("puts the name hint in that control's accessible description on both libraries", async () => {
+    const objectivesPage = renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    const objectives = within(await screen.findByRole("region", { name: "New objective block" }));
+    expect(objectives.getByLabelText("Name")).toHaveAccessibleDescription(
+      /saved as a lowercase slug.*binds this template/i,
+    );
+    objectivesPage.unmount();
+
+    renderAt(`/shops/${SHOP_ID}/mutation-blocks`);
+    const mutations = within(await screen.findByRole("region", { name: "New mutation block" }));
+    expect(mutations.getByLabelText("Name")).toHaveAccessibleDescription(
+      /saved as a lowercase slug.*binds this template/i,
+    );
   });
 
   it("reaches both libraries from the Scenarios section of the rail", async () => {
