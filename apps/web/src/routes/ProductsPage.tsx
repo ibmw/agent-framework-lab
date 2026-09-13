@@ -1,6 +1,7 @@
 import type { ProductViewSchema } from "@agent-lab/contracts";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
+import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, VersionChips } from "../components/WorkspaceChrome";
 import { issuesForProduct, ratingLabel } from "../lib/shop";
 import {
@@ -53,14 +54,17 @@ export function ProductsPage() {
         chips={<VersionChips preview={preview} />}
         description="The product editor edits the shop draft. Publishing the shop freezes the catalog."
         actions={
-          <button
-            className={accentButtonClasses}
-            type="button"
-            onClick={() => void save()}
-            disabled={!dirty || saving}
-          >
-            {saving ? "Saving…" : dirty ? "Save draft" : "Saved"}
-          </button>
+          <>
+            <TourLaunch id="products" />
+            <button
+              className={accentButtonClasses}
+              type="button"
+              onClick={() => void save()}
+              disabled={!dirty || saving}
+            >
+              {saving ? "Saving…" : dirty ? "Save draft" : "Saved"}
+            </button>
+          </>
         }
       />
 
@@ -71,7 +75,7 @@ export function ProductsPage() {
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className={`${surfaceClasses} overflow-hidden`}>
+        <section className={`${surfaceClasses} overflow-hidden`} data-tour="product-index">
           {content.products.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               This shop sells nothing yet. A published shop must sell at least one product.

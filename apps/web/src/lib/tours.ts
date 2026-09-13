@@ -25,6 +25,11 @@ import { chainPlacement, type SetupStepId } from "./setupPath";
 
 export type TourId =
   | "shop-home"
+  | "products"
+  | "shop-details"
+  | "policies-and-faq"
+  | "support-guidelines"
+  | "tone-of-voice"
   | "customers"
   | "orders"
   | "tickets"
@@ -334,6 +339,100 @@ export const TOURS: Record<TourId, Tour> = {
     // there would be an answer offered after the question had stopped being asked.
     chain: { step: "experiment", anchor: PAGE_NAME },
     steps: [],
+  },
+
+  products: {
+    surface: "the catalog",
+    steps: [
+      {
+        anchor: '[data-tour="product-index"]',
+        title: "The catalog is part of the shop draft",
+        body: [
+          "Products have no version and no publish control of their own: they are edited into the [[shop]] draft, and publishing the shop freezes the catalog with everything else on it. The last column is what each product's gate is still refusing, and a shop that sells nothing is itself one of the things the gate refuses.",
+          "An [[order]] names variants from here and an [[experiment]] pins the version they were frozen in, so a catalog edited afterwards never moves what a run already read.",
+        ],
+      },
+      {
+        anchor: '[aria-label="Add a product"]',
+        title: "A handle, and then the editor",
+        body: [
+          "A product is created with the handle it is addressed by and filled in afterwards — variants, prices, options, media and attributes belong to the product editor. A variant priced in a currency the shop does not sell is refused at the gate, so the currencies on the shop's details are what bound this catalog rather than the other way round.",
+        ],
+      },
+    ],
+  },
+
+  "shop-details": {
+    surface: "shop details",
+    steps: [
+      {
+        anchor: '[aria-label="Shop identity"]',
+        title: "The name, the money and the channels",
+        body: [
+          "The identity is what the rest of the [[shop]] is bounded by. Its currencies are the ones a variant may be priced in, and its locale is the language the incident is conducted in — the create form answers that pair together, and this is where either is changed afterwards.",
+        ],
+      },
+      {
+        anchor: '[aria-label="Payment methods"]',
+        title: "What an order could have been paid with",
+        body: [
+          "Payment and fulfilment methods are the vocabulary an [[order]] draws on: an order fixture names one of each, and naming one this shop does not offer is refused when the order is saved rather than when it is run.",
+        ],
+      },
+      {
+        anchor: '[aria-label="Draft validation"]',
+        title: "Everything here is one draft",
+        body: [
+          "These pages edit different parts of a single [[definition]], and the gate reads all of it at once. An error raised by the tone-of-voice page shows here too, which is why *Save draft* on any of them saves the same draft rather than that page's share of it.",
+        ],
+      },
+    ],
+  },
+
+  "policies-and-faq": {
+    surface: "policies and FAQ",
+    steps: [
+      {
+        anchor: '[aria-label="Policies"]',
+        title: "What the agent is allowed to tell a customer",
+        body: [
+          "A policy is a document the support agent reaches through a tool rather than prose for a person to read. A [[scenario]] names the ones that matter for its incident, and what the agent did with a policy it was given is part of what an [[evaluation]] decides afterwards.",
+        ],
+      },
+      {
+        anchor: '[aria-label="FAQ"]',
+        title: "The same reach, shorter answers",
+        body: [
+          "FAQ entries are retrieved the same way and are worth keeping separate from policies for the same reason a real shop does: one is what the business commits to, the other is what it is usually asked.",
+        ],
+      },
+    ],
+  },
+
+  "support-guidelines": {
+    surface: "support guidelines",
+    steps: [
+      {
+        anchor: '[aria-label="Guidelines"]',
+        title: "How this shop wants an incident handled",
+        body: [
+          "Guidelines are instruction rather than reference: what to escalate, what to refuse, what to confirm first. A [[support-identity]] carries what the agent *is* across every shop, and these are what this one shop asks of it — so the same identity answers differently here than it would elsewhere.",
+        ],
+      },
+    ],
+  },
+
+  "tone-of-voice": {
+    surface: "tone of voice",
+    steps: [
+      {
+        anchor: '[aria-label="Guidelines"]',
+        title: "The voice, and which one is the default",
+        body: [
+          "A shop may keep several voices and marks one as its default, which is the one an [[agent-configuration]] adopts unless its own prompt names another. Tone is the shop's to set rather than the identity's, so two shops can share an agent and still not sound alike.",
+        ],
+      },
+    ],
   },
 };
 

@@ -25,8 +25,8 @@ where somebody is most likely to be lost, because they are where the work is don
 
 ## Decision
 
-**Every step of the chain offers a tour, and opens on its place in it.** Fifteen surfaces now
-have a launch control. The tenth step is `/bench` — the page an experiment is *started* on — and
+**Every step of the chain offers a tour, and opens on its place in it.** Twenty surfaces have a
+launch control. The tenth step is `/bench` — the page an experiment is *started* on — and
 not the live bench it is watched on, which a reader reaches only by starting one; a chain step
 there would answer a question after it had stopped being asked. The live bench keeps its own walk
 and carries no chain step. The ten on the chain open with a step titled `Step N of 10 · Label`, which
@@ -63,6 +63,12 @@ beside the chain it describes, and the guide page imports it like everything els
 - **A tour on every route.** Settings, the glossary, the guides, the shop version reader and the
   per-item editors are not links of the chain, and a tour on each would exist to not be missing.
   The chain is what this decision extends; it is not an argument for coverage as such.
+
+  *Amended: the catalog and the four shop-setup pages did get one. They are not links of the
+  chain and they carry no chain step, but they are where the first link's work is actually done —
+  a shop is published from those five screens and the home the step names — so a reader sent to
+  step 1 does most of it somewhere the step could not reach. The per-item editors still have
+  none: you arrive at those from a list that has just explained itself.*
 - **Stored progress, or a tour that knows which steps this lab has done.** ADR 0044 refused a
   stored second shape and ADR 0045 kept refusing it. A composed step reads two tables in the
   build, never the record, so nothing here can go stale against a lab's contents.

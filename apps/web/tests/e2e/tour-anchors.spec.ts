@@ -20,6 +20,11 @@ import { type BuiltLab, buildLab } from "./support/lab";
 
 const SURFACES: Record<TourId, (lab: BuiltLab) => string> = {
   "shop-home": (lab) => `/shops/${lab.shopId}`,
+  products: (lab) => `/shops/${lab.shopId}/products`,
+  "shop-details": (lab) => `/shops/${lab.shopId}/setup/identity`,
+  "policies-and-faq": (lab) => `/shops/${lab.shopId}/setup/policies`,
+  "support-guidelines": (lab) => `/shops/${lab.shopId}/setup/support`,
+  "tone-of-voice": (lab) => `/shops/${lab.shopId}/setup/tone`,
   customers: (lab) => `/shops/${lab.shopId}/customers`,
   orders: (lab) => `/shops/${lab.shopId}/orders`,
   tickets: (lab) => `/shops/${lab.shopId}/tickets`,
