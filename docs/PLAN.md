@@ -231,6 +231,15 @@ slot that was already carrying buttons, none of which does anything until it is 
 key is left in the browsers that hold it rather than erased, because a reader kept alive to erase a
 browser preference is a migration mechanism for a browser preference (ADR 0046).
 
+Then the written guides went. Slice 1 put them beside settings, Slice 3 wrote the setup walk,
+and Slice 4 kept both as the page that still listed the ten steps after the band came off.
+Once every step of that walk lived on the surface it names, and the fast path lived on
+settings, the section was an index of help the reader was already standing in. The header
+carries Settings only. `/guides` and `/guides/setup` redirect there; the glossary moved to
+`/glossary` as a destination for a defined word rather than a section of its own. What that
+costs is that nothing walks all ten steps on one page any more — the same shape of loss Slice
+4 recorded when the derived strip went, now true of the walk itself (ADR 0049).
+
 The POC's remaining conversation, persona, and order-action HTTP contracts
 remain published and tested but have no UI consumer; their two history listings were removed
 by ADR 0034, which is the target historical record that replaces them.
@@ -1208,11 +1217,35 @@ experiment of its own. What is lost is stated rather than
 tidied away: nothing can turn the controls off lab-wide any more, and that is accepted for a header
 button that does nothing until it is pressed (ADR 0046).
 
+### Slice 6 — The written guides retire
+
+Milestone 7 had closed three times. Slice 4 replaced what the guide showed; Slice 5 removed the
+mode that hid it; this slice removes the section that was left once both of those contents
+lived somewhere else.
+
+- [x] Remove the Guides header entry, the `/guides` index, and the written setup guide.
+- [x] Move the glossary to `/glossary` as a destination for term links, with no header entry.
+- [x] Redirect the retired `/guides` paths so a bookmark still lands somewhere useful.
+- [x] Keep `SETUP_CHAIN` and `SETUP_GUIDE_STEPS` as the table each surface's tour composes
+  from, and the one-definition rule the popovers already follow.
+
+Frames: none. Settings and the glossary remain the lab-level surfaces outside the
+eighteen-frame set; the index between them is gone (ADR 0049).
+
+Slice evidence: an operator opens the lab and finds Settings in the header, not Guides. The
+help they used to open as a section is on the screen they are standing on — *Show me around*
+walks that one view, and *Create the demo* is on settings — and a word in a popover still
+opens the same definition the glossary page renders, now at `/glossary`. A bookmark to
+`/guides/setup` opens settings; a bookmark to `/guides/glossary#shop` opens the same term.
+What is lost is stated: nothing lists the ten steps in one place any more, and that is
+accepted because each of those steps already answers on the surface it names.
+
 ### Acceptance criteria
 
 - No step of the guide is stored, and no surface reports progress the record does not support.
 - Nothing decides whether the guide can be found. The control that offers a tour is on every
-  surface that has one, and reads nothing to be there.
+  surface that has one, and reads nothing to be there. The header does not carry a Guides
+  section; the glossary is a destination for a defined word, not a second kind of help.
 - The lab states its offline limit without an operator having to read an ADR to learn it.
 - Nothing in the settings surface or the guide can populate, reset, or overwrite a database.
 - Provider credentials and exporter endpoints stay in the environment, and no route reports a fact

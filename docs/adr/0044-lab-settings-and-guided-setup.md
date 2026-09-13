@@ -1,6 +1,6 @@
 # ADR 0044 — Lab settings, and a guide that reads the record rather than remembering the reader
 
-Status: accepted, partially superseded by ADR 0045 and ADR 0046 — 2026-09-11
+Status: accepted, partially superseded by ADR 0045, ADR 0046 and ADR 0049 — 2026-09-11
 
 Opens Milestone 7. Every milestone before it was about what the lab records; this one is the first
 about the person operating it. It adds a lab-level settings surface outside shop scope, a guide
@@ -29,6 +29,12 @@ are unconditional, so there is no override left to be an override rather than a 
 of that decision is its reasoning about where a browser preference lives, which now governs the two
 view preferences this ADR introduced alongside the mode — the rail's default collapsed state and the
 last-visited shop — and those are unchanged. The notes below mark what ADR 0046 reaches.
+
+ADR 0049 then **retires the guides namespace**. The first decision's placement — lab-level help
+sits beside `/shops`, not inside one — still governs `/settings` and the glossary. What it no
+longer governs is a section: the header carries Settings only, the setup guide is gone, and the
+glossary lives at `/glossary` as a destination for term links rather than a page `/guides`
+indexed. The notes below mark that too.
 
 ## Context
 
@@ -78,8 +84,12 @@ spends most of its vocabulary keeping apart: what is scoped to a shop and what i
 
 The lab surface is `/settings`, a top-level route beside `/shops`, reached from a control in the
 header next to the `Synthetic sandbox` badge. It renders through `AppShell` with no `currentShopId`,
-which is the no-rail layout `ShopsPage` already uses. The guides live beside it at `/guides`, on the
+which is the no-rail layout `ShopsPage` already uses. The guides lived beside it at `/guides`, on the
 same footing.
+
+> Narrowed by ADR 0049 (2026-09-13). The Guides section is gone. `/settings` stays; the glossary
+> moved to `/glossary` and is reached from a defined word, not from the header. The placement
+> argument below still holds for those two surfaces.
 
 > Landmark stale (2026-09-12). The `Synthetic sandbox` badge is gone from the header. It was a pill
 > the size and shape of the two controls beside it that never changed and could not be pressed, and
@@ -103,6 +113,9 @@ one step somebody opening this product for the first time is actually standing o
 Leaving shop scope costs the operator their place, so `/settings` and `/guides` carry a link back to
 the shop they were opened from. The last-visited shop is a stored preference this slice is
 introducing anyway, so the return path costs nothing extra.
+
+> Narrowed by ADR 0049 (2026-09-13). `/settings` and `/glossary` are the surfaces that still
+> carry that link. `/guides` redirects to settings.
 
 The shop-scoped entry is renamed to what it edits — shop details — and its route is unchanged. Two
 entries named Settings, one of which silently means "this shop", is the ambiguity; removing it is a
@@ -329,6 +342,9 @@ the build rather than about a run.
 > drawn for; `docs/design-direction.md` records the set returning to eighteen and why the tour does
 > not ask for a frame of its own. The half of this subsection about `/settings`, `/guides` and the
 > glossary being outside the authoritative set is unchanged.
+>
+> Narrowed again by ADR 0049 (2026-09-13). `/guides` is gone; `/settings` and `/glossary` are the
+> lab-level surfaces that remain outside the set.
 
 `docs/PLAN.md` requires every UI-bearing slice to name the frames it implements from the Milestone
 0.5 authoritative set. That set, read back from `tmp/design-frames/canvas.json`, is eighteen

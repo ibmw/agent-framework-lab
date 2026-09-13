@@ -54,7 +54,7 @@ test("a tour walks the screen it was launched from, and leaves when it is told t
   // Asserted on this step rather than the first, which is the composed chain step and states a
   // position rather than naming any of the lab's vocabulary.
   const term = popover.getByRole("link", { name: "shop", exact: true });
-  await expect(term).toHaveAttribute("href", "/guides/glossary#shop");
+  await expect(term).toHaveAttribute("href", "/glossary#shop");
   await expect(term).toHaveAttribute("title", /Shop — /);
 
   await popover.getByRole("button", { name: "Back" }).click();

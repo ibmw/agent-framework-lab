@@ -10,8 +10,8 @@ import { glossaryTerm, parseGlossaryProse } from "../lib/glossary";
  * a link to an anchor nobody wrote, which is exactly the failure ADR 0044 asked to be caught by a
  * test rather than by a reader.
  *
- * The definition shown on hover is the same sentence `/guides/glossary` renders — there is one
- * copy of it, in the module both read.
+ * The definition shown on hover is the same sentence `/glossary` renders — there is one copy
+ * of it, in the module both read.
  */
 
 /**
@@ -36,7 +36,7 @@ export function GlossaryTermLink({ id, label }: { id: string; label: string }) {
     <Link
       className="font-semibold text-lab-ink underline decoration-dotted underline-offset-2"
       title={`${term.term} — ${term.definition}`}
-      to={`/guides/glossary#${term.id}`}
+      to={`/glossary#${term.id}`}
     >
       {label}
     </Link>

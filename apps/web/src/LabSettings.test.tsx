@@ -335,26 +335,8 @@ describe("lab settings", () => {
     expect(preference).toBeChecked();
   });
 
-  it("indexes the guides that exist and promises none that do not", async () => {
-    renderAt("/guides");
-
-    expect(await screen.findByRole("heading", { name: "Guides" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open the setup guide" })).toHaveAttribute(
-      "href",
-      "/guides/setup",
-    );
-    expect(screen.getByRole("link", { name: "Open the glossary" })).toHaveAttribute(
-      "href",
-      "/guides/glossary",
-    );
-    // The index hands over the command rather than offering to run it, like every other
-    // surface that names it.
-    expect(screen.getByText("make seed", { selector: "code" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: /seed|demo data|populate/i })).toBeNull();
-  });
-
   it("defines the words the application uses on screen", async () => {
-    renderAt("/guides/glossary");
+    renderAt("/glossary");
 
     expect(await screen.findByRole("heading", { name: "Glossary" })).toBeVisible();
     const terms = screen.getByRole("region", { name: "Vocabulary" });
@@ -363,6 +345,22 @@ describe("lab settings", () => {
       within(terms).getByText(/shop-independent objective template/, { exact: false }),
     ).toBeVisible();
     expect(within(terms).getByText("Sandbox snapshot")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Back to guides" })).toBeNull();
+  });
+
+  it("sends the retired guides paths where their replacements live", async () => {
+    const index = renderAt("/guides");
+    expect(await screen.findByRole("heading", { name: "Lab settings" })).toBeVisible();
+    index.unmount();
+
+    renderAt("/guides/setup");
+    expect(await screen.findByRole("heading", { name: "Lab settings" })).toBeVisible();
+  });
+
+  it("keeps a glossary bookmark working after the guides namespace closed", async () => {
+    renderAt("/guides/glossary#shop");
+    expect(await screen.findByRole("heading", { name: "Glossary" })).toBeVisible();
+    expect(document.getElementById("shop")).toHaveTextContent("Shop");
   });
 });
 
@@ -380,11 +378,12 @@ describe("workspace shell", () => {
   it("reaches the lab's own surfaces from the header, inside a shop and outside one", () => {
     const outside = renderShell();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
-    expect(screen.getByRole("link", { name: "Guides" })).toHaveAttribute("href", "/guides");
+    expect(screen.queryByRole("link", { name: "Guides" })).toBeNull();
     outside.unmount();
 
     renderShell(SHOP_ID);
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.queryByRole("link", { name: "Guides" })).toBeNull();
   });
 
   it("names the shop-scoped entry after what it edits", () => {

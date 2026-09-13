@@ -78,7 +78,7 @@ export function ShopWorkspace() {
     return () => controller.abort();
   }, [refreshShops]);
 
-  // Leaving shop scope for `/settings` or `/guides` costs the operator their place, so the
+  // Leaving shop scope for `/settings` or `/glossary` costs the operator their place, so the
   // shop they were last standing in is what those surfaces offer a way back to. Recorded only
   // once the shop has actually loaded: a stale bookmark to a removed shop would otherwise
   // overwrite a good remembered id with one that resolves to nothing.

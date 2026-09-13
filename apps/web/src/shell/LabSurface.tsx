@@ -72,8 +72,8 @@ export function useLabSurface(): LabSurfaceValue {
 /**
  * A lab-level page: the no-rail layout the shops index already uses, plus the way back to the
  * shop the operator left. These surfaces sit outside shop scope on purpose — a new operator has
- * no shop yet, and a guide reachable only from inside one would be reachable exactly one step
- * after the step it exists to explain (ADR 0044).
+ * no shop yet, and a lab-level page reachable only from inside one would be reachable exactly
+ * one step after the step it exists to explain (ADR 0044).
  */
 export function LabSurface({
   surface,

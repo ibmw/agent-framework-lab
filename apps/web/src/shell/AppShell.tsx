@@ -1,6 +1,5 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
 import {
-  BookOpen,
   Bot,
   Boxes,
   ChevronLeft,
@@ -178,10 +177,7 @@ function SidebarEntry({
  * rail because the rail only exists inside a shop workspace, and the first thing a new
  * operator has to do is create the shop they do not have yet (ADR 0044).
  */
-const labEntries = [
-  { label: "Guides", to: "/guides", icon: <BookOpen size={13} /> },
-  { label: "Settings", to: "/settings", icon: <Settings size={13} /> },
-] as const;
+const labEntries = [{ label: "Settings", to: "/settings", icon: <Settings size={13} /> }] as const;
 
 const headerLinkClasses =
   "flex items-center gap-1.5 rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold no-underline transition";

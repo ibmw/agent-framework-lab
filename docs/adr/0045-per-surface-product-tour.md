@@ -1,6 +1,6 @@
 # ADR 0045 — A tour of the screen you are on, and what the derived strip took with it
 
-Status: accepted, partially superseded by ADR 0046 — 2026-09-12
+Status: accepted, partially superseded by ADR 0046 and ADR 0049 — 2026-09-12
 
 Reopens Milestone 7 after it closed. It replaces both of the guide's on-screen readings — the
 derived next-step strip of Slice 2 and the six inline explainer bands of Slice 3 — with a stepped
@@ -137,6 +137,12 @@ claimed.
 What survives the removal, and stays: `SETUP_CHAIN`, still walked by the written setup guide;
 `/guides/setup` and `/guides/glossary`; the glossary module and its one-definition rule; `/settings`
 and every read-out on it.
+
+> Narrowed by ADR 0049 (2026-09-13). The written setup guide and the Guides namespace are gone.
+> `SETUP_CHAIN` stays, walked by each surface's tour rather than by a page that lists all ten.
+> The glossary module and its one-definition rule stay, rendered at `/glossary`. `/settings`
+> stays. What this slice recorded as a cost — that nothing projects which step a lab has
+> reached — is now also true of the walk itself: nothing lists the ten steps in one place.
 
 ### `driver.js`, pinned, and skinned rather than shipped as it comes
 

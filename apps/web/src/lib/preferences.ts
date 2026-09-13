@@ -42,7 +42,7 @@ export function writeNavigationCollapsed(collapsed: boolean): void {
 }
 
 /**
- * The shop the operator was last standing in, which is what `/settings` and `/guides` link
+ * The shop the operator was last standing in, which is what `/settings` and `/glossary` link
  * back to. Leaving shop scope costs the operator their place, and this is what returns it.
  */
 export function readLastVisitedShop(): string | null {

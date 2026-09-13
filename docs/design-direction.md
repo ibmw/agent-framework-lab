@@ -180,6 +180,9 @@ ElevenLabs' agent configuration) adapted to the lab's template model:
 > tour, and the set returned to eighteen frames. The half about `/settings`, `/guides` and the
 > glossary sitting outside the set is unchanged, and the paragraphs below stay as the record of
 > what the nineteenth frame was and why it was drawn.
+>
+> Narrowed by ADR 0049 (2026-09-13). `/guides` is gone; `/settings` and `/glossary` are the
+> lab-level surfaces that remain outside the set.
 
 Milestone 7 adds surfaces that are not scoped to a shop, and the eighteen-frame claim above has to
 keep meaning what it says once they exist. ADR 0044 splits them in two.
@@ -191,6 +194,9 @@ four shop-setup pages, and the support-identity and judge listings were already 
 `styles.css`, without a frame and without anyone treating it as an exception. They invent no layout
 language. A lab-level page that needed one would be the signal that this reasoning has stopped
 applying and that the set has to grow rather than be worked around.
+
+> Narrowed by ADR 0049 (2026-09-13). The Guides index is gone. `/settings` and `/glossary` are
+> the two lab-level surfaces this paragraph still describes.
 
 **The guide strip is inside it.** The strip is not a surface but a band across the top of the
 content column on frames 1, 4, 7 and 9, which were designed without one, and a cross-cutting
@@ -300,3 +306,6 @@ the day this reasoning stops applying and the set has to grow rather than be wor
 listings the product already serves and named the one step a half-built lab had not satisfied, in
 the publish gate's own words, with nothing stored. No surface says that now. `/guides/setup` still
 walks the chain in dependency order, but it walks it without knowing where a reader has got to.
+
+> Narrowed by ADR 0049 (2026-09-13). That page is gone too. Each surface's tour still names its
+> own place in the chain; nothing lists all ten steps in one place.

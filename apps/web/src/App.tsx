@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AgentConfigurationEditorPage } from "./routes/AgentConfigurationEditorPage";
 import { AgentConfigurationsPage } from "./routes/AgentConfigurationsPage";
 import { MutationBlockEditorPage, ObjectiveBlockEditorPage } from "./routes/BlockEditorPage";
@@ -13,7 +13,6 @@ import { ExperimentSetupPage } from "./routes/ExperimentSetupPage";
 import { ExperimentTimelinePage } from "./routes/ExperimentTimelinePage";
 import { ExperimentTracesPage } from "./routes/ExperimentTracesPage";
 import { GlossaryPage } from "./routes/GlossaryPage";
-import { GuidesPage } from "./routes/GuidesPage";
 import { JudgeConfigurationEditorPage } from "./routes/JudgeConfigurationEditorPage";
 import { JudgeConfigurationsPage } from "./routes/JudgeConfigurationsPage";
 import { LabSettingsPage } from "./routes/LabSettingsPage";
@@ -23,7 +22,6 @@ import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
 import { ScenarioEditorPage } from "./routes/ScenarioEditorPage";
 import { ScenariosPage } from "./routes/ScenariosPage";
-import { SetupGuidePage } from "./routes/SetupGuidePage";
 import { ShopHomePage } from "./routes/ShopHomePage";
 import {
   PoliciesAndFaqPage,
@@ -45,11 +43,14 @@ export function App() {
       <Route path="/" element={<Navigate to="/shops" replace />} />
       <Route path="/shops" element={<ShopsPage />} />
       {/* Lab-level surfaces sit beside /shops rather than inside one: the first step of the
-          guided path is creating the shop a new operator does not have yet (ADR 0044). */}
+          chain is creating the shop a new operator does not have yet (ADR 0044). */}
       <Route path="/settings" element={<LabSettingsPage />} />
-      <Route path="/guides" element={<GuidesPage />} />
-      <Route path="/guides/setup" element={<SetupGuidePage />} />
-      <Route path="/guides/glossary" element={<GlossaryPage />} />
+      <Route path="/glossary" element={<GlossaryPage />} />
+      {/* The Guides section retired once the chain lived on each surface and the
+          fast path on settings (ADR 0049). Old paths still land somewhere useful. */}
+      <Route path="/guides" element={<Navigate to="/settings" replace />} />
+      <Route path="/guides/setup" element={<Navigate to="/settings" replace />} />
+      <Route path="/guides/glossary" element={<RedirectRetiredGlossary />} />
       <Route path="/shops/:shopId" element={<ShopWorkspace />}>
         <Route index element={<ShopHomePage />} />
         <Route path="products" element={<ProductsPage />} />
@@ -93,4 +94,9 @@ export function App() {
       <Route path="*" element={<Navigate to="/shops" replace />} />
     </Routes>
   );
+}
+
+function RedirectRetiredGlossary() {
+  const { hash } = useLocation();
+  return <Navigate to={{ pathname: "/glossary", hash }} replace />;
 }

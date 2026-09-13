@@ -63,15 +63,12 @@ every row. Use whichever is in front of you; the command is what CI and `test_de
 The reset above stays a terminal operation — deleting a database file is not something a page
 should offer — which makes it the thing to go looking for when the button refuses.
 
-`/guides/setup` in the Studio is the same chain written down for somebody operating the product
-rather than the checkout: ten steps in dependency order, what each one is, and what refuses until
-it is satisfied. It names `make seed` at the top as a command, links to the settings button beside
-it, and names the reset above as three commands. The guide itself performs nothing: it reads the
-chain and links to where each step is done, so no card on it carries a control.
-`/guides/glossary` defines the vocabulary those steps use, and the screens that speak it each carry
-a *Show me around* control in their header that walks that one screen with the same definitions in
-it. The control is on every one of those screens, for everybody: there is no mode to turn it on
-(ADR 0046).
+The same chain is what each screen's *Show me around* tour opens with: which link of the ten this
+is, and what stays refused until the work here is done, composed from one table rather than written
+per surface (ADR 0048). There is no page that lists all ten in one place (ADR 0049).
+`/glossary` defines the vocabulary those steps use, reached by following a defined word in a
+popover. The launch control is on every one of those screens, for everybody: there is no mode to
+turn it on (ADR 0046).
 
 `/settings` in the Studio reports what the running build is composed to do: the frameworks it has
 proven it can run and the envelope each was proven inside, whether a provider credential is

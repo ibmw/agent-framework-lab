@@ -5,11 +5,10 @@ import type { GlossaryTermId } from "./glossary";
  * order they refuse.
  *
  * This is the half of the path that holds without a record to read — the label, the surface the
- * work is done on, and the vocabulary the step speaks — and it is what the written setup guide
- * at `/guides/setup` walks. The derived reading that once decorated it with what a lab already
+ * work is done on, and the vocabulary the step speaks — and it is what each surface's *Show me
+ * around* tour opens with. The derived reading that once decorated it with what a lab already
  * satisfied was removed with the guide strip; nothing in the application now projects progress
- * from the listings, and `/guides/setup` says what the ten steps are rather than which of them
- * this lab has reached (ADR 0045).
+ * from the listings, and no page walks all ten steps in one place (ADR 0045, ADR 0049).
  */
 
 export type SetupStepId =
@@ -27,8 +26,8 @@ export type SetupStepId =
 /**
  * One step of the chain: what it is called, where it is done, and the vocabulary it speaks.
  *
- * One table, so that the guide's order and the guide's words have a single home and a step
- * added here without copy on the page fails to compile.
+ * One table, so that the chain's order and the chain's words have a single home and a step
+ * added here without a tour claiming it fails the sweep that reads this table.
  */
 export interface SetupStepShape {
   id: SetupStepId;
@@ -137,8 +136,8 @@ export const SETUP_CHAIN = [
 /**
  * The route a step's work is done on, inside one shop.
  *
- * One composition of the path, read by the written guide's links, so the guide sends a reader to
- * the surface the chain actually names.
+ * One composition of the path, so a tour that names a step and the sweep that reaches it agree
+ * on the surface the chain actually names.
  */
 export function stepHref(step: SetupStepShape, shopId: string): string {
   const base = `/shops/${shopId}`;
@@ -148,10 +147,10 @@ export function stepHref(step: SetupStepShape, shopId: string): string {
 /**
  * What each step of the chain is, and the gate standing between it and the next.
  *
- * Here rather than beside the page that renders it, because it is no longer read by one surface.
- * `/guides/setup` walks all ten in order for somebody who has nothing yet; a tour on any one of
- * those ten surfaces reads that step's own `gate` to say what stays refused until the work there
- * is done. One table means the guide and the popover cannot come to disagree about it.
+ * Here rather than beside a page that listed it, because no page lists it any more (ADR 0049).
+ * A tour on any one of those ten surfaces reads that step's own `gate` to say what stays
+ * refused until the work there is done. One table means two popovers cannot come to disagree
+ * about it.
  */
 export interface StepCopy {
   /** What this link of the chain is, in `[[term-id]]` markup. */
@@ -161,7 +160,7 @@ export interface StepCopy {
 }
 
 /**
- * Exported so the same test that reads the tours' vocabulary reads this page's, since a term
+ * Exported so the same test that reads the tours' vocabulary reads this table's, since a term
  * here resolving to nothing would render as a bare word exactly as it would there.
  */
 export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
@@ -255,9 +254,8 @@ export interface ChainPlacement {
  * Where a surface sits in the chain, composed from the two tables that already answer it.
  *
  * Nothing here is written down a second time. The position and the labels are the chain's, the
- * gate sentence is the guide's, and a tour that shows them is showing the words `/guides/setup`
- * shows — so the reading an operator gets standing on a surface cannot drift from the reading
- * they get on the page that lists all ten.
+ * gate sentence is this table's, and a tour that shows them is showing these words — so the
+ * reading an operator gets standing on a surface cannot drift from the table the sweep reads.
  *
  * Only the step's *own* gate is used. `gate` is what a step unlocks rather than what the next
  * one needs, and the two are not the same sentence: the shop's gate is about publishing a

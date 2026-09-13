@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { Card } from "../components/WorkspaceChrome";
 import { GLOSSARY_TERMS } from "../lib/glossary";
 import { LabSurface, useLabSurface } from "../shell/LabSurface";
@@ -6,10 +5,10 @@ import { LabSurface, useLabSurface } from "../shell/LabSurface";
 /**
  * The lab's vocabulary, rendered from the one module that carries it.
  *
- * These words are `docs/PLAN.md`'s stable target vocabulary, which until now was defined
- * nowhere a reader of the application could reach. The page holds no definitions of its own:
- * a term has one definition, and the tour popovers that hover it read the same module
- * (ADR 0044).
+ * These words are `docs/PLAN.md`'s stable target vocabulary. The page holds no definitions of
+ * its own: a term has one definition, and the tour popovers that hover it read the same module
+ * (ADR 0044). It is a destination for those terms rather than a section of its own — there is
+ * no header entry for it, and the retired Guides index is not a way back (ADR 0049).
  */
 export function GlossaryPage() {
   const surface = useLabSurface();
@@ -37,14 +36,6 @@ export function GlossaryPage() {
             ))}
           </dl>
         </Card>
-        <p className="text-[13px] text-admin-ink-soft">
-          <Link
-            className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-            to="/guides"
-          >
-            Back to guides
-          </Link>
-        </p>
       </div>
     </LabSurface>
   );

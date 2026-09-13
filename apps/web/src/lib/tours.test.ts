@@ -18,10 +18,10 @@ const STEPS = TOUR_IDS.flatMap((id) => tourSteps(id).map((step) => [id, step] as
 /**
  * Every piece of copy in this application written in `[[term-id]]` markup, in one list.
  *
- * The written setup guide is read here beside the tours because `GlossaryTermLink` renders a bare
- * word when a reference resolves to nothing: copy left out of this loop is copy where that can
- * happen unnoticed, whichever surface it is on. This list is what the explainers' own tests held,
- * carried onto the copy that replaced them.
+ * The chain's own step copy is read here beside the tours because `GlossaryTermLink` renders a
+ * bare word when a reference resolves to nothing: copy left out of this loop is copy where that
+ * can happen unnoticed, whichever surface it is on. This list is what the explainers' own tests
+ * held, carried onto the copy that replaced them.
  */
 const MARKED_UP_COPY: [string, readonly string[]][] = [
   ...STEPS.map(
@@ -71,7 +71,7 @@ describe("the tour table", () => {
     }
   });
 
-  it("names only vocabulary the glossary defines, here and in the written guide", () => {
+  it("names only vocabulary the glossary defines, here and in the chain's own copy", () => {
     const referenced = MARKED_UP_COPY.flatMap(([where, paragraphs]) =>
       paragraphs.flatMap((paragraph) =>
         referencedTerms(paragraph).map((term) => [where, term] as const),
@@ -98,8 +98,8 @@ describe("the tour table", () => {
   });
 
   it("speaks the vocabulary the chain's own steps speak", () => {
-    // The tours and the written setup guide are two readings of one lab, so a word that appears
-    // in a popover and in no step of the chain — or the other way round — is a sign they have
+    // The tours and the chain table are two readings of one lab, so a word that appears in a
+    // popover and in no step of the chain — or the other way round — is a sign they have
     // drifted apart.
     const inTours = new Set<string>(
       STEPS.flatMap(([, step]) => step.body.flatMap(referencedTerms)),
@@ -157,8 +157,8 @@ describe("the chain a tour opens with", () => {
       expect(first.title, `${id} does not open on its place in the chain`).toBe(
         `Step ${placement.position} of ${placement.total} · ${placement.label}`,
       );
-      // The gate is the guide's own sentence, so the popover and `/guides/setup` cannot come to
-      // disagree about what stays refused until this step is done.
+      // The gate is the chain table's own sentence, so two popovers cannot come to disagree
+      // about what stays refused until this step is done.
       expect(first.body).toContain(SETUP_GUIDE_STEPS[chain.step].gate);
     }
   });

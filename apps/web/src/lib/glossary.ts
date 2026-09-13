@@ -4,8 +4,8 @@
  * `docs/PLAN.md` carries the lab's stable target vocabulary — objective block, mutation block,
  * canonical snapshot, arm, participant driver — and nothing a reader of the application could
  * reach defined any of them. This module is that vocabulary, in one place, so a term has one
- * definition: the glossary page renders it, the written setup guide's steps reference it, and a
- * tour popover hovers it. A second copy of any of these sentences would be a second thing to keep
+ * definition: the glossary page renders it, the chain table's steps reference it, and a tour
+ * popover hovers it. A second copy of any of these sentences would be a second thing to keep
  * in agreement with `docs/PLAN.md` (ADR 0044).
  */
 

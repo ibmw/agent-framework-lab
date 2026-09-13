@@ -350,7 +350,7 @@ export function LabSettingsPage() {
                     {surface.rememberedShop.name}
                   </Link>
                   <span className="block text-xs text-admin-muted">
-                    What this page and the guides offer a way back to.
+                    What this page and the glossary offer a way back to.
                   </span>
                 </span>
               ) : surface.loading || surface.error ? (

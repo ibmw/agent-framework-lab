@@ -69,9 +69,9 @@ export interface Tour {
    * Where this surface sits in the setup chain, for the ten surfaces that sit on it.
    *
    * The step's copy is not written here: `chainPlacement` composes it from the chain table and
-   * the written guide's own gate sentences, so the answer a popover gives is the answer
-   * `/guides/setup` gives. What is declared here is only the anchor, which keeps every element
-   * a tour lights in this table and under the sweep.
+   * that table's own gate sentences, so two surfaces cannot phrase one fact differently. What
+   * is declared here is only the anchor, which keeps every element a tour lights in this table
+   * and under the sweep.
    */
   chain?: { step: SetupStepId; anchor: string };
   /** The walk around the surface itself. Empty where the chain step is the whole tour. */

@@ -1,6 +1,6 @@
 # ADR 0048 — The setup chain reaches the surfaces it names, as a composed tour step
 
-Status: accepted — 2026-09-13
+Status: accepted, partially superseded by ADR 0049 — 2026-09-13
 
 Extends ADR 0045's per-surface tour to all ten steps of the setup chain, and gives every one of
 those surfaces an opening step that is composed from `setupPath.ts` rather than written down.
@@ -15,6 +15,10 @@ with exactly one step in it.
 it is satisfied. It is the only place that reading exists. An operator standing on the customers
 screen — the second link of ten — has no way to ask where they are without leaving for the guide
 and finding the step again.
+
+> Narrowed by ADR 0049 (2026-09-13). That page is gone. The reading this slice put on each
+> surface is now the only reading; the table it composes from stays, and nothing lists all ten
+> steps in one place.
 
 Meanwhile ADR 0045 put a tour on seven surfaces, chosen because they were the seven that had
 carried an explainer or the strip. That set was drawn from what the *previous* shape happened to
@@ -37,6 +41,10 @@ says which neighbours the chain puts either side and then gives that step's gate
 renders. So the answer a popover gives is the answer `/guides/setup` gives, and there is no second
 copy to drift. Writing it per surface would have been ten chances to phrase one fact differently
 and ten places to leave it stale.
+
+> Narrowed by ADR 0049 (2026-09-13). The page is gone; the answer a popover gives is the answer
+> `SETUP_GUIDE_STEPS` gives. The "no second copy" claim is stronger rather than weaker: there
+> is no page left that could phrase the gate differently.
 
 **Only the step's own gate is used.** `gate` is what a step unlocks, not what the next one needs,
 and on most of the chain those are different sentences — the shop's gate is about publishing a
@@ -62,6 +70,9 @@ beside the chain it describes, and the guide page imports it like everything els
 
 - **A tour on every route.** Settings, the glossary, the guides, the shop version reader and the
   per-item editors are not links of the chain, and a tour on each would exist to not be missing.
+
+  *The guides are gone (ADR 0049). Settings and the glossary still have none, for the same
+  reason: they are not links of the chain.*
   The chain is what this decision extends; it is not an argument for coverage as such.
 
   *Amended: the catalog and the four shop-setup pages did get one. They are not links of the
