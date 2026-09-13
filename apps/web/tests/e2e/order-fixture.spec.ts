@@ -41,6 +41,9 @@ test("an author builds a paid order shipping to the customer's stale address", a
   const createShop = card(page, "Create a shop");
   await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
   await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
+  // Said rather than defaulted into. The form answers the currency from the locale, so a
+  // journey that asserts a price in euros has to be the thing that chose euros.
+  await createShop.getByRole("combobox", { name: "Currency" }).selectOption("EUR");
   await createShop.getByRole("button", { name: "Create shop" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 
