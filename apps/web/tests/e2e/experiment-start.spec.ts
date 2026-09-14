@@ -317,9 +317,11 @@ async function publishConfiguration(page: Page, name: string, identity: string, 
   await page.getByLabel("Prompt template", { exact: true }).fill(prompt);
 
   await page.getByLabel("Framework", { exact: true }).selectOption({ label: "Deterministic fake" });
+  // Choosing the framework is choosing what the lab has proven it on: the provider select
+  // offers only that framework's providers, and the model follows the provider it belongs to.
   const runtime = card(page, "LLM and runtime");
-  await runtime.getByLabel("Provider", { exact: true }).fill("fake");
-  await runtime.getByLabel("Model", { exact: true }).fill("deterministic");
+  await expect(runtime.getByLabel("Provider", { exact: true })).toHaveValue("fake");
+  await expect(runtime.getByLabel("Model", { exact: true })).toHaveValue("deterministic");
 
   // Not an exact label match: a binding's label is the tool name followed by its effect
   // chip, which is what an author reads.
@@ -348,7 +350,10 @@ async function publishJudge(page: Page, name: string) {
   // The offline judge, so this journey needs no provider: its rule is declared, which is
   // what lets the assertion below name the verdict.
   await card(page, "Model").getByRole("combobox", { name: "Provider" }).selectOption("fake");
-  await card(page, "Model").getByLabel("Model", { exact: true }).fill("deterministic");
+  // The provider change takes the model with it; `gpt-5-mini` is not something this runs.
+  await expect(card(page, "Model").getByLabel("Model", { exact: true })).toHaveValue(
+    "deterministic",
+  );
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByRole("status")).toContainText("Published version 1");

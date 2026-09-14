@@ -169,4 +169,33 @@ test("an author publishes an agent configuration the lab can actually run", asyn
   await prompt.fill("You are {{support_identity.role}} for {{shop.name}}. Be brief.");
   await saveDraft(page);
   await expect(page.getByText(/Draft v2 in progress/)).toBeVisible();
+
+  // Slice 6's evidence, on the draft that has already proved the rest of this journey.
+  //
+  // Choosing a framework is choosing what the lab has proven it on. The provider is a select
+  // over that framework's providers — an unproven one is a publish error — and the model is a
+  // datalist over its models, because an unexercised model is only a warning and a dropdown
+  // would refuse in the browser what the API would take.
+  await page.getByLabel("Framework", { exact: true }).selectOption({ label: "OpenAI Agents SDK" });
+  const runtime = card(page, "LLM and runtime");
+  const provider = runtime.getByRole("combobox", { name: "Provider" });
+  await expect(provider).toHaveValue("openai");
+  // Under the workspace's one spelling of the value, as frame 5 draws the control.
+  await expect(provider.getByRole("option")).toHaveText(["OpenAI"]);
+  await expect(runtime.getByLabel("Model", { exact: true })).toHaveValue("gpt-5-mini");
+
+  // A model off that list stands, and is told about in the field rather than one save later.
+  await runtime.getByLabel("Model", { exact: true }).fill("gpt-5-nano");
+  await expect(runtime.getByText(/gpt-5-nano is not a model the lab exercises/)).toBeVisible();
+  await runtime.getByLabel("Model", { exact: true }).fill("gpt-5-mini");
+
+  // Choosing a tone override is choosing from the shop's own list, and the name the run will
+  // resolve is shown beside the ID.
+  const tone = card(page, "Tone of voice");
+  await tone.getByLabel("Tone of voice source", { exact: true }).selectOption("override");
+  const guideline = tone.getByLabel("Guideline ID", { exact: true });
+  await guideline.fill("warm-precise");
+  await expect(tone.getByText(/Resolves to Warm and precise in Northstar/)).toBeVisible();
+  await guideline.fill("not-a-guideline");
+  await expect(tone.getByText(/publishes no guideline with this ID/)).toBeVisible();
 });

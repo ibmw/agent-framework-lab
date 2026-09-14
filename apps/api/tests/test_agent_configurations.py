@@ -21,6 +21,7 @@ from capability_lab.application.support_identities import (
 )
 from capability_lab.domain.agent_configuration import AgentConfigurationPayload
 from capability_lab.domain.definitions import DefinitionType, DefinitionValidation
+from capability_lab.domain.shop import ToneOfVoiceGuideline
 from capability_lab.domain.support_identity import SupportPermission
 from capability_lab.infrastructure.database import (
     Base,
@@ -360,6 +361,50 @@ def test_the_resources_offer_only_what_a_configuration_may_name(lab: Lab) -> Non
         "fake",
     }
     assert WRITE_TOOL in {contract.name for contract in resources.tools}
+
+
+def test_a_preview_shop_offers_the_tone_of_voice_its_published_version_froze(lab: Lab) -> None:
+    """An override picks by ID, so the picker has to know which IDs a run could resolve."""
+    option = lab.configurations.resources().preview_shops[0]
+
+    assert [(guideline.id, guideline.name) for guideline in option.tone_of_voice_guidelines] == [
+        ("warm", "Warm and precise")
+    ]
+
+
+def test_a_preview_shop_offers_no_guideline_that_lives_only_in_its_draft(lab: Lab) -> None:
+    """The draft's second guideline is exactly the override that fails at experiment setup."""
+    lab.shops.replace_draft(
+        lab.shop_id,
+        publishable_shop(
+            tone_of_voice_guidelines=(
+                ToneOfVoiceGuideline(
+                    id="warm", name="Warm and precise", guidance="Be kind.", is_default=True
+                ),
+                ToneOfVoiceGuideline(id="brisk", name="Brisk", guidance="Be short."),
+            )
+        ),
+    )
+
+    option = lab.configurations.resources().preview_shops[0]
+
+    assert [guideline.id for guideline in option.tone_of_voice_guidelines] == ["warm"]
+
+
+def test_a_shop_that_was_never_published_offers_no_tone_of_voice(session: Session) -> None:
+    shops = ShopService(shop_repository(session), AdvancingClock())
+    shop_id = shops.create_shop(identity()).definition.id
+    shops.replace_draft(shop_id, publishable_shop())
+    configurations = build_agent_configurations(session)
+
+    option = next(
+        candidate
+        for candidate in configurations.resources().preview_shops
+        if candidate.shop_id == shop_id
+    )
+
+    assert option.latest_published_version is None
+    assert option.tone_of_voice_guidelines == ()
 
 
 def test_reading_a_configuration_that_was_never_created_is_refused(lab: Lab) -> None:

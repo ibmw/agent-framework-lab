@@ -4335,6 +4335,11 @@ export interface components {
       name: string;
       /** Latest Published Version */
       latest_published_version: number | null;
+      /**
+       * Tone Of Voice Guidelines
+       * @description What a tone-of-voice override may name in this shop, as its published version froze it. Empty for a shop with no published version: resolution reads published versions, so a guideline that exists only in a draft is one an override could name and no run could resolve.
+       */
+      tone_of_voice_guidelines: components["schemas"]["ToneOfVoiceOptionSchema"][];
     };
     /** ProductResponse */
     ProductResponse: {
@@ -6231,6 +6236,16 @@ export interface components {
       /** Revision After */
       revision_after: number | null;
       source: components["schemas"]["SourceLocationSchema"] | null;
+    };
+    /**
+     * ToneOfVoiceOptionSchema
+     * @description One tone-of-voice guideline a shop publishes, by ID and by name.
+     */
+    ToneOfVoiceOptionSchema: {
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
     };
     /** ToneOfVoiceSchema */
     ToneOfVoiceSchema: {

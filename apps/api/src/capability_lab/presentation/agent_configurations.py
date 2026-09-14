@@ -31,6 +31,7 @@ from capability_lab.application.agent_configurations import (
     ResolvedToolBinding,
     ResolvedVariable,
     SupportIdentityOption,
+    ToneOfVoiceOption,
 )
 from capability_lab.application.ports import AgentCapability
 from capability_lab.application.sandbox_tool_contracts import ToolEffect
@@ -301,10 +302,29 @@ class SupportIdentityOptionSchema(StrictApiModel):
         )
 
 
+class ToneOfVoiceOptionSchema(StrictApiModel):
+    """One tone-of-voice guideline a shop publishes, by ID and by name."""
+
+    id: str
+    name: str
+
+    @classmethod
+    def from_domain(cls, option: ToneOfVoiceOption) -> Self:
+        return cls(id=option.id, name=option.name)
+
+
 class PreviewShopOptionSchema(StrictApiModel):
     shop_id: UUID
     name: str
     latest_published_version: int | None
+    tone_of_voice_guidelines: list[ToneOfVoiceOptionSchema] = Field(
+        description=(
+            "What a tone-of-voice override may name in this shop, as its published version "
+            "froze it. Empty for a shop with no published version: resolution reads published "
+            "versions, so a guideline that exists only in a draft is one an override could "
+            "name and no run could resolve."
+        )
+    )
 
     @classmethod
     def from_domain(cls, option: PreviewShopOption) -> Self:
@@ -312,6 +332,10 @@ class PreviewShopOptionSchema(StrictApiModel):
             shop_id=option.shop_id,
             name=option.name,
             latest_published_version=option.latest_published_version,
+            tone_of_voice_guidelines=[
+                ToneOfVoiceOptionSchema.from_domain(guideline)
+                for guideline in option.tone_of_voice_guidelines
+            ],
         )
 
 

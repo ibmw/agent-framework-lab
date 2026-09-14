@@ -9962,12 +9962,22 @@ components:
           - type: integer
           - type: 'null'
           title: Latest Published Version
+        tone_of_voice_guidelines:
+          items:
+            $ref: '#/components/schemas/ToneOfVoiceOptionSchema'
+          type: array
+          title: Tone Of Voice Guidelines
+          description: 'What a tone-of-voice override may name in this shop, as its
+            published version froze it. Empty for a shop with no published version:
+            resolution reads published versions, so a guideline that exists only in
+            a draft is one an override could name and no run could resolve.'
       additionalProperties: false
       type: object
       required:
       - shop_id
       - name
       - latest_published_version
+      - tone_of_voice_guidelines
       title: PreviewShopOptionSchema
     ProductResponse:
       properties:
@@ -13663,6 +13673,21 @@ components:
         process does
 
         not have, or a tool this build no longer publishes.'
+    ToneOfVoiceOptionSchema:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      title: ToneOfVoiceOptionSchema
+      description: One tone-of-voice guideline a shop publishes, by ID and by name.
     ToneOfVoiceSchema:
       properties:
         id:

@@ -4,7 +4,9 @@ import type {
   AgentConfigurationResolutionSchema,
   AgentConfigurationResourcesResponse,
   MemoryMode,
+  PreviewShopOptionSchema,
   ResolvedVariableSchema,
+  ToneOfVoiceOptionSchema,
   ToneOfVoiceSource,
 } from "@agent-lab/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +20,7 @@ import {
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
 import { FieldHint } from "../components/FieldHint";
+import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
   canPublish,
@@ -27,13 +30,16 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { ARCHITECTURE_LABELS, ARCHITECTURES } from "../lib/agents";
+import { ARCHITECTURE_LABELS, ARCHITECTURES, describeProvider } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { labelOf, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
+  PROVEN_PROVIDER_RULE,
   SUPPORT_IDENTITY_PIN_RULE,
   TEMPERATURE_PATTERN,
   TEMPERATURE_RULE,
+  TONE_OVERRIDE_RULE,
+  unprovenAgentProviderRule,
 } from "../lib/fieldRules";
 import {
   accentButtonClasses,
@@ -201,6 +207,52 @@ export function AgentConfigurationEditorPage() {
   const permitted = new Map((resolution?.tools ?? []).map((tool) => [tool.name, tool.permitted]));
   const enabled = new Set(content.tools);
 
+  const framework =
+    resources?.frameworks.find((entry) => entry.framework_id === content.framework_id) ?? null;
+  // The catalog's set, plus whatever the payload currently carries. A select can only hold a
+  // value it offers, so an option that is missing would leave the control showing one provider
+  // while the draft saves another — the control lying about the payload rather than the
+  // payload being wrong. An off-list value keeps its option and is told about beneath.
+  const provenProviders = framework?.providers ?? [];
+  const providers = provenProviders.includes(content.model.provider)
+    ? provenProviders
+    : [...provenProviders, content.model.provider];
+  const provenModels = framework?.models ?? [];
+  const unprovenProvider = framework !== null && !provenProviders.includes(content.model.provider);
+  const previewShop = resources?.preview_shops.find((shop) => shop.shop_id === previewShopId);
+  const guidelines = previewShop?.tone_of_voice_guidelines ?? [];
+
+  /**
+   * Changing the framework changes what the lab has proven, so the two fields under it follow.
+   *
+   * The provider **resets** when it leaves the new framework's set, because the control is a
+   * select that cannot represent a value it does not offer and the gate refuses one outright.
+   * The model resets only when the provider actually moved, because a model name means nothing
+   * outside its provider — and where the provider is unchanged (Pydantic AI and the OpenAI
+   * Agents SDK are both proven on `openai`) a model the author typed is theirs to keep, since
+   * the gate only warns about it. That is the same rule the judge editor applies to a provider
+   * change; only the field that triggers it differs.
+   */
+  function chooseFramework(frameworkId: string) {
+    if (!content) {
+      return;
+    }
+    const next = resources?.frameworks.find((entry) => entry.framework_id === frameworkId);
+    const provider =
+      next === undefined || next.providers.includes(content.model.provider)
+        ? content.model.provider
+        : (next.providers[0] ?? content.model.provider);
+    const modelId =
+      provider === content.model.provider
+        ? content.model.model_id
+        : (next?.models[0] ?? content.model.model_id);
+    edit({
+      ...content,
+      framework_id: frameworkId,
+      model: { ...content.model, provider, model_id: modelId },
+    });
+  }
+
   function toggleTool(name: string) {
     if (!content) {
       return;
@@ -288,7 +340,7 @@ export function AgentConfigurationEditorPage() {
                 aria-label="Framework"
                 className={fieldControlClasses}
                 value={content.framework_id}
-                onChange={(event) => edit({ ...content, framework_id: event.target.value })}
+                onChange={(event) => chooseFramework(event.target.value)}
               >
                 {(resources?.frameworks ?? []).map((framework) => (
                   <option key={framework.framework_id} value={framework.framework_id}>
@@ -423,29 +475,59 @@ export function AgentConfigurationEditorPage() {
               </select>
             </label>
             {content.tone_of_voice.source === "override" ? (
-              <label className={fieldLabelClasses}>
-                Guideline ID
-                <input
-                  className={fieldControlClasses}
-                  value={content.tone_of_voice.guideline_id}
-                  onChange={(event) =>
-                    edit({
-                      ...content,
-                      tone_of_voice: {
-                        ...content.tone_of_voice,
-                        guideline_id: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </label>
+              <div>
+                {/*
+                 * The preview shop's own list, served with the option (`tone_of_voice_guidelines`
+                 * on `PreviewShopOptionSchema`) and read off its *published* version, because
+                 * that is the version a run resolves against. A datalist rather than a select
+                 * for `CountryField`'s reason: the configuration is shop-independent, so an ID
+                 * this shop does not publish may still be the right one for the shop the
+                 * experiment will name, and a dropdown would refuse it here while the lab takes
+                 * it. The line beneath says which of the two it is, live.
+                 */}
+                <FieldHint
+                  label="Guideline ID"
+                  hint={TONE_OVERRIDE_RULE}
+                  extra={overrideEcho(content.tone_of_voice.guideline_id, guidelines, previewShop)}
+                >
+                  <input
+                    className={fieldControlClasses}
+                    list="tone-of-voice-guidelines"
+                    value={content.tone_of_voice.guideline_id}
+                    autoComplete="off"
+                    placeholder="warm-precise"
+                    onChange={(event) =>
+                      edit({
+                        ...content,
+                        tone_of_voice: {
+                          ...content.tone_of_voice,
+                          guideline_id: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                </FieldHint>
+                <datalist id="tone-of-voice-guidelines">
+                  {guidelines.map((guideline) => (
+                    <option key={guideline.id} value={guideline.id} label={guideline.name} />
+                  ))}
+                </datalist>
+              </div>
             ) : null}
             <p className="text-xs text-admin-muted">
               Resolves per shop through{" "}
               <code className="font-mono">{"{{shop.tone_of_voice}}"}</code>
-              {resolution?.tone_of_voice_label
-                ? ` — this context resolves to ${resolution.tone_of_voice_label}.`
-                : " — this context resolves to nothing yet."}{" "}
+              {/*
+               * Only where no field carries the answer. An override now says what it resolves
+               * to beside the ID that names it, and this line is the *saved* draft's resolution
+               * — so on an override it would contradict the field for as long as the edit is
+               * unsaved, which is a card arguing with itself.
+               */}
+              {content.tone_of_voice.source === "override"
+                ? ""
+                : resolution?.tone_of_voice_label
+                  ? ` — this context resolves to ${resolution.tone_of_voice_label}.`
+                  : " — this context resolves to nothing yet."}{" "}
               An override missing from the target shop fails at experiment setup and is reported as
               a configuration variable in comparisons.
             </p>
@@ -489,32 +571,47 @@ export function AgentConfigurationEditorPage() {
 
           <Card title="LLM and runtime">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className={fieldLabelClasses}>
-                Provider
-                <input
+              <FieldHint
+                label="Provider"
+                hint={PROVEN_PROVIDER_RULE}
+                extra={
+                  unprovenProvider && framework
+                    ? unprovenAgentProviderRule(content.model.provider, framework.label)
+                    : null
+                }
+                extraTone="error"
+              >
+                <select
                   className={fieldControlClasses}
                   value={content.model.provider}
                   onChange={(event) =>
                     edit({
                       ...content,
-                      model: { ...content.model, provider: event.target.value },
+                      model: {
+                        ...content.model,
+                        provider: event.target.value,
+                        // A model belongs to its provider, so it follows one here for the
+                        // reason it follows one in the judge editor.
+                        model_id: provenModels[0] ?? content.model.model_id,
+                      },
                     })
                   }
-                />
-              </label>
-              <label className={fieldLabelClasses}>
-                Model
-                <input
-                  className={fieldControlClasses}
-                  value={content.model.model_id}
-                  onChange={(event) =>
-                    edit({
-                      ...content,
-                      model: { ...content.model, model_id: event.target.value },
-                    })
-                  }
-                />
-              </label>
+                >
+                  {providers.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {describeProvider(provider)}
+                    </option>
+                  ))}
+                </select>
+              </FieldHint>
+              <ProvenModelField
+                value={content.model.model_id}
+                models={provenModels}
+                proven={framework?.label ?? content.framework_id}
+                onChange={(modelId) =>
+                  edit({ ...content, model: { ...content.model, model_id: modelId } })
+                }
+              />
               <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
                 <input
                   className={fieldControlClasses}
@@ -603,6 +700,39 @@ export function AgentConfigurationEditorPage() {
       </div>
     </>
   );
+}
+
+/**
+ * What the preview shop resolves a typed override ID to, beside the field that took it.
+ *
+ * Three answers, and each is a different fact. A named guideline echoes its name, which is
+ * the whole point of the paired line: the ID is what the payload carries and the name is what
+ * the run will inject. An ID this shop does not publish is stated as that and no more — this
+ * page's gate does not refuse it, because a configuration is shop-independent and the shop an
+ * experiment names may publish it; what refuses it is experiment setup, so that is what the
+ * line says. And a shop with no published version has no list to be missing from at all.
+ */
+function overrideEcho(
+  guidelineId: string,
+  guidelines: ToneOfVoiceOptionSchema[],
+  shop: PreviewShopOptionSchema | undefined,
+): string | null {
+  if (guidelineId === "") {
+    return null;
+  }
+  if (shop === undefined) {
+    // The resources are still loading, or name no such shop. Saying "no published version"
+    // here would be a claim about a shop this page has not seen.
+    return null;
+  }
+  const named = guidelines.find((guideline) => guideline.id === guidelineId);
+  if (named) {
+    return `Resolves to ${named.name} in ${shop.name}.`;
+  }
+  if (shop.latest_published_version === null) {
+    return `${shop.name} has no published version, so nothing resolves here yet.`;
+  }
+  return `${shop.name} v${shop.latest_published_version} publishes no guideline with this ID. An override missing from the target shop fails at experiment setup.`;
 }
 
 /**

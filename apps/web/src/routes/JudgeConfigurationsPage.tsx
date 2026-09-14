@@ -6,6 +6,7 @@ import { createJudgeConfiguration, listJudgeConfigurations } from "../api/judgeC
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { describeProvider } from "../lib/agents";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -113,7 +114,9 @@ export function JudgeConfigurationsPage() {
                         {judge.name}
                       </Link>
                     </td>
-                    <td className={tableCellClasses}>{judge.provider_label}</td>
+                    {/* One spelling for the workspace: the index and the editor must not disagree
+                        about a provider, and `lib/agents.ts` is where that word is decided. */}
+                    <td className={tableCellClasses}>{describeProvider(judge.provider)}</td>
                     <td className={tableCellClasses}>{judge.model_id}</td>
                     <td className={tableCellClasses}>{judge.evidence_count} kind(s) of evidence</td>
                     <td className={tableCellClasses}>

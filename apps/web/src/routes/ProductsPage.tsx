@@ -7,7 +7,7 @@ import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill, VersionChips } from "../components/WorkspaceChrome";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
-import { KEBAB_PATTERN, PRODUCT_HANDLE_RULE } from "../lib/fieldRules";
+import { KEBAB_PATTERN, PRODUCT_CATEGORY_RULE, PRODUCT_HANDLE_RULE } from "../lib/fieldRules";
 import { issuesForProduct, ratingLabel } from "../lib/shop";
 import {
   accentButtonClasses,
@@ -40,6 +40,11 @@ export function ProductsPage() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const takenHandles = content.products.map((product) => product.handle);
+  // Sorted and de-duplicated, so the list reads as a vocabulary rather than as the order
+  // products happened to be added in. A product with no category yet offers nothing.
+  const draftCategories = [
+    ...new Set(content.products.map((product) => product.category).filter(Boolean)),
+  ].sort((left, right) => left.localeCompare(right));
   const { value: suggestedHandle, takenBase: takenHandleBase } = uniqueSuggestion(
     slugify(title, ""),
     takenHandles,
@@ -158,18 +163,29 @@ export function ProductsPage() {
                 onChange={(event) => setTitle(event.target.value)}
               />
             </FieldHint>
-            <FieldHint
-              label="Category"
-              hint="Groups the product in the catalog, for example Jackets."
-            >
+            {/*
+             * A datalist rather than a select: a catalog's first product has no category to
+             * pick from, and the second is usually a new one too. The draft's own categories
+             * are offered because reaching for "Jackets" when the draft already holds
+             * "jackets" is how one catalog ends up with two of everything — `CountryField`'s
+             * reasoning, over a set this shop wrote rather than a register.
+             */}
+            <FieldHint label="Category" hint={PRODUCT_CATEGORY_RULE}>
               <input
                 className={fieldControlClasses}
+                list="product-categories"
                 value={category}
                 required
                 placeholder="Jackets"
+                autoComplete="off"
                 onChange={(event) => setCategory(event.target.value)}
               />
             </FieldHint>
+            <datalist id="product-categories">
+              {draftCategories.map((entry) => (
+                <option key={entry} value={entry} />
+              ))}
+            </datalist>
             <DerivedIdField
               label="Handle"
               hint={PRODUCT_HANDLE_RULE}

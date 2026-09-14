@@ -195,16 +195,16 @@ shipping fee of "abc" as zero. A screen reader announces "Remove Ocean Blue", no
 
 ### Slice 6 — Closed sets the lab already knows
 
-- [ ] Agent editor: provider becomes a select filtered by the chosen framework's proven providers;
+- [x] Agent editor: provider becomes a select filtered by the chosen framework's proven providers;
   model becomes an input with the datalist of proven models, the judge editor's pattern; changing
   the framework resets or flags a value that went off-list.
-- [ ] Agent editor: the tone override lists the preview shop's tone guidelines in a datalist and
+- [x] Agent editor: the tone override lists the preview shop's tone guidelines in a datalist and
   echoes the resolved label beside the field. This needs the preview-shop option payload to carry
   the shop's guideline IDs and names: an additive contract change shipped with its backend and
   this consumer.
-- [ ] Judge editor: a provider change resets the model to the provider's first proven one.
-- [ ] Products: category offers a datalist of categories already in the draft.
-- [ ] Tool console: the acting identity defaults when exactly one is published; arguments carry
+- [x] Judge editor: a provider change resets the model to the provider's first proven one.
+- [x] Products: category offers a datalist of categories already in the draft.
+- [x] Tool console: the acting identity defaults when exactly one is published; arguments carry
   `required` and a type from their declared kind, with humanised labels.
 
 Frames: 5 (agent configuration).

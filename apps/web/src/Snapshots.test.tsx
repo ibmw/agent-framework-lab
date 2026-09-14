@@ -177,6 +177,13 @@ const TOOLS: ToolContractListResponse = {
           required: false,
           choices: [],
         },
+        {
+          name: "order_id",
+          kind: "uuid",
+          description: "The identifier the interaction context carries.",
+          required: false,
+          choices: [],
+        },
       ],
     },
     {
@@ -623,7 +630,7 @@ describe("tools", () => {
     const console = await openArm(user);
 
     await user.selectOptions(within(console).getByLabelText("Tool"), "orders.read_order");
-    await user.type(within(console).getByLabelText("order_reference"), "NS-10482");
+    await user.type(within(console).getByLabelText("Order reference"), "NS-10482");
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
 
     await waitFor(() => expect(calls).toHaveLength(1));
@@ -658,7 +665,7 @@ describe("tools", () => {
     const console = await openArm(user);
 
     await user.selectOptions(within(console).getByLabelText("Tool"), "orders.read_order");
-    await user.type(within(console).getByLabelText("order_reference"), "NS-00000");
+    await user.type(within(console).getByLabelText("Order reference"), "NS-00000");
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
 
     expect(
@@ -675,10 +682,50 @@ describe("tools", () => {
 
     await user.selectOptions(within(console).getByLabelText("Tool"), "support.read_document");
 
-    const kind = within(console).getByLabelText("kind (required)");
+    const kind = within(console).getByLabelText("Kind (required)");
     // A blank required enum is a call the tool will refuse, so it must not read as "any".
     expect(within(kind).getByRole("option", { name: "Choose…" })).toBeInTheDocument();
     expect(within(kind).queryByRole("option", { name: "Any" })).toBeNull();
+  });
+
+  it("labels each argument for a reader and types it from its declared kind", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "orders.read_order");
+
+    // `order_reference` is the wire's word; a form is not the wire.
+    const reference = within(console).getByLabelText("Order reference");
+    expect(reference.tagName).toBe("INPUT");
+    // `_id` reads as "ID", the way every other identifier in the workspace is written.
+    const identifier = within(console).getByLabelText("Order ID");
+    // A uuid has no HTML type and no pattern that matches what the lab actually takes, so it
+    // gets the two things that do help rather than a type it does not have.
+    expect(identifier).toHaveAttribute("autocomplete", "off");
+    expect(identifier).toHaveAttribute("spellcheck", "false");
+    // Both are optional on this tool, so the browser refuses neither.
+    expect(reference).not.toBeRequired();
+    expect(identifier).not.toBeRequired();
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "support.read_document");
+    // An enum is the closed set it declares.
+    expect(within(console).getByLabelText("Kind (required)").tagName).toBe("SELECT");
+  });
+
+  it("refuses a call missing a required argument before it is sent", async () => {
+    const user = userEvent.setup();
+    const console = await openArm(user);
+
+    await user.selectOptions(within(console).getByLabelText("Tool"), "support.read_document");
+    const kind = within(console).getByLabelText("Kind (required)");
+    expect(kind).toBeRequired();
+    expect(kind).toBeInvalid();
+
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+
+    // The contract's own flag on the control, so the form stops a call the tool would have
+    // refused a round trip later.
+    expect(calls).toHaveLength(0);
   });
 
   it("never shows one tool's result under another tool's form", async () => {
@@ -704,7 +751,7 @@ describe("tools", () => {
     pending.release?.();
 
     await waitFor(() =>
-      expect(within(console).getByLabelText("kind (required)")).toBeInTheDocument(),
+      expect(within(console).getByLabelText("Kind (required)")).toBeInTheDocument(),
     );
     expect(within(console).queryByRole("region", { name: "orders.read_order result" })).toBeNull();
   });
@@ -726,13 +773,14 @@ describe("the safe address change", () => {
       within(console).getByLabelText("Tool"),
       "orders.propose_address_change",
     );
-    // Chosen, never defaulted: nothing acts until the operator says who is acting.
+    // Already on the one published identity; selecting it again is what an operator with a
+    // second one would have to do, and keeps this helper honest either way.
     await user.selectOptions(
       within(console).getByLabelText("Acting support identity"),
       IDENTITY_ID,
     );
-    await user.type(within(console).getByLabelText("order_reference"), "NS-10482");
-    await user.type(within(console).getByLabelText("address_id (required)"), "home");
+    await user.type(within(console).getByLabelText("Order reference"), "NS-10482");
+    await user.type(within(console).getByLabelText("Address ID (required)"), "home");
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
   }
 
@@ -752,7 +800,7 @@ describe("the safe address change", () => {
     });
   });
 
-  it("makes no write until the operator says who is acting", async () => {
+  it("acts under the one published identity without being asked to choose it", async () => {
     const user = userEvent.setup();
     const console = await openArm(user);
 
@@ -760,7 +808,51 @@ describe("the safe address change", () => {
       within(console).getByLabelText("Tool"),
       "orders.propose_address_change",
     );
-    await user.type(within(console).getByLabelText("address_id (required)"), "home");
+
+    // One published identity is not a choice, so the field is answered and the placeholder
+    // that could only be resolved one way is not offered.
+    const actor = within(console).getByLabelText("Acting support identity");
+    expect(actor).toHaveValue(IDENTITY_ID);
+    expect(within(actor).queryByRole("option", { name: "Choose…" })).toBeNull();
+
+    await user.type(within(console).getByLabelText("Address ID (required)"), "home");
+    await user.click(within(console).getByRole("button", { name: "Run tool" }));
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].actor).toEqual({ support_identity_id: IDENTITY_ID, version: 2 });
+  });
+
+  it("makes no write until the operator says who is acting, where there is a choice", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/support-identities", () =>
+        HttpResponse.json({
+          identities: [
+            ...IDENTITIES.identities,
+            {
+              identity_id: "c".repeat(36),
+              name: "Northstar tier 2",
+              title: "Senior associate",
+              permission_count: 4,
+              guidance_count: 1,
+              updated_at: "2026-08-25T12:00:00+00:00",
+              latest_published_version: 1,
+              published_version_count: 1,
+            },
+          ],
+        } satisfies SupportIdentityListResponse),
+      ),
+    );
+    const console = await openArm(user);
+
+    await user.selectOptions(
+      within(console).getByLabelText("Tool"),
+      "orders.propose_address_change",
+    );
+    // Two identities grant different things, so the lab must not pick one: a write is
+    // authorized against whichever this names.
+    expect(within(console).getByLabelText("Acting support identity")).toHaveValue("");
+    await user.type(within(console).getByLabelText("Address ID (required)"), "home");
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
 
     // Refused here rather than at the server, which answers a missing actor as an error.
@@ -854,7 +946,7 @@ describe("the safe address change", () => {
       within(console).getByLabelText("Acting support identity"),
       IDENTITY_ID,
     );
-    await user.type(within(console).getByLabelText("confirmation (required)"), CONFIRMATION);
+    await user.type(within(console).getByLabelText("Confirmation (required)"), CONFIRMATION);
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
 
     expect(

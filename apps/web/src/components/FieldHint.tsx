@@ -7,6 +7,20 @@ type ControlProps = {
 };
 
 /**
+ * The second line's three treatments.
+ *
+ * `admin-draft-ink` is the colour `IssueList` gives the *word* "Warning" beside a gate
+ * finding (it paints the message itself `admin-ink-soft`, and `PublishReasons` summarises
+ * warnings in `admin-muted`). It is borrowed here as the workspace's warning ink, not as a
+ * copy of any one of those three renderings.
+ */
+const EXTRA_TONES = {
+  muted: "text-admin-muted",
+  warning: "text-admin-draft-ink",
+  error: "text-lab-error",
+} as const;
+
+/**
  * One muted line under a control, tied to it by `aria-describedby`.
  *
  * A format rule or a consequence is written here so it is read rather than hovered.
@@ -30,8 +44,16 @@ export function FieldHint({
   hint: ReactNode;
   /** A second description line (for example a live "Saved as" preview), also tied by aria-describedby. */
   extra?: ReactNode;
-  /** Collision copy uses the create-error treatment; a preview stays muted. */
-  extraTone?: "muted" | "error";
+  /**
+   * Collision copy uses the create-error treatment; a preview stays muted.
+   *
+   * `warning` is the publish gate's third severity, in `admin-draft-ink` — the ink
+   * `IssueList` uses for the word "Warning" on a gate finding. A field that echoes a gate
+   * finding must not claim a severity the gate did not give it: an unexercised model is
+   * a warning there, so it is a warning here, and it is announced politely rather than
+   * as an alert because nothing has been refused.
+   */
+  extraTone?: "muted" | "warning" | "error";
   optional?: boolean;
   children: ReactElement<ControlProps>;
 }) {
@@ -55,13 +77,7 @@ export function FieldHint({
       </p>
       <p
         id={extraId}
-        className={
-          extra
-            ? extraTone === "error"
-              ? "font-normal text-lab-error"
-              : "font-normal text-admin-muted"
-            : "sr-only"
-        }
+        className={extra ? `font-normal ${EXTRA_TONES[extraTone]}` : "sr-only"}
         role={extra && extraTone === "error" ? "alert" : undefined}
         aria-live={extraTone === "error" ? undefined : "polite"}
       >

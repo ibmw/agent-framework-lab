@@ -125,3 +125,68 @@ export const REVIEW_RATING_RULE = "A whole number of stars, from one to five.";
 export const CHIP_LABEL_MAX_LENGTH = 200;
 
 export const TICKET_TAG_MAX_LENGTH = 64;
+
+/**
+ * What a framework's or a judge provider's proven set means for the two model fields.
+ *
+ * Both gates are in the lab's code and they are not the same severity, so neither sentence
+ * may claim the other's: `capability_issues` in `agent_capabilities.py` and
+ * `judge_capability_issues` in `judge_capabilities.py` raise `provider_not_proven` as an
+ * **error** — nothing in the lab could execute it — and an unlisted model only as a
+ * **warning**, because the lab does not publish a framework for every model of a provider it
+ * supports. So the provider is a select that refuses and the model is a datalist that
+ * suggests, on `CountryField`'s reasoning: a dropdown there would refuse in the browser what
+ * the API would take.
+ */
+export const PROVEN_PROVIDER_RULE =
+  "Only the providers this has been proven against; publishing refuses any other.";
+
+export const PROVEN_MODEL_RULE =
+  "Pick a proven model, or type another: publishing warns rather than refuses.";
+
+/**
+ * The publish gate's own sentences, reproduced here character for character.
+ *
+ * Each is one `issue_*` message in the lab's own code, and the path to that code is named
+ * beside it so a reviewer changing either side can find the other. There is no trailing full
+ * stop, because the gate's messages carry none and `IssueList` prints them as they arrive —
+ * a field that added one would be a second wording of the same rule, which is exactly what
+ * `docs/design-direction.md`'s one-copy rule is written against.
+ *
+ * Written here rather than read off `preview.issues` because the preview endpoint previews the
+ * **saved** draft: `GET /draft/preview` takes no payload, so a refetch after a keystroke would
+ * answer for the model that was last saved and report the wrong value in the field that is
+ * being typed. Reading the gate live would need a preview that accepts a draft payload, which
+ * is a contract change this slice is not authorised to make.
+ *
+ * Both sides are pinned: `test_agent_capabilities.py` and `test_judge_configurations.py` assert
+ * the exact Python messages, and `fieldRules.test.ts` asserts the exact sentences here.
+ */
+
+/** `model_not_exercised` / `judge_model_not_exercised`, which are worded identically. */
+export function unexercisedModelRule(modelId: string, proven: string, models: string[]): string {
+  return `${modelId} is not a model the lab exercises; ${proven} is proven on ${models.join(", ")}`;
+}
+
+/** `provider_not_proven` in `agent_capabilities.py` — an error, not a warning. */
+export function unprovenAgentProviderRule(provider: string, frameworkLabel: string): string {
+  return `${frameworkLabel} has not been proven against the ${provider} provider`;
+}
+
+/**
+ * `judge_provider_not_proven` in `judge_capabilities.py`.
+ *
+ * Deliberately not the agent's sentence: the judge gate names no framework, because a judge
+ * has none, and a shared wording would put a subject in the sentence that does not exist.
+ */
+export function unprovenJudgeProviderRule(provider: string): string {
+  return `${provider} is not a provider the lab has proven it can judge with`;
+}
+
+/** What a tone-of-voice override names, and where the names come from. */
+export const TONE_OVERRIDE_RULE =
+  "The ID of a guideline the target shop publishes. The list is the preview shop's own.";
+
+/** What the category field groups, with the draft's existing categories offered beside it. */
+export const PRODUCT_CATEGORY_RULE =
+  "Groups the product in the catalog, for example Jackets. Pick one the draft already uses, or type a new one.";

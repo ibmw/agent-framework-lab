@@ -250,6 +250,94 @@ describe("judge workspace", () => {
     expect(temperature).toBeInvalid();
   });
 
+  it("moves the model onto the provider the author just chose", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const model = within(await screen.findByRole("region", { name: "Model" }));
+    expect(model.getByLabelText("Model")).toHaveValue("gpt-5-mini");
+
+    await user.selectOptions(model.getByLabelText("Provider"), "fake");
+
+    // `gpt-5-mini` is not something the offline control runs, so it is not a value the
+    // author could have meant by the provider they just chose.
+    expect(model.getByLabelText("Model")).toHaveValue("deterministic");
+  });
+
+  it("offers only the models the chosen provider is proven on", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Model" }));
+    const list = card.getByLabelText("Model").getAttribute("list");
+    const options = () =>
+      [...document.querySelectorAll(`#${list} option`)].map((option) =>
+        option.getAttribute("value"),
+      );
+
+    expect(options()).toEqual(["gpt-5-mini"]);
+    await user.selectOptions(card.getByLabelText("Provider"), "fake");
+    expect(options()).toEqual(["deterministic"]);
+  });
+
+  it("keeps a draft's off-list provider on the select rather than misreporting it", async () => {
+    // Reachable through the API: `judge_capability_issues` takes any provider string. A select
+    // that dropped the option would display `openai` while the payload held `acme`.
+    currentJudge = { ...JUDGE, model: { ...JUDGE.model, provider: "acme" } };
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Model" }));
+    const provider = card.getByLabelText("Provider");
+
+    expect(provider).toHaveValue("acme");
+    expect(within(provider).getByRole("option", { name: "acme" })).toBeInTheDocument();
+    // The judge gate's own sentence, which names no framework because a judge has none.
+    expect(provider).toHaveAccessibleDescription(
+      /acme is not a provider the lab has proven it can judge with/,
+    );
+  });
+
+  it("spells a provider the way the rest of the workspace spells it", async () => {
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Model" }));
+    const provider = card.getByLabelText("Provider");
+    expect(within(provider).getByRole("option", { name: "OpenAI" })).toBeInTheDocument();
+    expect(
+      within(provider).getByRole("option", { name: "Deterministic control" }),
+    ).toBeInTheDocument();
+  });
+
+  it("warns in the field about a model the lab does not exercise", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Model" }));
+    const model = card.getByLabelText("Model");
+    // A datalist rather than a select, because the gate warns here rather than refusing:
+    // the value stands, and the warning is read where it was typed.
+    await user.clear(model);
+    await user.type(model, "gpt-5-nano");
+
+    expect(model).toHaveAccessibleDescription(/gpt-5-nano is not a model the lab exercises/);
+    expect(model).toHaveAccessibleDescription(/OpenAI is proven on gpt-5-mini/);
+  });
+
+  it("saves the provider and the model a provider change moved together", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const model = within(await screen.findByRole("region", { name: "Model" }));
+    await user.selectOptions(model.getByLabelText("Provider"), "fake");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].model).toMatchObject({
+      provider: "fake",
+      model_id: "deterministic",
+    });
+  });
+
   it("shows what each kind of evidence puts in front of the judge", async () => {
     renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
 

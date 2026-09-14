@@ -11,6 +11,7 @@ import { describeApiError } from "../api/client";
 import { listSupportIdentities } from "../api/supportIdentities";
 import { callSandboxTool, listToolContracts } from "../api/tools";
 import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
+import { argumentControl, argumentInputProps, argumentLabel } from "../lib/tools";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -95,11 +96,17 @@ export function SandboxToolConsole({
       .then((listed) => {
         // Only a published version can act: a write authorizes against frozen permissions,
         // never against a draft that can grant itself another one a moment later.
-        // Only a published version can act: a write authorizes against frozen permissions,
-        // never against a draft that can grant itself another one a moment later.
-        setIdentities(
-          listed.identities.filter((identity) => identity.latest_published_version !== null),
+        const published = listed.identities.filter(
+          (identity) => identity.latest_published_version !== null,
         );
+        setIdentities(published);
+        // One published identity is not a choice, and "Choose…" in front of a list of one
+        // is a step that can only be taken one way. Two or more stays unanswered, because
+        // then it *is* a choice and the lab must not make it: a write is authorized against
+        // whichever permissions this names.
+        if (published.length === 1) {
+          setActing((current) => (current === "" ? published[0].identity_id : current));
+        }
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
@@ -244,7 +251,8 @@ export function SandboxToolConsole({
               value={acting}
               onChange={(event) => setActing(event.target.value)}
             >
-              <option value="">Choose…</option>
+              {/* Offered only where there is something to choose between. */}
+              {identities.length === 1 ? null : <option value="">Choose…</option>}
               {identities.map((candidate) => (
                 <option key={candidate.identity_id} value={candidate.identity_id}>
                   {candidate.name} · v{candidate.latest_published_version}
@@ -293,6 +301,18 @@ export function SandboxToolConsole({
   );
 }
 
+/**
+ * One argument, rendered from the lab's own declaration of it.
+ *
+ * Three things come from the contract rather than from this file. The **label** is the
+ * argument's name spelled for a reader (`argumentLabel`), because `order_reference` is the
+ * wire's word and a form is not the wire. The **control** is its declared kind
+ * (`argumentControl`): an enum is the closed set it says it is, and everything else is a text
+ * box — `uuid` included, because no HTML type and no writable pattern matches what the lab
+ * actually accepts (`lib/tools.ts` says why). And **required** is now the contract's flag on
+ * the control rather than only a word in the label, so the form refuses the call the tool
+ * would have refused a round trip later.
+ */
 function ArgumentField({
   argument,
   value,
@@ -303,17 +323,19 @@ function ArgumentField({
   onChange: (value: string) => void;
 }) {
   const id = `tool-argument-${argument.name}`;
+  const props = argumentInputProps(argument);
   return (
     <div className={fieldLabelClasses}>
       <label htmlFor={id}>
-        {argument.name}
+        {argumentLabel(argument.name)}
         {argument.required ? " (required)" : ""}
       </label>
-      {argument.kind === "enum" ? (
+      {argumentControl(argument.kind) === "select" ? (
         <select
           id={id}
           className={fieldControlClasses}
           value={value}
+          required={props.required}
           onChange={(event) => onChange(event.target.value)}
         >
           {/* An unfilled optional enum is a question the caller did not ask; an unfilled
@@ -328,9 +350,12 @@ function ArgumentField({
       ) : (
         <input
           id={id}
-          className={fieldControlClasses}
+          className={
+            argument.kind === "uuid" ? `${fieldControlClasses} font-mono` : fieldControlClasses
+          }
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          {...props}
         />
       )}
       <span className="font-normal text-admin-muted">{argument.description}</span>

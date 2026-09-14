@@ -256,6 +256,35 @@ describe("adding a product", () => {
     expect(precedes(card.getByLabelText("Category"), card.getByLabelText("Handle"))).toBe(true);
   });
 
+  it("offers the categories the draft already uses, and takes a new one", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products`);
+    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+
+    const category = card.getByLabelText("Category");
+    const list = category.getAttribute("list");
+    expect(
+      [...document.querySelectorAll(`#${list} option`)].map((option) =>
+        option.getAttribute("value"),
+      ),
+    ).toEqual(["Jackets"]);
+    expect(category).toHaveAccessibleDescription(/pick one the draft already uses/i);
+
+    // A datalist suggests; it never refuses. The second category a catalog gets is new.
+    await user.type(category, "Trousers");
+    expect(category).toHaveValue("Trousers");
+    expect(category).toBeValid();
+  });
+
+  it("suggests no category on an empty draft", async () => {
+    currentContent = EMPTY_CONTENT;
+    renderAt(`/shops/${SHOP_ID}/products`);
+    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+
+    const list = card.getByLabelText("Category").getAttribute("list");
+    expect(document.querySelectorAll(`#${list} option`)).toHaveLength(0);
+  });
+
   it("derives the handle from the title and previews what it will save", async () => {
     const user = userEvent.setup();
     currentContent = EMPTY_CONTENT;

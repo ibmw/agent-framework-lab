@@ -67,6 +67,15 @@ const RESOURCES: AgentConfigurationResourcesResponse = {
       summary: "The lab's first support adapter.",
       architectures: ["single_agent"],
       providers: ["openai"],
+      models: ["gpt-5-mini", "gpt-5"],
+      capabilities: ["tool_calls", "conversation_memory"],
+    },
+    {
+      framework_id: "openai-agents",
+      label: "OpenAI Agents SDK",
+      summary: "The lab's second experiment framework, on the same provider as the first.",
+      architectures: ["single_agent"],
+      providers: ["openai"],
       models: ["gpt-5-mini"],
       capabilities: ["tool_calls", "conversation_memory"],
     },
@@ -109,8 +118,21 @@ const RESOURCES: AgentConfigurationResourcesResponse = {
     },
   ],
   preview_shops: [
-    { shop_id: SHOP_ID, name: "Northstar Outfitters", latest_published_version: 3 },
-    { shop_id: OTHER_SHOP_ID, name: "Southline Supply", latest_published_version: 1 },
+    {
+      shop_id: SHOP_ID,
+      name: "Northstar Outfitters",
+      latest_published_version: 3,
+      tone_of_voice_guidelines: [
+        { id: "warm-precise", name: "Warm and precise" },
+        { id: "brisk", name: "Brisk and factual" },
+      ],
+    },
+    {
+      shop_id: OTHER_SHOP_ID,
+      name: "Southline Supply",
+      latest_published_version: 1,
+      tone_of_voice_guidelines: [{ id: "southline-house", name: "Southline house voice" }],
+    },
   ],
 };
 
@@ -479,6 +501,144 @@ describe("agent configuration workspace", () => {
     expect(await within(resolved).findByText("shop.name: Southline Supply")).toBeVisible();
     const promptCard = screen.getByRole("region", { name: "System prompt" });
     expect(await within(promptCard).findByText(/Values:/)).toHaveTextContent("Southline Supply v1");
+  });
+
+  it("offers the providers and models the chosen framework is proven on", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
+    const provider = runtime.getByLabelText("Provider");
+    // A select, not a free text box: an unproven provider is a publish error, so the field
+    // refuses it rather than letting the gate do it a save later.
+    expect(provider.tagName).toBe("SELECT");
+    expect(within(provider).getByRole("option", { name: "OpenAI" })).toBeInTheDocument();
+    expect(within(provider).queryByRole("option", { name: "Deterministic control" })).toBeNull();
+
+    const models = runtime.getByLabelText("Model").getAttribute("list");
+    expect(
+      [...document.querySelectorAll(`#${models} option`)].map((option) =>
+        option.getAttribute("value"),
+      ),
+    ).toEqual(["gpt-5-mini", "gpt-5"]);
+
+    await user.selectOptions(screen.getByLabelText("Framework"), "fake");
+
+    expect(
+      within(provider).getByRole("option", { name: "Deterministic control" }),
+    ).toBeInTheDocument();
+    expect(
+      [...document.querySelectorAll(`#${models} option`)].map((option) =>
+        option.getAttribute("value"),
+      ),
+    ).toEqual(["deterministic"]);
+  });
+
+  it("keeps a draft's off-list provider on the select rather than misreporting it", async () => {
+    currentConfiguration = {
+      ...CONFIGURATION,
+      model: { ...CONFIGURATION.model, provider: "anthropic" },
+    };
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
+    const provider = runtime.getByLabelText("Provider");
+
+    expect(provider).toHaveValue("anthropic");
+    expect(within(provider).getByRole("option", { name: "anthropic" })).toBeInTheDocument();
+    // An error, not a warning: nothing in the lab could execute it.
+    expect(provider).toHaveAccessibleDescription(
+      /Pydantic AI has not been proven against the anthropic provider/,
+    );
+  });
+
+  it("moves the provider and the model onto the framework the author just chose", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
+    await user.selectOptions(screen.getByLabelText("Framework"), "fake");
+
+    // The provider is reset because a select cannot hold a value it does not offer; the
+    // model follows because a model name means nothing outside its provider.
+    expect(runtime.getByLabelText("Provider")).toHaveValue("fake");
+    expect(runtime.getByLabelText("Model")).toHaveValue("deterministic");
+  });
+
+  it("keeps a typed model when the framework changes but the provider does not", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
+    const model = runtime.getByLabelText("Model");
+    await user.clear(model);
+    await user.type(model, "gpt-5");
+
+    // Both frameworks are proven on `openai`, so nothing the author answered has been
+    // invalidated and nothing of theirs is discarded.
+    await user.selectOptions(screen.getByLabelText("Framework"), "openai-agents");
+
+    expect(runtime.getByLabelText("Provider")).toHaveValue("openai");
+    expect(model).toHaveValue("gpt-5");
+    // It is off the new framework's list, though, and the field says so in the gate's words.
+    expect(model).toHaveAccessibleDescription(/gpt-5 is not a model the lab exercises/);
+    expect(model).toHaveAccessibleDescription(/OpenAI Agents SDK is proven on gpt-5-mini/);
+  });
+
+  it("says nothing about a model that is on the proven list", async () => {
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
+    expect(runtime.getByLabelText("Model")).not.toHaveAccessibleDescription(
+      /not a model the lab exercises/,
+    );
+  });
+
+  it("offers the preview shop's own tone guidelines and echoes the one it resolves to", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const tone = within(await screen.findByRole("region", { name: "Tone of voice" }));
+    await user.selectOptions(tone.getByLabelText("Tone of voice source"), "override");
+
+    const field = tone.getByLabelText("Guideline ID");
+    const list = field.getAttribute("list");
+    expect(
+      [...document.querySelectorAll(`#${list} option`)].map((option) => [
+        option.getAttribute("value"),
+        option.getAttribute("label"),
+      ]),
+    ).toEqual([
+      ["warm-precise", "Warm and precise"],
+      ["brisk", "Brisk and factual"],
+    ]);
+
+    await user.type(field, "brisk");
+    expect(field).toHaveAccessibleDescription(
+      /Resolves to Brisk and factual in Northstar Outfitters/,
+    );
+  });
+
+  it("says when an override names nothing the preview shop publishes", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const tone = within(await screen.findByRole("region", { name: "Tone of voice" }));
+    await user.selectOptions(tone.getByLabelText("Tone of voice source"), "override");
+    const field = tone.getByLabelText("Guideline ID");
+    await user.type(field, "southline-house");
+
+    // Stated, not refused: the configuration is shop-independent, and this ID is the right
+    // one for the shop beside it. What refuses it is experiment setup, which is what it says.
+    expect(field).toHaveAccessibleDescription(
+      /Northstar Outfitters v3 publishes no guideline with this ID/,
+    );
+    expect(field).toHaveAccessibleDescription(/fails at experiment setup/);
+
+    await user.selectOptions(screen.getByLabelText("Preview context"), OTHER_SHOP_ID);
+
+    expect(await screen.findByText(/Resolves to Southline house voice in Southline Supply/)) //
+      .toBeVisible();
   });
 
   it("reports a failed save without discarding the draft", async () => {

@@ -573,3 +573,139 @@ themselves `aria-hidden`. There is no "no rating" — `ReviewSchema.rating` is r
 sixth state would exist only to be refused when Add was pressed. Because a filled star differs
 from an empty one by colour and shape alone, the group's second line says the count in words,
 which is the same rule the status pill follows.
+
+## Revision — closed sets the lab already knows (2026-09-14)
+
+Slice 6. The six sections above are unchanged; this one covers the two things they did not — a
+field whose set is *the lab's own answer* rather than the contract's or a register's, and what
+happens to a value when the question above it changes.
+
+**Frame 5 draws both of them as controls.** The LLM card's first row is two boxes with chevrons
+— "Anthropic ▾" and "claude-sonnet-5 ▾" — and only its second line ("temperature 0.2 · max 8 tool
+rounds") is a read-out. So the frame settles two things this slice had to decide anyway: the
+provider and the model are pickers rather than typed strings, and the provider is drawn under a
+**human label**, not an ID.
+
+**Where a set comes from decides the control.** The three previous sections settled two kinds of
+list: a closed set the contract publishes is a label table and a select (*enum labels*), and a
+register too large and too open to be a vocabulary is a datalist that suggests (*chips, a
+country*). A third kind appears here and is neither: what the lab has *proven* it can run. Its
+members are strings in `PROVEN_FRAMEWORKS` and `PROVEN_JUDGES`, not union members, so no table
+in `lib/enumLabels.ts` could be keyed to them and no sweep could hold them to the contract. The
+rule is instead the **gate's severity**, because that is what already decides what the lab will
+accept:
+
+- A provider is a `<select>`. `capability_issues` and `judge_capability_issues` raise an
+  unproven provider as an **error** — nothing in the lab could execute it — so a control that
+  could name one would be manufacturing a publish failure.
+- A model is an `<input list=…>`. The same two functions raise an unexercised model only as a
+  **warning**, because the lab does not publish a framework for every model of a provider it
+  supports. A select there would refuse in the browser what the API would take, which is exactly
+  `CountryField`'s objection.
+- A tone-of-voice override is an `<input list=…>` too, and for a third reason again: an agent
+  configuration is shop-independent, so an ID the *preview* shop does not publish may be the
+  right one for the shop the experiment will name. Nothing on that page refuses it; what refuses
+  it is experiment setup, and that is what the line beneath says.
+
+**A select offers whatever the payload carries.** A `<select>` can only show a value it lists, so
+an option missing for the draft's current provider would leave the control displaying one
+provider while the payload saved another — the control lying about the draft rather than the
+draft being wrong. The off-list value therefore keeps its option and is told about beneath it.
+This holds in both editors: neither gate constrains the provider *string* — `capability_issues`
+and `judge_capability_issues` take any — so a draft written through the API can carry one that
+is off either catalog, and a select that hid it would misreport the draft it is editing.
+
+**A provider is spelled once for the workspace, outside the enum registry.** The judge catalog
+serves a label per provider (`ProvenJudge.label`) and the framework catalog serves none, which
+left the agent editor and the settings page printing `openai` beside a judge editor printing
+"OpenAI" — one branch, two spellings of one string. `MODEL_PROVIDER_LABELS` in `lib/agents.ts` is
+now the one spelling, read by both editors, the judges index and the settings page. It is not in
+`lib/enumLabels.ts` because a provider is not a union the contract publishes — it is `Slug` on
+the wire and `frozenset[str]` in the catalog — so there is nothing for that module's sweep to
+hold it to, and `enumLabels.test.ts` names an unregistrable table as a failure. It sits beside
+`ARCHITECTURE_LABELS` instead, and an unknown provider is returned verbatim, on `describeValue`'s
+rule.
+
+It is the **fallback** spelling rather than a second authority. Where the lab serves a word for a
+provider it wins, because the judge gate writes its unexercised-model sentence from exactly that
+field (`judge.label`), so a select that spelled the provider from the table while the sentence
+beneath it spelled the same value from the server would come apart inside one card the day a
+third judge is added. So the judge editor's option text reads `judge.label` and falls back to the
+table; the agent editor has no served provider label to prefer and reads the table outright —
+which is safe there because the agent gate's sentence names the *framework*, not the provider, so
+the two controls in that card never name the same value twice.
+
+What remains is one field with no reader. `JudgeConfigurationSummarySchema.provider_label` is now
+read by nothing in `apps/web/src` outside a test fixture: the judges index takes the table, and
+the editor takes `ProvenJudgeSchema.label` from the resources it already fetches. That field is
+what a later slice should remove or generalise — generalising is the better half, because giving
+`ProvenFrameworkSchema` a provider label of its own would delete this table entirely and leave the
+lab the only author of the word. Both are contract changes, and both are that slice's to make.
+
+**The provider resets; the model follows the provider; nothing else is taken.** PLAN-UX offered
+"resets or flags" and the answer is both, split by a rule rather than by editor:
+
+- The **provider** resets when it leaves its proven set, because the control cannot represent an
+  off-list value and the gate refuses one outright. Nothing is lost that could have been
+  published.
+- The **model** resets only when the provider actually moved, because a model name means nothing
+  outside its provider: `deterministic` is not something OpenAI serves and `gpt-5-mini` is not
+  something the offline control runs, so the old value could not have been the author's answer
+  to the question they just changed. This is what makes the judge editor's mandated reset and
+  the agent editor's behaviour one rule: a judge's provider change moves the provider, and an
+  agent's framework change moves it only when the new framework is proven somewhere else. Two
+  frameworks on `openai` leave a typed model alone.
+- Everywhere else the value **stands and is flagged**, because the gate only warns and a form
+  that discarded a publishable answer would be worse than the warning it replaced.
+
+**A field may not claim a severity its gate did not give.** `FieldHint`'s second line gained a
+third tone, `warning`, in `admin-draft-ink` — the ink `IssueList` gives the word "Warning" beside
+a gate finding, borrowed as the workspace's warning ink rather than copied from any one
+rendering; the finding's message there is `admin-ink-soft` and `PublishReasons` summarises
+warnings in `admin-muted`. It is announced politely rather than as an alert, because nothing has
+been refused.
+
+**The sentence is the gate's, character for character.** `lib/fieldRules.ts` reproduces each
+`issue_*` message exactly, trailing punctuation included — which is to say none, because the
+gate's messages carry none — and names the Python function it copies. It is written there rather
+than read off `preview.issues` because `GET /draft/preview` previews the **saved** draft and
+takes no payload: a refetch after a keystroke would answer for the model that was last saved and
+report the wrong value in the field being typed. Reading the gate live wants a preview that
+accepts a draft payload, which is a contract change, so until there is one the duplication is
+pinned from both ends — a Python test asserts the exact message and a TypeScript test asserts the
+exact sentence, each naming the other. The agent gate's provider sentence and the judge gate's
+are different sentences and stay two functions: the judge gate names no framework, because a
+judge has none.
+
+**A picker of what a run will resolve reads published versions.** The tone-of-voice datalist is
+the preview shop's guidelines as its *published* version froze them, carried by
+`PreviewShopOptionSchema.tone_of_voice_guidelines` — the slice's one additive contract change.
+Draft guidelines are deliberately absent: `resolve_tone_of_voice` is handed the published
+payload, so a guideline living only in a draft is precisely the override that fails at
+experiment setup, and offering it would be the picker manufacturing that failure. A shop with no
+published version offers nothing and says so.
+
+**An argument is labelled and typed from the contract that declares it.** The tool console reads
+three things off `ToolArgumentSchema` that it previously only half-read. The **label** is the
+argument's name spelled for a reader — `order_reference` becomes "Order reference", and `_id`
+becomes "ID" the way every other identifier in the workspace is written — through a function in
+`lib/tools.ts` rather than a table, because an argument name is not a union member and a table
+would leave a newly published tool's argument with no words. **Required** is the contract's flag
+on the control and not only a word in the label, which is a real refusal here because the
+arguments sit in a `<form>` with a submit button. And the **control** is the declared kind: an
+enum is the closed set it says it is; everything else is a text box.
+
+**A kind with no HTML type takes none.** `uuid` is that kind. A `pattern` was the alternative and
+is wrong: the lab's own check is `UUID(value)` in `sandbox_tools.py`, which takes the hyphenless
+form, braces and a `urn:uuid:` prefix as well as the canonical spelling, so any pattern short
+enough to write would refuse values the tool accepts — the *chips* section's rule that a
+respelling must reach the shape the gate wants, read the other way round. It gets instead the two
+attributes that actually help an identifier: autofill and spellcheck off, and a mono face.
+`ToolArgumentKind` is a contract union and still has no label table, for the reason `KINDS` in
+`ExperimentTracesPage` has none: nothing renders it. It picks a control, and a value nobody reads
+needs no spelling.
+
+**A choice of one is not a choice.** The tool console's acting identity defaults when exactly one
+support identity is published, and the "Choose…" placeholder in front of a list of one is not
+offered. Two or more stays unanswered, because then it *is* a choice and the lab must not make
+it: a write is authorized against whichever permissions it names.

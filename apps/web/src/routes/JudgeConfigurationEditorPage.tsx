@@ -15,6 +15,7 @@ import {
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
 import { FieldHint } from "../components/FieldHint";
+import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
   canPublish,
@@ -24,9 +25,15 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
+import { describeProvider } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { JUDGE_EVIDENCE_SCOPE } from "../lib/enumLabels";
-import { TEMPERATURE_PATTERN, TEMPERATURE_RULE } from "../lib/fieldRules";
+import {
+  PROVEN_PROVIDER_RULE,
+  TEMPERATURE_PATTERN,
+  TEMPERATURE_RULE,
+  unprovenJudgeProviderRule,
+} from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -106,9 +113,44 @@ export function JudgeConfigurationEditorPage() {
     });
   }
 
-  const models = resources?.judges.find(
-    (judge) => judge.provider === content.model.provider,
-  )?.models;
+  const provider =
+    resources?.judges.find((judge) => judge.provider === content.model.provider) ?? null;
+  const models = provider?.models ?? [];
+  // The catalog's set, plus whatever the payload carries, for the reason the agent editor
+  // gives: a select can only show a value it offers, so a draft whose provider is off-list —
+  // reachable through the API, since `judge_capability_issues` takes any string — would
+  // otherwise display the first option while the payload held another. The control must not
+  // misreport the draft it is editing.
+  const provenProviders = (resources?.judges ?? []).map((judge) => judge.provider);
+  const unprovenProvider = resources !== null && !provenProviders.includes(content.model.provider);
+  const providers = unprovenProvider
+    ? [...provenProviders, content.model.provider]
+    : provenProviders;
+
+  /**
+   * A provider change takes the model with it.
+   *
+   * A model name means nothing outside its provider — `deterministic` is not something
+   * OpenAI serves, and `gpt-5-mini` is not something the offline control runs — so leaving
+   * the field on the old provider's model would hold a draft the gate warns about and no
+   * run could execute. It is a reset rather than a flag because the value it discards could
+   * not have been the author's answer to the question they just changed; the agent editor
+   * applies the same rule, where a framework change is what moves the provider.
+   */
+  function chooseProvider(providerId: string) {
+    if (!content) {
+      return;
+    }
+    const chosen = resources?.judges.find((judge) => judge.provider === providerId);
+    edit({
+      ...content,
+      model: {
+        ...content.model,
+        provider: providerId,
+        model_id: chosen?.models[0] ?? content.model.model_id,
+      },
+    });
+  }
 
   return (
     <>
@@ -236,45 +278,40 @@ export function JudgeConfigurationEditorPage() {
           </Card>
 
           <Card title="Model">
-            <label className={fieldLabelClasses}>
-              Provider
+            <FieldHint
+              label="Provider"
+              hint={PROVEN_PROVIDER_RULE}
+              extra={unprovenProvider ? unprovenJudgeProviderRule(content.model.provider) : null}
+              extraTone="error"
+            >
               <select
-                aria-label="Provider"
                 className={fieldControlClasses}
                 value={content.model.provider}
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    model: { ...content.model, provider: event.target.value },
-                  })
-                }
+                onChange={(event) => chooseProvider(event.target.value)}
               >
-                {(resources?.judges ?? []).map((judge) => (
-                  <option key={judge.provider} value={judge.provider}>
-                    {judge.label}
+                {/*
+                 * The served label where the catalog has one, so the option and the sentence
+                 * beneath it cannot come apart: `ProvenModelField`'s subject must stay
+                 * `judge.label` to keep that sentence character-identical to the gate, which
+                 * writes it from exactly that field. The shared table is the fallback, for
+                 * the appended off-list value that the catalog knows nothing about.
+                 */}
+                {providers.map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {resources?.judges.find((judge) => judge.provider === candidate)?.label ??
+                      describeProvider(candidate)}
                   </option>
                 ))}
               </select>
-            </label>
-            <label className={fieldLabelClasses}>
-              Model
-              <input
-                className={fieldControlClasses}
-                list="judge-models"
-                value={content.model.model_id}
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    model: { ...content.model, model_id: event.target.value },
-                  })
-                }
-              />
-            </label>
-            <datalist id="judge-models">
-              {(models ?? []).map((model) => (
-                <option key={model} value={model} />
-              ))}
-            </datalist>
+            </FieldHint>
+            <ProvenModelField
+              value={content.model.model_id}
+              models={models}
+              proven={provider?.label ?? describeProvider(content.model.provider)}
+              onChange={(modelId) =>
+                edit({ ...content, model: { ...content.model, model_id: modelId } })
+              }
+            />
             <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
               <input
                 className={fieldControlClasses}

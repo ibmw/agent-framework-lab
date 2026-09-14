@@ -158,12 +158,36 @@ class SupportIdentityOption:
 
 
 @dataclass(frozen=True, slots=True)
+class ToneOfVoiceOption:
+    """One tone-of-voice guideline a shop publishes, as an override picker offers it.
+
+    The ID and the name, and deliberately not the guidance: an override selects a guideline
+    by ID, and the body is the shop's content rather than something this picker resolves.
+    """
+
+    id: str
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class PreviewShopOption:
     """One shop the author can resolve the prompt's variables against."""
 
     shop_id: UUID
     name: str
     latest_published_version: int | None
+    tone_of_voice_guidelines: tuple[ToneOfVoiceOption, ...]
+    """What a tone-of-voice override may name in this shop, read off its *published* version.
+
+    Published rather than draft for the reason the module docstring gives about every other
+    resolved value: `resolve_tone_of_voice` is handed the published payload, and an override
+    naming a guideline that exists only in a shop's draft is exactly the one that fails at
+    experiment setup. A shop with no published version offers nothing, which is the truthful
+    answer rather than an empty accident.
+
+    No default: the wire field is required, and a constructor that forgot it would produce the
+    empty list this docstring defines as "no published version" for a shop that has one.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -394,9 +418,20 @@ class AgentConfigurationService(DefinitionAuthoringService[AgentConfigurationPay
                     shop_id=listing.definition_id,
                     name=listing.payload.identity.name,
                     latest_published_version=listing.latest_published_version,
+                    tone_of_voice_guidelines=self._published_tone_of_voice(listing.definition_id),
                 )
                 for listing in self._shops.list_definitions()
             ),
+        )
+
+    def _published_tone_of_voice(self, shop_id: UUID) -> tuple[ToneOfVoiceOption, ...]:
+        """The guidelines an override may name in one shop, as its published version froze them."""
+        published, _ = self._published_shop(shop_id)
+        if published is None:
+            return ()
+        return tuple(
+            ToneOfVoiceOption(id=guideline.id, name=guideline.name)
+            for guideline in published.tone_of_voice_guidelines
         )
 
     # -- preview resolution -----------------------------------------------------
@@ -523,6 +558,7 @@ __all__ = [
     "ResolvedToolBinding",
     "ResolvedVariable",
     "SupportIdentityOption",
+    "ToneOfVoiceOption",
     "agent_configuration_definition_id",
     "agent_configuration_references",
     "new_agent_configuration",

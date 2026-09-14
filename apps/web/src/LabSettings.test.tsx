@@ -144,13 +144,14 @@ describe("lab settings", () => {
 
     expect(within(pydantic).getByText("pydantic-ai", { selector: "code" })).toBeVisible();
     expect(within(pydantic).getByText("Single agent")).toBeVisible();
-    expect(within(pydantic).getByText("openai · gpt-5-mini")).toBeVisible();
+    // The provider under the workspace's one spelling of it, not the wire's word.
+    expect(within(pydantic).getByText("OpenAI · gpt-5-mini")).toBeVisible();
     expect(within(pydantic).getByText("structured output")).toBeVisible();
 
     // The envelope is per framework, so a reader learns what the control arm cannot do
     // without first being refused by the publish gate.
     expect(within(control).getByText("Deterministic fake")).toBeVisible();
-    expect(within(control).getByText("fake · deterministic")).toBeVisible();
+    expect(within(control).getByText("Deterministic control · deterministic")).toBeVisible();
     expect(within(control).queryByText("structured output")).toBeNull();
   });
 

@@ -88,6 +88,31 @@ def test_a_model_the_lab_does_not_exercise_is_a_warning_rather_than_a_refusal(
     assert "judge_model_not_exercised" in {issue.code for issue in validation.issues}
 
 
+def test_the_two_judge_gate_messages_are_the_exact_words_the_studio_repeats(
+    judges: JudgeConfigurationService,
+) -> None:
+    """The judge half of the pin `test_agent_capabilities.py` explains.
+
+    The provider sentence is deliberately not the agent gate's: a judge names no framework, so
+    the Studio keeps two functions rather than one with an empty subject.
+    """
+    unproven = judges.preview_draft(
+        authored(judges, model=JudgeModel(provider="acme", model_id="oracle"))
+    ).validation
+    unexercised = judges.preview_draft(
+        authored(judges, model=replace(control_model(), model_id="something-else"))
+    ).validation
+
+    provider = next(issue for issue in unproven.issues if issue.code == "judge_provider_not_proven")
+    model = next(issue for issue in unexercised.issues if issue.code == "judge_model_not_exercised")
+
+    assert provider.message == "acme is not a provider the lab has proven it can judge with"
+    assert model.message == (
+        "something-else is not a model the lab exercises; "
+        "Deterministic control is proven on deterministic"
+    )
+
+
 def test_a_rubric_that_names_what_an_arm_runs_is_refused(
     judges: JudgeConfigurationService,
 ) -> None:

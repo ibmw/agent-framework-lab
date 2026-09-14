@@ -85,3 +85,29 @@ respelling must reach the shape the gate wants rather than most of the way to it
 row shows the chips it was entered with, and that a rule shared by a table's rows lives once
 and is reached by `aria-describedby`. The four sections this ADR already points at are
 unchanged.
+
+## Amendment — 2026-09-14 (Slice 6)
+
+Slice 6 added a sixth sibling section in `docs/design-direction.md` (*Revision — closed sets the
+lab already knows (2026-09-14)*): that frame 5 draws the provider and the model as controls and
+the provider under a human label, that where a set comes from decides the control and the
+deciding fact is the publish gate's severity, that a select offers whatever the payload carries
+so it cannot misreport the draft, that a provider is spelled once for the workspace in
+`lib/agents.ts` and why that table cannot live in the enum registry, the reset-or-flag rule — the
+provider resets when it leaves its proven set, the model follows the provider and is otherwise
+flagged — that makes the judge editor's mandated reset and the agent editor's behaviour one rule,
+that a field may not claim a severity its gate did not give (`FieldHint` gained a `warning` tone
+in `admin-draft-ink`), that a copied gate sentence is copied character for character and pinned
+from both ends until a preview can accept a draft payload, that a picker of what a run will
+resolve reads published versions, how a tool argument is labelled and typed from the contract
+that declares it, that a kind with no HTML type takes none, and that a choice of one is not a
+choice. The five sections this ADR already points at are unchanged.
+
+**No ADR of its own for the contract change.** The slice ships one additive field —
+`PreviewShopOptionSchema.tone_of_voice_guidelines` — and that is deliberately recorded in the
+design-direction section rather than in an ADR. The repo's ADRs are scoped to decisions about
+what the product *is*: ADR 0012 decided that tone of voice is shop-level, ADR 0024 decided what a
+preview resolution reads. This field publishes no new domain fact, versions no route, needs no
+migration, and takes its one policy question — which version's guidelines a picker offers — from
+a rule already recorded: resolution reads published versions, never drafts. An ADR here would be
+a second copy of ADR 0024's sentence, which is the failure mode this ADR was written to avoid.

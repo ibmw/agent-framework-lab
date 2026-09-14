@@ -11,7 +11,7 @@ import { describeApiError } from "../api/client";
 import { seedLab } from "../api/labSeed";
 import { getLabStatus } from "../api/labStatus";
 import { Card, EntryCard, EntryId, EntryKind } from "../components/WorkspaceChrome";
-import { describeArchitecture, readableTerm } from "../lib/agents";
+import { describeArchitecture, describeProvider, readableTerm } from "../lib/agents";
 import { readNavigationCollapsed, writeNavigationCollapsed } from "../lib/preferences";
 import { accentButtonClasses, outlineButtonClasses } from "../lib/ui";
 import { LabSurface, useLabSurface } from "../shell/LabSurface";
@@ -25,7 +25,7 @@ function FrameworkRow({ framework }: { framework: ProvenFrameworkSchema }) {
         <dd>{framework.architectures.map(describeArchitecture).join(", ")}</dd>
         <dt className="font-semibold text-admin-muted">Provider · model</dt>
         <dd>
-          {framework.providers.join(", ")} · {framework.models.join(", ")}
+          {framework.providers.map(describeProvider).join(", ")} · {framework.models.join(", ")}
         </dd>
         <dt className="font-semibold text-admin-muted">Proven</dt>
         <dd className="flex flex-wrap gap-1.5">

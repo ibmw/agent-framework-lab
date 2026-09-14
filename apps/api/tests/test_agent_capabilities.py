@@ -104,6 +104,36 @@ def test_a_provider_outside_the_framework_is_an_error_and_an_unrun_model_a_warni
     )
 
 
+def test_the_two_model_gate_messages_are_the_exact_words_the_studio_repeats() -> None:
+    """Pinned because the Studio holds a second copy of both.
+
+    `apps/web/src/lib/fieldRules.ts` writes these sentences under the provider and the model
+    fields as they are typed, because `GET /draft/preview` previews the saved draft and cannot
+    be asked about a value still being typed. Until a preview accepts a draft payload, one rule
+    has two authors; this test is the end that stops the backend moving silently. The other end
+    is `apps/web/src/lib/fieldRules.test.ts`.
+    """
+    provider = next(
+        issue
+        for issue in capability_issues(
+            publishable_configuration(model=model_settings(provider="anthropic"))
+        )
+        if issue.code == "provider_not_proven"
+    )
+    model = next(
+        issue
+        for issue in capability_issues(
+            publishable_configuration(model=model_settings(model_id="gpt-4.1"))
+        )
+        if issue.code == "model_not_exercised"
+    )
+
+    assert provider.message == "Pydantic AI has not been proven against the anthropic provider"
+    assert model.message == (
+        "gpt-4.1 is not a model the lab exercises; Pydantic AI is proven on gpt-5-mini"
+    )
+
+
 def test_memory_the_lab_has_never_persisted_cannot_be_published() -> None:
     payload = publishable_configuration(memory=MemoryMode.DURABLE)
     issue = next(

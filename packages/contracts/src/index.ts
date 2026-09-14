@@ -225,6 +225,7 @@ export type ResolvedVariableSchema = components["schemas"]["ResolvedVariableSche
 export type ResolvedToolBindingSchema = components["schemas"]["ResolvedToolBindingSchema"];
 export type SupportIdentityOptionSchema = components["schemas"]["SupportIdentityOptionSchema"];
 export type PreviewShopOptionSchema = components["schemas"]["PreviewShopOptionSchema"];
+export type ToneOfVoiceOptionSchema = components["schemas"]["ToneOfVoiceOptionSchema"];
 export type ExperimentListResponse = components["schemas"]["ExperimentListResponse"];
 export type ExperimentSummarySchema = components["schemas"]["ExperimentSummarySchema"];
 export type ExperimentResponse = components["schemas"]["ExperimentResponse"];

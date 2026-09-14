@@ -273,6 +273,56 @@ async def test_the_resources_publish_the_frameworks_tools_and_variables(
     assert interaction and all(not variable["injectable"] for variable in interaction)
 
 
+async def test_a_preview_shop_carries_the_tone_of_voice_an_override_may_name(
+    client: AsyncClient,
+) -> None:
+    """The override picker chooses by ID, so the contract has to publish the IDs and names.
+
+    Read off the shop's *published* version, because that is the one `resolve_tone_of_voice`
+    is handed: a guideline living only in a draft is precisely the override that fails at
+    experiment setup, and offering it here would be the picker manufacturing that failure.
+    """
+    shop_id = await make_shop(client)
+
+    unpublished = (await client.get(f"{CONFIGURATIONS}/resources")).json()["preview_shops"]
+    assert unpublished[0]["shop_id"] == shop_id
+    assert unpublished[0]["latest_published_version"] is None
+    assert unpublished[0]["tone_of_voice_guidelines"] == []
+
+    published = await client.post(f"/api/v1/shops/{shop_id}/versions")
+    assert published.status_code == 201, published.text
+
+    body = (await client.get(f"{CONFIGURATIONS}/resources")).json()["preview_shops"]
+
+    assert body[0]["latest_published_version"] == 1
+    assert body[0]["tone_of_voice_guidelines"] == [
+        {"id": "warm-precise", "name": "Warm and precise"}
+    ]
+
+
+async def test_a_preview_shop_offers_no_guideline_added_only_to_the_draft(
+    client: AsyncClient,
+) -> None:
+    shop_id = await make_shop(client)
+    await client.post(f"/api/v1/shops/{shop_id}/versions")
+    draft = (await client.get(f"/api/v1/shops/{shop_id}/draft")).json()["content"]
+    draft.pop("default_tone_of_voice_id", None)
+    for product in draft["products"]:
+        product.pop("ratings", None)
+    draft["tone_of_voice_guidelines"] = [
+        *draft["tone_of_voice_guidelines"],
+        {"id": "brisk", "name": "Brisk", "guidance": "Be short.", "is_default": False},
+    ]
+    saved = await client.put(f"/api/v1/shops/{shop_id}/draft", json={"payload": draft})
+    assert saved.status_code == 200, saved.text
+
+    body = (await client.get(f"{CONFIGURATIONS}/resources")).json()["preview_shops"]
+
+    assert [guideline["id"] for guideline in body[0]["tone_of_voice_guidelines"]] == [
+        "warm-precise"
+    ]
+
+
 async def test_reading_a_configuration_that_was_never_created_is_a_named_refusal(
     client: AsyncClient,
 ) -> None:

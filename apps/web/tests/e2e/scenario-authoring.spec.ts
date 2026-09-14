@@ -371,7 +371,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await armsCard.getByRole("button", { name: "Arm A" }).click();
   const tools = card(page, "Tools · Arm A");
   await tools.getByLabel("Tool", { exact: true }).selectOption("orders.read_order");
-  await tools.getByLabel("order_reference", { exact: true }).fill("NS-10482");
+  await tools.getByLabel("Order reference", { exact: true }).fill("NS-10482");
   await tools.getByRole("button", { name: "Run tool" }).click();
   await expect(tools.getByRole("region", { name: "orders.read_order result" })).toContainText(
     "Bordeaux",
@@ -381,8 +381,8 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await tools.getByLabel("Acting support identity", { exact: true }).selectOption({
     label: `${identity} · v1`,
   });
-  await tools.getByLabel("order_reference", { exact: true }).fill("NS-10482");
-  await tools.getByLabel("address_id (required)", { exact: true }).fill("home");
+  await tools.getByLabel("Order reference", { exact: true }).fill("NS-10482");
+  await tools.getByLabel("Address ID (required)", { exact: true }).fill("home");
   await tools.getByRole("button", { name: "Run tool" }).click();
   const proposal = tools.getByRole("region", { name: "orders.propose_address_change result" });
   await expect(proposal).toContainText("Bordeaux");
@@ -405,7 +405,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await armsCard.getByRole("button", { name: "Arm B" }).click();
   const otherArm = card(page, "Tools · Arm B");
   await otherArm.getByLabel("Tool", { exact: true }).selectOption("orders.read_order");
-  await otherArm.getByLabel("order_reference", { exact: true }).fill("NS-10482");
+  await otherArm.getByLabel("Order reference", { exact: true }).fill("NS-10482");
   await otherArm.getByRole("button", { name: "Run tool" }).click();
   await expect(otherArm.getByRole("region", { name: "orders.read_order result" })).toContainText(
     "Bordeaux",
