@@ -878,3 +878,64 @@ describe("every enum has a name", () => {
     expect(screen.getByRole("checkbox", { name: "Email" })).toBeInTheDocument();
   });
 });
+
+describe("the currencies a shop sells in, on Shop details", () => {
+  async function currencyGroup() {
+    return within(await screen.findByRole("group", { name: "Currencies" }));
+  }
+
+  it("reads as the shared field does on the create form, rule and all", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    expect(await screen.findByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
+      /variants may only be priced in these; the first is the default/i,
+    );
+    // Named, where this page used to show the bare code with the name only on hover.
+    expect((await currencyGroup()).getByRole("checkbox", { name: "EUR — Euro" })).toBeChecked();
+  });
+
+  it("adds a second currency to the draft it saves", async () => {
+    const user = userEvent.setup();
+    type SavedPayload = { identity: { currencies: string[] } };
+    const saved: SavedPayload[] = [];
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: SavedPayload };
+        saved.push(body.payload);
+        return HttpResponse.json(draft(currentContent));
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    await user.click((await currencyGroup()).getByRole("checkbox", { name: "CHF — Swiss franc" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].identity.currencies).toEqual(["EUR", "CHF"]);
+  });
+
+  it("holds the last currency ticked rather than failing at save", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const only = (await currencyGroup()).getByRole("checkbox", { name: "EUR — Euro" });
+    await user.click(only);
+
+    expect(only).toBeChecked();
+  });
+
+  it("does not retick a saved shop when its locale is changed", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    await user.clear(await screen.findByLabelText("Locale"));
+    await user.type(screen.getByLabelText("Locale"), "ja-JP");
+
+    // The create form suggests a currency because nothing has been answered yet. A saved
+    // identity has been answered, and a locale correction is not a reason to reprice a shop.
+    expect((await currencyGroup()).getByRole("checkbox", { name: "EUR — Euro" })).toBeChecked();
+    expect(
+      (await currencyGroup()).getByRole("checkbox", { name: "JPY — Japanese yen" }),
+    ).not.toBeChecked();
+  });
+});

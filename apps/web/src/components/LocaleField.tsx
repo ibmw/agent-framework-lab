@@ -25,9 +25,14 @@ export function LocaleField({
   onChange: (value: string) => void;
 }) {
   const listId = useId();
+  // The place the tag names, read back under the field: `en-GB` is a string an operator can
+  // mistype into something plausible, and the echo is how they see that they did. Nothing is
+  // echoed for a tag the shortlist does not name — the lab takes it, and this component has
+  // no words for it, so saying nothing is the honest answer rather than repeating the tag.
+  const named = LOCALES.find((locale) => locale.tag === value);
   return (
     <div>
-      <FieldHint label="Locale" hint={LOCALE_RULE}>
+      <FieldHint label="Locale" hint={LOCALE_RULE} extra={named?.label}>
         <input
           className={fieldControlClasses}
           list={listId}

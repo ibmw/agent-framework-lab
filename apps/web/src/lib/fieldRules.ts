@@ -34,6 +34,13 @@ export function alreadyTakenMessage(id: string, place: string): string {
   return `${id} is already ${place}.`;
 }
 
+/**
+ * What ticking a currency decides. Both clauses are the lab's own: `ShopPayload.validate` in
+ * `domain/shop.py` refuses a variant priced outside `identity.currencies`, and
+ * `ShopIdentity.default_currency` is the first of them.
+ */
+export const CURRENCIES_RULE = "Variants may only be priced in these; the first is the default.";
+
 export const LOCALE_RULE = "Pick a locale from the list, or type another shaped like en or en-GB.";
 
 /** What publishing does with the identity a configuration names. */

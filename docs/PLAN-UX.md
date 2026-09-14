@@ -152,14 +152,14 @@ without a label fails `make check` naming the enum and the member.
 
 ### Slice 4 — A shop sells in several currencies from the start
 
-- [ ] Extract the currency checkbox group from Shop details into one `CurrencyField` showing
+- [x] Extract the currency checkbox group from Shop details into one `CurrencyField` showing
   "EUR — Euro", with the group hint "Variants may only be priced in these; the first is the
   default", and use it on the create form with the locale's currency pre-ticked.
-- [ ] Keep the locale-to-currency suggestion: it ticks the first currency until the operator
+- [x] Keep the locale-to-currency suggestion: it ticks the first currency until the operator
   chooses, on the same terms the slug follows the name.
-- [ ] Show the channel group on the create form, or state in the footnote that the shop starts on
+- [x] Show the channel group on the create form, or state in the footnote that the shop starts on
   chat and where to add email and phone.
-- [ ] Echo the chosen locale's label under `LocaleField` so `en-GB` reads as a place.
+- [x] Echo the chosen locale's label under `LocaleField` so `en-GB` reads as a place.
 
 Frames: none.
 

@@ -37,6 +37,10 @@ function renderShops() {
   );
 }
 
+function currencies(card: ReturnType<typeof within>) {
+  return within(card.getByRole("group", { name: "Currencies" }));
+}
+
 async function createShopCard() {
   const heading = await screen.findByRole("heading", { name: "Create a shop" });
   const card = heading.closest("div")?.parentElement;
@@ -55,7 +59,7 @@ describe("creating a shop from an example", () => {
     expect(card.getByLabelText("Name")).toHaveValue("Harbour Lane Supply");
     expect(card.getByLabelText("Slug")).toHaveValue("harbour-lane-supply");
     expect(card.getByLabelText("Locale")).toHaveValue("en-GB");
-    expect(card.getByLabelText("Currency")).toHaveValue("GBP");
+    expect(currencies(card).getByRole("checkbox", { name: "GBP — Pound sterling" })).toBeChecked();
   });
 
   it("creates nothing until the operator presses Create shop", async () => {
@@ -241,8 +245,8 @@ describe("the locale a shop is given", () => {
   });
 });
 
-describe("the currency a locale implies", () => {
-  it("answers the currency as the locale is chosen", async () => {
+describe("the currencies a shop sells in", () => {
+  it("ticks the currency the locale implies, as the locale is chosen", async () => {
     const user = userEvent.setup();
     renderShops();
     const card = await createShopCard();
@@ -250,21 +254,27 @@ describe("the currency a locale implies", () => {
     await user.clear(card.getByLabelText("Locale"));
     await user.type(card.getByLabelText("Locale"), "ja-JP");
 
-    expect(card.getByLabelText("Currency")).toHaveValue("JPY");
+    expect(currencies(card).getByRole("checkbox", { name: "JPY — Japanese yen" })).toBeChecked();
+    expect(
+      currencies(card).getByRole("checkbox", { name: "GBP — Pound sterling" }),
+    ).not.toBeChecked();
   });
 
-  it("stops following once the operator answers the currency themselves", async () => {
+  it("stops following once the operator ticks a currency themselves", async () => {
     const user = userEvent.setup();
     renderShops();
     const card = await createShopCard();
 
-    await user.selectOptions(card.getByLabelText("Currency"), "USD");
+    await user.click(currencies(card).getByRole("checkbox", { name: "USD — US dollar" }));
     await user.clear(card.getByLabelText("Locale"));
     await user.type(card.getByLabelText("Locale"), "ja-JP");
 
     // A shop priced for a market it does not speak the language of is a real thing to author,
     // so the deliberate answer stands rather than being corrected on the next keystroke.
-    expect(card.getByLabelText("Currency")).toHaveValue("USD");
+    expect(currencies(card).getByRole("checkbox", { name: "USD — US dollar" })).toBeChecked();
+    expect(
+      currencies(card).getByRole("checkbox", { name: "JPY — Japanese yen" }),
+    ).not.toBeChecked();
   });
 
   it("leaves the currency alone for a locale it has no currency for", async () => {
@@ -277,17 +287,59 @@ describe("the currency a locale implies", () => {
 
     // Iceland prices in krona, which the lab cannot express. Proposing the nearest currency
     // would be inventing an answer; the standing one is at least one somebody can see.
-    expect(card.getByLabelText("Currency")).toHaveValue("GBP");
+    expect(currencies(card).getByRole("checkbox", { name: "GBP — Pound sterling" })).toBeChecked();
   });
 
   it("offers every currency the lab can express, named as well as coded", async () => {
     renderShops();
     const card = await createShopCard();
 
-    const options = within(card.getByLabelText("Currency")).getAllByRole("option");
+    const boxes = currencies(card).getAllByRole("checkbox");
 
-    expect(options).toHaveLength(10);
-    expect(options[0]).toHaveTextContent("USD — US dollar");
+    expect(boxes).toHaveLength(10);
+    expect(boxes[0]).toHaveAccessibleName("USD — US dollar");
+  });
+
+  it("creates a shop selling in more than one, the first of them the default", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.type(card.getByLabelText("Name"), "Zurich Supply");
+    await user.clear(card.getByLabelText("Locale"));
+    await user.type(card.getByLabelText("Locale"), "de-CH");
+    await user.click(currencies(card).getByRole("checkbox", { name: "EUR — Euro" }));
+
+    // Read before the create, because what the group says the default is has to be what the
+    // request then carries first — the claim and the payload, on one shop, in one test.
+    expect(card.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
+      /default: CHF — Swiss franc/i,
+    );
+
+    await user.click(card.getByRole("button", { name: "Create shop" }));
+
+    // The Swiss shop is authored in one pass: the second currency is not a trip to Shop
+    // details, and the franc it was suggested stays first, so it is what variants default to.
+    expect(created).toEqual({
+      identity: {
+        name: "Zurich Supply",
+        slug: "zurich-supply",
+        locale: "de-CH",
+        currencies: ["CHF", "EUR"],
+        channels: ["chat"],
+      },
+    });
+  });
+
+  it("holds the last currency ticked, so the shop is never created without one", async () => {
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    const only = currencies(card).getByRole("checkbox", { name: "GBP — Pound sterling" });
+    await user.click(only);
+
+    expect(only).toBeChecked();
   });
 });
 
@@ -305,8 +357,12 @@ describe("create-form guidance", () => {
     expect(card.getByLabelText("Locale")).toHaveAccessibleDescription(
       /pick a locale from the list/i,
     );
-    expect(card.getByLabelText("Currency")).toHaveAccessibleDescription(
-      /the shop starts with this one currency/i,
+    expect(card.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
+      /variants may only be priced in these; the first is the default/i,
+    );
+    // The locale tag read back as the place it names, so a mistyped-but-plausible tag shows.
+    expect(card.getByLabelText("Locale")).toHaveAccessibleDescription(
+      /english \(united kingdom\)/i,
     );
   });
 

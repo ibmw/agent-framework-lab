@@ -7,6 +7,7 @@ import type {
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useState } from "react";
+import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { LocaleField } from "../components/LocaleField";
 import { TourLaunch } from "../components/TourLaunch";
@@ -21,7 +22,6 @@ import {
   PageHeader,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { CURRENCIES } from "../lib/currencies";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
 import {
   labelOf,
@@ -127,8 +127,8 @@ export function ShopIdentityPage() {
   const { content, edit } = useShopWorkspace();
   const identity = content.identity;
 
-  // A shop must always sell in at least one currency and answer on at least one channel,
-  // so the last checked box stays checked instead of failing at save.
+  // A shop must always answer on at least one channel, so the last checked box stays checked
+  // instead of failing at save. `CurrencyField` holds the same rule for the currencies.
   function toggle<T extends string>(list: T[], value: T): T[] {
     if (!list.includes(value)) {
       return [...list, value];
@@ -169,30 +169,10 @@ export function ShopIdentityPage() {
             onChange={(locale) => edit({ ...content, identity: { ...identity, locale } })}
           />
         </div>
-        <fieldset className="grid gap-1.5">
-          <legend className="text-xs font-semibold text-admin-muted">Currencies</legend>
-          <div className="flex flex-wrap gap-3 text-[13px]">
-            {CURRENCIES.map(({ code, label }) => (
-              <label key={code} className="flex items-center gap-1.5" title={label}>
-                <input
-                  type="checkbox"
-                  checked={identity.currencies.includes(code)}
-                  disabled={isLastSelected(identity.currencies, code)}
-                  onChange={() =>
-                    edit({
-                      ...content,
-                      identity: {
-                        ...identity,
-                        currencies: toggle([...identity.currencies], code),
-                      },
-                    })
-                  }
-                />
-                {code}
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <CurrencyField
+          value={identity.currencies}
+          onChange={(currencies) => edit({ ...content, identity: { ...identity, currencies } })}
+        />
         <fieldset className="grid gap-1.5">
           <legend className="text-xs font-semibold text-admin-muted">Support channels</legend>
           <div className="flex flex-wrap gap-3 text-[13px]">

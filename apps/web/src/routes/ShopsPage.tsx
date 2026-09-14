@@ -3,11 +3,12 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
+import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
-import { CURRENCIES, type Currency } from "../lib/currencies";
+import type { Currency } from "../lib/currencies";
 import { uniqueSuggestion } from "../lib/entryIds";
 import { KEBAB_PATTERN, SHOP_SLUG_RULE } from "../lib/fieldRules";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
@@ -51,45 +52,27 @@ export function ShopsPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [locale, setLocale] = useState(DEFAULT_LOCALE.tag);
-  const [currency, setCurrency] = useState<Currency>(DEFAULT_LOCALE.currency);
+  const [currencies, setCurrencies] = useState<Currency[]>([DEFAULT_LOCALE.currency]);
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
-  const [slugResume, setSlugResume] = useState(0);
-  // The currency follows the locale on the same terms as the slug, and stops for the same
-  // reason. It has no way back, because a dropdown cannot be emptied the way the slug can:
-  // choosing a currency is the last word on it, and the way to hand it back is to reload.
-  const [currencyEdited, setCurrencyEdited] = useState(false);
+  // One token for both derived fields: the example answers a name and a locale, and both the
+  // slug and the currencies are things those two derive, so they resume together.
+  const [exampleFill, setExampleFill] = useState(0);
   const takenSlugs = shops.map((shop) => shop.slug);
   const { value: suggestedSlug, takenBase: takenSlugBase } = uniqueSuggestion(
     shopSlugFromName(name),
     takenSlugs,
   );
 
-  function changeLocale(value: string) {
-    setLocale(value);
-    const suggested = currencyForLocale(value);
-    // Nothing is proposed for a locale the shortlist does not name, so a hand-typed `is-IS`
-    // leaves the currency where it stands rather than reaching for the nearest guess.
-    if (!currencyEdited && suggested) {
-      setCurrency(suggested);
-    }
-  }
-
-  function changeCurrency(value: string) {
-    setCurrency(value as Currency);
-    setCurrencyEdited(true);
-  }
-
   function fillWithExample() {
     setName(EXAMPLE_SHOP.name);
     setSlug(shopSlugFromName(EXAMPLE_SHOP.name));
     setLocale(EXAMPLE_SHOP.locale);
-    setCurrency(currencyForLocale(EXAMPLE_SHOP.locale) ?? DEFAULT_LOCALE.currency);
+    setCurrencies([currencyForLocale(EXAMPLE_SHOP.locale) ?? DEFAULT_LOCALE.currency]);
     // The example's slug and currency are what its name and locale derive, so this is filling
     // the pairs in rather than answering either: renaming or relocating the example afterwards
     // still carries them along.
-    setSlugResume((token) => token + 1);
-    setCurrencyEdited(false);
+    setExampleFill((token) => token + 1);
     setFilled(true);
   }
 
@@ -126,7 +109,7 @@ export function ShopsPage() {
         name,
         slug,
         locale,
-        currencies: [currency],
+        currencies,
         channels: ["chat"],
       });
       navigate(`/shops/${created.shop_id}`);
@@ -214,7 +197,7 @@ export function ShopsPage() {
                 // A new key remounts the field so its follow/edited state resets — React's
                 // way to reset state when the example fill replaces the source
                 // (https://react.dev/learn/preserving-and-resetting-state).
-                key={slugResume}
+                key={`slug-${exampleFill}`}
                 label="Slug"
                 hint={SHOP_SLUG_RULE}
                 value={slug}
@@ -228,20 +211,16 @@ export function ShopsPage() {
                 required
                 onChange={setSlug}
               />
-              <LocaleField value={locale} required onChange={changeLocale} />
-              <FieldHint label="Currency" hint="The shop starts with this one currency.">
-                <select
-                  className={fieldControlClasses}
-                  value={currency}
-                  onChange={(event) => changeCurrency(event.target.value)}
-                >
-                  {CURRENCIES.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.code} — {option.label}
-                    </option>
-                  ))}
-                </select>
-              </FieldHint>
+              <LocaleField value={locale} required onChange={setLocale} />
+              <CurrencyField
+                // Remounted with the slug, so the example fill hands the suggestion back.
+                // Its own key: two siblings under one key are one element to React, and the
+                // second would replace the first.
+                key={`currencies-${exampleFill}`}
+                value={currencies}
+                suggested={currencyForLocale(locale)}
+                onChange={setCurrencies}
+              />
               {formError ? (
                 <p role="alert" className="text-[13px] text-lab-error">
                   {formError}
@@ -251,8 +230,9 @@ export function ShopsPage() {
                 {creating ? "Creating…" : "Create shop"}
               </button>
               <p className="text-xs text-admin-muted">
-                A new shop starts as an empty draft. Catalog and support content are added in the
-                workspace, then published together.
+                A new shop starts as an empty draft that answers on chat. Catalog and support
+                content are added in the workspace, then published together; email and phone are
+                added under Shop details.
               </p>
               {/* Below the control it assists rather than beside it: this fills the form in, so it
                   reads as an alternative to typing the four fields, not as a second way to

@@ -415,3 +415,58 @@ that a label and its explanation compose into one line.
 says which axis the status is on — payment, fulfilment, product, availability — and is
 `aria-hidden`. The word beside it carries the meaning, so neither colour nor shape is ever the
 only carrier of a status.
+
+## Revision — currencies on the create form, and what a group's hint says (2026-09-14)
+
+Slice 4. A shop sells in several currencies from the form that creates it. The three sections
+above are unchanged; this one adds what they did not cover — a rule that belongs to a *set* of
+controls, and where a create form stops asking.
+
+**A create form asks for what constrains the work that follows, and names where the rest
+lives.** The currencies are on it because they gate everything authored next: `ShopPayload`
+refuses a variant priced outside `identity.currencies`, so a shop created with one currency is
+found out halfway through a catalog, by a publish gate, with a trip back to Shop details to fix
+it. The support channels gate nothing — a new shop answers on chat, and nothing an operator
+authors next depends on email or phone being ticked — so the form says that in its footnote and
+names the page that holds them. A create form that asked for both would be Shop details with a
+Create button, which is the shape this slice exists to avoid.
+
+**A group's rule is tied to the group.** `FieldHint` ties one line to one control through its
+`<label htmlFor>`, and a `<fieldset>` is not a control that a label can name. A set of
+checkboxes whose rule is about the set — "the first is the default" is nonsense written under
+`EUR` alone — uses `FieldGroupHint` from the same module instead: the same muted line, named by
+a `<legend>` and tied to the fieldset by `aria-describedby`, so it is read once for the group
+rather than once per box or not at all. The line itself is the same convention; only what it is
+tied to differs.
+
+**A hint that names something derived is paired with a line that shows it.** "The first is the
+default" is a claim about the set that the boxes cannot answer: they render in the contract's
+order while the answer is in the operator's ticking order, and floating the ticked ones to the
+front would move a box under the pointer that ticked it. So the group carries a second muted
+line — "Default: CHF — Swiss franc" — on `FieldHint`'s `extra` slot and `DerivedIdField`'s
+"Saved as `…`" model: where a rule names a value the form derives, the form shows that value
+where the rule is read. The same line carries the rule the disabled last box cannot state, that
+a shop sells in at least one currency.
+
+**A suggestion holds until the field is answered, and is handed back only where the control can
+say it is unanswered.** The locale ticks the shop's first currency the way a name writes its
+slug, and stops at the operator's first tick, on `DerivedIdField`'s terms. It has no way back:
+at least one currency must stay ticked, so a checkbox group has no state that reads as "nothing
+answered yet" for a suggestion to return into, and the way back is to reload the form. The
+next field that suggests something reads this rather than inventing a third rule — follow until
+answered always; resume on empty only where empty is expressible.
+
+**The currency table joined the registry.** `Currency` is a union `openapi.yaml` publishes like
+the others; it read as an exception only because the contracts package does not re-export it by
+name and `lib/currencies.ts` spells it off `ShopContentSchema`. Held as an array of
+`{ code, label }` it was exactly the shape the *Where a label table lives* section calls a
+defect — a currency added to the enum would have been silently absent from the form while the
+lab refused prices in it — so the words are now `CURRENCY` in `lib/enumLabels.ts`, keyed
+`Record<Currency, EnumLabel>` and swept like the rest. `lib/currencies.ts` keeps the type, which
+is a statement about the contract rather than a vocabulary.
+
+**A locale echoes the place it names.** `LocaleField` reads its tag back as the language and
+place beneath the field, on every surface that uses it, because `en-GB` is a string an operator
+can mistype into something plausible. A tag the shortlist does not name echoes nothing: the lab
+takes it and this workspace has no words for it, and repeating the tag would look like
+confirmation of something nothing confirmed.

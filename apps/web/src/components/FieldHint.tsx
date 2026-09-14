@@ -70,3 +70,50 @@ export function FieldHint({
     </div>
   );
 }
+
+/**
+ * The same muted line, under a group of controls rather than under one.
+ *
+ * A checkbox group's rule belongs to the set and not to any one box — "the first is the
+ * default" is nonsense written under `EUR` alone — so it is tied to the group. `FieldHint`
+ * cannot carry it: its `<label htmlFor>` names a form control, and a `<fieldset>` is not one.
+ * The group is named by its `<legend>`, the way the shop-detail groups already are, and
+ * described by `aria-describedby` on the fieldset, so a reader arriving at the first checkbox
+ * hears the rule once for the group instead of once per box or not at all.
+ *
+ * `extra` is `FieldHint`'s second line, for the same job it does there: where the hint names
+ * something the group derives — "the first is the default" — this is where the group says
+ * which one that currently is, the way `DerivedIdField` previews the id it will save.
+ */
+export function FieldGroupHint({
+  legend,
+  hint,
+  extra,
+  children,
+}: {
+  legend: string;
+  hint: ReactNode;
+  /** A live second description line: what the hint's rule currently resolves to. */
+  extra?: ReactNode;
+  children: ReactNode;
+}) {
+  const generatedId = useId();
+  const hintId = `${generatedId}-hint`;
+  const extraId = `${generatedId}-extra`;
+  return (
+    <fieldset className={fieldLabelClasses} aria-describedby={`${hintId} ${extraId}`}>
+      <legend className="text-xs font-semibold text-admin-muted">{legend}</legend>
+      {children}
+      <p id={hintId} className="font-normal text-admin-muted">
+        {hint}
+      </p>
+      <p
+        id={extraId}
+        className={extra ? "font-normal text-admin-muted" : "sr-only"}
+        aria-live="polite"
+      >
+        {extra ?? null}
+      </p>
+    </fieldset>
+  );
+}

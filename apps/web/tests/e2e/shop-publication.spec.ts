@@ -31,9 +31,14 @@ test("an author publishes a shop with size and colour variants and reads the fro
   const createShop = card(page, "Create a shop");
   await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
   await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  // Said rather than defaulted into. The form answers the currency from the locale, so a
-  // journey that asserts a price in euros has to be the thing that chose euros.
-  await createShop.getByRole("combobox", { name: "Currency" }).selectOption("EUR");
+  // A Swiss shop, which sells in two currencies from the first form it meets. The locale
+  // answers the first — and reads back as the place it names — and the operator ticks the
+  // second here rather than being sent to Shop details to add it after the fact.
+  await createShop.getByLabel("Locale", { exact: true }).fill("de-CH");
+  await expect(createShop.getByText("German (Switzerland)")).toBeVisible();
+  const currencies = createShop.getByRole("group", { name: "Currencies" });
+  await expect(currencies.getByRole("checkbox", { name: "CHF — Swiss franc" })).toBeChecked();
+  await currencies.getByRole("checkbox", { name: "EUR — Euro" }).check();
   await createShop.getByRole("button", { name: "Create shop" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
@@ -97,10 +102,15 @@ test("an author publishes a shop with size and colour variants and reads the fro
   const variants = card(page, "Variants");
   await variants.getByLabel("New variant SKU", { exact: true }).fill("NS-ASJ-OB-M");
   await variants.getByLabel("Price (optional)", { exact: true }).fill("249.00");
+  // The shop's first currency is what a new variant is priced in, so this one takes the franc.
   await variants.getByRole("button", { name: "Add variant" }).click();
 
   await variants.getByLabel("New variant SKU", { exact: true }).fill("NS-ASJ-CH-L");
   await variants.getByLabel("Price (optional)", { exact: true }).fill("249.00");
+  // And this one takes the euro, which the create form put on the shop. Both are prices the
+  // publish gate accepts, which is what a second currency was ticked for.
+  // By role: this select's label wraps it, so its text reads "CurrencyCHFEUR" to a label query.
+  await variants.getByRole("combobox", { name: "Currency" }).selectOption("EUR");
   await variants.getByLabel("Color", { exact: true }).selectOption("Charcoal");
   await variants.getByLabel("Size", { exact: true }).selectOption("L");
   await variants.getByRole("button", { name: "Add variant" }).click();
@@ -121,5 +131,6 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(frozen.getByText("NS-ASJ-OB-M")).toBeVisible();
   await expect(frozen.getByText("Ocean Blue · M")).toBeVisible();
   await expect(frozen.getByText("Charcoal · L")).toBeVisible();
+  await expect(frozen.getByText("249.00 CHF").first()).toBeVisible();
   await expect(frozen.getByText("249.00 EUR").first()).toBeVisible();
 });

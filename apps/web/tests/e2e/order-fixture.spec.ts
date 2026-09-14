@@ -41,9 +41,16 @@ test("an author builds a paid order shipping to the customer's stale address", a
   const createShop = card(page, "Create a shop");
   await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
   await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  // Said rather than defaulted into. The form answers the currency from the locale, so a
-  // journey that asserts a price in euros has to be the thing that chose euros.
-  await createShop.getByRole("combobox", { name: "Currency" }).selectOption("EUR");
+  // Said rather than defaulted into. The form now ticks the locale's currency for you, which
+  // makes the point sharper rather than stale: a journey that asserts a price in euros ticks
+  // EUR itself and unticks the pound `en-GB` suggested, so the shop sells in euros because
+  // this test said so. One currency left also means the variant form asks for no currency.
+  // EUR first, then the pound: the last ticked box is disabled, so unticking GBP while it
+  // is the only currency would be a click on a disabled control.
+  const shopCurrencies = createShop.getByRole("group", { name: "Currencies" });
+  await shopCurrencies.getByRole("checkbox", { name: "EUR — Euro" }).check();
+  await shopCurrencies.getByRole("checkbox", { name: "GBP — Pound sterling" }).uncheck();
+  await expect(shopCurrencies.getByRole("checkbox", { name: "EUR — Euro" })).toBeChecked();
   await createShop.getByRole("button", { name: "Create shop" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
 

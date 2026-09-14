@@ -21,6 +21,10 @@ import type {
   ToolOutcome,
   VariantSchema,
 } from "@agent-lab/contracts";
+// `Currency` is a union `openapi.yaml` publishes like the others; the contracts package
+// re-exports schemas one at a time and does not name this one, so `lib/currencies.ts`
+// spells it off `ShopContentSchema` and this table is keyed on that.
+import type { Currency } from "./currencies";
 
 /**
  * The closed sets the workspace reads, in the words an operator reads them in.
@@ -150,6 +154,32 @@ export const POLICY_KIND: LabelMap<PolicySchema["kind"]> = {
   privacy: { label: "Privacy" },
   warranty: { label: "Warranty" },
   terms: { label: "Terms" },
+};
+
+/**
+ * The currencies a shop may sell in, named for a reader who knows the money but not the code.
+ *
+ * In the domain's own order — `Currency` in `domain/shop.py` is "the ten most traded, in that
+ * order" — because the checkbox group renders the table as it stands and that order is the
+ * lab's, not an alphabetisation of it.
+ *
+ * No explanation: a currency is the name of a currency, and the rule an operator needs here is
+ * about the *set* they tick rather than about any one member, so it is the group's hint.
+ *
+ * Whether a shop sells in one currency or four is content the operator authors; nothing in the
+ * lab prefers a member of this list, so nothing here is a default.
+ */
+export const CURRENCY: LabelMap<Currency> = {
+  USD: { label: "US dollar" },
+  EUR: { label: "Euro" },
+  JPY: { label: "Japanese yen" },
+  GBP: { label: "Pound sterling" },
+  CNY: { label: "Renminbi" },
+  AUD: { label: "Australian dollar" },
+  CAD: { label: "Canadian dollar" },
+  CHF: { label: "Swiss franc" },
+  HKD: { label: "Hong Kong dollar" },
+  SGD: { label: "Singapore dollar" },
 };
 
 export const SUPPORT_CHANNEL: LabelMap<SupportChannel> = {
@@ -369,6 +399,7 @@ export const ENUM_LABELS = {
   BackgroundKind: BACKGROUND_KIND,
   BlockParameterKind: BLOCK_PARAMETER_KIND,
   ComparisonDimension: COMPARISON_DIMENSION,
+  Currency: CURRENCY,
   DefinitionType: DEFINITION_TYPE,
   FulfilmentStatus: FULFILMENT_STATUS,
   JudgeEvidenceScope: JUDGE_EVIDENCE_SCOPE,

@@ -59,3 +59,13 @@ option carries one at all, and the glyph-with-label rule for status. That sectio
 the tables that pre-date the slice and still sit outside the shared module, so the convention
 records what is true rather than an end state. The two sections this ADR already points at are
 unchanged.
+
+## Amendment — 2026-09-14 (Slice 4)
+
+Slice 4 added a fourth sibling section in `docs/design-direction.md` (*Revision — currencies on
+the create form, and what a group's hint says (2026-09-14)*): that a rule belonging to a set of
+controls is tied to the group by `FieldGroupHint` rather than to one box, that a hint naming
+something the group derives is paired with a live line showing what it currently is, that a
+suggestion is handed back only where the control can express "unanswered", and what a create
+form asks before it names the page holding the rest. The three sections this ADR already
+points at are unchanged.
