@@ -441,7 +441,7 @@ describe("agent configuration workspace", () => {
 
     const binding = await screen.findByLabelText(/orders.propose_address_change/);
     expect(binding).not.toBeChecked();
-    expect(screen.getByText("needs change shipping address")).toBeVisible();
+    expect(screen.getByText("needs Change shipping address")).toBeVisible();
   });
 
   it("resolves the prompt against the shop the author selects", async () => {

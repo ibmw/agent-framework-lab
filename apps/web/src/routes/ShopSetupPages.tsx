@@ -3,7 +3,6 @@ import type {
   FulfilmentMethodSchema,
   PaymentMethodSchema,
   PolicySchema,
-  ShopContentSchema,
   SupportGuidelineSchema,
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
@@ -24,6 +23,13 @@ import {
 } from "../components/WorkspaceChrome";
 import { CURRENCIES } from "../lib/currencies";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
+import {
+  labelOf,
+  optionsOf,
+  PAYMENT_METHOD_KIND,
+  POLICY_KIND,
+  SUPPORT_CHANNEL,
+} from "../lib/enumLabels";
 import { DERIVED_KEBAB_RULE, KEBAB_PATTERN } from "../lib/fieldRules";
 import type { TourId } from "../lib/tours";
 import {
@@ -35,23 +41,11 @@ import {
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
-const POLICY_KINDS: PolicySchema["kind"][] = [
-  "returns",
-  "shipping",
-  "cancellation",
-  "privacy",
-  "warranty",
-  "terms",
-];
+const POLICY_KINDS = optionsOf(POLICY_KIND);
 
-const PAYMENT_KINDS: PaymentMethodSchema["kind"][] = [
-  "card",
-  "wallet",
-  "bank_transfer",
-  "gift_card",
-];
+const PAYMENT_KINDS = optionsOf(PAYMENT_METHOD_KIND);
 
-const CHANNELS: ShopContentSchema["identity"]["channels"][number][] = ["chat", "email", "phone"];
+const CHANNELS = optionsOf(SUPPORT_CHANNEL);
 
 /**
  * The four pages that edit one shop draft between them, each with its own walk.
@@ -203,19 +197,22 @@ export function ShopIdentityPage() {
           <legend className="text-xs font-semibold text-admin-muted">Support channels</legend>
           <div className="flex flex-wrap gap-3 text-[13px]">
             {CHANNELS.map((channel) => (
-              <label key={channel} className="flex items-center gap-1.5">
+              <label key={channel.value} className="flex items-center gap-1.5">
                 <input
                   type="checkbox"
-                  checked={identity.channels.includes(channel)}
-                  disabled={isLastSelected(identity.channels, channel)}
+                  checked={identity.channels.includes(channel.value)}
+                  disabled={isLastSelected(identity.channels, channel.value)}
                   onChange={() =>
                     edit({
                       ...content,
-                      identity: { ...identity, channels: toggle([...identity.channels], channel) },
+                      identity: {
+                        ...identity,
+                        channels: toggle([...identity.channels], channel.value),
+                      },
                     })
                   }
                 />
-                {channel}
+                {channel.label}
               </label>
             ))}
           </div>
@@ -277,7 +274,7 @@ function PaymentAndFulfilmentCards() {
               title={method.name}
               chips={
                 <>
-                  <EntryKind value={method.kind} />
+                  <EntryKind value={labelOf(PAYMENT_METHOD_KIND, method.kind)} />
                   <EntryId value={method.id} />
                   <label className="flex items-center gap-1.5 text-[12px] text-admin-muted">
                     <input
@@ -350,9 +347,9 @@ function PaymentAndFulfilmentCards() {
                 })
               }
             >
-              {PAYMENT_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {kind}
+              {PAYMENT_KINDS.map((entry) => (
+                <option key={entry.value} value={entry.value}>
+                  {entry.label}
                 </option>
               ))}
             </select>
@@ -505,7 +502,7 @@ export function PoliciesAndFaqPage() {
               title={entry.title}
               chips={
                 <>
-                  <EntryKind value={entry.kind} />
+                  <EntryKind value={labelOf(POLICY_KIND, entry.kind)} />
                   <EntryId value={entry.id} />
                 </>
               }
@@ -561,9 +558,9 @@ export function PoliciesAndFaqPage() {
                   setPolicy({ ...policy, kind: event.target.value as PolicySchema["kind"] })
                 }
               >
-                {POLICY_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {kind}
+                {POLICY_KINDS.map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
                   </option>
                 ))}
               </select>

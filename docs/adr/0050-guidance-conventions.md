@@ -49,3 +49,13 @@ Slice 2 added a sibling section in `docs/design-direction.md` (*Revision — der
 ## Migration
 
 None.
+
+## Amendment — 2026-09-14
+
+Slice 3 added a third sibling section in `docs/design-direction.md` (*Revision — enum labels
+and the status pill (2026-09-14)*): where a label table lives, how each is keyed to the
+contract union, the rule that an explanation may only say what the lab enforces, when an
+option carries one at all, and the glyph-with-label rule for status. That section also lists
+the tables that pre-date the slice and still sit outside the shared module, so the convention
+records what is true rather than an end state. The two sections this ADR already points at are
+unchanged.

@@ -130,15 +130,15 @@ with `NS-10483` already in it. Nowhere in the workspace is an ID field the first
 
 ### Slice 3 — Every enum has a name
 
-- [ ] One label map per enum, sourced from the contract's union type so a new member fails a
+- [x] One label map per enum, sourced from the contract's union type so a new member fails a
   table test rather than rendering raw: product status, variant availability, attribute type,
   payment kind, policy kind, channel, permission, customer background kind, judge scope, sandbox
   definition type, tool outcome, and the order and ticket statuses that still leak through on
   linked-order rows and the version page.
-- [ ] Selects that need it use the scenario editor's "label — explanation" option style;
+- [x] Selects that need it use the scenario editor's "label — explanation" option style;
   permissions read "Issue refund — refund an order in full or part".
-- [ ] Status columns pair a glyph with the label, never colour alone, on the `StatusPill` model.
-- [ ] Remove the five hand-written `.replace(/_/g, " ")` and route them through the maps.
+- [x] Status columns pair a glyph with the label, never colour alone, on the `StatusPill` model.
+- [x] Remove the five hand-written `.replace(/_/g, " ")` and route them through the maps.
 
 Frames: none.
 

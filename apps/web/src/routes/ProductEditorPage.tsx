@@ -18,6 +18,13 @@ import {
 import type { Currency } from "../lib/currencies";
 import { slugify, uniqueId, uniqueSuggestion, uniqueVariantSku } from "../lib/entryIds";
 import {
+  ATTRIBUTE_TYPE,
+  labelOf,
+  optionsOf,
+  PRODUCT_STATUS,
+  VARIANT_AVAILABILITY,
+} from "../lib/enumLabels";
+import {
   DERIVED_KEBAB_RULE,
   KEBAB_PATTERN,
   REFERENCE_PATTERN,
@@ -43,20 +50,11 @@ import {
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
-const AVAILABILITIES: VariantSchema["availability"][] = [
-  "in_stock",
-  "backorder",
-  "out_of_stock",
-  "discontinued",
-];
+const AVAILABILITIES = optionsOf(VARIANT_AVAILABILITY);
 
-const ATTRIBUTE_TYPES: AttributeSchema["attribute_type"][] = [
-  "text",
-  "number",
-  "boolean",
-  "choice",
-  "measurement",
-];
+const ATTRIBUTE_TYPES = optionsOf(ATTRIBUTE_TYPE);
+
+const PRODUCT_STATUSES = optionsOf(PRODUCT_STATUS);
 
 export function ProductEditorPage() {
   const { handle = "" } = useParams();
@@ -129,9 +127,11 @@ export function ProductEditorPage() {
                     })
                   }
                 >
-                  <option value="draft">draft</option>
-                  <option value="active">active</option>
-                  <option value="archived">archived</option>
+                  {PRODUCT_STATUSES.map((entry) => (
+                    <option key={entry.value} value={entry.value}>
+                      {entry.option}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className={fieldLabelClasses}>
@@ -388,9 +388,9 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                       })
                     }
                   >
-                    {AVAILABILITIES.map((availability) => (
-                      <option key={availability} value={availability}>
-                        {availability}
+                    {AVAILABILITIES.map((entry) => (
+                      <option key={entry.value} value={entry.value}>
+                        {entry.label}
                       </option>
                     ))}
                   </select>
@@ -620,7 +620,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
           <li key={attribute.key} className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{attribute.label}</span>
             <EntryId value={attribute.key} />
-            <EntryKind value={attribute.attribute_type} />
+            <EntryKind value={labelOf(ATTRIBUTE_TYPE, attribute.attribute_type)} />
             <span>
               {attribute.value}
               {attribute.unit ? ` ${attribute.unit}` : ""}
@@ -678,9 +678,9 @@ function AttributesCard({ product, onChange }: EditorProps) {
               setAttributeType(event.target.value as AttributeSchema["attribute_type"])
             }
           >
-            {ATTRIBUTE_TYPES.map((option) => (
-              <option key={option} value={option}>
-                {option}
+            {ATTRIBUTE_TYPES.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
               </option>
             ))}
           </select>

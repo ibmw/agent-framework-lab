@@ -5,45 +5,31 @@ import type {
   PaymentStatus,
   ReplaceOrderRequest,
 } from "@agent-lab/contracts";
+import {
+  FULFILMENT_STATUS,
+  labelOf,
+  membersOf,
+  ORDER_EVENT_KIND,
+  PAYMENT_STATUS,
+} from "./enumLabels";
 
 /**
  * Status is never carried by colour alone: every pill pairs its tone with a written label,
- * matching the design brief's accessibility constraint.
+ * matching the design brief's accessibility constraint. The words themselves live in
+ * `enumLabels.ts`, where the contract's own union holds them to its members.
  */
-const PAYMENT_LABELS: Record<PaymentStatus, string> = {
-  pending: "Pending",
-  authorized: "Authorized",
-  paid: "Paid",
-  refunded: "Refunded",
-};
-
-const FULFILMENT_LABELS: Record<FulfilmentStatus, string> = {
-  unfulfilled: "Unfulfilled",
-  partially_fulfilled: "Partially fulfilled",
-  fulfilled: "Fulfilled",
-};
-
-export const EVENT_KINDS: OrderEventKind[] = [
-  "placed",
-  "payment_authorized",
-  "payment_captured",
-  "payment_refunded",
-  "shipped",
-  "delivered",
-  "address_updated",
-  "support_contact",
-];
+export const EVENT_KINDS: OrderEventKind[] = membersOf(ORDER_EVENT_KIND);
 
 export function paymentLabel(status: PaymentStatus): string {
-  return PAYMENT_LABELS[status];
+  return labelOf(PAYMENT_STATUS, status);
 }
 
 export function fulfilmentLabel(status: FulfilmentStatus): string {
-  return FULFILMENT_LABELS[status];
+  return labelOf(FULFILMENT_STATUS, status);
 }
 
 export function eventKindLabel(kind: OrderEventKind): string {
-  return kind.replace(/_/g, " ").replace(/^./, (first) => first.toUpperCase());
+  return labelOf(ORDER_EVENT_KIND, kind);
 }
 
 /**

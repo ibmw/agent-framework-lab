@@ -33,6 +33,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { slugify, uniqueId } from "../lib/entryIds";
+import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -58,12 +59,7 @@ const CLIENT: DefinitionClient<
   unavailable: "The customer service is unavailable.",
 };
 
-const BACKGROUND_KINDS: BackgroundKind[] = [
-  "purchase",
-  "support_contact",
-  "account_event",
-  "life_event",
-];
+const BACKGROUND_KINDS = optionsOf(BACKGROUND_KIND);
 
 export function CustomerEditorPage() {
   const { profileId = "" } = useParams();
@@ -618,7 +614,7 @@ export function CustomerEditorPage() {
                   <li key={entry.id} className="grid gap-1 text-[13px]">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">
-                        {entry.occurred_on} · {entry.kind.replace(/_/g, " ")}
+                        {entry.occurred_on} · {labelOf(BACKGROUND_KIND, entry.kind)}
                       </span>
                       <button
                         className={`${subtleButtonClasses} ml-auto`}
@@ -914,9 +910,9 @@ function BackgroundForm({
           value={kind}
           onChange={(event) => setKind(event.target.value as BackgroundKind)}
         >
-          {BACKGROUND_KINDS.map((option) => (
-            <option key={option} value={option}>
-              {option.replace(/_/g, " ")}
+          {BACKGROUND_KINDS.map((entry) => (
+            <option key={entry.value} value={entry.value}>
+              {entry.label}
             </option>
           ))}
         </select>

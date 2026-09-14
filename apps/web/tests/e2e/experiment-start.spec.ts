@@ -210,9 +210,9 @@ async function publishSupportIdentity(page: Page, name: string) {
   const permissions = card(page, "Permissions");
   // `change shipping address` acts on an order, so publishing refuses it without
   // `read orders`: a mutation the identity cannot first read would be unauditable.
-  await permissions.getByLabel("read orders", { exact: true }).check();
-  await permissions.getByLabel("read policies", { exact: true }).check();
-  await permissions.getByLabel("change shipping address", { exact: true }).check();
+  await permissions.getByLabel(/^Read orders —/).check();
+  await permissions.getByLabel(/^Read policies —/).check();
+  await permissions.getByLabel(/^Change shipping address —/).check();
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByText(/Published version 1/)).toBeVisible();
@@ -490,9 +490,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await armA.getByRole("button", { name: "Run Arm A's agent" }).click();
   await expect(armA.getByText(/I found order NS-10482/)).toBeVisible();
   await expect(armA.getByText(/redirected it to 18 rue des Ecoles/)).toBeVisible();
-  await expect(armA.getByText(/interaction\.read_context → success/)).toBeVisible();
+  await expect(armA.getByText(/interaction\.read_context → Success/)).toBeVisible();
   await expect(
-    armA.getByText(/orders\.apply_address_change → success · moved this arm/),
+    armA.getByText(/orders\.apply_address_change → Success · moved this arm/),
   ).toBeVisible();
 
   // And the scenario's own fault fired in the middle of it: the recipe binds the order to
@@ -661,7 +661,7 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await stream.getByRole("button", { name: "State" }).click();
   await expect(stream.getByRole("listitem")).toHaveCount(4);
   await expect(
-    stream.getByText(/orders\.apply_address_change v1 → success · moved this arm r1 → r2/),
+    stream.getByText(/orders\.apply_address_change v1 → Success · moved this arm r1 → r2/),
   ).toHaveCount(2);
   await expect(
     stream.getByText(
@@ -694,7 +694,7 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await waterfall.getByRole("button").filter({ hasText: "orders.apply_address_change" }).click();
   const span = card(page, "Span");
   await expect(span.getByText("orders.apply_address_change · v1")).toBeVisible();
-  await expect(span.getByText("ok")).toBeVisible();
+  await expect(span.getByText("Success", { exact: true })).toBeVisible();
   await expect(span.getByText(/^[0-9a-f]{32}$/)).toBeVisible();
 
   // And the incident is found again from history — experiment-first, across every shop,

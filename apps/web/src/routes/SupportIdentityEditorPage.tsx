@@ -23,6 +23,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { slugify, uniqueId } from "../lib/entryIds";
+import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -228,7 +229,7 @@ export function SupportIdentityEditorPage() {
                     checked={content.permissions.includes(permission)}
                     onChange={() => togglePermission(permission)}
                   />
-                  {permission.replace(/_/g, " ")}
+                  {optionText(SUPPORT_PERMISSION[permission])}
                 </label>
               ))}
             </fieldset>
@@ -241,7 +242,7 @@ export function SupportIdentityEditorPage() {
                     checked={content.permissions.includes(permission)}
                     onChange={() => togglePermission(permission)}
                   />
-                  {permission.replace(/_/g, " ")}
+                  {optionText(SUPPORT_PERMISSION[permission])}
                 </label>
               ))}
             </fieldset>

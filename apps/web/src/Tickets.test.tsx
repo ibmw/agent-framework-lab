@@ -634,6 +634,10 @@ describe("ticket context panel", () => {
 
     const linked = card("Linked objects");
     expect(within(linked).getByText("NS-10482")).toBeVisible();
+    // The order's two statuses read as words on a pill, not as the wire's own spelling.
+    expect(within(linked).getByText("Paid")).toBeVisible();
+    expect(within(linked).getByText("Unfulfilled")).toBeVisible();
+    expect(within(linked).queryByText(/unfulfilled/)).toBeNull();
     expect(within(linked).getByText(/ship-to: Bordeaux — previous flat/)).toBeVisible();
 
     const documents = card("Suggested documents");

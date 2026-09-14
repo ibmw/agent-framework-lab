@@ -24,7 +24,9 @@ import {
   PageHeader,
   StatusPill,
 } from "../components/WorkspaceChrome";
-import { originLabel } from "../lib/tickets";
+import { DEFINITION_TYPE, labelOf } from "../lib/enumLabels";
+import { fulfilmentLabel, paymentLabel } from "../lib/orders";
+import { channelLabel, originLabel } from "../lib/tickets";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -302,7 +304,7 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
         <p className="text-[13px] text-admin-ink-soft">
           Opened from the {originLabel(interaction.origin_kind)} on ticket{" "}
           <span className="font-mono font-semibold">{interaction.ticket_reference}</span> via{" "}
-          {interaction.channel}
+          {channelLabel(interaction.channel)}
           {interaction.product_handle === null ? null : (
             <>
               {" "}
@@ -335,7 +337,9 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
           <tbody>
             {snapshot.pins.map((pin) => (
               <tr key={`${pin.definition_type}:${pin.definition_id}`}>
-                <td className={tableCellClasses}>{pin.definition_type.replace(/_/g, " ")}</td>
+                <td className={tableCellClasses}>
+                  {labelOf(DEFINITION_TYPE, pin.definition_type)}
+                </td>
                 <td className={tableCellClasses}>v{pin.version}</td>
                 <td className={tableCellClasses}>
                   <Fingerprint value={pin.content_fingerprint} />
@@ -363,11 +367,8 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
               <li key={order.order_id} className="grid gap-1">
                 <p className="flex flex-wrap items-center gap-2 text-[13px]">
                   <span className="font-mono font-semibold text-lab-ink">{order.reference}</span>
-                  <StatusPill tone="payment" label={order.payment_status.replace(/_/g, " ")} />
-                  <StatusPill
-                    tone="fulfilment"
-                    label={order.fulfilment_status.replace(/_/g, " ")}
-                  />
+                  <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />
+                  <StatusPill tone="fulfilment" label={fulfilmentLabel(order.fulfilment_status)} />
                   <span className="text-admin-muted">
                     {order.total_amount} {order.currency} · {order.item_count} item(s)
                   </span>

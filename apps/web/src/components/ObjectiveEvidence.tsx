@@ -6,6 +6,7 @@ import type {
 } from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
 import { listJudgeConfigurations } from "../api/judgeConfigurations";
+import { labelOf, OBJECTIVE_SEVERITY } from "../lib/enumLabels";
 import { describeJudgement, OUTCOMES } from "../lib/evidence";
 import {
   fieldControlClasses,
@@ -79,7 +80,7 @@ export function ObjectiveMatrix({
               {row.statement}
               {compact ? null : (
                 <span className="ml-2 text-xs text-admin-muted">
-                  {row.severity}
+                  {labelOf(OBJECTIVE_SEVERITY, row.severity)}
                   {row.evidence === "forbidden" ? " · must never happen" : ""}
                 </span>
               )}

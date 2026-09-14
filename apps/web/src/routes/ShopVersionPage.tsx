@@ -12,7 +12,17 @@ import {
   EntryText,
   Fingerprint,
   PageHeader,
+  StatusPill,
 } from "../components/WorkspaceChrome";
+import {
+  ATTRIBUTE_TYPE,
+  labelOf,
+  PAYMENT_METHOD_KIND,
+  POLICY_KIND,
+  PRODUCT_STATUS,
+  SUPPORT_CHANNEL,
+  VARIANT_AVAILABILITY,
+} from "../lib/enumLabels";
 import { ratingLabel, variantOptionLabel, variantPriceLabel } from "../lib/shop";
 import { formatTimestamp, tableCellClasses, tableHeadClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
@@ -81,7 +91,10 @@ export function ShopVersionPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-4">
           {content.products.map((product) => (
-            <Card key={product.handle} title={`${product.title} · ${product.status}`}>
+            <Card
+              key={product.handle}
+              title={`${product.title} · ${labelOf(PRODUCT_STATUS, product.status)}`}
+            >
               <div className="flex flex-wrap items-center gap-2 text-[13px]">
                 <EntryId value={product.handle} />
                 <EntryKind value={product.category} />
@@ -114,7 +127,12 @@ export function ShopVersionPage() {
                       <td className={tableCellClasses}>{variant.sku}</td>
                       <td className={tableCellClasses}>{variantOptionLabel(variant)}</td>
                       <td className={tableCellClasses}>{variantPriceLabel(variant)}</td>
-                      <td className={tableCellClasses}>{variant.availability}</td>
+                      <td className={tableCellClasses}>
+                        <StatusPill
+                          tone="availability"
+                          label={labelOf(VARIANT_AVAILABILITY, variant.availability)}
+                        />
+                      </td>
                       <td className={tableCellClasses}>{variant.stock_quantity}</td>
                     </tr>
                   ))}
@@ -151,7 +169,9 @@ export function ShopVersionPage() {
                     <li key={attribute.key}>
                       <span className="font-semibold">{attribute.label}</span>{" "}
                       <EntryId value={attribute.key} />{" "}
-                      <span className="text-admin-muted">({attribute.attribute_type})</span>{" "}
+                      <span className="text-admin-muted">
+                        ({labelOf(ATTRIBUTE_TYPE, attribute.attribute_type)})
+                      </span>{" "}
                       {attribute.value}
                       {attribute.unit ? ` ${attribute.unit}` : ""}
                       {attribute.choices.length > 0 ? (
@@ -172,7 +192,7 @@ export function ShopVersionPage() {
               entries={content.policies.map((entry) => ({
                 id: entry.id,
                 title: entry.title,
-                kind: entry.kind,
+                kind: labelOf(POLICY_KIND, entry.kind),
                 label: "Body",
                 text: entry.body,
               }))}
@@ -227,7 +247,12 @@ export function ShopVersionPage() {
                   ["Slug", content.identity.slug],
                   ["Locale", content.identity.locale],
                   ["Currencies", content.identity.currencies.join(" · ")],
-                  ["Support channels", content.identity.channels.join(" · ")],
+                  [
+                    "Support channels",
+                    content.identity.channels
+                      .map((channel) => labelOf(SUPPORT_CHANNEL, channel))
+                      .join(" · "),
+                  ],
                 ] as const
               ).map(([term, value]) => (
                 <div key={term} className="flex items-baseline gap-2">
@@ -245,7 +270,7 @@ export function ShopVersionPage() {
                   title={method.name}
                   chips={
                     <>
-                      <EntryKind value={method.kind} />
+                      <EntryKind value={labelOf(PAYMENT_METHOD_KIND, method.kind)} />
                       <EntryId value={method.id} />
                       <span className="text-[12px] text-admin-muted">
                         {method.enabled ? "enabled" : "disabled"}

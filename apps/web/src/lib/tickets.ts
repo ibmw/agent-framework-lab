@@ -10,59 +10,38 @@ import type {
   TicketStatus,
 } from "@agent-lab/contracts";
 import { slugify, uniqueId } from "./entryIds";
+import {
+  labelOf,
+  SHOP_DOCUMENT_KIND,
+  SUPPORT_CHANNEL,
+  TICKET_AUTHOR,
+  TICKET_ORIGIN_KIND,
+  TICKET_STATUS,
+} from "./enumLabels";
 
 /**
  * Status is never carried by colour alone: every badge pairs its tone with a written label,
- * matching the design brief's accessibility constraint.
+ * matching the design brief's accessibility constraint. The words themselves live in
+ * `enumLabels.ts`, where the contract's own union holds them to its members.
  */
-const STATUS_LABELS: Record<TicketStatus, string> = {
-  open: "Open",
-  resolved: "Resolved",
-};
-
-const CHANNEL_LABELS: Record<SupportChannel, string> = {
-  chat: "Chat",
-  email: "Email",
-  phone: "Phone",
-};
-
-const ORIGIN_LABELS: Record<TicketOriginKind, string> = {
-  product_page: "product page",
-  order_page: "order page",
-  checkout: "checkout",
-  faq: "FAQ",
-  support_entry: "support entry",
-};
-
-const AUTHOR_LABELS: Record<TicketAuthor, string> = {
-  customer: "Customer",
-  support_agent: "Past support agent",
-};
-
-const DOCUMENT_LABELS: Record<ShopDocumentKind, string> = {
-  policy: "policy",
-  support_guideline: "guideline",
-  faq_entry: "FAQ",
-};
-
 export function statusLabel(status: TicketStatus): string {
-  return STATUS_LABELS[status];
+  return labelOf(TICKET_STATUS, status);
 }
 
 export function channelLabel(channel: SupportChannel): string {
-  return CHANNEL_LABELS[channel];
+  return labelOf(SUPPORT_CHANNEL, channel);
 }
 
 export function originLabel(kind: TicketOriginKind): string {
-  return ORIGIN_LABELS[kind];
+  return labelOf(TICKET_ORIGIN_KIND, kind);
 }
 
 export function authorLabel(author: TicketAuthor): string {
-  return AUTHOR_LABELS[author];
+  return labelOf(TICKET_AUTHOR, author);
 }
 
 export function documentKindLabel(kind: ShopDocumentKind): string {
-  return DOCUMENT_LABELS[kind];
+  return labelOf(SHOP_DOCUMENT_KIND, kind);
 }
 
 /** Which origins name a resource, mirroring the backend's own rule. */

@@ -24,6 +24,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { JUDGE_EVIDENCE_SCOPE } from "../lib/enumLabels";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -44,14 +45,6 @@ const CLIENT: DefinitionClient<
   // A judge carries no derived evidence, so the content *is* the payload.
   toPayload: (content) => content,
   unavailable: "The judge service is unavailable.",
-};
-
-/** What each evidence scope shows the judge, in the words an author decides by. */
-const SCOPES: Record<JudgeEvidenceScope, string> = {
-  customer_turns: "What the customer said to this arm, in order.",
-  agent_replies: "What this arm answered. Without it, the judge scores the calls alone.",
-  tool_calls: "Which tools the arm called, with what arguments, and how each answered.",
-  state_changes: "Which calls moved this arm's world.",
 };
 
 /**
@@ -222,9 +215,11 @@ export function JudgeConfigurationEditorPage() {
                       onChange={() => toggleScope(scope)}
                     />
                     <span>
-                      <span className="font-semibold text-lab-ink">{scope.replace(/_/g, " ")}</span>
+                      <span className="font-semibold text-lab-ink">
+                        {JUDGE_EVIDENCE_SCOPE[scope].label}
+                      </span>
                       <br />
-                      {SCOPES[scope]}
+                      {JUDGE_EVIDENCE_SCOPE[scope].explanation}
                     </span>
                   </label>
                 </li>

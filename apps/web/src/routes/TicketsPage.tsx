@@ -32,12 +32,14 @@ import {
   IssueList,
   PageHeader,
   PublishReasons,
+  StatusPill,
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { nextReference } from "../lib/entryIds";
+import { optionsOf, TICKET_ORIGIN_KIND, TICKET_STATUS } from "../lib/enumLabels";
 import { REFERENCE_PATTERN, TICKET_REFERENCE_RULE } from "../lib/fieldRules";
-import { fromLocalInput, toLocalInput } from "../lib/orders";
+import { fromLocalInput, fulfilmentLabel, paymentLabel, toLocalInput } from "../lib/orders";
 import {
   appendMessage,
   authorLabel,
@@ -76,13 +78,13 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
-const ORIGIN_KINDS: TicketOriginKind[] = [
-  "order_page",
-  "product_page",
-  "checkout",
-  "faq",
-  "support_entry",
-];
+/**
+ * The two closed sets this page picks from, read from the contract-held tables rather than
+ * retyped, so a member the contract gains reaches the select instead of being left out of it.
+ */
+const TICKET_STATUSES = optionsOf(TICKET_STATUS);
+
+const ORIGIN_KINDS = optionsOf(TICKET_ORIGIN_KIND);
 
 function matches(ticket: TicketSummarySchema, filter: Filter): boolean {
   return filter === "all" || ticket.status === filter;
@@ -795,8 +797,11 @@ function ContextPanel({
             value={content.status}
             onChange={(event) => onEdit({ ...content, status: event.target.value as TicketStatus })}
           >
-            <option value="open">Open</option>
-            <option value="resolved">Resolved</option>
+            {TICKET_STATUSES.map((entry) => (
+              <option key={entry.value} value={entry.value}>
+                {entry.label}
+              </option>
+            ))}
           </select>
         </label>
         <label className={fieldLabelClasses}>
@@ -830,8 +835,8 @@ function ContextPanel({
             }
           >
             {ORIGIN_KINDS.map((kind) => (
-              <option key={kind} value={kind}>
-                {originLabel(kind)}
+              <option key={kind.value} value={kind.value}>
+                {kind.label}
               </option>
             ))}
           </select>
@@ -969,9 +974,13 @@ function ContextPanel({
                     />
                     {order.reference}
                   </label>
-                  <span className="text-admin-muted">
-                    {order.total_amount} {order.currency} · {order.payment_status} ·{" "}
-                    {order.fulfilment_status}
+                  <span className="flex flex-wrap items-center gap-1.5 text-admin-muted">
+                    {order.total_amount} {order.currency}
+                    <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />
+                    <StatusPill
+                      tone="fulfilment"
+                      label={fulfilmentLabel(order.fulfilment_status)}
+                    />
                   </span>
                   {order.shipping_label ? (
                     <span className="text-admin-muted">ship-to: {order.shipping_label}</span>

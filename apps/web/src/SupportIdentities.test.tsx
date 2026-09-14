@@ -207,8 +207,26 @@ describe("support identity workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Northstar tier 1" })).toBeVisible();
     expect(screen.getByText(/acts on an order the identity is not allowed to read/)).toBeVisible();
-    expect(screen.getByLabelText("change shipping address")).toBeChecked();
-    expect(screen.getByLabelText("read orders")).not.toBeChecked();
+    // Selected by what the checkbox says it grants, which is the whole of its label now.
+    expect(
+      screen.getByLabelText("Change shipping address — redirect an order that has not shipped"),
+    ).toBeChecked();
+    expect(screen.getByLabelText("Read orders — look up this customer's orders")).not.toBeChecked();
+  });
+
+  it("says what a permission grants on the checkbox that grants it", async () => {
+    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+
+    await screen.findByRole("heading", { name: "Northstar tier 1" });
+    const permissions = within(screen.getByRole("region", { name: "Permissions" }));
+    // The claim of the slice, in the words PLAN-UX wrote it in.
+    expect(
+      permissions.getByRole("checkbox", {
+        name: "Issue refund — refund an order in full or part",
+      }),
+    ).toBeInTheDocument();
+    // And nowhere on the card is the wire's own spelling still readable.
+    expect(permissions.queryByText(/issue_refund/)).toBeNull();
   });
 
   it("grants a permission and saves the whole payload", async () => {
@@ -216,7 +234,7 @@ describe("support identity workspace", () => {
     renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
-    await user.click(screen.getByLabelText("read orders"));
+    await user.click(screen.getByLabelText("Read orders — look up this customer's orders"));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));

@@ -345,3 +345,73 @@ above is unchanged.
 **Order and ticket references.** An order continues the shop's existing `{prefix}-{n}`
 series (`seriesPrefix`, then `nextReference`). A shop with no numbered orders yet takes
 initials from its name. Ticket references always use `T`, independently of the shop name.
+
+## Revision — enum labels and the status pill (2026-09-14)
+
+Slice 3. No value of a contract union reaches a reader in its wire spelling. The convention is
+written here once; ADR 0050 records that this section is the decision and does not restate it.
+The field-hint and derived-identifier sections above are unchanged.
+
+**Where a label table lives.** A closed set the contract publishes has exactly one label table,
+and a new one goes in `apps/web/src/lib/enumLabels.ts`. They are not spread across the domain
+modules because these vocabularies are not domain-shaped — a permission is read by two editors,
+a definition type by three surfaces — and because one registry is what makes the sweep over
+them exhaustive.
+
+This is not yet true of the whole workspace, and the section says so rather than describing an
+end state as if it had arrived. Slice 3 moved in the twenty-one tables it names, including the
+ones `lib/orders.ts` and `lib/tickets.ts` already held; those two modules keep publishing their
+label functions and read the tables from the new module. These tables still sit outside it and
+migrate as the slice that next touches their surface moves them:
+
+- `ASSESSMENTS`, `DETERMINISTIC_EVIDENCE` and `EFFECTS` in `routes/BlockEditorPage.tsx`, and
+  `EFFECTS` in `routes/ExperimentTimelinePage.tsx` — arrays and open records over contract
+  unions, so a new member is silently absent rather than refused.
+- `MEMORY_MODES` in `routes/AgentConfigurationEditorPage.tsx`, which carries a third field
+  (`detail`) that the shared `EnumLabel` does not yet model.
+- `DOCUMENT_LABELS` in `lib/scenarios.ts`, reached through `documentCollectionLabel`. It is
+  the one place a contract union has two label tables at once: it spells `ShopDocumentKind`
+  at length ("shop policy", "support guideline", "FAQ entry") for the scenario editor's
+  context documents, where `SHOP_DOCUMENT_KIND` spells it short ("policy", "guideline",
+  "FAQ") for the ticket context panel. The two lengths are deliberate, not a duplication to
+  merge blindly; they collapse into one table when a slice decides which length each surface
+  is owed — most likely by giving `EnumLabel` a longer form, the way `MEMORY_MODES` needs a
+  third field.
+- `ARCHITECTURE_LABELS` in `lib/agents.ts`, and `OUTCOMES`, `FAILURES` and `JUDGE_FAILURES` in
+  `lib/evidence.ts`, which pair a label with a mark or a sentence of their own.
+- `KINDS` in `routes/ExperimentTracesPage.tsx`, which is not a label table at all: it maps a
+  span kind to the exporter's own span name, letter for letter, and must not be prettified.
+- Hand-written `<option>` lists for `AccountStatus` and `LoyaltyTier` in
+  `routes/CustomerEditorPage.tsx`.
+
+**Keyed to the contract, not to a copy of it.** Each table is typed `Record<Union, EnumLabel>`
+over the generated contract union, so a member added to `openapi.yaml` fails the typecheck here.
+`lib/enumLabels.test.ts` then reads the generated types and names the enum and the member that
+has no words, the sweep shape `lib/tours.test.ts` uses over `TOUR_IDS`, and it reads the
+module's own exports back so a table left out of the registry fails too. A field the contract
+types as a free string rather than as its union is read with `describeValue`, which returns the
+value exactly as the record carries it when the table has no words for it — the vocabulary is
+the backend's, and dressing an unknown member up would put this application's guess where the
+lab's own word belongs.
+
+**A label, and an explanation only where one is owed.** An entry is `{ label }`, or
+`{ label, explanation }` where an operator could reasonably choose wrong — a permission grants
+an ability, an evidence scope changes the question a judge is asked. Explained controls read
+"Label — explanation", the scenario editor's option style: "Issue refund — refund an order in
+full or part". A set whose members explain themselves ("Card", "Wallet", "Draft") carries no
+second sentence, because a hint that says nothing teaches a reader to skip the ones that do.
+
+**An explanation may only say what the lab enforces.** Every clause that states a rule is the
+lab's own sentence, carried from the code that applies it, and the table says which code that
+is. An explanation with no rule behind it would teach an operator a constraint the run will not
+honour, which is worse than the bare label it replaced.
+
+**Case belongs to the position.** Most labels are capitalized. The tables read mid-sentence —
+ticket origin, document kind, comparison dimension — stay lowercase, because "opened from
+Order page" is worse than "opened from order page". Explanations are lowercase clauses, so
+that a label and its explanation compose into one line.
+
+**Status pairs a glyph with the word.** A status column renders a `StatusPill`, whose glyph
+says which axis the status is on — payment, fulfilment, product, availability — and is
+`aria-hidden`. The word beside it carries the meaning, so neither colour nor shape is ever the
+only carrier of a status.

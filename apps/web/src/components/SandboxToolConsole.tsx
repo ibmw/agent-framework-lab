@@ -10,6 +10,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { describeApiError } from "../api/client";
 import { listSupportIdentities } from "../api/supportIdentities";
 import { callSandboxTool, listToolContracts } from "../api/tools";
+import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -357,7 +358,8 @@ function ToolResult({
     <div className="grid gap-2">
       <p className="flex flex-wrap items-center gap-2 text-[13px]">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border/60 px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft">
-          <span aria-hidden>{result.outcome === "success" ? "✓" : "!"}</span> {result.outcome}
+          <span aria-hidden>{result.outcome === "success" ? "✓" : "!"}</span>{" "}
+          {labelOf(TOOL_OUTCOME, result.outcome)}
         </span>
         <span className="text-admin-muted">
           read at revision r{result.sandbox_revision} ·{" "}

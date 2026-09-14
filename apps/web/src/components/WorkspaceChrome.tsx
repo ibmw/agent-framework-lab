@@ -276,13 +276,30 @@ export function PublishReasons({
 }
 
 /**
- * An order's two status axes. Status is never carried by colour alone: the pill pairs a
- * glyph with the written label.
+ * The glyph each status axis is drawn with.
+ *
+ * The mark says *which* status this is, not which value it holds — two pills side by side in
+ * one table cell are told apart by their shape before they are read. It is decorative on
+ * purpose: the label beside it carries the meaning, so nothing here is the only carrier of
+ * anything, and a reader who sees no colour and no glyph still reads the status.
  */
-export function StatusPill({ tone, label }: { tone: "payment" | "fulfilment"; label: string }) {
+const PILL_GLYPHS = {
+  payment: "◆",
+  fulfilment: "▣",
+  product: "◧",
+  availability: "▤",
+} as const;
+
+export type StatusTone = keyof typeof PILL_GLYPHS;
+
+/**
+ * One status axis. Status is never carried by colour alone: the pill pairs a glyph with the
+ * written label, and the label is a contract enum's own name from `lib/enumLabels.ts`.
+ */
+export function StatusPill({ tone, label }: { tone: StatusTone; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border/60 px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft">
-      <span aria-hidden>{tone === "payment" ? "◆" : "▣"}</span> {label}
+      <span aria-hidden>{PILL_GLYPHS[tone]}</span> {label}
     </span>
   );
 }

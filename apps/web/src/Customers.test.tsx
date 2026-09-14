@@ -554,3 +554,29 @@ describe("customer workspace", () => {
     expect(await screen.findByText(/Draft matches v1/)).toBeVisible();
   });
 });
+
+describe("every enum has a name", () => {
+  it("names a background kind in the picker and on the entry it saves", async () => {
+    const user = userEvent.setup();
+    currentProfile = {
+      ...PROFILE_CONTENT,
+      background: [
+        {
+          id: "refund-2025",
+          kind: "support_contact",
+          occurred_on: "2026-05-02",
+          note: "Asked about a refund window.",
+        },
+      ],
+    };
+    currentPreview = profilePreview({ content: currentProfile });
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const background = within(await screen.findByRole("region", { name: "Background" }));
+    expect(background.getByText("2026-05-02 · Support contact")).toBeVisible();
+
+    const kind = background.getByLabelText("Kind");
+    await user.selectOptions(kind, within(kind).getByRole("option", { name: "Life event" }));
+    expect(kind).toHaveValue("life_event");
+  });
+});

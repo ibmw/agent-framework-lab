@@ -28,6 +28,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { ARCHITECTURE_LABELS, ARCHITECTURES } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { labelOf, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
@@ -467,7 +468,7 @@ export function AgentConfigurationEditorPage() {
                     </span>
                     {tool.required_permission && permitted.get(tool.name) === false ? (
                       <span className="text-[11.5px] font-semibold text-lab-error">
-                        needs {tool.required_permission.replace(/_/g, " ")}
+                        needs {labelOf(SUPPORT_PERMISSION, tool.required_permission)}
                       </span>
                     ) : null}
                   </label>

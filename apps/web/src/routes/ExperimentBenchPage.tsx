@@ -24,6 +24,13 @@ import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
+  COMPARISON_DIMENSION,
+  DEFINITION_TYPE,
+  describeValue,
+  labelOf,
+  TOOL_OUTCOME,
+} from "../lib/enumLabels";
+import {
   describeFailure,
   formatCost,
   formatDuration,
@@ -351,7 +358,7 @@ export function ExperimentBenchPage() {
             <ul className="grid gap-1 text-xs text-admin-muted">
               {experiment.sandbox_inputs.map((pin) => (
                 <li key={`${pin.definition_type}:${pin.definition_id}`}>
-                  {pin.definition_type.replace(/_/g, " ")} v{pin.version}
+                  {describeValue(DEFINITION_TYPE, pin.definition_type)} v{pin.version}
                 </li>
               ))}
             </ul>
@@ -378,7 +385,9 @@ export function ExperimentBenchPage() {
               <>
                 <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
                   {differences.map((variable) => (
-                    <li key={variable.dimension}>{variable.dimension.replace(/_/g, " ")}</li>
+                    <li key={variable.dimension}>
+                      {labelOf(COMPARISON_DIMENSION, variable.dimension)}
+                    </li>
                   ))}
                 </ul>
                 {differences.length > 1 ? (
@@ -549,9 +558,9 @@ function Attempt({
               <li
                 key={`call:${entry.ordinal}:${entry.attempt}:${entry.sequence}`}
                 className={`${subtleButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}
-                title={`${entry.tool} ${entry.version} → ${entry.outcome}`}
+                title={`${entry.tool} ${entry.version} → ${labelOf(TOOL_OUTCOME, entry.outcome)}`}
               >
-                {entry.tool} → {entry.outcome}
+                {entry.tool} → {labelOf(TOOL_OUTCOME, entry.outcome)}
                 {entry.revision_after > entry.revision_before ? " · moved this arm" : ""}
               </li>
             ) : (

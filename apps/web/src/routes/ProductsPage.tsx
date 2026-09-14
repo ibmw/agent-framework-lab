@@ -4,8 +4,9 @@ import { Link } from "react-router-dom";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
-import { Card, PageHeader, VersionChips } from "../components/WorkspaceChrome";
+import { Card, PageHeader, StatusPill, VersionChips } from "../components/WorkspaceChrome";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
+import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
 import { KEBAB_PATTERN, PRODUCT_HANDLE_RULE } from "../lib/fieldRules";
 import { issuesForProduct, ratingLabel } from "../lib/shop";
 import {
@@ -117,7 +118,12 @@ export function ProductsPage() {
                         </Link>
                         <div className="text-admin-muted">{product.category}</div>
                       </td>
-                      <td className={tableCellClasses}>{product.status}</td>
+                      <td className={tableCellClasses}>
+                        <StatusPill
+                          tone="product"
+                          label={labelOf(PRODUCT_STATUS, product.status)}
+                        />
+                      </td>
                       <td className={tableCellClasses}>{product.variants.length}</td>
                       <td className={tableCellClasses}>{ratingLabel(product)}</td>
                       <td className={tableCellClasses}>

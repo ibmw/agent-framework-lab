@@ -238,10 +238,12 @@ describe("judge workspace", () => {
 
     const evidence = await screen.findByRole("region", { name: "Evidence" });
     expect(
-      within(evidence).getByText(/What this arm answered\. Without it, the judge scores the calls/),
+      within(evidence).getByText(
+        /what this arm answered; without it the judge scores what the arm did, not what it said/,
+      ),
     ).toBeVisible();
-    expect(within(evidence).getByRole("checkbox", { name: /agent replies/ })).toBeChecked();
-    expect(within(evidence).getByRole("checkbox", { name: /state changes/ })).not.toBeChecked();
+    expect(within(evidence).getByRole("checkbox", { name: /Agent replies/ })).toBeChecked();
+    expect(within(evidence).getByRole("checkbox", { name: /State changes/ })).not.toBeChecked();
   });
 
   it("saves a change to what the judge is shown, because it changes the question", async () => {
@@ -249,7 +251,7 @@ describe("judge workspace", () => {
     renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
 
     const evidence = await screen.findByRole("region", { name: "Evidence" });
-    await user.click(within(evidence).getByRole("checkbox", { name: /state changes/ }));
+    await user.click(within(evidence).getByRole("checkbox", { name: /State changes/ }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));

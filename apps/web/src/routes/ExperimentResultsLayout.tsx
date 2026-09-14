@@ -24,6 +24,7 @@ import {
 } from "../api/experiments";
 import { TourLaunch } from "../components/TourLaunch";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
+import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
 import {
   fieldControlClasses,
   fieldLabelClasses,
@@ -292,7 +293,7 @@ function describeChange(changed: ComparisonDimension[]) {
   if (changed.length === 0) {
     return null;
   }
-  const named = changed.map((dimension) => dimension.replace(/_/g, " ")).join(", ");
+  const named = changed.map((dimension) => labelOf(COMPARISON_DIMENSION, dimension)).join(", ");
   return changed.length === 1 ? (
     <span className="text-admin-muted">{` · changed ${named}`}</span>
   ) : (
@@ -578,7 +579,7 @@ function Provenance({ experiment }: { experiment: ExperimentResponse }) {
           key={`${pin.definition_type}:${pin.definition_id}`}
           className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold"
         >
-          {pin.definition_type.replace(/_/g, " ")} v{pin.version}
+          {describeValue(DEFINITION_TYPE, pin.definition_type)} v{pin.version}
         </span>
       ))}
       <span className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold">
@@ -589,7 +590,7 @@ function Provenance({ experiment }: { experiment: ExperimentResponse }) {
           key={variable.dimension}
           className="rounded-full bg-admin-draft px-2.5 py-0.5 font-semibold text-admin-draft-ink"
         >
-          {variable.dimension.replace(/_/g, " ")} differs
+          {labelOf(COMPARISON_DIMENSION, variable.dimension)} differs
         </span>
       ))}
       {differences.length > 1 ? (

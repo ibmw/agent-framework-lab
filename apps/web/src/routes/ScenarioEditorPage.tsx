@@ -30,6 +30,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import {
   addMutation,
   addObjective,
@@ -85,10 +86,8 @@ type ResourceState =
   | { status: "loaded"; resources: ScenarioResourcesSchema }
   | { status: "failed"; message: string };
 
-const SEVERITIES: { value: ObjectiveSeverity; label: string }[] = [
-  { value: "required", label: "Required — the objective fails when missed" },
-  { value: "expected", label: "Expected — a visible warning, without failing the run" },
-];
+/** The option style every explained select in the workspace follows, read from one table. */
+const SEVERITIES = optionsOf(OBJECTIVE_SEVERITY);
 
 /**
  * Frame 4: the scenario as a composition surface rather than a set of bespoke forms.
@@ -415,7 +414,7 @@ export function ScenarioEditorPage() {
                       >
                         {SEVERITIES.map((entry) => (
                           <option key={entry.value} value={entry.value}>
-                            {entry.label}
+                            {entry.option}
                           </option>
                         ))}
                       </select>

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { describeApiError } from "../api/client";
 import { getExperimentTraces } from "../api/experiments";
 import { Card } from "../components/WorkspaceChrome";
+import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure } from "../lib/evidence";
 import { subtleButtonClasses } from "../lib/ui";
 import { useExperimentResults } from "./ExperimentResultsLayout";
@@ -25,12 +26,6 @@ const KINDS: Record<RunTraceSpanSchema["kind"], string> = {
   attempt: "experiment.attempt",
   runtime: "agent.answer",
   tool: "agent.tool",
-};
-
-const OUTCOMES: Record<string, string> = {
-  success: "ok",
-  refused: "refused",
-  failed: "failed",
 };
 
 /**
@@ -277,7 +272,7 @@ function Attributes({ trace, span }: { trace: RunTraceSchema; span: RunTraceSpan
     rows.splice(1, 0, ["tool", `${span.tool} · ${span.tool_version ?? "unversioned"}`]);
   }
   if (span.tool_outcome !== null) {
-    rows.splice(2, 0, ["outcome", OUTCOMES[span.tool_outcome] ?? span.tool_outcome]);
+    rows.splice(2, 0, ["outcome", labelOf(TOOL_OUTCOME, span.tool_outcome)]);
   }
   if (span.kind === "attempt" && trace.outcome === "failed") {
     rows.splice(1, 0, ["ended", describeFailure(trace.failure)]);

@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { describeApiError } from "../api/client";
 import { getExperimentTimeline } from "../api/experiments";
 import { Card } from "../components/WorkspaceChrome";
+import { labelOf as enumLabel, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure } from "../lib/evidence";
 import { outlineButtonClasses, subtleButtonClasses } from "../lib/ui";
 import { useExperimentResults } from "./ExperimentResultsLayout";
@@ -299,7 +300,11 @@ function describe(entry: TimelineEntrySchema): string {
   // though a tool call always fills them. Falling back keeps a malformed entry readable
   // instead of rendering the word "null" at an operator, which is what the branches above do.
   const call = [entry.tool, entry.tool_version].filter(Boolean).join(" ");
-  return `${call || "an unnamed tool call"} → ${entry.tool_outcome ?? "no recorded outcome"}${movement(entry)}`;
+  const outcome =
+    entry.tool_outcome === null
+      ? "no recorded outcome"
+      : enumLabel(TOOL_OUTCOME, entry.tool_outcome);
+  return `${call || "an unnamed tool call"} → ${outcome}${movement(entry)}`;
 }
 
 /** The revisions an entry moved this arm through, or nothing when it moved none. */

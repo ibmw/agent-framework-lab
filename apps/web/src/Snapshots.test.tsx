@@ -434,7 +434,7 @@ describe("starting states", () => {
     await user.click(screen.getByRole("button", { name: "Materialize snapshot" }));
 
     const pins = await screen.findByRole("region", { name: "Pinned versions" });
-    expect(within(pins).getByText("shop")).toBeVisible();
+    expect(within(pins).getByText("Shop")).toBeVisible();
     expect(within(pins).getByText("v3")).toBeVisible();
 
     const orders = screen.getByRole("region", { name: "Copied orders" });
@@ -654,7 +654,7 @@ describe("tools", () => {
     expect(
       await within(console).findByText("this customer holds no order 'NS-00000'"),
     ).toBeVisible();
-    expect(within(console).getByText("refused")).toBeVisible();
+    expect(within(console).getByText("Refused")).toBeVisible();
     // A refusal is not an error: the console does not report the call as having failed.
     expect(within(console).queryByRole("alert")).toBeNull();
   });

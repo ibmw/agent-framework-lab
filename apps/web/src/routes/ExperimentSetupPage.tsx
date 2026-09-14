@@ -1,5 +1,6 @@
 import type {
   AgentConfigurationSummarySchema,
+  ComparisonDimension,
   DefinitionIssueSchema,
   DefinitionVersionSummarySchema,
   ExperimentPreviewResponse,
@@ -18,6 +19,7 @@ import { listExperiments, previewExperiment, startExperiment } from "../api/expe
 import { listScenarios, listScenarioVersions } from "../api/scenarios";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
+import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -57,8 +59,8 @@ function newestVersion(versions: DefinitionVersionSummarySchema[]): number | nul
   );
 }
 
-function dimensionLabel(dimension: string): string {
-  return dimension.replace(/_/g, " ");
+function dimensionLabel(dimension: ComparisonDimension): string {
+  return labelOf(COMPARISON_DIMENSION, dimension);
 }
 
 /** The request a start would make, or null while the operator has not chosen enough for one. */

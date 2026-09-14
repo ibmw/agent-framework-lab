@@ -488,7 +488,7 @@ describe("shop workspace", () => {
 
     const policies = await screen.findByRole("region", { name: "Policies" });
     expect(within(policies).getByText("Shipping and delivery")).toBeVisible();
-    expect(within(policies).getByText("shipping", { selector: "span" })).toBeVisible();
+    expect(within(policies).getByText("Shipping", { selector: "span" })).toBeVisible();
     expect(within(policies).getByText("shipping-policy", { selector: "code" })).toBeVisible();
     const body = within(policies).getByText(/Standard delivery is 2 to 5 working days/);
     expect(body).toBeVisible();
@@ -793,10 +793,88 @@ describe("shop workspace", () => {
     expect(within(identity).getByText("northstar")).toBeVisible();
     expect(within(identity).getByText("en-GB")).toBeVisible();
     expect(within(identity).getByText("EUR")).toBeVisible();
-    expect(within(identity).getByText("chat")).toBeVisible();
+    expect(within(identity).getByText("Chat")).toBeVisible();
 
     const payment = screen.getByRole("region", { name: "Payment methods" });
-    expect(within(payment).getByText("Card")).toBeVisible();
+    // Twice: the method's own name, and the kind chip that now spells `card` for a reader.
+    expect(within(payment).getAllByText("Card")).toHaveLength(2);
     expect(within(payment).getByText("visa", { selector: "code" })).toBeVisible();
+  });
+});
+
+/**
+ * Slice 3: nowhere in the workspace does an operator read `in_stock` or `gift_card`.
+ *
+ * Every assertion here selects a control by the words on it, because that is the claim —
+ * a select an author reads is a select a test can find by reading.
+ */
+describe("every enum has a name", () => {
+  it("names a product's status in the index, with a glyph beside the word", async () => {
+    renderAt(`/shops/${SHOP_ID}/products`);
+
+    const status = await screen.findByText("Active");
+    expect(status).toBeVisible();
+    // Never colour alone: the mark is there, and it is decorative — the word carries it.
+    // Asserted in two steps on purpose: `glyph?.textContent` on a pill with no mark at all
+    // is `undefined`, which would pass every assertion this test could make about it.
+    const glyph = status.parentElement?.querySelector("[aria-hidden]");
+    expect(glyph).toBeInstanceOf(Element);
+    expect(glyph?.textContent?.trim()).not.toBe("");
+  });
+
+  it("names a product's status in the editor without inventing a rule for it", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const details = within(await screen.findByRole("region", { name: "Details" }));
+    const status = details.getByLabelText("Status");
+    expect(status).toHaveValue("active");
+    // The lab attaches no behaviour to the value, so the option is the word and nothing else.
+    expect(within(status).getByRole("option", { name: "Draft" })).toBeInTheDocument();
+    expect(within(status).getByRole("option", { name: "Archived" })).toBeInTheDocument();
+  });
+
+  it("offers a variant's availability in words, and saves the wire value behind them", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    const availability = variants.getByLabelText("Availability for NS-ASJ-OB-L");
+    expect(availability).toHaveDisplayValue("On backorder");
+
+    await user.selectOptions(
+      availability,
+      within(availability).getByRole("option", { name: "Out of stock" }),
+    );
+    expect(availability).toHaveValue("out_of_stock");
+  });
+
+  it("names an attribute's type on the saved row and in the picker", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const attributes = within(
+      await screen.findByRole("region", { name: "Custom attributes (typed)" }),
+    );
+    // The saved row's kind chip, not the picker's option of the same name.
+    expect(attributes.getByText("Choice", { selector: "span" })).toBeVisible();
+    expect(
+      within(attributes.getByLabelText("Type")).getByRole("option", { name: "Measurement" }),
+    ).toBeInTheDocument();
+  });
+
+  it("names a payment kind rather than spelling the wire's underscores", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+    const kind = card.getByLabelText("Kind");
+    expect(within(kind).getByRole("option", { name: "Bank transfer" })).toBeInTheDocument();
+    expect(within(kind).getByRole("option", { name: "Gift card" })).toBeInTheDocument();
+    expect(within(kind).queryByRole("option", { name: "bank_transfer" })).toBeNull();
+  });
+
+  it("names the channels a shop answers on", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    expect(await screen.findByRole("checkbox", { name: "Chat" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Email" })).toBeInTheDocument();
   });
 });

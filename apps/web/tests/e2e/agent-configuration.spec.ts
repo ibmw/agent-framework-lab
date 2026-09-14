@@ -98,8 +98,8 @@ async function publishReadOnlyIdentity(page: Page, name: string) {
   await page.getByRole("link", { name }).click();
 
   const permissions = card(page, "Permissions");
-  await permissions.getByLabel("read orders", { exact: true }).check();
-  await permissions.getByLabel("read policies", { exact: true }).check();
+  await permissions.getByLabel(/^Read orders —/).check();
+  await permissions.getByLabel(/^Read policies —/).check();
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByText(/Published version 1/)).toBeVisible();
@@ -143,6 +143,9 @@ test("an author publishes an agent configuration the lab can actually run", asyn
   // A write the identity may never make is refused at publication, not at its first call.
   await bindings.getByLabel(/orders\.propose_address_change/).check();
   await saveDraft(page);
+  // The publish gate's own sentence, written by the backend, which still names the permission
+  // by its wire value. Slice 3 carries no backend change; the *editor's* own warning beside the
+  // binding reads "needs Change shipping address" and is asserted in AgentConfigurations.test.tsx.
   await expect(gate.getByText(/needs change_shipping_address/)).toBeVisible();
   await bindings.getByLabel(/orders\.propose_address_change/).uncheck();
 

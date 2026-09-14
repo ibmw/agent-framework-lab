@@ -1216,7 +1216,7 @@ describe("live bench", () => {
     await user.click(await screen.findByRole("button", { name: "Run Arm A's agent" }));
 
     const armA = await screen.findByRole("region", { name: "Arm A" });
-    expect(await within(armA).findByText(/interaction\.read_context → success/)).toBeVisible();
+    expect(await within(armA).findByText(/interaction\.read_context → Success/)).toBeVisible();
     // The arm beside it was not run: advancing is per arm.
     expect(advanced).toEqual([ARM_A]);
     const armB = screen.getByRole("region", { name: "Arm B" });
@@ -1265,9 +1265,9 @@ describe("live bench", () => {
     const strip = within(armA).getAllByRole("listitem").slice(1);
 
     expect(strip.map((entry) => entry.textContent)).toEqual([
-      "orders.read_order → success",
+      "orders.read_order → Success",
       "scenario fault · moved this arm",
-      "orders.propose_address_change → success",
+      "orders.propose_address_change → Success",
     ]);
   });
 
@@ -1734,7 +1734,7 @@ describe("execution timeline", () => {
 
     expect(rows[0]).toHaveTextContent("Arm A · Arm B");
     expect(rows[0]).toHaveTextContent(/triggering message opened every arm/);
-    expect(rows[1]).toHaveTextContent(/orders\.apply_address_change v1 → success/);
+    expect(rows[1]).toHaveTextContent(/orders\.apply_address_change v1 → Success/);
     expect(rows[1]).toHaveTextContent("moved this arm r0 → r1");
     expect(rows[3]).toHaveTextContent("The agent replied (attempt 1).");
   });
@@ -1837,7 +1837,7 @@ describe("traces", () => {
 
     const panel = screen.getByRole("region", { name: "Span" });
     expect(within(panel).getByText("orders.apply_address_change · v1")).toBeVisible();
-    expect(within(panel).getByText("refused")).toBeVisible();
+    expect(within(panel).getByText("Refused")).toBeVisible();
     expect(within(panel).getByText("+2600 ms into the attempt")).toBeVisible();
     expect(within(panel).getByText("a".repeat(32))).toBeVisible();
   });

@@ -39,6 +39,7 @@ import {
   updateParameter,
 } from "../lib/blocks";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -95,7 +96,7 @@ const EFFECTS: { value: MutationEffect; label: string }[] = [
   { value: "service_outage", label: "Service outage — a dependency is unavailable" },
 ];
 
-const SEVERITIES = ["required", "expected"] as const;
+const SEVERITIES = optionsOf(OBJECTIVE_SEVERITY);
 
 function BlockEditor<
   PayloadT extends BlockPayload,
@@ -394,8 +395,8 @@ function ParameterRow({
               >
                 <option value="">No default</option>
                 {SEVERITIES.map((severity) => (
-                  <option key={severity} value={severity}>
-                    {severity}
+                  <option key={severity.value} value={severity.value}>
+                    {severity.option}
                   </option>
                 ))}
               </select>

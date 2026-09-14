@@ -4,6 +4,7 @@ import type {
   MutationBlockPayloadSchema,
   ObjectiveBlockPayloadSchema,
 } from "@agent-lab/contracts";
+import { BLOCK_PARAMETER_KIND, optionsOf } from "./enumLabels";
 
 /**
  * Client-side rules for authoring a block template.
@@ -35,16 +36,15 @@ const SHOP_BOUND_KINDS: readonly BlockParameterKind[] = [
 /** Mirrors `LITERAL_PARAMETER_KINDS`: the kinds a template may carry a default for. */
 const LITERAL_KINDS: readonly BlockParameterKind[] = ["severity", "timing", "duration", "text"];
 
-export const PARAMETER_KINDS: readonly { kind: BlockParameterKind; label: string }[] = [
-  { kind: "document_reference", label: "Document — a shop policy, guideline, or FAQ entry" },
-  { kind: "entity_reference", label: "Entity — an order, customer, or product" },
-  { kind: "data_reference", label: "Data — a named field of a shop object" },
-  { kind: "tool_reference", label: "Tool — a versioned tool the lab exposes" },
-  { kind: "severity", label: "Severity — required or expected" },
-  { kind: "timing", label: "Timing — when a mutation fires" },
-  { kind: "duration", label: "Duration — a span of sandbox time" },
-  { kind: "text", label: "Text — free authored text" },
-];
+/**
+ * The kinds a parameter may take, each explained on its own option row.
+ *
+ * The words come from the contract-held table in `enumLabels.ts`; this list is the shape the
+ * picker reads them in, so a kind the contract gains cannot reach the select unnamed.
+ */
+export const PARAMETER_KINDS: readonly { kind: BlockParameterKind; label: string }[] = optionsOf(
+  BLOCK_PARAMETER_KIND,
+).map((entry) => ({ kind: entry.value, label: entry.option }));
 
 export function bindsShopObject(kind: BlockParameterKind): boolean {
   return SHOP_BOUND_KINDS.includes(kind);
