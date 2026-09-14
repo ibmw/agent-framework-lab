@@ -234,7 +234,7 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
   const addObjectiveParameter = objectiveParameters.getByRole("form", {
     name: "Add a parameter",
   });
-  await addObjectiveParameter.getByLabel("Parameter name", { exact: true }).fill("doc_ref");
+  await addObjectiveParameter.getByLabel("Label", { exact: true }).fill("doc_ref");
   await addObjectiveParameter
     .getByLabel("Kind", { exact: true })
     .selectOption("document_reference");
@@ -276,10 +276,10 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
     .fill("Mutates the bound entity out of band, bumping the version the arm holds.");
   const mutationParameters = card(page, "Parameters");
   const addMutationParameter = mutationParameters.getByRole("form", { name: "Add a parameter" });
-  await addMutationParameter.getByLabel("Parameter name", { exact: true }).fill("entity_ref");
+  await addMutationParameter.getByLabel("Label", { exact: true }).fill("entity_ref");
   await addMutationParameter.getByLabel("Kind", { exact: true }).selectOption("entity_reference");
   await addMutationParameter.getByRole("button", { name: "Add parameter" }).click();
-  await addMutationParameter.getByLabel("Parameter name", { exact: true }).fill("timing");
+  await addMutationParameter.getByLabel("Label", { exact: true }).fill("timing");
   await addMutationParameter.getByLabel("Kind", { exact: true }).selectOption("timing");
   await addMutationParameter.getByRole("button", { name: "Add parameter" }).click();
   await mutationParameters

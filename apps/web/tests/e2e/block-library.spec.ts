@@ -58,7 +58,7 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
 
   const parameters = card(page, "Parameters");
   const addParameter = parameters.getByRole("form", { name: "Add a parameter" });
-  await addParameter.getByLabel("Parameter name", { exact: true }).fill("doc_ref");
+  await addParameter.getByLabel("Label", { exact: true }).fill("doc_ref");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
 
   // A document reference is bound by the scenario, so the template cannot default it.
@@ -66,7 +66,7 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
   await expect(parameters.getByLabel("Default of doc_ref")).toHaveCount(0);
   await parameters.getByLabel("Description of doc_ref").fill("The document the arm must read.");
 
-  await addParameter.getByLabel("Parameter name", { exact: true }).fill("severity");
+  await addParameter.getByLabel("Label", { exact: true }).fill("severity");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("severity");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
   await parameters.getByLabel("Default of severity").selectOption("required");
@@ -119,7 +119,7 @@ test("a mutation block cannot be published until it says when it fires", async (
 
   const parameters = card(page, "Parameters");
   const addParameter = parameters.getByRole("form", { name: "Add a parameter" });
-  await addParameter.getByLabel("Parameter name", { exact: true }).fill("entity_ref");
+  await addParameter.getByLabel("Label", { exact: true }).fill("entity_ref");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("entity_reference");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
   await parameters.getByLabel("Description of entity_ref").fill("The order that moves.");
@@ -130,7 +130,7 @@ test("a mutation block cannot be published until it says when it fires", async (
   await expect(gate.getByText(/must declare a timing parameter/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Publish v1" })).toBeDisabled();
 
-  await addParameter.getByLabel("Parameter name", { exact: true }).fill("timing");
+  await addParameter.getByLabel("Label", { exact: true }).fill("timing");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("timing");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
   await parameters.getByLabel("Default of timing").fill("after_first_read");
