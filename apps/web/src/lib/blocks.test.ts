@@ -113,6 +113,14 @@ describe("editing parameters", () => {
     expect(next.parameters[2].default).toBeNull();
   });
 
+  it("uses the same fallback identifier the preview must show when a label yields no letters", () => {
+    const first = addParameter(payload(), "!!!", "document_reference");
+    expect(first.parameters.at(-1)?.name).toBe("parameter");
+    expect(addParameter(first, "!!!", "document_reference").parameters.at(-1)?.name).toBe(
+      "parameter_2",
+    );
+  });
+
   it("drops a default the new kind cannot carry when a parameter is retyped", () => {
     // Otherwise the form would keep showing a default the backend refuses with
     // `reference_parameter_with_default`, and offer no way to clear it.

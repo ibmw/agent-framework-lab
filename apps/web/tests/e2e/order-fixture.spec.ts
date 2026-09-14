@@ -50,12 +50,12 @@ test("an author builds a paid order shipping to the customer's stale address", a
   // An order selects its payment and fulfilment method from the shop's configuration.
   await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");
-  await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByLabel("Name", { exact: true }).fill("Card synthetic");
+  await payments.getByLabel("ID", { exact: true }).fill("card");
   await payments.getByRole("button", { name: "Add payment method" }).click();
   const fulfilment = card(page, "Fulfilment methods");
-  await fulfilment.getByLabel("ID", { exact: true }).fill("standard");
   await fulfilment.getByLabel("Name", { exact: true }).fill("Standard 3-5 days");
+  await fulfilment.getByLabel("ID", { exact: true }).fill("standard");
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
   await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
   await saveDraft(page);
@@ -63,7 +63,6 @@ test("an author builds a paid order shipping to the customer's stale address", a
   // ...and its line items from the catalog.
   await openSection(page, "Products", "Products");
   const newProduct = card(page, "Add a product");
-  await newProduct.getByLabel("Handle", { exact: true }).fill("alpine-shell-jacket");
   await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
   await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
   await newProduct.getByRole("button", { name: "Add to draft" }).click();
@@ -71,7 +70,6 @@ test("an author builds a paid order shipping to the customer's stale address", a
 
   await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
   const options = card(page, "Options");
-  await options.getByLabel("Option key", { exact: true }).fill("color");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
   await options.getByLabel("Values (comma separated)", { exact: true }).fill("Ocean Blue");
   await options.getByRole("button", { name: "Add option" }).click();
@@ -109,6 +107,7 @@ test("an author builds a paid order shipping to the customer's stale address", a
   await openSection(page, "Orders", "Orders");
   const createOrder = card(page, "Create order");
   await createOrder.getByLabel("Customer", { exact: true }).selectOption({ label: "Maya Laurent" });
+  await expect(createOrder.getByLabel("Reference", { exact: true })).toHaveValue(/^[A-Z0-9]+-1$/);
   await createOrder.getByLabel("Reference", { exact: true }).fill("NS-10482");
   await createOrder.getByRole("button", { name: "Create order" }).click();
 

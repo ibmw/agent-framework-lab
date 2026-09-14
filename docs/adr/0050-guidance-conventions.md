@@ -36,6 +36,11 @@ A later slice that needs the same convention reads the design-direction section,
 prose. A later slice that changes the convention amends that section and notes the amendment
 here.
 
+## Amendment — 2026-09-13
+
+Slice 2 added a sibling section in `docs/design-direction.md` (*Revision — derived identifiers
+(2026-09-13)*). The field-hints section this ADR points at is unchanged.
+
 ## Verification
 
 - Vitest per create-form page asserts each hint is in the control's accessible description.

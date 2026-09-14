@@ -22,6 +22,7 @@ export function FieldHint({
   label,
   hint,
   extra,
+  extraTone = "muted",
   optional = false,
   children,
 }: {
@@ -29,6 +30,8 @@ export function FieldHint({
   hint: ReactNode;
   /** A second description line (for example a live "Saved as" preview), also tied by aria-describedby. */
   extra?: ReactNode;
+  /** Collision copy uses the create-error treatment; a preview stays muted. */
+  extraTone?: "muted" | "error";
   optional?: boolean;
   children: ReactElement<ControlProps>;
 }) {
@@ -52,8 +55,15 @@ export function FieldHint({
       </p>
       <p
         id={extraId}
-        className={extra ? "font-normal text-admin-muted" : "sr-only"}
-        aria-live="polite"
+        className={
+          extra
+            ? extraTone === "error"
+              ? "font-normal text-lab-error"
+              : "font-normal text-admin-muted"
+            : "sr-only"
+        }
+        role={extra && extraTone === "error" ? "alert" : undefined}
+        aria-live={extraTone === "error" ? undefined : "polite"}
       >
         {extra ?? null}
       </p>

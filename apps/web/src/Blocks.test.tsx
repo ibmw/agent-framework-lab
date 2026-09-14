@@ -430,13 +430,38 @@ describe("objective block editor", () => {
 
     await screen.findByRole("heading", { name: "read-required-document" });
     const form = screen.getByRole("form", { name: "Add a parameter" });
-    await user.type(within(form).getByLabelText("Parameter name"), "policy ref");
+    await user.type(within(form).getByLabelText("Label"), "policy ref");
+    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(
+      /saved as policy_ref/i,
+    );
     await user.click(within(form).getByRole("button", { name: "Add parameter" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
     expect(parameters.map((entry) => entry.name)).toEqual(["doc_ref", "severity", "policy_ref"]);
+  });
+
+  it("asks for a label, previews the identifier, and does not suggest typing doc_ref", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+
+    await screen.findByRole("heading", { name: "read-required-document" });
+    const form = screen.getByRole("form", { name: "Add a parameter" });
+    expect(within(form).getByLabelText("Label")).toHaveAttribute("placeholder", "Document");
+    expect(within(form).queryByPlaceholderText("doc_ref")).toBeNull();
+
+    await user.type(within(form).getByLabelText("Label"), "doc ref");
+    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(/saved as doc_ref_2/i);
+
+    await user.clear(within(form).getByLabelText("Label"));
+    await user.type(within(form).getByLabelText("Label"), "!!!");
+    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(/saved as parameter/i);
+    await user.click(within(form).getByRole("button", { name: "Add parameter" }));
+    await user.type(within(form).getByLabelText("Label"), "!!!");
+    expect(within(form).getByLabelText("Label")).toHaveAccessibleDescription(
+      /saved as parameter_2/i,
+    );
   });
 
   it("reorders parameters, because order is what a scenario binds in", async () => {
@@ -494,7 +519,7 @@ describe("mutation block editor", () => {
 
     await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
     const form = screen.getByRole("form", { name: "Add a parameter" });
-    await user.type(within(form).getByLabelText("Parameter name"), "timing");
+    await user.type(within(form).getByLabelText("Label"), "timing");
     await user.selectOptions(within(form).getByLabelText("Kind"), "timing");
     await user.click(within(form).getByRole("button", { name: "Add parameter" }));
     await user.type(screen.getByLabelText("Default of timing"), "after_first_read");

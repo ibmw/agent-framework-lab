@@ -15,6 +15,10 @@ import { App } from "./App";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
+function precedes(earlier: HTMLElement, later: HTMLElement): boolean {
+  return Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 const EMPTY_CONTENT: ShopDraftResponse["content"] = {
   identity: {
     name: "Northstar Outfitters",
@@ -239,15 +243,69 @@ describe("adding a product", () => {
     renderAt(`/shops/${SHOP_ID}/products`);
 
     const card = within(await screen.findByRole("region", { name: "Add a product" }));
-    expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
-      /lowercase with hyphens.*tools address the product/i,
-    );
     expect(card.getByLabelText("Title")).toHaveAccessibleDescription(
       /the name customers and the catalog see/i,
     );
     expect(card.getByLabelText("Category")).toHaveAccessibleDescription(
       /groups the product in the catalog/i,
     );
+    expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
+      /lowercase with hyphens.*tools address the product/i,
+    );
+    expect(precedes(card.getByLabelText("Title"), card.getByLabelText("Category"))).toBe(true);
+    expect(precedes(card.getByLabelText("Category"), card.getByLabelText("Handle"))).toBe(true);
+  });
+
+  it("derives the handle from the title and previews what it will save", async () => {
+    const user = userEvent.setup();
+    currentContent = EMPTY_CONTENT;
+    renderAt(`/shops/${SHOP_ID}/products`);
+    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+
+    await user.type(card.getByLabelText("Title"), "Alpine Shell Jacket");
+
+    expect(card.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket");
+    expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
+      /saved as alpine-shell-jacket/i,
+    );
+  });
+
+  it("stops following once the handle is edited, and follows again once emptied", async () => {
+    const user = userEvent.setup();
+    currentContent = EMPTY_CONTENT;
+    renderAt(`/shops/${SHOP_ID}/products`);
+    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+
+    await user.type(card.getByLabelText("Title"), "Alpine Shell Jacket");
+    await user.clear(card.getByLabelText("Handle"));
+    await user.type(card.getByLabelText("Handle"), "alpine-jacket");
+    await user.type(card.getByLabelText("Title"), " XL");
+    expect(card.getByLabelText("Handle")).toHaveValue("alpine-jacket");
+
+    await user.clear(card.getByLabelText("Handle"));
+    expect(card.getByLabelText("Handle")).toHaveValue("");
+    await user.type(card.getByLabelText("Title"), " Petite");
+    expect(card.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket-xl-petite");
+  });
+
+  it("offers a free handle and refuses one already in the draft", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products`);
+    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+
+    await user.type(card.getByLabelText("Title"), "Alpine Shell Jacket");
+    await user.type(card.getByLabelText("Category"), "Jackets");
+
+    expect(card.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket-2");
+    expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
+      /alpine-shell-jacket is already in the draft/i,
+    );
+
+    await user.clear(card.getByLabelText("Handle"));
+    await user.type(card.getByLabelText("Handle"), "alpine-shell-jacket");
+    expect(card.getByLabelText("Handle")).toBeInvalid();
+    await user.click(card.getByRole("button", { name: "Add to draft" }));
+    expect(screen.getAllByRole("link", { name: "Alpine Shell Jacket" })).toHaveLength(1);
   });
 });
 
@@ -345,6 +403,22 @@ describe("shop workspace", () => {
     expect(screen.getByText(/there is nothing\s+new to freeze/)).toBeVisible();
   });
 
+  it("keeps the editor up when a saved option has no parsable values", async () => {
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...READY_CONTENT.products[0],
+          options: [{ key: "fit", name: "Fit", values: [] }],
+        },
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    expect(await screen.findByRole("heading", { name: "Alpine Shell Jacket" })).toBeVisible();
+    expect(screen.getByLabelText("New variant SKU")).toHaveValue("ALPINE-SHELL-JACKET");
+  });
+
   it("prices a new variant in the shop's own currency, not a hard-coded one", async () => {
     currentContent = {
       ...READY_CONTENT,
@@ -363,9 +437,31 @@ describe("shop workspace", () => {
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
     const variants = await screen.findByRole("region", { name: "Variants" });
+    expect(
+      precedes(within(variants).getByLabelText("Color"), within(variants).getByLabelText("Size")),
+    ).toBe(true);
+    expect(
+      precedes(
+        within(variants).getByLabelText("Size"),
+        within(variants).getByLabelText("Price (optional)"),
+      ),
+    ).toBe(true);
+    expect(
+      precedes(
+        within(variants).getByLabelText("Price (optional)"),
+        within(variants).getByLabelText("New variant SKU"),
+      ),
+    ).toBe(true);
+    expect(within(variants).getByLabelText("New variant SKU")).toHaveValue(
+      "ALPINE-SHELL-JACKET-OCEAN-BLUE-M",
+    );
+    await userEvent.clear(within(variants).getByLabelText("New variant SKU"));
     await userEvent.type(within(variants).getByLabelText("New variant SKU"), "NS-ASJ-OB-S");
     await userEvent.type(within(variants).getByLabelText("Price (optional)"), "199.00");
     await userEvent.click(within(variants).getByRole("button", { name: "Add variant" }));
+    expect(within(variants).getByLabelText("New variant SKU")).toHaveValue(
+      "ALPINE-SHELL-JACKET-OCEAN-BLUE-M",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(saved).toHaveLength(1));
@@ -373,6 +469,18 @@ describe("shop workspace", () => {
       amount: "199.00",
       currency: "USD",
     });
+  });
+
+  it("keeps a typed variant SKU when another variant is removed", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = await screen.findByRole("region", { name: "Variants" });
+    await user.clear(within(variants).getByLabelText("New variant SKU"));
+    await user.type(within(variants).getByLabelText("New variant SKU"), "NS-ASJ-CUSTOM");
+    await user.click(within(variants).getByRole("button", { name: "Remove NS-ASJ-OB-L" }));
+
+    expect(within(variants).getByLabelText("New variant SKU")).toHaveValue("NS-ASJ-CUSTOM");
   });
 
   it("shows the body of every saved policy and FAQ entry, not only its title", async () => {
@@ -430,13 +538,181 @@ describe("shop workspace", () => {
     expect(within(faq).queryByText("When will my order arrive?")).toBeNull();
     expect(within(faq).queryByText("Standard delivery arrives in 2 to 5 working days.")).toBeNull();
 
-    await userEvent.type(within(faq).getByLabelText("ID"), "sizing");
     await userEvent.type(within(faq).getByLabelText("Question"), "Does it run small?");
     await userEvent.type(within(faq).getByLabelText("Answer"), "It runs roomy over a mid-layer.");
+    expect(within(faq).getByLabelText("ID")).toHaveValue("does-it-run-small");
     await userEvent.click(within(faq).getByRole("button", { name: "Add FAQ entry" }));
 
     expect(within(faq).getByText("Does it run small?")).toBeVisible();
     expect(within(faq).getByText("It runs roomy over a mid-layer.")).toBeVisible();
+    expect(within(faq).getByText("does-it-run-small", { selector: "code" })).toBeVisible();
+  });
+
+  it("derives a payment id from the name and refuses one already in the draft", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const payments = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    await user.type(payments.getByLabelText("Name"), "Visa");
+    expect(payments.getByLabelText("ID")).toHaveValue("visa-2");
+    expect(payments.getByLabelText("ID")).toHaveAccessibleDescription(
+      /visa is already in the draft/i,
+    );
+
+    await user.clear(payments.getByLabelText("ID"));
+    expect(payments.getByLabelText("ID")).toHaveValue("");
+    await user.type(payments.getByLabelText("Name"), " Debit");
+    expect(payments.getByLabelText("ID")).toHaveValue("visa-debit");
+
+    await user.clear(payments.getByLabelText("ID"));
+    await user.type(payments.getByLabelText("ID"), "visa");
+    expect(payments.getByLabelText("ID")).toBeInvalid();
+    await user.click(payments.getByRole("button", { name: "Add payment method" }));
+    expect(payments.getAllByText("visa", { selector: "code" })).toHaveLength(1);
+  });
+
+  it("derives a fulfilment id from the name, and follows again once emptied", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const fulfilment = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+
+    await user.type(fulfilment.getByLabelText("Name"), "Express");
+    expect(fulfilment.getByLabelText("ID")).toHaveValue("express");
+    await user.clear(fulfilment.getByLabelText("ID"));
+    await user.type(fulfilment.getByLabelText("ID"), "overnight");
+    await user.type(fulfilment.getByLabelText("Name"), " air");
+    expect(fulfilment.getByLabelText("ID")).toHaveValue("overnight");
+    await user.clear(fulfilment.getByLabelText("ID"));
+    expect(fulfilment.getByLabelText("ID")).toHaveValue("");
+    await user.type(fulfilment.getByLabelText("Name"), " freight");
+    expect(fulfilment.getByLabelText("ID")).toHaveValue("express-air-freight");
+
+    await user.type(fulfilment.getByLabelText("Carrier"), "Nordic Post");
+    await user.click(fulfilment.getByRole("button", { name: "Add fulfilment method" }));
+    expect(fulfilment.getByText("express-air-freight", { selector: "code" })).toBeVisible();
+    await user.type(fulfilment.getByLabelText("Name"), "Express air freight");
+    expect(fulfilment.getByLabelText("ID")).toHaveValue("express-air-freight-2");
+    await user.clear(fulfilment.getByLabelText("ID"));
+    await user.type(fulfilment.getByLabelText("ID"), "express-air-freight");
+    expect(fulfilment.getByLabelText("ID")).toBeInvalid();
+    await user.click(fulfilment.getByRole("button", { name: "Add fulfilment method" }));
+    expect(fulfilment.getAllByText("express-air-freight", { selector: "code" })).toHaveLength(1);
+  });
+
+  it("derives policy and FAQ ids from title and question", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+    const policies = within(await screen.findByRole("region", { name: "Policies" }));
+
+    await user.type(policies.getByLabelText("Title"), "Returns policy");
+    expect(policies.getByLabelText("ID")).toHaveValue("returns-policy");
+    await user.clear(policies.getByLabelText("ID"));
+    expect(policies.getByLabelText("ID")).toHaveValue("");
+    await user.type(policies.getByLabelText("Title"), " restated");
+    expect(policies.getByLabelText("ID")).toHaveValue("returns-policy-restated");
+
+    await user.clear(policies.getByLabelText("ID"));
+    await user.type(policies.getByLabelText("ID"), "shipping-policy");
+    expect(policies.getByLabelText("ID")).toBeInvalid();
+    await user.click(policies.getByRole("button", { name: "Add policy" }));
+    expect(policies.getAllByText("shipping-policy", { selector: "code" })).toHaveLength(1);
+
+    const faq = within(screen.getByRole("region", { name: "FAQ" }));
+    await user.type(faq.getByLabelText("Question"), "When will my order arrive?");
+    expect(faq.getByLabelText("ID")).toHaveValue("when-will-my-order-arrive");
+    await user.clear(faq.getByLabelText("ID"));
+    expect(faq.getByLabelText("ID")).toHaveValue("");
+    await user.type(faq.getByLabelText("Question"), " again");
+    expect(faq.getByLabelText("ID")).toHaveValue("when-will-my-order-arrive-again");
+
+    await user.clear(faq.getByLabelText("ID"));
+    await user.type(faq.getByLabelText("ID"), "delivery-times");
+    expect(faq.getByLabelText("ID")).toBeInvalid();
+    await user.type(faq.getByLabelText("Answer"), "Same as before.");
+    await user.click(faq.getByRole("button", { name: "Add FAQ entry" }));
+    expect(faq.getAllByText("delivery-times", { selector: "code" })).toHaveLength(1);
+  });
+
+  it("derives a support guideline id from the title", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/support`);
+    const guidelines = within(await screen.findByRole("region", { name: "Guidelines" }));
+
+    await user.type(guidelines.getByLabelText("Title"), "Escalation");
+    expect(guidelines.getByLabelText("ID")).toHaveValue("escalation-2");
+    await user.clear(guidelines.getByLabelText("ID"));
+    expect(guidelines.getByLabelText("ID")).toHaveValue("");
+    await user.type(guidelines.getByLabelText("Title"), " path");
+    expect(guidelines.getByLabelText("ID")).toHaveValue("escalation-path");
+
+    await user.clear(guidelines.getByLabelText("ID"));
+    await user.type(guidelines.getByLabelText("ID"), "escalation");
+    expect(guidelines.getByLabelText("ID")).toBeInvalid();
+  });
+
+  it("derives a tone-of-voice id from the name", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
+
+    await user.type(tone.getByLabelText("Name"), "Warm and precise");
+    expect(tone.getByLabelText("ID")).toHaveValue("warm-and-precise");
+    await user.clear(tone.getByLabelText("ID"));
+    expect(tone.getByLabelText("ID")).toHaveValue("");
+    await user.type(tone.getByLabelText("Name"), " voice");
+    expect(tone.getByLabelText("ID")).toHaveValue("warm-and-precise-voice");
+
+    await user.clear(tone.getByLabelText("ID"));
+    await user.type(tone.getByLabelText("ID"), "warm");
+    expect(tone.getByLabelText("ID")).toBeInvalid();
+  });
+
+  it("derives option and attribute keys, and shows a review id only on the saved row", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    await user.type(options.getByLabelText("Option name"), "Fit");
+    await user.type(options.getByLabelText("Values (comma separated)"), ",");
+    await user.click(options.getByRole("button", { name: "Add option" }));
+    expect(options.queryByRole("button", { name: "Remove Fit" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Alpine Shell Jacket" })).toBeVisible();
+
+    await user.clear(options.getByLabelText("Values (comma separated)"));
+    await user.type(options.getByLabelText("Values (comma separated)"), "Regular");
+    expect(options.getByLabelText("Option key")).toHaveValue("fit");
+    await user.clear(options.getByLabelText("Option key"));
+    expect(options.getByLabelText("Option key")).toHaveValue("");
+    await user.type(options.getByLabelText("Option name"), " profile");
+    expect(options.getByLabelText("Option key")).toHaveValue("fit-profile");
+
+    await user.clear(options.getByLabelText("Option key"));
+    await user.type(options.getByLabelText("Option key"), "color");
+    expect(options.getByLabelText("Option key")).toBeInvalid();
+    await user.clear(options.getByLabelText("Option key"));
+    await user.type(options.getByLabelText("Option key"), "fit");
+    await user.click(options.getByRole("button", { name: "Add option" }));
+    expect(options.getByText("fit", { selector: "code" })).toBeVisible();
+
+    const attributes = within(screen.getByRole("region", { name: "Custom attributes (typed)" }));
+    await user.type(attributes.getByLabelText("Label"), "Waterproofing");
+    expect(attributes.getByLabelText("Key")).toHaveValue("waterproofing-2");
+    await user.clear(attributes.getByLabelText("Key"));
+    expect(attributes.getByLabelText("Key")).toHaveValue("");
+    await user.type(attributes.getByLabelText("Label"), " rating");
+    expect(attributes.getByLabelText("Key")).toHaveValue("waterproofing-rating");
+
+    await user.clear(attributes.getByLabelText("Key"));
+    await user.type(attributes.getByLabelText("Key"), "waterproofing");
+    expect(attributes.getByLabelText("Key")).toBeInvalid();
+
+    const reviews = within(screen.getByRole("region", { name: "Ratings and reviews" }));
+    expect(reviews.queryByLabelText("Review ID")).toBeNull();
+    expect(reviews.getByText("one", { selector: "code" })).toBeVisible();
+    await user.type(reviews.getByLabelText("Author"), "Camille");
+    await user.type(reviews.getByLabelText("Body"), "Still dry.");
+    await user.click(reviews.getByRole("button", { name: "Add review" }));
+    expect(reviews.getByText("camille", { selector: "code" })).toBeVisible();
   });
 
   it("shows a published version as read-only frozen content", async () => {

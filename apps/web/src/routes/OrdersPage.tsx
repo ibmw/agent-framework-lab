@@ -4,9 +4,11 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listCustomerProfiles } from "../api/customerProfiles";
 import { createOrder, listOrders } from "../api/orders";
+import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
+import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
 import { ORDER_REFERENCE_RULE, REFERENCE_PATTERN } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel, todayInput } from "../lib/orders";
 import {
@@ -45,7 +47,7 @@ function matches(order: OrderSummarySchema, filter: Filter): boolean {
 
 /** Frame 2 — the shop's authored order fixtures. */
 export function OrdersPage() {
-  const { shopId } = useShopWorkspace();
+  const { shopId, content } = useShopWorkspace();
   const [orders, setOrders] = useState<OrderSummarySchema[]>([]);
   const [customers, setCustomers] = useState<CustomerProfileSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,8 +89,20 @@ export function OrdersPage() {
     return () => controller.abort();
   }, [reload]);
 
+  const takenReferences = orders.map((order) => order.reference);
+  const suggestedReference =
+    loading || loadError
+      ? ""
+      : nextReference(
+          seriesPrefix(takenReferences, referencePrefix(content.identity.name)),
+          takenReferences,
+        );
+
   async function addOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!reference || takenReferences.includes(reference)) {
+      return;
+    }
     setBusy(true);
     setFormError(null);
     try {
@@ -229,17 +243,20 @@ export function OrdersPage() {
                 ))}
               </select>
             </FieldHint>
-            <FieldHint label="Reference" hint={ORDER_REFERENCE_RULE}>
-              <input
-                className={fieldControlClasses}
-                value={reference}
-                required
-                pattern={REFERENCE_PATTERN}
-                title={ORDER_REFERENCE_RULE}
-                placeholder="NS-10482"
-                onChange={(event) => setReference(event.target.value.toUpperCase())}
-              />
-            </FieldHint>
+            <DerivedIdField
+              label="Reference"
+              hint={ORDER_REFERENCE_RULE}
+              value={reference}
+              suggested={suggestedReference}
+              taken={takenReferences}
+              takenPlace="used by an order in this shop"
+              pattern={REFERENCE_PATTERN}
+              title={ORDER_REFERENCE_RULE}
+              placeholder="NS-10483"
+              required
+              normalize={(value) => value.toUpperCase()}
+              onChange={setReference}
+            />
             <FieldHint
               label="Placed on"
               hint="The calendar day the fixture was placed, in your timezone."

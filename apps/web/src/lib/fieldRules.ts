@@ -12,16 +12,27 @@ export const SHOP_SLUG_RULE =
   "Lowercase with hyphens. Follows the name until you edit it; empty it to follow the name again.";
 
 export const PRODUCT_HANDLE_RULE =
-  "Lowercase with hyphens. Tools address the product by this handle.";
+  "Lowercase with hyphens. Tools address the product by this handle. Follows the title until you edit it; empty it to follow the title again.";
+
+/** Shop-detail and product-editor entry IDs that follow a name, title or question. */
+export const DERIVED_KEBAB_RULE =
+  "Lowercase with hyphens. Follows the field above until you edit it; empty it to follow again.";
 
 /** Uppercase alphanumeric kebab-case, as order and ticket references are stored. */
 export const REFERENCE_PATTERN = "[A-Z0-9]+(-[A-Z0-9]+)*";
 
 export const ORDER_REFERENCE_RULE =
-  "Uppercase letters, digits, and hyphens. How the order is named in tickets.";
+  "Uppercase letters, digits, and hyphens. How the order is named in tickets. Prefills the next free reference; empty it to take that suggestion again.";
 
 export const TICKET_REFERENCE_RULE =
-  "Uppercase letters, digits, and hyphens. How the ticket is named in scenarios.";
+  "Uppercase letters, digits, and hyphens. How the ticket is named in scenarios. Prefills the next free reference; empty it to take that suggestion again.";
+
+export const VARIANT_SKU_RULE =
+  "Uppercase letters, digits, and hyphens. Follows the handle and chosen options until you edit it; empty it to follow again.";
+
+export function alreadyTakenMessage(id: string, place: string): string {
+  return `${id} is already ${place}.`;
+}
 
 export const LOCALE_RULE = "Pick a locale from the list, or type another shaped like en or en-GB.";
 

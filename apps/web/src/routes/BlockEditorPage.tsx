@@ -12,6 +12,8 @@ import type {
 import { type FormEvent, type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
+import { savedAsPreview } from "../components/DerivedIdField";
+import { FieldHint } from "../components/FieldHint";
 import {
   Card,
   canPublish,
@@ -32,6 +34,8 @@ import {
   removeParameter,
   retypeParameter,
   shopBoundCount,
+  toIdentifier,
+  uniqueParameterName,
   updateParameter,
 } from "../lib/blocks";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
@@ -254,6 +258,7 @@ function BlockEditor<
               </ul>
             )}
             <ParameterForm
+              taken={content.parameters.map((parameter) => parameter.name)}
               onAdd={(name, kind) => edit(addParameter(content, name, kind))}
               disabled={content.parameters.length >= MAX_PARAMETERS}
             />
@@ -426,33 +431,41 @@ function ParameterRow({
 }
 
 function ParameterForm({
+  taken,
   onAdd,
   disabled,
 }: {
+  taken: readonly string[];
   onAdd: (name: string, kind: BlockParameterKind) => void;
   disabled: boolean;
 }) {
-  const [name, setName] = useState("");
+  const [label, setLabel] = useState("");
   const [kind, setKind] = useState<BlockParameterKind>("document_reference");
+  const identifier = uniqueParameterName(toIdentifier(label), taken);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onAdd(name, kind);
-    setName("");
+    onAdd(label, kind);
+    setLabel("");
   }
 
   return (
     <form className="flex flex-wrap items-end gap-2" aria-label="Add a parameter" onSubmit={submit}>
-      <label className={`${fieldLabelClasses} min-w-40 flex-1`}>
-        Parameter name
-        <input
-          className={fieldControlClasses}
-          value={name}
-          required
-          placeholder="doc_ref"
-          onChange={(event) => setName(event.target.value)}
-        />
-      </label>
+      <div className="min-w-40 flex-1">
+        <FieldHint
+          label="Label"
+          hint="The name a scenario binds. Saved as a snake_case identifier."
+          extra={label ? savedAsPreview(identifier) : undefined}
+        >
+          <input
+            className={fieldControlClasses}
+            value={label}
+            required
+            placeholder="Document"
+            onChange={(event) => setLabel(event.target.value)}
+          />
+        </FieldHint>
+      </div>
       <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
         Kind
         {/* Named explicitly: a wrapping label around a select carries every option's text in

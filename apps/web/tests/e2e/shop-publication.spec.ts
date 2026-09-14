@@ -43,7 +43,6 @@ test("an author publishes a shop with size and colour variants and reads the fro
   // Support knowledge and commerce configuration a published shop must carry.
   await openSection(page, "Policies & FAQ", "Policies & FAQ");
   const policies = card(page, "Policies");
-  await policies.getByLabel("ID", { exact: true }).fill("shipping");
   await policies.getByLabel("Title", { exact: true }).fill("Shipping policy");
   await policies
     .getByLabel("Body", { exact: true })
@@ -53,11 +52,9 @@ test("an author publishes a shop with size and colour variants and reads the fro
 
   await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");
-  await payments.getByLabel("ID", { exact: true }).fill("visa");
   await payments.getByLabel("Name", { exact: true }).fill("Visa");
   await payments.getByRole("button", { name: "Add payment method" }).click();
   const fulfilment = card(page, "Fulfilment methods");
-  await fulfilment.getByLabel("ID", { exact: true }).fill("standard");
   await fulfilment.getByLabel("Name", { exact: true }).fill("Standard");
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
   await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
@@ -65,7 +62,6 @@ test("an author publishes a shop with size and colour variants and reads the fro
 
   await openSection(page, "Tone of voice", "Tone of voice");
   const tone = card(page, "Guidelines");
-  await tone.getByLabel("ID", { exact: true }).fill("warm-precise");
   await tone.getByLabel("Name", { exact: true }).fill("Warm and precise");
   await tone.getByLabel("Guidance", { exact: true }).fill("Be concise, warm, and specific.");
   await tone.getByRole("button", { name: "Add tone of voice" }).click();
@@ -74,9 +70,9 @@ test("an author publishes a shop with size and colour variants and reads the fro
   // Catalog: one product with colour and size options and two priced variants.
   await openSection(page, "Products", "Products");
   const newProduct = card(page, "Add a product");
-  await newProduct.getByLabel("Handle", { exact: true }).fill("alpine-shell-jacket");
   await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
   await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
+  await expect(newProduct.getByLabel("Handle", { exact: true })).toHaveValue("alpine-shell-jacket");
   await newProduct.getByRole("button", { name: "Add to draft" }).click();
   await saveDraft(page);
 
@@ -87,15 +83,15 @@ test("an author publishes a shop with size and colour variants and reads the fro
     .fill("Three-layer waterproof shell with taped seams.");
 
   const options = card(page, "Options");
-  await options.getByLabel("Option key", { exact: true }).fill("color");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
   await options
     .getByLabel("Values (comma separated)", { exact: true })
     .fill("Ocean Blue, Charcoal");
+  await expect(options.getByLabel("Option key", { exact: true })).toHaveValue("color");
   await options.getByRole("button", { name: "Add option" }).click();
-  await options.getByLabel("Option key", { exact: true }).fill("size");
   await options.getByLabel("Option name", { exact: true }).fill("Size");
   await options.getByLabel("Values (comma separated)", { exact: true }).fill("M, L");
+  await expect(options.getByLabel("Option key", { exact: true })).toHaveValue("size");
   await options.getByRole("button", { name: "Add option" }).click();
 
   const variants = card(page, "Variants");

@@ -3,10 +3,12 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
+import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { CURRENCIES, type Currency } from "../lib/currencies";
+import { uniqueSuggestion } from "../lib/entryIds";
 import { KEBAB_PATTERN, SHOP_SLUG_RULE } from "../lib/fieldRules";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
 import { shopSlugFromName } from "../lib/shop";
@@ -52,27 +54,16 @@ export function ShopsPage() {
   const [currency, setCurrency] = useState<Currency>(DEFAULT_LOCALE.currency);
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
-  // The slug follows the name until somebody answers the slug themselves, and then it stops:
-  // a field that overwrote a deliberate answer on the next keystroke in another field would be
-  // worse than one that never helped. Emptying it hands it back, which is the way out for a
-  // reader who edited it and wants the suggestion again without reloading the page.
-  const [slugEdited, setSlugEdited] = useState(false);
-  // The currency follows the locale on the same terms, and stops for the same reason. It has no
-  // way back, because a dropdown cannot be emptied the way the slug can: choosing a currency is
-  // the last word on it, and the way to hand it back is to reload the empty form.
+  const [slugResume, setSlugResume] = useState(0);
+  // The currency follows the locale on the same terms as the slug, and stops for the same
+  // reason. It has no way back, because a dropdown cannot be emptied the way the slug can:
+  // choosing a currency is the last word on it, and the way to hand it back is to reload.
   const [currencyEdited, setCurrencyEdited] = useState(false);
-
-  function changeName(value: string) {
-    setName(value);
-    if (!slugEdited) {
-      setSlug(shopSlugFromName(value));
-    }
-  }
-
-  function changeSlug(value: string) {
-    setSlug(value);
-    setSlugEdited(value !== "");
-  }
+  const takenSlugs = shops.map((shop) => shop.slug);
+  const { value: suggestedSlug, takenBase: takenSlugBase } = uniqueSuggestion(
+    shopSlugFromName(name),
+    takenSlugs,
+  );
 
   function changeLocale(value: string) {
     setLocale(value);
@@ -97,7 +88,7 @@ export function ShopsPage() {
     // The example's slug and currency are what its name and locale derive, so this is filling
     // the pairs in rather than answering either: renaming or relocating the example afterwards
     // still carries them along.
-    setSlugEdited(false);
+    setSlugResume((token) => token + 1);
     setCurrencyEdited(false);
     setFilled(true);
   }
@@ -125,6 +116,9 @@ export function ShopsPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!slug || takenSlugs.includes(slug)) {
+      return;
+    }
     setCreating(true);
     setFormError(null);
     try {
@@ -213,20 +207,27 @@ export function ShopsPage() {
                   required
                   maxLength={200}
                   placeholder="Harbour Lane Supply"
-                  onChange={(event) => changeName(event.target.value)}
+                  onChange={(event) => setName(event.target.value)}
                 />
               </FieldHint>
-              <FieldHint label="Slug" hint={SHOP_SLUG_RULE}>
-                <input
-                  className={fieldControlClasses}
-                  value={slug}
-                  required
-                  pattern={KEBAB_PATTERN}
-                  title={SHOP_SLUG_RULE}
-                  placeholder="harbour-lane-supply"
-                  onChange={(event) => changeSlug(event.target.value)}
-                />
-              </FieldHint>
+              <DerivedIdField
+                // A new key remounts the field so its follow/edited state resets — React's
+                // way to reset state when the example fill replaces the source
+                // (https://react.dev/learn/preserving-and-resetting-state).
+                key={slugResume}
+                label="Slug"
+                hint={SHOP_SLUG_RULE}
+                value={slug}
+                suggested={suggestedSlug}
+                taken={takenSlugs}
+                takenBase={takenSlugBase}
+                takenPlace="used by another shop"
+                pattern={KEBAB_PATTERN}
+                title={SHOP_SLUG_RULE}
+                placeholder="harbour-lane-supply"
+                required
+                onChange={setSlug}
+              />
               <LocaleField value={locale} required onChange={changeLocale} />
               <FieldHint label="Currency" hint="The shop starts with this one currency.">
                 <select

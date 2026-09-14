@@ -22,6 +22,7 @@ import {
   publishTicket,
   replaceTicketDraft,
 } from "../api/tickets";
+import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import {
@@ -34,6 +35,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { nextReference } from "../lib/entryIds";
 import { REFERENCE_PATTERN, TICKET_REFERENCE_RULE } from "../lib/fieldRules";
 import { fromLocalInput, toLocalInput } from "../lib/orders";
 import {
@@ -228,6 +230,8 @@ export function TicketsPage() {
 
           <NewTicketForm
             shopId={shopId}
+            taken={tickets.map((ticket) => ticket.reference)}
+            ready={!loading && !listError}
             onCreated={async (created) => {
               try {
                 await reload();
@@ -261,9 +265,13 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 
 function NewTicketForm({
   shopId,
+  taken,
+  ready,
   onCreated,
 }: {
   shopId: string;
+  taken: readonly string[];
+  ready: boolean;
   onCreated: (ticketId: string) => Promise<void>;
 }) {
   const { content } = useShopWorkspace();
@@ -274,6 +282,7 @@ function NewTicketForm({
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const suggestedReference = ready ? nextReference("T", taken) : "";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -294,6 +303,9 @@ function NewTicketForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!reference || taken.includes(reference)) {
+      return;
+    }
     setBusy(true);
     setError(null);
     let createdId: string;
@@ -324,17 +336,6 @@ function NewTicketForm({
   return (
     <form className="grid gap-2 border-t border-admin-border p-3" onSubmit={submit}>
       <h2 className="text-xs font-bold tracking-wide text-admin-muted uppercase">New ticket</h2>
-      <FieldHint label="Reference" hint={TICKET_REFERENCE_RULE}>
-        <input
-          className={fieldControlClasses}
-          value={reference}
-          required
-          pattern={REFERENCE_PATTERN}
-          title={TICKET_REFERENCE_RULE}
-          placeholder="T-204"
-          onChange={(event) => setReference(event.target.value.toUpperCase())}
-        />
-      </FieldHint>
       <FieldHint label="Subject" hint="The incident as the customer would describe it.">
         <input
           className={fieldControlClasses}
@@ -378,6 +379,20 @@ function NewTicketForm({
           ))}
         </select>
       </FieldHint>
+      <DerivedIdField
+        label="Reference"
+        hint={TICKET_REFERENCE_RULE}
+        value={reference}
+        suggested={suggestedReference}
+        taken={taken}
+        takenPlace="used by a ticket in this shop"
+        pattern={REFERENCE_PATTERN}
+        title={TICKET_REFERENCE_RULE}
+        placeholder="T-2042"
+        required
+        normalize={(value) => value.toUpperCase()}
+        onChange={setReference}
+      />
       {error ? (
         <p role="alert" className="text-[12px] text-lab-error">
           {error}

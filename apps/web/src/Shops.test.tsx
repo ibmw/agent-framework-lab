@@ -146,11 +146,50 @@ describe("the slug a name suggests", () => {
     const card = await createShopCard();
 
     await user.type(card.getByLabelText("Name"), "Harbour");
-    await user.type(card.getByLabelText("Slug"), "-post");
     await user.clear(card.getByLabelText("Slug"));
+    await user.type(card.getByLabelText("Slug"), "harbour-post");
+    await user.clear(card.getByLabelText("Slug"));
+
+    expect(card.getByLabelText("Slug")).toHaveValue("");
+
     await user.type(card.getByLabelText("Name"), " Lane");
 
     expect(card.getByLabelText("Slug")).toHaveValue("harbour-lane");
+  });
+
+  it("offers a free slug and refuses one already used by another shop", async () => {
+    server.use(
+      http.get("*/api/v1/shops", () =>
+        HttpResponse.json({
+          shops: [
+            {
+              shop_id: SHOP_ID,
+              name: "Harbour Lane Supply",
+              slug: "harbour-lane-supply",
+              updated_at: "2026-08-23T12:05:00+00:00",
+              latest_published_version: null,
+              published_version_count: 0,
+            },
+          ],
+        } satisfies ShopListResponse),
+      ),
+    );
+    const user = userEvent.setup();
+    renderShops();
+    const card = await createShopCard();
+
+    await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
+
+    expect(card.getByLabelText("Slug")).toHaveValue("harbour-lane-supply-2");
+    expect(card.getByLabelText("Slug")).toHaveAccessibleDescription(
+      /harbour-lane-supply is already used by another shop/i,
+    );
+
+    await user.clear(card.getByLabelText("Slug"));
+    await user.type(card.getByLabelText("Slug"), "harbour-lane-supply");
+    expect(card.getByLabelText("Slug")).toBeInvalid();
+    await user.click(card.getByRole("button", { name: "Create shop" }));
+    expect(created).toBeNull();
   });
 
   it("sends the derived slug, so a name alone is enough to create a shop", async () => {

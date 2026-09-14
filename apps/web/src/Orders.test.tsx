@@ -366,12 +366,12 @@ describe("order index", () => {
 
     await within(form).findByRole("option", { name: "Maya Laurent" });
     await user.selectOptions(within(form).getByLabelText("Customer"), PROFILE_ID);
-    await user.type(within(form).getByLabelText("Reference"), "NS-10999");
+    await waitFor(() => expect(within(form).getByLabelText("Reference")).toHaveValue("NS-10483"));
     await user.click(within(form).getByRole("button", { name: "Create order" }));
 
     await waitFor(() => expect(createdOrders).toHaveLength(1));
     expect(createdOrders[0]).toMatchObject({
-      reference: "NS-10999",
+      reference: "NS-10483",
       customer_profile_id: PROFILE_ID,
     });
     // The contract wants an explicit offset; the browser resolves the picked day once.
@@ -391,6 +391,45 @@ describe("order index", () => {
     expect(form.getByLabelText("Placed on")).toHaveAccessibleDescription(
       /calendar day the fixture was placed/i,
     );
+  });
+
+  it("prefills the next free reference, resumes when emptied, and refuses a duplicate", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    const form = within(await screen.findByRole("region", { name: "Create order" }));
+
+    await waitFor(() => expect(form.getByLabelText("Reference")).toHaveValue("NS-10483"));
+    await user.clear(form.getByLabelText("Reference"));
+    await user.type(form.getByLabelText("Reference"), "NS-10999");
+    await user.clear(form.getByLabelText("Reference"));
+    expect(form.getByLabelText("Reference")).toHaveValue("");
+    await user.tab();
+    expect(form.getByLabelText("Reference")).toHaveValue("NS-10483");
+
+    await user.clear(form.getByLabelText("Reference"));
+    await user.type(form.getByLabelText("Reference"), "NS-10482");
+    expect(form.getByLabelText("Reference")).toBeInvalid();
+    expect(form.getByLabelText("Reference")).toHaveAccessibleDescription(
+      /ns-10482 is already used by an order in this shop/i,
+    );
+    await user.click(form.getByRole("button", { name: "Create order" }));
+    expect(createdOrders).toHaveLength(0);
+  });
+
+  it("does not guess a reference after the listing fails to load", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+        HttpResponse.json(
+          { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+          { status: 503 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
+    expect(
+      within(screen.getByRole("region", { name: "Create order" })).getByLabelText("Reference"),
+    ).toHaveValue("");
   });
 });
 

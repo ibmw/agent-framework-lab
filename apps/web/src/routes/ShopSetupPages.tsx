@@ -8,6 +8,7 @@ import type {
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useState } from "react";
+import { DerivedIdField } from "../components/DerivedIdField";
 import { LocaleField } from "../components/LocaleField";
 import { TourLaunch } from "../components/TourLaunch";
 import {
@@ -22,6 +23,8 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { CURRENCIES } from "../lib/currencies";
+import { slugify, uniqueSuggestion } from "../lib/entryIds";
+import { DERIVED_KEBAB_RULE, KEBAB_PATTERN } from "../lib/fieldRules";
 import type { TourId } from "../lib/tours";
 import {
   accentButtonClasses,
@@ -233,8 +236,16 @@ function PaymentAndFulfilmentCards() {
   }>({ id: "", name: "", kind: "card" });
   const [fulfilment, setFulfilment] = useState({ id: "", name: "", carrier: "", min: 1, max: 3 });
 
+  const takenPaymentIds = content.payment_methods.map((method) => method.id);
+  const takenFulfilmentIds = content.fulfilment_methods.map((method) => method.id);
+  const paymentSuggested = uniqueSuggestion(slugify(payment.name, ""), takenPaymentIds);
+  const fulfilmentSuggested = uniqueSuggestion(slugify(fulfilment.name, ""), takenFulfilmentIds);
+
   function addPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!payment.id || takenPaymentIds.includes(payment.id)) {
+      return;
+    }
     const method: PaymentMethodSchema = { ...payment, enabled: true };
     edit({ ...content, payment_methods: [...content.payment_methods, method] });
     setPayment({ id: "", name: "", kind: "card" });
@@ -242,6 +253,9 @@ function PaymentAndFulfilmentCards() {
 
   function addFulfilment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!fulfilment.id || takenFulfilmentIds.includes(fulfilment.id)) {
+      return;
+    }
     const method: FulfilmentMethodSchema = {
       id: fulfilment.id,
       name: fulfilment.name,
@@ -303,16 +317,6 @@ function PaymentAndFulfilmentCards() {
         </ul>
         <form className={`${addFormClasses} sm:grid-cols-4`} onSubmit={addPayment}>
           <label className={fieldLabelClasses}>
-            ID
-            <input
-              className={fieldControlClasses}
-              value={payment.id}
-              required
-              pattern="[a-z0-9]+(-[a-z0-9]+)*"
-              onChange={(event) => setPayment({ ...payment, id: event.target.value })}
-            />
-          </label>
-          <label className={fieldLabelClasses}>
             Name
             <input
               className={fieldControlClasses}
@@ -321,6 +325,19 @@ function PaymentAndFulfilmentCards() {
               onChange={(event) => setPayment({ ...payment, name: event.target.value })}
             />
           </label>
+          <DerivedIdField
+            label="ID"
+            hint={DERIVED_KEBAB_RULE}
+            value={payment.id}
+            suggested={paymentSuggested.value}
+            taken={takenPaymentIds}
+            takenBase={paymentSuggested.takenBase}
+            takenPlace="in the draft"
+            pattern={KEBAB_PATTERN}
+            title={DERIVED_KEBAB_RULE}
+            required
+            onChange={(id) => setPayment({ ...payment, id })}
+          />
           <label className={fieldLabelClasses}>
             Kind
             <select
@@ -381,16 +398,6 @@ function PaymentAndFulfilmentCards() {
         </ul>
         <form className={`${addFormClasses} sm:grid-cols-5`} onSubmit={addFulfilment}>
           <label className={fieldLabelClasses}>
-            ID
-            <input
-              className={fieldControlClasses}
-              value={fulfilment.id}
-              required
-              pattern="[a-z0-9]+(-[a-z0-9]+)*"
-              onChange={(event) => setFulfilment({ ...fulfilment, id: event.target.value })}
-            />
-          </label>
-          <label className={fieldLabelClasses}>
             Name
             <input
               className={fieldControlClasses}
@@ -399,6 +406,19 @@ function PaymentAndFulfilmentCards() {
               onChange={(event) => setFulfilment({ ...fulfilment, name: event.target.value })}
             />
           </label>
+          <DerivedIdField
+            label="ID"
+            hint={DERIVED_KEBAB_RULE}
+            value={fulfilment.id}
+            suggested={fulfilmentSuggested.value}
+            taken={takenFulfilmentIds}
+            takenBase={fulfilmentSuggested.takenBase}
+            takenPlace="in the draft"
+            pattern={KEBAB_PATTERN}
+            title={DERIVED_KEBAB_RULE}
+            required
+            onChange={(id) => setFulfilment({ ...fulfilment, id })}
+          />
           <label className={fieldLabelClasses}>
             Carrier
             <input
@@ -451,14 +471,25 @@ export function PoliciesAndFaqPage() {
   });
   const [faq, setFaq] = useState({ id: "", question: "", answer: "" });
 
+  const takenPolicyIds = content.policies.map((entry) => entry.id);
+  const takenFaqIds = content.faq.map((entry) => entry.id);
+  const policySuggested = uniqueSuggestion(slugify(policy.title, ""), takenPolicyIds);
+  const faqSuggested = uniqueSuggestion(slugify(faq.question, ""), takenFaqIds);
+
   function addPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!policy.id || takenPolicyIds.includes(policy.id)) {
+      return;
+    }
     edit({ ...content, policies: [...content.policies, policy] });
     setPolicy({ id: "", title: "", kind: "returns", body: "" });
   }
 
   function addFaq(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!faq.id || takenFaqIds.includes(faq.id)) {
+      return;
+    }
     const entry: FaqEntrySchema = faq;
     edit({ ...content, faq: [...content.faq, entry] });
     setFaq({ id: "", question: "", answer: "" });
@@ -500,16 +531,6 @@ export function PoliciesAndFaqPage() {
         <form className={addFormClasses} onSubmit={addPolicy}>
           <div className="grid gap-2 sm:grid-cols-3">
             <label className={fieldLabelClasses}>
-              ID
-              <input
-                className={fieldControlClasses}
-                value={policy.id}
-                required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                onChange={(event) => setPolicy({ ...policy, id: event.target.value })}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
               Title
               <input
                 className={fieldControlClasses}
@@ -518,6 +539,19 @@ export function PoliciesAndFaqPage() {
                 onChange={(event) => setPolicy({ ...policy, title: event.target.value })}
               />
             </label>
+            <DerivedIdField
+              label="ID"
+              hint={DERIVED_KEBAB_RULE}
+              value={policy.id}
+              suggested={policySuggested.value}
+              taken={takenPolicyIds}
+              takenBase={policySuggested.takenBase}
+              takenPlace="in the draft"
+              pattern={KEBAB_PATTERN}
+              title={DERIVED_KEBAB_RULE}
+              required
+              onChange={(id) => setPolicy({ ...policy, id })}
+            />
             <label className={fieldLabelClasses}>
               Kind
               <select
@@ -576,16 +610,6 @@ export function PoliciesAndFaqPage() {
         <form className={addFormClasses} onSubmit={addFaq}>
           <div className="grid gap-2 sm:grid-cols-2">
             <label className={fieldLabelClasses}>
-              ID
-              <input
-                className={fieldControlClasses}
-                value={faq.id}
-                required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                onChange={(event) => setFaq({ ...faq, id: event.target.value })}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
               Question
               <input
                 className={fieldControlClasses}
@@ -594,6 +618,19 @@ export function PoliciesAndFaqPage() {
                 onChange={(event) => setFaq({ ...faq, question: event.target.value })}
               />
             </label>
+            <DerivedIdField
+              label="ID"
+              hint={DERIVED_KEBAB_RULE}
+              value={faq.id}
+              suggested={faqSuggested.value}
+              taken={takenFaqIds}
+              takenBase={faqSuggested.takenBase}
+              takenPlace="in the draft"
+              pattern={KEBAB_PATTERN}
+              title={DERIVED_KEBAB_RULE}
+              required
+              onChange={(id) => setFaq({ ...faq, id })}
+            />
           </div>
           <label className={fieldLabelClasses}>
             Answer
@@ -616,6 +653,8 @@ export function PoliciesAndFaqPage() {
 export function SupportGuidelinesPage() {
   const { content, edit } = useShopWorkspace();
   const [guideline, setGuideline] = useState({ id: "", title: "", body: "" });
+  const takenGuidelineIds = content.support_guidelines.map((entry) => entry.id);
+  const guidelineSuggested = uniqueSuggestion(slugify(guideline.title, ""), takenGuidelineIds);
 
   return (
     <SetupPage title="Support guidelines" tour="support-guidelines">
@@ -651,22 +690,15 @@ export function SupportGuidelinesPage() {
           className={addFormClasses}
           onSubmit={(event) => {
             event.preventDefault();
+            if (!guideline.id || takenGuidelineIds.includes(guideline.id)) {
+              return;
+            }
             const entry: SupportGuidelineSchema = guideline;
             edit({ ...content, support_guidelines: [...content.support_guidelines, entry] });
             setGuideline({ id: "", title: "", body: "" });
           }}
         >
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className={fieldLabelClasses}>
-              ID
-              <input
-                className={fieldControlClasses}
-                value={guideline.id}
-                required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                onChange={(event) => setGuideline({ ...guideline, id: event.target.value })}
-              />
-            </label>
             <label className={fieldLabelClasses}>
               Title
               <input
@@ -676,6 +708,19 @@ export function SupportGuidelinesPage() {
                 onChange={(event) => setGuideline({ ...guideline, title: event.target.value })}
               />
             </label>
+            <DerivedIdField
+              label="ID"
+              hint={DERIVED_KEBAB_RULE}
+              value={guideline.id}
+              suggested={guidelineSuggested.value}
+              taken={takenGuidelineIds}
+              takenBase={guidelineSuggested.takenBase}
+              takenPlace="in the draft"
+              pattern={KEBAB_PATTERN}
+              title={DERIVED_KEBAB_RULE}
+              required
+              onChange={(id) => setGuideline({ ...guideline, id })}
+            />
           </div>
           <label className={fieldLabelClasses}>
             Body
@@ -701,6 +746,8 @@ export function SupportGuidelinesPage() {
 export function ToneOfVoicePage() {
   const { content, edit } = useShopWorkspace();
   const [tone, setTone] = useState({ id: "", name: "", guidance: "" });
+  const takenToneIds = content.tone_of_voice_guidelines.map((entry) => entry.id);
+  const toneSuggested = uniqueSuggestion(slugify(tone.name, ""), takenToneIds);
 
   function setDefault(id: string) {
     edit({
@@ -763,6 +810,9 @@ export function ToneOfVoicePage() {
           className={addFormClasses}
           onSubmit={(event) => {
             event.preventDefault();
+            if (!tone.id || takenToneIds.includes(tone.id)) {
+              return;
+            }
             const entry: ToneOfVoiceSchema = {
               ...tone,
               is_default: content.tone_of_voice_guidelines.length === 0,
@@ -776,16 +826,6 @@ export function ToneOfVoicePage() {
         >
           <div className="grid gap-2 sm:grid-cols-2">
             <label className={fieldLabelClasses}>
-              ID
-              <input
-                className={fieldControlClasses}
-                value={tone.id}
-                required
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                onChange={(event) => setTone({ ...tone, id: event.target.value })}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
               Name
               <input
                 className={fieldControlClasses}
@@ -794,6 +834,19 @@ export function ToneOfVoicePage() {
                 onChange={(event) => setTone({ ...tone, name: event.target.value })}
               />
             </label>
+            <DerivedIdField
+              label="ID"
+              hint={DERIVED_KEBAB_RULE}
+              value={tone.id}
+              suggested={toneSuggested.value}
+              taken={takenToneIds}
+              takenBase={toneSuggested.takenBase}
+              takenPlace="in the draft"
+              pattern={KEBAB_PATTERN}
+              title={DERIVED_KEBAB_RULE}
+              required
+              onChange={(id) => setTone({ ...tone, id })}
+            />
           </div>
           <label className={fieldLabelClasses}>
             Guidance

@@ -1,9 +1,11 @@
 import type { ProductViewSchema } from "@agent-lab/contracts";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
+import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, VersionChips } from "../components/WorkspaceChrome";
+import { slugify, uniqueSuggestion } from "../lib/entryIds";
 import { KEBAB_PATTERN, PRODUCT_HANDLE_RULE } from "../lib/fieldRules";
 import { issuesForProduct, ratingLabel } from "../lib/shop";
 import {
@@ -36,9 +38,17 @@ export function ProductsPage() {
   const [handle, setHandle] = useState("");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
+  const takenHandles = content.products.map((product) => product.handle);
+  const { value: suggestedHandle, takenBase: takenHandleBase } = uniqueSuggestion(
+    slugify(title, ""),
+    takenHandles,
+  );
 
   function addProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!handle || takenHandles.includes(handle)) {
+      return;
+    }
     edit({
       ...content,
       products: [...content.products, emptyProduct(handle, title, category)],
@@ -133,17 +143,6 @@ export function ProductsPage() {
 
         <Card title="Add a product">
           <form className="grid gap-3" onSubmit={addProduct}>
-            <FieldHint label="Handle" hint={PRODUCT_HANDLE_RULE}>
-              <input
-                className={fieldControlClasses}
-                value={handle}
-                required
-                pattern={KEBAB_PATTERN}
-                title={PRODUCT_HANDLE_RULE}
-                placeholder="alpine-shell-jacket"
-                onChange={(event) => setHandle(event.target.value)}
-              />
-            </FieldHint>
             <FieldHint label="Title" hint="The name customers and the catalog see.">
               <input
                 className={fieldControlClasses}
@@ -165,6 +164,20 @@ export function ProductsPage() {
                 onChange={(event) => setCategory(event.target.value)}
               />
             </FieldHint>
+            <DerivedIdField
+              label="Handle"
+              hint={PRODUCT_HANDLE_RULE}
+              value={handle}
+              suggested={suggestedHandle}
+              taken={takenHandles}
+              takenBase={takenHandleBase}
+              takenPlace="in the draft"
+              pattern={KEBAB_PATTERN}
+              title={PRODUCT_HANDLE_RULE}
+              placeholder="alpine-shell-jacket"
+              required
+              onChange={setHandle}
+            />
             <button className={accentButtonClasses} type="submit">
               Add to draft
             </button>

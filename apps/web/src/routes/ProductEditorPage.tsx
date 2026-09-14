@@ -6,6 +6,7 @@ import type {
 } from "@agent-lab/contracts";
 import { type FormEvent, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { DerivedIdField } from "../components/DerivedIdField";
 import {
   Card,
   EntryId,
@@ -15,6 +16,13 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
+import { slugify, uniqueId, uniqueSuggestion, uniqueVariantSku } from "../lib/entryIds";
+import {
+  DERIVED_KEBAB_RULE,
+  KEBAB_PATTERN,
+  REFERENCE_PATTERN,
+  VARIANT_SKU_RULE,
+} from "../lib/fieldRules";
 import {
   findProduct,
   issuesForProduct,
@@ -186,16 +194,22 @@ function OptionsCard({ product, onChange }: EditorProps) {
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
   const [values, setValues] = useState("");
+  const taken = product.options.map((option) => option.key);
+  const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(name, ""), taken);
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const parsed = values
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!key || taken.includes(key) || parsed.length === 0) {
+      return;
+    }
     const option: OptionSchema = {
       key,
       name,
-      values: values
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean),
+      values: parsed,
     };
     onChange({ ...product, options: [...product.options, option] });
     setKey("");
@@ -231,17 +245,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
           <li className="text-admin-muted">No options yet.</li>
         ) : null}
       </ul>
-      <form className="grid gap-2 sm:grid-cols-[1fr_1fr_2fr_auto]" onSubmit={add}>
-        <label className={fieldLabelClasses}>
-          Option key
-          <input
-            className={fieldControlClasses}
-            value={key}
-            required
-            pattern="[a-z0-9]+(-[a-z0-9]+)*"
-            onChange={(event) => setKey(event.target.value)}
-          />
-        </label>
+      <form className="grid gap-2 sm:grid-cols-[1fr_2fr_1fr_auto]" onSubmit={add}>
         <label className={fieldLabelClasses}>
           Option name
           <input
@@ -260,6 +264,19 @@ function OptionsCard({ product, onChange }: EditorProps) {
             onChange={(event) => setValues(event.target.value)}
           />
         </label>
+        <DerivedIdField
+          label="Option key"
+          hint={DERIVED_KEBAB_RULE}
+          value={key}
+          suggested={suggestedKey}
+          taken={taken}
+          takenBase={takenBase}
+          takenPlace="in the draft"
+          pattern={KEBAB_PATTERN}
+          title={DERIVED_KEBAB_RULE}
+          required
+          onChange={setKey}
+        />
         <button className={`${accentButtonClasses} self-end`} type="submit">
           Add option
         </button>
@@ -270,13 +287,26 @@ function OptionsCard({ product, onChange }: EditorProps) {
 
 function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   const defaultCurrency = currencies[0];
-  const [sku, setSku] = useState("");
+  const [optionValues, setOptionValues] = useState<Record<string, string>>({});
+  const chosenValues = product.options.map(
+    (option) => optionValues[option.key] ?? option.values[0],
+  );
+  const takenSkus = product.variants.map((variant) => variant.sku);
+  const { value: suggestedSku, takenBase: takenSkuBase } = uniqueVariantSku(
+    product.handle,
+    chosenValues,
+    takenSkus,
+  );
+  const [sku, setSku] = useState(suggestedSku);
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<Currency>(defaultCurrency);
-  const [optionValues, setOptionValues] = useState<Record<string, string>>({});
+  const [skuResume, setSkuResume] = useState(0);
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!sku || takenSkus.includes(sku)) {
+      return;
+    }
     const variant: VariantSchema = {
       sku,
       option_values: product.options.map((option) => ({
@@ -290,6 +320,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
     onChange({ ...product, variants: [...product.variants, variant] });
     setSku("");
     setAmount("");
+    setSkuResume((generation) => generation + 1);
   }
 
   function updateVariant(index: number, next: VariantSchema) {
@@ -409,18 +440,27 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
         </table>
       </div>
 
-      <form className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]" onSubmit={add}>
-        <label className={fieldLabelClasses}>
-          New variant SKU
-          <input
-            className={fieldControlClasses}
-            value={sku}
-            required
-            pattern="[A-Z0-9]+(-[A-Z0-9]+)*"
-            title="Uppercase alphanumeric kebab-case, for example NS-ASJ-OB-M"
-            onChange={(event) => setSku(event.target.value.toUpperCase())}
-          />
-        </label>
+      <form className="grid gap-2 sm:grid-cols-2" onSubmit={add}>
+        {product.options.map((option) => (
+          <div key={option.key} className={fieldLabelClasses}>
+            {/* An explicit association keeps the accessible name free of the option text. */}
+            <label htmlFor={`new-variant-${option.key}`}>{option.name}</label>
+            <select
+              id={`new-variant-${option.key}`}
+              className={fieldControlClasses}
+              value={optionValues[option.key] ?? option.values[0]}
+              onChange={(event) =>
+                setOptionValues({ ...optionValues, [option.key]: event.target.value })
+              }
+            >
+              {option.values.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
         <label className={fieldLabelClasses}>
           Price (optional)
           <input
@@ -446,29 +486,24 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
             </select>
           </label>
         ) : null}
+        <DerivedIdField
+          key={skuResume}
+          label="New variant SKU"
+          hint={VARIANT_SKU_RULE}
+          value={sku}
+          suggested={suggestedSku}
+          taken={takenSkus}
+          takenBase={takenSkuBase}
+          takenPlace="in the draft"
+          pattern={REFERENCE_PATTERN}
+          title={VARIANT_SKU_RULE}
+          required
+          normalize={(value) => value.toUpperCase()}
+          onChange={setSku}
+        />
         <button className={`${accentButtonClasses} self-end`} type="submit">
           Add variant
         </button>
-        {product.options.map((option) => (
-          <div key={option.key} className={fieldLabelClasses}>
-            {/* An explicit association keeps the accessible name free of the option text. */}
-            <label htmlFor={`new-variant-${option.key}`}>{option.name}</label>
-            <select
-              id={`new-variant-${option.key}`}
-              className={fieldControlClasses}
-              value={optionValues[option.key] ?? option.values[0]}
-              onChange={(event) =>
-                setOptionValues({ ...optionValues, [option.key]: event.target.value })
-              }
-            >
-              {option.values.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </div>
-        ))}
       </form>
     </Card>
   );
@@ -548,9 +583,14 @@ function AttributesCard({ product, onChange }: EditorProps) {
   const [value, setValue] = useState("");
   const [unit, setUnit] = useState("");
   const [choices, setChoices] = useState("");
+  const taken = product.attributes.map((attribute) => attribute.key);
+  const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(label, ""), taken);
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!key || taken.includes(key)) {
+      return;
+    }
     const attribute: AttributeSchema = {
       key,
       label,
@@ -608,16 +648,6 @@ function AttributesCard({ product, onChange }: EditorProps) {
       </ul>
       <form className="grid gap-2 sm:grid-cols-3" onSubmit={add}>
         <label className={fieldLabelClasses}>
-          Key
-          <input
-            className={fieldControlClasses}
-            value={key}
-            required
-            pattern="[a-z0-9]+(-[a-z0-9]+)*"
-            onChange={(event) => setKey(event.target.value)}
-          />
-        </label>
-        <label className={fieldLabelClasses}>
           Label
           <input
             className={fieldControlClasses}
@@ -626,6 +656,19 @@ function AttributesCard({ product, onChange }: EditorProps) {
             onChange={(event) => setLabel(event.target.value)}
           />
         </label>
+        <DerivedIdField
+          label="Key"
+          hint={DERIVED_KEBAB_RULE}
+          value={key}
+          suggested={suggestedKey}
+          taken={taken}
+          takenBase={takenBase}
+          takenPlace="in the draft"
+          pattern={KEBAB_PATTERN}
+          title={DERIVED_KEBAB_RULE}
+          required
+          onChange={setKey}
+        />
         <label className={fieldLabelClasses}>
           Type
           <select
@@ -685,7 +728,6 @@ function AttributesCard({ product, onChange }: EditorProps) {
 }
 
 function ReviewsCard({ product, onChange }: EditorProps) {
-  const [id, setId] = useState("");
   const [author, setAuthor] = useState("");
   const [rating, setRating] = useState(5);
   const [body, setBody] = useState("");
@@ -696,6 +738,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
         {product.reviews.map((review) => (
           <li key={review.id} className="flex items-start gap-2">
             <span className="font-semibold">{review.rating}★</span>
+            <EntryId value={review.id} />
             <span className="text-admin-ink-soft">
               “{review.body}” — {review.author_display_name}
             </span>
@@ -721,25 +764,18 @@ function ReviewsCard({ product, onChange }: EditorProps) {
         className="grid gap-2 sm:grid-cols-4"
         onSubmit={(event) => {
           event.preventDefault();
+          const id = uniqueId(
+            slugify(author, "review"),
+            product.reviews.map((review) => review.id),
+          );
           onChange({
             ...product,
             reviews: [...product.reviews, { id, author_display_name: author, rating, body }],
           });
-          setId("");
           setAuthor("");
           setBody("");
         }}
       >
-        <label className={fieldLabelClasses}>
-          Review ID
-          <input
-            className={fieldControlClasses}
-            value={id}
-            required
-            pattern="[a-z0-9]+(-[a-z0-9]+)*"
-            onChange={(event) => setId(event.target.value)}
-          />
-        </label>
         <label className={fieldLabelClasses}>
           Author
           <input

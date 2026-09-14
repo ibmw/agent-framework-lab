@@ -334,3 +334,14 @@ does not replace the hint.
 **LocaleField.** The locale rule lives on `LocaleField` itself, so every surface that uses
 the field — the shop create form, Shop details, and the customer editor — shows the same
 hint. Slice 1 does not rewrite those other surfaces; they inherit the field's own rule.
+
+## Revision — derived identifiers (2026-09-13)
+
+Slice 2. Identifiers are derived from a human field and are never the first thing on a
+form. The field follows the source until edited, restores the suggestion on blur-while-empty
+or the next source change, and refuses a value already taken. The field-hint convention
+above is unchanged.
+
+**Order and ticket references.** An order continues the shop's existing `{prefix}-{n}`
+series (`seriesPrefix`, then `nextReference`). A shop with no numbered orders yet takes
+initials from its name. Ticket references always use `T`, independently of the shop name.

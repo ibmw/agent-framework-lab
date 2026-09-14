@@ -74,6 +74,28 @@ describe("FieldHint", () => {
     expect(screen.getByLabelText("Name").getAttribute("aria-describedby")).toBe(describedBy);
   });
 
+  it("uses the create-error treatment on an extra collision line", () => {
+    render(
+      <FieldHint
+        label="Handle"
+        hint="Lowercase with hyphens."
+        extra="alpine-shell-jacket is already in the draft."
+        extraTone="error"
+      >
+        <input />
+      </FieldHint>,
+    );
+
+    const extraId = screen
+      .getByLabelText("Handle")
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .at(-1);
+    expect(document.getElementById(extraId ?? "")).toHaveClass("text-lab-error");
+    expect(screen.getByRole("alert")).toHaveTextContent(/already in the draft/i);
+    expect(document.getElementById(extraId ?? "")).not.toHaveAttribute("aria-live");
+  });
+
   it("marks the minority as optional, the way the product editor writes price", () => {
     render(
       <FieldHint label="Price" hint="Leave empty to add in the editor." optional>

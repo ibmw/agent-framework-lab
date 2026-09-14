@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { describeApiError } from "../api/client";
+import { savedAsPreview } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -211,13 +212,7 @@ function BlockLibrary({
             <FieldHint
               label="Name"
               hint="Saved as a lowercase slug. A scenario binds this template to its own shop's objects."
-              extra={
-                name && toSlug(name) !== name ? (
-                  <>
-                    Saved as <code className="font-mono">{toSlug(name)}</code>.
-                  </>
-                ) : undefined
-              }
+              extra={name && toSlug(name) !== name ? savedAsPreview(toSlug(name)) : undefined}
             >
               <input
                 className={fieldControlClasses}

@@ -388,14 +388,14 @@ describe("ticket list", () => {
     // editor's own Subject is on screen beside this form's.
     const list = within(screen.getByRole("region", { name: "Tickets" }));
     await list.findByRole("option", { name: "Maya Laurent" });
-    await user.type(list.getByLabelText("Reference"), "t-900");
+    await waitFor(() => expect(list.getByLabelText("Reference")).toHaveValue("T-205"));
     await user.type(list.getByLabelText("Subject"), "Late delivery");
     await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
     await user.click(list.getByRole("button", { name: "Open ticket" }));
 
     await waitFor(() => expect(createdTickets).toHaveLength(1));
     expect(createdTickets[0]).toMatchObject({
-      reference: "T-900",
+      reference: "T-205",
       subject: "Late delivery",
       customer_profile_id: PROFILE_ID,
       channel: "chat",
@@ -431,6 +431,44 @@ describe("ticket list", () => {
     );
   });
 
+  it("prefills the next free reference, resumes when emptied, and refuses a duplicate", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+
+    await waitFor(() => expect(list.getByLabelText("Reference")).toHaveValue("T-205"));
+    await user.clear(list.getByLabelText("Reference"));
+    await user.type(list.getByLabelText("Reference"), "T-900");
+    await user.clear(list.getByLabelText("Reference"));
+    expect(list.getByLabelText("Reference")).toHaveValue("");
+    await user.tab();
+    expect(list.getByLabelText("Reference")).toHaveValue("T-205");
+
+    await user.clear(list.getByLabelText("Reference"));
+    await user.type(list.getByLabelText("Reference"), "T-204");
+    expect(list.getByLabelText("Reference")).toBeInvalid();
+    expect(list.getByLabelText("Reference")).toHaveAccessibleDescription(
+      /t-204 is already used by a ticket in this shop/i,
+    );
+    await user.click(list.getByRole("button", { name: "Open ticket" }));
+    expect(createdTickets).toHaveLength(0);
+  });
+
+  it("does not guess a reference after the listing fails to load", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json(
+          { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+          { status: 503 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
+    expect(list.getByLabelText("Reference")).toHaveValue("");
+  });
+
   it("shows a refused create beside the button that failed, not as a listing load error", async () => {
     server.use(
       http.post(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
@@ -449,7 +487,6 @@ describe("ticket list", () => {
     const list = within(await screen.findByRole("region", { name: "Tickets" }));
 
     await list.findByRole("option", { name: "Maya Laurent" });
-    await user.type(list.getByLabelText("Reference"), "t-900");
     await user.type(list.getByLabelText("Subject"), "Late delivery");
     await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
     await user.click(list.getByRole("button", { name: "Open ticket" }));
@@ -491,7 +528,6 @@ describe("ticket list", () => {
     const list = within(await screen.findByRole("region", { name: "Tickets" }));
 
     await list.findByRole("option", { name: "Maya Laurent" });
-    await user.type(list.getByLabelText("Reference"), "t-900");
     await user.type(list.getByLabelText("Subject"), "Late delivery");
     await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
     await user.click(list.getByRole("button", { name: "Open ticket" }));

@@ -102,18 +102,18 @@ accessible description, so a reader without a pointer has the same rule.
 
 ### Slice 2 — Identifiers are derived, never asked first
 
-- [ ] Add `DerivedIdField` and `nextReference`, with the shop create form's slug moved onto the
+- [x] Add `DerivedIdField` and `nextReference`, with the shop create form's slug moved onto the
   component so its behaviour is the shared one.
-- [ ] Products: Title first, then Category, then the handle derived from the title with a live
+- [x] Products: Title first, then Category, then the handle derived from the title with a live
   "Saved as" preview; a handle already in the draft is refused before submit rather than merging
   two products into one editor.
-- [ ] Product editor: option key from option name, attribute key from label, review ID derived
+- [x] Product editor: option key from option name, attribute key from label, review ID derived
   from the author and shown only as an `EntryId` on the saved row.
-- [ ] Shop details: payment and fulfilment IDs from their names. Policies, FAQ, support guidelines
+- [x] Shop details: payment and fulfilment IDs from their names. Policies, FAQ, support guidelines
   and tone: IDs from title, question or name, in that field order.
-- [ ] Block editor: the parameter form asks for a label, previews the identifier it will save, and
+- [x] Block editor: the parameter form asks for a label, previews the identifier it will save, and
   stops suggesting `doc_ref` as something to type.
-- [ ] Orders and tickets: the reference is prefilled from the shop's existing references and
+- [x] Orders and tickets: the reference is prefilled from the shop's existing references and
   editable; a duplicate is refused inline.
 
 Frames: 2c (product editor).
