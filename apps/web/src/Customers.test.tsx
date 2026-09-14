@@ -15,6 +15,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { todayInput } from "./lib/orders";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OTHER_SHOP_ID = "8c7b6a59-4d3e-42f1-a0b9-8c7d6e5f4a3b";
@@ -552,6 +553,87 @@ describe("customer workspace", () => {
 
     expect(await screen.findByText(/Published version 1/)).toBeVisible();
     expect(await screen.findByText(/Draft matches v1/)).toBeVisible();
+  });
+});
+
+describe("typed controls on the customer editor", () => {
+  it("enters a trait at a time, refuses a second copy of one, and names each remove", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const traits = within(screen.getByRole("group", { name: "Traits" }));
+    expect(traits.getByRole("button", { name: "Remove direct" })).toBeVisible();
+
+    // A trait is stored as it was written: frame 6b draws "mildly anxious" with its space.
+    await user.type(traits.getByLabelText("New trait"), "mildly anxious");
+    await user.click(traits.getByRole("button", { name: "Add trait" }));
+
+    await user.type(traits.getByLabelText("New trait"), "direct");
+    expect(traits.getByLabelText("New trait")).toBeInvalid();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "direct is already a trait of this persona.",
+    );
+    await user.click(traits.getByRole("button", { name: "Add trait" }));
+
+    await user.clear(traits.getByLabelText("New trait"));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const persona = savedPayloads[0].persona as { traits: string[] };
+    expect(persona.traits).toEqual(["direct", "mildly anxious"]);
+  });
+
+  it("offers a country by name on the add form and saves the code", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const addForm = within(screen.getByRole("group", { name: "Add an address" }));
+    await user.type(addForm.getByLabelText("Label"), "Berlin office");
+    await user.type(addForm.getByLabelText("Street"), "Torstrasse 1");
+    await user.type(addForm.getByLabelText("Postal code"), "10119");
+    await user.type(addForm.getByLabelText("City"), "Berlin");
+
+    const country = addForm.getByLabelText("Country");
+    await user.clear(country);
+    await user.type(country, "de");
+    expect(country).toHaveValue("DE");
+    expect(country).toHaveAccessibleDescription(/Germany/);
+
+    await user.click(addForm.getByRole("button", { name: "Add address" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const saved = savedPayloads[0].addresses as Array<{ label: string; country: string }>;
+    expect(saved[1]).toMatchObject({ label: "Berlin office", country: "DE" });
+  });
+
+  it("reads a saved address row's country back as the country it names", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const book = within(screen.getByRole("region", { name: "Address book" }));
+    const [row] = book.getAllByLabelText("Country");
+    expect(row).toHaveValue("FR");
+    expect(row).toHaveAccessibleDescription(/France/);
+  });
+
+  it("types the identity fields as the values they carry", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const identity = within(screen.getByRole("region", { name: "Identity" }));
+    expect(identity.getByLabelText("Email")).toHaveAttribute("type", "email");
+    expect(identity.getByLabelText("Phone")).toHaveAttribute("type", "tel");
+  });
+
+  it("opens a background entry on today rather than on a day nobody chose", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const background = within(screen.getByRole("region", { name: "Background" }));
+    expect(background.getByLabelText("Date")).toHaveValue(todayInput());
   });
 });
 

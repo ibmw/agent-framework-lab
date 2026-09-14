@@ -686,6 +686,51 @@ describe("ticket context panel", () => {
   });
 });
 
+describe("the ticket's tags", () => {
+  it("respells a typed tag, previews it, and refuses one the ticket already carries", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Ticket thread" });
+
+    const tags = within(screen.getByRole("group", { name: "Tags" }));
+    expect(tags.getByRole("button", { name: "Remove address-change" })).toBeVisible();
+
+    await user.type(tags.getByLabelText("New tag"), "Refund Requested");
+    expect(tags.getByLabelText("New tag")).toHaveAccessibleDescription(
+      /Saved as refund-requested\./,
+    );
+    await user.click(tags.getByRole("button", { name: "Add tag" }));
+    expect(tags.getByRole("button", { name: "Remove refund-requested" })).toBeVisible();
+
+    // The comparison is against the stored spelling, which is what the lab holds unique.
+    await user.type(tags.getByLabelText("New tag"), "Address Change");
+    expect(tags.getByLabelText("New tag")).toBeInvalid();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "address-change is already a tag on this ticket.",
+    );
+    await user.click(tags.getByRole("button", { name: "Add tag" }));
+
+    // Punctuation the gate would refuse (`_require_slug`) is respelled, and the preview says
+    // so, rather than being previewed verbatim and refused after the save.
+    await user.clear(tags.getByLabelText("New tag"));
+    await user.type(tags.getByLabelText("New tag"), "Refund! (urgent)");
+    expect(tags.getByLabelText("New tag")).toHaveAccessibleDescription(/Saved as refund-urgent\./);
+    await user.click(tags.getByRole("button", { name: "Add tag" }));
+    expect(tags.getByRole("button", { name: "Remove refund-urgent" })).toBeVisible();
+    expect(tags.getByLabelText("New tag")).toHaveAttribute("maxlength", "64");
+
+    await user.clear(tags.getByLabelText("New tag"));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].payload.tags).toEqual([
+      "address-change",
+      "refund-requested",
+      "refund-urgent",
+    ]);
+  });
+});
+
 describe("saving and publishing", () => {
   it("saves the authored content without the derived thread facts", async () => {
     const user = userEvent.setup();

@@ -69,3 +69,19 @@ something the group derives is paired with a live line showing what it currently
 suggestion is handed back only where the control can express "unanswered", and what a create
 form asks before it names the page holding the rest. The three sections this ADR already
 points at are unchanged.
+
+## Amendment — 2026-09-14 (Slice 5)
+
+Slice 5 added a fifth sibling section in `docs/design-direction.md` (*Revision — chips, a
+country, and what a number field says (2026-09-14)*): that a list entered one value at a time
+is one control with its rule on the field that takes the next value, that a remove button is
+named after what it removes, that duplicate refusal belongs to the primitive because the domain
+requires uniqueness on every list it serves, that respelling is a caller's function previewed
+on the paired-line convention, why a country register is not a `lib/enumLabels.ts` table, what
+a number field's pattern and hint are both taken from, that a pattern is not a refusal so a
+value the form cannot carry must not reach a save, and why a five-value rating is a radio group
+with no empty state, which lists the primitive owns and which the results page keeps, that a
+respelling must reach the shape the gate wants rather than most of the way to it, that a saved
+row shows the chips it was entered with, and that a rule shared by a table's rows lives once
+and is reached by `aria-describedby`. The four sections this ADR already points at are
+unchanged.

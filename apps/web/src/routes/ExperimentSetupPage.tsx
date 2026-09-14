@@ -17,9 +17,11 @@ import {
 import { describeApiError, LabApiError } from "../api/client";
 import { listExperiments, previewExperiment, startExperiment } from "../api/experiments";
 import { listScenarios, listScenarioVersions } from "../api/scenarios";
+import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
+import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -32,7 +34,6 @@ import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "The experiment bench is unavailable.";
 const DEFAULT_SEED = 20260828;
-const MAX_SEED = 2 ** 32 - 1;
 
 /**
  * One arm as the form holds it: a published configuration and the version to pin.
@@ -304,17 +305,18 @@ export function ExperimentSetupPage() {
                       ))}
                   </select>
                 </label>
-                <label className={fieldLabelClasses}>
-                  Seed
+                <FieldHint label="Seed" hint={SEED_RULE}>
                   <input
                     className={fieldControlClasses}
                     type="number"
                     min={0}
                     max={MAX_SEED}
+                    step={1}
                     value={seed}
+                    title={SEED_RULE}
                     onChange={(event) => setSeed(event.target.value)}
                   />
-                </label>
+                </FieldHint>
               </div>
             )}
           </Card>

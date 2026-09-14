@@ -22,6 +22,7 @@ import {
   publishTicket,
   replaceTicketDraft,
 } from "../api/tickets";
+import { ChipListField } from "../components/ChipListField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
@@ -38,7 +39,12 @@ import {
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { nextReference } from "../lib/entryIds";
 import { optionsOf, TICKET_ORIGIN_KIND, TICKET_STATUS } from "../lib/enumLabels";
-import { REFERENCE_PATTERN, TICKET_REFERENCE_RULE } from "../lib/fieldRules";
+import {
+  REFERENCE_PATTERN,
+  TICKET_REFERENCE_RULE,
+  TICKET_TAG_MAX_LENGTH,
+  TICKET_TAGS_RULE,
+} from "../lib/fieldRules";
 import { fromLocalInput, fulfilmentLabel, paymentLabel, toLocalInput } from "../lib/orders";
 import {
   appendMessage,
@@ -49,6 +55,7 @@ import {
   initials,
   messageDay,
   messageTime,
+  normalizeTag,
   originLabel,
   originNeedsOrder,
   originNeedsProduct,
@@ -740,20 +747,9 @@ function ContextPanel({
   context: TicketContextSchema | null;
   onEdit: (next: TicketContentSchema) => void;
 }) {
-  const [tag, setTag] = useState("");
   const documents = context ? documentOptions(context.resources) : [];
   const resolvable = new Set((context?.resources.orders ?? []).map((order) => order.order_id));
   const unresolvable = content.linked_order_ids.filter((orderId) => !resolvable.has(orderId));
-
-  function addTag(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const slug = tag.trim().toLowerCase().replace(/\s+/g, "-");
-    if (!slug || content.tags.includes(slug)) {
-      return;
-    }
-    onEdit({ ...content, tags: [...content.tags, slug] });
-    setTag("");
-  }
 
   function toggleDocument(kind: ShopDocumentKind, documentId: string) {
     const present = content.suggested_documents.some(
@@ -887,33 +883,19 @@ function ContextPanel({
             </select>
           </label>
         ) : null}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {content.tags.map((entry) => (
-            <button
-              key={entry}
-              type="button"
-              className={subtleButtonClasses}
-              aria-label={`Remove tag ${entry}`}
-              onClick={() =>
-                onEdit({ ...content, tags: content.tags.filter((value) => value !== entry) })
-              }
-            >
-              {entry} ✕
-            </button>
-          ))}
-        </div>
-        <form className="flex items-center gap-2" onSubmit={addTag}>
-          <input
-            aria-label="New tag"
-            className={fieldControlClasses}
-            value={tag}
-            placeholder="address-change"
-            onChange={(event) => setTag(event.target.value)}
-          />
-          <button className={subtleButtonClasses} type="submit">
-            Add tag
-          </button>
-        </form>
+        <ChipListField
+          legend="Tags"
+          label="New tag"
+          hint={TICKET_TAGS_RULE}
+          maxLength={TICKET_TAG_MAX_LENGTH}
+          addLabel="Add tag"
+          placeholder="address change"
+          empty="No tag yet."
+          values={content.tags}
+          normalize={normalizeTag}
+          takenPlace="a tag on this ticket"
+          onChange={(tags) => onEdit({ ...content, tags })}
+        />
       </Card>
 
       {context ? (

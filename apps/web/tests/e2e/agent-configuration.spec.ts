@@ -73,7 +73,8 @@ async function publishShop(page: Page, unique: string) {
   const options = card(page, "Options");
   await options.getByLabel("Option key", { exact: true }).fill("color");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
-  await options.getByLabel("Values (comma separated)", { exact: true }).fill("Ocean Blue");
+  await options.getByLabel("New value", { exact: true }).fill("Ocean Blue");
+  await options.getByRole("button", { name: "Add value" }).click();
   await options.getByRole("button", { name: "Add option" }).click();
   const variants = card(page, "Variants");
   await variants.getByLabel("New variant SKU", { exact: true }).fill("NS-ASJ-OB-M");

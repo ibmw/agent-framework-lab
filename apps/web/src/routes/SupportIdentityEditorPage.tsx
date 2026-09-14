@@ -4,7 +4,7 @@ import type {
   SupportIdentityPreviewResponse,
   SupportPermission,
 } from "@agent-lab/contracts";
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getSupportIdentityDraft,
@@ -12,6 +12,7 @@ import {
   publishSupportIdentity,
   replaceSupportIdentityDraft,
 } from "../api/supportIdentities";
+import { ChipListField } from "../components/ChipListField";
 import {
   Card,
   canPublish,
@@ -24,6 +25,7 @@ import {
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
+import { CHIP_LABEL_MAX_LENGTH, ESCALATION_CONDITIONS_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -68,7 +70,6 @@ export function SupportIdentityEditorPage() {
   const editor = useDefinitionEditor(identityId, CLIENT);
   const { content, preview, edit } = editor;
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const [condition, setCondition] = useState("");
 
   if (editor.loading) {
     return <p className="text-sm text-admin-muted">Loading support identity…</p>;
@@ -103,21 +104,6 @@ export function SupportIdentityEditorPage() {
       ...content,
       guidance: content.guidance.map((note) => (note.id === id ? { ...note, ...next } : note)),
     });
-  }
-
-  function addCondition(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!content || content.escalation.conditions.includes(condition)) {
-      return;
-    }
-    edit({
-      ...content,
-      escalation: {
-        ...content.escalation,
-        conditions: [...content.escalation.conditions, condition],
-      },
-    });
-    setCondition("");
   }
 
   return (
@@ -324,42 +310,20 @@ export function SupportIdentityEditorPage() {
                 }
               />
             </label>
-            <div className="flex flex-wrap items-center gap-2">
-              {content.escalation.conditions.map((entry) => (
-                <button
-                  key={entry}
-                  className={subtleButtonClasses}
-                  type="button"
-                  onClick={() =>
-                    edit({
-                      ...content,
-                      escalation: {
-                        ...content.escalation,
-                        conditions: content.escalation.conditions.filter(
-                          (value) => value !== entry,
-                        ),
-                      },
-                    })
-                  }
-                >
-                  {entry} ✕
-                </button>
-              ))}
-            </div>
-            <form className="flex flex-wrap items-end gap-2" onSubmit={addCondition}>
-              <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-                New condition
-                <input
-                  className={fieldControlClasses}
-                  value={condition}
-                  required
-                  onChange={(event) => setCondition(event.target.value)}
-                />
-              </label>
-              <button className={inkButtonClasses} type="submit">
-                Add condition
-              </button>
-            </form>
+            <ChipListField
+              legend="Conditions"
+              label="New condition"
+              hint={ESCALATION_CONDITIONS_RULE}
+              maxLength={CHIP_LABEL_MAX_LENGTH}
+              addLabel="Add condition"
+              placeholder="the customer asks for a manager"
+              empty="No condition yet; this identity never escalates."
+              values={content.escalation.conditions}
+              takenPlace="an escalation condition"
+              onChange={(conditions) =>
+                edit({ ...content, escalation: { ...content.escalation, conditions } })
+              }
+            />
           </Card>
         </div>
 

@@ -15,6 +15,7 @@ import {
   listSandboxSnapshots,
   materializeSandboxSnapshot,
 } from "../api/snapshots";
+import { FieldHint } from "../components/FieldHint";
 import { SandboxToolConsole } from "../components/SandboxToolConsole";
 import { TourLaunch } from "../components/TourLaunch";
 import {
@@ -25,6 +26,7 @@ import {
   StatusPill,
 } from "../components/WorkspaceChrome";
 import { DEFINITION_TYPE, labelOf } from "../lib/enumLabels";
+import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel } from "../lib/orders";
 import { channelLabel, originLabel } from "../lib/tickets";
 import {
@@ -40,8 +42,6 @@ import { useShopWorkspace } from "../shell/ShopWorkspace";
 const UNAVAILABLE = "The starting states of this scenario are unavailable.";
 const ARMS_UNAVAILABLE = "The arms cloned from this snapshot are unavailable.";
 const DEFAULT_SEED = 20260825;
-/** The contract's own bound, declared here so the field refuses before the server has to. */
-const MAX_SEED = 2 ** 32 - 1;
 
 function newestVersion(versions: DefinitionVersionSummarySchema[]): number | null {
   return versions.reduce<number | null>(
@@ -209,17 +209,18 @@ export function SnapshotsPage() {
                       ))}
                   </select>
                 </label>
-                <label className={fieldLabelClasses}>
-                  Seed
+                <FieldHint label="Seed" hint={SEED_RULE}>
                   <input
                     className={fieldControlClasses}
                     type="number"
                     min={0}
                     max={MAX_SEED}
+                    step={1}
                     value={seed}
+                    title={SEED_RULE}
                     onChange={(event) => setSeed(event.target.value)}
                   />
-                </label>
+                </FieldHint>
                 <button className={accentButtonClasses} type="submit" disabled={working}>
                   {working ? "Freezing…" : "Materialize snapshot"}
                 </button>

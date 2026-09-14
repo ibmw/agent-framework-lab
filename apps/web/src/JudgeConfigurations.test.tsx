@@ -233,6 +233,23 @@ describe("judge workspace", () => {
     );
   });
 
+  it("constrains the judge's temperature the way the agent editor constrains its own", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+
+    const temperature = await screen.findByLabelText("Temperature");
+    expect(temperature).toHaveAttribute("inputmode", "decimal");
+    expect(temperature).toHaveAccessibleDescription(/Between 0 and 2, with at most two decimals/);
+
+    await user.clear(temperature);
+    await user.type(temperature, "3.5");
+    // The pattern cannot say the upper bound; what it can say is the shape.
+    expect(temperature).toBeValid();
+    await user.clear(temperature);
+    await user.type(temperature, "0.001");
+    expect(temperature).toBeInvalid();
+  });
+
   it("shows what each kind of evidence puts in front of the judge", async () => {
     renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
 

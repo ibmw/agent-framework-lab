@@ -92,6 +92,27 @@ export function toTicketRequest(content: TicketContentSchema): ReplaceTicketDraf
   };
 }
 
+/**
+ * How a typed tag is spelled when stored: the slug the lab will accept, or nothing.
+ *
+ * `slugify` rather than a lowercase-and-hyphenate of its own, because the rule a tag has to
+ * satisfy is `_require_slug` in `domain/ticket.py` — `^[a-z0-9]+(?:-[a-z0-9]+)*$` — and a
+ * respelling that folded case and whitespace but kept an apostrophe or a `!` would preview
+ * "Saved as `refund!`", take the chip, and be refused at save. The preview has to be the truth
+ * or it is worse than no preview.
+ *
+ * A `pattern` on the field was the alternative and is the weaker one here: `ChipListField`'s
+ * Add is a plain button with no form to submit, so constraint validation would mark the box
+ * red and still let the chip through — the trap this branch's own design-direction section
+ * calls out, that a pattern is not a refusal.
+ *
+ * The empty fallback means a tag of pure punctuation adds nothing, the way an empty field
+ * adds nothing, rather than inventing the word "entry" as an identifier would.
+ */
+export function normalizeTag(tag: string): string {
+  return slugify(tag, "");
+}
+
 /** Every document a shop currently offers, as one flat list for the suggestion picker. */
 export function documentOptions(
   resources: TicketShopResourcesSchema,

@@ -51,7 +51,12 @@ test("an author publishes a customer profile with an address book and persona", 
   await addAddress.getByLabel("Street", { exact: true }).fill("18 rue des Écoles");
   await addAddress.getByLabel("Postal code", { exact: true }).fill("69005");
   await addAddress.getByLabel("City", { exact: true }).fill("Lyon");
-  await addAddress.getByLabel("Country", { exact: true }).fill("FR");
+  // Typed as a country is typed, and read back as the country it names rather than left as
+  // two letters the author has to trust they got right.
+  const country = addAddress.getByLabel("Country", { exact: true });
+  await country.fill("fr");
+  await expect(country).toHaveValue("FR");
+  await expect(addAddress.getByText("France", { exact: true })).toBeVisible();
   await addAddress.getByRole("button", { name: "Add address" }).click();
   await expect(addressBook.getByText("Default")).toBeVisible();
 
@@ -61,6 +66,14 @@ test("an author publishes a customer profile with an address book and persona", 
     .fill("Direct, mildly anxious under uncertainty; wants quick, concrete answers.");
   await persona.getByLabel("New trait", { exact: true }).fill("direct");
   await persona.getByRole("button", { name: "Add trait" }).click();
+  // The chip is named after what it removes, not after its glyph.
+  await expect(persona.getByRole("button", { name: "Remove direct" })).toBeVisible();
+  // And the same trait twice is refused where it was typed.
+  await persona.getByLabel("New trait", { exact: true }).fill("direct");
+  await expect(persona.getByText("direct is already a trait of this persona.")).toBeVisible();
+  await persona.getByRole("button", { name: "Add trait" }).click();
+  await expect(persona.getByRole("button", { name: "Remove direct" })).toHaveCount(1);
+  await persona.getByLabel("New trait", { exact: true }).fill("");
 
   await saveDraft(page);
 

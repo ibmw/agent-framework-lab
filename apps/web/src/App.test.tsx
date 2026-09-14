@@ -363,7 +363,33 @@ describe("shop workspace", () => {
     expect(within(attributes).getByText("Waterproofing")).toBeVisible();
     expect(within(attributes).getByText("waterproofing", { selector: "code" })).toBeVisible();
     // Without the legal choices, "20k" says nothing about what else the attribute accepts.
-    expect(within(attributes).getByText("one of 10k, 20k, 30k")).toBeVisible();
+    // They read as the chips frame 2c draws, each its own item rather than one joined string.
+    expect(within(attributes).getByText("one of")).toBeVisible();
+    const choices = within(attributes).getByRole("list", { name: "Choices for Waterproofing" });
+    expect(
+      within(choices)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["10k", "20k", "30k"]);
+  });
+
+  it("reads a saved option's values back as the chips the add form enters them as", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    // Frame 2c draws pills here, one per value — not one "Ocean Blue · M · L" string.
+    const colour = options.getByRole("list", { name: "Values of Color" });
+    expect(
+      within(colour)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Ocean Blue"]);
+    const size = options.getByRole("list", { name: "Values of Size" });
+    expect(
+      within(size)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["M", "L"]);
   });
 
   it("refuses to publish while the workspace holds unsaved edits", async () => {
@@ -673,13 +699,15 @@ describe("shop workspace", () => {
 
     const options = within(await screen.findByRole("region", { name: "Options" }));
     await user.type(options.getByLabelText("Option name"), "Fit");
-    await user.type(options.getByLabelText("Values (comma separated)"), ",");
+    // An option with no value is refused, as it was when the values were one comma-separated
+    // field: the domain requires at least one and the form never builds a draft without it.
     await user.click(options.getByRole("button", { name: "Add option" }));
     expect(options.queryByRole("button", { name: "Remove Fit" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Alpine Shell Jacket" })).toBeVisible();
 
-    await user.clear(options.getByLabelText("Values (comma separated)"));
-    await user.type(options.getByLabelText("Values (comma separated)"), "Regular");
+    await user.type(options.getByLabelText("New value"), "Regular");
+    await user.click(options.getByRole("button", { name: "Add value" }));
+    expect(options.getByRole("button", { name: "Remove Regular" })).toBeVisible();
     expect(options.getByLabelText("Option key")).toHaveValue("fit");
     await user.clear(options.getByLabelText("Option key"));
     expect(options.getByLabelText("Option key")).toHaveValue("");
@@ -808,6 +836,141 @@ describe("shop workspace", () => {
  * Every assertion here selects a control by the words on it, because that is the claim —
  * a select an author reads is a select a test can find by reading.
  */
+describe("typed controls on the product editor", () => {
+  it("enters option values as chips, refuses a repeat, and names each remove", async () => {
+    const user = userEvent.setup();
+    type SavedPayload = { products: Array<{ options: Array<{ key: string; values: string[] }> }> };
+    const saved: SavedPayload[] = [];
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: SavedPayload };
+        saved.push(body.payload);
+        return HttpResponse.json(draft(currentContent));
+      }),
+    );
+
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    await user.type(options.getByLabelText("Option name"), "Fit");
+    const values = within(options.getByRole("group", { name: "Values" }));
+    await user.type(values.getByLabelText("New value"), "Regular");
+    await user.click(values.getByRole("button", { name: "Add value" }));
+    await user.type(values.getByLabelText("New value"), "Relaxed");
+    await user.click(values.getByRole("button", { name: "Add value" }));
+
+    // The lab's own rule: `_require_unique` over an option's values.
+    await user.type(values.getByLabelText("New value"), "Regular");
+    expect(values.getByLabelText("New value")).toBeInvalid();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Regular is already a value of this option.",
+    );
+    await user.click(values.getByRole("button", { name: "Add value" }));
+    expect(values.getAllByRole("button", { name: "Remove Regular" })).toHaveLength(1);
+
+    await user.clear(values.getByLabelText("New value"));
+    await user.click(options.getByRole("button", { name: "Add option" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].products[0].options.at(-1)).toEqual({
+      key: "fit",
+      name: "Fit",
+      values: ["Regular", "Relaxed"],
+    });
+  });
+
+  it("enters attribute choices as chips, and writes them in the order entered", async () => {
+    const user = userEvent.setup();
+    type SavedPayload = { products: Array<{ attributes: Array<{ choices: string[] }> }> };
+    const saved: SavedPayload[] = [];
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: SavedPayload };
+        saved.push(body.payload);
+        return HttpResponse.json(draft(currentContent));
+      }),
+    );
+
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const card = await screen.findByRole("region", { name: "Custom attributes (typed)" });
+    const attributes = within(card);
+    await user.type(attributes.getByLabelText("Label"), "Cut");
+    await user.selectOptions(attributes.getByLabelText("Type"), "choice");
+    await user.type(attributes.getByLabelText("Value"), "Regular");
+    const choices = within(attributes.getByRole("group", { name: "Choices" }));
+    await user.type(choices.getByLabelText("New choice"), "Regular");
+    await user.click(choices.getByRole("button", { name: "Add choice" }));
+    await user.type(choices.getByLabelText("New choice"), "Relaxed");
+    await user.click(choices.getByRole("button", { name: "Add choice" }));
+    await user.click(attributes.getByRole("button", { name: "Add attribute" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].products[0].attributes.at(-1)?.choices).toEqual(["Regular", "Relaxed"]);
+  });
+
+  it("constrains a price to an amount, and says the money it is priced in", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    const row = variants.getByLabelText("Price for NS-ASJ-OB-L");
+    expect(row).toHaveAttribute("inputmode", "decimal");
+    await userEvent.type(row, "abc");
+    expect(row).toBeInvalid();
+    await userEvent.clear(row);
+    await userEvent.type(row, "249.00");
+    expect(row).toBeValid();
+
+    // The rule reaches a reader without a pointer on the row itself, not only through the
+    // browser's validity bubble, which is what this branch's own convention requires.
+    expect(row).toHaveAccessibleDescription(/at most two decimals/i);
+
+    // The shop sells in one currency here, so the form's only statement of it is this line.
+    const add = variants.getByLabelText("Price (optional)");
+    expect(add).toHaveAccessibleDescription(/at most two decimals/i);
+    expect(add).toHaveAccessibleDescription(/Priced in EUR\./);
+  });
+
+  it("rates a review as five named stars rather than as a typed digit", async () => {
+    const user = userEvent.setup();
+    type SavedPayload = { products: Array<{ reviews: Array<{ rating: number }> }> };
+    const saved: SavedPayload[] = [];
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: SavedPayload };
+        saved.push(body.payload);
+        return HttpResponse.json(draft(currentContent));
+      }),
+    );
+
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const reviews = within(await screen.findByRole("region", { name: "Ratings and reviews" }));
+    const rating = within(reviews.getByRole("group", { name: "Rating" }));
+    expect(rating.getAllByRole("radio")).toHaveLength(5);
+    expect(rating.getByRole("radio", { name: "5 stars" })).toBeChecked();
+    // Neither colour nor shape carries the value on its own.
+    expect(reviews.getByRole("group", { name: "Rating" })).toHaveAccessibleDescription(
+      /5 of 5 stars\./,
+    );
+
+    await user.click(rating.getByRole("radio", { name: "4 stars" }));
+    expect(reviews.getByRole("group", { name: "Rating" })).toHaveAccessibleDescription(
+      /4 of 5 stars\./,
+    );
+
+    await user.type(reviews.getByLabelText("Author"), "Camille");
+    await user.type(reviews.getByLabelText("Body"), "Still dry.");
+    await user.click(reviews.getByRole("button", { name: "Add review" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].products[0].reviews.at(-1)?.rating).toBe(4);
+  });
+});
+
 describe("every enum has a name", () => {
   it("names a product's status in the index, with a glyph beside the word", async () => {
     renderAt(`/shops/${SHOP_ID}/products`);

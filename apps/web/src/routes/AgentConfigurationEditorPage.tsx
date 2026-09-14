@@ -17,6 +17,7 @@ import {
   replaceAgentConfigurationDraft,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
+import { FieldHint } from "../components/FieldHint";
 import {
   Card,
   canPublish,
@@ -29,7 +30,11 @@ import {
 import { ARCHITECTURE_LABELS, ARCHITECTURES } from "../lib/agents";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { labelOf, SUPPORT_PERMISSION } from "../lib/enumLabels";
-import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
+import {
+  SUPPORT_IDENTITY_PIN_RULE,
+  TEMPERATURE_PATTERN,
+  TEMPERATURE_RULE,
+} from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -510,11 +515,14 @@ export function AgentConfigurationEditorPage() {
                   }
                 />
               </label>
-              <label className={fieldLabelClasses}>
-                Temperature
+              <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={content.model.temperature}
+                  inputMode="decimal"
+                  pattern={TEMPERATURE_PATTERN}
+                  title={TEMPERATURE_RULE}
+                  placeholder="0.20"
                   onChange={(event) =>
                     edit({
                       ...content,
@@ -522,7 +530,7 @@ export function AgentConfigurationEditorPage() {
                     })
                   }
                 />
-              </label>
+              </FieldHint>
               <ToolRoundsField
                 value={content.model.max_tool_rounds}
                 onChange={(rounds) =>
@@ -548,10 +556,6 @@ export function AgentConfigurationEditorPage() {
                 </label>
               ))}
             </fieldset>
-            <p className="text-xs text-admin-muted">
-              Temperature is an exact decimal, never a binary float: it is part of what a published
-              version is fingerprinted on.
-            </p>
           </Card>
         </div>
 

@@ -172,15 +172,15 @@ variant priced in either passes the gate.
 
 ### Slice 5 — Chips, countries and numbers
 
-- [ ] Add `ChipListField` and use it for option values, attribute choices, customer traits, ticket
+- [x] Add `ChipListField` and use it for option values, attribute choices, customer traits, ticket
   tags and escalation conditions, retiring the two hand-rolled versions.
-- [ ] Add `CountryField`, a datalist of ISO codes with names on the `LocaleField` model, used in
+- [x] Add `CountryField`, a datalist of ISO codes with names on the `LocaleField` model, used in
   the customer address form and on existing address rows.
-- [ ] Constrain numbers: price and shipping fee take `inputMode="decimal"` with a two-decimal
+- [x] Constrain numbers: price and shipping fee take `inputMode="decimal"` with a two-decimal
   pattern and a currency suffix; temperature takes a decimal pattern with its range as the hint
   and the "exact decimal" note moved under the field; seed takes an integer range hint and
   `step="1"`; review rating becomes a five-star radio group.
-- [ ] Customer editor: identity email as `type="email"`, phone as `type="tel"`, background date
+- [x] Customer editor: identity email as `type="email"`, phone as `type="tel"`, background date
   defaulting to today rather than a fixed day.
 
 Frames: 2c (product editor), 6b (customer editor).

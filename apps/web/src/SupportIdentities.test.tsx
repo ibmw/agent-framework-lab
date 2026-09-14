@@ -260,6 +260,32 @@ describe("support identity workspace", () => {
     expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
   });
 
+  it("enters escalation conditions one at a time, refusing a repeat", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+
+    await screen.findByRole("heading", { name: "Northstar tier 1" });
+    const conditions = within(screen.getByRole("group", { name: "Conditions" }));
+    expect(conditions.getByText("No condition yet; this identity never escalates.")).toBeVisible();
+
+    await user.type(conditions.getByLabelText("New condition"), "a refund above 200 EUR");
+    await user.click(conditions.getByRole("button", { name: "Add condition" }));
+    expect(conditions.getByRole("button", { name: "Remove a refund above 200 EUR" })).toBeVisible();
+
+    await user.type(conditions.getByLabelText("New condition"), "a refund above 200 EUR");
+    expect(conditions.getByLabelText("New condition")).toBeInvalid();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "a refund above 200 EUR is already an escalation condition.",
+    );
+    await user.clear(conditions.getByLabelText("New condition"));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].escalation).toMatchObject({
+      conditions: ["a refund above 200 EUR"],
+    });
+  });
+
   it("publishes a clean draft and reports the frozen version", async () => {
     const user = userEvent.setup();
     currentPreview = identityPreview({ publishable: true, issues: [] });

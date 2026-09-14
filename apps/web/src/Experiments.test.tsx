@@ -1076,6 +1076,18 @@ describe("experiment setup", () => {
     expect(within(architecture).getByText("Same")).toBeVisible();
   });
 
+  it("says what a seed is and what it may be, under the field", async () => {
+    const user = userEvent.setup();
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+
+    const seed = screen.getByLabelText("Seed");
+    expect(seed).toHaveAttribute("step", "1");
+    expect(seed).toHaveAccessibleDescription(/A whole number between 0 and 4294967295\./);
+    expect(seed).toHaveAccessibleDescription(/replays the same run/);
+  });
+
   it("warns that arms differing in more than one dimension measure none of them", async () => {
     const user = userEvent.setup();
     renderSetup();

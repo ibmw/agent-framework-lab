@@ -89,13 +89,23 @@ test("an author publishes a shop with size and colour variants and reads the fro
 
   const options = card(page, "Options");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
-  await options
-    .getByLabel("Values (comma separated)", { exact: true })
-    .fill("Ocean Blue, Charcoal");
+  // One value at a time, each becoming a chip named after itself — and the second "Ocean
+  // Blue" this shop will never carry is refused where it is typed rather than dropped.
+  await options.getByLabel("New value", { exact: true }).fill("Ocean Blue");
+  await options.getByRole("button", { name: "Add value" }).click();
+  await options.getByLabel("New value", { exact: true }).fill("Ocean Blue");
+  await expect(options.getByText("Ocean Blue is already a value of this option.")).toBeVisible();
+  await options.getByRole("button", { name: "Add value" }).click();
+  await expect(options.getByRole("button", { name: "Remove Ocean Blue" })).toHaveCount(1);
+  await options.getByLabel("New value", { exact: true }).fill("Charcoal");
+  await options.getByRole("button", { name: "Add value" }).click();
   await expect(options.getByLabel("Option key", { exact: true })).toHaveValue("color");
   await options.getByRole("button", { name: "Add option" }).click();
   await options.getByLabel("Option name", { exact: true }).fill("Size");
-  await options.getByLabel("Values (comma separated)", { exact: true }).fill("M, L");
+  await options.getByLabel("New value", { exact: true }).fill("M");
+  await options.getByRole("button", { name: "Add value" }).click();
+  await options.getByLabel("New value", { exact: true }).fill("L");
+  await options.getByRole("button", { name: "Add value" }).click();
   await expect(options.getByLabel("Option key", { exact: true })).toHaveValue("size");
   await options.getByRole("button", { name: "Add option" }).click();
 

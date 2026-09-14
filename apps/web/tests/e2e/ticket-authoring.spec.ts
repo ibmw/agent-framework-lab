@@ -80,7 +80,8 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
   const options = card(page, "Options");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
-  await options.getByLabel("Values (comma separated)", { exact: true }).fill("Ocean Blue");
+  await options.getByLabel("New value", { exact: true }).fill("Ocean Blue");
+  await options.getByRole("button", { name: "Add value" }).click();
   await options.getByRole("button", { name: "Add option" }).click();
   const variants = card(page, "Variants");
   await variants.getByLabel("New variant SKU", { exact: true }).fill("NS-ASJ-OB-M");

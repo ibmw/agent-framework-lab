@@ -470,3 +470,106 @@ place beneath the field, on every surface that uses it, because `en-GB` is a str
 can mistype into something plausible. A tag the shortlist does not name echoes nothing: the lab
 takes it and this workspace has no words for it, and repeating the tag would look like
 confirmation of something nothing confirmed.
+
+## Revision — chips, a country, and what a number field says (2026-09-14)
+
+Slice 5. The five sections above are unchanged; this one covers what they did not — a control
+that holds a *list* of short values, a suggestion list too large to be a shortlist, and what a
+field that takes a number is allowed to accept.
+
+**A list entered one value at a time is one control.** `ChipListField` is the primitive:
+each stored value is a chip carrying a remove button named after the value, and the field that
+takes the next one carries the list's rule as a `FieldHint`. The rule is tied to the input
+rather than to the group, because what it constrains is the value being typed; `FieldGroupHint`
+stays for a rule about a *set* that no one control can state, which is the currency default.
+The chips and the field sit in one `<fieldset>` named by a `<legend>`, so the list has a name
+to be read as a whole.
+
+**The remove button is named after what it removes, always.** "Remove Ocean Blue", not "✕".
+The glyph is `aria-hidden` and decorative, the way a `StatusPill`'s glyph is. This was true of
+the ticket's tags and not of the customer's traits or the identity's escalation conditions, and
+the difference was an oversight rather than a decision.
+
+**Duplicates belong to the primitive, and are said rather than swallowed.** Each of the five
+lists it serves — option values, attribute choices, persona traits, ticket tags, escalation
+conditions — is `_require_unique` in the domain, so refusal is one rule of the lab's and not
+five callers' preferences. It reads on `DerivedIdField`'s collision model: the second line
+turns to the error treatment and is announced, the field is marked invalid, and the Add press
+does nothing. A refusal that is only a no-op teaches an operator that the button is broken.
+
+**Which lists the primitive owns.** Five: option values and attribute choices in the product
+editor, persona traits in the customer editor, the ticket's tags, and an identity's escalation
+conditions. PLAN-UX calls these "the two hand-rolled versions", which was a miscount — traits,
+tags and conditions were all hand-rolled, and the product editor asked for comma-separated
+text. A sixth exists and is deliberately left alone: the results page's **Notes & tags**
+(`ExperimentResultsPage`), whose remove button is already named, whose values are an operator's
+own filing facets on a finished run rather than content inside a versioned definition, and
+whose add is a real `<form>` posting to the annotations endpoint rather than an edit to a
+draft. It is the obvious next adopter and nothing here regresses by leaving it; a slice that
+touches that card should move it.
+
+**Respelling is a prop, because only the caller knows whether there is one.** A ticket tag is
+stored as a slug; a persona trait is stored as written, and frame 6b draws "mildly anxious"
+with its space. `ChipListField` therefore takes `normalize`, the same function under the same
+name `DerivedIdField` takes, and where a caller passes one the field previews the result as
+"Saved as `wrong-address`" — the paired line of the *currencies* section, applied to a value
+the field is about to store — and compares candidates against the stored spelling, because that
+is the spelling the lab holds unique.
+
+**A respelling has to reach the shape the gate wants, not most of the way to it.** A tag's is
+`slugify`, because `domain/ticket.py` holds tags to `_require_slug`; folding case and
+whitespace but keeping punctuation would preview "Saved as `refund!`" and be refused at save,
+which is worse than no preview. A `pattern` on the field was the alternative and is the weaker
+one: `ChipListField`'s Add is a plain button with no form to submit, so constraint validation
+would paint the box red and let the chip through — a pattern is not a refusal here either. For
+the same reason every caller passes the contract's own `maxLength`, so the field stops where
+the save would.
+
+**Where a suggestion list is not a vocabulary.** `CountryField` is `LocaleField`: a datalist
+that suggests rather than a select that refuses, holding the code and echoing the country
+beneath the field. Its data is `lib/countries.ts` and deliberately *not* `lib/enumLabels.ts` —
+that module's rule is one table per closed set the contract publishes, keyed to the generated
+union and swept against it, and an address country is `string` with `pattern: ^[A-Z]{2}$`.
+`require_country_code` says why in as many words: it checks the shape and not the register,
+because "a closed country list would have to be maintained for no simulation benefit". A table
+in the registry would be swept against nothing and would claim a closed set the lab does not
+hold. The one way it departs from `LocaleField` is length: a locale shortlist is bounded by
+the currencies the lab can price in, while a synthetic customer may live anywhere, so all 249
+alpha-2 codes are there. That is ~7.6 KB minified and ~2.4 KB gzipped against a 170 KB gzipped
+bundle, which is not enough to earn a split; a table that has to be fetched would be one more
+thing to fail while an operator types an address.
+
+**A number field says what it accepts, and does not accept what it cannot carry.** The rule is
+the contract's, spelled once in `lib/fieldRules.ts` and used by both the `pattern` and the hint
+so the two cannot drift: money is `MoneySchema.amount`, temperature is the contract's pattern
+inside the range `agent_configuration.py` and `judge.py` enforce, a seed is the contract's
+unsigned 32-bit bound. `inputMode="decimal"` shapes the keyboard; `pattern` marks the field
+invalid.
+
+**A pattern is not a refusal, so a value the form cannot carry does not reach a save.** The
+shipping fee is where this bites: `previewTotals` reads an unparseable amount as nothing so a
+half-typed fee does not turn every row into NaN, which means "abc" looks on screen exactly like
+a fee of zero. The order editor therefore refuses the save and says so, the rule `clampQuantity`
+already followed for quantities — the editor holds only an order the lab would take.
+
+**A saved row shows the same chips it was entered with.** Frame 2c draws an option's values as
+pills on the row, so the row renders a named, read-only `ChipList` — the pill minus the button
+— rather than the `·`-joined string it carried before. Opening a saved entry's *fields* in
+place is a later slice's work and this is not that: it is the frame's rendering of what is
+already there.
+
+**A rule under a table row lives once, not once per row.** A hint line beside twenty price
+boxes would be twenty copies of one sentence, so the rows' inputs share one `sr-only`
+description through `aria-describedby`, which may name an element anywhere on the page. The
+same holds where a card has no room for a standing line at all: the order editor's shipping fee
+carries the money rule in a paragraph that is always present and always in the field's
+description, `sr-only` until the fee is refused and then visible and announced — `FieldHint`'s
+`extra` slot, open-coded where no `FieldHint` fits. `title=` stays for the browser's own
+validity bubble and is never the only carrier.
+
+**A closed set of five is five controls, not a typed digit.** The review rating is a radio
+group: one radio per star, each named ("4 stars"), arrow-key navigable, with the stars
+themselves `aria-hidden`. There is no "no rating" — `ReviewSchema.rating` is required, and a
+sixth state would exist only to be refused when Add was pressed. Because a filled star differs
+from an empty one by colour and shape alone, the group's second line says the count in words,
+which is the same rule the status pill follows.

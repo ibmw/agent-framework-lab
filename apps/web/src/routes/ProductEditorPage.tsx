@@ -4,9 +4,11 @@ import type {
   ProductViewSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { ChipList, ChipListField } from "../components/ChipListField";
 import { DerivedIdField } from "../components/DerivedIdField";
+import { FieldGroupHint, FieldHint } from "../components/FieldHint";
 import {
   Card,
   EntryId,
@@ -25,9 +27,15 @@ import {
   VARIANT_AVAILABILITY,
 } from "../lib/enumLabels";
 import {
+  ATTRIBUTE_CHOICES_RULE,
+  CHIP_LABEL_MAX_LENGTH,
   DERIVED_KEBAB_RULE,
   KEBAB_PATTERN,
+  MONEY_PATTERN,
+  MONEY_RULE,
+  OPTION_VALUES_RULE,
   REFERENCE_PATTERN,
+  REVIEW_RATING_RULE,
   VARIANT_SKU_RULE,
 } from "../lib/fieldRules";
 import {
@@ -193,28 +201,24 @@ interface PricedEditorProps extends EditorProps {
 function OptionsCard({ product, onChange }: EditorProps) {
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
-  const [values, setValues] = useState("");
+  const [values, setValues] = useState<string[]>([]);
   const taken = product.options.map((option) => option.key);
   const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(name, ""), taken);
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsed = values
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (!key || taken.includes(key) || parsed.length === 0) {
+    if (!key || taken.includes(key) || values.length === 0) {
       return;
     }
     const option: OptionSchema = {
       key,
       name,
-      values: parsed,
+      values,
     };
     onChange({ ...product, options: [...product.options, option] });
     setKey("");
     setName("");
-    setValues("");
+    setValues([]);
   }
 
   return (
@@ -224,9 +228,9 @@ function OptionsCard({ product, onChange }: EditorProps) {
           <li key={option.key} className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{option.name}</span>
             <EntryId value={option.key} />
-            <span className="min-w-0 [overflow-wrap:anywhere] text-admin-muted">
-              {option.values.join(" · ")}
-            </span>
+            {/* Frame 2c draws an option's values as pills on the saved row, the same pills
+                the add form below enters them as. */}
+            <ChipList label={`Values of ${option.name}`} values={option.values} />
             <button
               className={`${subtleButtonClasses} ml-auto`}
               type="button"
@@ -245,39 +249,44 @@ function OptionsCard({ product, onChange }: EditorProps) {
           <li className="text-admin-muted">No options yet.</li>
         ) : null}
       </ul>
-      <form className="grid gap-2 sm:grid-cols-[1fr_2fr_1fr_auto]" onSubmit={add}>
-        <label className={fieldLabelClasses}>
-          Option name
-          <input
-            className={fieldControlClasses}
-            value={name}
+      <form className="grid gap-2" onSubmit={add}>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className={fieldLabelClasses}>
+            Option name
+            <input
+              className={fieldControlClasses}
+              value={name}
+              required
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <DerivedIdField
+            label="Option key"
+            hint={DERIVED_KEBAB_RULE}
+            value={key}
+            suggested={suggestedKey}
+            taken={taken}
+            takenBase={takenBase}
+            takenPlace="in the draft"
+            pattern={KEBAB_PATTERN}
+            title={DERIVED_KEBAB_RULE}
             required
-            onChange={(event) => setName(event.target.value)}
+            onChange={setKey}
           />
-        </label>
-        <label className={fieldLabelClasses}>
-          Values (comma separated)
-          <input
-            className={fieldControlClasses}
-            value={values}
-            required
-            onChange={(event) => setValues(event.target.value)}
-          />
-        </label>
-        <DerivedIdField
-          label="Option key"
-          hint={DERIVED_KEBAB_RULE}
-          value={key}
-          suggested={suggestedKey}
-          taken={taken}
-          takenBase={takenBase}
-          takenPlace="in the draft"
-          pattern={KEBAB_PATTERN}
-          title={DERIVED_KEBAB_RULE}
-          required
-          onChange={setKey}
+        </div>
+        <ChipListField
+          legend="Values"
+          label="New value"
+          hint={OPTION_VALUES_RULE}
+          maxLength={CHIP_LABEL_MAX_LENGTH}
+          addLabel="Add value"
+          placeholder="Ocean Blue"
+          empty="No value yet; an option needs at least one."
+          values={values}
+          takenPlace="a value of this option"
+          onChange={setValues}
         />
-        <button className={`${accentButtonClasses} self-end`} type="submit">
+        <button className={`${accentButtonClasses} justify-self-start`} type="submit">
           Add option
         </button>
       </form>
@@ -287,6 +296,9 @@ function OptionsCard({ product, onChange }: EditorProps) {
 
 function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   const defaultCurrency = currencies[0];
+  // One description for every row's price box: the rule is the same on all of them, and a
+  // reader hears it wherever they land in the table.
+  const priceRuleId = useId();
   const [optionValues, setOptionValues] = useState<Record<string, string>>({});
   const chosenValues = product.options.map(
     (option) => optionValues[option.key] ?? option.values[0],
@@ -355,23 +367,39 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                   <label className="sr-only" htmlFor={`price-${variant.sku}`}>
                     Price for {variant.sku}
                   </label>
-                  <input
-                    id={`price-${variant.sku}`}
-                    className={`${fieldControlClasses} max-w-28`}
-                    value={variant.price?.amount ?? ""}
-                    placeholder={variantPriceLabel(variant)}
-                    onChange={(event) =>
-                      updateVariant(index, {
-                        ...variant,
-                        price: event.target.value
-                          ? {
-                              amount: event.target.value,
-                              currency: variant.price?.currency ?? defaultCurrency,
-                            }
-                          : null,
-                      })
-                    }
-                  />
+                  {/* The currency is beside the box rather than inside its label, so a row
+                      that is priced says which money it is priced in without the operator
+                      opening the header. A hint line per row would be twenty copies of one
+                      sentence down the table, so every row's field is described by the one
+                      below it instead: `aria-describedby` may name an element anywhere, and
+                      the rule reaching a reader without a pointer is the point of the
+                      convention. `title=` stays for the browser's own validity bubble. */}
+                  <span className="flex items-center gap-1.5">
+                    <input
+                      id={`price-${variant.sku}`}
+                      className={`${fieldControlClasses} max-w-28`}
+                      value={variant.price?.amount ?? ""}
+                      inputMode="decimal"
+                      pattern={MONEY_PATTERN}
+                      title={MONEY_RULE}
+                      aria-describedby={priceRuleId}
+                      placeholder={variantPriceLabel(variant)}
+                      onChange={(event) =>
+                        updateVariant(index, {
+                          ...variant,
+                          price: event.target.value
+                            ? {
+                                amount: event.target.value,
+                                currency: variant.price?.currency ?? defaultCurrency,
+                              }
+                            : null,
+                        })
+                      }
+                    />
+                    <span className="text-admin-muted">
+                      {variant.price?.currency ?? defaultCurrency}
+                    </span>
+                  </span>
                 </td>
                 <td className={tableCellClasses}>
                   <label className="sr-only" htmlFor={`availability-${variant.sku}`}>
@@ -439,6 +467,9 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
           </tbody>
         </table>
       </div>
+      <p id={priceRuleId} className="sr-only">
+        {MONEY_RULE}
+      </p>
 
       <form className="grid gap-2 sm:grid-cols-2" onSubmit={add}>
         {product.options.map((option) => (
@@ -461,15 +492,25 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
             </select>
           </div>
         ))}
-        <label className={fieldLabelClasses}>
-          Price (optional)
+        {/* The currency is a control of its own where the shop sells in more than one, so
+            the suffix only says what the form is not already asking: the money a single-
+            currency shop prices in, which nothing else on this form names. */}
+        <FieldHint
+          label="Price"
+          hint={MONEY_RULE}
+          extra={currencies.length > 1 ? undefined : `Priced in ${defaultCurrency}.`}
+          optional
+        >
           <input
             className={fieldControlClasses}
             value={amount}
             inputMode="decimal"
+            pattern={MONEY_PATTERN}
+            title={MONEY_RULE}
+            placeholder="249.00"
             onChange={(event) => setAmount(event.target.value)}
           />
-        </label>
+        </FieldHint>
         {currencies.length > 1 ? (
           <label className={fieldLabelClasses}>
             Currency
@@ -582,7 +623,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
   const [attributeType, setAttributeType] = useState<AttributeSchema["attribute_type"]>("text");
   const [value, setValue] = useState("");
   const [unit, setUnit] = useState("");
-  const [choices, setChoices] = useState("");
+  const [choices, setChoices] = useState<string[]>([]);
   const taken = product.attributes.map((attribute) => attribute.key);
   const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(label, ""), taken);
 
@@ -597,20 +638,14 @@ function AttributesCard({ product, onChange }: EditorProps) {
       attribute_type: attributeType,
       value,
       unit: attributeType === "measurement" ? unit : null,
-      choices:
-        attributeType === "choice"
-          ? choices
-              .split(",")
-              .map((entry) => entry.trim())
-              .filter(Boolean)
-          : [],
+      choices: attributeType === "choice" ? choices : [],
     };
     onChange({ ...product, attributes: [...product.attributes, attribute] });
     setKey("");
     setLabel("");
     setValue("");
     setUnit("");
-    setChoices("");
+    setChoices([]);
   }
 
   return (
@@ -626,7 +661,13 @@ function AttributesCard({ product, onChange }: EditorProps) {
               {attribute.unit ? ` ${attribute.unit}` : ""}
             </span>
             {attribute.choices.length > 0 ? (
-              <span className="text-admin-muted">one of {attribute.choices.join(", ")}</span>
+              <>
+                {/* "one of" is the rule the lab applies — `shop.py` refuses a choice
+                    attribute whose value is not among them — so it stays a word, and the
+                    choices beside it become the chips frame 2c draws. */}
+                <span className="text-admin-muted">one of</span>
+                <ChipList label={`Choices for ${attribute.label}`} values={attribute.choices} />
+              </>
             ) : null}
             <button
               className={`${subtleButtonClasses} ml-auto`}
@@ -706,15 +747,20 @@ function AttributesCard({ product, onChange }: EditorProps) {
           </label>
         ) : null}
         {attributeType === "choice" ? (
-          <label className={fieldLabelClasses}>
-            Choices (comma separated)
-            <input
-              className={fieldControlClasses}
-              value={choices}
-              required
-              onChange={(event) => setChoices(event.target.value)}
+          <div className="sm:col-span-3">
+            <ChipListField
+              legend="Choices"
+              label="New choice"
+              hint={ATTRIBUTE_CHOICES_RULE}
+              maxLength={CHIP_LABEL_MAX_LENGTH}
+              addLabel="Add choice"
+              placeholder="Regular"
+              empty="No choice yet; a choice attribute needs at least one."
+              values={choices}
+              takenPlace="a choice of this attribute"
+              onChange={setChoices}
             />
-          </label>
+          </div>
         ) : null}
         <button className={`${accentButtonClasses} self-end`} type="submit">
           Add attribute
@@ -785,17 +831,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
             onChange={(event) => setAuthor(event.target.value)}
           />
         </label>
-        <label className={fieldLabelClasses}>
-          Rating
-          <input
-            type="number"
-            min={1}
-            max={5}
-            className={fieldControlClasses}
-            value={rating}
-            onChange={(event) => setRating(Number(event.target.value))}
-          />
-        </label>
+        <StarRatingField value={rating} onChange={setRating} />
         <label className={`${fieldLabelClasses} sm:col-span-3`}>
           Body
           <input
@@ -813,5 +849,55 @@ function ReviewsCard({ product, onChange }: EditorProps) {
         The rating summary is derived from these reviews; it is never authored directly.
       </p>
     </Card>
+  );
+}
+
+const STARS = [1, 2, 3, 4, 5];
+
+/**
+ * The rating a synthetic review carries: five radios, one per star.
+ *
+ * A number box asked an operator to type a digit into a field whose meaning is a row of
+ * stars, and accepted `0` and `7` on the way to being refused by the contract. Five radios
+ * carry the same payload — `ReviewSchema.rating` is an integer between 1 and 5 — while being
+ * the shape the value actually has: a closed set of five, arrow-key navigable, each with its
+ * own name, and impossible to leave holding something the lab would refuse.
+ *
+ * **There is no "no rating".** The contract requires the field, the add form has always
+ * submitted one, and a sixth state would exist only to be refused when Add was pressed. The
+ * five stars this form opens on are the default this form already had.
+ *
+ * The stars themselves are `aria-hidden` and the accessible name of each radio is its own
+ * sr-only wording ("4 stars"), so the row is never read as five identical glyphs. The group's
+ * second line says the chosen count in words, because a filled star and an empty one differ
+ * by colour and shape alone, which the design direction does not let carry a value.
+ */
+function StarRatingField({ value, onChange }: { value: number; onChange: (star: number) => void }) {
+  const name = useId();
+  return (
+    <FieldGroupHint legend="Rating" hint={REVIEW_RATING_RULE} extra={`${value} of 5 stars.`}>
+      <div className="flex items-center gap-0.5">
+        {STARS.map((star) => (
+          <label key={star} className="cursor-pointer">
+            <input
+              className="peer sr-only"
+              type="radio"
+              name={name}
+              checked={value === star}
+              onChange={() => onChange(star)}
+            />
+            <span
+              aria-hidden
+              className={`rounded px-0.5 text-lg peer-focus-visible:ring-2 peer-focus-visible:ring-lab-accent/40 ${
+                star <= value ? "text-lab-accent" : "text-admin-border"
+              }`}
+            >
+              ★
+            </span>
+            <span className="sr-only">{star === 1 ? "1 star" : `${star} stars`}</span>
+          </label>
+        ))}
+      </div>
+    </FieldGroupHint>
   );
 }

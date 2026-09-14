@@ -14,6 +14,7 @@ import {
   readJudgeConfigurationResources,
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
+import { FieldHint } from "../components/FieldHint";
 import {
   Card,
   canPublish,
@@ -25,6 +26,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { JUDGE_EVIDENCE_SCOPE } from "../lib/enumLabels";
+import { TEMPERATURE_PATTERN, TEMPERATURE_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -273,11 +275,14 @@ export function JudgeConfigurationEditorPage() {
                 <option key={model} value={model} />
               ))}
             </datalist>
-            <label className={fieldLabelClasses}>
-              Temperature
+            <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
               <input
                 className={fieldControlClasses}
                 value={content.model.temperature}
+                inputMode="decimal"
+                pattern={TEMPERATURE_PATTERN}
+                title={TEMPERATURE_RULE}
+                placeholder="0.00"
                 onChange={(event) =>
                   edit({
                     ...content,
@@ -285,7 +290,7 @@ export function JudgeConfigurationEditorPage() {
                   })
                 }
               />
-            </label>
+            </FieldHint>
             <p className="text-xs text-admin-muted">
               Zero by default: a judge is rerun to see whether a verdict holds, and one that varied
               for its own reasons would make every rerun unreadable.

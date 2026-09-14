@@ -5,7 +5,7 @@ import type {
   ShopOrderResponse,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
@@ -18,6 +18,7 @@ import {
   StatusPill,
 } from "../components/WorkspaceChrome";
 import { slugify, uniqueId } from "../lib/entryIds";
+import { isMoneyAmount, MONEY_PATTERN, MONEY_RULE } from "../lib/fieldRules";
 import {
   clampQuantity,
   EVENT_KINDS,
@@ -78,6 +79,8 @@ export function OrderEditorPage() {
   // holds a quantity the contract accepts, so a half-typed or cleared field can neither skew
   // the totals on screen nor reach a save; the field still shows exactly what was typed.
   const [quantityDraft, setQuantityDraft] = useState<{ id: string; text: string } | null>(null);
+  // Declared with the other hooks because this component returns early while it loads.
+  const feeRuleId = useId();
 
   const apply = useCallback((response: ShopOrderResponse) => {
     setOrder(response);
@@ -136,6 +139,12 @@ export function OrderEditorPage() {
 
   async function save() {
     if (!content) {
+      return;
+    }
+    // The order the editor holds is one the lab would take, the rule `clampQuantity` follows
+    // for quantities. A fee that is not an amount is not sent and silently refused elsewhere.
+    if (!isMoneyAmount(content.shipping_fee.amount)) {
+      setError(`The shipping fee is not an amount. ${MONEY_RULE}`);
       return;
     }
     setSaving(true);
@@ -249,6 +258,7 @@ export function OrderEditorPage() {
   }
 
   const totals = previewTotals(content);
+  const feeRefused = !isMoneyAmount(content.shipping_fee.amount);
   const address = content.shipping_address;
   const addressBook = customer?.addresses ?? [];
   const selection = addressBook.find((entry) => entry.id === addressId);
@@ -494,19 +504,43 @@ export function OrderEditorPage() {
               </div>
               <label className="flex items-center justify-between gap-3">
                 <span className="text-xs font-semibold text-admin-muted">Shipping fee</span>
-                <input
-                  className={`${fieldControlClasses} w-32`}
-                  value={content.shipping_fee.amount}
-                  inputMode="decimal"
-                  aria-label="Shipping fee"
-                  onChange={(event) =>
-                    edit({
-                      ...content,
-                      shipping_fee: { ...content.shipping_fee, amount: event.target.value },
-                    })
-                  }
-                />
+                <span className="flex items-center gap-1.5">
+                  <input
+                    className={`${fieldControlClasses} w-32`}
+                    value={content.shipping_fee.amount}
+                    inputMode="decimal"
+                    pattern={MONEY_PATTERN}
+                    title={MONEY_RULE}
+                    aria-label="Shipping fee"
+                    aria-describedby={feeRuleId}
+                    aria-invalid={feeRefused || undefined}
+                    onChange={(event) =>
+                      edit({
+                        ...content,
+                        shipping_fee: { ...content.shipping_fee, amount: event.target.value },
+                      })
+                    }
+                  />
+                  <span className="text-admin-muted">{content.currency}</span>
+                </span>
               </label>
+              {/* The rule, always in the field's accessible description and visible only once
+                  it has been broken — `FieldHint`'s `extra` slot in the one place a card of
+                  totals has no room for a standing hint line. The element and its words stay
+                  put, so an invalid fee announces once rather than on every keystroke; only
+                  the `role` and the styling change.
+
+                  Saying it at all is what keeps "abc" from reading as an accepted fee of
+                  zero: the totals above have already counted it as nothing, because `cents`
+                  contributes 0 for anything unparseable so a half-typed fee cannot turn every
+                  row into NaN. */}
+              <p
+                id={feeRuleId}
+                role={feeRefused ? "alert" : undefined}
+                className={feeRefused ? "text-xs text-lab-error" : "sr-only"}
+              >
+                {MONEY_RULE}
+              </p>
               <div className="flex justify-between font-semibold">
                 <span>Total</span>
                 <span>

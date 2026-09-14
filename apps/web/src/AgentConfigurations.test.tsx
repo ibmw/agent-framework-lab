@@ -361,6 +361,25 @@ describe("agent configuration workspace", () => {
     );
   });
 
+  it("constrains the temperature and puts its range and its exactness under the field", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+
+    const temperature = await screen.findByLabelText("Temperature");
+    expect(temperature).toHaveAttribute("inputmode", "decimal");
+    // The note used to sit at the foot of the card, three controls away from the field it is
+    // about; the range the domain enforces was nowhere.
+    expect(temperature).toHaveAccessibleDescription(/Between 0 and 2, with at most two decimals/);
+    expect(temperature).toHaveAccessibleDescription(/never a binary float/);
+
+    await user.clear(temperature);
+    await user.type(temperature, "0.25");
+    expect(temperature).toBeValid();
+    await user.clear(temperature);
+    await user.type(temperature, "0.256");
+    expect(temperature).toBeInvalid();
+  });
+
   it("repeats the pinning sentence on the editor", async () => {
     renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
     expect(

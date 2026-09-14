@@ -500,6 +500,16 @@ describe("starting states", () => {
     expect(screen.queryByRole("button", { name: "Materialize snapshot" })).toBeNull();
   });
 
+  it("says what a seed is and what it may be, under the field", async () => {
+    renderPage();
+    await screen.findByRole("button", { name: "Materialize snapshot" });
+
+    const seed = screen.getByLabelText("Seed");
+    expect(seed).toHaveAttribute("step", "1");
+    expect(seed).toHaveAccessibleDescription(/A whole number between 0 and 4294967295\./);
+    expect(seed).toHaveAccessibleDescription(/replays the same run/);
+  });
+
   it("refuses to freeze against a seed the author cleared", async () => {
     const user = userEvent.setup();
     renderPage();

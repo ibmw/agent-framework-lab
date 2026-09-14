@@ -8,7 +8,7 @@ import type {
   HiddenFactSchema,
   LoyaltyTier,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -21,6 +21,8 @@ import {
   replaceCustomerProfileDraft,
   toProfilePayload,
 } from "../api/customerProfiles";
+import { ChipListField } from "../components/ChipListField";
+import { CountryField } from "../components/CountryField";
 import { LocaleField } from "../components/LocaleField";
 import {
   Card,
@@ -34,6 +36,8 @@ import {
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
+import { CHIP_LABEL_MAX_LENGTH, PERSONA_TRAITS_RULE } from "../lib/fieldRules";
+import { todayInput } from "../lib/orders";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -69,7 +73,6 @@ export function CustomerEditorPage() {
   const [attachedShops, setAttachedShops] = useState<string[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const [trait, setTrait] = useState("");
 
   const reloadShops = useCallback(
     async (signal?: AbortSignal) => {
@@ -199,18 +202,6 @@ export function CustomerEditorPage() {
     edit({ ...content, hidden_facts: content.hidden_facts.filter((fact) => fact.id !== id) });
   }
 
-  function addTrait(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!content || content.persona.traits.includes(trait)) {
-      return;
-    }
-    edit({
-      ...content,
-      persona: { ...content.persona, traits: [...content.persona.traits, trait] },
-    });
-    setTrait("");
-  }
-
   async function toggleShop(targetShopId: string, attach: boolean) {
     setAttachError(null);
     try {
@@ -316,6 +307,7 @@ export function CustomerEditorPage() {
                 Email
                 <input
                   className={fieldControlClasses}
+                  type="email"
                   value={content.identity.email}
                   onChange={(event) =>
                     edit({
@@ -329,6 +321,7 @@ export function CustomerEditorPage() {
                 Phone
                 <input
                   className={fieldControlClasses}
+                  type="tel"
                   value={content.identity.phone ?? ""}
                   onChange={(event) =>
                     edit({
@@ -518,16 +511,10 @@ export function CustomerEditorPage() {
                           }
                         />
                       </label>
-                      <label className={fieldLabelClasses}>
-                        Country
-                        <input
-                          className={fieldControlClasses}
-                          value={entry.country}
-                          onChange={(event) =>
-                            updateAddress(entry.id, { country: event.target.value.toUpperCase() })
-                          }
-                        />
-                      </label>
+                      <CountryField
+                        value={entry.country}
+                        onChange={(country) => updateAddress(entry.id, { country })}
+                      />
                     </div>
                   </li>
                 ))}
@@ -561,40 +548,18 @@ export function CustomerEditorPage() {
                 }
               />
             </label>
-            <div className="flex flex-wrap items-center gap-2">
-              {content.persona.traits.map((entry) => (
-                <button
-                  key={entry}
-                  className={subtleButtonClasses}
-                  type="button"
-                  onClick={() =>
-                    edit({
-                      ...content,
-                      persona: {
-                        ...content.persona,
-                        traits: content.persona.traits.filter((value) => value !== entry),
-                      },
-                    })
-                  }
-                >
-                  {entry} ✕
-                </button>
-              ))}
-            </div>
-            <form className="flex flex-wrap items-end gap-2" onSubmit={addTrait}>
-              <label className={fieldLabelClasses}>
-                New trait
-                <input
-                  className={fieldControlClasses}
-                  value={trait}
-                  required
-                  onChange={(event) => setTrait(event.target.value)}
-                />
-              </label>
-              <button className={inkButtonClasses} type="submit">
-                Add trait
-              </button>
-            </form>
+            <ChipListField
+              legend="Traits"
+              label="New trait"
+              hint={PERSONA_TRAITS_RULE}
+              maxLength={CHIP_LABEL_MAX_LENGTH}
+              addLabel="Add trait"
+              placeholder="mildly anxious"
+              empty="No trait yet."
+              values={content.persona.traits}
+              takenPlace="a trait of this persona"
+              onChange={(traits) => edit({ ...content, persona: { ...content.persona, traits } })}
+            />
           </Card>
 
           <Card
@@ -866,17 +831,9 @@ function AddressForm({
             onChange={(event) => setCity(event.target.value)}
           />
         </label>
-        <label className={fieldLabelClasses}>
-          Country
-          <input
-            className={`${fieldControlClasses} max-w-20`}
-            value={country}
-            required
-            pattern="[A-Z]{2}"
-            title="Uppercase ISO 3166-1 alpha-2, for example FR"
-            onChange={(event) => setTypedCountry(event.target.value.toUpperCase())}
-          />
-        </label>
+        <div className="min-w-44">
+          <CountryField value={country} required onChange={setTypedCountry} />
+        </div>
         <button className={inkButtonClasses} type="submit">
           Add address
         </button>
@@ -891,7 +848,10 @@ function BackgroundForm({
   onAdd: (kind: BackgroundKind, occurredOn: string, note: string) => void;
 }) {
   const [kind, setKind] = useState<BackgroundKind>("purchase");
-  const [occurredOn, setOccurredOn] = useState("2026-01-01");
+  // Today, not a date in someone else's year. A background entry is authored history and its
+  // day is a real choice, but the nearest plausible one is the day the author is standing in
+  // — a fixed `2026-01-01` was a value nobody picked that every entry carried until noticed.
+  const [occurredOn, setOccurredOn] = useState(todayInput);
   const [note, setNote] = useState("");
 
   return (

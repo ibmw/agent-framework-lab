@@ -563,6 +563,34 @@ describe("order editor", () => {
     expect(quantity).toHaveValue(999);
   });
 
+  it("refuses to save a shipping fee that is not an amount", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+
+    const fee = screen.getByLabelText("Shipping fee");
+    expect(fee).toHaveAttribute("inputmode", "decimal");
+    // The rule is in the field's description before it is broken, not only once it is.
+    expect(fee).toHaveAccessibleDescription(/at most two decimals/i);
+    await user.clear(fee);
+    await user.type(fee, "abc");
+
+    expect(fee).toBeInvalid();
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+
+    // Nothing was sent, and the reason is on the page rather than the fee quietly counting
+    // as zero in the total beside it.
+    expect(savedRequests).toHaveLength(0);
+    expect(screen.getByText(/The shipping fee is not an amount/)).toBeVisible();
+
+    await user.clear(fee);
+    await user.type(fee, "4.90");
+    expect(fee).toBeValid();
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].shipping_fee_amount).toBe("4.90");
+  });
+
   it("lets an author step back from a delete", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
