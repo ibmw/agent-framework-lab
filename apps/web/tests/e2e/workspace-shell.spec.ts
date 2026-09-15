@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./support/e2e";
 
 /**
  * The workspace shell owns the viewport: the rail and the content pane scroll independently,

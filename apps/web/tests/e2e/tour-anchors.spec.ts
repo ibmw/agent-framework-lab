@@ -1,7 +1,8 @@
-import { test as base, expect } from "@playwright/test";
 import { SETUP_CHAIN, stepHref } from "../../src/lib/setupPath";
 import { TOUR_IDS, TOURS, type TourId, tourSteps } from "../../src/lib/tours";
+import { test as base, expect } from "./support/e2e";
 import { type BuiltLab, buildLab } from "./support/lab";
+import { webOrigin } from "./support/stack";
 
 /**
  * The anchor sweep: one case per surface with a tour, driven off the tour table itself.
@@ -46,14 +47,16 @@ const SURFACES: Record<TourId, (lab: BuiltLab) => string> = {
  *
  * The bench and the results screen are the end of a ten-step dependency order, so reaching them
  * costs a shop, a customer, an order, a ticket, both libraries, a published recipe, an identity,
- * two published configurations and a started experiment. That is a great deal of writing against
- * the one SQLite file this suite shares, and it is worth doing once rather than once per surface.
+ * two published configurations and a started experiment. That is a great deal of writing, and it
+ * is worth doing once rather than once per surface.
  */
 const test = base.extend<object, { lab: BuiltLab }>({
   lab: [
     async ({ playwright }, use, workerInfo) => {
+      // This worker's own frontend, and through its proxy this worker's own API: a worker-scoped
+      // fixture cannot take the test-scoped `baseURL`, so it names the same stack directly.
       const api = await playwright.request.newContext({
-        baseURL: workerInfo.project.use.baseURL,
+        baseURL: webOrigin(workerInfo.parallelIndex),
       });
       await use(await buildLab(api));
       await api.dispose();

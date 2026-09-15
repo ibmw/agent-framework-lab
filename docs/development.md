@@ -92,11 +92,14 @@ environments that intentionally use a different API origin.
 There are two stacks, and they never share a port or a database. The developer stack is the one
 `make dev-api` and `make dev-web` bring up: the API on 8000, reading `.env` and so writing
 `var/agent-lab.db`, and Vite on 5173 proxying to it. The E2E stack is the one `pnpm test:e2e`
-brings up for itself: the API on 8001, Vite on 5174, migrated onto a temporary SQLite file named
-per run under the system temporary directory, which the run's global teardown removes along with
-any that a killed run left behind.
+brings up for itself, and it is one stack *per Playwright worker*: worker *n* gets the API on
+`8001 + n` and Vite on `5174 + n`, each API migrated onto its own temporary SQLite file named for
+the run and the worker under the system temporary directory, which the run's global teardown
+removes along with any that a killed run left behind. The whole block 8001-8004 and 5174-5177 is
+Playwright's, and a worker count of four is what `apps/web/tests/e2e/support/stack.ts` declares
+(two in CI); `docs/testing-strategy.md` says why a worker owns a database rather than sharing one.
 
-Playwright starts both of the E2E stack's servers itself and reuses neither, in CI and locally
+Playwright starts every one of those servers itself and reuses none, in CI and locally
 alike. Reusing a server that answers on the expected port was how a local run came to drive the
 developer's API — and write hundreds of rows into the developer's database — while still reporting
 green, because the isolated database it had prepared was never the one being served. The case that
@@ -104,22 +107,26 @@ still bites is a Vite left on 5174 by someone who started it by hand against the
 adopting that one reproduces the defect exactly, which is why the frontend refuses reuse as firmly
 as the API does.
 
-So a process left on 8001 or 5174 fails the run. Playwright's own message ends by offering
+So a process left on any of those ports fails the run. Playwright's own message ends by offering
 `reuseExistingServer: true` as the remedy; it is not one here, and taking it puts the defect back.
-Find the leftover and kill it — `lsof -nP -iTCP:8001 -sTCP:LISTEN` — and leave the flag alone.
-`apps/web/tests/config/e2e-isolation.test.ts` fails under `make check` if either server starts
-reusing, moves onto a developer port, or stops naming a temporary database.
+Find the leftover and kill it — `lsof -nP -iTCP:8001-8004 -iTCP:5174-5177 -sTCP:LISTEN` — and
+leave the flag alone.
+`apps/web/tests/config/e2e-isolation.test.ts` fails under `make check` if a server starts reusing,
+moves onto a developer port, stops naming a temporary database, or shares one with another
+worker.
 
-Two variables carry the difference, both read from the environment by `apps/web/vite.config.ts`,
-both defaulting to the developer stack so no development command needs them: `AGENT_LAB_WEB_PORT`
-is the port Vite binds (strictly — an occupied port is an error, not a silent increment), and
-`AGENT_LAB_API_ORIGIN` is the origin it proxies `/api` to. They are read from the process
-environment, not from `.env`: Vite does not load that file when it evaluates its config, and the
-API's settings ignore both names, so writing them into `.env` does nothing. Export them in the
-shell to use them by hand. `apps/web/playwright.config.ts` sets both, alongside the `AGENT_LAB_`
-settings that point the E2E API at its temporary database, and an empty `VITE_API_BASE_URL` so
-that a value exported in a developer's shell cannot send the E2E browser past the proxy to
-another origin.
+Three variables carry the difference, all read from the environment by `apps/web/vite.config.ts`,
+all defaulting to the developer stack so no development command needs them: `AGENT_LAB_WEB_PORT`
+is the port Vite binds (strictly — an occupied port is an error, not a silent increment),
+`AGENT_LAB_API_ORIGIN` is the origin it proxies `/api` to, and `AGENT_LAB_WEB_CACHE_DIR` is the
+directory its dependency optimizer caches into, which each E2E worker's server needs to itself so
+that four servers on one project do not re-optimize under each other. They are read from the
+process environment, not from `.env`: Vite does not load that file when it evaluates its config,
+and the API's settings ignore all three names, so writing them into `.env` does nothing. Export
+them in the shell to use them by hand. `apps/web/playwright.config.ts` sets all three, alongside
+the `AGENT_LAB_` settings that point each E2E API at its own temporary database, and an empty
+`VITE_API_BASE_URL` so that a value exported in a developer's shell cannot send the E2E browser
+past the proxy to another origin.
 
 Run the suite with the developer stack up and nothing about it should move: same processes on 8000
 and 5173, and `var/agent-lab.db` byte for byte as it was.

@@ -1,4 +1,5 @@
-import { expect as baseExpect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect as baseExpect, test } from "./support/e2e";
 
 /**
  * This journey's assertions wait longer than the suite's default, and only this journey's.

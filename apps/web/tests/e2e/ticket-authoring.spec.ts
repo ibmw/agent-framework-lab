@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./support/e2e";
 
 /**
  * Milestone 2 ticket acceptance evidence: an author opens the wrong-address incident on one

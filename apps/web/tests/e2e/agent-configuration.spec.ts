@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./support/e2e";
 
 /**
  * Milestone 3 Slice 1 acceptance evidence: an author composes a shop-independent agent

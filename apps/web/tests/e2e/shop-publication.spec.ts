@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./support/e2e";
 
 /**
  * Milestone 1 Slice 2 acceptance evidence: an author publishes a shop containing a product

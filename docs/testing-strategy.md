@@ -17,6 +17,35 @@ developer's database (`docs/development.md`). Initialize synthetic generators fr
 generation context, and use factory-boy to express relevant variants rather than hide asserted
 values.
 
+## One stack per Playwright worker
+
+The suite runs `fullyParallel`, and it used to run every worker against one API process holding
+one SQLite file. That made it untrustworthy rather than parallel. Every write in every journey
+queued on that file's single writer lock, and a long write — an arm answering a turn, a judge
+scoring one — could hold it past SQLite's busy timeout, so a request that was merely waiting came
+back `database is locked`. The API answered 500, the Studio folded it into its error banner, and
+the spec sat out its timeout waiting for a reply its arm had never been given. Three different
+assertions in `experiment-start.spec.ts` failed that way on different runs; none of them had
+anything to do with the code under test. The same shared database also let two workers starting in
+the same millisecond mint the same `Date.now()` suffix and so the same shop slug.
+
+So each worker now owns a whole stack: its own frontend, its own API, its own database file.
+`apps/web/tests/e2e/support/stack.ts` declares how many and computes each one's ports and database
+URL; `playwright.config.ts` declares that many servers; `apps/web/tests/e2e/support/e2e.ts` exports
+the `test` that hands a worker the base URL of its own frontend. Workers cannot contend, and no
+worker can see another's rows.
+
+Two rules follow for anyone writing a spec:
+
+- Take `test` and `expect` from `./support/e2e`, never from `@playwright/test`. The config names no
+  `baseURL`, so a spec that imports the wrong one has none and fails on its first navigation.
+  `tests/config/e2e-isolation.test.ts` fails first, by name.
+- A worker's database is still shared by every spec that lands on that worker, one after another.
+  So anything the lab makes globally unique — block names, support-identity and configuration
+  names, the names a dropdown is selected by — still carries a per-spec suffix. Anything scoped to
+  a shop (a ticket reference, an order reference, a customer) needs nothing, because each spec
+  builds its own shop.
+
 Two shapes of test carry more weight than their size suggests, and both are load-bearing (ADR 0023).
 **Recorded fingerprints** pin the canonical serializer's bytes and the `sandbox-v2` and
 `sandbox-state-v1` envelopes of one fixed, locally owned starting state; when one fails, answer

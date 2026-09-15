@@ -8,6 +8,12 @@ import { defineConfig } from "vitest/config";
 // The defaults are the developer stack, so `make dev-web` needs neither variable.
 const port = readPort(process.env.AGENT_LAB_WEB_PORT);
 const apiOrigin = process.env.AGENT_LAB_API_ORIGIN ?? "http://localhost:8000";
+// Vite's dependency optimizer caches into the project, and the E2E suite runs one dev server per
+// Playwright worker against this one project. Four servers re-optimizing into one directory
+// invalidate each other's cache mid-run, which is a stall in somebody's first page load. A server
+// that is given a directory of its own optimizes once and keeps it. Unset is the default and the
+// developer stack.
+const cacheDir = process.env.AGENT_LAB_WEB_CACHE_DIR;
 
 function readPort(value: string | undefined): number {
   if (value === undefined) {
@@ -23,6 +29,7 @@ function readPort(value: string | undefined): number {
 }
 
 export default defineConfig({
+  cacheDir,
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

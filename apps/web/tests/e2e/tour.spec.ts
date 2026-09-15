@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
 import { TOURS, tourSteps } from "../../src/lib/tours";
+import { expect, test } from "./support/e2e";
 
 /**
  * One tour, run the way an operator runs it (ADR 0045).

@@ -1,12 +1,13 @@
 import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DATABASE_FILE_PREFIX } from "./playwright.config";
+import { DATABASE_FILE_PREFIX } from "./tests/e2e/support/stack";
 
-// Every run migrates a database named for itself under the system temporary directory, and left
-// on its own the directory accumulates one per run forever. The suite holds fixed ports, so two
-// runs cannot overlap and no file found here belongs to anyone else: the sweep removes the run's
-// own database and any that a killed run left behind, journal and shared-memory files included.
+// Every run migrates a database per worker under the system temporary directory, each named for
+// the run and the worker it belongs to, and left on its own the directory accumulates them
+// forever. The suite holds fixed ports, so two runs cannot overlap and no file found here
+// belongs to anyone else: the sweep removes the run's own databases and any that a killed run
+// left behind, journal and shared-memory files included.
 export default async function removeRunDatabases(): Promise<void> {
   const directory = tmpdir();
   const entries = await readdir(directory);

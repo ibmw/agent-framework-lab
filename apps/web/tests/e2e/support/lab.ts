@@ -11,8 +11,8 @@ import { type APIRequestContext, expect } from "@playwright/test";
  * does, deliberately and slowly, because the UI is what that journey is about. Here the chain is
  * scaffolding rather than subject, so it is built at the HTTP boundary in one pass.
  *
- * Every reference is suffixed so the suite's shared database can hold this alongside whatever
- * the other journeys are creating at the same time.
+ * Every reference is suffixed so this worker's database can hold it alongside whatever the other
+ * journeys that land on this worker create before or after it.
  */
 
 export interface BuiltLab {
