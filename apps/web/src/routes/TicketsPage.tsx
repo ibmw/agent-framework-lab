@@ -228,8 +228,8 @@ export function TicketsPage() {
               {visible.map((ticket) => (
                 <li key={ticket.ticket_id}>
                   <Link
-                    to={`../tickets/${ticket.ticket_id}`}
-                    relative="path"
+                    // operator to `/shops/X/tickets/tickets/…` — out of the shop entirely.
+                    to={`/shops/${shopId}/tickets/${ticket.ticket_id}`}
                     className={`grid gap-1 border-b border-admin-border/60 px-3 py-2.5 text-[13px] no-underline ${
                       ticket.ticket_id === ticketId ? "bg-[#e8f0ed]" : "hover:bg-admin-canvas"
                     }`}
@@ -581,7 +581,7 @@ function TicketWorkspace({
         </Card>
       </div>
 
-      <ContextPanel content={content} context={context} onEdit={edit} />
+      <ContextPanel shopId={shopId} content={content} context={context} onEdit={edit} />
     </div>
   );
 }
@@ -771,10 +771,13 @@ function Bubble({
 }
 
 function ContextPanel({
+  shopId,
   content,
   context,
   onEdit,
 }: {
+  /** Every link out of this panel is written from the shop down, not from the current URL up. */
+  shopId: string;
   content: TicketContentSchema;
   context: TicketContextSchema | null;
   onEdit: (next: TicketContentSchema) => void;
@@ -962,8 +965,7 @@ function ContextPanel({
           </dl>
           <Link
             className="text-[12px] font-semibold text-lab-ink"
-            to={`../../customers/${context.customer.profile_id}`}
-            relative="path"
+            to={`/shops/${shopId}/customers/${context.customer.profile_id}`}
           >
             View customer
           </Link>
@@ -1070,8 +1072,7 @@ function ContextPanel({
               <li key={other.ticket_id} className="flex items-center gap-2">
                 <Link
                   className="font-semibold text-lab-ink"
-                  to={`../${other.ticket_id}`}
-                  relative="path"
+                  to={`/shops/${shopId}/tickets/${other.ticket_id}`}
                 >
                   {other.reference}
                 </Link>

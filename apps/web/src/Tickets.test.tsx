@@ -329,6 +329,27 @@ function card(name: string) {
   return screen.getByRole("region", { name });
 }
 
+function otherTicketHandlers() {
+  return [
+    http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/draft`, () =>
+      HttpResponse.json({
+        ticket_id: OTHER_TICKET_ID,
+        shop_id: SHOP_ID,
+        lifecycle_state: "draft",
+        content: { ...currentContent, reference: "T-187", subject: "Sizing question" },
+        created_at: "2026-08-24T12:00:00+00:00",
+        updated_at: "2026-08-24T12:05:00+00:00",
+      } satisfies TicketDraftResponse),
+    ),
+    http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/draft/preview`, () =>
+      HttpResponse.json({ ...currentPreview, ticket_id: OTHER_TICKET_ID }),
+    ),
+    http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/context`, () =>
+      HttpResponse.json(CONTEXT),
+    ),
+  ];
+}
+
 describe("ticket list", () => {
   it("shows each incident with its customer, preview, and channel", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets`);
@@ -906,5 +927,22 @@ describe("the helpdesk layout", () => {
     expect(screen.getByRole("button", { name: "Expand navigation" })).toBeVisible();
     // Collapsed is a first-class layout, not a hidden one: the names survive as link names.
     expect(within(rail).getByRole("link", { name: "Tickets" })).toBeVisible();
+  });
+
+  it("moves between tickets without leaving the shop", async () => {
+    const user = userEvent.setup();
+    server.use(...otherTicketHandlers());
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
+
+    const rows = within(within(screen.getByRole("region", { name: "Tickets" })).getByRole("list"));
+    await user.click(rows.getByRole("link", { name: /Sizing question/ }));
+
+    // A relative-by-path link resolved against `/shops/…/tickets/T-204` asked for
+    // `…/tickets/tickets/…`, which matches no route, and the catch-all put the operator back
+    // on the shop index — out of the shop they were working in.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}`),
+    );
   });
 });
