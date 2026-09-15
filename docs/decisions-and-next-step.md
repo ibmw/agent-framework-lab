@@ -96,6 +96,34 @@ SDK immediately.
 - PostgreSQL or durable workflow runtime without a documented operational trigger.
 - Global framework leaderboard.
 
+## Known application defects, found but not fixed
+
+Both were found on 15 September 2026 while making the Playwright suite trustworthy in parallel
+(`fix(test): give every Playwright worker its own stack`). Neither is a test defect and neither was
+touched by that change: a suite must not have application code bent to suit it. Both are latent at
+lab scale now that the suite no longer provokes them, and both want their own slice.
+
+- **The SQLite engine sets neither WAL nor a busy timeout.**
+  `apps/api/src/capability_lab/infrastructure/database.py` builds the engine with `pool_pre_ping`
+  and `PRAGMA foreign_keys=ON` only, so pysqlite's five-second default applies and readers block on
+  the writer. Any concurrent traffic against one API can answer `500` with
+  `sqlite3.OperationalError: database is locked` — two browser tabs on the developer stack is
+  enough. This was proved, not inferred: the suite failed about one run in seven, in three
+  different assertions, each run carrying exactly one such 500. Hardening it puts `-wal` and `-shm`
+  files beside `var/agent-lab.db`, which is a change to what the repository's own reset and
+  migration policy has to account for, so it deserves an ADR rather than a drive-by fix.
+
+- **An infrastructure error inside a tool call is recorded as the agent framework's failure.**
+  `apps/api/src/capability_lab/application/experiment_runs.py` catches every exception from
+  `runtime.answer` in one branch and records a `FRAMEWORK` failure. A tool call reaches the sandbox
+  repositories, so a database fault surfaces there. Today an invalidated session turns it into a
+  500 and the run visibly breaks; once the engine above is hardened, a transient lock would instead
+  be written down quietly as *this framework failed* in a two-arm comparison. That is the lab
+  attributing its own fault to the thing it exists to measure, which is worth more than the crash:
+  the evidence a comparison rests on stops being about the frameworks. Distinguishing an
+  infrastructure fault from a framework fault is the fix, and it is a change to what a run record
+  means, so it belongs with ADR 0026's failure taxonomy.
+
 ## Recommended next steps
 
 1. Milestone 0.5 is complete. The design direction is selected and recorded in
