@@ -4,7 +4,13 @@ import { Link } from "react-router-dom";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
-import { Card, PageHeader, StatusPill, VersionChips } from "../components/WorkspaceChrome";
+import {
+  Card,
+  EditorSaveActions,
+  PageHeader,
+  StatusPill,
+  VersionChips,
+} from "../components/WorkspaceChrome";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
 import { KEBAB_PATTERN, PRODUCT_CATEGORY_RULE, PRODUCT_HANDLE_RULE } from "../lib/fieldRules";
@@ -35,7 +41,8 @@ function emptyProduct(handle: string, title: string, category: string): ProductV
 }
 
 export function ProductsPage() {
-  const { content, preview, edit, save, saving, dirty, error } = useShopWorkspace();
+  const { content, preview, edit, save, saving, discard, discarding, dirty, error } =
+    useShopWorkspace();
   const [handle, setHandle] = useState("");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -73,14 +80,14 @@ export function ProductsPage() {
         actions={
           <>
             <TourLaunch id="products" />
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => void save()}
-              disabled={!dirty || saving}
-            >
-              {saving ? "Saving…" : dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              tone="accent"
+              dirty={dirty}
+              saving={saving}
+              discarding={discarding}
+              onSave={() => void save()}
+              onDiscard={() => void discard()}
+            />
           </>
         }
       />

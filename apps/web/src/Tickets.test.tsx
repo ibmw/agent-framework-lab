@@ -8,14 +8,14 @@ import type {
   TicketDraftResponse,
   TicketListResponse,
   TicketPreviewResponse,
+  TicketSummarySchema,
 } from "@agent-lab/contracts";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const PROFILE_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -312,12 +312,17 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
+/**
+ * The page's publication notice, out of the status lines the header now also carries: every
+ * editor reports "All changes saved" as a status of its own (PLAN-UX Slice 8).
+ */
+async function publicationNotice() {
+  const lines = await screen.findAllByRole("status");
+  return lines.find((line) => line.textContent?.startsWith("Published version"));
+}
+
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(path);
 }
 
 function card(name: string) {
@@ -400,6 +405,94 @@ describe("ticket list", () => {
       customer_profile_id: PROFILE_ID,
       channel: "chat",
     });
+  });
+
+  it("opens the ticket it created with one navigation, not two", async () => {
+    const user = userEvent.setup();
+    // A ticket created from `/tickets` is opened by the create. The page also opens the most
+    // recently updated ticket when it is given none — and that effect is scheduled from the
+    // render the reloaded list produces, where `ticketId` is still undefined although the
+    // create's navigation is already on its way. Left alone it sent a second navigation after
+    // the first, every time, on the one page in the workspace that creates and navigates in
+    // the same breath. PLAN-UX Slice 10 gives that shape to eight more surfaces.
+    // The shop has no incident yet, which is the journey the e2e specs walk: the page is
+    // standing on `/tickets` with nothing named when the create lands.
+    let listed: TicketSummarySchema[] = [];
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json({ tickets: listed } satisfies TicketListResponse),
+      ),
+    );
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets`);
+    await screen.findByText(/No tickets yet/);
+    const keys = new Set<string>([router.state.location.key]);
+    router.subscribe((state) => keys.add(state.location.key));
+    listed = TICKETS.tickets.filter((ticket) => ticket.ticket_id === TICKET_ID);
+
+    const list = within(screen.getByRole("region", { name: "Tickets" }));
+    await list.findByRole("option", { name: "Maya Laurent" });
+    await waitFor(() => expect(list.getByLabelText("Reference")).not.toHaveValue(""));
+    await user.type(list.getByLabelText("Subject"), "Late delivery");
+    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
+    await user.click(list.getByRole("button", { name: "Open ticket" }));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`),
+    );
+    // One location beyond the one it started on: the redirect did not follow the create.
+    expect([...keys]).toHaveLength(2);
+  });
+
+  it("re-reads the list when the prompt saves the ticket, not only when the button does", async () => {
+    const user = userEvent.setup();
+    server.use(
+      // The list reflects what the lab holds, so a renamed ticket shows its new subject.
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json({
+          tickets: TICKETS.tickets.map((ticket) =>
+            ticket.ticket_id === TICKET_ID
+              ? { ...ticket, subject: currentContent.subject }
+              : ticket,
+          ),
+        } satisfies TicketListResponse),
+      ),
+      // The ticket being opened, which this fixture otherwise never opens.
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/draft`, () =>
+        HttpResponse.json({
+          ticket_id: OTHER_TICKET_ID,
+          shop_id: SHOP_ID,
+          lifecycle_state: "draft",
+          content: { ...currentContent, reference: "T-187", subject: "Sizing question" },
+          created_at: "2026-08-24T12:00:00+00:00",
+          updated_at: "2026-08-24T12:05:00+00:00",
+        } satisfies TicketDraftResponse),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/draft/preview`, () =>
+        HttpResponse.json({ ...currentPreview, ticket_id: OTHER_TICKET_ID }),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/context`, () =>
+        HttpResponse.json(CONTEXT),
+      ),
+    );
+    renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+
+    const details = within(await screen.findByRole("region", { name: "Ticket details" }));
+    await user.clear(details.getByLabelText("Subject"));
+    await user.type(details.getByLabelText("Subject"), "Address changed before dispatch");
+
+    // Moving to the customer's other ticket happens inside this page, so nothing remounts and
+    // the list stays on screen to be wrong on.
+    const other = within(screen.getByRole("region", { name: "Other tickets from this customer" }));
+    await user.click(other.getByRole("link", { name: "T-187" }));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    // The save landed, and so did the read that follows every save of this draft — which the
+    // page's own Save button used to be the only thing that ran.
+    const list = within(screen.getByRole("region", { name: "Tickets" }));
+    expect(await list.findByText("Address changed before dispatch")).toBeVisible();
+    expect(list.queryByText("Wrong address concern")).toBeNull();
   });
 
   it("offers only the channels this shop supports", async () => {
@@ -765,7 +858,7 @@ describe("saving and publishing", () => {
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
 
     await waitFor(() => expect(published).toBe(1));
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    expect(await publicationNotice()).toHaveTextContent(
       /Published version 1\. A scenario built on this ticket freezes this exact version\./,
     );
   });

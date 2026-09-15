@@ -16,6 +16,7 @@ import { ChipListField } from "../components/ChipListField";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   EntryCard,
   EntryEditNotice,
   EntryId,
@@ -36,7 +37,6 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
-  outlineButtonClasses,
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
@@ -72,7 +72,9 @@ const ACTION_PERMISSIONS: SupportPermission[] = [
 
 export function SupportIdentityEditorPage() {
   const { identityId = "" } = useParams();
-  const editor = useDefinitionEditor(identityId, CLIENT);
+  const editor = useDefinitionEditor(identityId, CLIENT, {
+    label: "The support identity draft has unsaved changes.",
+  });
   const { content, preview, edit } = editor;
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
   const guidanceEditor = useEntryEdit<GuidanceFields>(
@@ -136,14 +138,13 @@ export function SupportIdentityEditorPage() {
         }
         actions={
           <>
-            <button
-              className={outlineButtonClasses}
-              type="button"
-              onClick={() => void editor.save()}
-              disabled={!editor.dirty || editor.saving}
-            >
-              {editor.saving ? "Saving…" : editor.dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              dirty={editor.dirty}
+              saving={editor.saving}
+              discarding={editor.discarding}
+              onSave={() => void editor.save()}
+              onDiscard={() => void editor.discard()}
+            />
             <button
               className={accentButtonClasses}
               type="button"

@@ -833,3 +833,29 @@ controls wait behind an Edit press would be a regression dressed as a convention
 there covers only what was write-once — the SKU and the option values — and saves against the
 row as it stands rather than against a copy taken when the row was opened, so a price typed
 while the row is open is not put back.
+
+## Revision — an editor says what is unsaved, and asks before it is lost (2026-09-15)
+
+Slice 8. The eight sections above are unchanged; this one covers what an editor's header reports
+and what the workspace does when work is about to be thrown away. The decisions themselves — the
+data-router migration, one blocker above the route tree, the register an open row declares into,
+and the one case the prompt declines to save — are recorded in **ADR 0051**, which PLAN-UX asks
+for by name; this section is the visible convention and does not restate the reasoning.
+
+**A clean editor reports a state, not an action.** The header shows **Discard changes** beside
+**Save draft** while there is something to save, and the line "All changes saved" when there is
+not — in a polite live region, so a save that lands is announced to a reader whose focus was on
+the button that has just gone. The disabled accent button reading "Saved" is retired everywhere:
+a control in the place the eye looks for an action should perform one.
+
+**Discard undoes exactly what Save would have written.** It re-reads the draft the lab holds. It
+leaves a row that is open for editing alone, because no page-level Save has ever carried one —
+the same sentence the *saved row opens where it stands* section already prints under every such
+list, read backwards.
+
+**A navigation that would strand unsaved work is asked about once**, in one modal dialog naming
+what would be lost, with Save and leave, Discard and leave, and Stay on this page. It asks about
+the work *this* navigation strands and nothing else, so a draft the destination can still save is
+neither named nor touched. Where the prompt cannot save something — an open row, whose typing has
+not reached the draft — Save is disabled and carries its reason as an accessible description, on
+the `PublishReasons` model rather than as a silent grey button.

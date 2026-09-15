@@ -11,8 +11,8 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
 import { AppShell } from "./shell/AppShell";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -127,11 +127,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(path);
 }
 
 describe("lab settings", () => {

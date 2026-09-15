@@ -2,6 +2,14 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./support/e2e";
 
 /**
+ * The page's publication notice. Every editor header now reports "All changes saved" as a
+ * status line of its own (PLAN-UX Slice 8), so a query for "the page's status" says which.
+ */
+function publicationNotice(page: Page) {
+  return page.getByRole("status").filter({ hasText: "Published version" });
+}
+
+/**
  * Milestone 2 ticket acceptance evidence: an author opens the wrong-address incident on one
  * shop's customer, authors the prior history and the triggering first message every arm will
  * receive, links the stale-address order, and publishes. The published version then stays
@@ -14,7 +22,7 @@ function card(page: Page, name: string) {
 
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 }
 
 async function openSection(page: Page, link: string, heading: string) {
@@ -136,7 +144,7 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await shipping.getByLabel("Fulfilment method", { exact: true }).selectOption("standard");
   await shipping.getByLabel("Ship to", { exact: true }).selectOption("bordeaux-previous-flat");
   await page.getByRole("button", { name: "Save order" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 
   // The incident itself.
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
@@ -188,7 +196,7 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText(
+  await expect(publicationNotice(page)).toContainText(
     "A scenario built on this ticket freezes this exact version",
   );
 

@@ -1,11 +1,10 @@
 import type { ShopListResponse } from "@agent-lab/contracts";
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "9c8b7a6d-5e4f-4a3b-9c8d-7e6f5a4b3c2d";
 
@@ -30,11 +29,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderShops() {
-  return render(
-    <MemoryRouter initialEntries={["/shops"]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp("/shops");
 }
 
 function currencies(card: ReturnType<typeof within>) {

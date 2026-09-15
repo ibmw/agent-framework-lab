@@ -245,14 +245,19 @@ field. Nothing in the workspace still asks them to remove and retype an entry to
 
 ### Slice 8 — Unsaved work is protected
 
-- [ ] Move the app from `BrowserRouter` to `createBrowserRouter` and `RouterProvider`, with the
+- [x] Move the app from `BrowserRouter` to `createBrowserRouter` and `RouterProvider`, with the
   existing route tree unchanged, because `useBlocker` is only available on a data router.
-- [ ] Guard `dirty` once inside `useDefinitionEditor` with `beforeunload` and `useBlocker`, and
+- [x] Guard `dirty` once inside `useDefinitionEditor` with `beforeunload` and `useBlocker`, and
   in the order editor which tracks its own; a blocked navigation offers Save, Discard and Stay.
-- [ ] Add a "Discard changes" action beside Save on every editor, which re-fetches the draft.
-- [ ] Render the clean state as a status ("All changes saved") rather than a disabled accent
+  The flag is declared where this line says, once, in the hook; the `useBlocker` and the
+  `beforeunload` sit above the route tree instead, because a router consults exactly **one**
+  blocker and the shop draft's editor is mounted alongside every page-scoped one. A **departure**
+  from this line's wording, recorded in ADR 0051 with the open row's registration, which Slice 7
+  left to this slice, and with the one case the prompt declines to save.
+- [x] Add a "Discard changes" action beside Save on every editor, which re-fetches the draft.
+- [x] Render the clean state as a status ("All changes saved") rather than a disabled accent
   button reading "Saved".
-- [ ] Record the router migration, the guard's placement in the hook, and the three-way prompt in
+- [x] Record the router migration, the guard's placement in the hook, and the three-way prompt in
   an ADR.
 
 Frames: none.

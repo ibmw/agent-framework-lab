@@ -5,13 +5,14 @@ import type {
   ShopOrderResponse,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
 import { deleteOrder, getOrder, replaceOrder } from "../api/orders";
 import {
   Card,
+  EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -34,7 +35,6 @@ import {
   toOrderRequest,
 } from "../lib/orders";
 import {
-  accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
@@ -45,6 +45,7 @@ import {
   tableHeadClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "The order service is unavailable.";
@@ -72,6 +73,15 @@ export function OrderEditorPage() {
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  // Set the moment the order is deleted, and read by the guard rather than by a render: the
+  // navigation that follows the delete happens before React has committed anything, so a flag
+  // in state would still read "unsaved" and the prompt would ask about an order that is gone.
+  const deleted = useRef(false);
+  // Counts what has happened to the order this editor holds — a load, an edit, a save. A read
+  // that returns to find the count moved on is a read for an order this editor is no longer
+  // showing, and applying it would put one order's content under another's id (ADR 0051).
+  const edits = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [newSku, setNewSku] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -83,6 +93,7 @@ export function OrderEditorPage() {
   const feeRuleId = useId();
 
   const apply = useCallback((response: ShopOrderResponse) => {
+    edits.current += 1;
     setOrder(response);
     setQuantityDraft(null);
     setContent(response.content);
@@ -115,6 +126,78 @@ export function OrderEditorPage() {
     return () => controller.abort();
   }, [shopId, orderId, apply]);
 
+  const save = useCallback(async (): Promise<string | null> => {
+    if (content === null) {
+      return UNAVAILABLE;
+    }
+    // The order the editor holds is one the lab would take, the rule `clampQuantity` follows
+    // for quantities. A fee that is not an amount is not sent and silently refused elsewhere.
+    if (!isMoneyAmount(content.shipping_fee.amount)) {
+      const refused = `The shipping fee is not an amount. ${MONEY_RULE}`;
+      setError(refused);
+      return refused;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      apply(
+        await replaceOrder(shopId, orderId, {
+          ...toOrderRequest(content),
+          shipping_address_id: addressId,
+        }),
+      );
+      return null;
+    } catch (cause: unknown) {
+      const message = describeApiError(cause, UNAVAILABLE);
+      setError(message);
+      return message;
+    } finally {
+      setSaving(false);
+    }
+  }, [content, addressId, shopId, orderId, apply]);
+
+  /**
+   * Discard: read the order back from the lab, which is what Save would have written over.
+   *
+   * Nothing it read reaches an editor that has moved on. Discard-and-leave fires this and
+   * navigates without waiting, and browser back or forward between two orders reuses this
+   * component rather than remounting it, so a read of one order can land after another's.
+   */
+  const discard = useCallback(async () => {
+    const sentAt = edits.current;
+    setDiscarding(true);
+    setError(null);
+    setDirty(false);
+    try {
+      const read = await getOrder(shopId, orderId);
+      if (edits.current === sentAt) {
+        apply(read);
+      }
+    } catch (cause: unknown) {
+      if (edits.current === sentAt) {
+        setError(describeApiError(cause, UNAVAILABLE));
+        setDirty(true);
+      }
+    } finally {
+      // The control's busy state, not content: see `useDefinitionEditor.discard`.
+      setDiscarding(false);
+    }
+  }, [shopId, orderId, apply]);
+
+  // This editor tracks its own dirty flag rather than running on `useDefinitionEditor` — an
+  // order is a fixture, not a versioned definition — so it declares its unsaved work itself.
+  useRegisterUnsavedWork(
+    dirty
+      ? {
+          label: "This order has unsaved changes.",
+          // Nothing strands edits to an order the lab no longer holds.
+          reaches: () => deleted.current,
+          save,
+          discard: () => void discard(),
+        }
+      : null,
+  );
+
   if (loading) {
     return <p className="text-sm text-admin-muted">Loading order…</p>;
   }
@@ -128,45 +211,22 @@ export function OrderEditorPage() {
   }
 
   function edit(next: OrderContentSchema) {
+    edits.current += 1;
     setContent(next);
     setDirty(true);
   }
 
   function selectAddress(next: string | null) {
+    edits.current += 1;
     setAddressId(next);
     setDirty(true);
-  }
-
-  async function save() {
-    if (!content) {
-      return;
-    }
-    // The order the editor holds is one the lab would take, the rule `clampQuantity` follows
-    // for quantities. A fee that is not an amount is not sent and silently refused elsewhere.
-    if (!isMoneyAmount(content.shipping_fee.amount)) {
-      setError(`The shipping fee is not an amount. ${MONEY_RULE}`);
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      apply(
-        await replaceOrder(shopId, orderId, {
-          ...toOrderRequest(content),
-          shipping_address_id: addressId,
-        }),
-      );
-    } catch (cause: unknown) {
-      setError(describeApiError(cause, UNAVAILABLE));
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function remove() {
     setSaving(true);
     try {
       await deleteOrder(shopId, orderId);
+      deleted.current = true;
       navigate(`/shops/${shopId}/orders`);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "The order could not be deleted."));
@@ -311,14 +371,15 @@ export function OrderEditorPage() {
                 Delete
               </button>
             )}
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => void save()}
-              disabled={!dirty || saving}
-            >
-              {saving ? "Saving…" : dirty ? "Save order" : "Saved"}
-            </button>
+            <EditorSaveActions
+              saveLabel="Save order"
+              tone="accent"
+              dirty={dirty}
+              saving={saving}
+              discarding={discarding}
+              onSave={() => void save()}
+              onDiscard={() => void discard()}
+            />
           </>
         }
       />

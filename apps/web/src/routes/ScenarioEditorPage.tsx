@@ -23,6 +23,7 @@ import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -119,7 +120,9 @@ export function ScenarioEditorPage() {
     }),
     [shopId],
   );
-  const editor = useDefinitionEditor(scenarioId, client);
+  const editor = useDefinitionEditor(scenarioId, client, {
+    label: "The scenario draft has unsaved changes.",
+  });
   const { content, preview, edit: editDraft } = editor;
   const [state, setState] = useState<ResourceState>({ status: "loading" });
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
@@ -205,14 +208,13 @@ export function ScenarioEditorPage() {
         actions={
           <>
             <TourLaunch id="scenario" />
-            <button
-              className={outlineButtonClasses}
-              type="button"
-              onClick={() => void editor.save()}
-              disabled={!editor.dirty || editor.saving}
-            >
-              {editor.saving ? "Saving…" : editor.dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              dirty={editor.dirty}
+              saving={editor.saving}
+              discarding={editor.discarding}
+              onSave={() => void editor.save()}
+              onDiscard={() => void editor.discard()}
+            />
             <button
               className={accentButtonClasses}
               type="button"

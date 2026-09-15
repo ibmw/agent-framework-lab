@@ -17,6 +17,7 @@ import { FieldHint } from "../components/FieldHint";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -45,7 +46,6 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
-  outlineButtonClasses,
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
@@ -116,7 +116,9 @@ function BlockEditor<
   typeAxis: (content: PayloadT, edit: (next: PayloadT) => void) => ReactNode;
   publishedNote: string;
 }) {
-  const editor = useDefinitionEditor(blockId, client);
+  const editor = useDefinitionEditor(blockId, client, {
+    label: `The ${noun} draft has unsaved changes.`,
+  });
   const { content, preview, edit } = editor;
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
@@ -155,14 +157,13 @@ function BlockEditor<
         }
         actions={
           <>
-            <button
-              className={outlineButtonClasses}
-              type="button"
-              onClick={() => void editor.save()}
-              disabled={!editor.dirty || editor.saving}
-            >
-              {editor.saving ? "Saving…" : editor.dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              dirty={editor.dirty}
+              saving={editor.saving}
+              discarding={editor.discarding}
+              onSave={() => void editor.save()}
+              onDiscard={() => void editor.discard()}
+            />
             <button
               className={accentButtonClasses}
               type="button"

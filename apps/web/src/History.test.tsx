@@ -6,13 +6,12 @@ import type {
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { App } from "./App";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OTHER_SHOP_ID = "6a5b4c3d-2e1f-4a0b-8c9d-1e2f3a4b5c6d";
@@ -240,11 +239,7 @@ beforeEach(() => {
 afterAll(() => server.close());
 
 function renderHistory(search = "") {
-  return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/history${search}`]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(`/shops/${SHOP_ID}/history${search}`);
 }
 
 function lastAsked(): URLSearchParams {

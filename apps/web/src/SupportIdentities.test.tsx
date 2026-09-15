@@ -7,13 +7,12 @@ import type {
   SupportIdentityPreviewResponse,
   SupportIdentityVersionResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const IDENTITY_ID = "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
@@ -174,11 +173,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(path);
 }
 
 describe("support identity workspace", () => {

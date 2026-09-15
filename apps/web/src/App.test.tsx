@@ -6,14 +6,17 @@ import type {
   ShopVersionListResponse,
   ShopVersionResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
+import { isValidElement } from "react";
+import type { RouteObject } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
-import { toPayload } from "./lib/shop";
+import { routeTree } from "./App";
+import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
+import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -255,11 +258,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(path);
 }
 
 describe("adding a product", () => {
@@ -399,13 +398,13 @@ describe("shop workspace", () => {
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
     const price = await screen.findByLabelText("Price for NS-ASJ-OB-L");
-    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
     await userEvent.type(price, "249.00");
     const save = screen.getByRole("button", { name: "Save draft" });
     await userEvent.click(save);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled());
+    await waitFor(() => expect(screen.getByText("All changes saved")).toBeInTheDocument());
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -1636,11 +1635,242 @@ describe("editing a saved entry in place", () => {
     await user.clear(open.getByLabelText("Title"));
     await user.type(open.getByLabelText("Title"), "Not this");
 
-    // The draft is untouched, so the page's own Save is still the "Saved" it was.
-    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+    // The draft is untouched, so the page still reports itself as saved.
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
     await user.click(open.getByRole("button", { name: "Cancel editing Shipping and delivery" }));
 
     expect(policies.getByText("Shipping and delivery")).toBeVisible();
     expect(savedDrafts).toEqual([]);
+  });
+});
+
+/**
+ * Every URL the tree answers and the component it answers with, in the order it declares them.
+ *
+ * The element matters as much as the path: "the existing route tree unchanged" is a claim about
+ * what each URL renders, and a tree that kept every path while swapping two elements would be a
+ * migration that broke the application and passed its own test. A pathless layout contributes no
+ * URL of its own, which is how the guard sits above everything without being a route.
+ *
+ * The component is named rather than imported: forty imports to compare forty identities would
+ * put more of this file in the maintenance of the assertion than in the assertion. The name is
+ * the function's own, read from source by Vitest and never minified here.
+ */
+function routedElements(routes: RouteObject[], prefix = ""): [string, string][] {
+  return routes.flatMap((route): [string, string][] => {
+    const here =
+      route.path === undefined
+        ? prefix
+        : route.path.startsWith("/")
+          ? route.path
+          : `${prefix}/${route.path}`;
+    const element = isValidElement(route.element) ? route.element.type : undefined;
+    const name = typeof element === "function" ? element.name : String(element);
+    const self: [string, string][] =
+      route.index === true
+        ? [[`${prefix} [index]`, name]]
+        : route.path === undefined
+          ? []
+          : [[here, name]];
+    return [...self, ...routedElements(route.children ?? [], here)];
+  });
+}
+
+describe("the route tree under the data router", () => {
+  it("answers the same URLs it did, with one guard above all of them", () => {
+    expect(routeTree).toHaveLength(1);
+    const root = routeTree[0];
+    // Pathless: it matches no URL of its own, so nothing about the tree's shape moved.
+    expect(root.path).toBeUndefined();
+    expect(root.index).not.toBe(true);
+    expect(isValidElement(root.element) ? root.element.type : null).toBe(UnsavedChangesGuard);
+
+    expect(routedElements(routeTree)).toStrictEqual([
+      ["/", "Navigate"],
+      ["/shops", "ShopsPage"],
+      ["/settings", "LabSettingsPage"],
+      ["/glossary", "GlossaryPage"],
+      ["/guides", "Navigate"],
+      ["/guides/setup", "Navigate"],
+      ["/guides/glossary", "RedirectRetiredGlossary"],
+      ["/shops/:shopId", "ShopWorkspace"],
+      ["/shops/:shopId [index]", "ShopHomePage"],
+      ["/shops/:shopId/products", "ProductsPage"],
+      ["/shops/:shopId/products/:handle", "ProductEditorPage"],
+      ["/shops/:shopId/orders", "OrdersPage"],
+      ["/shops/:shopId/orders/:orderId", "OrderEditorPage"],
+      ["/shops/:shopId/customers", "CustomersPage"],
+      ["/shops/:shopId/tickets", "TicketsPage"],
+      ["/shops/:shopId/tickets/:ticketId", "TicketsPage"],
+      ["/shops/:shopId/customers/:profileId", "CustomerEditorPage"],
+      ["/shops/:shopId/bench", "ExperimentSetupPage"],
+      ["/shops/:shopId/bench/:experimentId", "ExperimentBenchPage"],
+      ["/shops/:shopId/bench/:experimentId/results", "ExperimentResultsLayout"],
+      ["/shops/:shopId/bench/:experimentId/results [index]", "ExperimentResultsPage"],
+      ["/shops/:shopId/bench/:experimentId/results/timeline", "ExperimentTimelinePage"],
+      ["/shops/:shopId/bench/:experimentId/results/traces", "ExperimentTracesPage"],
+      ["/shops/:shopId/history", "ExperimentHistoryPage"],
+      ["/shops/:shopId/scenarios", "ScenariosPage"],
+      ["/shops/:shopId/scenarios/:scenarioId", "ScenarioEditorPage"],
+      ["/shops/:shopId/scenarios/:scenarioId/snapshots", "SnapshotsPage"],
+      ["/shops/:shopId/objective-blocks", "ObjectiveBlocksPage"],
+      ["/shops/:shopId/objective-blocks/:blockId", "ObjectiveBlockEditorPage"],
+      ["/shops/:shopId/mutation-blocks", "MutationBlocksPage"],
+      ["/shops/:shopId/mutation-blocks/:blockId", "MutationBlockEditorPage"],
+      ["/shops/:shopId/support-identities", "SupportIdentitiesPage"],
+      ["/shops/:shopId/agent-configurations", "AgentConfigurationsPage"],
+      ["/shops/:shopId/agent-configurations/:configurationId", "AgentConfigurationEditorPage"],
+      ["/shops/:shopId/judges", "JudgeConfigurationsPage"],
+      ["/shops/:shopId/judges/:judgeId", "JudgeConfigurationEditorPage"],
+      ["/shops/:shopId/support-identities/:identityId", "SupportIdentityEditorPage"],
+      ["/shops/:shopId/setup/identity", "ShopIdentityPage"],
+      ["/shops/:shopId/setup/policies", "PoliciesAndFaqPage"],
+      ["/shops/:shopId/setup/support", "SupportGuidelinesPage"],
+      ["/shops/:shopId/setup/tone", "ToneOfVoicePage"],
+      ["/shops/:shopId/versions/:version", "ShopVersionPage"],
+      ["/*", "Navigate"],
+    ]);
+  });
+});
+
+describe("the shop draft's reach", () => {
+  /** Every shop-scoped URL the tree answers, with its parameters filled in. */
+  function shopRoutes(): string[] {
+    // De-duplicated: a layout route and its index answer the same URL.
+    return [
+      ...new Set(routedElements(routeTree).map(([pattern]) => pattern.replace(" [index]", ""))),
+    ]
+      .filter((pattern) => pattern.startsWith("/shops/:shopId"))
+      .map((pattern) =>
+        pattern
+          .replace(":shopId", SHOP_ID)
+          .replace(/:[A-Za-z]+/g, "x")
+          .replace(/\/$/, ""),
+      );
+  }
+
+  it("covers exactly the surfaces that render the shop draft's Save", () => {
+    // Swept over the tree rather than compared with a list somebody keeps: a route added
+    // tomorrow is classified tomorrow, and a rename that drops one out of reach fails here
+    // rather than silently prompting an operator who had nothing to lose.
+    const reached = shopRoutes().filter((pathname) => shopDraftIsSavableAt(SHOP_ID, pathname));
+    expect(reached).toStrictEqual([
+      `/shops/${SHOP_ID}`,
+      `/shops/${SHOP_ID}/products`,
+      `/shops/${SHOP_ID}/products/x`,
+      `/shops/${SHOP_ID}/setup/identity`,
+      `/shops/${SHOP_ID}/setup/policies`,
+      `/shops/${SHOP_ID}/setup/support`,
+      `/shops/${SHOP_ID}/setup/tone`,
+    ]);
+    // And it is a statement about this shop: another shop's catalog cannot save this draft.
+    expect(shopDraftIsSavableAt(SHOP_ID, "/shops/other/products")).toBe(false);
+  });
+});
+
+describe("unsaved work is protected", () => {
+  function rail() {
+    return within(screen.getByLabelText("Shop workspace"));
+  }
+
+  it("asks before the rail carries a product edit somewhere it cannot be saved", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const description = await screen.findByLabelText("Description");
+    await user.type(description, " Taped seams.");
+
+    await user.click(rail().getByRole("link", { name: "Orders" }));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent("The shop draft has unsaved changes.");
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
+    expect(screen.getByLabelText("Description")).toHaveValue(
+      "Three-layer waterproof shell. Taped seams.",
+    );
+  });
+
+  it("says nothing when the surface being opened can save the same draft", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    await user.type(await screen.findByLabelText("Description"), " Taped seams.");
+    await user.click(rail().getByRole("link", { name: "Products" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The edit went with them: the catalog's own Save is what it is still waiting for.
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+  });
+
+  it("names both a dirty draft and an open row, and drops neither on Discard", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+
+    // Two unsaved things at once, of the two different kinds: one the draft's flag can see,
+    // one it cannot. The prompt has to list both and act on both.
+    const faq = within(await screen.findByRole("region", { name: "FAQ" }));
+    await user.type(faq.getByLabelText("Question"), "Where is my parcel?");
+    const policies = within(screen.getByRole("region", { name: "Policies" }));
+    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
+    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
+    await user.clear(open.getByLabelText("Body"));
+    await user.type(open.getByLabelText("Body"), "Every parcel leaves within a day.");
+    await user.click(screen.getByRole("button", { name: "Save Shipping and delivery" }));
+    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
+    await user.type(
+      within(policies.getByRole("form", { name: "Edit Shipping and delivery" })).getByLabelText(
+        "Body",
+      ),
+      " Twice.",
+    );
+
+    await user.click(rail().getByRole("link", { name: "Orders" }));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    const listed = within(prompt)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+    expect(listed).toStrictEqual([
+      "The shop draft has unsaved changes.",
+      "Shipping and delivery is open for editing, and nothing typed in it has reached the draft.",
+    ]);
+    // One of the two cannot be saved from here, so neither is saved from here.
+    expect(within(prompt).getByRole("button", { name: "Save and leave" })).toBeDisabled();
+
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
+    // The draft went back to what the lab holds, so nothing of either was left behind.
+    expect(savedDrafts).toHaveLength(0);
+  });
+
+  it("counts a row that is open for editing, which the draft's own flag cannot see", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+
+    const policies = within(await screen.findByRole("region", { name: "Policies" }));
+    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
+    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
+    await user.clear(open.getByLabelText("Body"));
+    await user.type(open.getByLabelText("Body"), "Every parcel leaves within a day.");
+    // Nothing typed in the row has reached the draft, which is exactly why `dirty` is false.
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Agent Framework Lab" }));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "Shipping and delivery is open for editing, and nothing typed in it has reached the draft.",
+    );
+    // The prompt cannot save it, and says where it can be saved rather than offering to.
+    const save = within(prompt).getByRole("button", { name: "Save and leave" });
+    expect(save).toBeDisabled();
+    expect(save).toHaveAccessibleDescription(/Stay, then press the row's own Save or Cancel/);
+
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Shops" })).toBeVisible();
   });
 });

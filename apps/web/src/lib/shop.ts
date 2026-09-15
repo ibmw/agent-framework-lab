@@ -107,3 +107,27 @@ export function ratingLabel(product: ProductViewSchema): string {
   const plural = product.ratings.review_count === 1 ? "review" : "reviews";
   return `${average} · ${product.ratings.review_count} ${plural}`;
 }
+
+/**
+ * The surfaces that render the shop draft's own Save, relative to `/shops/:shopId`.
+ *
+ * The shop draft is the workspace's one editor that outlives the page editing it: it is held by
+ * `ShopWorkspace`, the layout route, so it survives every move inside the shop. That makes
+ * "leaving the page" the wrong question for it and "leaving the reach of its Save" the right
+ * one. Home, Products, the product editor and the four setup pages each draw the button; Orders,
+ * Customers, Tickets, the bench and the rest do not, so an edit carried there is an edit with
+ * nothing on screen that can write it — which is what PLAN-UX Slice 8's evidence describes when
+ * an operator edits a product description and clicks Orders in the rail.
+ */
+export function shopDraftIsSavableAt(shopId: string, pathname: string): boolean {
+  const home = `/shops/${shopId}`;
+  if (pathname === home) {
+    return true;
+  }
+  const rest = pathname.startsWith(`${home}/`) ? pathname.slice(home.length + 1) : null;
+  if (rest === null) {
+    return false;
+  }
+  const [section] = rest.split("/");
+  return section === "products" || section === "setup";
+}

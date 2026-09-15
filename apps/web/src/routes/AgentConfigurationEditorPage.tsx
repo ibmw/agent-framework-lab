@@ -24,6 +24,7 @@ import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -45,7 +46,6 @@ import {
   accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  outlineButtonClasses,
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
@@ -98,7 +98,9 @@ const VARIABLE_PATTERN = /\{\{([^{}]*)\}\}/g;
 export function AgentConfigurationEditorPage() {
   const { configurationId = "" } = useParams();
   const { shopId } = useShopWorkspace();
-  const editor = useDefinitionEditor(configurationId, CLIENT);
+  const editor = useDefinitionEditor(configurationId, CLIENT, {
+    label: "The agent configuration draft has unsaved changes.",
+  });
   const { content, preview, edit } = editor;
   const [resources, setResources] = useState<AgentConfigurationResourcesResponse | null>(null);
   const [resolution, setResolution] = useState<AgentConfigurationResolutionSchema | null>(null);
@@ -287,14 +289,13 @@ export function AgentConfigurationEditorPage() {
         }
         actions={
           <>
-            <button
-              className={outlineButtonClasses}
-              type="button"
-              onClick={() => void save()}
-              disabled={!editor.dirty || editor.saving}
-            >
-              {editor.saving ? "Saving…" : editor.dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              dirty={editor.dirty}
+              saving={editor.saving}
+              discarding={editor.discarding}
+              onSave={() => void save()}
+              onDiscard={() => void editor.discard()}
+            />
             <button
               className={accentButtonClasses}
               type="button"

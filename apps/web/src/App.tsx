@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { createRoutesFromElements, Navigate, Route, useLocation } from "react-router-dom";
 import { AgentConfigurationEditorPage } from "./routes/AgentConfigurationEditorPage";
 import { AgentConfigurationsPage } from "./routes/AgentConfigurationsPage";
 import { MutationBlockEditorPage, ObjectiveBlockEditorPage } from "./routes/BlockEditorPage";
@@ -36,65 +36,73 @@ import { SupportIdentitiesPage } from "./routes/SupportIdentitiesPage";
 import { SupportIdentityEditorPage } from "./routes/SupportIdentityEditorPage";
 import { TicketsPage } from "./routes/TicketsPage";
 import { ShopWorkspace } from "./shell/ShopWorkspace";
+import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 
-export function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/shops" replace />} />
-      <Route path="/shops" element={<ShopsPage />} />
-      {/* Lab-level surfaces sit beside /shops rather than inside one: the first step of the
-          chain is creating the shop a new operator does not have yet (ADR 0044). */}
-      <Route path="/settings" element={<LabSettingsPage />} />
-      <Route path="/glossary" element={<GlossaryPage />} />
-      {/* The Guides section retired once the chain lived on each surface and the
-          fast path on settings (ADR 0049). Old paths still land somewhere useful. */}
-      <Route path="/guides" element={<Navigate to="/settings" replace />} />
-      <Route path="/guides/setup" element={<Navigate to="/settings" replace />} />
-      <Route path="/guides/glossary" element={<RedirectRetiredGlossary />} />
-      <Route path="/shops/:shopId" element={<ShopWorkspace />}>
-        <Route index element={<ShopHomePage />} />
-        <Route path="products" element={<ProductsPage />} />
-        <Route path="products/:handle" element={<ProductEditorPage />} />
-        <Route path="orders" element={<OrdersPage />} />
-        <Route path="orders/:orderId" element={<OrderEditorPage />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="tickets" element={<TicketsPage />} />
-        <Route path="tickets/:ticketId" element={<TicketsPage />} />
-        <Route path="customers/:profileId" element={<CustomerEditorPage />} />
-        <Route path="bench" element={<ExperimentSetupPage />} />
-        <Route path="bench/:experimentId" element={<ExperimentBenchPage />} />
-        <Route path="bench/:experimentId/results" element={<ExperimentResultsLayout />}>
-          <Route index element={<ExperimentResultsPage />} />
-          <Route path="timeline" element={<ExperimentTimelinePage />} />
-          <Route path="traces" element={<ExperimentTracesPage />} />
-        </Route>
-        <Route path="history" element={<ExperimentHistoryPage />} />
-        <Route path="scenarios" element={<ScenariosPage />} />
-        <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
-        <Route path="scenarios/:scenarioId/snapshots" element={<SnapshotsPage />} />
-        <Route path="objective-blocks" element={<ObjectiveBlocksPage />} />
-        <Route path="objective-blocks/:blockId" element={<ObjectiveBlockEditorPage />} />
-        <Route path="mutation-blocks" element={<MutationBlocksPage />} />
-        <Route path="mutation-blocks/:blockId" element={<MutationBlockEditorPage />} />
-        <Route path="support-identities" element={<SupportIdentitiesPage />} />
-        <Route path="agent-configurations" element={<AgentConfigurationsPage />} />
-        <Route
-          path="agent-configurations/:configurationId"
-          element={<AgentConfigurationEditorPage />}
-        />
-        <Route path="judges" element={<JudgeConfigurationsPage />} />
-        <Route path="judges/:judgeId" element={<JudgeConfigurationEditorPage />} />
-        <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
-        <Route path="setup/identity" element={<ShopIdentityPage />} />
-        <Route path="setup/policies" element={<PoliciesAndFaqPage />} />
-        <Route path="setup/support" element={<SupportGuidelinesPage />} />
-        <Route path="setup/tone" element={<ToneOfVoicePage />} />
-        <Route path="versions/:version" element={<ShopVersionPage />} />
+/**
+ * The application's routes, as route objects for a data router.
+ *
+ * They are still written as `<Route>` elements and read the same way they always did:
+ * `createRoutesFromElements` is the translation, so the migration to `createBrowserRouter` —
+ * which `useBlocker` requires — changed how the tree is handed to the router and not what is
+ * in it (ADR 0051). The one addition is the pathless root, which adds no path and matches no
+ * URL of its own; it is the layout that holds the guard above every route.
+ */
+export const routeTree = createRoutesFromElements(
+  <Route element={<UnsavedChangesGuard />}>
+    <Route path="/" element={<Navigate to="/shops" replace />} />
+    <Route path="/shops" element={<ShopsPage />} />
+    {/* Lab-level surfaces sit beside /shops rather than inside one: the first step of the
+        chain is creating the shop a new operator does not have yet (ADR 0044). */}
+    <Route path="/settings" element={<LabSettingsPage />} />
+    <Route path="/glossary" element={<GlossaryPage />} />
+    {/* The Guides section retired once the chain lived on each surface and the
+        fast path on settings (ADR 0049). Old paths still land somewhere useful. */}
+    <Route path="/guides" element={<Navigate to="/settings" replace />} />
+    <Route path="/guides/setup" element={<Navigate to="/settings" replace />} />
+    <Route path="/guides/glossary" element={<RedirectRetiredGlossary />} />
+    <Route path="/shops/:shopId" element={<ShopWorkspace />}>
+      <Route index element={<ShopHomePage />} />
+      <Route path="products" element={<ProductsPage />} />
+      <Route path="products/:handle" element={<ProductEditorPage />} />
+      <Route path="orders" element={<OrdersPage />} />
+      <Route path="orders/:orderId" element={<OrderEditorPage />} />
+      <Route path="customers" element={<CustomersPage />} />
+      <Route path="tickets" element={<TicketsPage />} />
+      <Route path="tickets/:ticketId" element={<TicketsPage />} />
+      <Route path="customers/:profileId" element={<CustomerEditorPage />} />
+      <Route path="bench" element={<ExperimentSetupPage />} />
+      <Route path="bench/:experimentId" element={<ExperimentBenchPage />} />
+      <Route path="bench/:experimentId/results" element={<ExperimentResultsLayout />}>
+        <Route index element={<ExperimentResultsPage />} />
+        <Route path="timeline" element={<ExperimentTimelinePage />} />
+        <Route path="traces" element={<ExperimentTracesPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/shops" replace />} />
-    </Routes>
-  );
-}
+      <Route path="history" element={<ExperimentHistoryPage />} />
+      <Route path="scenarios" element={<ScenariosPage />} />
+      <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
+      <Route path="scenarios/:scenarioId/snapshots" element={<SnapshotsPage />} />
+      <Route path="objective-blocks" element={<ObjectiveBlocksPage />} />
+      <Route path="objective-blocks/:blockId" element={<ObjectiveBlockEditorPage />} />
+      <Route path="mutation-blocks" element={<MutationBlocksPage />} />
+      <Route path="mutation-blocks/:blockId" element={<MutationBlockEditorPage />} />
+      <Route path="support-identities" element={<SupportIdentitiesPage />} />
+      <Route path="agent-configurations" element={<AgentConfigurationsPage />} />
+      <Route
+        path="agent-configurations/:configurationId"
+        element={<AgentConfigurationEditorPage />}
+      />
+      <Route path="judges" element={<JudgeConfigurationsPage />} />
+      <Route path="judges/:judgeId" element={<JudgeConfigurationEditorPage />} />
+      <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
+      <Route path="setup/identity" element={<ShopIdentityPage />} />
+      <Route path="setup/policies" element={<PoliciesAndFaqPage />} />
+      <Route path="setup/support" element={<SupportGuidelinesPage />} />
+      <Route path="setup/tone" element={<ToneOfVoicePage />} />
+      <Route path="versions/:version" element={<ShopVersionPage />} />
+    </Route>
+    <Route path="*" element={<Navigate to="/shops" replace />} />
+  </Route>,
+);
 
 function RedirectRetiredGlossary() {
   const { hash } = useLocation();

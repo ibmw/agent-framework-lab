@@ -26,14 +26,13 @@ import type {
   TimelineEntrySchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
 import { TOURS } from "./lib/tours";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -1014,43 +1013,23 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderSetup() {
-  return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench`]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(`/shops/${SHOP_ID}/bench`);
 }
 
 function renderTimeline() {
-  return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/timeline`]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/timeline`);
 }
 
 function renderTraces() {
-  return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/traces`]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/traces`);
 }
 
 function renderResults() {
-  return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`);
 }
 
 function renderBench() {
-  return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}`]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}`);
 }
 
 async function chooseArm(user: ReturnType<typeof userEvent.setup>, position: number, name: string) {
@@ -2073,11 +2052,7 @@ describe("replay", () => {
   });
 
   it("says which run a derived experiment replays, and links back to it", async () => {
-    render(
-      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${REPLAY_ID}/results`]}>
-        <App />
-      </MemoryRouter>,
-    );
+    renderApp(`/shops/${SHOP_ID}/bench/${REPLAY_ID}/results`);
 
     const back = await screen.findByRole("link", {
       name: "Wrong address — framework comparison",
@@ -2137,11 +2112,7 @@ describe("replay", () => {
   });
 
   it("says which run a fork came from and what it changed", async () => {
-    render(
-      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${FORK_ID}/results`]}>
-        <App />
-      </MemoryRouter>,
-    );
+    renderApp(`/shops/${SHOP_ID}/bench/${FORK_ID}/results`);
 
     const back = await screen.findByRole("link", {
       name: "Wrong address — framework comparison",
@@ -2155,11 +2126,7 @@ describe("replay", () => {
     // moved from the run it came from — and the chip strip is ADR 0025's, over the arms this
     // experiment actually holds. A fork is the operation most likely to turn a one-variable
     // source into a two-variable run, and the screen it lands on has to say so.
-    render(
-      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${FORK_ID}/results`]}>
-        <App />
-      </MemoryRouter>,
-    );
+    renderApp(`/shops/${SHOP_ID}/bench/${FORK_ID}/results`);
 
     expect(
       await screen.findByText(
@@ -2221,11 +2188,7 @@ describe("replay", () => {
   });
 
   it("names the run a derived thread was driven by, where there is one to name", async () => {
-    render(
-      <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/bench/${REPLAY_ID}`]}>
-        <App />
-      </MemoryRouter>,
-    );
+    renderApp(`/shops/${SHOP_ID}/bench/${REPLAY_ID}`);
 
     const composer = await screen.findByRole("region", { name: "Customer composer" });
 

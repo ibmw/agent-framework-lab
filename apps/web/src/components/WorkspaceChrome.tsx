@@ -1,7 +1,12 @@
 import type { DefinitionIssueSchema } from "@agent-lab/contracts";
 import type { ReactNode } from "react";
 import type { EntryEdit } from "../lib/entryEdit";
-import { accentButtonClasses, subtleButtonClasses, surfaceClasses } from "../lib/ui";
+import {
+  accentButtonClasses,
+  outlineButtonClasses,
+  subtleButtonClasses,
+  surfaceClasses,
+} from "../lib/ui";
 
 /**
  * Draft and published state is never carried by colour alone: every chip pairs its colour
@@ -65,6 +70,65 @@ export function PageHeader({
       </div>
       {description ? <p className="text-[13px] text-admin-muted">{description}</p> : null}
     </header>
+  );
+}
+
+/**
+ * The Save an editor's header carries, the Discard beside it, and the line that replaces both
+ * once there is nothing to save.
+ *
+ * A clean editor used to draw a disabled accent button reading "Saved", which is a control
+ * offering an action it will not perform; what it was actually reporting is a state, so it is
+ * written as one (PLAN-UX Slice 8). "Discard changes" appears only while there is something to
+ * discard, and it undoes exactly what Save would have written — the draft, and not a row that
+ * is open for editing, whose typing no page-level Save has ever carried.
+ */
+export function EditorSaveActions({
+  saveLabel = "Save draft",
+  dirty,
+  saving,
+  discarding,
+  onSave,
+  onDiscard,
+  tone = "outline",
+}: {
+  saveLabel?: string;
+  dirty: boolean;
+  saving: boolean;
+  discarding: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+  /** Accent where Save is the page's primary action, outline where Publish is. */
+  tone?: "accent" | "outline";
+}) {
+  return (
+    <>
+      {/* Present whether or not the editor is dirty, so the line is a live region an assistive
+          technology is already watching when a save lands. */}
+      <p role="status" className={dirty ? "sr-only" : "text-xs font-semibold text-admin-muted"}>
+        {dirty ? "" : "All changes saved"}
+      </p>
+      {dirty ? (
+        <>
+          <button
+            className={subtleButtonClasses}
+            type="button"
+            onClick={onDiscard}
+            disabled={saving || discarding}
+          >
+            {discarding ? "Discarding…" : "Discard changes"}
+          </button>
+          <button
+            className={tone === "accent" ? accentButtonClasses : outlineButtonClasses}
+            type="button"
+            onClick={onSave}
+            disabled={saving || discarding}
+          >
+            {saving ? "Saving…" : saveLabel}
+          </button>
+        </>
+      ) : null}
+    </>
   );
 }
 

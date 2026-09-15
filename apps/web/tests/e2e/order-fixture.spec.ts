@@ -13,7 +13,7 @@ function card(page: Page, name: string) {
 
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 }
 
 async function openSection(page: Page, link: string, heading: string) {
@@ -139,7 +139,7 @@ test("an author builds a paid order shipping to the customer's stale address", a
   await expect(shipping.getByText(/Saving freezes a new copy/)).toBeVisible();
 
   await page.getByRole("button", { name: "Save order" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 
   // Totals derive from the line item, and the address is a frozen, source-labeled copy.
   await expect(lines.getByText("249.00 EUR").first()).toBeVisible();

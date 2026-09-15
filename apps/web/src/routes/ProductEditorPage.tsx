@@ -13,6 +13,7 @@ import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldGroupHint, FieldHint } from "../components/FieldHint";
 import {
   Card,
+  EditorSaveActions,
   EntryCard,
   EntryEditButtons,
   EntryEditNotice,
@@ -76,7 +77,8 @@ const PRODUCT_STATUSES = optionsOf(PRODUCT_STATUS);
 
 export function ProductEditorPage() {
   const { handle = "" } = useParams();
-  const { content, preview, edit, save, saving, dirty, error } = useShopWorkspace();
+  const { content, preview, edit, save, saving, discard, discarding, dirty, error } =
+    useShopWorkspace();
   const product = findProduct(content, handle);
 
   if (!product) {
@@ -104,14 +106,14 @@ export function ProductEditorPage() {
         chips={<VersionChips preview={preview} />}
         description={`Editing the shop draft · ${ratingLabel(product)}`}
         actions={
-          <button
-            className={accentButtonClasses}
-            type="button"
-            onClick={() => void save()}
-            disabled={!dirty || saving}
-          >
-            {saving ? "Saving…" : dirty ? "Save draft" : "Saved"}
-          </button>
+          <EditorSaveActions
+            tone="accent"
+            dirty={dirty}
+            saving={saving}
+            discarding={discarding}
+            onSave={() => void save()}
+            onDiscard={() => void discard()}
+          />
         }
       />
 

@@ -19,6 +19,7 @@ import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -38,7 +39,6 @@ import {
   accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  outlineButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
 
@@ -70,7 +70,9 @@ const CLIENT: DefinitionClient<
  */
 export function JudgeConfigurationEditorPage() {
   const { judgeId = "" } = useParams();
-  const editor = useDefinitionEditor(judgeId, CLIENT);
+  const editor = useDefinitionEditor(judgeId, CLIENT, {
+    label: "The judge draft has unsaved changes.",
+  });
   const { content, preview, edit } = editor;
   const [resources, setResources] = useState<JudgeConfigurationResourcesResponse | null>(null);
   const [resourceError, setResourceError] = useState<string | null>(null);
@@ -173,14 +175,13 @@ export function JudgeConfigurationEditorPage() {
         }
         actions={
           <>
-            <button
-              className={outlineButtonClasses}
-              type="button"
-              onClick={() => void editor.save()}
-              disabled={!editor.dirty || editor.saving}
-            >
-              {editor.saving ? "Saving…" : editor.dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              dirty={editor.dirty}
+              saving={editor.saving}
+              discarding={editor.discarding}
+              onSave={() => void editor.save()}
+              onDiscard={() => void editor.discard()}
+            />
             <button
               className={accentButtonClasses}
               type="button"

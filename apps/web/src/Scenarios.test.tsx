@@ -11,14 +11,13 @@ import type {
   ShopPreviewResponse,
   TicketListResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
 import { TOURS } from "./lib/tours";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -361,12 +360,17 @@ async function addBlock(
   );
 }
 
+/**
+ * The page's publication notice, out of the status lines the header now also carries: every
+ * editor reports "All changes saved" as a status of its own (PLAN-UX Slice 8).
+ */
+async function publicationNotice() {
+  const lines = await screen.findAllByRole("status");
+  return lines.find((line) => line.textContent?.startsWith("Published version"));
+}
+
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(path);
 }
 
 describe("scenario index", () => {
@@ -583,10 +587,10 @@ describe("scenario editor", () => {
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Published version 1");
+    expect(await publicationNotice()).toHaveTextContent("Published version 1");
     // The notice describes what was frozen, so the next edit retires it.
     await user.type(screen.getByLabelText("Hidden facts"), "Maya says nothing unprompted.");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(await publicationNotice()).toBeUndefined();
   });
 
   it("says so when the shop's objects and the libraries cannot be loaded", async () => {

@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
+import { useRegisterUnsavedWork } from "./unsavedWork";
 
 /**
  * What a saved row's edit mode needs from the list that owns it.
@@ -61,16 +62,17 @@ export interface EntryEditor<FieldsT> {
 }
 
 /**
- * An open row is also unsaved work that `useDefinitionEditor`'s `dirty` flag cannot see, so
- * PLAN-UX Slice 8's navigation guard has to learn about it. The path it registers through is
- * Slice 8's to choose — counting open rows into `dirty`, holding them beside it, or lifting
- * these editors into a context — so nothing is offered here in advance; a seam shaped for one
- * of the three would decide a question that slice is told it owns.
+ * An open row is unsaved work that `useDefinitionEditor`'s `dirty` flag cannot see, because
+ * edit mode holds its draft outside `content` on purpose. It is therefore declared to the
+ * workspace's register of unsaved work from here — one declaration per list, made by the hook
+ * every editable list already calls, so no page can hold an editable list and forget to guard
+ * it (ADR 0051). It declares no `save`: nothing typed in an open row has reached the draft, so
+ * no page-level Save has ever carried it and the navigation prompt does not pretend to.
  *
  * @param ids the ids the list currently holds, in any order. An open row whose id is no
- *   longer among them is closed: a draft that is refetched or discarded — which Slice 8 adds
- *   — can drop the entry being edited, and a row left open against it would render stale
- *   fields and disable every sibling's Edit behind a notice naming an entry that is gone.
+ *   longer among them is closed: a draft that is refetched or discarded can drop the entry
+ *   being edited, and a row left open against it would render stale fields and disable every
+ *   sibling's Edit behind a notice naming an entry that is gone.
  */
 export function useEntryEdit<FieldsT>(ids: readonly string[]): EntryEditor<FieldsT> {
   const [state, setState] = useState<OpenRow<FieldsT> | null>(null);
@@ -84,6 +86,15 @@ export function useEntryEdit<FieldsT>(ids: readonly string[]): EntryEditor<Field
       setState(null);
     }
   }, [state, open]);
+
+  useRegisterUnsavedWork(
+    open === null
+      ? null
+      : {
+          label: `${open.label} is open for editing, and nothing typed in it has reached the draft.`,
+          discard: () => setState(null),
+        },
+  );
 
   return {
     open,

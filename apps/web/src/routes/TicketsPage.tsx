@@ -9,7 +9,7 @@ import type {
   TicketStatus,
   TicketSummarySchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listCustomerProfiles } from "../api/customerProfiles";
@@ -29,6 +29,7 @@ import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -112,6 +113,8 @@ export function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
   const [listError, setListError] = useState<string | null>(null);
+  /** The ticket a create on this page is opening, while its navigation is in flight. */
+  const opening = useRef<string | null>(null);
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
@@ -143,13 +146,32 @@ export function TicketsPage() {
     [tickets, filter],
   );
 
+  // Stable, because the editor beside the list builds its guard from it: an `onSaved` rebuilt
+  // every render would rebuild the guard, and with it the editor's own `save`.
+  const onTicketSaved = useCallback(() => {
+    reload().catch(() => {
+      // The list keeps what it has; the save itself landed and said so.
+    });
+  }, [reload]);
+
   // The list is a way in rather than a waiting room: an operator who opens Tickets is shown the
   // one they touched last instead of an empty pane telling them to pick something. Only when no
   // ticket is named — a reader who navigated to one, or who filtered until nothing matched, is
   // not moved — and `replace`, so the way back out is the page they came from and not this
   // redirect happening again.
+  //
+  // It must also stay out of the way of a ticket this page has just created, which the create
+  // opens itself. The effect is scheduled from the render that the reloaded list produces, and
+  // in that render `ticketId` is still undefined even though the create's navigation is already
+  // on its way — so without `opening` it fires every single time a ticket is created and sends a
+  // second navigation after the first. A ref rather than state, because an effect cannot read a
+  // flag it is racing; the effect clears it as soon as a ticket is named.
   useEffect(() => {
-    if (ticketId !== undefined || loading || visible.length === 0) {
+    if (ticketId !== undefined) {
+      opening.current = null;
+      return;
+    }
+    if (opening.current !== null || loading || visible.length === 0) {
       return;
     }
     const latest = visible.reduce((newest, ticket) =>
@@ -242,6 +264,7 @@ export function TicketsPage() {
             taken={tickets.map((ticket) => ticket.reference)}
             ready={!loading && !listError}
             onCreated={async (created) => {
+              opening.current = created;
               try {
                 await reload();
               } catch (cause: unknown) {
@@ -253,7 +276,7 @@ export function TicketsPage() {
         </section>
 
         {ticketId ? (
-          <TicketWorkspace shopId={shopId} ticketId={ticketId} onSaved={() => void reload()} />
+          <TicketWorkspace shopId={shopId} ticketId={ticketId} onSaved={onTicketSaved} />
         ) : (
           <p className="text-[13px] text-admin-muted">
             {loading ? "Loading tickets…" : "No tickets yet. Open one to start an incident."}
@@ -439,8 +462,6 @@ function TicketWorkspace({
     }),
     [shopId],
   );
-  const editor = useDefinitionEditor(ticketId, client);
-  const { content, preview, edit } = editor;
   const [context, setContext] = useState<TicketContextSchema | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
@@ -450,6 +471,26 @@ function TicketWorkspace({
     },
     [shopId, ticketId],
   );
+
+  // Two reads follow a saved ticket: the context panel beside the thread, and the list this
+  // editor sits next to. They belong to the editor rather than to its Save button, because the
+  // navigation prompt saves this draft too — and unlike the shop switcher it does not need the
+  // operator to leave the page to go stale, since the list and the related-ticket links move
+  // between tickets inside this one.
+  const guard = useMemo(
+    () => ({
+      label: "The ticket draft has unsaved changes.",
+      afterSave: async () => {
+        // The panel is context, not content: a panel that cannot be re-read never turns a
+        // successful save into anything the operator has to answer.
+        await refreshContext().catch(() => {});
+        onSaved();
+      },
+    }),
+    [refreshContext, onSaved],
+  );
+  const editor = useDefinitionEditor(ticketId, client, guard);
+  const { content, preview, edit } = editor;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -472,14 +513,6 @@ function TicketWorkspace({
     );
   }
 
-  async function save() {
-    await editor.save();
-    // The panel is context, not content: the same stance as the load effect, so a panel that
-    // cannot be refreshed never turns a successful save into an unhandled rejection.
-    await refreshContext().catch(() => {});
-    onSaved();
-  }
-
   return (
     <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="grid min-w-0 content-start gap-4">
@@ -491,14 +524,13 @@ function TicketWorkspace({
             <StatusBadge status={content.status} />
             <VersionChips preview={preview} />
             <div className="ml-auto flex items-center gap-2">
-              <button
-                className={outlineButtonClasses}
-                type="button"
-                onClick={() => void save()}
-                disabled={!editor.dirty || editor.saving}
-              >
-                {editor.saving ? "Saving…" : editor.dirty ? "Save draft" : "Saved"}
-              </button>
+              <EditorSaveActions
+                dirty={editor.dirty}
+                saving={editor.saving}
+                discarding={editor.discarding}
+                onSave={() => void editor.save()}
+                onDiscard={() => void editor.discard()}
+              />
               <button
                 className={accentButtonClasses}
                 type="button"

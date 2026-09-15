@@ -2,6 +2,14 @@ import type { Page } from "@playwright/test";
 import { expect as baseExpect, test } from "./support/e2e";
 
 /**
+ * The page's publication notice. Every editor header now reports "All changes saved" as a
+ * status line of its own (PLAN-UX Slice 8), so a query for "the page's status" says which.
+ */
+function publicationNotice(page: Page) {
+  return page.getByRole("status").filter({ hasText: "Published version" });
+}
+
+/**
  * This journey's assertions wait longer than the suite's default, and only this journey's.
  *
  * It is the heaviest writer in a suite that runs every journey at once against one API process
@@ -42,7 +50,7 @@ function card(page: Page, name: string) {
 
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 }
 
 async function openSection(page: Page, link: string, heading: string) {
@@ -165,7 +173,7 @@ async function buildIncident(page: Page, unique: string) {
   await shipping.getByLabel("Fulfilment method", { exact: true }).selectOption("standard");
   await shipping.getByLabel("Ship to", { exact: true }).selectOption("bordeaux-previous-flat");
   await page.getByRole("button", { name: "Save order" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
   const list = card(page, "Tickets");
@@ -193,7 +201,7 @@ async function buildIncident(page: Page, unique: string) {
     .check();
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText(
+  await expect(publicationNotice(page)).toContainText(
     "A scenario built on this ticket freezes this exact version",
   );
 }
@@ -246,7 +254,7 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
     .fill("The shop document the arm has to read.");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 
   // The other kind of objective: one no rule can decide, which a judge scores (ADR 0031).
   await openSection(page, "Objective blocks", "Objective blocks");
@@ -264,7 +272,7 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
     .selectOption("judge");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 
   await openSection(page, "Mutation blocks", "Mutation blocks");
   const newMutation = card(page, "New mutation block");
@@ -295,7 +303,7 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
     .fill("after_first_read");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 }
 
 /**
@@ -357,7 +365,7 @@ async function publishJudge(page: Page, name: string) {
   );
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 }
 
 async function publishScenario(page: Page, objective: string, judged: string, mutation: string) {
@@ -401,7 +409,7 @@ async function publishScenario(page: Page, objective: string, judged: string, mu
   await completion.getByLabel("Turn cap", { exact: true }).fill("2");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 }
 
 async function chooseArm(page: Page, position: number, configuration: string) {

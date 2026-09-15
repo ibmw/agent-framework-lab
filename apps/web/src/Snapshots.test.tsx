@@ -13,14 +13,13 @@ import type {
   ToolCallResponse,
   ToolContractListResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
 import { TOURS } from "./lib/tours";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -392,11 +391,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderPage() {
-  return render(
-    <MemoryRouter initialEntries={[`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/snapshots`]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/snapshots`);
 }
 
 describe("starting states", () => {

@@ -8,13 +8,12 @@ import type {
   ShopOrderResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const PROFILE_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -322,11 +321,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(path);
 }
 
 function card(name: string) {
@@ -488,7 +483,7 @@ describe("order editor", () => {
     expect(savedRequests[0].lines).toEqual([{ sku: "NS-ASJ-OB-M", quantity: 2 }]);
     expect(savedRequests[0].shipping_address_id).toBe("bordeaux-previous-flat");
     expect(JSON.stringify(savedRequests[0])).not.toContain("249.00");
-    expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
+    expect(await screen.findByText("All changes saved")).toBeInTheDocument();
   });
 
   it("announces that reselecting freezes a new copy", async () => {
@@ -614,6 +609,22 @@ describe("order editor", () => {
 
     await waitFor(() => expect(deleted).toEqual([ORDER_ID]));
     expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
+  });
+
+  it("does not ask about edits to an order it has just deleted", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+
+    // Unsaved work on a fixture the operator has chosen to destroy is not work to ask about.
+    const fee = screen.getByLabelText("Shipping fee");
+    await user.clear(fee);
+    await user.type(fee, "9.90");
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete permanently" }));
+
+    expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("keeps a failed save visible instead of pretending it worked", async () => {

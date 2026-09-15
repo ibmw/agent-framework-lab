@@ -4,7 +4,7 @@ import type {
   ShopPreviewResponse,
   ShopSummarySchema,
 } from "@agent-lab/contracts";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -16,7 +16,7 @@ import {
 } from "../api/shops";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { writeLastVisitedShop } from "../lib/preferences";
-import { toPayload } from "../lib/shop";
+import { shopDraftIsSavableAt, toPayload } from "../lib/shop";
 import { AppShell } from "./AppShell";
 
 const CLIENT: DefinitionClient<ShopContentSchema, ShopPayloadSchema, ShopPreviewResponse> = {
@@ -35,10 +35,12 @@ export interface ShopWorkspaceValue {
   preview: ShopPreviewResponse | null;
   dirty: boolean;
   saving: boolean;
+  discarding: boolean;
   publishing: boolean;
   error: string | null;
   edit: (next: ShopContentSchema) => void;
-  save: () => Promise<void>;
+  save: () => Promise<string | null>;
+  discard: () => Promise<void>;
   publish: () => Promise<number | null>;
 }
 
@@ -58,7 +60,6 @@ export function useShopWorkspace(): ShopWorkspaceValue {
  */
 export function ShopWorkspace() {
   const { shopId = "" } = useParams();
-  const editor = useDefinitionEditor(shopId, CLIENT);
   const [shops, setShops] = useState<ShopSummarySchema[]>([]);
   const [shopsError, setShopsError] = useState<string | null>(null);
 
@@ -71,6 +72,21 @@ export function ShopWorkspace() {
       }
     }
   }, []);
+
+  // This editor outlives the page editing it, so what strands its draft is leaving the reach of
+  // its Save rather than leaving a route (`shopDraftIsSavableAt`). And the switcher shows each
+  // shop's authored name, so the list follows any write that can change it — declared here, on
+  // the editor, because the navigation prompt saves this draft too and a wrapper around the
+  // page's own button would not be reached when it did.
+  const guard = useMemo(
+    () => ({
+      label: "The shop draft has unsaved changes.",
+      reaches: (pathname: string) => shopDraftIsSavableAt(shopId, pathname),
+      afterSave: refreshShops,
+    }),
+    [shopId, refreshShops],
+  );
+  const editor = useDefinitionEditor(shopId, CLIENT, guard);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -89,14 +105,7 @@ export function ShopWorkspace() {
     }
   }, [loaded, shopId]);
 
-  // The switcher shows each shop's authored name, so the list follows any write that can
-  // change it.
-  const { save: saveDraft, publish: publishDraft } = editor;
-  const save = useCallback(async () => {
-    await saveDraft();
-    await refreshShops();
-  }, [saveDraft, refreshShops]);
-
+  const { publish: publishDraft } = editor;
   const publish = useCallback(async () => {
     const version = await publishDraft();
     await refreshShops();
@@ -131,10 +140,12 @@ export function ShopWorkspace() {
           preview: editor.preview,
           dirty: editor.dirty,
           saving: editor.saving,
+          discarding: editor.discarding,
           publishing: editor.publishing,
           error: editor.error ?? shopsError,
           edit: editor.edit,
-          save,
+          save: editor.save,
+          discard: editor.discard,
           publish,
         }}
       >

@@ -14,6 +14,7 @@ import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   DefaultToneChip,
+  EditorSaveActions,
   EntryCard,
   EntryEditNotice,
   EntryId,
@@ -65,7 +66,7 @@ function SetupPage({
   tour: TourId;
   children: ReactNode;
 }) {
-  const { preview, save, saving, dirty, error } = useShopWorkspace();
+  const { preview, save, saving, discard, discarding, dirty, error } = useShopWorkspace();
   return (
     <>
       <PageHeader
@@ -74,14 +75,14 @@ function SetupPage({
         actions={
           <>
             <TourLaunch id={tour} />
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => void save()}
-              disabled={!dirty || saving}
-            >
-              {saving ? "Saving…" : dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              tone="accent"
+              dirty={dirty}
+              saving={saving}
+              discarding={discarding}
+              onSave={() => void save()}
+              onDiscard={() => void discard()}
+            />
           </>
         }
       />

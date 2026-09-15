@@ -57,7 +57,7 @@ test("the rail keeps its controls on screen in every section", async ({ page }) 
   await fulfilment.getByLabel("Carrier", { exact: true }).fill("Nordic Post");
   await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 
   for (const [link, heading] of SECTIONS) {
     // Scoped to the rail: the guide strip on the shop home links to sections by name too.
@@ -90,4 +90,56 @@ test("the rail collapses only when the author asks, in every section", async ({ 
   await expect(page.getByRole("button", { name: "Expand navigation" })).toBeVisible();
   await page.getByRole("button", { name: "Expand navigation" }).click();
   await expect(page.getByRole("button", { name: "Collapse navigation" })).toBeVisible();
+});
+
+/**
+ * PLAN-UX Slice 8's own evidence, in a browser: an edit that the rail would carry somewhere it
+ * cannot be saved is asked about once, and the three answers do what they say.
+ */
+test("asks before the rail carries an unsaved product edit out of reach", async ({ page }) => {
+  const unique = Date.now().toString(36);
+
+  await page.goto("/shops");
+  const createShop = page.getByRole("region", { name: "Create a shop" });
+  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
+  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
+  await createShop.getByRole("button", { name: "Create shop" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Products" }).click();
+  const newProduct = page.getByRole("region", { name: "Add a product" });
+  await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
+  await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
+  await newProduct.getByRole("button", { name: "Add to draft" }).click();
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("All changes saved")).toBeVisible();
+
+  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
+  await page
+    .getByRole("region", { name: "Details" })
+    .getByLabel("Description", { exact: true })
+    .fill("Three-layer waterproof shell with taped seams.");
+
+  // The product editor and the catalog save the same draft, so moving between them asks nothing.
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Products" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // Orders cannot save it, so it is asked about — once, with three answers.
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Orders" }).click();
+  const prompt = page.getByRole("dialog", { name: "Unsaved changes" });
+  await expect(prompt).toContainText("The shop draft has unsaved changes.");
+  await prompt.getByRole("button", { name: "Stay on this page" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Orders" }).click();
+  await prompt.getByRole("button", { name: "Discard and leave" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
+
+  // Discard read the draft back, so the description the lab holds is the one it was saved with.
+  await page.getByLabel("Shop workspace").getByRole("link", { name: "Products" }).click();
+  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
+  await expect(
+    page.getByRole("region", { name: "Details" }).getByLabel("Description", { exact: true }),
+  ).toHaveValue("");
 });

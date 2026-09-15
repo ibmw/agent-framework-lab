@@ -28,6 +28,7 @@ import { LocaleField } from "../components/LocaleField";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   EntryCard,
   EntryEditNotice,
   EntryId,
@@ -49,7 +50,6 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
-  outlineButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
   textAreaClasses,
@@ -186,7 +186,9 @@ function HiddenFactFieldset({
 export function CustomerEditorPage() {
   const { profileId = "" } = useParams();
   const { shopId, shops } = useShopWorkspace();
-  const editor = useDefinitionEditor(profileId, CLIENT);
+  const editor = useDefinitionEditor(profileId, CLIENT, {
+    label: "The customer profile draft has unsaved changes.",
+  });
   const { content, preview, edit } = editor;
   const [attachedShops, setAttachedShops] = useState<string[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -367,14 +369,13 @@ export function CustomerEditorPage() {
         }
         actions={
           <>
-            <button
-              className={outlineButtonClasses}
-              type="button"
-              onClick={() => void editor.save()}
-              disabled={!editor.dirty || editor.saving}
-            >
-              {editor.saving ? "Saving…" : editor.dirty ? "Save draft" : "Saved"}
-            </button>
+            <EditorSaveActions
+              dirty={editor.dirty}
+              saving={editor.saving}
+              discarding={editor.discarding}
+              onSave={() => void editor.save()}
+              onDiscard={() => void editor.discard()}
+            />
             <button
               className={accentButtonClasses}
               type="button"

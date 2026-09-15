@@ -2,6 +2,14 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./support/e2e";
 
 /**
+ * The page's publication notice. Every editor header now reports "All changes saved" as a
+ * status line of its own (PLAN-UX Slice 8), so a query for "the page's status" says which.
+ */
+function publicationNotice(page: Page) {
+  return page.getByRole("status").filter({ hasText: "Published version" });
+}
+
+/**
  * Milestone 2 scenario acceptance evidence: an author composes the wrong-address recipe on a
  * published ticket — the context document the incident turns on, a read-check bound to that
  * document, a fault bound to the stale-address order — publishes it, and freezes that version
@@ -19,7 +27,7 @@ function card(page: Page, name: string) {
 
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 }
 
 async function openSection(page: Page, link: string, heading: string) {
@@ -136,7 +144,7 @@ async function buildIncident(page: Page, unique: string) {
   await shipping.getByLabel("Fulfilment method", { exact: true }).selectOption("standard");
   await shipping.getByLabel("Ship to", { exact: true }).selectOption("bordeaux-previous-flat");
   await page.getByRole("button", { name: "Save order" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
   const list = card(page, "Tickets");
@@ -164,7 +172,7 @@ async function buildIncident(page: Page, unique: string) {
     .check();
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText(
+  await expect(publicationNotice(page)).toContainText(
     "A scenario built on this ticket freezes this exact version",
   );
 }
@@ -217,7 +225,7 @@ async function publishTemplates(page: Page, objective: string, mutation: string)
     .fill("The shop document the arm has to read.");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 
   await openSection(page, "Mutation blocks", "Mutation blocks");
   const newMutation = card(page, "New mutation block");
@@ -248,7 +256,7 @@ async function publishTemplates(page: Page, objective: string, mutation: string)
     .fill("after_first_read");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 }
 
 test("an author composes and publishes the wrong-address scenario", async ({ page }) => {
@@ -331,7 +339,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await expect(resolved.getByText(objective)).toBeVisible();
 
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByRole("status")).toContainText("Published version 1");
+  await expect(publicationNotice(page)).toContainText("Published version 1");
 
   // A published version is a recipe, not starting state: freezing it settles the orders it
   // only names, and the snapshot separates what it pinned from what it had to copy.

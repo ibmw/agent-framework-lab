@@ -13,7 +13,7 @@ function card(page: Page, name: string) {
 
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+  await expect(page.getByText("All changes saved")).toBeVisible();
 }
 
 test("an author publishes a customer profile with an address book and persona", async ({

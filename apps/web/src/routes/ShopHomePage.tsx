@@ -7,6 +7,7 @@ import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
+  EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -15,7 +16,6 @@ import {
 } from "../components/WorkspaceChrome";
 import { groupIssues } from "../lib/shop";
 import {
-  accentButtonClasses,
   formatTimestamp,
   inkButtonClasses,
   labNoteClasses,
@@ -25,8 +25,19 @@ import {
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 export function ShopHomePage() {
-  const { shopId, content, preview, publish, publishing, save, saving, dirty, error } =
-    useShopWorkspace();
+  const {
+    shopId,
+    content,
+    preview,
+    publish,
+    publishing,
+    save,
+    saving,
+    discard,
+    discarding,
+    dirty,
+    error,
+  } = useShopWorkspace();
   const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
   const [versionsError, setVersionsError] = useState<string | null>(null);
   const [published, setPublished] = useState<number | null>(null);
@@ -73,16 +84,14 @@ export function ShopHomePage() {
         actions={
           <>
             <TourLaunch id="shop-home" />
-            {dirty ? (
-              <button
-                className={accentButtonClasses}
-                type="button"
-                onClick={() => void save()}
-                disabled={saving}
-              >
-                {saving ? "Saving…" : "Save draft"}
-              </button>
-            ) : null}
+            <EditorSaveActions
+              tone="accent"
+              dirty={dirty}
+              saving={saving}
+              discarding={discarding}
+              onSave={() => void save()}
+              onDiscard={() => void discard()}
+            />
           </>
         }
       />

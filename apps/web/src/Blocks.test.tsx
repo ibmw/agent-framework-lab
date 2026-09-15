@@ -11,14 +11,13 @@ import type {
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { App } from "./App";
 import { TOURS } from "./lib/tours";
+import { renderApp } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OBJECTIVE_ID = "1a2b3c4d-5e6f-4708-9a0b-1c2d3e4f5a6b";
@@ -278,12 +277,17 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
+/**
+ * The page's publication notice, out of the status lines the header now also carries: every
+ * editor reports "All changes saved" as a status of its own (PLAN-UX Slice 8).
+ */
+async function publicationNotice() {
+  const lines = await screen.findAllByRole("status");
+  return lines.find((line) => line.textContent?.startsWith("Published version"));
+}
+
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  );
+  return renderApp(path);
 }
 
 describe("block libraries", () => {
@@ -484,7 +488,7 @@ describe("objective block editor", () => {
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    expect(await publicationNotice()).toHaveTextContent(
       "Published version 1. A scenario binds this exact version.",
     );
     expect(publishAttempts).toBe(1);
