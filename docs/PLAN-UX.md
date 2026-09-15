@@ -220,13 +220,18 @@ name the run will resolve is shown beside the ID.
 
 ### Slice 7 — Every saved entry can be edited in place
 
-- [ ] Give `EntryCard` an edit mode: the row's fields open inline with Save and Cancel, the
+- [x] Give `EntryCard` an edit mode: the row's fields open inline with Save and Cancel, the
   identifier stays fixed and visible, and the payload written is the same one the add form would
   write.
-- [ ] Adopt it on policies, FAQ, support guidelines, tone, payment methods and fulfilment methods;
+- [x] Adopt it on policies, FAQ, support guidelines, tone, payment methods and fulfilment methods;
   on product options, media, attributes and reviews; on variant SKU and option values; on
   customer background entries and hidden facts.
-- [ ] Hidden-fact and guidance rows gain visible labels where they had only `aria-label`.
+- [x] Hidden-fact and guidance rows gain visible labels where they had only `aria-label`.
+  Delivered by opening those rows through `EntryCard` edit mode rather than by printing
+  captions down an always-open list. The support-identity guidance rows were therefore
+  **converted** rather than only relabelled — a departure from this line's wording, recorded in
+  `docs/design-direction.md` under *Revision — a saved row opens where it stands*, taken
+  because their write was assembled at the call site and was the drift this slice removes.
 
 Frames: 2c (product editor), 6b (customer editor).
 

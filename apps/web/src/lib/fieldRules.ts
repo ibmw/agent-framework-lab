@@ -30,6 +30,27 @@ export const TICKET_REFERENCE_RULE =
 export const VARIANT_SKU_RULE =
   "Uppercase letters, digits, and hyphens. Follows the handle and chosen options until you edit it; empty it to follow again.";
 
+/**
+ * What moving a *saved* entry's key means, for the two entries whose key is one of their own
+ * fields rather than a derived ID beside them.
+ *
+ * `diff_keyed_collection` in `domain/definitions.py` keys a variant on its SKU and a media
+ * entry on its reference, so an edit that moves either is reported as a removal and an
+ * addition rather than as an update — which is the one place an edit in place cannot promise
+ * "one updated field", and so is the one place it says so. Every other entry on these pages
+ * has an ID of its own, and edit mode hands it back untouched.
+ */
+export const VARIANT_SKU_RENAME_RULE =
+  "Uppercase letters, digits, and hyphens. Orders and tools name this variant by its SKU: changing it reads as a removal and an addition against the published version, and orders already placed keep their frozen copy.";
+
+/** Whether a typed SKU is one the contract's `^[A-Z0-9]+(-[A-Z0-9]+)*$` would carry. */
+export function isVariantSku(value: string): boolean {
+  return new RegExp(`^${REFERENCE_PATTERN}$`).test(value);
+}
+
+export const MEDIA_REFERENCE_RULE =
+  "A URL or path, like media/alpine-shell.jpg. It is what keys this entry: changing it reads as a removal and an addition against the published version.";
+
 export function alreadyTakenMessage(id: string, place: string): string {
   return `${id} is already ${place}.`;
 }

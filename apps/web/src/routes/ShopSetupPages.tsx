@@ -6,7 +6,7 @@ import type {
   SupportGuidelineSchema,
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { LocaleField } from "../components/LocaleField";
@@ -15,6 +15,7 @@ import {
   Card,
   DefaultToneChip,
   EntryCard,
+  EntryEditNotice,
   EntryId,
   EntryKind,
   EntryText,
@@ -22,6 +23,7 @@ import {
   PageHeader,
   VersionChips,
 } from "../components/WorkspaceChrome";
+import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
 import {
   labelOf,
@@ -123,6 +125,140 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
  */
 const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
 
+/**
+ * The authored fields of each of this page's six entry kinds, and the one function that turns
+ * each set of them into the entry the draft stores.
+ *
+ * The add form holds the fields, the edit mode holds the fields, and both hand them to the
+ * same builder with the entry's identifier beside them — which is what keeps the two paths
+ * from drifting into two shapes of the same payload. The identifier is the builder's first
+ * argument rather than one of the fields because it is derived once, when the entry is
+ * created, and an edit hands back the one the entry already has.
+ */
+interface ProseFields {
+  name: string;
+  text: string;
+}
+
+/**
+ * `enabled` is deliberately not here. It is the row's own chip-line toggle, which writes
+ * straight to the draft and stays live while the row is open, so an edit must read it from
+ * the entry as it stands at Save rather than from a copy taken when Edit was pressed — the
+ * rule the variants table already follows, and the one a tone of voice follows for
+ * `is_default`. Snapshotting it would silently revert a toggle made while the row was open.
+ */
+interface PaymentFields {
+  name: string;
+  kind: PaymentMethodSchema["kind"];
+}
+
+interface FulfilmentFields {
+  name: string;
+  carrier: string;
+  min: number;
+  max: number;
+}
+
+function paymentEntry(
+  id: string,
+  fields: PaymentFields & { enabled: boolean },
+): PaymentMethodSchema {
+  return { id, name: fields.name, kind: fields.kind, enabled: fields.enabled };
+}
+
+function paymentFields(entry: PaymentMethodSchema): PaymentFields {
+  return { name: entry.name, kind: entry.kind };
+}
+
+function fulfilmentEntry(id: string, fields: FulfilmentFields): FulfilmentMethodSchema {
+  return {
+    id,
+    name: fields.name,
+    carrier: fields.carrier,
+    min_transit_days: fields.min,
+    max_transit_days: fields.max,
+  };
+}
+
+function fulfilmentFields(entry: FulfilmentMethodSchema): FulfilmentFields {
+  return {
+    name: entry.name,
+    carrier: entry.carrier,
+    min: entry.min_transit_days,
+    max: entry.max_transit_days,
+  };
+}
+
+function policyEntry(
+  id: string,
+  fields: ProseFields & { kind: PolicySchema["kind"] },
+): PolicySchema {
+  return { id, title: fields.name, kind: fields.kind, body: fields.text };
+}
+
+function faqEntry(id: string, fields: ProseFields): FaqEntrySchema {
+  return { id, question: fields.name, answer: fields.text };
+}
+
+function guidelineEntry(id: string, fields: ProseFields): SupportGuidelineSchema {
+  return { id, title: fields.name, body: fields.text };
+}
+
+function toneEntry(id: string, fields: ProseFields & { is_default: boolean }): ToneOfVoiceSchema {
+  return { id, name: fields.name, guidance: fields.text, is_default: fields.is_default };
+}
+
+/**
+ * The name-and-prose pair that four of this page's six kinds are — a policy, an FAQ entry, a
+ * support guideline, a tone of voice — under the four different pairs of words they wear.
+ *
+ * The add form and the edit mode render this same component, so the control that takes a
+ * policy body is one control with one set of rules rather than two that happen to look alike.
+ * `beside` is what shares the first row: the derived ID on an add form, which an edit mode
+ * never shows because it never asks.
+ */
+function ProseFieldset({
+  nameLabel,
+  textLabel,
+  columns = "sm:grid-cols-2",
+  value,
+  onChange,
+  beside,
+}: {
+  nameLabel: string;
+  textLabel: string;
+  columns?: string;
+  value: ProseFields;
+  onChange: (next: ProseFields) => void;
+  beside?: ReactNode;
+}) {
+  return (
+    <>
+      <div className={`grid gap-2 ${columns}`}>
+        <label className={fieldLabelClasses}>
+          {nameLabel}
+          <input
+            className={fieldControlClasses}
+            value={value.name}
+            required
+            onChange={(event) => onChange({ ...value, name: event.target.value })}
+          />
+        </label>
+        {beside}
+      </div>
+      <label className={fieldLabelClasses}>
+        {textLabel}
+        <textarea
+          className={textAreaClasses}
+          value={value.text}
+          required
+          onChange={(event) => onChange({ ...value, text: event.target.value })}
+        />
+      </label>
+    </>
+  );
+}
+
 export function ShopIdentityPage() {
   const { content, edit } = useShopWorkspace();
   const identity = content.identity;
@@ -204,17 +340,96 @@ export function ShopIdentityPage() {
   );
 }
 
+/** The Kind select a payment method wears, on the add form and in an open row alike. */
+function PaymentKindField({
+  value,
+  onChange,
+}: {
+  value: PaymentMethodSchema["kind"];
+  onChange: (kind: PaymentMethodSchema["kind"]) => void;
+}) {
+  return (
+    <label className={fieldLabelClasses}>
+      Kind
+      <select
+        className={fieldControlClasses}
+        value={value}
+        onChange={(event) => onChange(event.target.value as PaymentMethodSchema["kind"])}
+      >
+        {PAYMENT_KINDS.map((entry) => (
+          <option key={entry.value} value={entry.value}>
+            {entry.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Carrier and transit window, on the add form and in an open row alike. */
+function FulfilmentFieldset({
+  value,
+  onChange,
+}: {
+  value: FulfilmentFields;
+  onChange: (next: FulfilmentFields) => void;
+}) {
+  return (
+    <>
+      <label className={fieldLabelClasses}>
+        Carrier
+        <input
+          className={fieldControlClasses}
+          value={value.carrier}
+          required
+          onChange={(event) => onChange({ ...value, carrier: event.target.value })}
+        />
+      </label>
+      <label className={fieldLabelClasses}>
+        Min days
+        <input
+          type="number"
+          min={0}
+          className={fieldControlClasses}
+          value={value.min}
+          onChange={(event) => onChange({ ...value, min: Number(event.target.value) })}
+        />
+      </label>
+      <label className={fieldLabelClasses}>
+        Max days
+        <input
+          type="number"
+          min={0}
+          className={fieldControlClasses}
+          value={value.max}
+          onChange={(event) => onChange({ ...value, max: Number(event.target.value) })}
+        />
+      </label>
+    </>
+  );
+}
+
 function PaymentAndFulfilmentCards() {
   const { content, edit } = useShopWorkspace();
-  const [payment, setPayment] = useState<{
-    id: string;
-    name: string;
-    kind: PaymentMethodSchema["kind"];
-  }>({ id: "", name: "", kind: "card" });
-  const [fulfilment, setFulfilment] = useState({ id: "", name: "", carrier: "", min: 1, max: 3 });
-
+  const [payment, setPayment] = useState<{ id: string } & PaymentFields>({
+    id: "",
+    name: "",
+    kind: "card",
+  });
+  const [fulfilment, setFulfilment] = useState<{ id: string } & FulfilmentFields>({
+    id: "",
+    name: "",
+    carrier: "",
+    min: 1,
+    max: 3,
+  });
   const takenPaymentIds = content.payment_methods.map((method) => method.id);
   const takenFulfilmentIds = content.fulfilment_methods.map((method) => method.id);
+  const paymentEditor = useEntryEdit<PaymentFields>(takenPaymentIds);
+  const fulfilmentEditor = useEntryEdit<FulfilmentFields>(takenFulfilmentIds);
+  const paymentNotice = useId();
+  const fulfilmentNotice = useId();
+
   const paymentSuggested = uniqueSuggestion(slugify(payment.name, ""), takenPaymentIds);
   const fulfilmentSuggested = uniqueSuggestion(slugify(fulfilment.name, ""), takenFulfilmentIds);
 
@@ -223,9 +438,30 @@ function PaymentAndFulfilmentCards() {
     if (!payment.id || takenPaymentIds.includes(payment.id)) {
       return;
     }
-    const method: PaymentMethodSchema = { ...payment, enabled: true };
-    edit({ ...content, payment_methods: [...content.payment_methods, method] });
+    edit({
+      ...content,
+      payment_methods: [
+        ...content.payment_methods,
+        // A rail is added enabled; nothing on the form asks, and a disabled new rail would be
+        // an answer the operator did not give.
+        paymentEntry(payment.id, { ...payment, enabled: true }),
+      ],
+    });
     setPayment({ id: "", name: "", kind: "card" });
+  }
+
+  /**
+   * The saved entry is replaced where it stands, so the list's order never moves — and
+   * `enabled` is read off the entry as it stands rather than off the open fields, so a toggle
+   * made on the chip line while the row was open survives Save.
+   */
+  function savePayment(id: string, fields: PaymentFields) {
+    edit({
+      ...content,
+      payment_methods: content.payment_methods.map((entry) =>
+        entry.id === id ? paymentEntry(id, { ...fields, enabled: entry.enabled }) : entry,
+      ),
+    });
   }
 
   function addFulfilment(event: FormEvent<HTMLFormElement>) {
@@ -233,15 +469,23 @@ function PaymentAndFulfilmentCards() {
     if (!fulfilment.id || takenFulfilmentIds.includes(fulfilment.id)) {
       return;
     }
-    const method: FulfilmentMethodSchema = {
-      id: fulfilment.id,
-      name: fulfilment.name,
-      carrier: fulfilment.carrier,
-      min_transit_days: fulfilment.min,
-      max_transit_days: fulfilment.max,
-    };
-    edit({ ...content, fulfilment_methods: [...content.fulfilment_methods, method] });
+    edit({
+      ...content,
+      fulfilment_methods: [
+        ...content.fulfilment_methods,
+        fulfilmentEntry(fulfilment.id, fulfilment),
+      ],
+    });
     setFulfilment({ id: "", name: "", carrier: "", min: 1, max: 3 });
+  }
+
+  function saveFulfilment(id: string, fields: FulfilmentFields) {
+    edit({
+      ...content,
+      fulfilment_methods: content.fulfilment_methods.map((entry) =>
+        entry.id === id ? fulfilmentEntry(id, fields) : entry,
+      ),
+    });
   }
 
   return (
@@ -273,6 +517,31 @@ function PaymentAndFulfilmentCards() {
                   </label>
                 </>
               }
+              edit={entryEdit(
+                paymentEditor,
+                paymentNotice,
+                method.id,
+                method.name,
+                () => paymentFields(method),
+                (fields) => savePayment(method.id, fields),
+                (value, onChange) => (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className={fieldLabelClasses}>
+                      Name
+                      <input
+                        className={fieldControlClasses}
+                        value={value.name}
+                        required
+                        onChange={(event) => onChange({ ...value, name: event.target.value })}
+                      />
+                    </label>
+                    <PaymentKindField
+                      value={value.kind}
+                      onChange={(kind) => onChange({ ...value, kind })}
+                    />
+                  </div>
+                ),
+              )}
               actions={
                 <RemoveButton
                   label={method.name}
@@ -292,6 +561,7 @@ function PaymentAndFulfilmentCards() {
             <li className="text-admin-muted">No payment method yet.</li>
           ) : null}
         </ul>
+        <EntryEditNotice id={paymentNotice} label={paymentEditor.open?.label ?? null} />
         <form className={`${addFormClasses} sm:grid-cols-4`} onSubmit={addPayment}>
           <label className={fieldLabelClasses}>
             Name
@@ -315,25 +585,10 @@ function PaymentAndFulfilmentCards() {
             required
             onChange={(id) => setPayment({ ...payment, id })}
           />
-          <label className={fieldLabelClasses}>
-            Kind
-            <select
-              className={fieldControlClasses}
-              value={payment.kind}
-              onChange={(event) =>
-                setPayment({
-                  ...payment,
-                  kind: event.target.value as PaymentMethodSchema["kind"],
-                })
-              }
-            >
-              {PAYMENT_KINDS.map((entry) => (
-                <option key={entry.value} value={entry.value}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <PaymentKindField
+            value={payment.kind}
+            onChange={(kind) => setPayment({ ...payment, kind })}
+          />
           <button className={`${accentButtonClasses} self-end`} type="submit">
             Add payment method
           </button>
@@ -354,6 +609,28 @@ function PaymentAndFulfilmentCards() {
                   <EntryId value={method.id} />
                 </>
               }
+              edit={entryEdit(
+                fulfilmentEditor,
+                fulfilmentNotice,
+                method.id,
+                method.name,
+                () => fulfilmentFields(method),
+                (fields) => saveFulfilment(method.id, fields),
+                (value, onChange) => (
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    <label className={fieldLabelClasses}>
+                      Name
+                      <input
+                        className={fieldControlClasses}
+                        value={value.name}
+                        required
+                        onChange={(event) => onChange({ ...value, name: event.target.value })}
+                      />
+                    </label>
+                    <FulfilmentFieldset value={value} onChange={onChange} />
+                  </div>
+                ),
+              )}
               actions={
                 <RemoveButton
                   label={method.name}
@@ -373,6 +650,7 @@ function PaymentAndFulfilmentCards() {
             <li className="text-admin-muted">No fulfilment method yet.</li>
           ) : null}
         </ul>
+        <EntryEditNotice id={fulfilmentNotice} label={fulfilmentEditor.open?.label ?? null} />
         <form className={`${addFormClasses} sm:grid-cols-5`} onSubmit={addFulfilment}>
           <label className={fieldLabelClasses}>
             Name
@@ -396,39 +674,10 @@ function PaymentAndFulfilmentCards() {
             required
             onChange={(id) => setFulfilment({ ...fulfilment, id })}
           />
-          <label className={fieldLabelClasses}>
-            Carrier
-            <input
-              className={fieldControlClasses}
-              value={fulfilment.carrier}
-              required
-              onChange={(event) => setFulfilment({ ...fulfilment, carrier: event.target.value })}
-            />
-          </label>
-          <label className={fieldLabelClasses}>
-            Min days
-            <input
-              type="number"
-              min={0}
-              className={fieldControlClasses}
-              value={fulfilment.min}
-              onChange={(event) =>
-                setFulfilment({ ...fulfilment, min: Number(event.target.value) })
-              }
-            />
-          </label>
-          <label className={fieldLabelClasses}>
-            Max days
-            <input
-              type="number"
-              min={0}
-              className={fieldControlClasses}
-              value={fulfilment.max}
-              onChange={(event) =>
-                setFulfilment({ ...fulfilment, max: Number(event.target.value) })
-              }
-            />
-          </label>
+          <FulfilmentFieldset
+            value={fulfilment}
+            onChange={(next) => setFulfilment({ ...fulfilment, ...next })}
+          />
           <button className={`${accentButtonClasses} self-end`} type="submit">
             Add fulfilment method
           </button>
@@ -438,28 +687,60 @@ function PaymentAndFulfilmentCards() {
   );
 }
 
+/** The Kind select a policy wears, on the add form and in an open row alike. */
+function PolicyKindField({
+  value,
+  onChange,
+}: {
+  value: PolicySchema["kind"];
+  onChange: (kind: PolicySchema["kind"]) => void;
+}) {
+  return (
+    <label className={fieldLabelClasses}>
+      Kind
+      <select
+        className={fieldControlClasses}
+        value={value}
+        onChange={(event) => onChange(event.target.value as PolicySchema["kind"])}
+      >
+        {POLICY_KINDS.map((entry) => (
+          <option key={entry.value} value={entry.value}>
+            {entry.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+type PolicyFields = ProseFields & { kind: PolicySchema["kind"] };
+
 export function PoliciesAndFaqPage() {
   const { content, edit } = useShopWorkspace();
-  const [policy, setPolicy] = useState({
+  const [policy, setPolicy] = useState<{ id: string } & PolicyFields>({
     id: "",
-    title: "",
-    kind: "returns" as PolicySchema["kind"],
-    body: "",
+    name: "",
+    kind: "returns",
+    text: "",
   });
-  const [faq, setFaq] = useState({ id: "", question: "", answer: "" });
-
+  const [faq, setFaq] = useState<{ id: string } & ProseFields>({ id: "", name: "", text: "" });
   const takenPolicyIds = content.policies.map((entry) => entry.id);
   const takenFaqIds = content.faq.map((entry) => entry.id);
-  const policySuggested = uniqueSuggestion(slugify(policy.title, ""), takenPolicyIds);
-  const faqSuggested = uniqueSuggestion(slugify(faq.question, ""), takenFaqIds);
+  const policyEditor = useEntryEdit<PolicyFields>(takenPolicyIds);
+  const faqEditor = useEntryEdit<ProseFields>(takenFaqIds);
+  const policyNotice = useId();
+  const faqNotice = useId();
+
+  const policySuggested = uniqueSuggestion(slugify(policy.name, ""), takenPolicyIds);
+  const faqSuggested = uniqueSuggestion(slugify(faq.name, ""), takenFaqIds);
 
   function addPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!policy.id || takenPolicyIds.includes(policy.id)) {
       return;
     }
-    edit({ ...content, policies: [...content.policies, policy] });
-    setPolicy({ id: "", title: "", kind: "returns", body: "" });
+    edit({ ...content, policies: [...content.policies, policyEntry(policy.id, policy)] });
+    setPolicy({ id: "", name: "", kind: "returns", text: "" });
   }
 
   function addFaq(event: FormEvent<HTMLFormElement>) {
@@ -467,9 +748,8 @@ export function PoliciesAndFaqPage() {
     if (!faq.id || takenFaqIds.includes(faq.id)) {
       return;
     }
-    const entry: FaqEntrySchema = faq;
-    edit({ ...content, faq: [...content.faq, entry] });
-    setFaq({ id: "", question: "", answer: "" });
+    edit({ ...content, faq: [...content.faq, faqEntry(faq.id, faq)] });
+    setFaq({ id: "", name: "", text: "" });
   }
 
   return (
@@ -486,6 +766,34 @@ export function PoliciesAndFaqPage() {
                   <EntryId value={entry.id} />
                 </>
               }
+              edit={entryEdit(
+                policyEditor,
+                policyNotice,
+                entry.id,
+                entry.title,
+                () => ({ name: entry.title, kind: entry.kind, text: entry.body }),
+                (fields) =>
+                  edit({
+                    ...content,
+                    policies: content.policies.map((item) =>
+                      item.id === entry.id ? policyEntry(entry.id, fields) : item,
+                    ),
+                  }),
+                (value, onChange) => (
+                  <ProseFieldset
+                    nameLabel="Title"
+                    textLabel="Body"
+                    value={value}
+                    onChange={(next) => onChange({ ...value, ...next })}
+                    beside={
+                      <PolicyKindField
+                        value={value.kind}
+                        onChange={(kind) => onChange({ ...value, kind })}
+                      />
+                    }
+                  />
+                ),
+              )}
               actions={
                 <RemoveButton
                   label={entry.title}
@@ -505,56 +813,36 @@ export function PoliciesAndFaqPage() {
             <li className="text-admin-muted">No policy yet.</li>
           ) : null}
         </ul>
+        <EntryEditNotice id={policyNotice} label={policyEditor.open?.label ?? null} />
         <form className={addFormClasses} onSubmit={addPolicy}>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <label className={fieldLabelClasses}>
-              Title
-              <input
-                className={fieldControlClasses}
-                value={policy.title}
-                required
-                onChange={(event) => setPolicy({ ...policy, title: event.target.value })}
-              />
-            </label>
-            <DerivedIdField
-              label="ID"
-              hint={DERIVED_KEBAB_RULE}
-              value={policy.id}
-              suggested={policySuggested.value}
-              taken={takenPolicyIds}
-              takenBase={policySuggested.takenBase}
-              takenPlace="in the draft"
-              pattern={KEBAB_PATTERN}
-              title={DERIVED_KEBAB_RULE}
-              required
-              onChange={(id) => setPolicy({ ...policy, id })}
-            />
-            <label className={fieldLabelClasses}>
-              Kind
-              <select
-                className={fieldControlClasses}
-                value={policy.kind}
-                onChange={(event) =>
-                  setPolicy({ ...policy, kind: event.target.value as PolicySchema["kind"] })
-                }
-              >
-                {POLICY_KINDS.map((entry) => (
-                  <option key={entry.value} value={entry.value}>
-                    {entry.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className={fieldLabelClasses}>
-            Body
-            <textarea
-              className={textAreaClasses}
-              value={policy.body}
-              required
-              onChange={(event) => setPolicy({ ...policy, body: event.target.value })}
-            />
-          </label>
+          <ProseFieldset
+            nameLabel="Title"
+            textLabel="Body"
+            columns="sm:grid-cols-3"
+            value={policy}
+            onChange={(next) => setPolicy({ ...policy, ...next })}
+            beside={
+              <>
+                <DerivedIdField
+                  label="ID"
+                  hint={DERIVED_KEBAB_RULE}
+                  value={policy.id}
+                  suggested={policySuggested.value}
+                  taken={takenPolicyIds}
+                  takenBase={policySuggested.takenBase}
+                  takenPlace="in the draft"
+                  pattern={KEBAB_PATTERN}
+                  title={DERIVED_KEBAB_RULE}
+                  required
+                  onChange={(id) => setPolicy({ ...policy, id })}
+                />
+                <PolicyKindField
+                  value={policy.kind}
+                  onChange={(kind) => setPolicy({ ...policy, kind })}
+                />
+              </>
+            }
+          />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
             Add policy
           </button>
@@ -568,6 +856,29 @@ export function PoliciesAndFaqPage() {
               key={entry.id}
               title={entry.question}
               chips={<EntryId value={entry.id} />}
+              edit={entryEdit(
+                faqEditor,
+                faqNotice,
+                entry.id,
+                entry.question,
+                () => ({ name: entry.question, text: entry.answer }),
+                (fields) =>
+                  edit({
+                    ...content,
+                    faq: content.faq.map((item) =>
+                      item.id === entry.id ? faqEntry(entry.id, fields) : item,
+                    ),
+                  }),
+                (value, onChange) => (
+                  <ProseFieldset
+                    nameLabel="Question"
+                    textLabel="Answer"
+                    columns="sm:grid-cols-1"
+                    value={value}
+                    onChange={onChange}
+                  />
+                ),
+              )}
               actions={
                 <RemoveButton
                   label={entry.question}
@@ -584,40 +895,29 @@ export function PoliciesAndFaqPage() {
             <li className="text-admin-muted">No FAQ entry yet.</li>
           ) : null}
         </ul>
+        <EntryEditNotice id={faqNotice} label={faqEditor.open?.label ?? null} />
         <form className={addFormClasses} onSubmit={addFaq}>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className={fieldLabelClasses}>
-              Question
-              <input
-                className={fieldControlClasses}
-                value={faq.question}
+          <ProseFieldset
+            nameLabel="Question"
+            textLabel="Answer"
+            value={faq}
+            onChange={(next) => setFaq({ ...faq, ...next })}
+            beside={
+              <DerivedIdField
+                label="ID"
+                hint={DERIVED_KEBAB_RULE}
+                value={faq.id}
+                suggested={faqSuggested.value}
+                taken={takenFaqIds}
+                takenBase={faqSuggested.takenBase}
+                takenPlace="in the draft"
+                pattern={KEBAB_PATTERN}
+                title={DERIVED_KEBAB_RULE}
                 required
-                onChange={(event) => setFaq({ ...faq, question: event.target.value })}
+                onChange={(id) => setFaq({ ...faq, id })}
               />
-            </label>
-            <DerivedIdField
-              label="ID"
-              hint={DERIVED_KEBAB_RULE}
-              value={faq.id}
-              suggested={faqSuggested.value}
-              taken={takenFaqIds}
-              takenBase={faqSuggested.takenBase}
-              takenPlace="in the draft"
-              pattern={KEBAB_PATTERN}
-              title={DERIVED_KEBAB_RULE}
-              required
-              onChange={(id) => setFaq({ ...faq, id })}
-            />
-          </div>
-          <label className={fieldLabelClasses}>
-            Answer
-            <textarea
-              className={textAreaClasses}
-              value={faq.answer}
-              required
-              onChange={(event) => setFaq({ ...faq, answer: event.target.value })}
-            />
-          </label>
+            }
+          />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
             Add FAQ entry
           </button>
@@ -629,9 +929,15 @@ export function PoliciesAndFaqPage() {
 
 export function SupportGuidelinesPage() {
   const { content, edit } = useShopWorkspace();
-  const [guideline, setGuideline] = useState({ id: "", title: "", body: "" });
+  const [guideline, setGuideline] = useState<{ id: string } & ProseFields>({
+    id: "",
+    name: "",
+    text: "",
+  });
   const takenGuidelineIds = content.support_guidelines.map((entry) => entry.id);
-  const guidelineSuggested = uniqueSuggestion(slugify(guideline.title, ""), takenGuidelineIds);
+  const guidelineEditor = useEntryEdit<ProseFields>(takenGuidelineIds);
+  const guidelineNotice = useId();
+  const guidelineSuggested = uniqueSuggestion(slugify(guideline.name, ""), takenGuidelineIds);
 
   return (
     <SetupPage title="Support guidelines" tour="support-guidelines">
@@ -642,6 +948,29 @@ export function SupportGuidelinesPage() {
               key={entry.id}
               title={entry.title}
               chips={<EntryId value={entry.id} />}
+              edit={entryEdit(
+                guidelineEditor,
+                guidelineNotice,
+                entry.id,
+                entry.title,
+                () => ({ name: entry.title, text: entry.body }),
+                (fields) =>
+                  edit({
+                    ...content,
+                    support_guidelines: content.support_guidelines.map((item) =>
+                      item.id === entry.id ? guidelineEntry(entry.id, fields) : item,
+                    ),
+                  }),
+                (value, onChange) => (
+                  <ProseFieldset
+                    nameLabel="Title"
+                    textLabel="Body"
+                    columns="sm:grid-cols-1"
+                    value={value}
+                    onChange={onChange}
+                  />
+                ),
+              )}
               actions={
                 <RemoveButton
                   label={entry.title}
@@ -663,6 +992,7 @@ export function SupportGuidelinesPage() {
             <li className="text-admin-muted">No support guideline yet.</li>
           ) : null}
         </ul>
+        <EntryEditNotice id={guidelineNotice} label={guidelineEditor.open?.label ?? null} />
         <form
           className={addFormClasses}
           onSubmit={(event) => {
@@ -670,44 +1000,37 @@ export function SupportGuidelinesPage() {
             if (!guideline.id || takenGuidelineIds.includes(guideline.id)) {
               return;
             }
-            const entry: SupportGuidelineSchema = guideline;
-            edit({ ...content, support_guidelines: [...content.support_guidelines, entry] });
-            setGuideline({ id: "", title: "", body: "" });
+            edit({
+              ...content,
+              support_guidelines: [
+                ...content.support_guidelines,
+                guidelineEntry(guideline.id, guideline),
+              ],
+            });
+            setGuideline({ id: "", name: "", text: "" });
           }}
         >
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className={fieldLabelClasses}>
-              Title
-              <input
-                className={fieldControlClasses}
-                value={guideline.title}
+          <ProseFieldset
+            nameLabel="Title"
+            textLabel="Body"
+            value={guideline}
+            onChange={(next) => setGuideline({ ...guideline, ...next })}
+            beside={
+              <DerivedIdField
+                label="ID"
+                hint={DERIVED_KEBAB_RULE}
+                value={guideline.id}
+                suggested={guidelineSuggested.value}
+                taken={takenGuidelineIds}
+                takenBase={guidelineSuggested.takenBase}
+                takenPlace="in the draft"
+                pattern={KEBAB_PATTERN}
+                title={DERIVED_KEBAB_RULE}
                 required
-                onChange={(event) => setGuideline({ ...guideline, title: event.target.value })}
+                onChange={(id) => setGuideline({ ...guideline, id })}
               />
-            </label>
-            <DerivedIdField
-              label="ID"
-              hint={DERIVED_KEBAB_RULE}
-              value={guideline.id}
-              suggested={guidelineSuggested.value}
-              taken={takenGuidelineIds}
-              takenBase={guidelineSuggested.takenBase}
-              takenPlace="in the draft"
-              pattern={KEBAB_PATTERN}
-              title={DERIVED_KEBAB_RULE}
-              required
-              onChange={(id) => setGuideline({ ...guideline, id })}
-            />
-          </div>
-          <label className={fieldLabelClasses}>
-            Body
-            <textarea
-              className={textAreaClasses}
-              value={guideline.body}
-              required
-              onChange={(event) => setGuideline({ ...guideline, body: event.target.value })}
-            />
-          </label>
+            }
+          />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
             Add guideline
           </button>
@@ -722,8 +1045,10 @@ export function SupportGuidelinesPage() {
 
 export function ToneOfVoicePage() {
   const { content, edit } = useShopWorkspace();
-  const [tone, setTone] = useState({ id: "", name: "", guidance: "" });
+  const [tone, setTone] = useState<{ id: string } & ProseFields>({ id: "", name: "", text: "" });
   const takenToneIds = content.tone_of_voice_guidelines.map((entry) => entry.id);
+  const toneEditor = useEntryEdit<ProseFields>(takenToneIds);
+  const toneNotice = useId();
   const toneSuggested = uniqueSuggestion(slugify(tone.name, ""), takenToneIds);
 
   function setDefault(id: string) {
@@ -762,6 +1087,33 @@ export function ToneOfVoicePage() {
                   {entry.is_default ? <DefaultToneChip /> : null}
                 </>
               }
+              edit={entryEdit(
+                toneEditor,
+                toneNotice,
+                entry.id,
+                entry.name,
+                () => ({ name: entry.name, text: entry.guidance }),
+                (fields) =>
+                  edit({
+                    ...content,
+                    tone_of_voice_guidelines: content.tone_of_voice_guidelines.map((item) =>
+                      item.id === entry.id
+                        ? // `is_default` is the radio's answer on the row above, never the
+                          // form's: an edit to the wording must not move the shop default.
+                          toneEntry(entry.id, { ...fields, is_default: entry.is_default })
+                        : item,
+                    ),
+                  }),
+                (value, onChange) => (
+                  <ProseFieldset
+                    nameLabel="Name"
+                    textLabel="Guidance"
+                    columns="sm:grid-cols-1"
+                    value={value}
+                    onChange={onChange}
+                  />
+                ),
+              )}
               actions={
                 <RemoveButton
                   label={entry.name}
@@ -783,6 +1135,7 @@ export function ToneOfVoicePage() {
             <li className="text-admin-muted">No tone-of-voice guideline yet.</li>
           ) : null}
         </ul>
+        <EntryEditNotice id={toneNotice} label={toneEditor.open?.label ?? null} />
         <form
           className={addFormClasses}
           onSubmit={(event) => {
@@ -790,50 +1143,40 @@ export function ToneOfVoicePage() {
             if (!tone.id || takenToneIds.includes(tone.id)) {
               return;
             }
-            const entry: ToneOfVoiceSchema = {
-              ...tone,
-              is_default: content.tone_of_voice_guidelines.length === 0,
-            };
             edit({
               ...content,
-              tone_of_voice_guidelines: [...content.tone_of_voice_guidelines, entry],
+              tone_of_voice_guidelines: [
+                ...content.tone_of_voice_guidelines,
+                toneEntry(tone.id, {
+                  ...tone,
+                  is_default: content.tone_of_voice_guidelines.length === 0,
+                }),
+              ],
             });
-            setTone({ id: "", name: "", guidance: "" });
+            setTone({ id: "", name: "", text: "" });
           }}
         >
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className={fieldLabelClasses}>
-              Name
-              <input
-                className={fieldControlClasses}
-                value={tone.name}
+          <ProseFieldset
+            nameLabel="Name"
+            textLabel="Guidance"
+            value={tone}
+            onChange={(next) => setTone({ ...tone, ...next })}
+            beside={
+              <DerivedIdField
+                label="ID"
+                hint={DERIVED_KEBAB_RULE}
+                value={tone.id}
+                suggested={toneSuggested.value}
+                taken={takenToneIds}
+                takenBase={toneSuggested.takenBase}
+                takenPlace="in the draft"
+                pattern={KEBAB_PATTERN}
+                title={DERIVED_KEBAB_RULE}
                 required
-                onChange={(event) => setTone({ ...tone, name: event.target.value })}
+                onChange={(id) => setTone({ ...tone, id })}
               />
-            </label>
-            <DerivedIdField
-              label="ID"
-              hint={DERIVED_KEBAB_RULE}
-              value={tone.id}
-              suggested={toneSuggested.value}
-              taken={takenToneIds}
-              takenBase={toneSuggested.takenBase}
-              takenPlace="in the draft"
-              pattern={KEBAB_PATTERN}
-              title={DERIVED_KEBAB_RULE}
-              required
-              onChange={(id) => setTone({ ...tone, id })}
-            />
-          </div>
-          <label className={fieldLabelClasses}>
-            Guidance
-            <textarea
-              className={textAreaClasses}
-              value={tone.guidance}
-              required
-              onChange={(event) => setTone({ ...tone, guidance: event.target.value })}
-            />
-          </label>
+            }
+          />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
             Add tone of voice
           </button>

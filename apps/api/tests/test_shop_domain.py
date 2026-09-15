@@ -6,6 +6,8 @@ from capability_lab.domain.shop import (
     AttributeType,
     Currency,
     Money,
+    PolicyDocument,
+    PolicyKind,
     ProductReview,
     ProductVariant,
     ShopChangeKind,
@@ -238,6 +240,52 @@ def test_changes_name_the_added_variant_attribute_and_edited_field() -> None:
         "Updated Alpine Shell Jacket description",
         "Added variant NS-ASJ-CH-L",
         "Added attribute Fit",
+    ]
+
+
+def test_correcting_one_word_of_a_policy_is_one_updated_change() -> None:
+    """What editing a saved entry in place has to produce, from the summary's side.
+
+    The workspace opens a saved policy, changes a word and writes the entry back with the id
+    it already had. `diff_keyed_collection` keys on that id, so the draft reports one update
+    — and would report a removal and an addition if the editor had re-derived the id from the
+    edited title, which is why it does not.
+    """
+    published = publishable_shop()
+    draft = publishable_shop(
+        policies=(
+            PolicyDocument(
+                id="shipping",
+                title="Shipping policy",
+                kind=PolicyKind.SHIPPING,
+                body="Addresses can change before despatch.",
+            ),
+        )
+    )
+
+    changes = summarize_shop_changes(published, draft)
+    assert [(change.kind, change.description) for change in changes] == [
+        (ShopChangeKind.UPDATED, "Updated policy Shipping policy")
+    ]
+
+
+def test_renaming_a_policy_id_reads_as_a_removal_and_an_addition() -> None:
+    """The other half of the rule, stated rather than assumed."""
+    published = publishable_shop()
+    draft = publishable_shop(
+        policies=(
+            PolicyDocument(
+                id="shipping-and-delivery",
+                title="Shipping policy",
+                kind=PolicyKind.SHIPPING,
+                body="Addresses can change before dispatch.",
+            ),
+        )
+    )
+
+    assert [change.kind for change in summarize_shop_changes(published, draft)] == [
+        ShopChangeKind.ADDED,
+        ShopChangeKind.REMOVED,
     ]
 
 

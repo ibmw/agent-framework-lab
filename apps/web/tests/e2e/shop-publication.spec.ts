@@ -51,7 +51,11 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await policies.getByLabel("Title", { exact: true }).fill("Shipping policy");
   await policies
     .getByLabel("Body", { exact: true })
-    .fill("A shipping address can change before dispatch.");
+    .fill(
+      "A shipping address can change before dispatch.\n\n" +
+        "Once a parcel is with the carrier the address is fixed.\n\n" +
+        "Refused deliveries return to the warehouse within ten days.",
+    );
   await policies.getByRole("button", { name: "Add policy" }).click();
   await saveDraft(page);
 
@@ -143,4 +147,34 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(frozen.getByText("Charcoal · L")).toBeVisible();
   await expect(frozen.getByText("249.00 CHF").first()).toBeVisible();
   await expect(frozen.getByText("249.00 EUR").first()).toBeVisible();
+
+  // PLAN-UX Slice 7. One word of a three-paragraph policy is wrong. The operator opens the
+  // saved row, fixes the word and presses Save — no removing and retyping the policy — and
+  // the draft reports one updated entry against v1, because the row was written back under
+  // the id it already had.
+  await openSection(page, "Policies & FAQ", "Policies & FAQ");
+  const saved = card(page, "Policies");
+  await saved.getByRole("button", { name: "Edit Shipping policy" }).click();
+  const openRow = saved.getByRole("form", { name: "Edit Shipping policy" });
+  // The identifier stays on the header line, displayed and never asked for.
+  await expect(saved.getByText("shipping-policy")).toBeVisible();
+  // By role rather than by label: a wrapping `<label>`'s rendered text includes the value of
+  // the control it wraps, so a prefilled textarea has no exact label text to match on. The
+  // accessible name is still "Body".
+  await openRow
+    .getByRole("textbox", { name: "Body", exact: true })
+    .fill(
+      "A shipping address can change before despatch.\n\n" +
+        "Once a parcel is with the carrier the address is fixed.\n\n" +
+        "Refused deliveries return to the warehouse within ten days.",
+    );
+  await openRow.getByRole("button", { name: "Save Shipping policy" }).click();
+  await expect(saved.getByText("despatch").first()).toBeVisible();
+  await saveDraft(page);
+
+  await openSection(page, "Home", "Home");
+  await expect(card(page, "Draft changes").getByText("1", { exact: true })).toBeVisible();
+  const freeze = card(page, "What publishing would freeze");
+  await expect(freeze.getByRole("listitem")).toHaveCount(1);
+  await expect(freeze.getByText("Updated policy Shipping policy")).toBeVisible();
 });

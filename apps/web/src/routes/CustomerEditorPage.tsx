@@ -1,6 +1,7 @@
 import type {
   AccountStatus,
   AddressSchema,
+  BackgroundEntrySchema,
   BackgroundKind,
   CustomerProfileContentSchema,
   CustomerProfilePayloadSchema,
@@ -8,7 +9,7 @@ import type {
   HiddenFactSchema,
   LoyaltyTier,
 } from "@agent-lab/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -27,6 +28,10 @@ import { LocaleField } from "../components/LocaleField";
 import {
   Card,
   canPublish,
+  EntryCard,
+  EntryEditNotice,
+  EntryId,
+  EntryText,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -34,6 +39,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
 import { CHIP_LABEL_MAX_LENGTH, PERSONA_TRAITS_RULE } from "../lib/fieldRules";
@@ -65,6 +71,118 @@ const CLIENT: DefinitionClient<
 
 const BACKGROUND_KINDS = optionsOf(BACKGROUND_KIND);
 
+/**
+ * The authored fields of the profile's two keyed lists, and the one builder each.
+ *
+ * The add form below a list and the open row inside it hold the same object and call the same
+ * function, so the two paths cannot grow different payloads. The identifier is the builder's
+ * first argument: it is derived once, when the entry is created, and an edit hands back the
+ * one the entry already has — which is what makes an edit read as one updated entry rather
+ * than a removal and an addition in the draft's change summary.
+ */
+interface BackgroundFields {
+  kind: BackgroundKind;
+  occurredOn: string;
+  note: string;
+}
+
+interface HiddenFactFields {
+  note: string;
+  revealedWhen: string;
+}
+
+function backgroundEntry(id: string, fields: BackgroundFields): BackgroundEntrySchema {
+  return { id, kind: fields.kind, occurred_on: fields.occurredOn, note: fields.note };
+}
+
+function hiddenFactEntry(id: string, fields: HiddenFactFields): HiddenFactSchema {
+  return { id, note: fields.note, revealed_when: fields.revealedWhen };
+}
+
+/**
+ * The background entry's three controls, on the add form and in an open row alike.
+ *
+ * The row carried them as three `aria-label`s and a date printed as a heading; PLAN-UX Slice 7
+ * asks for visible labels where a row had only the accessible one, and the way a row gets them
+ * is by asking its questions with the same words the add form asks them with.
+ */
+function BackgroundFieldset({
+  value,
+  onChange,
+}: {
+  value: BackgroundFields;
+  onChange: (next: BackgroundFields) => void;
+}) {
+  return (
+    <>
+      <label className={fieldLabelClasses}>
+        Kind
+        <select
+          className={fieldControlClasses}
+          value={value.kind}
+          onChange={(event) => onChange({ ...value, kind: event.target.value as BackgroundKind })}
+        >
+          {BACKGROUND_KINDS.map((entry) => (
+            <option key={entry.value} value={entry.value}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className={fieldLabelClasses}>
+        Date
+        <input
+          className={fieldControlClasses}
+          type="date"
+          value={value.occurredOn}
+          onChange={(event) => onChange({ ...value, occurredOn: event.target.value })}
+        />
+      </label>
+      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
+        Note
+        <input
+          className={fieldControlClasses}
+          value={value.note}
+          required
+          onChange={(event) => onChange({ ...value, note: event.target.value })}
+        />
+      </label>
+    </>
+  );
+}
+
+/** A hidden fact's two controls, on the add form and in an open row alike. */
+function HiddenFactFieldset({
+  value,
+  onChange,
+}: {
+  value: HiddenFactFields;
+  onChange: (next: HiddenFactFields) => void;
+}) {
+  return (
+    <>
+      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
+        Hidden fact
+        <input
+          className={fieldControlClasses}
+          value={value.note}
+          required
+          onChange={(event) => onChange({ ...value, note: event.target.value })}
+        />
+      </label>
+      <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
+        Revealed when
+        <input
+          className={fieldControlClasses}
+          placeholder="Revealed when…"
+          value={value.revealedWhen}
+          onChange={(event) => onChange({ ...value, revealedWhen: event.target.value })}
+        />
+      </label>
+    </>
+  );
+}
+
 export function CustomerEditorPage() {
   const { profileId = "" } = useParams();
   const { shopId, shops } = useShopWorkspace();
@@ -73,6 +191,14 @@ export function CustomerEditorPage() {
   const [attachedShops, setAttachedShops] = useState<string[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
+  const backgroundEditor = useEntryEdit<BackgroundFields>(
+    (content?.background ?? []).map((entry) => entry.id),
+  );
+  const hiddenFactEditor = useEntryEdit<HiddenFactFields>(
+    (content?.hidden_facts ?? []).map((fact) => fact.id),
+  );
+  const backgroundNotice = useId();
+  const hiddenFactNotice = useId();
 
   const reloadShops = useCallback(
     async (signal?: AbortSignal) => {
@@ -166,13 +292,17 @@ export function CustomerEditorPage() {
     edit({ ...content, account: { ...content.account, ...next } });
   }
 
-  function updateBackground(id: string, note: string) {
+  /** The entry is replaced where it stands, with the ID it already had, so the list's order
+   * never moves and the change summary reads one updated entry. */
+  function saveBackground(id: string, fields: BackgroundFields) {
     if (!content) {
       return;
     }
     edit({
       ...content,
-      background: content.background.map((entry) => (entry.id === id ? { ...entry, note } : entry)),
+      background: content.background.map((entry) =>
+        entry.id === id ? backgroundEntry(id, fields) : entry,
+      ),
     });
   }
 
@@ -183,14 +313,14 @@ export function CustomerEditorPage() {
     edit({ ...content, background: content.background.filter((entry) => entry.id !== id) });
   }
 
-  function updateHiddenFact(id: string, next: Partial<HiddenFactSchema>) {
+  function saveHiddenFact(id: string, fields: HiddenFactFields) {
     if (!content) {
       return;
     }
     edit({
       ...content,
       hidden_facts: content.hidden_facts.map((fact) =>
-        fact.id === id ? { ...fact, ...next } : fact,
+        fact.id === id ? hiddenFactEntry(id, fields) : fact,
       ),
     });
   }
@@ -574,46 +704,59 @@ export function CustomerEditorPage() {
             {content.background.length === 0 ? (
               <p className="text-[13px] text-admin-muted">No background authored yet.</p>
             ) : (
-              <ul className="grid gap-2">
+              <ul className="grid gap-2 text-[13px]">
                 {content.background.map((entry) => (
-                  <li key={entry.id} className="grid gap-1 text-[13px]">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">
-                        {entry.occurred_on} · {labelOf(BACKGROUND_KIND, entry.kind)}
-                      </span>
+                  <EntryCard
+                    key={entry.id}
+                    title={`${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`}
+                    chips={<EntryId value={entry.id} />}
+                    edit={entryEdit(
+                      backgroundEditor,
+                      backgroundNotice,
+                      entry.id,
+                      `${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`,
+                      () => ({
+                        kind: entry.kind,
+                        occurredOn: entry.occurred_on,
+                        note: entry.note,
+                      }),
+                      (fields) => saveBackground(entry.id, fields),
+                      (value, onChange) => (
+                        <div className="flex flex-wrap items-end gap-2">
+                          <BackgroundFieldset value={value} onChange={onChange} />
+                        </div>
+                      ),
+                    )}
+                    actions={
                       <button
-                        className={`${subtleButtonClasses} ml-auto`}
+                        className={subtleButtonClasses}
                         type="button"
+                        aria-label={`Remove the ${entry.occurred_on} background entry`}
                         onClick={() => removeBackground(entry.id)}
                       >
                         Remove
                       </button>
-                    </div>
-                    <input
-                      aria-label={`Background note for ${entry.occurred_on}`}
-                      className={fieldControlClasses}
-                      value={entry.note}
-                      onChange={(event) => updateBackground(entry.id, event.target.value)}
-                    />
-                  </li>
+                    }
+                  >
+                    <EntryText label="Note" value={entry.note} />
+                  </EntryCard>
                 ))}
               </ul>
             )}
+            <EntryEditNotice id={backgroundNotice} label={backgroundEditor.open?.label ?? null} />
             <BackgroundForm
-              onAdd={(kind, occurredOn, note) =>
+              onAdd={(fields) =>
                 edit({
                   ...content,
                   background: [
                     ...content.background,
-                    {
-                      id: uniqueId(
-                        slugify(note.slice(0, 40)),
+                    backgroundEntry(
+                      uniqueId(
+                        slugify(fields.note.slice(0, 40)),
                         content.background.map((entry) => entry.id),
                       ),
-                      kind,
-                      occurred_on: occurredOn,
-                      note,
-                    },
+                      fields,
+                    ),
                   ],
                 })
               }
@@ -634,51 +777,55 @@ export function CustomerEditorPage() {
             ) : (
               <ul className="grid gap-2 text-[13px]">
                 {content.hidden_facts.map((fact) => (
-                  <li key={fact.id} className="grid gap-1">
-                    <div className="flex items-center gap-2">
-                      <input
-                        aria-label={`Hidden fact ${fact.id}`}
-                        className={fieldControlClasses}
-                        value={fact.note}
-                        onChange={(event) =>
-                          updateHiddenFact(fact.id, { note: event.target.value })
-                        }
-                      />
+                  <EntryCard
+                    key={fact.id}
+                    title={fact.note}
+                    chips={<EntryId value={fact.id} />}
+                    edit={entryEdit(
+                      hiddenFactEditor,
+                      hiddenFactNotice,
+                      fact.id,
+                      fact.note,
+                      () => ({ note: fact.note, revealedWhen: fact.revealed_when }),
+                      (fields) => saveHiddenFact(fact.id, fields),
+                      (value, onChange) => (
+                        <div className="flex flex-wrap items-end gap-2">
+                          <HiddenFactFieldset value={value} onChange={onChange} />
+                        </div>
+                      ),
+                    )}
+                    actions={
                       <button
                         className={subtleButtonClasses}
                         type="button"
+                        aria-label={`Remove ${fact.note}`}
                         onClick={() => removeHiddenFact(fact.id)}
                       >
                         Remove
                       </button>
-                    </div>
-                    <input
-                      aria-label={`Reveal condition for ${fact.id}`}
-                      className={fieldControlClasses}
-                      placeholder="Revealed when…"
-                      value={fact.revealed_when}
-                      onChange={(event) =>
-                        updateHiddenFact(fact.id, { revealed_when: event.target.value })
-                      }
-                    />
-                  </li>
+                    }
+                  >
+                    {fact.revealed_when ? (
+                      <EntryText label="Revealed when" value={fact.revealed_when} />
+                    ) : null}
+                  </EntryCard>
                 ))}
               </ul>
             )}
+            <EntryEditNotice id={hiddenFactNotice} label={hiddenFactEditor.open?.label ?? null} />
             <HiddenFactForm
-              onAdd={(note, revealedWhen) =>
+              onAdd={(fields) =>
                 edit({
                   ...content,
                   hidden_facts: [
                     ...content.hidden_facts,
-                    {
-                      id: uniqueId(
-                        slugify(note.slice(0, 40)),
+                    hiddenFactEntry(
+                      uniqueId(
+                        slugify(fields.note.slice(0, 40)),
                         content.hidden_facts.map((fact) => fact.id),
                       ),
-                      note,
-                      revealed_when: revealedWhen,
-                    },
+                      fields,
+                    ),
                   ],
                 })
               }
@@ -842,59 +989,26 @@ function AddressForm({
   );
 }
 
-function BackgroundForm({
-  onAdd,
-}: {
-  onAdd: (kind: BackgroundKind, occurredOn: string, note: string) => void;
-}) {
-  const [kind, setKind] = useState<BackgroundKind>("purchase");
+function BackgroundForm({ onAdd }: { onAdd: (fields: BackgroundFields) => void }) {
   // Today, not a date in someone else's year. A background entry is authored history and its
   // day is a real choice, but the nearest plausible one is the day the author is standing in
   // — a fixed `2026-01-01` was a value nobody picked that every entry carried until noticed.
-  const [occurredOn, setOccurredOn] = useState(todayInput);
-  const [note, setNote] = useState("");
+  const [fields, setFields] = useState<BackgroundFields>(() => ({
+    kind: "purchase",
+    occurredOn: todayInput(),
+    note: "",
+  }));
 
   return (
     <form
       className="flex flex-wrap items-end gap-2"
       onSubmit={(event) => {
         event.preventDefault();
-        onAdd(kind, occurredOn, note);
-        setNote("");
+        onAdd(fields);
+        setFields({ ...fields, note: "" });
       }}
     >
-      <label className={fieldLabelClasses}>
-        Kind
-        <select
-          className={fieldControlClasses}
-          value={kind}
-          onChange={(event) => setKind(event.target.value as BackgroundKind)}
-        >
-          {BACKGROUND_KINDS.map((entry) => (
-            <option key={entry.value} value={entry.value}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className={fieldLabelClasses}>
-        Date
-        <input
-          className={fieldControlClasses}
-          type="date"
-          value={occurredOn}
-          onChange={(event) => setOccurredOn(event.target.value)}
-        />
-      </label>
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        Note
-        <input
-          className={fieldControlClasses}
-          value={note}
-          required
-          onChange={(event) => setNote(event.target.value)}
-        />
-      </label>
+      <BackgroundFieldset value={fields} onChange={setFields} />
       <button className={inkButtonClasses} type="submit">
         Add entry
       </button>
@@ -902,37 +1016,19 @@ function BackgroundForm({
   );
 }
 
-function HiddenFactForm({ onAdd }: { onAdd: (note: string, revealedWhen: string) => void }) {
-  const [note, setNote] = useState("");
-  const [revealedWhen, setRevealedWhen] = useState("");
+function HiddenFactForm({ onAdd }: { onAdd: (fields: HiddenFactFields) => void }) {
+  const [fields, setFields] = useState<HiddenFactFields>({ note: "", revealedWhen: "" });
 
   return (
     <form
       className="flex flex-wrap items-end gap-2"
       onSubmit={(event) => {
         event.preventDefault();
-        onAdd(note, revealedWhen);
-        setNote("");
-        setRevealedWhen("");
+        onAdd(fields);
+        setFields({ note: "", revealedWhen: "" });
       }}
     >
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        Hidden fact
-        <input
-          className={fieldControlClasses}
-          value={note}
-          required
-          onChange={(event) => setNote(event.target.value)}
-        />
-      </label>
-      <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
-        Revealed when
-        <input
-          className={fieldControlClasses}
-          value={revealedWhen}
-          onChange={(event) => setRevealedWhen(event.target.value)}
-        />
-      </label>
+      <HiddenFactFieldset value={fields} onChange={setFields} />
       <button className={inkButtonClasses} type="submit">
         Add fact
       </button>

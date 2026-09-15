@@ -709,3 +709,127 @@ needs no spelling.
 support identity is published, and the "Choose…" placeholder in front of a list of one is not
 offered. Two or more stays unanswered, because then it *is* a choice and the lab must not make
 it: a write is authorized against whichever permissions it names.
+
+## Revision — a saved row opens where it stands (2026-09-14)
+
+Slice 7. The seven sections above are unchanged; this one covers the thing they did not — what
+a saved entry does when it is wrong, and what an editor is allowed to change about an entry
+that already exists.
+
+**A saved row is read back, and opens where it stands.** `EntryCard` gains an edit mode: the
+header line — title, chips, identifier — stays exactly where it was, and the read-only body is
+replaced by the row's fields under Save and Cancel. Frame 6b draws this affordance: each
+address row in the address book carries a green **Edit** beside its **Remove**, so the frame
+settles that a saved row is read-only until asked and that Edit sits where Remove already sat.
+Frame 2c draws no edit affordance on its media or attribute rows at all and draws a `⋮`
+overflow on each variant row; nothing in the eighteen frames draws a saved entry as a row of
+always-open boxes, which is what three of these lists were. The `⋮` is **deferred to Slice 9**,
+not declined: a named Edit beside a named Remove is what frame 6b draws and is more reachable
+than a menu, and a menu earns its place when the row's cluster outgrows the space — which is
+what Slice 9 does to it, by giving every Remove a two-step confirm and the variants row a third
+control. The slice that widens the cluster is the slice that should draw the overflow.
+
+**The identifier is displayed, never asked.** An entry ID is derived once, when the entry is
+created (`lib/entryIds.ts` already says so), and edit mode hands it back untouched. This is not
+tidiness: `diff_keyed_collection` in `domain/definitions.py` keys every collection on that ID,
+so an entry written back under a new one is reported as a **removal and an addition** rather
+than as an update, and the draft's change summary — the "What publishing would freeze" card —
+would say a policy was deleted and another added because a word of its body was fixed. Slice 2
+made an identifier follow its source *until edited*; a saved entry is past that point, so a
+retitled policy keeps `shipping-policy` and the row shows it as an `EntryId` rather than
+offering a `DerivedIdField` with nothing left to derive from.
+
+**Two entries are their own key, and say so where they are typed.** A variant has no ID beside
+its SKU and a media entry none beside its reference; those two fields *are* what the diff keys
+on. PLAN-UX names both as editable, so they are — a SKU that could never be corrected was the
+defect this slice exists to remove — but the field carries the consequence in its hint rather
+than leaving it to be discovered: "changing it reads as a removal and an addition against the
+published version, and orders already placed keep their frozen copy". A SKU another variant
+holds is refused on `DerivedIdField`'s collision model, and Save is disabled while it is.
+
+**One payload builder per entry, called by both paths.** The rule that makes edit mode safe is
+that the add form and the open row write through the same function: one `xEntry(id, fields)`
+per list, taking the authored fields and the identifier, and one fieldset component rendering
+the controls for both. Neither path can then grow a field the other does not write — the case
+this guards is not hypothetical, since an attribute's `unit` is null unless it is a
+measurement and its `choices` empty unless it is a choice, and an edit path that spread
+`{...attribute, ...changes}` would have carried a stale unit through a type change. The page
+tests assert against the payload the save carried, not against the row: PLAN-UX names that
+test precisely, and it is the only one that catches two builders that agree today.
+
+**One row open at a time, per list.** While a row is open the other rows' Edit buttons are
+disabled and the list carries one line saying why, reached by `aria-describedby` — the
+convention the variants table already uses for the rule its price boxes share. Two reasons,
+neither aesthetic: an open row's typing is deliberately *not* in the draft, so the page's own
+"Save draft" cannot carry it, and a card can say that about one open row in one sentence but
+not about a set of them; and the state PLAN-UX Slice 8 has to guard is then one open row per
+list rather than a set per list, which is the smaller thing to register whatever shape that
+registration takes. The same line says the other half — that nothing in the open row reaches
+the draft until Save is pressed — because an operator who types into a row and presses the
+page's Save would otherwise be told "Saved" about work that was not.
+
+**Cancel restores by writing nothing.** Edit mode holds its draft outside `content` and writes
+once, on Save. Cancel therefore has nothing to undo and the saved entry is already what it
+was; reopening the row shows the stored values rather than what Cancel discarded.
+
+**An open row is unsaved work the `dirty` flag cannot see, and Slice 8 must register it.**
+That is a consequence of the paragraph above, not a detail: `useDefinitionEditor` sets `dirty`
+from the draft, an open row does not touch the draft, so an operator who opens the returns
+policy, retypes three paragraphs and clicks Orders in the rail is not asked — which is exactly
+what PLAN-UX's "No navigation, reload or Remove discards an edit without asking once" forbids.
+A page holds several of these editors, not one: the product editor holds five — options,
+variants, media, attributes, reviews — Shop details and Policies & FAQ hold two each, and
+Support guidelines and Tone of voice hold one each. None is reachable from the hook where
+Slice 8 puts its guard. **Slice 8 adds the registration path**, and nothing is offered here in
+advance: whether a page counts its open rows into `dirty`, holds them beside it, or lifts these
+editors into a context is that slice's question, and a seam shaped for one of the three — an
+`onOpenChange` callback was written and removed — would answer it early and would be the wrong
+shape for the third. What this slice does hold is the other half: an editor is given the ids
+its list currently holds and closes an open row whose entry is gone, so Slice 8's Discard,
+which refetches the draft, cannot leave a row open on stale fields or disable every sibling's
+Edit behind a notice naming an entry that no longer exists.
+
+**The open row is a named form.** It asks the same questions the add form below the list asks,
+in the same words, so the group carries `aria-label="Edit {entry}"`. Without a name, "Title"
+means two controls on one card and neither a reader nor a test can say which one they reached.
+Edit, Save and Cancel are named after the row the same way `RemoveButton` already is: the
+visible word stays short and the accessible name says which entry.
+
+**A row that had only an accessible name gets visible words.** The customer editor's background
+and hidden-fact rows, and the support identity's guidance rows, asked their questions through
+`aria-label` alone — a reader with a pointer saw two unlabelled boxes and had to guess which
+was the note and which the reveal condition. They now read back as text and open into the same
+labelled fieldset the add form uses, which is how a row gets a visible label without printing
+a form's worth of captions down a list. The guidance rows are where PLAN-UX takes edit mode
+from. Converting them is a **departure** from PLAN-UX's wording, which asks only that they
+"gain visible labels": the conversion is recorded here and noted at the checkbox, and it was
+taken because their old write was `{ ...note, ...next }` assembled at the call site — the
+drift this slice exists to remove — and because a list that corrects in place by different
+means from every other list is the inconsistency the primitive replaces.
+
+**A refusal belongs to the builder's neighbours, not to one path.** Sharing the builder is not
+enough on its own: a refusal the add form gets for free from HTML is a refusal the open row has
+to make itself, and a refusal the open row makes is one the add form owes too. Both cases
+appeared here and both are now one rule per list. A variant's SKU sits in a `<td>` with no form
+around it and a Save that is a plain button, so `pattern` marks the box and refuses nothing —
+the *chips* section's rule read the other way round — and the shape is therefore checked in the
+save gate off `isVariantSku`, built from the same constant the pattern is. A media reference is
+the other direction: the open row refused a duplicate by greying Save and saying nothing, and
+the add form did not refuse one at all, which would have put two entries under one key in both
+the change summary and React's reconciliation. Both now read on `DerivedIdField`'s collision
+model — the second line turns to the error treatment and is announced, the field is marked
+invalid, and the press does nothing — from one function computed once per card.
+
+**One wiring, in `lib/entryEdit.ts`.** The function that turns an editor and an entry into an
+`EntryEdit` began as a copy per page with a comment pointing at the first one, and had drifted
+inside a single branch before review: one copy grew a `saveable` parameter the others lacked. A
+slice whose thesis is that two copies of one thing drift does not get to keep four, so it is one
+exported function, and `EntryEdit` moved beside it rather than staying in `WorkspaceChrome` so
+that `lib/` does not have to reach into `components/`.
+
+**What the variants table kept.** Price, availability and stock stay live cells: they were
+already correctable, they carry Slice 5's shared price rule, and a row that made three working
+controls wait behind an Edit press would be a regression dressed as a convention. Edit mode
+there covers only what was write-once — the SKU and the option values — and saves against the
+row as it stands rather than against a copy taken when the row was opened, so a price typed
+while the row is open is not put back.

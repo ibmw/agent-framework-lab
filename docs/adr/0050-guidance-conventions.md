@@ -111,3 +111,41 @@ preview resolution reads. This field publishes no new domain fact, versions no r
 migration, and takes its one policy question — which version's guidelines a picker offers — from
 a rule already recorded: resolution reads published versions, never drafts. An ADR here would be
 a second copy of ADR 0024's sentence, which is the failure mode this ADR was written to avoid.
+
+## Amendment — 2026-09-14 (Slice 7)
+
+Slice 7 added a seventh sibling section in `docs/design-direction.md` (*Revision — a saved row
+opens where it stands (2026-09-14)*): what frames 2c and 6b actually draw on a saved row and
+what they do not, that an entry's identifier is displayed rather than asked because
+`diff_keyed_collection` keys the draft's change summary on it, that the two entries whose key
+*is* one of their fields — a variant's SKU, a media reference — stay editable but carry the
+consequence in their hint, the rule that one payload builder and one fieldset serve the add
+form and the open row so the two cannot drift, that a refusal one path gets free from HTML is
+one the other must make itself, why the wiring is one exported function in `lib/entryEdit.ts`
+rather than a copy per page, why one row is open at a time per list and what the line under the
+list says, that Cancel restores by having written nothing — and what that costs, since an open
+row is unsaved work the `dirty` flag cannot see — that the open row is a named form because it
+repeats the add form's questions, how a row that carried only an `aria-label` gets visible
+words, and what the variants table deliberately kept as live cells. The six sections this ADR
+already points at are unchanged.
+
+**One departure from PLAN-UX's wording.** Slice 7's third checkbox asks that hidden-fact and
+guidance rows "gain visible labels where they had only `aria-label`". The support-identity
+guidance rows were converted to edit mode instead of merely relabelled, which delivers the
+visible labels through the add form's own fieldset rather than through captions printed down an
+always-open list. It is recorded as a departure in the design-direction section and noted at the
+checkbox in `docs/PLAN-UX.md`.
+
+**Slice 8 adds the registration path.** The section records that an open row is unsaved work
+`useDefinitionEditor`'s `dirty` flag cannot see and that a page holds several independent
+editors, so Slice 8's guard has to learn about them. It deliberately offers no seam for that:
+the shape — counting open rows into `dirty`, holding them beside it, or lifting the editors
+into a context — is Slice 8's question, and this slice would answer it early by shipping a
+callback no page calls. What this slice does hold is the half that is needed now: an editor
+closes an open row whose entry a refetch has dropped.
+
+**No ADR of its own.** PLAN-UX asks a slice that records a convention to write one, and this
+amendment is that record, on the terms this ADR was opened with: the words live in the
+design-direction section and this names it rather than restating it. The one decision a reader
+might expect an ADR for — one open row per list — is a convention about a form, not about what
+the product *is*, and it is recorded where the other form conventions are.

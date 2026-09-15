@@ -1,6 +1,7 @@
 import type {
   ShopDraftResponse,
   ShopListResponse,
+  ShopPayloadSchema,
   ShopPreviewResponse,
   ShopVersionListResponse,
   ShopVersionResponse,
@@ -12,6 +13,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { toPayload } from "./lib/shop";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -174,6 +176,26 @@ let currentContent = READY_CONTENT;
 let currentPreview = preview();
 let versions: ShopVersionListResponse = { versions: [] };
 
+/**
+ * Every draft payload the workspace wrote, in order.
+ *
+ * What an edit in place has to be checked against is not what the row renders but what the
+ * save carried: PLAN-UX Slice 7 asks for a test that edits one field of a saved entry and
+ * asserts the payload changed only that field, because a second payload builder behind the
+ * edit path would show the right row and write a different entry.
+ */
+type SavedShopPayload = ShopPayloadSchema;
+
+let savedDrafts: SavedShopPayload[] = [];
+
+function lastSaved(): SavedShopPayload {
+  const payload = savedDrafts.at(-1);
+  if (!payload) {
+    throw new Error("The workspace saved no draft.");
+  }
+  return payload;
+}
+
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json(shops)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () => HttpResponse.json(draft(currentContent))),
@@ -187,6 +209,7 @@ const server = setupServer(
         { status: 422 },
       );
     }
+    savedDrafts.push(body.payload as SavedShopPayload);
     return HttpResponse.json(draft(currentContent));
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () => HttpResponse.json(currentPreview)),
@@ -227,6 +250,7 @@ afterEach(() => {
   currentContent = READY_CONTENT;
   currentPreview = preview();
   versions = { versions: [] };
+  savedDrafts = [];
 });
 afterAll(() => server.close());
 
@@ -1129,5 +1153,494 @@ describe("the currencies a shop sells in, on Shop details", () => {
     expect(
       (await currencyGroup()).getByRole("checkbox", { name: "JPY — Japanese yen" }),
     ).not.toBeChecked();
+  });
+});
+
+/**
+ * The fixture as a draft write carries it, which is not the fixture: `toPayload` strips the
+ * derived evidence the API answers with — a product's ratings, the resolved default tone.
+ *
+ * Taken from the projection the app uses rather than hand-copied, so "everything else is what
+ * the unedited draft would have written" stays true when the payload's shape changes. What
+ * each test asserts on top of it is a literal.
+ */
+function unchangedPayload(): SavedShopPayload {
+  return toPayload(currentContent);
+}
+
+/**
+ * PLAN-UX Slice 7. Each of these opens one saved row, changes one field, saves the row and
+ * then the draft, and asserts `toStrictEqual` against the *whole* payload the save carried —
+ * not against the collection that was edited. That is what catches a second payload builder
+ * behind the edit path: a row that renders correctly while writing a `unit` the add form
+ * would have nulled, an entry whose id followed its retitled source, a sibling collection
+ * reordered, or a key that quietly became `undefined`, all pass every assertion about the
+ * screen and most assertions about one list.
+ */
+describe("editing a saved entry in place", () => {
+  it("changes one word of a policy body and leaves the rest of the draft alone", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+
+    const policies = within(await screen.findByRole("region", { name: "Policies" }));
+    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
+
+    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
+    const body = open.getByLabelText("Body");
+    expect(body).toHaveValue(READY_CONTENT.policies[0].body);
+    await user.clear(body);
+    await user.type(body, "Standard delivery is 2 to 5 working days.\n\nExpress is same day.");
+    await user.click(open.getByRole("button", { name: "Save Shipping and delivery" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    expect(lastSaved()).toStrictEqual({
+      ...unchangedPayload(),
+      policies: [
+        {
+          // Derived once when the entry was created, and handed back: this is what makes the
+          // draft report one updated policy rather than a removal and an addition.
+          id: "shipping-policy",
+          title: "Shipping and delivery",
+          kind: "shipping",
+          body: "Standard delivery is 2 to 5 working days.\n\nExpress is same day.",
+        },
+      ],
+    });
+  });
+
+  it("renames a fulfilment method without disturbing its carrier or transit window", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...READY_CONTENT,
+      fulfilment_methods: [
+        {
+          id: "standard",
+          name: "Standard",
+          carrier: "Nordic Post",
+          min_transit_days: 2,
+          max_transit_days: 5,
+        },
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    await user.click(card.getByRole("button", { name: "Edit Standard" }));
+    const open = within(card.getByRole("form", { name: "Edit Standard" }));
+    await user.clear(open.getByLabelText("Name"));
+    await user.type(open.getByLabelText("Name"), "Standard delivery");
+    await user.click(open.getByRole("button", { name: "Save Standard" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    expect(lastSaved()).toStrictEqual({
+      ...unchangedPayload(),
+      fulfilment_methods: [
+        {
+          id: "standard",
+          name: "Standard delivery",
+          carrier: "Nordic Post",
+          min_transit_days: 2,
+          max_transit_days: 5,
+        },
+      ],
+    });
+  });
+
+  it("keeps a payment method's enabled toggle made while the row was open", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...READY_CONTENT,
+      payment_methods: [{ id: "visa", name: "Card", kind: "card", enabled: true }],
+    };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+    await user.click(card.getByRole("button", { name: "Edit Card" }));
+    const open = within(card.getByRole("form", { name: "Edit Card" }));
+    await user.selectOptions(open.getByLabelText("Kind"), "wallet");
+
+    // The enabled box is on the row's chip line, outside the open form, and writes straight
+    // to the draft. Save must read it from the entry as it now stands: a snapshot taken when
+    // Edit was pressed would put the tick back and lose the operator's work in silence.
+    await user.click(card.getByRole("checkbox", { name: "enabled" }));
+    await user.click(open.getByRole("button", { name: "Save Card" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    expect(lastSaved()).toStrictEqual({
+      ...unchangedPayload(),
+      payment_methods: [{ id: "visa", name: "Card", kind: "wallet", enabled: false }],
+    });
+  });
+
+  it("adds a value to a saved option through the same chip field the add form uses", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    await user.click(options.getByRole("button", { name: "Edit Color" }));
+
+    // The saved values are the chips, editable, each with the name the read-only row gave it.
+    const open = within(options.getByRole("form", { name: "Edit Color" }));
+    expect(open.getByRole("button", { name: "Remove Ocean Blue" })).toBeVisible();
+    await user.type(open.getByLabelText("New value"), "Charcoal");
+    await user.click(open.getByRole("button", { name: "Add value" }));
+    await user.click(open.getByRole("button", { name: "Save Color" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    const before = unchangedPayload();
+    expect(lastSaved()).toStrictEqual({
+      ...before,
+      products: [
+        {
+          ...before.products[0],
+          options: [
+            { key: "color", name: "Color", values: ["Ocean Blue", "Charcoal"] },
+            { key: "size", name: "Size", values: ["M", "L"] },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("relabels a choice attribute without dropping the choices it is constrained to", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
+    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
+    const open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
+    await user.clear(open.getByLabelText("Label"));
+    await user.type(open.getByLabelText("Label"), "Waterproof rating");
+    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    const before = unchangedPayload();
+    expect(lastSaved()).toStrictEqual({
+      ...before,
+      products: [
+        {
+          ...before.products[0],
+          attributes: [
+            {
+              // The key does not follow the label the way the add form's does: it was derived
+              // when the attribute was created, and the tools that read it have not moved.
+              key: "waterproofing",
+              label: "Waterproof rating",
+              attribute_type: "choice",
+              value: "20k",
+              unit: null,
+              choices: ["10k", "20k", "30k"],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("empties the choices when a choice attribute is edited into a text one", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
+    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
+    const open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
+    await user.selectOptions(open.getByLabelText("Type"), "text");
+    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    // The builder normalises, so the edit path cannot carry choices a text attribute may not
+    // hold — which is what an edit that spread `{...attribute, ...changes}` would have done.
+    expect(lastSaved().products[0].attributes).toStrictEqual([
+      {
+        key: "waterproofing",
+        label: "Waterproofing",
+        attribute_type: "text",
+        value: "20k",
+        unit: null,
+        choices: [],
+      },
+    ]);
+  });
+
+  it("nulls the unit when a measurement attribute is edited into a text one", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...READY_CONTENT.products[0],
+          attributes: [
+            {
+              key: "waterproofing",
+              label: "Waterproofing",
+              attribute_type: "measurement",
+              value: "20000",
+              unit: "mm",
+              choices: [],
+            },
+          ],
+        },
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
+    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
+    const open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
+    expect(open.getByLabelText("Unit")).toHaveValue("mm");
+    await user.selectOptions(open.getByLabelText("Type"), "text");
+    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    expect(lastSaved().products[0].attributes).toStrictEqual([
+      {
+        key: "waterproofing",
+        label: "Waterproofing",
+        attribute_type: "text",
+        value: "20000",
+        unit: null,
+        choices: [],
+      },
+    ]);
+  });
+
+  it("corrects a review's body and keeps the id the row displays", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const card = within(await screen.findByRole("region", { name: "Ratings and reviews" }));
+    await user.click(card.getByRole("button", { name: "Edit review one" }));
+    const open = within(card.getByRole("form", { name: "Edit review one" }));
+    await user.clear(open.getByLabelText("Body"));
+    await user.type(open.getByLabelText("Body"), "Dry all day.");
+    await user.click(open.getByRole("button", { name: "Save review one" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    const before = unchangedPayload();
+    expect(lastSaved()).toStrictEqual({
+      ...before,
+      products: [
+        {
+          ...before.products[0],
+          reviews: [{ id: "one", author_display_name: "Camille", rating: 5, body: "Dry all day." }],
+        },
+      ],
+    });
+  });
+
+  it("moves a variant's option value and leaves its price, stock and availability", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "L");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    const before = unchangedPayload();
+    expect(lastSaved().products[0].variants).toStrictEqual([
+      {
+        ...before.products[0].variants[0],
+        option_values: [
+          { key: "color", value: "Ocean Blue" },
+          { key: "size", value: "L" },
+        ],
+      },
+      before.products[0].variants[1],
+    ]);
+  });
+
+  it("corrects only the SKU of a variant whose option order is not the product's", async () => {
+    const user = userEvent.setup();
+    // Authored through the API rather than through this form, so its two option values are in
+    // the other order from the product's — which is only observable with both keys present.
+    const stored = {
+      sku: "NS-ASJ-ODD",
+      option_values: [
+        { key: "size", value: "M" },
+        { key: "color", value: "Ocean Blue" },
+      ],
+      availability: "in_stock" as const,
+      stock_quantity: 3,
+      price: { amount: "249.00", currency: "EUR" as const },
+    };
+    currentContent = {
+      ...READY_CONTENT,
+      products: [{ ...READY_CONTENT.products[0], variants: [stored] }],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-ODD" }));
+    const sku = variants.getByLabelText("SKU for NS-ASJ-ODD");
+    await user.clear(sku);
+    await user.type(sku, "NS-ASJ-OB-S");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-ODD" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    // Only the SKU moved, `size` before `color` as it was stored. Rebuilding from
+    // `product.options` would have re-sorted it and reported an update nobody asked for.
+    expect(lastSaved().products[0].variants).toStrictEqual([{ ...stored, sku: "NS-ASJ-OB-S" }]);
+  });
+
+  it("lets a variant that predates an option choose one, which the gate refuses without", async () => {
+    const user = userEvent.setup();
+    // No `size` at all: `validate_shop` raises `variant_missing_option` as an error, so this
+    // draft cannot be published until this row answers — and this row is the only place it
+    // can be answered.
+    const stored = {
+      sku: "NS-ASJ-OLD",
+      option_values: [{ key: "color", value: "Ocean Blue" }],
+      availability: "in_stock" as const,
+      stock_quantity: 3,
+      price: { amount: "249.00", currency: "EUR" as const },
+    };
+    currentContent = {
+      ...READY_CONTENT,
+      products: [{ ...READY_CONTENT.products[0], variants: [stored] }],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OLD" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OLD"), "L");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OLD" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+
+    // The answer the row offered is the answer the builder wrote: the carried key keeps its
+    // place and the gained one is appended. A select with no write behind it would have shown
+    // "L" and saved the variant unchanged.
+    expect(lastSaved().products[0].variants).toStrictEqual([
+      {
+        ...stored,
+        option_values: [
+          { key: "color", value: "Ocean Blue" },
+          { key: "size", value: "L" },
+        ],
+      },
+    ]);
+  });
+
+  it("refuses a SKU another variant already holds, rather than merging two rows", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    const sku = variants.getByLabelText("SKU for NS-ASJ-OB-M");
+    await user.clear(sku);
+    await user.type(sku, "NS-ASJ-OB-L");
+
+    expect(sku).toBeInvalid();
+    expect(variants.getByText("NS-ASJ-OB-L is already in the draft.")).toBeVisible();
+    expect(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" })).toBeDisabled();
+    // And the rename says what it will cost before it is pressed.
+    expect(sku).toHaveAccessibleDescription(/reads as a removal and an addition/);
+  });
+
+  it("refuses a SKU the contract could not carry, which no form here would have caught", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    const sku = variants.getByLabelText("SKU for NS-ASJ-OB-M");
+    await user.clear(sku);
+    // The open row has no form around it, so `pattern` marks the box and refuses nothing;
+    // the shape is checked in the save gate instead, off the same constant.
+    await user.type(sku, "ns asj_1");
+
+    expect(sku).toHaveValue("NS ASJ_1");
+    // Asserted on the attribute, not only on `toBeInvalid()`: `pattern` alone would make
+    // `checkValidity()` false and hide whether the box says so to a reader who has no
+    // constraint validation — which is the whole reason the shape is checked in the gate.
+    expect(sku).toHaveAttribute("aria-invalid", "true");
+    expect(sku).toBeInvalid();
+    expect(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" })).toBeDisabled();
+    expect(savedDrafts).toEqual([]);
+  });
+
+  it("refuses a media reference another entry holds, on both the row and the add form", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...READY_CONTENT.products[0],
+          media: [
+            { reference: "media/alpine-shell.jpg", alt_text: "Hood up in the rain" },
+            { reference: "media/alpine-charcoal.jpg", alt_text: "Charcoal, front" },
+          ],
+        },
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const card = within(await screen.findByRole("region", { name: "Media references" }));
+    await user.click(card.getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
+    const open = within(card.getByRole("form", { name: "Edit media/alpine-shell.jpg" }));
+    const reference = open.getByLabelText("Reference");
+    await user.clear(reference);
+    await user.type(reference, "media/alpine-charcoal.jpg");
+
+    // Greying Save without saying why was the defect: the refusal is announced where it was
+    // typed, on `DerivedIdField`'s collision model.
+    expect(reference).toBeInvalid();
+    expect(reference).toHaveAccessibleDescription(
+      /media\/alpine-charcoal\.jpg is already a media reference of this product/,
+    );
+    expect(open.getByRole("button", { name: "Save media/alpine-shell.jpg" })).toBeDisabled();
+    await user.click(open.getByRole("button", { name: "Cancel editing media/alpine-shell.jpg" }));
+
+    // The add form refuses the same duplicate in the same words — it refused nothing at all
+    // before, and two entries sharing a reference are one key in the change summary.
+    await user.type(card.getByLabelText("Reference"), "media/alpine-charcoal.jpg");
+    await user.type(card.getByLabelText("Alt text"), "Charcoal again");
+    await user.click(card.getByRole("button", { name: "Add media" }));
+
+    expect(card.getByLabelText("Reference")).toBeInvalid();
+    expect(card.getAllByRole("listitem")).toHaveLength(2);
+    expect(savedDrafts).toEqual([]);
+  });
+
+  it("says nothing in the open row reaches the draft, and Cancel proves it", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+
+    const policies = within(await screen.findByRole("region", { name: "Policies" }));
+    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
+    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
+    await user.clear(open.getByLabelText("Title"));
+    await user.type(open.getByLabelText("Title"), "Not this");
+
+    // The draft is untouched, so the page's own Save is still the "Saved" it was.
+    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+    await user.click(open.getByRole("button", { name: "Cancel editing Shipping and delivery" }));
+
+    expect(policies.getByText("Shipping and delivery")).toBeVisible();
+    expect(savedDrafts).toEqual([]);
   });
 });

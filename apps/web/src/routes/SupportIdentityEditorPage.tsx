@@ -4,7 +4,7 @@ import type {
   SupportIdentityPreviewResponse,
   SupportPermission,
 } from "@agent-lab/contracts";
-import { useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getSupportIdentityDraft,
@@ -16,6 +16,10 @@ import { ChipListField } from "../components/ChipListField";
 import {
   Card,
   canPublish,
+  EntryCard,
+  EntryEditNotice,
+  EntryId,
+  EntryText,
   Fingerprint,
   IssueList,
   PageHeader,
@@ -23,6 +27,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import { CHIP_LABEL_MAX_LENGTH, ESCALATION_CONDITIONS_RULE } from "../lib/fieldRules";
@@ -70,6 +75,10 @@ export function SupportIdentityEditorPage() {
   const editor = useDefinitionEditor(identityId, CLIENT);
   const { content, preview, edit } = editor;
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
+  const guidanceEditor = useEntryEdit<GuidanceFields>(
+    (content?.guidance ?? []).map((note) => note.id),
+  );
+  const guidanceNotice = useId();
 
   if (editor.loading) {
     return <p className="text-sm text-admin-muted">Loading support identity…</p>;
@@ -96,13 +105,13 @@ export function SupportIdentityEditorPage() {
     });
   }
 
-  function updateGuidance(id: string, next: Partial<GuidanceNoteSchema>) {
+  function saveGuidance(id: string, fields: GuidanceFields) {
     if (!content) {
       return;
     }
     edit({
       ...content,
-      guidance: content.guidance.map((note) => (note.id === id ? { ...note, ...next } : note)),
+      guidance: content.guidance.map((note) => (note.id === id ? guidanceEntry(id, fields) : note)),
     });
   }
 
@@ -244,14 +253,24 @@ export function SupportIdentityEditorPage() {
             ) : (
               <ul className="grid gap-2 text-[13px]">
                 {content.guidance.map((note) => (
-                  <li key={note.id} className="grid gap-1">
-                    <div className="flex items-center gap-2">
-                      <input
-                        aria-label={`Guidance title for ${note.id}`}
-                        className={fieldControlClasses}
-                        value={note.title}
-                        onChange={(event) => updateGuidance(note.id, { title: event.target.value })}
-                      />
+                  <EntryCard
+                    key={note.id}
+                    title={note.title}
+                    chips={<EntryId value={note.id} />}
+                    edit={entryEdit(
+                      guidanceEditor,
+                      guidanceNotice,
+                      note.id,
+                      note.title,
+                      () => ({ title: note.title, body: note.body }),
+                      (fields) => saveGuidance(note.id, fields),
+                      (value, onChange) => (
+                        <div className="flex flex-wrap items-end gap-2">
+                          <GuidanceFieldset value={value} onChange={onChange} />
+                        </div>
+                      ),
+                    )}
+                    actions={
                       <button
                         className={subtleButtonClasses}
                         type="button"
@@ -265,31 +284,27 @@ export function SupportIdentityEditorPage() {
                       >
                         Remove
                       </button>
-                    </div>
-                    <input
-                      aria-label={`Guidance body for ${note.id}`}
-                      className={fieldControlClasses}
-                      value={note.body}
-                      onChange={(event) => updateGuidance(note.id, { body: event.target.value })}
-                    />
-                  </li>
+                    }
+                  >
+                    <EntryText label="Guidance" value={note.body} />
+                  </EntryCard>
                 ))}
               </ul>
             )}
+            <EntryEditNotice id={guidanceNotice} label={guidanceEditor.open?.label ?? null} />
             <GuidanceForm
-              onAdd={(title, body) =>
+              onAdd={(fields) =>
                 edit({
                   ...content,
                   guidance: [
                     ...content.guidance,
-                    {
-                      id: uniqueId(
-                        slugify(title, "note"),
+                    guidanceEntry(
+                      uniqueId(
+                        slugify(fields.title, "note"),
                         content.guidance.map((note) => note.id),
                       ),
-                      title,
-                      body,
-                    },
+                      fields,
+                    ),
                   ],
                 })
               }
@@ -350,38 +365,68 @@ export function SupportIdentityEditorPage() {
   );
 }
 
-function GuidanceForm({ onAdd }: { onAdd: (title: string, body: string) => void }) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+/**
+ * A guidance note's two fields, and the one function that turns them into the note the draft
+ * stores.
+ *
+ * These rows are where PLAN-UX takes edit mode from: they already corrected in place, but they
+ * asked their two questions through `aria-label` alone, so a reader with a pointer saw two
+ * unlabelled boxes. Slice 7 asks for visible labels, and the way a row gets them is by asking
+ * with the same words — and the same component — the add form asks with.
+ */
+interface GuidanceFields {
+  title: string;
+  body: string;
+}
 
+function guidanceEntry(id: string, fields: GuidanceFields): GuidanceNoteSchema {
+  return { id, title: fields.title, body: fields.body };
+}
+
+function GuidanceFieldset({
+  value,
+  onChange,
+}: {
+  value: GuidanceFields;
+  onChange: (next: GuidanceFields) => void;
+}) {
   return (
-    <form
-      className="flex flex-wrap items-end gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onAdd(title, body);
-        setTitle("");
-        setBody("");
-      }}
-    >
+    <>
       <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
         Title
         <input
           className={fieldControlClasses}
-          value={title}
+          value={value.title}
           required
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => onChange({ ...value, title: event.target.value })}
         />
       </label>
       <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
         Guidance
         <input
           className={fieldControlClasses}
-          value={body}
+          value={value.body}
           required
-          onChange={(event) => setBody(event.target.value)}
+          onChange={(event) => onChange({ ...value, body: event.target.value })}
         />
       </label>
+    </>
+  );
+}
+
+function GuidanceForm({ onAdd }: { onAdd: (fields: GuidanceFields) => void }) {
+  const [fields, setFields] = useState<GuidanceFields>({ title: "", body: "" });
+
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onAdd(fields);
+        setFields({ title: "", body: "" });
+      }}
+    >
+      <GuidanceFieldset value={fields} onChange={setFields} />
       <button className={inkButtonClasses} type="submit">
         Add guidance
       </button>

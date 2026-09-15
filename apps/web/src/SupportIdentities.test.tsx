@@ -298,3 +298,48 @@ describe("support identity workspace", () => {
     expect(await screen.findByText(/Draft matches v1/)).toBeVisible();
   });
 });
+
+/**
+ * PLAN-UX Slice 7's third checkbox. These rows are where the plan takes edit mode from — they
+ * already corrected in place — but they asked their two questions through `aria-label` alone,
+ * and assembled the note at the call site rather than through the add form's builder.
+ */
+describe("editing a saved guidance note in place", () => {
+  it("corrects the body, keeps the id, and asks in visible words", async () => {
+    const user = userEvent.setup();
+    currentIdentity = {
+      ...IDENTITY_CONTENT,
+      guidance: [
+        { id: "refunds", title: "Refunds", body: "Offer a refund above 200 EUR." },
+        { id: "tone", title: "Tone", body: "Lead with the fact." },
+      ],
+    };
+    // Captured before the save, because the PUT handler reassigns `currentIdentity` to the
+    // payload: reading the baseline afterwards would compare the save to itself and the
+    // assertion could not fail.
+    const before = structuredClone(currentIdentity);
+    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Guidance" }));
+    await user.click(card.getByRole("button", { name: "Edit Refunds" }));
+
+    const open = within(card.getByRole("form", { name: "Edit Refunds" }));
+    expect(open.getByLabelText("Guidance")).toHaveValue("Offer a refund above 200 EUR.");
+    await user.clear(open.getByLabelText("Guidance"));
+    await user.type(open.getByLabelText("Guidance"), "Escalate a refund above 200 EUR.");
+    await user.click(open.getByRole("button", { name: "Save Refunds" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+
+    // Against the whole payload: a support identity carries no derived evidence, so the
+    // content *is* the payload and every other field must come back byte-identical.
+    expect(savedPayloads[0]).toStrictEqual({
+      ...before,
+      guidance: [
+        { id: "refunds", title: "Refunds", body: "Escalate a refund above 200 EUR." },
+        { id: "tone", title: "Tone", body: "Lead with the fact." },
+      ],
+    });
+  });
+});

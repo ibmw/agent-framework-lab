@@ -15,6 +15,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { toProfilePayload } from "./api/customerProfiles";
 import { todayInput } from "./lib/orders";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -660,5 +661,92 @@ describe("every enum has a name", () => {
     const kind = background.getByLabelText("Kind");
     await user.selectOptions(kind, within(kind).getByRole("option", { name: "Life event" }));
     expect(kind).toHaveValue("life_event");
+  });
+});
+
+/**
+ * PLAN-UX Slice 7 on the customer editor. Both lists here carried their fields as
+ * `aria-label`s on always-open boxes: the row could be corrected, but only by a reader who
+ * could see which box was which, and the entry it wrote was assembled at the call site rather
+ * than by the function the add form used.
+ */
+describe("editing a saved customer entry in place", () => {
+  it("corrects a background note and leaves its kind, date and id alone", async () => {
+    const user = userEvent.setup();
+    currentProfile = {
+      ...PROFILE_CONTENT,
+      background: [
+        {
+          id: "refund-2025",
+          kind: "support_contact",
+          occurred_on: "2026-05-02",
+          note: "Asked about a refund window.",
+        },
+      ],
+    };
+    currentPreview = profilePreview({ content: currentProfile });
+    // Captured before the save, because the PUT handler merges the payload back into
+    // `currentProfile`: reading the baseline afterwards would compare the save to itself.
+    const before = toProfilePayload(currentProfile);
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Background" }));
+    await user.click(card.getByRole("button", { name: "Edit 2026-05-02 · Support contact" }));
+
+    const open = within(card.getByRole("form", { name: "Edit 2026-05-02 · Support contact" }));
+    // The row now asks its questions in words, not only in the accessible name.
+    expect(open.getByLabelText("Note")).toHaveValue("Asked about a refund window.");
+    await user.clear(open.getByLabelText("Note"));
+    await user.type(open.getByLabelText("Note"), "Asked about the refund window.");
+    await user.click(open.getByRole("button", { name: "Save 2026-05-02 · Support contact" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+
+    // Against the whole payload, not the one list: a sibling collection moving, or a key that
+    // quietly became `undefined`, is exactly what a second payload builder would do.
+    expect(savedPayloads[0]).toStrictEqual({
+      ...before,
+      background: [
+        {
+          id: "refund-2025",
+          kind: "support_contact",
+          occurred_on: "2026-05-02",
+          note: "Asked about the refund window.",
+        },
+      ],
+    });
+  });
+
+  it("corrects a hidden fact's reveal condition without touching the fact itself", async () => {
+    const user = userEvent.setup();
+    currentProfile = {
+      ...PROFILE_CONTENT,
+      hidden_facts: [
+        { id: "second-address", note: "Has a second address.", revealed_when: "Asked directly." },
+      ],
+    };
+    currentPreview = profilePreview({ content: currentProfile });
+    const before = toProfilePayload(currentProfile);
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const card = within(await screen.findByRole("region", { name: "Hidden simulator facts" }));
+    await user.click(card.getByRole("button", { name: "Edit Has a second address." }));
+
+    const open = within(card.getByRole("form", { name: "Edit Has a second address." }));
+    expect(open.getByLabelText("Hidden fact")).toHaveValue("Has a second address.");
+    await user.clear(open.getByLabelText("Revealed when"));
+    await user.type(open.getByLabelText("Revealed when"), "Asked twice.");
+    await user.click(open.getByRole("button", { name: "Save Has a second address." }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+
+    expect(savedPayloads[0]).toStrictEqual({
+      ...before,
+      hidden_facts: [
+        { id: "second-address", note: "Has a second address.", revealed_when: "Asked twice." },
+      ],
+    });
   });
 });

@@ -1,6 +1,7 @@
 import type { DefinitionIssueSchema } from "@agent-lab/contracts";
 import type { ReactNode } from "react";
-import { surfaceClasses } from "../lib/ui";
+import type { EntryEdit } from "../lib/entryEdit";
+import { accentButtonClasses, subtleButtonClasses, surfaceClasses } from "../lib/ui";
 
 /**
  * Draft and published state is never carried by colour alone: every chip pairs its colour
@@ -92,16 +93,108 @@ export function Card({
 }
 
 /**
+ * The Edit a saved row carries, and the Save and Cancel it opens into.
+ *
+ * Shared by `EntryCard` and the variants table, so a row that is not a card is still opened,
+ * saved and cancelled by the same three controls under the same three names. Each is named
+ * after the row it acts on the way `RemoveButton` already is: the visible word stays short
+ * and the accessible name says which entry, because a card holding six rows otherwise offers
+ * six buttons called "Edit".
+ */
+export function EntryEditButtons({
+  label,
+  open,
+  blockedBy,
+  onOpen,
+  onSave,
+  onCancel,
+  saveable = true,
+  submit = false,
+}: {
+  label: string;
+  open: boolean;
+  blockedBy?: string;
+  onOpen: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saveable?: boolean;
+  /** True where the fields sit in a `<form>`, so Enter in a field saves the row. */
+  submit?: boolean;
+}) {
+  if (!open) {
+    return (
+      <button
+        className={subtleButtonClasses}
+        type="button"
+        aria-label={`Edit ${label}`}
+        aria-describedby={blockedBy}
+        disabled={Boolean(blockedBy)}
+        onClick={onOpen}
+      >
+        Edit
+      </button>
+    );
+  }
+  return (
+    <>
+      <button
+        className={accentButtonClasses}
+        type={submit ? "submit" : "button"}
+        aria-label={`Save ${label}`}
+        disabled={!saveable}
+        onClick={submit ? undefined : onSave}
+      >
+        Save
+      </button>
+      <button
+        className={subtleButtonClasses}
+        type="button"
+        aria-label={`Cancel editing ${label}`}
+        onClick={onCancel}
+      >
+        Cancel
+      </button>
+    </>
+  );
+}
+
+/**
+ * The line a list shows while one of its rows is open, and the reason its other Edit buttons
+ * are disabled.
+ *
+ * It says the two things an operator cannot see: that the open row is the list's one open
+ * edit, and that nothing reaches the draft until Save is pressed — so the page's own "Save
+ * draft" does not carry what is being typed here.
+ */
+export function EntryEditNotice({ id, label }: { id: string; label: string | null }) {
+  return (
+    // Present whether or not a row is open, so the line is a live region an assistive
+    // technology is already watching when one opens. `role="status"` carries the polite
+    // announcement; a second `aria-live` here would only ask for it twice.
+    <p id={id} className={label ? "text-xs text-admin-muted" : "sr-only"} role="status">
+      {label
+        ? `Editing ${label}. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.`
+        : null}
+    </p>
+  );
+}
+
+/**
  * One saved entry in an editor's list. A row that carries only a title and a Remove button
  * cannot be read back — the configuration becomes write-only — so the identifying line and
  * the stored fields live in the same component, and every list that has fields to show uses
  * it rather than inventing its own row.
+ *
+ * With `edit` it also opens: the header line stays exactly where it was, identifier and all,
+ * and the read-only body is replaced by the fields in a form whose Save writes the same
+ * payload the add form below the list would have written.
  */
 export function EntryCard({
   lead,
   title,
   chips,
   actions,
+  edit,
   children,
 }: {
   /** A control that selects the entry, such as the default-tone radio. */
@@ -109,8 +202,10 @@ export function EntryCard({
   title: ReactNode;
   chips?: ReactNode;
   actions?: ReactNode;
+  edit?: EntryEdit;
   children?: ReactNode;
 }) {
+  const open = edit?.open ?? false;
   return (
     // A grid item defaults to min-width:auto, so an unbreakable token in the body would
     // widen the row past the card — which clips, taking every sibling's actions with it.
@@ -120,9 +215,37 @@ export function EntryCard({
         {lead}
         <h3 className="min-w-0 [overflow-wrap:anywhere] text-[13px] font-semibold">{title}</h3>
         {chips}
-        {actions ? <div className="ml-auto flex items-center gap-1.5">{actions}</div> : null}
+        {/* While the row is open its Remove is gone: removing the entry being corrected is
+            not one of the two answers the open row is asking for. */}
+        {edit && !open ? (
+          <div className="ml-auto flex items-center gap-1.5">
+            <EntryEditButtons {...edit} />
+            {actions}
+          </div>
+        ) : actions && !open ? (
+          <div className="ml-auto flex items-center gap-1.5">{actions}</div>
+        ) : null}
       </div>
-      {children}
+      {open && edit ? (
+        <form
+          // Named, because the open row asks the same questions the add form below the list
+          // asks, in the same words. Without a name on the group, "Title" means two controls
+          // on the card and neither a reader nor a test can say which one they have reached.
+          aria-label={`Edit ${edit.label}`}
+          className="grid min-w-0 gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            edit.onSave();
+          }}
+        >
+          {edit.fields}
+          <div className="flex items-center gap-1.5">
+            <EntryEditButtons {...edit} submit />
+          </div>
+        </form>
+      ) : (
+        children
+      )}
     </li>
   );
 }
