@@ -346,6 +346,20 @@ above is unchanged.
 series (`seriesPrefix`, then `nextReference`). A shop with no numbered orders yet takes
 initials from its name. Ticket references always use `T`, independently of the shop name.
 
+**A suggestion that is not known yet** (added 2026-09-15). Both of those are derived from a list
+the page is still reading, and a field that opens before the list lands has no suggestion to offer
+— only a suggestion *coming*. Such a field is closed (`DerivedIdField`'s `pending`) until it
+knows, and the commit that opens it is the one that puts the suggestion in it. It closes again
+when a *create* moves the list: the re-read that follows leaves the field empty and the next free
+reference unknown, exactly as on first load, and the field comes back unclaimed rather than still
+belonging to whoever typed the last one. A re-read that leaves a value in the field — a save
+elsewhere on the page — needs none of this, because there is nothing empty for a suggestion to
+land in. The follow-until-edited rule cannot stand in for this: a suggestion arriving late is
+indistinguishable from a source that changed, so the field writes it over whatever the operator
+typed into it in the meantime — which is the defect this clause was written for. Every field whose
+suggestion is derived from something loading says so; one derived from a field on the same form
+has nothing to wait for and does not.
+
 ## Revision — enum labels and the status pill (2026-09-14)
 
 Slice 3. No value of a contract union reaches a reader in its wire spelling. The convention is

@@ -41,6 +41,7 @@ import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEdi
 import { nextReference } from "../lib/entryIds";
 import { optionsOf, TICKET_ORIGIN_KIND, TICKET_STATUS } from "../lib/enumLabels";
 import {
+  alreadyTakenMessage,
   REFERENCE_PATTERN,
   TICKET_REFERENCE_RULE,
   TICKET_TAG_MAX_LENGTH,
@@ -77,6 +78,9 @@ import {
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "The ticket service is unavailable.";
+
+/** Completes "{reference} is already {…}." wherever a ticket reference is refused. */
+const TICKET_REFERENCE_TAKEN_PLACE = "used by a ticket in this shop";
 
 type Filter = "open" | "resolved" | "all";
 
@@ -228,6 +232,9 @@ export function TicketsPage() {
               {visible.map((ticket) => (
                 <li key={ticket.ticket_id}>
                   <Link
+                    // Absolute, like every other link out of this page. `relative="path"` ties
+                    // a link to how many segments the URL happens to have: this one resolved
+                    // correctly from `/shops/X/tickets` and, once a ticket was open, sent the
                     // operator to `/shops/X/tickets/tickets/…` — out of the shop entirely.
                     to={`/shops/${shopId}/tickets/${ticket.ticket_id}`}
                     className={`grid gap-1 border-b border-admin-border/60 px-3 py-2.5 text-[13px] no-underline ${
@@ -263,6 +270,7 @@ export function TicketsPage() {
             shopId={shopId}
             taken={tickets.map((ticket) => ticket.reference)}
             ready={!loading && !listError}
+            loading={loading}
             onCreated={async (created) => {
               opening.current = created;
               try {
@@ -299,11 +307,15 @@ function NewTicketForm({
   shopId,
   taken,
   ready,
+  loading,
   onCreated,
 }: {
   shopId: string;
   taken: readonly string[];
+  /** The list has been read, so which references are free is known. */
   ready: boolean;
+  /** The list is still coming: the reference field waits for it rather than being typed into. */
+  loading: boolean;
   onCreated: (ticketId: string) => Promise<void>;
 }) {
   const { content } = useShopWorkspace();
@@ -314,7 +326,21 @@ function NewTicketForm({
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const suggestedReference = ready ? nextReference("T", taken) : "";
+  // A create in flight is about to change the list, so which reference is free is unknown
+  // again until the reload it triggers lands — the same state the page opens in, down to the
+  // field being nobody's, and closed the same way. `busy` spans the create *and* the reload,
+  // which `reload` itself does not report through `loading`.
+  const settling = loading || busy;
+  const suggestedReference = ready && !busy ? nextReference("T", taken) : "";
+
+  // "The ticket needs a reference" is only true while one is still being worked out. Once the
+  // list lands the field holds one, and an alert that outlived its own reason is worse than no
+  // alert at all. A create failure is set long after this has settled, so it survives.
+  useEffect(() => {
+    if (!loading) {
+      setError(null);
+    }
+  }, [loading]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -335,7 +361,17 @@ function NewTicketForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!reference || taken.includes(reference)) {
+    // Said rather than swallowed. The field's own `required` and custom validity hold both of
+    // these back most of the time — but not while it is disabled, which bars it from
+    // constraint validation altogether, and not in the commit where it holds a suggestion this
+    // form has not been told about yet. Returning in silence there left "Open ticket" doing
+    // nothing at all, with nothing on screen to explain it.
+    if (!reference) {
+      setError("The ticket needs a reference before it can be opened.");
+      return;
+    }
+    if (taken.includes(reference)) {
+      setError(alreadyTakenMessage(reference, TICKET_REFERENCE_TAKEN_PLACE));
       return;
     }
     setBusy(true);
@@ -416,8 +452,11 @@ function NewTicketForm({
         hint={TICKET_REFERENCE_RULE}
         value={reference}
         suggested={suggestedReference}
+        // Only while a suggestion is on its way. A list that *failed* leaves none to wait for,
+        // and the field stays usable so a ticket can still be named by hand.
+        pending={settling}
         taken={taken}
-        takenPlace="used by a ticket in this shop"
+        takenPlace={TICKET_REFERENCE_TAKEN_PLACE}
         pattern={REFERENCE_PATTERN}
         title={TICKET_REFERENCE_RULE}
         placeholder="T-2042"

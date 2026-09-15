@@ -411,6 +411,69 @@ describe("order index", () => {
     expect(createdOrders).toHaveLength(0);
   });
 
+  it("takes no reference until it knows which references are free", async () => {
+    let release: (() => void) | null = null;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return HttpResponse.json(ORDERS);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    const form = within(await screen.findByRole("region", { name: "Create order" }));
+
+    // Which reference is free is exactly what the listing still has to say. A field that is
+    // open for typing before it lands writes the suggestion over whatever was typed into it.
+    expect(form.getByLabelText("Reference")).toBeDisabled();
+    expect(form.getByLabelText("Reference")).toHaveValue("");
+
+    (release as unknown as () => void)();
+    await waitFor(() => expect(form.getByLabelText("Reference")).toBeEnabled());
+    // Enabled and already holding the suggestion: never enabled and empty.
+    expect(form.getByLabelText("Reference")).toHaveValue("NS-10483");
+  });
+
+  it("takes no reference while a create is in flight either", async () => {
+    const user = userEvent.setup();
+    let release: (() => void) | null = null;
+    let reads = 0;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
+        reads += 1;
+        if (reads === 1) {
+          return HttpResponse.json(ORDERS);
+        }
+        // The reload a create triggers, held open: the listing that decides the next free
+        // reference has not answered yet, so neither has the suggestion.
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return HttpResponse.json({
+          orders: [...ORDERS.orders, { ...ORDERS.orders[0], reference: "NS-10483" }],
+        } satisfies OrderListResponse);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    const form = within(await screen.findByRole("region", { name: "Create order" }));
+    await form.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(form.getByLabelText("Customer"), PROFILE_ID);
+    await waitFor(() => expect(form.getByLabelText("Reference")).toHaveValue("NS-10483"));
+
+    await user.click(form.getByRole("button", { name: "Create order" }));
+
+    // The page stays here after a create, and the listing behind the suggestion is moving.
+    // Left open, the field would be back where it started: empty, editable, and about to be
+    // written over — or still showing the reference that has just been used.
+    await waitFor(() => expect(form.getByLabelText("Reference")).toBeDisabled());
+    expect(form.getByLabelText("Reference")).toHaveValue("");
+
+    (release as unknown as () => void)();
+    await waitFor(() => expect(form.getByLabelText("Reference")).toBeEnabled());
+    expect(form.getByLabelText("Reference")).toHaveValue("NS-10484");
+  });
+
   it("does not guess a reference after the listing fails to load", async () => {
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>

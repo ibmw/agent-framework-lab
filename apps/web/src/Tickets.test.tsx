@@ -329,6 +329,7 @@ function card(name: string) {
   return screen.getByRole("region", { name });
 }
 
+/** The customer's *other* ticket, which this fixture otherwise never opens. */
 function otherTicketHandlers() {
   return [
     http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/draft`, () =>
@@ -405,6 +406,100 @@ describe("ticket list", () => {
     expect(await screen.findByText(/No tickets yet/)).toBeVisible();
   });
 
+  it("moves between tickets without leaving the shop", async () => {
+    const user = userEvent.setup();
+    server.use(...otherTicketHandlers());
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
+
+    const rows = within(within(screen.getByRole("region", { name: "Tickets" })).getByRole("list"));
+    await user.click(rows.getByRole("link", { name: /Sizing question/ }));
+
+    // A relative-by-path link resolved against `/shops/…/tickets/T-204` asked for
+    // `…/tickets/tickets/…`, which matches no route, and the catch-all put the operator back
+    // on the shop index — out of the shop they were working in.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}`),
+    );
+  });
+
+  it("takes no reference until it knows which references are free", async () => {
+    const user = userEvent.setup();
+    let release: (() => void) | null = null;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return HttpResponse.json(TICKETS);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+
+    // The suggestion is the next free reference, and which one that is is exactly what the
+    // list still has to say. An operator who types into the field before it lands has their
+    // reference written over by the suggestion arriving behind it.
+    expect(list.getByLabelText("Reference")).toBeDisabled();
+    expect(list.getByLabelText("Reference")).toHaveValue("");
+
+    await user.type(list.getByLabelText("Subject"), "Late delivery");
+    await list.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
+    await user.click(list.getByRole("button", { name: "Open ticket" }));
+
+    // Nothing was opened — and the form says so rather than leaving the button to do nothing.
+    expect(createdTickets).toHaveLength(0);
+    expect(list.getByRole("alert")).toHaveTextContent(
+      "The ticket needs a reference before it can be opened.",
+    );
+
+    (release as unknown as () => void)();
+    await waitFor(() => expect(list.getByLabelText("Reference")).toBeEnabled());
+    // Enabled and already holding the suggestion: never enabled and empty.
+    expect(list.getByLabelText("Reference")).toHaveValue("T-205");
+  });
+
+  it("takes no reference while a create is in flight either", async () => {
+    const user = userEvent.setup();
+    let release: (() => void) | null = null;
+    let reads = 0;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, async () => {
+        reads += 1;
+        if (reads === 1) {
+          return HttpResponse.json(TICKETS);
+        }
+        // The reload a create triggers, held open: the list that decides the next free
+        // reference has not answered yet, so neither has the suggestion.
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return HttpResponse.json({
+          tickets: [...TICKETS.tickets, { ...TICKETS.tickets[0], reference: "T-205" }],
+        } satisfies TicketListResponse);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+    await list.findByRole("option", { name: "Maya Laurent" });
+    await waitFor(() => expect(list.getByLabelText("Reference")).toHaveValue("T-205"));
+    await user.type(list.getByLabelText("Subject"), "Late delivery");
+    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
+
+    await user.click(list.getByRole("button", { name: "Open ticket" }));
+
+    // The list panel stays on screen across the create, and the list behind the suggestion is
+    // moving. Left open, the field would be back where it started: empty, editable, and about
+    // to be written over — or still showing the reference that has just been used.
+    await waitFor(() => expect(list.getByLabelText("Reference")).toBeDisabled());
+    expect(list.getByLabelText("Reference")).toHaveValue("");
+
+    (release as unknown as () => void)();
+    await waitFor(() => expect(list.getByLabelText("Reference")).toBeEnabled());
+    expect(list.getByLabelText("Reference")).toHaveValue("T-206");
+  });
+
   it("opens a ticket for a customer attached to this shop", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets`);
@@ -477,23 +572,7 @@ describe("ticket list", () => {
           ),
         } satisfies TicketListResponse),
       ),
-      // The ticket being opened, which this fixture otherwise never opens.
-      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/draft`, () =>
-        HttpResponse.json({
-          ticket_id: OTHER_TICKET_ID,
-          shop_id: SHOP_ID,
-          lifecycle_state: "draft",
-          content: { ...currentContent, reference: "T-187", subject: "Sizing question" },
-          created_at: "2026-08-24T12:00:00+00:00",
-          updated_at: "2026-08-24T12:05:00+00:00",
-        } satisfies TicketDraftResponse),
-      ),
-      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/draft/preview`, () =>
-        HttpResponse.json({ ...currentPreview, ticket_id: OTHER_TICKET_ID }),
-      ),
-      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}/context`, () =>
-        HttpResponse.json(CONTEXT),
-      ),
+      ...otherTicketHandlers(),
     );
     renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 
@@ -927,22 +1006,5 @@ describe("the helpdesk layout", () => {
     expect(screen.getByRole("button", { name: "Expand navigation" })).toBeVisible();
     // Collapsed is a first-class layout, not a hidden one: the names survive as link names.
     expect(within(rail).getByRole("link", { name: "Tickets" })).toBeVisible();
-  });
-
-  it("moves between tickets without leaving the shop", async () => {
-    const user = userEvent.setup();
-    server.use(...otherTicketHandlers());
-    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
-
-    const rows = within(within(screen.getByRole("region", { name: "Tickets" })).getByRole("list"));
-    await user.click(rows.getByRole("link", { name: /Sizing question/ }));
-
-    // A relative-by-path link resolved against `/shops/…/tickets/T-204` asked for
-    // `…/tickets/tickets/…`, which matches no route, and the catch-all put the operator back
-    // on the shop index — out of the shop they were working in.
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}`),
-    );
   });
 });

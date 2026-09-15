@@ -9,7 +9,7 @@ import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
-import { ORDER_REFERENCE_RULE, REFERENCE_PATTERN } from "../lib/fieldRules";
+import { alreadyTakenMessage, ORDER_REFERENCE_RULE, REFERENCE_PATTERN } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel, todayInput } from "../lib/orders";
 import {
   accentButtonClasses,
@@ -22,6 +22,9 @@ import {
 import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "The order service is unavailable.";
+
+/** Completes "{reference} is already {…}." wherever an order reference is refused. */
+const ORDER_REFERENCE_TAKEN_PLACE = "used by an order in this shop";
 
 type Filter = "all" | "open" | "unfulfilled" | "unpaid";
 
@@ -90,17 +93,41 @@ export function OrdersPage() {
   }, [reload]);
 
   const takenReferences = orders.map((order) => order.reference);
+  // A create in flight is about to change the listing, so which reference is free is unknown
+  // again until the reload it triggers lands — the same state the page opens in, down to the
+  // field being nobody's, and closed the same way. `busy` spans the create *and* the reload,
+  // which `reload` itself does not report through `loading`.
+  const settling = loading || busy;
   const suggestedReference =
-    loading || loadError
+    loading || loadError || busy
       ? ""
       : nextReference(
           seriesPrefix(takenReferences, referencePrefix(content.identity.name)),
           takenReferences,
         );
 
+  // "The order needs a reference" is only true while one is still being worked out. Once the
+  // listing lands the field holds one, and an alert that outlived its own reason is worse than
+  // no alert at all. A create failure is set long after this has settled, so it survives.
+  useEffect(() => {
+    if (!loading) {
+      setFormError(null);
+    }
+  }, [loading]);
+
   async function addOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!reference || takenReferences.includes(reference)) {
+    // Said rather than swallowed. The field's own `required` and custom validity hold both of
+    // these back most of the time — but not while it is disabled, which bars it from
+    // constraint validation altogether, and not in the commit where it holds a suggestion this
+    // form has not been told about yet. Returning in silence there left "Create order" doing
+    // nothing at all.
+    if (!reference) {
+      setFormError("The order needs a reference before it can be created.");
+      return;
+    }
+    if (takenReferences.includes(reference)) {
+      setFormError(alreadyTakenMessage(reference, ORDER_REFERENCE_TAKEN_PLACE));
       return;
     }
     setBusy(true);
@@ -248,8 +275,11 @@ export function OrdersPage() {
               hint={ORDER_REFERENCE_RULE}
               value={reference}
               suggested={suggestedReference}
+              // Only while a suggestion is on its way. A listing that *failed* leaves none to
+              // wait for, and the field stays usable so an order can still be named by hand.
+              pending={settling}
               taken={takenReferences}
-              takenPlace="used by an order in this shop"
+              takenPlace={ORDER_REFERENCE_TAKEN_PLACE}
               pattern={REFERENCE_PATTERN}
               title={ORDER_REFERENCE_RULE}
               placeholder="NS-10483"
