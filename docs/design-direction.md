@@ -908,6 +908,16 @@ prototype for the pattern, and where a slice follows the prototype against a fra
 one sentence rather than leaving a reader to find the contradiction. The exports moved: the
 per-screen `.dc.html` files and `canvas.json` are under `tmp/design-frames/DEPRECADED/`.
 
+**Where the README is silent and the prototype is specific, the prototype governs.**
+`tmp/design-frames/README.md` holds the measurements, but it is a summary of `Workspace.dc.html`
+and not a ceiling on it: a value the bullets do not mention is still a value the design made.
+Three grounds license keeping what the codebase already has — an explicit release in the handoff,
+such as the *Assets* section freeing the drawing of a glyph; a repository rule that outranks a
+mockup, such as an accessible name specs and tours click or a value that already *is* a token; or
+another slice owning the decision. "The handoff is silent" is not one of them. Either way the
+slice writes the departure in one sentence, as `ui/rail-icons-collapse` — where this was
+settled — does for the rail.
+
 **Pine takes the primary action, and the warm red is reserved for destructive.** This is the one
 recorded token the refresh changes. Primary actions move to `#1d6241`, hover `#14452e`; the clay
 accent `#c2532d` stops being the colour of the safe, expected action, and `#9d3028` (hover
