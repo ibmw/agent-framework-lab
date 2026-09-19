@@ -8,7 +8,9 @@ description: Prepare, review, or create clean atomic Git commits for Agent Frame
 ## Workflow
 
 1. Confirm that the user explicitly requested or approved creating commits. A request to review a
-   diff or suggest a message does not authorize a commit.
+   diff or suggest a message does not authorize a commit. Committing work in progress on a
+   short-lived task branch is standing-approved and needs no separate ask; it is scaffolding for
+   review and is collapsed before the branch lands.
 2. Inspect `git status`, unstaged and staged diffs, the current branch, and recent commit subjects.
    Preserve user changes and never stage unrelated files.
 3. Confirm the work is on a short-lived branch created from `main`. If `main` has no initial commit,
@@ -28,6 +30,21 @@ description: Prepare, review, or create clean atomic Git commits for Agent Frame
   that behavior.
 - Do not reference `PLAN.md` milestone or step numbers; name the technical outcome.
 - Never rewrite, squash, amend, or force-push existing history without explicit user approval.
+  The one standing exception is collapsing a short-lived, unpushed task branch onto its merge
+  base immediately before it fast-forwards into `main`.
+
+## Two kinds of commit
+
+An **iteration commit** lives on a task branch and exists so a reviewer can be handed one round
+of changes instead of a whole branch. It may be as small or as messy as the work is, and a round
+answering review findings is one commit with a `fixup:` subject. None of these reaches `main`.
+
+A **landing commit** is what the branch becomes before it is merged: the content rules below
+apply to it in full. Collapse with `git reset --soft $(git merge-base main HEAD)` and commit
+again — the working tree is untouched, so the tree that passed `make check` is the tree that
+lands, and `git diff <the recorded branch tip> HEAD` must print nothing. Do not use
+`git rebase -i`; it is unavailable in the agent environment and unnecessary for a branch
+collapsing to one commit.
 
 ## Message format
 

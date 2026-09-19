@@ -28,14 +28,26 @@ roadmap slice explicitly requires it.
 
 ## Git commits
 
-- Create commits only when the user explicitly requests or approves them.
-- Keep every commit atomic, independently reviewable, and limited to one logical purpose.
+- Create commits only when the user explicitly requests or approves them, with one standing
+  exception: work on a short-lived task branch is committed as it goes, so that a review can be
+  handed one round of changes rather than a whole branch. Those commits are scaffolding.
+- Keep every commit atomic, independently reviewable, and limited to one logical purpose. That
+  is a rule about what **lands**; an iteration commit on a task branch is exempt from it and
+  does not survive to the main branch.
 - Use `<type>(<scope>): <imperative description>` with one of: `feat`, `fix`, `docs`, `chore`,
   `refactor`, `test`, `style`, `perf`, or `ci`. Omit the scope for cross-cutting changes.
 - Keep required tests, contracts, migrations, and documentation with the behavior they support.
 - Do not name `PLAN.md` steps or milestones in commit messages; describe the technical outcome.
 - Never mention AI assistance or add AI/tool attribution, generation metadata, or trailers.
-- Never amend, squash, rewrite, or force-push history without explicit user approval.
+- Collapse a task branch's iteration commits before landing it, so the main branch records the
+  finished work and not how it was reached. Use `git reset --soft` onto the merge base and
+  commit again: it moves the pointer without touching the working tree, so the tree that passed
+  `make check` is the tree that lands. Prove it — `git diff <the branch tip you recorded> HEAD`
+  must be empty — and record the tip in the report before resetting.
+- Never amend, squash, rewrite, or force-push history without explicit user approval, outside
+  that one case: a short-lived, unpushed task branch being cleaned immediately before it
+  fast-forwards into the main branch. The main branch, any pushed branch, and anything another
+  person or session may hold are immutable.
 
 Use the project-local skills under `.codex/skills/` for Python backend, React frontend, agent
 framework integration, and Git commit work.
