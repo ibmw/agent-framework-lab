@@ -14,6 +14,7 @@ import {
   readJudgeConfigurationResources,
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
@@ -190,6 +191,7 @@ export function JudgeConfigurationEditorPage() {
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >
+              <ButtonIcon verb="publish" />
               {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
             </button>
           </>

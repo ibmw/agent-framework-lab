@@ -13,7 +13,7 @@ import { getLabStatus } from "../api/labStatus";
 import { Card, EntryCard, EntryId, EntryKind } from "../components/WorkspaceChrome";
 import { describeArchitecture, describeProvider, readableTerm } from "../lib/agents";
 import { readNavigationCollapsed, writeNavigationCollapsed } from "../lib/preferences";
-import { accentButtonClasses, outlineButtonClasses } from "../lib/ui";
+import { outlineButtonClasses, warningButtonClasses } from "../lib/ui";
 import { LabSurface, useLabSurface } from "../shell/LabSurface";
 
 function FrameworkRow({ framework }: { framework: ProvenFrameworkSchema }) {
@@ -83,7 +83,7 @@ function SeedCard({ shops, onSeeded }: { shops: ShopSummarySchema[]; onSeeded: (
       {seeded === null ? (
         <div className="grid gap-1.5">
           <button
-            className={arming ? accentButtonClasses : outlineButtonClasses}
+            className={arming ? warningButtonClasses : outlineButtonClasses}
             type="button"
             disabled={running || occupied}
             onClick={() => (arming ? write() : setArming(true))}

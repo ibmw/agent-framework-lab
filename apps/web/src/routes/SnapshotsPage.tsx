@@ -15,6 +15,7 @@ import {
   listSandboxSnapshots,
   materializeSandboxSnapshot,
 } from "../api/snapshots";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { SandboxToolConsole } from "../components/SandboxToolConsole";
 import { TourLaunch } from "../components/TourLaunch";
@@ -222,6 +223,7 @@ export function SnapshotsPage() {
                   />
                 </FieldHint>
                 <button className={accentButtonClasses} type="submit" disabled={working}>
+                  <ButtonIcon verb="save" />
                   {working ? "Freezing…" : "Materialize snapshot"}
                 </button>
               </form>
@@ -468,6 +470,7 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
             />
           </label>
           <button className={accentButtonClasses} type="submit" disabled={working}>
+            <ButtonIcon verb="save" />
             {working ? "Cloning…" : "Clone sandbox"}
           </button>
         </form>

@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createJudgeConfiguration, listJudgeConfigurations } from "../api/judgeConfigurations";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -152,6 +153,7 @@ export function JudgeConfigurationsPage() {
               </p>
             ) : null}
             <button className={accentButtonClasses} type="submit" disabled={creating}>
+              <ButtonIcon verb="save" />
               {creating ? "Creating…" : "Create judge"}
             </button>
             <p className="text-xs text-admin-muted">

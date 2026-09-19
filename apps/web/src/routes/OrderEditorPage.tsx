@@ -10,6 +10,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
 import { deleteOrder, getOrder, replaceOrder } from "../api/orders";
+import { ButtonIcon } from "../components/ButtonIcon";
 import {
   Card,
   EditorSaveActions,
@@ -35,11 +36,13 @@ import {
   toOrderRequest,
 } from "../lib/orders";
 import {
+  destructiveButtonClasses,
+  destructiveOutlineButtonClasses,
+  destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
-  subtleButtonClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -353,21 +356,23 @@ export function OrderEditorPage() {
                   Keep it
                 </button>
                 <button
-                  className={outlineButtonClasses}
+                  className={destructiveButtonClasses}
                   type="button"
                   onClick={() => void remove()}
                   disabled={saving}
                 >
+                  <ButtonIcon verb="delete" />
                   Delete permanently
                 </button>
               </>
             ) : (
               <button
-                className={outlineButtonClasses}
+                className={destructiveOutlineButtonClasses}
                 type="button"
                 onClick={() => setConfirmingDelete(true)}
                 disabled={saving}
               >
+                <ButtonIcon verb="delete" />
                 Delete
               </button>
             )}
@@ -448,7 +453,7 @@ export function OrderEditorPage() {
                       </td>
                       <td className={tableCellClasses}>
                         <button
-                          className={subtleButtonClasses}
+                          className={destructiveSubtleButtonClasses}
                           type="button"
                           aria-label={`Remove ${line.sku}`}
                           onClick={() =>
@@ -458,6 +463,7 @@ export function OrderEditorPage() {
                             })
                           }
                         >
+                          <ButtonIcon verb="delete" />
                           Remove
                         </button>
                       </td>
@@ -488,6 +494,7 @@ export function OrderEditorPage() {
                 </select>
               </label>
               <button className={outlineButtonClasses} type="submit">
+                <ButtonIcon verb="create" />
                 Add line
               </button>
             </form>
@@ -752,6 +759,7 @@ export function OrderEditorPage() {
             title="Order events"
             footer={
               <button className={outlineButtonClasses} type="button" onClick={addEvent}>
+                <ButtonIcon verb="create" />
                 Add event
               </button>
             }
@@ -833,7 +841,7 @@ export function OrderEditorPage() {
                     />
                   </label>
                   <button
-                    className={subtleButtonClasses}
+                    className={destructiveSubtleButtonClasses}
                     type="button"
                     onClick={() =>
                       edit({
@@ -842,6 +850,7 @@ export function OrderEditorPage() {
                       })
                     }
                   >
+                    <ButtonIcon verb="delete" />
                     Remove event
                   </button>
                 </div>

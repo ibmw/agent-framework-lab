@@ -7,6 +7,7 @@ import {
   createCustomerProfile,
   listCustomerProfiles,
 } from "../api/customerProfiles";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -253,6 +254,7 @@ export function CustomersPage() {
                 </p>
               ) : null}
               <button className={accentButtonClasses} type="submit" disabled={busy}>
+                <ButtonIcon verb="save" />
                 Create and attach
               </button>
               <p className="text-xs text-admin-muted">
@@ -291,6 +293,7 @@ export function CustomersPage() {
                 type="submit"
                 disabled={busy || attachable.length === 0}
               >
+                <ButtonIcon verb="create" />
                 Attach to this shop
               </button>
               <p className="text-xs text-admin-muted">

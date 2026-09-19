@@ -22,6 +22,7 @@ import {
   getExperimentEvaluation,
   replayExperiment,
 } from "../api/experiments";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { TourLaunch } from "../components/TourLaunch";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
@@ -206,6 +207,7 @@ export function ExperimentResultsLayout() {
               onClick={replay}
               disabled={deriving}
             >
+              <ButtonIcon verb="rerun" />
               {deriving ? "Deriving…" : "Replay"}
             </button>
             {/* The frame's ellipsis is doing real work: a replay asks nothing because
@@ -219,6 +221,7 @@ export function ExperimentResultsLayout() {
               aria-controls={FORK_PANEL_ID}
               onClick={() => setForking((open) => !open)}
             >
+              <ButtonIcon verb="fork" />
               Fork…
             </button>
           </div>
@@ -402,6 +405,7 @@ function ForkPanel({
             )
           }
         >
+          <ButtonIcon verb="fork" />
           {deriving ? "Deriving…" : "Fork this run"}
         </button>
       </div>

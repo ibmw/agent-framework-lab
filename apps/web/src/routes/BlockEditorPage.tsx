@@ -12,6 +12,7 @@ import type {
 import { type FormEvent, type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { savedAsPreview } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import {
@@ -43,6 +44,7 @@ import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEdi
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import {
   accentButtonClasses,
+  destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
@@ -172,6 +174,7 @@ function BlockEditor<
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >
+              <ButtonIcon verb="publish" />
               {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
             </button>
           </>
@@ -345,11 +348,12 @@ function ParameterRow({
             ↓
           </button>
           <button
-            className={subtleButtonClasses}
+            className={destructiveSubtleButtonClasses}
             type="button"
             aria-label={`Remove ${parameter.name}`}
             onClick={onRemove}
           >
+            <ButtonIcon verb="delete" />
             Remove
           </button>
         </div>
@@ -486,6 +490,7 @@ function ParameterForm({
         </select>
       </label>
       <button className={inkButtonClasses} type="submit" disabled={disabled}>
+        <ButtonIcon verb="create" />
         Add parameter
       </button>
     </form>

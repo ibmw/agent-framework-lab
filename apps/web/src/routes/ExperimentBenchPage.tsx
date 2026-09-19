@@ -20,6 +20,7 @@ import {
   getExperimentEvaluation,
   scoreExperiment,
 } from "../api/experiments";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
@@ -228,6 +229,7 @@ export function ExperimentBenchPage() {
               className={outlineButtonClasses}
               to={`/shops/${shopId}/bench/${experimentId}/results`}
             >
+              <ButtonIcon verb="results" />
               Results
             </Link>
           </>
@@ -617,6 +619,7 @@ function AdvanceControl({
       onClick={onAdvance}
       aria-label={attempts === 0 ? `Run ${run.label}'s agent` : `Try ${run.label}'s agent again`}
     >
+      <ButtonIcon verb={attempts === 0 ? "start" : "rerun"} />
       {working ? "Running…" : attempts === 0 ? "Run the agent" : "Try again"}
     </button>
   );

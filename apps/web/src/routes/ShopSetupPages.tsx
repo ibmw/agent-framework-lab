@@ -7,6 +7,7 @@ import type {
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { LocaleField } from "../components/LocaleField";
@@ -37,9 +38,9 @@ import { DERIVED_KEBAB_RULE, KEBAB_PATTERN } from "../lib/fieldRules";
 import type { TourId } from "../lib/tours";
 import {
   accentButtonClasses,
+  destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
@@ -109,11 +110,12 @@ function SetupPage({
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
-      className={subtleButtonClasses}
+      className={destructiveSubtleButtonClasses}
       type="button"
       aria-label={`Remove ${label}`}
       onClick={onClick}
     >
+      <ButtonIcon verb="delete" />
       Remove
     </button>
   );
@@ -591,6 +593,7 @@ function PaymentAndFulfilmentCards() {
             onChange={(kind) => setPayment({ ...payment, kind })}
           />
           <button className={`${accentButtonClasses} self-end`} type="submit">
+            <ButtonIcon verb="create" />
             Add payment method
           </button>
         </form>
@@ -680,6 +683,7 @@ function PaymentAndFulfilmentCards() {
             onChange={(next) => setFulfilment({ ...fulfilment, ...next })}
           />
           <button className={`${accentButtonClasses} self-end`} type="submit">
+            <ButtonIcon verb="create" />
             Add fulfilment method
           </button>
         </form>
@@ -845,6 +849,7 @@ export function PoliciesAndFaqPage() {
             }
           />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
+            <ButtonIcon verb="create" />
             Add policy
           </button>
         </form>
@@ -920,6 +925,7 @@ export function PoliciesAndFaqPage() {
             }
           />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
+            <ButtonIcon verb="create" />
             Add FAQ entry
           </button>
         </form>
@@ -1033,6 +1039,7 @@ export function SupportGuidelinesPage() {
             }
           />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
+            <ButtonIcon verb="create" />
             Add guideline
           </button>
         </form>
@@ -1179,6 +1186,7 @@ export function ToneOfVoicePage() {
             }
           />
           <button className={`${accentButtonClasses} justify-self-start`} type="submit">
+            <ButtonIcon verb="create" />
             Add tone of voice
           </button>
         </form>

@@ -19,6 +19,7 @@ import {
   publishScenario,
   replaceScenarioDraft,
 } from "../api/scenarios";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
@@ -66,6 +67,7 @@ import {
 } from "../lib/scenarios";
 import {
   accentButtonClasses,
+  destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   outlineButtonClasses,
@@ -223,6 +225,7 @@ export function ScenarioEditorPage() {
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >
+              <ButtonIcon verb="publish" />
               {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
             </button>
           </>
@@ -740,11 +743,12 @@ function BoundBlockRow({
             ↓
           </button>
           <button
-            className={subtleButtonClasses}
+            className={destructiveSubtleButtonClasses}
             type="button"
             aria-label={`Remove ${instance.id}`}
             onClick={onRemove}
           >
+            <ButtonIcon verb="delete" />
             Remove
           </button>
         </div>
@@ -949,6 +953,7 @@ function TemplatePicker({
           }
         }}
       >
+        <ButtonIcon verb="create" />
         Add
       </button>
     </div>

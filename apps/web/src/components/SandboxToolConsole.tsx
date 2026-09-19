@@ -18,6 +18,7 @@ import {
   fieldLabelClasses,
   surfaceClasses,
 } from "../lib/ui";
+import { ButtonIcon } from "./ButtonIcon";
 import { Card, Fingerprint } from "./WorkspaceChrome";
 
 const CONTRACTS_UNAVAILABLE = "The published tool set is unavailable.";
@@ -287,6 +288,7 @@ export function SandboxToolConsole({
             ))}
             <div>
               <button className={accentButtonClasses} type="submit" disabled={working}>
+                <ButtonIcon verb="start" />
                 {working ? "Running…" : "Run tool"}
               </button>
             </div>
@@ -409,6 +411,7 @@ function ToolResult({
             type="button"
             onClick={() => onApply(confirmation)}
           >
+            <ButtonIcon verb="save" />
             Apply this change
           </button>
         </div>

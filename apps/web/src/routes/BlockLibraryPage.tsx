@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { describeApiError } from "../api/client";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { savedAsPreview } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
@@ -228,6 +229,7 @@ function BlockLibrary({
               </p>
             ) : null}
             <button className={accentButtonClasses} type="submit" disabled={creating}>
+              <ButtonIcon verb="save" />
               {creating ? "Creating…" : "Create block"}
             </button>
             <p className="text-xs text-admin-muted">

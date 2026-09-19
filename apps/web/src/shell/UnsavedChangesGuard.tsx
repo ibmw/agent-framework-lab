@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { Outlet, useBlocker } from "react-router-dom";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { accentButtonClasses, outlineButtonClasses, surfaceClasses } from "../lib/ui";
 import {
   type RegisteredWork,
@@ -236,6 +237,7 @@ function UnsavedChangesPrompt({
             onClick={discardAndLeave}
             disabled={busy}
           >
+            <ButtonIcon verb="discard" />
             Discard and leave
           </button>
           <button
@@ -245,6 +247,7 @@ function UnsavedChangesPrompt({
             disabled={busy || !savableHere}
             aria-describedby={savableHere ? undefined : reasonId}
           >
+            <ButtonIcon verb="save" />
             {busy ? "Saving…" : "Save and leave"}
           </button>
         </div>

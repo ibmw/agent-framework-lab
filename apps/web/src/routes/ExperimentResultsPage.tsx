@@ -11,6 +11,7 @@ import type {
 import { type FormEvent, useState } from "react";
 import { describeApiError } from "../api/client";
 import { addExperimentNote, scoreExperiment, setExperimentTags } from "../api/experiments";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
 import {
@@ -367,6 +368,7 @@ function NotesAndTags({
             type="submit"
             disabled={busy || tag.trim() === ""}
           >
+            <ButtonIcon verb="create" />
             Add tag
           </button>
         </form>
@@ -400,6 +402,7 @@ function NotesAndTags({
             type="submit"
             disabled={busy || note.trim() === ""}
           >
+            <ButtonIcon verb="create" />
             Add note
           </button>
         </div>

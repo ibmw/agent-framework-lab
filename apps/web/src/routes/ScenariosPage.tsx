@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createScenario, listScenarios } from "../api/scenarios";
 import { listTickets } from "../api/tickets";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -205,6 +206,7 @@ export function ScenariosPage() {
                 </p>
               ) : null}
               <button className={accentButtonClasses} type="submit" disabled={creating}>
+                <ButtonIcon verb="save" />
                 {creating ? "Creating…" : "Create scenario"}
               </button>
               <p className="text-xs text-admin-muted">

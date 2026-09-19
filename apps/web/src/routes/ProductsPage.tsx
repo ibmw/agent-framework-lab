@@ -1,6 +1,7 @@
 import type { ProductViewSchema } from "@agent-lab/contracts";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
@@ -208,6 +209,7 @@ export function ProductsPage() {
               onChange={setHandle}
             />
             <button className={accentButtonClasses} type="submit">
+              <ButtonIcon verb="save" />
               Add to draft
             </button>
             <p className="text-xs text-admin-muted">

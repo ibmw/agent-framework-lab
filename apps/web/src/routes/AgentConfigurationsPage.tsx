@@ -10,6 +10,7 @@ import {
   readAgentConfigurationResources,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -186,6 +187,7 @@ export function AgentConfigurationsPage() {
                 </p>
               ) : null}
               <button className={accentButtonClasses} type="submit" disabled={creating}>
+                <ButtonIcon verb="save" />
                 {creating ? "Creating…" : "Create configuration"}
               </button>
               <p className="text-xs text-admin-muted">

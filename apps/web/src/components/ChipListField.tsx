@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { alreadyTakenMessage } from "../lib/fieldRules";
 import { fieldControlClasses, subtleButtonClasses } from "../lib/ui";
+import { ButtonIcon } from "./ButtonIcon";
 import { savedAsPreview } from "./DerivedIdField";
 import { FieldHint } from "./FieldHint";
 
@@ -179,6 +180,7 @@ export function ChipListField({
           </FieldHint>
         </div>
         <button className={subtleButtonClasses} type="button" onClick={add}>
+          <ButtonIcon verb="create" />
           {addLabel}
         </button>
       </div>

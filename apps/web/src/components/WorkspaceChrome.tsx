@@ -7,6 +7,7 @@ import {
   subtleButtonClasses,
   surfaceClasses,
 } from "../lib/ui";
+import { ButtonIcon } from "./ButtonIcon";
 
 /**
  * Draft and published state is never carried by colour alone: every chip pairs its colour
@@ -116,6 +117,7 @@ export function EditorSaveActions({
             onClick={onDiscard}
             disabled={saving || discarding}
           >
+            <ButtonIcon verb="discard" />
             {discarding ? "Discarding…" : "Discard changes"}
           </button>
           <button
@@ -124,6 +126,7 @@ export function EditorSaveActions({
             onClick={onSave}
             disabled={saving || discarding}
           >
+            <ButtonIcon verb="save" />
             {saving ? "Saving…" : saveLabel}
           </button>
         </>
@@ -195,6 +198,7 @@ export function EntryEditButtons({
         disabled={Boolean(blockedBy)}
         onClick={onOpen}
       >
+        <ButtonIcon verb="edit" />
         Edit
       </button>
     );
@@ -208,6 +212,7 @@ export function EntryEditButtons({
         disabled={!saveable}
         onClick={submit ? undefined : onSave}
       >
+        <ButtonIcon verb="save" />
         Save
       </button>
       <button

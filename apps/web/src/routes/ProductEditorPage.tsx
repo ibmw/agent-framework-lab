@@ -8,6 +8,7 @@ import type {
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldGroupHint, FieldHint } from "../components/FieldHint";
@@ -59,9 +60,9 @@ import {
 } from "../lib/shop";
 import {
   accentButtonClasses,
+  destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  subtleButtonClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -438,7 +439,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
             )}
             actions={
               <button
-                className={subtleButtonClasses}
+                className={destructiveSubtleButtonClasses}
                 type="button"
                 onClick={() =>
                   onChange({
@@ -447,6 +448,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
                   })
                 }
               >
+                <ButtonIcon verb="delete" />
                 Remove {option.name}
               </button>
             }
@@ -484,6 +486,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
         </div>
         <OptionValuesField values={values} onChange={setValues} />
         <button className={`${accentButtonClasses} justify-self-start`} type="submit">
+          <ButtonIcon verb="create" />
           Add option
         </button>
       </form>
@@ -768,7 +771,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                       />
                       {rowEdit ? null : (
                         <button
-                          className={subtleButtonClasses}
+                          className={destructiveSubtleButtonClasses}
                           type="button"
                           onClick={() =>
                             onChange({
@@ -779,6 +782,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                             })
                           }
                         >
+                          <ButtonIcon verb="delete" />
                           Remove {variant.sku}
                         </button>
                       )}
@@ -886,6 +890,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
           onChange={setSku}
         />
         <button className={`${accentButtonClasses} self-end`} type="submit">
+          <ButtonIcon verb="create" />
           Add variant
         </button>
       </form>
@@ -991,7 +996,7 @@ function MediaCard({ product, onChange }: EditorProps) {
             )}
             actions={
               <button
-                className={subtleButtonClasses}
+                className={destructiveSubtleButtonClasses}
                 type="button"
                 onClick={() =>
                   onChange({
@@ -1000,6 +1005,7 @@ function MediaCard({ product, onChange }: EditorProps) {
                   })
                 }
               >
+                <ButtonIcon verb="delete" />
                 Remove {entry.reference}
               </button>
             }
@@ -1025,6 +1031,7 @@ function MediaCard({ product, onChange }: EditorProps) {
       >
         <MediaFieldset value={media} onChange={setMedia} collision={addCollision} />
         <button className={`${accentButtonClasses} self-end`} type="submit">
+          <ButtonIcon verb="create" />
           Add media
         </button>
       </form>
@@ -1181,7 +1188,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
             )}
             actions={
               <button
-                className={subtleButtonClasses}
+                className={destructiveSubtleButtonClasses}
                 type="button"
                 onClick={() =>
                   onChange({
@@ -1190,6 +1197,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
                   })
                 }
               >
+                <ButtonIcon verb="delete" />
                 Remove {attribute.label}
               </button>
             }
@@ -1240,6 +1248,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
           }
         />
         <button className={`${accentButtonClasses} self-end`} type="submit">
+          <ButtonIcon verb="create" />
           Add attribute
         </button>
       </form>
@@ -1321,7 +1330,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
             )}
             actions={
               <button
-                className={subtleButtonClasses}
+                className={destructiveSubtleButtonClasses}
                 type="button"
                 onClick={() =>
                   onChange({
@@ -1330,6 +1339,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
                   })
                 }
               >
+                <ButtonIcon verb="delete" />
                 Remove review {review.id}
               </button>
             }
@@ -1358,6 +1368,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
       >
         <ReviewFieldset value={fields} onChange={setFields} />
         <button className={`${accentButtonClasses} self-end`} type="submit">
+          <ButtonIcon verb="create" />
           Add review
         </button>
       </form>
@@ -1404,7 +1415,7 @@ function StarRatingField({ value, onChange }: { value: number; onChange: (star: 
             />
             <span
               aria-hidden
-              className={`rounded px-0.5 text-lg peer-focus-visible:ring-2 peer-focus-visible:ring-lab-accent/40 ${
+              className={`rounded px-0.5 text-lg peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-lab-primary ${
                 star <= value ? "text-lab-accent" : "text-admin-border"
               }`}
             >

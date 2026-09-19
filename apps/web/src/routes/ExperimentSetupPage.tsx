@@ -17,6 +17,7 @@ import {
 import { describeApiError, LabApiError } from "../api/client";
 import { listExperiments, previewExperiment, startExperiment } from "../api/experiments";
 import { listScenarios, listScenarioVersions } from "../api/scenarios";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
@@ -349,10 +350,11 @@ export function ExperimentSetupPage() {
             ))}
             {arms.length < 2 ? (
               <button
-                className="justify-self-start text-[13px] font-semibold text-lab-ink underline-offset-2 hover:underline"
+                className="inline-flex items-center gap-1.5 justify-self-start text-[13px] font-semibold text-lab-ink underline-offset-2 hover:underline"
                 type="button"
                 onClick={() => setArms((current) => [...current, emptyArm()])}
               >
+                <ButtonIcon verb="create" />
                 Add a second arm
               </button>
             ) : null}
@@ -427,6 +429,7 @@ export function ExperimentSetupPage() {
               Participant: human operator — you play the customer in both arms.
             </p>
             <button className={accentButtonClasses} type="submit" disabled={working}>
+              <ButtonIcon verb="start" />
               {working ? "Starting…" : "Start experiment"}
             </button>
           </Card>

@@ -22,6 +22,7 @@ import {
   replaceCustomerProfileDraft,
   toProfilePayload,
 } from "../api/customerProfiles";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { CountryField } from "../components/CountryField";
 import { LocaleField } from "../components/LocaleField";
@@ -47,6 +48,7 @@ import { CHIP_LABEL_MAX_LENGTH, PERSONA_TRAITS_RULE } from "../lib/fieldRules";
 import { todayInput } from "../lib/orders";
 import {
   accentButtonClasses,
+  destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
@@ -384,6 +386,7 @@ export function CustomerEditorPage() {
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >
+              <ButtonIcon verb="publish" />
               {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
             </button>
           </>
@@ -565,15 +568,17 @@ export function CustomerEditorPage() {
                           aria-label={`Make ${entry.label} the default address`}
                           onClick={() => makeDefault(entry.id)}
                         >
+                          <ButtonIcon verb="makeDefault" />
                           Make default
                         </button>
                       )}
                       <button
-                        className={`${subtleButtonClasses} ml-auto`}
+                        className={`${destructiveSubtleButtonClasses} ml-auto`}
                         type="button"
                         aria-label={`Remove ${entry.label}`}
                         onClick={() => removeAddress(entry.id)}
                       >
+                        <ButtonIcon verb="delete" />
                         Remove
                       </button>
                     </div>
@@ -730,11 +735,12 @@ export function CustomerEditorPage() {
                     )}
                     actions={
                       <button
-                        className={subtleButtonClasses}
+                        className={destructiveSubtleButtonClasses}
                         type="button"
                         aria-label={`Remove the ${entry.occurred_on} background entry`}
                         onClick={() => removeBackground(entry.id)}
                       >
+                        <ButtonIcon verb="delete" />
                         Remove
                       </button>
                     }
@@ -797,11 +803,12 @@ export function CustomerEditorPage() {
                     )}
                     actions={
                       <button
-                        className={subtleButtonClasses}
+                        className={destructiveSubtleButtonClasses}
                         type="button"
                         aria-label={`Remove ${fact.note}`}
                         onClick={() => removeHiddenFact(fact.id)}
                       >
+                        <ButtonIcon verb="delete" />
                         Remove
                       </button>
                     }
@@ -873,6 +880,7 @@ export function CustomerEditorPage() {
                   type="button"
                   onClick={() => void toggleShop(shop.shop_id, true)}
                 >
+                  <ButtonIcon verb="create" />
                   Attach to {shop.name}
                 </button>
               ))}
@@ -983,6 +991,7 @@ function AddressForm({
           <CountryField value={country} required onChange={setTypedCountry} />
         </div>
         <button className={inkButtonClasses} type="submit">
+          <ButtonIcon verb="create" />
           Add address
         </button>
       </fieldset>
@@ -1011,6 +1020,7 @@ function BackgroundForm({ onAdd }: { onAdd: (fields: BackgroundFields) => void }
     >
       <BackgroundFieldset value={fields} onChange={setFields} />
       <button className={inkButtonClasses} type="submit">
+        <ButtonIcon verb="create" />
         Add entry
       </button>
     </form>
@@ -1031,6 +1041,7 @@ function HiddenFactForm({ onAdd }: { onAdd: (fields: HiddenFactFields) => void }
     >
       <HiddenFactFieldset value={fields} onChange={setFields} />
       <button className={inkButtonClasses} type="submit">
+        <ButtonIcon verb="create" />
         Add fact
       </button>
     </form>

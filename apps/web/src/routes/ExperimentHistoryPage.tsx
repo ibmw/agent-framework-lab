@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { forkExperiment, listExperimentHistory, replayExperiment } from "../api/experiments";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { PageHeader } from "../components/WorkspaceChrome";
 import { OUTCOMES } from "../lib/evidence";
 import {
@@ -579,15 +580,16 @@ function HistoryRow({
             Open live bench
           </Link>
           <button
-            className="text-left text-lab-ink underline-offset-2 hover:underline"
+            className="flex items-start gap-1.5 text-left text-lab-ink underline-offset-2 hover:underline"
             type="button"
             disabled={deriving}
             onClick={() => onReplay(experiment)}
           >
+            <ButtonIcon verb="rerun" />
             {deriving ? "Deriving…" : "Replay recorded versions"}
           </button>
           <button
-            className="text-left text-lab-ink underline-offset-2 hover:underline disabled:text-admin-muted disabled:no-underline"
+            className="flex items-start gap-1.5 text-left text-lab-ink underline-offset-2 hover:underline disabled:text-admin-muted disabled:no-underline"
             type="button"
             disabled={deriving || !newer}
             // Described rather than titled: a browser does not reliably show a `title` on a
@@ -596,6 +598,7 @@ function HistoryRow({
             aria-describedby={newer ? undefined : `${experiment.experiment_id}-fork-reason`}
             onClick={() => onFork(experiment)}
           >
+            <ButtonIcon verb="fork" />
             {deriving ? "Deriving…" : "Fork with newer versions"}
           </button>
           {newer ? null : (

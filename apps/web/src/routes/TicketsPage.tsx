@@ -22,6 +22,7 @@ import {
   publishTicket,
   replaceTicketDraft,
 } from "../api/tickets";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
@@ -470,6 +471,7 @@ function NewTicketForm({
         </p>
       ) : null}
       <button className={accentButtonClasses} type="submit" disabled={busy}>
+        <ButtonIcon verb="save" />
         {busy ? "Opening…" : "Open ticket"}
       </button>
       <p className="text-xs text-admin-muted">The first message is authored in the thread.</p>
@@ -578,6 +580,7 @@ function TicketWorkspace({
                 }}
                 disabled={editor.publishing || !canPublish(preview, editor.dirty)}
               >
+                <ButtonIcon verb="publish" />
                 {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
               </button>
             </div>
@@ -734,6 +737,7 @@ function Thread({
         ) : null}
         <div className="flex items-center gap-2">
           <button className={outlineButtonClasses} type="submit">
+            <ButtonIcon verb="create" />
             Add to thread
           </button>
           <p className="text-xs text-admin-muted">
@@ -796,11 +800,12 @@ function Bubble({
             </span>
           ) : null}
           <button
-            className="underline underline-offset-2 hover:text-lab-error"
+            className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-lab-error"
             type="button"
             aria-label={`Remove message from ${name} at ${messageTime(sentAt)}`}
             onClick={onRemove}
           >
+            <ButtonIcon verb="delete" />
             Remove
           </button>
         </div>

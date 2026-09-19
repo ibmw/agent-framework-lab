@@ -10,10 +10,24 @@
   --color-lab-ink-soft: #3e5951;
   --color-lab-muted: #65746f;
   --color-lab-border: #aebbb5;
+  /*
+   * Pine is the primary action (design-direction, "the workspace refresh"). The clay accent
+   * below is not redefined: it is still the trace bar, the review star and the emphasis on a
+   * ticket, and it is still the colour of the armed seed — the one press that is expected to
+   * give a reader pause without being destructive.
+   */
+  --color-lab-primary: #1d6241;
+  --color-lab-primary-hover: #14452e;
   --color-lab-accent: #c2532d;
+  --color-lab-accent-hover: #a84626;
   --color-lab-accent-soft: #f6dfd4;
   --color-lab-success: #2f7c5e;
   --color-lab-error: #9d3028;
+  --color-lab-error-hover: #86271f;
+  --color-lab-error-border: #d3a49b;
+  /* The tint a red-bordered secondary hovers to, per the handoff's token table. Distinct from
+     `--color-lab-error-soft` below, which is the confirm panel's ground. */
+  --color-lab-error-tint: #fbf1ee;
   --color-lab-error-soft: #fff3ef;
   --color-lab-subtle: #eeeee6;
   --color-lab-fingerprint: #e8eee9;
@@ -163,11 +177,11 @@
  * `driver.css` sets `outline: 0` on its footer buttons and `all: unset` on its close button, so
  * without these a reader stepping through a tour by keyboard would have nothing but a colour
  * shift to tell them where they are — which is the one thing this design says status may never
- * be. The ring is the accent already used for field focus.
+ * be. The ring is the pine already used for field focus.
  */
 .driver-popover.lab-tour .driver-popover-footer-btn:focus-visible,
 .driver-popover.lab-tour .driver-popover-close-btn:focus-visible {
-  outline: 2px solid var(--color-lab-accent);
+  outline: 2px solid var(--color-lab-primary);
   outline-offset: 2px;
 }
 

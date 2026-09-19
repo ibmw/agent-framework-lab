@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listCustomerProfiles } from "../api/customerProfiles";
 import { createOrder, listOrders } from "../api/orders";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { TourLaunch } from "../components/TourLaunch";
@@ -309,6 +310,7 @@ export function OrdersPage() {
               type="submit"
               disabled={busy || customers.length === 0}
             >
+              <ButtonIcon verb="save" />
               Create order
             </button>
             <p className="text-xs text-admin-muted">

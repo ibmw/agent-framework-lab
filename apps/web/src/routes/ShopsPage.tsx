@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
@@ -227,6 +228,7 @@ export function ShopsPage() {
                 </p>
               ) : null}
               <button className={accentButtonClasses} type="submit" disabled={creating}>
+                <ButtonIcon verb="save" />
                 {creating ? "Creating…" : "Create shop"}
               </button>
               <p className="text-xs text-admin-muted">

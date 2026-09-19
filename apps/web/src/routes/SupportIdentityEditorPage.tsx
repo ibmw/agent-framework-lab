@@ -12,6 +12,7 @@ import {
   publishSupportIdentity,
   replaceSupportIdentityDraft,
 } from "../api/supportIdentities";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import {
   Card,
@@ -34,10 +35,10 @@ import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import { CHIP_LABEL_MAX_LENGTH, ESCALATION_CONDITIONS_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
+  destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
-  subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
 
@@ -153,6 +154,7 @@ export function SupportIdentityEditorPage() {
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >
+              <ButtonIcon verb="publish" />
               {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
             </button>
           </>
@@ -273,7 +275,7 @@ export function SupportIdentityEditorPage() {
                     )}
                     actions={
                       <button
-                        className={subtleButtonClasses}
+                        className={destructiveSubtleButtonClasses}
                         type="button"
                         aria-label={`Remove ${note.title}`}
                         onClick={() =>
@@ -283,6 +285,7 @@ export function SupportIdentityEditorPage() {
                           })
                         }
                       >
+                        <ButtonIcon verb="delete" />
                         Remove
                       </button>
                     }
@@ -429,6 +432,7 @@ function GuidanceForm({ onAdd }: { onAdd: (fields: GuidanceFields) => void }) {
     >
       <GuidanceFieldset value={fields} onChange={setFields} />
       <button className={inkButtonClasses} type="submit">
+        <ButtonIcon verb="create" />
         Add guidance
       </button>
     </form>

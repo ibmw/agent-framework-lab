@@ -926,6 +926,13 @@ and the hover and `focus-visible` ring that several variants are missing. Until 
 the application still ships the clay accent, and this section is the decision rather than a
 description of the code.
 
+> Amended as built (2026-09-19). Primary landed as a **new** token, `--color-lab-primary` `#1d6241`
+> with `--color-lab-primary-hover` `#14452e`, rather than as a redefinition of `--color-lab-accent`:
+> the accent also draws the trace bars, the review star rating and a ticket's emphasis, none of
+> which this refresh settles and none of which it may silently repaint. `accentButtonClasses` is
+> still where the change lands. The clay keeps those three and one button — the armed seed — and
+> the focus rings moved off it onto the pine. The reasoning is in `apps/web/src/lib/ui.ts`.
+
 **The other token moves are additions, and each arrives with its first consumer.** A field border
 `#c9cccf` distinct from the card border; a focus ring of `0 0 0 3px rgb(29 98 65 / 20%)` on fields
 and `2px solid #1d6241` offset 2px on custom controls; the selected-chip trio (`#eaf5ed` on
