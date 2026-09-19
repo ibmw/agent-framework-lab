@@ -121,6 +121,45 @@ This is why the Save button currently sits in a different place on three pages.
 One `SearchField` component: magnifier, 36px left padding, the `Search <thing>` placeholder
 convention. Eleven consumers.
 
+### UI-7 · The field control itself
+`branch: ui/field-control`
+
+The three input rules UI-2 could not reach: `min-height:44px`, a field border `#c9cccf` distinct
+from the card border, and `14.5px` text. They live in `fieldControlClasses` and `textAreaClasses`
+in `lib/ui.ts`, which every route shares, so a four-route slice may not apply them — the same
+string paints a create form, an in-place row editor and a compact add-form. Its own slice, whose
+consumer is the whole workspace.
+
+The focus ring the handoff asks for on fields is already there from UI-1 and is not part of this.
+
+*Checks:* the existing page tests, which assert on controls rather than on their metrics, plus
+the whole Playwright suite — a 44px minimum changes where things sit on every surface a spec
+scrolls.
+
+### UI-8 · The rules the rows are missing
+`branch: ui/field-hint-copy`
+
+UI-2 shipped the row and authored no copy, which was the right line for a layout slice and leaves
+the pattern half-delivered: the handoff writes a hint for all 107 rows and the workspace shows two
+of them. This slice writes the rest, and it is a content slice — each hint is read against what
+the surface actually renders, not transcribed.
+
+Two things it must fix on the way, both found while adopting UI-2:
+
+- **Five create-form hints are inline string literals, not exports** — Title
+  (`ProductsPage.tsx:165`), Given name, Family name, Email, Customer since
+  (`CustomersPage.tsx:208,217,227,240`) and the shop's own at `ShopsPage.tsx:185`. They are
+  written, but not written once, so an editor row cannot reuse one without first pulling it into
+  `lib/fieldRules.ts`. That is what makes them drift.
+- **A rule is shown only where it is true.** `PRODUCT_CATEGORY_RULE` offers a pick list of the
+  draft's categories; the product editor renders no datalist, so UI-2 left the rule off that row
+  rather than promise what is not there. Either this slice's copy accounts for the difference or
+  the datalist lands first — see the defect recorded in `docs/decisions-and-next-step.md`.
+
+*Checks:* a sweep asserting every rule in `lib/fieldRules.ts` is consumed somewhere, so an export
+nothing shows fails; per-page tests that the hint is in its control's accessible description, the
+pattern Slice 1 of `docs/PLAN-UX.md` established.
+
 ---
 
 ## 3. The behaviour slices
@@ -181,12 +220,18 @@ says so.
 1. Two ADRs (parallel, no code).
 2. UI-1, UI-2 — everything else inherits them.
 3. UI-3, UI-4, UI-5, UI-6 — independent, parallelisable.
-4. B-1, B-2, B-3.
-5. Provider milestone: contracts → migration → API → `LabSettingsPage` → agent configuration
+4. UI-7, then UI-8 — both fell out of UI-2 and neither blocks anything above.
+5. B-1, B-2, B-3.
+6. Provider milestone: contracts → migration → API → `LabSettingsPage` → agent configuration
    field.
 
 UI-1 and UI-2 first is the load-bearing call: every later slice touches buttons and fields, and
 doing them last means editing the same lines twice.
+
+UI-7 sits after the independent four rather than beside UI-2 because it repaints every control in
+the workspace: doing it while four branches are open would make each of them answer for a
+diff it did not cause. UI-8 follows UI-7 because a hint is written against the control the reader
+is looking at.
 
 ---
 
