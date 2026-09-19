@@ -124,6 +124,27 @@ lab scale now that the suite no longer provokes them, and both want their own sl
   infrastructure fault from a framework fault is the fix, and it is a change to what a run record
   means, so it belongs with ADR 0026's failure taxonomy.
 
+Found on 19 September 2026 while putting the editors' fields on one row
+(`feat(web): put every field on one row, label and rule beside the control`). Reported rather than
+fixed for the same reason as the two above, one layer up: a layout slice that starts adding
+behaviour stops being reviewable as a layout slice.
+
+- **The product editor's category offers no list of the draft's categories.**
+  `docs/PLAN-UX.md` Slice 6 records "Products: category offers a datalist of categories already in
+  the draft" as delivered, and half of it was: `ProductsPage.tsx:184` gives the create form
+  `list="product-categories"` and a `<datalist>` built from `draftCategories`, while the editor's
+  own category input at `apps/web/src/routes/ProductEditorPage.tsx` has neither. So the same field
+  offers the draft's existing categories when a product is created and nothing when it is edited,
+  which is where a category is most likely to be corrected into a second spelling of one that
+  already exists — the exact fragmentation the datalist was added to prevent.
+  The consequence is already visible in the copy: `PRODUCT_CATEGORY_RULE` in `lib/fieldRules.ts`
+  reads "Pick one the draft already uses, or type a new one", and that row therefore ships with no
+  hint at all, because a rule that promises a pick list the surface does not render is worse than
+  a rule withheld. A test on the editor asserts the row has no `list` attribute and an empty
+  accessible description, so whoever adds the datalist is sent to the hint in the same change.
+  The fix is small — the editor already holds every product in `content` — and it is behaviour, so
+  it wants the slice that also re-ticks the line in `docs/PLAN-UX.md` rather than a drive-by.
+
 ## Recommended next steps
 
 1. Milestone 0.5 is complete. The design direction is selected and recorded in
