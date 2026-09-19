@@ -36,6 +36,14 @@ matrix is the clearest rendering of per-arm deterministic evidence.
 - The exploration and merged-stage-one mockups were removed from the canvas after selection; this
   document is the record of how the direction was chosen.
 
+> Export superseded (2026-09-19). `tmp/design-frames/` no longer holds one `.dc.html` per frame
+> beside a `canvas.json` and an index: it holds `Workspace.html` and `Workspace.dc.html`, the
+> whole-workspace refresh, with `README.md` now the handoff for that prototype rather than an
+> index of frames, and the eighteen per-screen exports and `canvas.json` moved under
+> `DEPRECADED/`. What a UI slice cites, and which of the two wins where they disagree, is the
+> *workspace refresh* revision at the foot of this document. The three bullets above stay as the
+> record of how the frames were exported and why `tmp/` is not under version control.
+
 ## Implications
 
 - Primary navigation is **Studio / Bench / History**, per `docs/product-direction.md`.
@@ -48,6 +56,10 @@ matrix is the clearest rendering of per-arm deterministic evidence.
 - The likely implementation stack remains React, Tailwind, shadcn/ui, and assistant-ui.
 - The application shell implementing this navigation lands with `docs/PLAN.md` Milestone 1
   Slice 2; UI-bearing slices cite the canvas frames they implement.
+
+> Token changed (2026-09-19). Accent `#c2532d` is no longer the primary action. Primary moves to
+> pine `#1d6241` and the warm red is reserved for destructive; every other token in the list above
+> stands. The reasoning is in the *workspace refresh* revision at the foot of this document.
 
 ## Revision — shop workspace and ticket model (2026-08-23)
 
@@ -873,3 +885,93 @@ the work *this* navigation strands and nothing else, so a draft the destination 
 neither named nor touched. Where the prompt cannot save something — an open row, whose typing has
 not reached the draft — Save is disabled and carries its reason as an accessible description, on
 the `PublishReasons` model rather than as a silent grey button.
+
+## Revision — the workspace refresh, and pine takes the primary action (2026-09-19)
+
+A high-fidelity refresh of the whole `apps/web` operator workspace arrives as one self-contained
+prototype: `tmp/design-frames/Workspace.html` to open in a browser, `Workspace.dc.html` for the
+markup, `README.md` as its handoff, and `form-decisions.md` as the locked form language with the
+alternatives it was chosen over. It is a design reference and not production code; what it asks
+for is a recreation on the existing primitives — the Tailwind theme in `styles.css`, the class
+sets in `lib/ui.ts`, the chrome in `components/WorkspaceChrome.tsx` — with no new UI dependency.
+`docs/implementation-plan.md` breaks it into slices in this repository's own format, and the two
+architecture decisions it carries are ADR 0052 and ADR 0053. This section records what changes in
+the **selected direction**; the handoff holds the measurements and is not restated here.
+
+**What a UI slice cites now.** The workspace prototype is the authority for what crosses every
+screen — navigation chrome, the form row, button language and colour, list density, the search
+affordance — and it **supersedes the per-screen frames wherever the two disagree**. The eighteen
+frames are not withdrawn: where the prototype does not contradict them they still describe a
+surface's composition, and a slice still names them by number, as PLAN-UX's slices do for frames
+2c, 4, 7, 8 and 9. So a `Frames:` line names the numbered frame for the surface and the workspace
+prototype for the pattern, and where a slice follows the prototype against a frame it says so in
+one sentence rather than leaving a reader to find the contradiction. The exports moved: the
+per-screen `.dc.html` files and `canvas.json` are under `tmp/design-frames/DEPRECADED/`.
+
+**Pine takes the primary action, and the warm red is reserved for destructive.** This is the one
+recorded token the refresh changes. Primary actions move to `#1d6241`, hover `#14452e`; the clay
+accent `#c2532d` stops being the colour of the safe, expected action, and `#9d3028` (hover
+`#86271f`) becomes the colour of the one that destroys something. The reason is that the clay was
+doing both jobs at once: it read as a warning while sitting on *Save draft*, *Add to draft* and
+*Publish*, so the workspace had no colour left that meant "this one deletes" — the single signal a
+UI should not blur. Pine also puts the primary action in the lab's own identity colour, which the
+top bar and the rail already carry.
+
+Two consequences are named so they are not discovered. The **accessibility rule stands unchanged**:
+status is still never conveyed by colour alone, and a destructive control keeps its trash glyph and
+its verb, with red as a second signal rather than the only one. And the change is a **token and a
+class set**, not a per-page edit — `--color-lab-accent` and `accentButtonClasses` are where it
+lands, in slice `ui/primary-pine`, together with the destructive variant that does not exist yet
+and the hover and `focus-visible` ring that several variants are missing. Until that slice lands
+the application still ships the clay accent, and this section is the decision rather than a
+description of the code.
+
+**The other token moves are additions, and each arrives with its first consumer.** A field border
+`#c9cccf` distinct from the card border; a focus ring of `0 0 0 3px rgb(29 98 65 / 20%)` on fields
+and `2px solid #1d6241` offset 2px on custom controls; the selected-chip trio (`#eaf5ed` on
+`#b6d9c4` in `#1d6241`). None of them replaces an existing token, and the house rule holds: a
+token no page uses is not a slice.
+
+**One form row, on every editor.** Label and hint share a left column of `1 1 210px` capped at
+36ch, the control takes the right, both top-aligned, and the row wraps to stacked at narrow
+widths. This **generalises the field-hint convention** recorded above rather than replacing it:
+the hint is still one muted line under the label, still in the control's accessible description,
+and still the place a format rule or a consequence is written. What the refresh adds is that the
+geometry is one component instead of a shape each editor reproduces. Forty-four of the
+hundred-and-seven rows label a chip group or a custom widget rather than a native control, and
+those carry `role="group"` with `aria-labelledby` — never a `for` pointing at nothing.
+
+**A button's icon is part of the button, not of the page.** The refresh gives roughly seventy-five
+controls a glyph on a closed vocabulary — plus for create, check for save, counter-clockwise for
+discard, pencil, trash, star, play for start, replay, branch for fork, upload for publish, bars for
+results, arrow-out for open. The pairing is encoded once beside the class sets so it cannot drift
+per page, and the glyphs are redrawable: what is fixed is which glyph means which verb, not the
+drawing.
+
+**Counts live on the filter that produces them.** The KPI stat strip leaves all eleven index
+routes, and the filter chips carry the number beside their label. It is the same figure read in
+the place it can be acted on, and it removes a band that repeated on every list. Five counts have
+no chip today and must gain one rather than be lost — *without a default address*, *required by a
+scenario*, *referenced by a ticket*, and *not composed yet* on both block libraries.
+
+**The navigation rail gains icons and a collapse.** One glyph per destination, a collapse control
+at the foot, and a 52px strip of centred icons with the label on hover when collapsed. This is the
+consumer `readNavigationCollapsed` and `writeNavigationCollapsed` in `lib/preferences.ts` were
+written for; the preference already exists and stays in the browser, as ADR 0044 and ADR 0046
+decided. The rail stays hidden in shops scope and on the lab-level surfaces, which keeps those
+outside the frame set for the reason ADR 0044 gave.
+
+**Settings is three zones, distinguished by surface so a reader can tell what they may touch.**
+Editable per-browser preferences on white; the lab-wide model connection on white with an explicit
+Save and Discard, because it is not a per-browser preference and should not save on change; and a
+read-only runtime zone in grey with a padlock and a "To change it:" line naming the variable or the
+file. The middle zone is the visible half of **ADR 0052**, and the third keeps the character ADR
+0044 gave this page — it reports composition and never edits it — for the two things that are
+still composition. The seed action sits in its own zone below, because it is an action rather than
+a setting (ADR 0047).
+
+**Two things in the prototype are proposals rather than decisions.** The five new browser
+preferences — where the app opens, auto-offer the tour, confirm before delete, timestamp format,
+table density — and the shop logo. Each needs a real consumer to exist, by the same rule that
+refuses a primitive no page uses; the ones that do not earn one are cut rather than shipped as
+switches that decide nothing.
