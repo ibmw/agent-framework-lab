@@ -29,6 +29,48 @@ export const textAreaClasses = `box-border min-h-24 py-2 ${fieldSurfaceClasses}`
 export const fieldLabelClasses = "grid gap-1 text-xs font-semibold text-admin-muted";
 
 /**
+ * The form row, in the one shape the handoff gives all 107 of them.
+ *
+ * `tmp/design-frames/README.md`, *The form pattern*, writes it as inline style; this is that
+ * declaration and nothing else, utility by utility:
+ *
+ * ```
+ * row:      display:flex; flex-wrap:wrap; align-items:flex-start;
+ *           column-gap:28px; row-gap:10px; padding:22px 0;
+ *           border-top:1px solid #f1f2f3
+ * left:     flex:1 1 210px; min-width:0; max-width:36ch
+ *   label:  display:block; 13.5px/700; #202223
+ *   hint:   margin-top:4px; 13px/1.5; #42474c; text-wrap:pretty
+ * control:  flex:2 1 330px; min-width:0
+ * ```
+ *
+ * The wrap is the responsive behaviour rather than a breakpoint: `210 + 28 + 330` is 568px, so
+ * the two columns stack when the row has less than that, wherever the row happens to sit — a
+ * card in the 320px side column reaches the stacked order without the page knowing its width.
+ * That is why these are `flex-[…]` bases and not `sm:` variants.
+ *
+ * `#f1f2f3` is the rule *between rows*, lighter than `admin-border`, which divides a card from
+ * what is outside it. It is written as a literal for the same reason `labNoteClasses` above
+ * writes its two: a colour one file uses is not yet a token, and the refresh's token table in
+ * `docs/design-direction.md` does not list this one.
+ */
+export const fieldRowClasses =
+  "flex flex-wrap items-start gap-x-7 gap-y-2.5 border-t border-[#f1f2f3] py-[22px]";
+
+/** The left column: the label, and the hint under it. */
+export const fieldRowLabelClasses = "min-w-0 max-w-[36ch] flex-[1_1_210px]";
+
+/** The label itself, or — where the control is a group — the name standing in for one. */
+export const fieldRowLabelTextClasses = "block text-[13.5px] font-bold text-admin-ink";
+
+/** The hint, under the label rather than under the control. */
+export const fieldRowHintClasses =
+  "mt-1 text-[13px] leading-[1.5] font-normal text-admin-ink-soft [text-wrap:pretty]";
+
+/** The right column: the control, and any second line directly beneath it. */
+export const fieldRowControlClasses = "min-w-0 flex-[2_1_330px]";
+
+/**
  * The ring every control shows a keyboard reader, on the refresh's pine rather than the clay
  * accent: `2px solid #1d6241` offset by 2px, the value the handoff's token table gives for a
  * custom control. It is `focus-visible` rather than `focus` so a pointer press does not draw

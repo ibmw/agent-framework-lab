@@ -10,6 +10,7 @@ import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
+import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { TourLaunch } from "../components/TourLaunch";
 import {
@@ -282,19 +283,17 @@ export function ShopIdentityPage() {
   return (
     <SetupPage title="Shop details" tour="shop-details">
       <Card title="Shop identity">
-        <label className={fieldLabelClasses}>
-          Name
-          <input
-            className={fieldControlClasses}
-            value={identity.name}
-            onChange={(event) =>
-              edit({ ...content, identity: { ...identity, name: event.target.value } })
-            }
-          />
-        </label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className={fieldLabelClasses}>
-            Slug
+        <FieldRows>
+          <Field label="Name">
+            <input
+              className={fieldControlClasses}
+              value={identity.name}
+              onChange={(event) =>
+                edit({ ...content, identity: { ...identity, name: event.target.value } })
+              }
+            />
+          </Field>
+          <Field label="Slug">
             <input
               className={fieldControlClasses}
               value={identity.slug}
@@ -302,40 +301,52 @@ export function ShopIdentityPage() {
                 edit({ ...content, identity: { ...identity, slug: event.target.value } })
               }
             />
-          </label>
+          </Field>
+          {/* `LocaleField` and `CurrencyField` each carry their own label and their own rule,
+              so neither is wrapped in a row that would name it a second time. They are asked
+              to draw themselves as rows instead, which is what keeps one card to one label
+              typography and one unbroken run of dividing rules. */}
           <LocaleField
+            arrangement="row"
             value={identity.locale}
             onChange={(locale) => edit({ ...content, identity: { ...identity, locale } })}
           />
-        </div>
-        <CurrencyField
-          value={identity.currencies}
-          onChange={(currencies) => edit({ ...content, identity: { ...identity, currencies } })}
-        />
-        <fieldset className="grid gap-1.5">
-          <legend className="text-xs font-semibold text-admin-muted">Support channels</legend>
-          <div className="flex flex-wrap gap-3 text-[13px]">
-            {CHANNELS.map((channel) => (
-              <label key={channel.value} className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={identity.channels.includes(channel.value)}
-                  disabled={isLastSelected(identity.channels, channel.value)}
-                  onChange={() =>
-                    edit({
-                      ...content,
-                      identity: {
-                        ...identity,
-                        channels: toggle([...identity.channels], channel.value),
-                      },
-                    })
-                  }
-                />
-                {channel.label}
-              </label>
-            ))}
-          </div>
-        </fieldset>
+          <CurrencyField
+            arrangement="row"
+            value={identity.currencies}
+            onChange={(currencies) => edit({ ...content, identity: { ...identity, currencies } })}
+          />
+          {/* The set of boxes is one control with no element for a `for` to point at, so the
+              row names it with `role="group"` and `aria-labelledby`. The rule about the last
+              box belongs to the set, the way `CurrencyField`'s does: a box that cannot be
+              clicked is not a place to read why. */}
+          <FieldGroup
+            label="Support channels"
+            hint="A shop must answer somewhere. The last channel left on cannot be turned off."
+          >
+            <div className="flex flex-wrap gap-3 text-[13px]">
+              {CHANNELS.map((channel) => (
+                <label key={channel.value} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={identity.channels.includes(channel.value)}
+                    disabled={isLastSelected(identity.channels, channel.value)}
+                    onChange={() =>
+                      edit({
+                        ...content,
+                        identity: {
+                          ...identity,
+                          channels: toggle([...identity.channels], channel.value),
+                        },
+                      })
+                    }
+                  />
+                  {channel.label}
+                </label>
+              ))}
+            </div>
+          </FieldGroup>
+        </FieldRows>
       </Card>
 
       <PaymentAndFulfilmentCards />

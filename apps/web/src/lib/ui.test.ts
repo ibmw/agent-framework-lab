@@ -4,6 +4,11 @@ import {
   buttonIcon,
   buttonVariantClasses,
   fieldControlClasses,
+  fieldRowClasses,
+  fieldRowControlClasses,
+  fieldRowHintClasses,
+  fieldRowLabelClasses,
+  fieldRowLabelTextClasses,
   focusRingClasses,
   iconLeadingClasses,
   textAreaClasses,
@@ -134,5 +139,59 @@ describe("the button glyph vocabulary", () => {
     expect(iconLeadingClasses).toContain("flex-none");
     expect(iconLeadingClasses).toMatch(/\bh-\S+\b/);
     expect(iconLeadingClasses).toMatch(/\bw-\S+\b/);
+  });
+});
+
+/**
+ * The form row, held to the handoff's own numbers.
+ *
+ * `tmp/design-frames/README.md`'s *The form pattern* section is the source. These are drift
+ * guards on utility strings and nothing more: no test in this repository lays the row out, so
+ * none of them proves that it wraps. What they prove is that the declaration which makes it
+ * wrap is still the declaration the handoff wrote.
+ */
+describe("the form row", () => {
+  it("declares the wrap, and starts both columns at the top", () => {
+    expect(fieldRowClasses).toContain("flex-wrap");
+    expect(fieldRowClasses).toContain("items-start");
+  });
+
+  it("carries the handoff's gaps, padding and dividing rule", () => {
+    // column-gap 28px, row-gap 10px, padding 22px 0, border-top 1px #f1f2f3.
+    expect(fieldRowClasses).toContain("gap-x-7");
+    expect(fieldRowClasses).toContain("gap-y-2.5");
+    expect(fieldRowClasses).toContain("py-[22px]");
+    expect(fieldRowClasses).toContain("border-t");
+    expect(fieldRowClasses).toContain("border-[#f1f2f3]");
+  });
+
+  it("declares the width below which the two columns can no longer sit side by side", () => {
+    const basis = (classes: string) => {
+      const match = /flex-\[\d+_\d+_(\d+)px\]/.exec(classes);
+      return Number(match?.[1]);
+    };
+    // Tailwind's spacing step is 4px, so `gap-x-7` is the handoff's 28px column gap.
+    const columnGap = Number(/gap-x-(\d+(?:\.\d+)?)/.exec(fieldRowClasses)?.[1]) * 4;
+
+    expect(basis(fieldRowLabelClasses)).toBe(210);
+    expect(basis(fieldRowControlClasses)).toBe(330);
+    // Read out of all three utilities rather than restated, so that moving any one of them
+    // fails here. 568px is the plan's "below ~540px" as the handoff's own numbers give it.
+    expect(basis(fieldRowLabelClasses) + columnGap + basis(fieldRowControlClasses)).toBe(568);
+  });
+
+  it("lets both columns shrink, and caps the reading measure of the left one", () => {
+    expect(fieldRowLabelClasses).toContain("min-w-0");
+    expect(fieldRowControlClasses).toContain("min-w-0");
+    expect(fieldRowLabelClasses).toContain("max-w-[36ch]");
+  });
+
+  it("sets the label and the hint at the sizes the handoff writes", () => {
+    expect(fieldRowLabelTextClasses).toContain("text-[13.5px]");
+    expect(fieldRowLabelTextClasses).toContain("font-bold");
+    expect(fieldRowLabelTextClasses).toContain("text-admin-ink");
+    expect(fieldRowHintClasses).toContain("text-[13px]");
+    expect(fieldRowHintClasses).toContain("text-admin-ink-soft");
+    expect(fieldRowHintClasses).toContain("[text-wrap:pretty]");
   });
 });

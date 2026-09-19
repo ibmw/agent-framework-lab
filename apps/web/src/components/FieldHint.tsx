@@ -1,5 +1,12 @@
 import { cloneElement, type ReactElement, type ReactNode, useId } from "react";
-import { fieldLabelClasses } from "../lib/ui";
+import {
+  fieldLabelClasses,
+  fieldRowClasses,
+  fieldRowControlClasses,
+  fieldRowHintClasses,
+  fieldRowLabelClasses,
+  fieldRowLabelTextClasses,
+} from "../lib/ui";
 
 type ControlProps = {
   id?: string;
@@ -20,6 +27,74 @@ const EXTRA_TONES = {
   error: "text-lab-error",
 } as const;
 
+type ExtraTone = keyof typeof EXTRA_TONES;
+
+/**
+ * Label, hint and second line are one contract with two arrangements.
+ *
+ * `FieldHint` stacks them; `Field` below puts the label and the hint in a left column and the
+ * control in a right one, which is the row the workspace refresh draws 107 times. What must
+ * not fork between the two is *which* ids exist, what ends up in `aria-describedby`, and the
+ * fact that the second line stays mounted while it is empty so a later preview can announce —
+ * so that lives here and each arrangement only decides where the parts are drawn.
+ *
+ * `hasHint` is not cosmetic: a row with no rule to state must not point `aria-describedby` at
+ * a paragraph that was never rendered. `FieldHint` always has one; a `Field` need not. It is
+ * read for truth rather than for `undefined`, because a caller computing a rule conditionally
+ * hands back `null` or `false` as readily as nothing at all, and each of those renders the
+ * same empty paragraph.
+ */
+function useBoundControl(
+  children: ReactElement<ControlProps>,
+  { htmlFor, hasHint }: { htmlFor?: string; hasHint: boolean },
+) {
+  const generatedId = useId();
+  const controlId = htmlFor ?? children.props.id ?? generatedId;
+  const hintId = `${generatedId}-hint`;
+  const extraId = `${generatedId}-extra`;
+  const describedBy = [children.props["aria-describedby"], hasHint ? hintId : null, extraId]
+    .filter(Boolean)
+    .join(" ");
+  return {
+    controlId,
+    hintId,
+    extraId,
+    control: cloneElement(children, { id: controlId, "aria-describedby": describedBy }),
+  };
+}
+
+/**
+ * The second line, wherever it is drawn: a live preview, a warning at the gate's own severity,
+ * or a refusal. It keeps its element while it holds nothing — `sr-only` rather than unmounted
+ * — because a polite region that appears at the moment it has something to say is a region no
+ * reader is listening to yet.
+ *
+ * `className` is the arrangement's own typography and nothing more; the tone's ink is this
+ * component's, so no caller can give a refusal the colour of a preview.
+ */
+function ExtraLine({
+  id,
+  tone,
+  className,
+  children,
+}: {
+  id: string;
+  tone: ExtraTone;
+  className: string;
+  children?: ReactNode;
+}) {
+  return (
+    <p
+      id={id}
+      className={children ? `${className} ${EXTRA_TONES[tone]}` : "sr-only"}
+      role={children && tone === "error" ? "alert" : undefined}
+      aria-live={tone === "error" ? undefined : "polite"}
+    >
+      {children ?? null}
+    </p>
+  );
+}
+
 /**
  * One muted line under a control, tied to it by `aria-describedby`.
  *
@@ -31,15 +106,20 @@ const EXTRA_TONES = {
  * have no optional fields, so they do not pass `optional`. The product editor already
  * writes "(optional)" on price and is not a create form — this flag is the primitive's
  * encoding of that convention for later consumers, not a conversion of that editor.
+ *
+ * **Stacked by default, a row where a caller asks.** The stacked arrangement is the one for a
+ * field that is not a row of a form: the inline add-a-chip control inside `ChipListField`, and
+ * every surface the field pattern has not reached. `arrangement="row"` hands the same props to
+ * `Field`, and exists for one case — a self-labelling field such as `LocaleField` sitting in a
+ * card whose other rows are on the pattern. Wrapping one of those in a `Field` would give one
+ * control two names; leaving it stacked puts two label typographies in one card. Asking it to
+ * draw itself as a row is the third answer, and the default keeps every other caller as it was.
  */
-export function FieldHint({
-  label,
-  hint,
-  extra,
-  extraTone = "muted",
-  optional = false,
-  children,
-}: {
+export function FieldHint({ arrangement = "stacked", ...props }: FieldHintProps) {
+  return arrangement === "row" ? <Field {...props} /> : <StackedFieldHint {...props} />;
+}
+
+type FieldHintProps = {
   label: string;
   hint: ReactNode;
   /** A second description line (for example a live "Saved as" preview), also tied by aria-describedby. */
@@ -53,17 +133,25 @@ export function FieldHint({
    * a warning there, so it is a warning here, and it is announced politely rather than
    * as an alert because nothing has been refused.
    */
-  extraTone?: "muted" | "warning" | "error";
+  extraTone?: ExtraTone;
   optional?: boolean;
+  /** `"row"` draws this field as a `Field`. See `FieldHint` for the one case it is for. */
+  arrangement?: Arrangement;
   children: ReactElement<ControlProps>;
-}) {
-  const generatedId = useId();
-  const controlId = children.props.id ?? generatedId;
-  const hintId = `${generatedId}-hint`;
-  const extraId = `${generatedId}-extra`;
-  const describedBy = [children.props["aria-describedby"], hintId, extraId]
-    .filter(Boolean)
-    .join(" ");
+};
+
+/** Which of the two arrangements a self-labelling field draws itself in. */
+export type Arrangement = "stacked" | "row";
+
+function StackedFieldHint({
+  label,
+  hint,
+  extra,
+  extraTone = "muted",
+  optional = false,
+  children,
+}: Omit<FieldHintProps, "arrangement">) {
+  const { controlId, hintId, extraId, control } = useBoundControl(children, { hasHint: true });
 
   return (
     <div className={fieldLabelClasses}>
@@ -71,20 +159,179 @@ export function FieldHint({
         {label}
         {optional ? " (optional)" : null}
       </label>
-      {cloneElement(children, { id: controlId, "aria-describedby": describedBy })}
+      {control}
       <p id={hintId} className="font-normal text-admin-muted">
         {hint}
       </p>
-      <p
-        id={extraId}
-        className={extra ? `font-normal ${EXTRA_TONES[extraTone]}` : "sr-only"}
-        role={extra && extraTone === "error" ? "alert" : undefined}
-        aria-live={extraTone === "error" ? undefined : "polite"}
-      >
-        {extra ?? null}
-      </p>
+      <ExtraLine id={extraId} tone={extraTone} className="font-normal">
+        {extra}
+      </ExtraLine>
     </div>
   );
+}
+
+/**
+ * A form row: label and hint in one left column, the control in the right, both top-aligned,
+ * stacking when the row is narrower than the two columns need.
+ *
+ * This is the workspace refresh's single form shape (`tmp/design-frames/README.md`, *The form
+ * pattern*), and the geometry is in `lib/ui.ts` beside the other class sets rather than here.
+ *
+ * **It is not a second `FieldHint`.** It is the other arrangement of the same contract: the
+ * ids, the `aria-describedby` wiring, the `(optional)` marker and the tones all come from the
+ * helpers above, so there is exactly one place in the workspace that decides what a field's
+ * accessible description contains. Where they differ is where the parts sit — the hint moves
+ * from under the control to under the label, and the second line stays under the control,
+ * which is where the handoff puts a validation message and where `form-decisions.md` 1.5 puts
+ * "any refusal".
+ *
+ * `hint` is optional here and required on `FieldHint`. The refresh gives every one of its rows
+ * a rule and this component does not encourage a row without one; but the four editors this
+ * slice adopts it on hold rows whose rule has not been written yet, and a row is better in the
+ * pattern with no hint than outside it with none either.
+ *
+ * `htmlFor` is for a caller whose control already owns its `id`. Left out, the row generates
+ * one and binds it, exactly as `FieldHint` does. A control that is *not* one element — a chip
+ * group, a set of checkboxes, a custom widget — is not this component: it is `FieldGroup`,
+ * because there is nothing for `for` to point at.
+ */
+export function Field({
+  label,
+  hint,
+  htmlFor,
+  extra,
+  extraTone = "muted",
+  optional = false,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  /** The control's own `id`, where it has one. Omitted, the row makes one and binds it. */
+  htmlFor?: string;
+  extra?: ReactNode;
+  extraTone?: ExtraTone;
+  optional?: boolean;
+  children: ReactElement<ControlProps>;
+}) {
+  const { controlId, hintId, extraId, control } = useBoundControl(children, {
+    htmlFor,
+    hasHint: Boolean(hint),
+  });
+
+  return (
+    <div className={fieldRowClasses}>
+      <div className={fieldRowLabelClasses}>
+        <label className={`${fieldRowLabelTextClasses} cursor-pointer`} htmlFor={controlId}>
+          {label}
+          {optional ? " (optional)" : null}
+        </label>
+        {hint ? (
+          <p id={hintId} className={fieldRowHintClasses}>
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      <div className={fieldRowControlClasses}>
+        {control}
+        {/* 7px and 13px are the prototype's own second line under a control; the weight is the
+            handoff's, which sets a validation message at 600 and leaves a preview at normal. */}
+        <ExtraLine
+          id={extraId}
+          tone={extraTone}
+          className={`mt-[7px] text-[13px] ${extraTone === "error" ? "font-semibold" : "font-normal"}`}
+        >
+          {extra}
+        </ExtraLine>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The same row, where the control is not a control: a set of checkboxes, a chip group, a
+ * custom widget. 44 of the refresh's 107 rows are this.
+ *
+ * A `<fieldset>` named by `aria-labelledby`, where `FieldGroupHint` below uses a `<legend>`.
+ * The difference is forced by the layout and is not a preference: a `<legend>` must be the
+ * first child of its `<fieldset>`, so it cannot sit inside the left column beside the hint
+ * while the controls sit in the right one. The element, the `group` role and the accessible
+ * name come out the same either way, so nothing a reader hears depends on which a row uses.
+ *
+ * The one thing it must never be is a `<label htmlFor>` with nothing to point at — the
+ * handoff says so in as many words, and the prototype itself does not obey it: its group rows
+ * emit a bare `<label>` with no `for`, and the document contains no `role="group"` at all,
+ * which names the group to a pointer and to nobody else.
+ */
+export function FieldGroup({
+  label,
+  hint,
+  extra,
+  extraTone = "muted",
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  extra?: ReactNode;
+  extraTone?: ExtraTone;
+  children: ReactNode;
+}) {
+  const generatedId = useId();
+  const labelId = `${generatedId}-label`;
+  const hintId = `${generatedId}-hint`;
+  const extraId = `${generatedId}-extra`;
+  const describedBy = [hint ? hintId : null, extraId].filter(Boolean).join(" ");
+
+  return (
+    // `min-w-0` because a `<fieldset>` is `min-inline-size: min-content` by default, which
+    // would keep the row from ever wrapping around a wide group.
+    <fieldset
+      className={`${fieldRowClasses} min-w-0`}
+      aria-labelledby={labelId}
+      aria-describedby={describedBy}
+    >
+      <div className={fieldRowLabelClasses}>
+        <span id={labelId} className={fieldRowLabelTextClasses}>
+          {label}
+        </span>
+        {hint ? (
+          <p id={hintId} className={fieldRowHintClasses}>
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      <div className={fieldRowControlClasses}>
+        {children}
+        <ExtraLine
+          id={extraId}
+          tone={extraTone}
+          className={`mt-[7px] text-[13px] ${extraTone === "error" ? "font-semibold" : "font-normal"}`}
+        >
+          {extra}
+        </ExtraLine>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * Consecutive rows, adjacent.
+ *
+ * A row carries its own `22px` padding and its own rule, so the gap of whatever holds it —
+ * `Card` lays its children out on a `grid gap-3` — must not also apply between them or the
+ * rows drift apart by a gap the handoff does not draw. Wrapping the run makes it one child of
+ * that grid; inside it the rows sit against each other, which is the whole of the pattern's
+ * vertical rhythm.
+ *
+ * The first row's own rule is dropped, because `Card` has already drawn one under its heading
+ * and the two would read as a doubled line 16px apart. The handoff's `border-top` on every row
+ * stays the row's geometry; what this suppresses is a repeat of a rule the card drew, which is
+ * the one thing the prototype's run of rows never shows.
+ *
+ * It renders nothing but the box. It exists so that a page says what it means by the wrapper,
+ * and so that whoever changes the rhythm changes it in one place.
+ */
+export function FieldRows({ children }: { children: ReactNode }) {
+  return <div className="[&>:first-child]:border-t-0">{children}</div>;
 }
 
 /**
@@ -100,19 +347,37 @@ export function FieldHint({
  * `extra` is `FieldHint`'s second line, for the same job it does there: where the hint names
  * something the group derives — "the first is the default" — this is where the group says
  * which one that currently is, the way `DerivedIdField` previews the id it will save.
+ *
+ * Stacked by default and paired with `FieldHint`, including its `arrangement`: a page building
+ * its own group on the field pattern reaches for `FieldGroup`, and a *self-labelling* group
+ * such as `CurrencyField` asks for the row here instead, for the reason `FieldHint` gives.
  */
-export function FieldGroupHint({
-  legend,
-  hint,
-  extra,
-  children,
-}: {
+export function FieldGroupHint({ arrangement = "stacked", ...props }: FieldGroupHintProps) {
+  return arrangement === "row" ? (
+    <FieldGroup label={props.legend} hint={props.hint} extra={props.extra}>
+      {props.children}
+    </FieldGroup>
+  ) : (
+    <StackedFieldGroupHint {...props} />
+  );
+}
+
+type FieldGroupHintProps = {
   legend: string;
   hint: ReactNode;
   /** A live second description line: what the hint's rule currently resolves to. */
   extra?: ReactNode;
+  /** `"row"` draws this group as a `FieldGroup`. See `FieldHint` for the one case it is for. */
+  arrangement?: Arrangement;
   children: ReactNode;
-}) {
+};
+
+function StackedFieldGroupHint({
+  legend,
+  hint,
+  extra,
+  children,
+}: Omit<FieldGroupHintProps, "arrangement">) {
   const generatedId = useId();
   const hintId = `${generatedId}-hint`;
   const extraId = `${generatedId}-extra`;
@@ -123,13 +388,9 @@ export function FieldGroupHint({
       <p id={hintId} className="font-normal text-admin-muted">
         {hint}
       </p>
-      <p
-        id={extraId}
-        className={extra ? "font-normal text-admin-muted" : "sr-only"}
-        aria-live="polite"
-      >
-        {extra ?? null}
-      </p>
+      <ExtraLine id={extraId} tone="muted" className="font-normal">
+        {extra}
+      </ExtraLine>
     </fieldset>
   );
 }

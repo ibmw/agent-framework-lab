@@ -2,7 +2,7 @@ import { useId } from "react";
 import { LOCALE_RULE } from "../lib/fieldRules";
 import { LOCALE_PATTERN, LOCALES } from "../lib/locales";
 import { fieldControlClasses } from "../lib/ui";
-import { FieldHint } from "./FieldHint";
+import { type Arrangement, FieldHint } from "./FieldHint";
 
 /**
  * The Locale field, wherever an identity carries one.
@@ -14,14 +14,19 @@ import { FieldHint } from "./FieldHint";
  * `autoComplete="off"` keeps the browser's own address autofill from covering the suggestions,
  * which is the one thing that reliably hides them. The list is built per instance — `useId`
  * rather than a constant — so two of these on one page do not share an `id`.
+ *
+ * `arrangement` is `FieldHint`'s, passed straight through: this field labels itself, so a card
+ * on the form pattern asks it to draw itself as a row rather than wrapping it in one.
  */
 export function LocaleField({
   value,
   required = false,
+  arrangement,
   onChange,
 }: {
   value: string;
   required?: boolean;
+  arrangement?: Arrangement;
   onChange: (value: string) => void;
 }) {
   const listId = useId();
@@ -32,7 +37,7 @@ export function LocaleField({
   const named = LOCALES.find((locale) => locale.tag === value);
   return (
     <div>
-      <FieldHint label="Locale" hint={LOCALE_RULE} extra={named?.label}>
+      <FieldHint label="Locale" hint={LOCALE_RULE} extra={named?.label} arrangement={arrangement}>
         <input
           className={fieldControlClasses}
           list={listId}

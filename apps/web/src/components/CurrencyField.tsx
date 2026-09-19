@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Currency } from "../lib/currencies";
 import { CURRENCY, labelOf, membersOf } from "../lib/enumLabels";
 import { CURRENCIES_RULE } from "../lib/fieldRules";
-import { FieldGroupHint } from "./FieldHint";
+import { type Arrangement, FieldGroupHint } from "./FieldHint";
 
 /**
  * The currencies a shop sells in: one checkbox per currency the lab can express, in the
@@ -28,6 +28,7 @@ import { FieldGroupHint } from "./FieldHint";
 export function CurrencyField({
   value,
   suggested,
+  arrangement,
   onChange,
 }: {
   value: readonly Currency[];
@@ -45,6 +46,11 @@ export function CurrencyField({
    * this is that primitive's behaviour rather than a case to special-case here.
    */
   suggested?: Currency;
+  /**
+   * `FieldGroupHint`'s, passed straight through: this group labels itself, so a card on the
+   * form pattern asks it to draw itself as a row rather than wrapping it in one.
+   */
+  arrangement?: Arrangement;
   onChange: (currencies: Currency[]) => void;
 }) {
   const [chosen, setChosen] = useState(false);
@@ -87,6 +93,7 @@ export function CurrencyField({
       // and a checkbox that cannot be clicked is not a place to read it.
       hint={<>{CURRENCIES_RULE} A shop sells in at least one.</>}
       extra={first ? `Default: ${first} — ${labelOf(CURRENCY, first)}.` : undefined}
+      arrangement={arrangement}
     >
       {/* Wrapped rather than columned: the same ten boxes sit in the 340px create card and
           across the width of Shop details, and a column rule wide enough for "AUD —

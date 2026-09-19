@@ -716,3 +716,48 @@ describe("order editor", () => {
     expect(screen.getByRole("button", { name: "Save order" })).toBeEnabled();
   });
 });
+
+/**
+ * UI-2: the order editor's payment, fulfilment and shipping rows on the form pattern.
+ *
+ * Five of these controls were named twice — a wrapping `<label>` and an `aria-label` of the
+ * same words: Payment status, Payment method, Fulfilment status, Fulfilment method and Ship
+ * to. They are now named once, by the row; Paid at and Shipped at never carried the second
+ * name. The assertion is that the name a reader hears did not move, and that the sentence
+ * under Ship to, which was a paragraph beside the select, is in the select's description now
+ * that it is the row's hint.
+ */
+describe("the field pattern on the order editor", () => {
+  it("binds every payment and fulfilment row to its own control", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+
+    const payment = card("Line items & payment");
+    for (const label of ["Payment status", "Payment method", "Paid at"] as const) {
+      expect(within(payment).getByText(label).getAttribute("for")).toBe(
+        within(payment).getByLabelText(label).id,
+      );
+    }
+
+    const shipping = card("Fulfilment & shipping");
+    for (const label of ["Fulfilment status", "Fulfilment method", "Shipped at"] as const) {
+      expect(within(shipping).getByText(label).getAttribute("for")).toBe(
+        within(shipping).getByLabelText(label).id,
+      );
+    }
+  });
+
+  it("puts where the addresses come from in the Ship to select's description", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    const shipping = card("Fulfilment & shipping");
+
+    expect(within(shipping).getByLabelText("Ship to")).toHaveAccessibleDescription(
+      /selected from the customer's address book — no free input/i,
+    );
+    // Still readable without a pointer, and still a link to the book it names.
+    expect(
+      within(shipping).getByRole("link", { name: "the customer's address book" }),
+    ).toBeVisible();
+  });
+});

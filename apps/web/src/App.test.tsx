@@ -1874,3 +1874,69 @@ describe("unsaved work is protected", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Shops" })).toBeVisible();
   });
 });
+
+/**
+ * UI-2: the product editor's Details card and Shop details' identity card on the form pattern.
+ *
+ * The rows here carry no hint yet — the handoff writes one for each and this slice does not
+ * author copy — so what they must prove is the binding, and that the one row whose control is
+ * a set of boxes names itself as a group rather than with a `for` pointing at nothing.
+ */
+describe("the field pattern on the shop editors", () => {
+  it("binds each of the product editor's detail rows to its control", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+    const details = within(screen.getByRole("region", { name: "Details" }));
+    for (const label of ["Title", "Status", "Category", "Description"] as const) {
+      const control = details.getByLabelText(label);
+      expect(details.getByText(label).getAttribute("for")).toBe(control.id);
+    }
+    expect(details.getByLabelText("Title")).toHaveValue("Alpine Shell Jacket");
+  });
+
+  it("promises no pick list on the editor's Category, which renders none", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+    // `PRODUCT_CATEGORY_RULE` says "pick one the draft already uses", which the create form
+    // backs with a `<datalist>` and this surface does not. A hint that is false where it is
+    // shown is worse than a row with none, so this row carries none until the list exists.
+    const details = within(screen.getByRole("region", { name: "Details" }));
+    expect(details.getByLabelText("Category")).toHaveAccessibleDescription("");
+    expect(details.getByLabelText("Category")).not.toHaveAttribute("list");
+  });
+
+  it("names the channel boxes as one group, with the rule the disabled box cannot state", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const channels = await screen.findByRole("group", { name: "Support channels" });
+    expect(channels).toHaveAccessibleDescription(
+      /a shop must answer somewhere. the last channel left on cannot be turned off/i,
+    );
+    expect(within(channels).getByRole("checkbox", { name: "Chat" })).toBeChecked();
+    // The rule is true of the control as well as said by it.
+    expect(within(channels).getByRole("checkbox", { name: "Chat" })).toBeDisabled();
+  });
+
+  it("binds Shop details' own rows and leaves the shared fields naming themselves once", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    for (const label of ["Name", "Slug"] as const) {
+      expect(identity.getByText(label).getAttribute("for")).toBe(identity.getByLabelText(label).id);
+    }
+    // `LocaleField` and `CurrencyField` were not wrapped — a row around either would have
+    // produced a second name for one control — but they are asked to draw themselves as rows,
+    // so the card holds one label typography rather than two.
+    expect(identity.getAllByLabelText("Locale")).toHaveLength(1);
+    expect(identity.getAllByRole("group", { name: "Currencies" })).toHaveLength(1);
+    expect(identity.getByText("Locale").className).toBe(identity.getByText("Name").className);
+    expect(identity.getByRole("group", { name: "Currencies" }).className).toContain("flex-wrap");
+    // And neither lost the rule it carries itself.
+    expect(identity.getByLabelText("Locale")).toHaveAccessibleDescription(/pick a locale/i);
+    expect(identity.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
+      /variants may only be priced in these; the first is the default/i,
+    );
+  });
+});

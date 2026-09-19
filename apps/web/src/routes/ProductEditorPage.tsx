@@ -11,7 +11,7 @@ import { Link, useParams } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
 import { DerivedIdField } from "../components/DerivedIdField";
-import { FieldGroupHint, FieldHint } from "../components/FieldHint";
+import { Field, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
 import {
   Card,
   EditorSaveActions,
@@ -127,17 +127,18 @@ export function ProductEditorPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-4">
           <Card title="Details">
-            <label className={fieldLabelClasses}>
-              Title
-              <input
-                className={fieldControlClasses}
-                value={product.title}
-                onChange={(event) => update({ ...product, title: event.target.value })}
-              />
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className={fieldLabelClasses}>
-                Status
+            {/* Status and Category shared a `sm:grid-cols-2` here. The prototype gives each of
+                the four its own full-width row, and the field pattern's own wrap already
+                stacks a row where there is no room, so the half-width pair went with it. */}
+            <FieldRows>
+              <Field label="Title">
+                <input
+                  className={fieldControlClasses}
+                  value={product.title}
+                  onChange={(event) => update({ ...product, title: event.target.value })}
+                />
+              </Field>
+              <Field label="Status">
                 <select
                   className={fieldControlClasses}
                   value={product.status}
@@ -154,24 +155,28 @@ export function ProductEditorPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className={fieldLabelClasses}>
-                Category
+              </Field>
+              {/* No hint, deliberately. `PRODUCT_CATEGORY_RULE` is written and the create
+                  form shows it, but its second sentence — "Pick one the draft already uses"
+                  — is true there because that form renders a `<datalist>` of the draft's
+                  categories beside the input. This one does not, so the rule would promise a
+                  pick list that is not on the surface saying so. The missing list is recorded
+                  as follow-up work; a layout slice reports a gap rather than closing it. */}
+              <Field label="Category">
                 <input
                   className={fieldControlClasses}
                   value={product.category}
                   onChange={(event) => update({ ...product, category: event.target.value })}
                 />
-              </label>
-            </div>
-            <label className={fieldLabelClasses}>
-              Description
-              <textarea
-                className={textAreaClasses}
-                value={product.description}
-                onChange={(event) => update({ ...product, description: event.target.value })}
-              />
-            </label>
+              </Field>
+              <Field label="Description">
+                <textarea
+                  className={textAreaClasses}
+                  value={product.description}
+                  onChange={(event) => update({ ...product, description: event.target.value })}
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           <OptionsCard product={product} onChange={update} />

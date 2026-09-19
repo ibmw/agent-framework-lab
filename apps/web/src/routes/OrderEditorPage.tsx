@@ -11,6 +11,7 @@ import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
 import { deleteOrder, getOrder, replaceOrder } from "../api/orders";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { Field, FieldRows } from "../components/FieldHint";
 import {
   Card,
   EditorSaveActions,
@@ -499,11 +500,12 @@ export function OrderEditorPage() {
               </button>
             </form>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className={fieldLabelClasses}>
-                Payment status
+            {/* The three-across `sm:grid-cols-3` went with the pattern: the prototype gives
+                each of an order's questions its own row, and the row stacks itself where
+                there is no width for two columns. */}
+            <FieldRows>
+              <Field label="Payment status">
                 <select
-                  aria-label="Payment status"
                   className={fieldControlClasses}
                   value={content.payment.status}
                   onChange={(event) =>
@@ -522,11 +524,9 @@ export function OrderEditorPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className={fieldLabelClasses}>
-                Payment method
+              </Field>
+              <Field label="Payment method">
                 <select
-                  aria-label="Payment method"
                   className={fieldControlClasses}
                   value={content.payment.method_id ?? ""}
                   onChange={(event) =>
@@ -543,9 +543,8 @@ export function OrderEditorPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className={fieldLabelClasses}>
-                Paid at
+              </Field>
+              <Field label="Paid at">
                 <input
                   className={fieldControlClasses}
                   type="datetime-local"
@@ -560,8 +559,8 @@ export function OrderEditorPage() {
                     })
                   }
                 />
-              </label>
-            </div>
+              </Field>
+            </FieldRows>
 
             <div className="grid gap-2 border-t border-admin-border pt-3 text-[13px]">
               <div className="flex justify-between">
@@ -619,11 +618,9 @@ export function OrderEditorPage() {
           </Card>
 
           <Card title="Fulfilment & shipping">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className={fieldLabelClasses}>
-                Fulfilment status
+            <FieldRows>
+              <Field label="Fulfilment status">
                 <select
-                  aria-label="Fulfilment status"
                   className={fieldControlClasses}
                   value={content.fulfilment.status}
                   onChange={(event) =>
@@ -642,11 +639,9 @@ export function OrderEditorPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className={fieldLabelClasses}>
-                Fulfilment method
+              </Field>
+              <Field label="Fulfilment method">
                 <select
-                  aria-label="Fulfilment method"
                   className={fieldControlClasses}
                   value={content.fulfilment.method_id ?? ""}
                   onChange={(event) =>
@@ -666,9 +661,8 @@ export function OrderEditorPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className={fieldLabelClasses}>
-                Shipped at
+              </Field>
+              <Field label="Shipped at">
                 <input
                   className={fieldControlClasses}
                   type="datetime-local"
@@ -685,41 +679,49 @@ export function OrderEditorPage() {
                     })
                   }
                 />
-              </label>
-            </div>
+              </Field>
+            </FieldRows>
             <p className="text-xs text-admin-muted">
               {content.allows_address_change
                 ? "Address changes stay allowed while this order is not fulfilled."
                 : "This order is fulfilled; a run can no longer change its address."}
             </p>
 
-            <label className={fieldLabelClasses}>
-              Ship to
-              <select
-                aria-label="Ship to"
-                className={fieldControlClasses}
-                value={addressId ?? ""}
-                onChange={(event) => selectAddress(event.target.value || null)}
+            <FieldRows>
+              {/* The sentence under this select was already a field's rule — where the
+                  addresses come from and that none may be typed — so the pattern's hint slot
+                  is where it belongs, and it is now in the select's accessible description
+                  rather than only beside it. */}
+              <Field
+                label="Ship to"
+                hint={
+                  <>
+                    Selected from{" "}
+                    <Link
+                      className="underline underline-offset-2"
+                      to={`/shops/${shopId}/customers/${content.customer_profile_id}`}
+                    >
+                      the customer's address book
+                    </Link>{" "}
+                    — no free input.
+                  </>
+                }
               >
-                <option value="">No address selected</option>
-                {addressBook.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label}
-                    {entry.is_default ? " (default)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="text-xs text-admin-muted">
-              Selected from{" "}
-              <Link
-                className="underline underline-offset-2"
-                to={`/shops/${shopId}/customers/${content.customer_profile_id}`}
-              >
-                the customer's address book
-              </Link>{" "}
-              — no free input.
-            </p>
+                <select
+                  className={fieldControlClasses}
+                  value={addressId ?? ""}
+                  onChange={(event) => selectAddress(event.target.value || null)}
+                >
+                  <option value="">No address selected</option>
+                  {addressBook.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
+                      {entry.is_default ? " (default)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </FieldRows>
 
             {address ? (
               <div className={`${surfaceClasses} bg-admin-canvas p-3 text-[13px]`}>

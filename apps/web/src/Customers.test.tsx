@@ -745,3 +745,58 @@ describe("editing a saved customer entry in place", () => {
     });
   });
 });
+
+/**
+ * UI-2: the customer editor's own cards on the form pattern.
+ *
+ * The claim these hold is the one the slice may not break — every control still answers to the
+ * words above it, and every description a control had it still has. The row moved the label
+ * out of a wrapper and onto a `for`, which is invisible here and would be very visible if it
+ * had been got wrong.
+ */
+describe("the field pattern on the customer editor", () => {
+  it("binds each identity and account row to the control it names", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    const identity = within(screen.getByRole("region", { name: "Identity" }));
+    for (const [label, value] of [
+      ["Given name", "Maya"],
+      ["Family name", "Laurent"],
+      ["Email", "maya.laurent@example.org"],
+    ] as const) {
+      const control = identity.getByLabelText(label);
+      expect(control).toHaveValue(value);
+      // The binding, not the wrapper: a row labels by `for`/`id`.
+      expect(identity.getByText(label).getAttribute("for")).toBe(control.id);
+    }
+
+    const account = within(screen.getByRole("region", { name: "Account" }));
+    expect(account.getByLabelText("Loyalty tier")).toHaveValue("silver");
+    expect(account.getByLabelText("Account notes")).toBeVisible();
+  });
+
+  it("leaves the shared locale field naming itself once", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    // `LocaleField` brings its own label and its own rule. Wrapping it in a row would have
+    // given it a second label, and `getAllByLabelText` is how that would show. It draws itself
+    // as a row instead, so the Identity card is one label typography rather than two.
+    const identity = within(screen.getByRole("region", { name: "Identity" }));
+    expect(identity.getAllByLabelText("Locale")).toHaveLength(1);
+    expect(identity.getByLabelText("Locale")).toHaveAccessibleDescription(
+      /pick a locale from the list/i,
+    );
+    expect(identity.getByText("Locale").className).toBe(identity.getByText("Email").className);
+  });
+
+  it("keeps the persona's traits named by their own group, not by a row as well", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    const persona = within(screen.getByRole("region", { name: "Behavioral persona" }));
+    expect(persona.getByLabelText("Summary")).toBeVisible();
+    expect(persona.getAllByRole("group", { name: "Traits" })).toHaveLength(1);
+  });
+});

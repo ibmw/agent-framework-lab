@@ -948,6 +948,21 @@ geometry is one component instead of a shape each editor reproduces. Forty-four 
 hundred-and-seven rows label a chip group or a custom widget rather than a native control, and
 those carry `role="group"` with `aria-labelledby` — never a `for` pointing at nothing.
 
+> Amended as built (2026-09-19). The row landed as `Field` and `FieldGroup` beside `FieldHint`,
+> which keeps the stacked arrangement; all three share one implementation of the label, the hint
+> and the `aria-describedby` wiring. Four departures. The geometry is the handoff's flex row,
+> not `form-decisions.md`'s 1.5 grid, which differs in its column basis, its collapse width and
+> its bottom-aligned label, and whose canonical rendering is not in the bundle. A group row is a
+> `<fieldset>` named by `aria-labelledby` rather than a `div` with `role="group"` — the same role
+> and name, and a `<legend>` cannot sit in the left column. And a row carries no hint unless the
+> rule is both written here and true on that surface: the handoff's per-row copy is not authored
+> in a layout slice, and a written rule that promises an affordance the surface does not render
+> is left off rather than shown. Finally, the handoff's input rules — `min-height:44px`,
+> `border:1px solid #c9cccf`, `14.5px` — are not applied, because they live in the one
+> `fieldControlClasses` every route shares and a four-route slice may not repaint the workspace
+> to reach them. The reasoning is in
+> `apps/web/src/components/FieldHint.tsx`.
+
 **A button's icon is part of the button, not of the page.** The refresh gives roughly seventy-five
 controls a glyph on a closed vocabulary — plus for create, check for save, counter-clockwise for
 discard, pencil, trash, star, play for start, replay, branch for fork, upload for publish, bars for

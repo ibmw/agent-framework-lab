@@ -25,6 +25,7 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { CountryField } from "../components/CountryField";
+import { Field, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import {
   Card,
@@ -410,9 +411,8 @@ export function CustomerEditorPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid content-start gap-4">
           <Card title="Identity">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className={fieldLabelClasses}>
-                Given name
+            <FieldRows>
+              <Field label="Given name">
                 <input
                   className={fieldControlClasses}
                   value={content.identity.given_name}
@@ -423,9 +423,8 @@ export function CustomerEditorPage() {
                     })
                   }
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Family name
+              </Field>
+              <Field label="Family name">
                 <input
                   className={fieldControlClasses}
                   value={content.identity.family_name}
@@ -436,9 +435,8 @@ export function CustomerEditorPage() {
                     })
                   }
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Email
+              </Field>
+              <Field label="Email">
                 <input
                   className={fieldControlClasses}
                   type="email"
@@ -450,9 +448,8 @@ export function CustomerEditorPage() {
                     })
                   }
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Phone
+              </Field>
+              <Field label="Phone">
                 <input
                   className={fieldControlClasses}
                   type="tel"
@@ -467,29 +464,31 @@ export function CustomerEditorPage() {
                     })
                   }
                 />
-              </label>
+              </Field>
+              {/* `LocaleField` brings its own label and its own rule, so it is not wrapped in
+                  a row that would give it a second one. It is asked to draw itself as a row
+                  instead, which keeps this card to one label typography. */}
               <LocaleField
+                arrangement="row"
                 value={content.identity.locale}
                 onChange={(locale) =>
                   edit({ ...content, identity: { ...content.identity, locale } })
                 }
               />
-            </div>
+            </FieldRows>
           </Card>
 
           <Card title="Account">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className={fieldLabelClasses}>
-                Customer since
+            <FieldRows>
+              <Field label="Customer since">
                 <input
                   className={fieldControlClasses}
                   type="date"
                   value={content.account.customer_since}
                   onChange={(event) => editAccount({ customer_since: event.target.value })}
                 />
-              </label>
-              <label className={fieldLabelClasses}>
-                Status
+              </Field>
+              <Field label="Status">
                 <select
                   className={fieldControlClasses}
                   value={content.account.status}
@@ -499,9 +498,8 @@ export function CustomerEditorPage() {
                   <option value="dormant">Dormant</option>
                   <option value="closed">Closed</option>
                 </select>
-              </label>
-              <label className={fieldLabelClasses}>
-                Loyalty tier
+              </Field>
+              <Field label="Loyalty tier">
                 <select
                   className={fieldControlClasses}
                   value={content.account.loyalty_tier}
@@ -513,8 +511,11 @@ export function CustomerEditorPage() {
                   <option value="silver">Silver</option>
                   <option value="gold">Gold</option>
                 </select>
-              </label>
-            </div>
+              </Field>
+            </FieldRows>
+            {/* A lone checkbox says what it means beside itself; a row would give it a label
+                on the left and a tick on the right with nothing between them. It keeps the
+                place it had, between the account's selects and its notes. */}
             <label className="flex items-center gap-2 text-[13px]">
               <input
                 type="checkbox"
@@ -523,14 +524,15 @@ export function CustomerEditorPage() {
               />
               Opted in to marketing
             </label>
-            <label className={fieldLabelClasses}>
-              Account notes
-              <textarea
-                className={textAreaClasses}
-                value={content.account.notes}
-                onChange={(event) => editAccount({ notes: event.target.value })}
-              />
-            </label>
+            <FieldRows>
+              <Field label="Account notes">
+                <textarea
+                  className={textAreaClasses}
+                  value={content.account.notes}
+                  onChange={(event) => editAccount({ notes: event.target.value })}
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           <Card
@@ -671,19 +673,22 @@ export function CustomerEditorPage() {
               </p>
             }
           >
-            <label className={fieldLabelClasses}>
-              Summary
-              <textarea
-                className={textAreaClasses}
-                value={content.persona.summary}
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    persona: { ...content.persona, summary: event.target.value },
-                  })
-                }
-              />
-            </label>
+            <FieldRows>
+              <Field label="Summary">
+                <textarea
+                  className={textAreaClasses}
+                  value={content.persona.summary}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      persona: { ...content.persona, summary: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+            </FieldRows>
+            {/* `ChipListField` is a `<fieldset>` with its own `<legend>` and its own hint on
+                the control that takes the next value. Wrapping it would name it twice. */}
             <ChipListField
               legend="Traits"
               label="New trait"
