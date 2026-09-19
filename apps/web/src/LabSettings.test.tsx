@@ -397,11 +397,11 @@ describe("workspace shell", () => {
   it("remembers the collapsed rail across a reload", async () => {
     const first = renderShell(SHOP_ID);
 
-    await userEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    await userEvent.click(screen.getByRole("button", { name: "Collapse menu" }));
     first.unmount();
 
     renderShell(SHOP_ID);
-    expect(screen.getByRole("button", { name: "Expand navigation" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Expand menu" })).toBeVisible();
   });
 });
 

@@ -988,7 +988,7 @@ describe("the helpdesk layout", () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
     await screen.findByRole("region", { name: "Ticket thread" });
 
-    const collapse = screen.getByRole("button", { name: "Collapse navigation" });
+    const collapse = screen.getByRole("button", { name: "Collapse menu" });
     expect(collapse).toHaveAttribute("aria-expanded", "true");
     expect(
       within(screen.getByRole("navigation", { name: "Shop workspace" })).getByText("Tickets"),
@@ -1000,10 +1000,10 @@ describe("the helpdesk layout", () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
     await screen.findByRole("region", { name: "Ticket thread" });
 
-    await user.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    await user.click(screen.getByRole("button", { name: "Collapse menu" }));
 
     const rail = screen.getByRole("navigation", { name: "Shop workspace" });
-    expect(screen.getByRole("button", { name: "Expand navigation" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Expand menu" })).toBeVisible();
     // Collapsed is a first-class layout, not a hidden one: the names survive as link names.
     expect(within(rail).getByRole("link", { name: "Tickets" })).toBeVisible();
   });

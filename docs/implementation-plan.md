@@ -91,10 +91,53 @@ Those need `role="group"` + `aria-labelledby`, not a dangling `for`.
 ### UI-3 · Navigation rail
 `branch: ui/rail-icons-collapse`
 
-Icons per destination, expanded and collapsed; collapse control at the foot; collapsed rail is
-a 52px strip of centred icons with the label on hover. `readNavigationCollapsed` /
-`writeNavigationCollapsed` in `lib/preferences.ts` already exist — this slice is the consumer
-they were written for. Touches `shell/ShopWorkspace.tsx` and `shell/LabSurface.tsx`.
+Most of this slice was already built, and not where this plan first said it was. The rail is
+`shell/AppShell.tsx` — `ShopWorkspace.tsx` and `LabSurface.tsx` hold no navigation, they only
+mount the shell. It already has a glyph per destination, a collapsed mode, an `sr-only` label
+plus `title` on hover so a collapsed row keeps its accessible name, section headings that
+become divider lines, a collapse control at the foot above a 1px rule carrying `aria-expanded`,
+no rail at all outside shop scope, and the preference: `readNavigationCollapsed` and
+`writeNavigationCollapsed` in `lib/preferences.ts` found their consumer there, so that sentence
+is discharged rather than pending.
+
+What is left is the remainder, measured against the handoff's *Navigation rail* and against the
+prototype where that bullet is silent — metrics and vocabulary, no behaviour: 216px expanded and
+a 52px strip collapsed (they were 226 and 58); the glyph at 17px expanded and 19px collapsed in
+a 36px row (it was 15px everywhere), dimmed to 0.75 on an expanded row that is not the current
+one; headings at `0.07em` in `#8c9196`; the hover wash `#eceef0`; the active row's ink `#14352e`
+at 700 and its `#ddeae5` hover; an inactive collapsed row lifted to `admin-muted` at 650, where
+a glyph stands alone and a list with its words deleted would read as disabled; and the foot
+reading "‹ Collapse menu" at 12.5px 650 in `admin-muted`.
+
+*Watch:* the foot control's **name, visible copy and tooltip are one string**. Collapsed it has
+no visible text at all, so the accessible name is the whole of what a reader has; expanded, a
+name that differed from the face of it is what a voice-control reader falls into. Moving it
+renamed the control in five suites — `tests/e2e/workspace-shell.spec.ts`, `AppShell.test.tsx`,
+`Tickets.test.tsx`, `LabSettings.test.tsx` — and nothing else, because `nav[aria-label="Shop
+workspace"]` is what the tours anchor on and what every other spec reaches the rail by. That
+landmark name does **not** move.
+
+*Checks:* `shell/AppShell.test.tsx` — the two widths, the glyph sizes and the 36px row, the
+heading tracking and its collapsed rule, the control's name against its copy and its tooltip
+and `aria-expanded`, the preference written and read back, and every collapsed destination
+still named.
+
+**Where this follows the codebase against the prototype**, per the rule in
+`docs/design-direction.md`: the rail keeps its 13px entry type (the prototype's 13.5px is
+inherited from the frame root rather than set on the row, and half a pixel is below a reader's
+threshold) and its 2px row gap (the prototype's 3px is collapsed-only and one pixel out); it
+takes `admin-border` for the foot rule and the collapsed divider where the prototype draws
+`#e5e9ec` and `#dfe3e6`, because the handoff names the rail's own border in that token; it
+keeps lucide's stroke width, which the handoff's *Assets* release frees; and it keeps this
+workspace's list of destinations, which the prototype does not share — it opens on "Overview"
+where the app opens on "Home", files Support identities under *Shop setup*, and has no
+cross-shop section because its lab is a second rail behind a top-bar mode. Renaming or
+remapping a destination changes an accessible name every journey clicks through.
+
+Two more things are **not** in this slice. The right-aligned per-entry count: the prototype
+reads it off its own fixture arrays, the workspace has no such figure at the shell, and UI-4 is
+where counts are decided. And the top bar — the other half of the handoff's *Chrome* section,
+which is nobody's slice yet.
 
 ### UI-4 · List pages: counts move into the filters
 `branch: ui/filter-counts`

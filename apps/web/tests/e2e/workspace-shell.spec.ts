@@ -25,7 +25,7 @@ const SECTIONS = [
 ] as const;
 
 async function expectRailControlOnScreen(page: Page, section: string) {
-  const toggle = page.getByRole("button", { name: /navigation$/ });
+  const toggle = page.getByRole("button", { name: /^(Collapse|Expand) menu$/ });
   const box = await toggle.boundingBox();
   expect(box, `${section}: the rail control is not rendered`).not.toBeNull();
   expect(
@@ -80,16 +80,16 @@ test("the rail collapses only when the author asks, in every section", async ({ 
 
   // Arriving anywhere — the helpdesk included — leaves the rail as the author left it.
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
-  await expect(page.getByRole("button", { name: "Collapse navigation" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Collapse menu" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Collapse navigation" }).click();
+  await page.getByRole("button", { name: "Collapse menu" }).click();
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Orders" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
 
   // ...and the choice survives moving between sections.
-  await expect(page.getByRole("button", { name: "Expand navigation" })).toBeVisible();
-  await page.getByRole("button", { name: "Expand navigation" }).click();
-  await expect(page.getByRole("button", { name: "Collapse navigation" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Expand menu" })).toBeVisible();
+  await page.getByRole("button", { name: "Expand menu" }).click();
+  await expect(page.getByRole("button", { name: "Collapse menu" })).toBeVisible();
 });
 
 /**
