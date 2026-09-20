@@ -178,20 +178,22 @@ const SHOP_LISTING: ShopListResponse = {
   ],
 };
 
-/** The page's own Shop filter, which shares its accessible name with the top bar's switcher. */
+/** The page's own Shop filter, which the notice sends no reader to. */
 function shopFilter(): HTMLElement {
   return within(screen.getByRole("form", { name: "Narrow history" })).getByRole("combobox", {
     name: "Shop",
   });
 }
 
-/** The top bar's shop switcher, or null where the lab has no shops to draw one from. */
+/**
+ * The top bar's shop switcher, or null where the lab has no shops to draw one from.
+ *
+ * It is a button opening a menu now, not a select (ADR 0055), which is also what tells it
+ * apart from the page's own *Shop* filter above — the two used to share a role as well as a
+ * name.
+ */
 function shopSwitcher(): HTMLElement | null {
-  return (
-    screen
-      .queryAllByRole("combobox", { name: "Shop" })
-      .find((control) => !control.closest("form")) ?? null
-  );
+  return screen.queryByRole("button", { name: /^Switch shop/ });
 }
 
 let asked: URLSearchParams[] = [];
@@ -631,10 +633,9 @@ describe("experiment history", () => {
     // bar draws one.
     const switcher = shopSwitcher();
     expect(switcher).not.toBeNull();
-    expect(switcher).toHaveValue("");
-    expect(
-      within(switcher as HTMLElement).getByRole("option", { name: "Select a shop" }),
-    ).toBeInTheDocument();
+    // It names no shop, which is what the notice says of it.
+    expect(switcher).toHaveAccessibleName("Switch shop");
+    expect(switcher).toHaveTextContent("Select a shop");
 
     // And the filter itself is untouched by the notice: every shop with a run is offered.
     const filter = shopFilter();

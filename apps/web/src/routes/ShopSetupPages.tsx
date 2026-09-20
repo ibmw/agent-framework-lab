@@ -12,7 +12,6 @@ import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
-import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   DefaultToneChip,
@@ -41,7 +40,6 @@ import {
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
 } from "../lib/fieldRules";
-import type { TourId } from "../lib/tours";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
@@ -57,22 +55,8 @@ const PAYMENT_KINDS = optionsOf(PAYMENT_METHOD_KIND);
 
 const CHANNELS = optionsOf(SUPPORT_CHANNEL);
 
-/**
- * The four pages that edit one shop draft between them, each with its own walk.
- *
- * The tour is taken rather than derived from the title: these are four surfaces with four things
- * to say, and a page that shared its neighbour's copy would be the kind of help that is worse
- * than none.
- */
-function SetupPage({
-  title,
-  tour,
-  children,
-}: {
-  title: string;
-  tour: TourId;
-  children: ReactNode;
-}) {
+/** The four pages that edit one shop draft between them. */
+function SetupPage({ title, children }: { title: string; children: ReactNode }) {
   const { preview, save, saving, discard, discarding, dirty, error } = useShopWorkspace();
   return (
     <>
@@ -80,17 +64,14 @@ function SetupPage({
         title={title}
         chips={<VersionChips preview={preview} />}
         actions={
-          <>
-            <TourLaunch id={tour} />
-            <EditorSaveActions
-              tone="accent"
-              dirty={dirty}
-              saving={saving}
-              discarding={discarding}
-              onSave={() => void save()}
-              onDiscard={() => void discard()}
-            />
-          </>
+          <EditorSaveActions
+            tone="accent"
+            dirty={dirty}
+            saving={saving}
+            discarding={discarding}
+            onSave={() => void save()}
+            onDiscard={() => void discard()}
+          />
         }
       />
       {error ? (
@@ -286,7 +267,7 @@ export function ShopIdentityPage() {
   }
 
   return (
-    <SetupPage title="Shop details" tour="shop-details">
+    <SetupPage title="Shop details">
       <Card title="Shop identity">
         <FieldRows>
           <Field label="Name" hint={SHOP_NAME_RULE}>
@@ -774,7 +755,7 @@ export function PoliciesAndFaqPage() {
   }
 
   return (
-    <SetupPage title="Policies & FAQ" tour="policies-and-faq">
+    <SetupPage title="Policies & FAQ">
       <Card title="Policies">
         <ul className="grid gap-2 text-[13px]">
           {content.policies.map((entry) => (
@@ -963,7 +944,7 @@ export function SupportGuidelinesPage() {
   const guidelineSuggested = uniqueSuggestion(slugify(guideline.name, ""), takenGuidelineIds);
 
   return (
-    <SetupPage title="Support guidelines" tour="support-guidelines">
+    <SetupPage title="Support guidelines">
       <Card title="Guidelines">
         <ul className="grid gap-2 text-[13px]">
           {content.support_guidelines.map((entry) => (
@@ -1087,7 +1068,7 @@ export function ToneOfVoicePage() {
   }
 
   return (
-    <SetupPage title="Tone of voice" tour="tone-of-voice">
+    <SetupPage title="Tone of voice">
       <Card title="Guidelines">
         <ul className="grid gap-2 text-[13px]">
           {content.tone_of_voice_guidelines.map((entry) => (

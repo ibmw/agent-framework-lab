@@ -8,10 +8,8 @@ import { savedAsPreview } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { searchRows } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { toSlug } from "../lib/blocks";
-import type { TourId } from "../lib/tours";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -23,8 +21,6 @@ import {
 
 interface LibraryCopy {
   title: string;
-  /** The tour this library offers. */
-  tour: TourId;
   description: string;
   /** What the library is, shown above the index the way frames 4a and 4b state it. */
   premise: string;
@@ -39,7 +35,6 @@ interface LibraryCopy {
 
 const OBJECTIVE_COPY: LibraryCopy = {
   title: "Objective blocks",
-  tour: "objective-blocks",
   description:
     "What an experiment asserts, authored once and composed by any scenario. A scenario binds a template's parameters to its own shop's objects.",
   premise:
@@ -54,7 +49,6 @@ const OBJECTIVE_COPY: LibraryCopy = {
 
 const MUTATION_COPY: LibraryCopy = {
   title: "Mutation blocks",
-  tour: "mutation-blocks",
   description:
     "What the scenario runtime injects into a run's sandbox. A scenario binds a template's parameters and its trigger time.",
   premise:
@@ -145,7 +139,6 @@ function BlockLibrary({
             <span aria-hidden>⇄</span> Shared across shops
           </span>
         }
-        actions={<TourLaunch id={copy.tour} />}
         description={copy.description}
       />
 

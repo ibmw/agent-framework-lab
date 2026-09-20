@@ -19,7 +19,6 @@ import { listExperiments, previewExperiment, startExperiment } from "../api/expe
 import { listScenarios, listScenarioVersions } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
@@ -113,7 +112,6 @@ export function ExperimentSetupPage() {
     <>
       <PageHeader
         title="New experiment"
-        actions={<TourLaunch id="bench-setup" />}
         description={
           currentShop
             ? `Composing for ${currentShop.name}. One scenario, one or two agent configurations, isolated arms. Every referenced version is pinned at start.`

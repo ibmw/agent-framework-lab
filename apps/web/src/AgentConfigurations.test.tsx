@@ -593,7 +593,8 @@ describe("agent configuration workspace", () => {
     await waitFor(() => expect(screen.getByLabelText("Preview context")).toHaveValue(SHOP_ID));
 
     // The top bar's switcher, which in lab mode sets the current shop instead of navigating.
-    await user.selectOptions(screen.getByRole("combobox", { name: "Shop" }), OTHER_SHOP_ID);
+    await user.click(screen.getByRole("button", { name: /^Switch shop/ }));
+    await user.click(screen.getByRole("menuitem", { name: /Southline Supply/ }));
 
     await waitFor(() =>
       expect(screen.getByLabelText("Preview context")).toHaveValue(OTHER_SHOP_ID),

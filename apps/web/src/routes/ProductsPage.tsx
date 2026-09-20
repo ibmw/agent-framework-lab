@@ -6,7 +6,6 @@ import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   EditorSaveActions,
@@ -144,17 +143,14 @@ export function ProductsPage() {
         chips={<VersionChips preview={preview} />}
         description="The product editor edits the shop draft. Publishing the shop freezes the catalog."
         actions={
-          <>
-            <TourLaunch id="products" />
-            <EditorSaveActions
-              tone="accent"
-              dirty={dirty}
-              saving={saving}
-              discarding={discarding}
-              onSave={() => void save()}
-              onDiscard={() => void discard()}
-            />
-          </>
+          <EditorSaveActions
+            tone="accent"
+            dirty={dirty}
+            saving={saving}
+            discarding={discarding}
+            onSave={() => void save()}
+            onDiscard={() => void discard()}
+          />
         }
       />
 

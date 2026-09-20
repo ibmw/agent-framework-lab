@@ -7,7 +7,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -113,7 +112,6 @@ export function SupportIdentitiesPage() {
       <PageHeader
         title="Support identities"
         description="What the support agent is and what it may do. Identities are cross-shop; tone of voice comes from the shop, and an agent configuration adopts one published identity."
-        actions={<TourLaunch id="support-identities" />}
       />
 
       {loadError ? (

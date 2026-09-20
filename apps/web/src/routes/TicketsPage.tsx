@@ -26,7 +26,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
-import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
@@ -194,7 +193,6 @@ export function TicketsPage() {
       <PageHeader
         title="Tickets"
         description="An incident as it arrived: the thread, the customer it is about, and the order it concerns. A scenario is composed on a published ticket."
-        actions={<TourLaunch id="tickets" />}
       />
       <div className="grid min-h-0 gap-4 xl:grid-cols-[262px_minmax(0,1fr)]">
         <section className={`${surfaceClasses} overflow-hidden`} aria-label="Tickets">

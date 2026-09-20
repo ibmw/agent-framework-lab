@@ -199,6 +199,70 @@ export const fieldRowControlClasses = "min-w-0 flex-[2_1_330px]";
 export const focusRingClasses =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lab-primary";
 
+/**
+ * The ring a keyboard reader gets on the top bar, which cannot be the pine one above.
+ *
+ * The prototype draws `2px solid #1d6241` on the bar's own controls as it does everywhere else,
+ * and on the bar's `#16332d` ground that measures **1.86:1** — under the 3:1 WCAG 2.2 asks of a
+ * focus indicator (1.4.11). `docs/design-direction.md`'s *Principles* put "WCAG 2.2 AA contrast;
+ * every workflow keyboard-reachable" above any measurement below them, so the Authority's rule 2
+ * does not carry the prototype's value here. The ring is the bar's own paper instead — 13.37:1
+ * on the bar and 10.44:1 on the hover pill — which is already the colour of the active tab's
+ * underline, so the bar gains a contrast and not a colour (ADR 0055).
+ */
+export const topBarFocusRingClasses =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lab-paper";
+
+/**
+ * The same ring, drawn inside the control instead of around it.
+ *
+ * For the two controls that are the bar's whole 56px — the mode tabs and the app title. An
+ * outward offset puts their top band above the bar, where the shell's `overflow-hidden` clips
+ * it, and their bottom band on the pane below, where the paper reads 1.06:1 on
+ * `admin-canvas`: a reader would get two vertical lines rather than a ring. Inset, all four
+ * edges are on the bar's forest and the ring is the 13.37:1 one everywhere (ADR 0055).
+ */
+export const topBarInsetFocusRingClasses =
+  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-lab-paper";
+
+/**
+ * Everything the top bar draws that is not a shop's name: the two mode tabs and the two quiet
+ * controls at the right, *Show me around* and *Settings*.
+ *
+ * Their own class sets rather than button variants, because they sit on the bar's forest ground
+ * and every variant in the table below is drawn for the paper underneath it. They are gathered
+ * here rather than beside the header that renders them because the bar is drawn from two files —
+ * the shell and the switcher — and `#a8c1b8` is one ink in one role across both
+ * (`docs/design-direction.md`, *Tokens, type and glyphs*). `#21453b` stays a literal: the hover
+ * pill is one role drawn in this file alone, and a token is minted for a role rather than for a
+ * second consumer of a hex.
+ *
+ * The handoff for the controls: 13px 600 in `#a8c1b8`, filling a 9px-radius pill of `#21453b`
+ * with white text under the pointer, and lit — the pill already filled, at 700 — while its own
+ * page is open.
+ */
+const topBarControlBaseClasses = `inline-flex items-center gap-[9px] self-center rounded-[9px] px-3.5 py-2 text-[13px] whitespace-nowrap transition ${topBarFocusRingClasses}`;
+
+export const topBarControlClasses = `${topBarControlBaseClasses} font-semibold text-[#a8c1b8] no-underline hover:bg-[#21453b] hover:text-white`;
+
+/** The same control while the page it opens is the page you are on. */
+export const topBarControlLitClasses = `${topBarControlBaseClasses} bg-[#21453b] font-bold text-white no-underline hover:bg-[#2a544a]`;
+
+/**
+ * A mode tab, stretched to the bar's full height with its underline along the bottom edge.
+ *
+ * 2px, which is the README's value against the prototype's 3px: one value against one value in
+ * one role is the Authority's rule 3, and the README wins (ADR 0055). Everything else here is
+ * the prototype's — 13px, white at 700 lit and `#a8c1b8` at 600 otherwise. The ring is the
+ * inset one: a tab is the bar's full height, so an outward offset would draw half of it off
+ * the bar.
+ */
+const modeTabClasses = `flex items-center gap-2 self-stretch border-b-2 px-1 text-[13px] no-underline transition ${topBarInsetFocusRingClasses}`;
+
+export const activeModeTabClasses = `${modeTabClasses} border-lab-paper font-bold text-white`;
+
+export const inactiveModeTabClasses = `${modeTabClasses} border-transparent font-semibold text-[#a8c1b8] hover:text-white`;
+
 const buttonBaseClasses = `inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition ${focusRingClasses} disabled:cursor-not-allowed disabled:opacity-55`;
 
 const smallButtonBaseClasses = `inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition ${focusRingClasses} disabled:cursor-not-allowed disabled:opacity-55`;

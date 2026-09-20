@@ -13,19 +13,34 @@ import {
   MessageSquare,
   Play,
   Scale,
-  Settings,
   Shapes,
+  SlidersHorizontal,
   Store,
   Tag,
   Target,
   UserCog,
   Users,
+  X,
   Zap,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
-import { readNavigationCollapsed, writeNavigationCollapsed } from "../lib/preferences";
-import { focusRingClasses } from "../lib/ui";
+import { type ReactNode, useEffect, useState } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { TourLaunch } from "../components/TourLaunch";
+import {
+  readNavigationCollapsed,
+  readSettingsReturn,
+  writeNavigationCollapsed,
+  writeSettingsReturn,
+} from "../lib/preferences";
+import {
+  activeModeTabClasses,
+  focusRingClasses,
+  inactiveModeTabClasses,
+  topBarControlClasses,
+  topBarControlLitClasses,
+  topBarInsetFocusRingClasses,
+} from "../lib/ui";
+import { ShopSwitcher } from "./ShopSwitcher";
 
 interface NavEntry {
   label: string;
@@ -215,16 +230,6 @@ function SidebarEntry({ entry, collapsed }: { entry: NavEntry; collapsed: boolea
 }
 
 /**
- * The lab's own surfaces, which are not a shop's. They sit in the header rather than in the
- * rail because the rail only exists inside a shop workspace, and the first thing a new
- * operator has to do is create the shop they do not have yet (ADR 0044).
- */
-const labEntries = [{ label: "Settings", to: "/settings", icon: <Settings size={13} /> }] as const;
-
-const headerLinkClasses =
-  "flex items-center gap-1.5 rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold no-underline transition";
-
-/**
  * Which of the two modes is being drawn, or neither (ADR 0054).
  *
  * `undefined` is the frameless case — the shops index, Settings and the glossary — and it is a
@@ -248,7 +253,8 @@ interface AppShellProps {
 
 export function AppShell({ shops, currentShopId, mode, onShopChange, children }: AppShellProps) {
   const navigate = useNavigate();
-  const current = shops.find((shop) => shop.shop_id === currentShopId);
+  const location = useLocation();
+  const current = shops.find((shop) => shop.shop_id === currentShopId) ?? null;
   const sections =
     mode === "lab" ? labSections() : currentShopId ? shopSections(currentShopId) : null;
   // One rail for every section, collapsed only when the author says so. Routes deliberately
@@ -262,49 +268,61 @@ export function AppShell({ shops, currentShopId, mode, onShopChange, children }:
     writeNavigationCollapsed(next);
   }
 
+  // What the Settings toggle returns to: the last location that was not Settings, recorded on
+  // every navigation so that a reload of the settings page — the one case `history.back()`
+  // cannot answer — still knows what was underneath (ADR 0055). Path, query and fragment
+  // together, because history's narrowing lives in the URL (ADR 0033).
+  const atSettings = location.pathname === "/settings";
+  const here = `${location.pathname}${location.search}${location.hash}`;
+  useEffect(() => {
+    if (!atSettings) {
+      writeSettingsReturn(here);
+    }
+  }, [atSettings, here]);
+
+  // The identity at the left of the bar is one or the other, never both: the prototype draws
+  // the title on the shops index and the switcher everywhere else, and the README is silent on
+  // where the title goes when the switcher is there (Authority rule 2). The one case the
+  // prototype has not got is a lab with no shops at all, where there is no switcher to draw.
+  const switcher = mode !== undefined && shops.length > 0;
+
   return (
     // The shell owns the viewport and the two panes scroll inside it. With the page doing the
     // scrolling instead, a tall section stretched the rail down the document and parked its
     // bottom control below the fold — the collapse control read as missing on exactly the
     // longest pages, which are the ones most in need of the room.
     <div className="flex h-screen flex-col overflow-hidden bg-admin-canvas text-admin-ink">
-      <header className="flex h-13 flex-none items-center gap-3.5 bg-lab-ink px-4 text-lab-paper">
-        <NavLink
-          to="/shops"
-          className="flex items-center gap-2 font-display text-[15px] font-bold text-white no-underline"
-        >
-          Agent Framework Lab
-        </NavLink>
-        {shops.length > 0 ? (
-          <label className="flex items-center gap-2 text-xs">
-            <span className="sr-only">Shop</span>
-            <select
-              aria-label="Shop"
-              className="h-8 rounded-lg border border-white/20 bg-white/10 px-2.5 text-[12.5px] font-semibold text-white outline-none"
-              value={current?.shop_id ?? ""}
-              onChange={(event) =>
-                onShopChange
-                  ? onShopChange(event.target.value)
-                  : navigate(`/shops/${event.target.value}`)
-              }
-            >
-              {!current && <option value="">Select a shop</option>}
-              {shops.map((shop) => (
-                <option key={shop.shop_id} value={shop.shop_id} className="text-admin-ink">
-                  {shop.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+      {/* 56px on the bar's own ground, which is the README's height and the README's colour
+          (ADR 0055). `items-stretch`, because the mode tabs carry their underline along the
+          bar's bottom edge rather than under their own words. */}
+      <header className="relative z-20 flex h-14 flex-none items-stretch bg-lab-bar pr-[18px] text-lab-paper">
+        {switcher ? (
+          <ShopSwitcher
+            shops={shops}
+            current={current}
+            // In shop mode the choice navigates; the lab passes its own, because there is
+            // nowhere in the lab to navigate a shop to (ADR 0054).
+            onChoose={(shopId) =>
+              onShopChange ? onShopChange(shopId) : navigate(`/shops/${shopId}`)
+            }
+          />
+        ) : (
+          <NavLink
+            to="/shops"
+            title="All shops"
+            className={`flex items-center pr-5 pl-[18px] font-display text-[15px] font-bold tracking-[-0.01em] text-white no-underline transition hover:text-lab-bar-soft ${topBarInsetFocusRingClasses}`}
+          >
+            Agent Framework Lab
+          </NavLink>
+        )}
+
         {mode ? (
-          // The two modes, so that the lab is reachable at all. Their glyph, underline and
-          // inactive ink are Slice 10's; what ships here is the pair and where each one goes.
-          // With no current shop, *Shop fixture* can only offer the index — there is no shop
-          // to return to, and a tab that went nowhere would be worse than one that says pick.
-          <nav aria-label="Workspace mode" className="flex items-center gap-2">
+          <nav aria-label="Workspace mode" className="flex items-stretch gap-[26px] px-6">
             {(
               [
+                // With no current shop, *Shop fixture* can only offer the index — there is no
+                // shop to return to, and a tab that went nowhere would be worse than one that
+                // says pick.
                 ["Shop fixture", current ? `/shops/${current.shop_id}` : "/shops", Store, "shop"],
                 ["Experiment lab", "/lab/bench", FlaskConical, "lab"],
               ] as const
@@ -313,34 +331,46 @@ export function AppShell({ shops, currentShopId, mode, onShopChange, children }:
                 key={label}
                 to={to}
                 aria-current={mode === forMode ? "page" : undefined}
-                className={
-                  mode === forMode
-                    ? `${headerLinkClasses} border-white/50 bg-white/15 text-white`
-                    : `${headerLinkClasses} text-[#b9cdc5] hover:bg-white/10 hover:text-white`
-                }
+                className={mode === forMode ? activeModeTabClasses : inactiveModeTabClasses}
               >
-                <Glyph size={13} aria-hidden="true" focusable="false" />
+                <Glyph
+                  size={17}
+                  aria-hidden="true"
+                  focusable="false"
+                  className={mode === forMode ? "opacity-95" : "opacity-80"}
+                />
                 {label}
               </NavLink>
             ))}
           </nav>
         ) : null}
-        <nav aria-label="Lab" className="ml-auto flex items-center gap-2">
-          {labEntries.map((entry) => (
-            <NavLink
-              key={entry.label}
-              to={entry.to}
-              className={({ isActive }) =>
-                isActive
-                  ? `${headerLinkClasses} border-white/50 bg-white/15 text-white`
-                  : `${headerLinkClasses} text-[#b9cdc5] hover:bg-white/10 hover:text-white`
-              }
+
+        {/* The prototype separates the two by 14px and 4px (`Workspace.dc.html` :88, :94). */}
+        <div className="ml-auto flex items-center gap-[18px]">
+          {/* One mount for the whole application. Which tour it offers — and whether there is
+              one to offer at all — it reads from the route (ADR 0055). */}
+          <TourLaunch />
+          {atSettings ? (
+            <button
+              type="button"
+              title="Back to workspace"
+              // The visible word first, so a reader saying what is on the button still reaches
+              // it, and the consequence the close glyph draws after it.
+              aria-label="Settings, back to workspace"
+              className={topBarControlLitClasses}
+              onClick={() => navigate(readSettingsReturn() ?? "/shops")}
             >
-              {entry.icon}
-              {entry.label}
+              <SlidersHorizontal size={17} aria-hidden="true" focusable="false" />
+              Settings
+              <X size={13} aria-hidden="true" focusable="false" className="opacity-70" />
+            </button>
+          ) : (
+            <NavLink to="/settings" title="Workspace settings" className={topBarControlClasses}>
+              <SlidersHorizontal size={17} aria-hidden="true" focusable="false" />
+              Settings
             </NavLink>
-          ))}
-        </nav>
+          )}
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

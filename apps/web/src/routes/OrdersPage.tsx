@@ -9,7 +9,6 @@ import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
 import { alreadyTakenMessage, ORDER_REFERENCE_RULE, REFERENCE_PATTERN } from "../lib/fieldRules";
@@ -188,7 +187,6 @@ export function OrdersPage() {
       <PageHeader
         title="Orders"
         description="Orders are authored fixture state for this shop. Starting an experiment snapshots them into each arm's sandbox — live runs mutate isolated clones, never this data."
-        actions={<TourLaunch id="orders" />}
       />
 
       {loadError ? (

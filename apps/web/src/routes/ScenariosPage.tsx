@@ -8,7 +8,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
   accentButtonClasses,
@@ -130,7 +129,6 @@ export function ScenariosPage() {
       <PageHeader
         title="Scenarios"
         description="An experiment recipe: one ticket, the documents that matter for it, the objectives it is judged by, and the faults the runtime injects."
-        actions={<TourLaunch id="scenarios" />}
       />
 
       {loadError ? (

@@ -3,8 +3,9 @@ import "driver.js/dist/driver.css";
 import { Compass } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { TOURS, type TourId, type TourStep, tourSteps } from "../lib/tours";
-import { subtleButtonClasses } from "../lib/ui";
+import { useLocation } from "react-router-dom";
+import { TOURS, type TourId, type TourStep, tourAt, tourSteps } from "../lib/tours";
+import { topBarControlClasses } from "../lib/ui";
 import { GuideProse } from "./GuideProse";
 
 /**
@@ -30,6 +31,13 @@ import { GuideProse } from "./GuideProse";
  *
  * The overlay itself is `driver.js`, skinned in this application's own tokens by the `.lab-tour`
  * block in `styles.css` rather than shipped as it comes (ADR 0045).
+ *
+ * There is one mount, in the top bar, and it takes no identifier: the surface's tour is resolved
+ * from the location against the table that already names every surface's route, so the tour, its
+ * address and its control are one row and no route file names a tour a second time (ADR 0055).
+ * Where the location names no tour the control is *absent* rather than disabled, which is the
+ * prototype's own `tourAvailable` branch: a disabled offer is one the application never intends
+ * to honour.
  */
 
 /**
@@ -56,7 +64,15 @@ function TourBody({ step }: { step: TourStep }) {
   );
 }
 
-export function TourLaunch({ id }: { id: TourId }) {
+export function TourLaunch() {
+  const { pathname } = useLocation();
+  const id = tourAt(pathname);
+  // The hooks below belong to one tour, so the surface without one returns before any of them
+  // rather than running them against an identifier it does not have.
+  return id === null ? null : <SurfaceTour key={id} id={id} />;
+}
+
+function SurfaceTour({ id }: { id: TourId }) {
   const tour = TOURS[id];
   // The chain step is composed rather than declared, so what this walks is the table's
   // answer for this surface and not the rows as they were typed.
@@ -139,11 +155,14 @@ export function TourLaunch({ id }: { id: TourId }) {
       <button
         ref={launcher}
         type="button"
-        className={subtleButtonClasses}
+        className={topBarControlClasses}
         onClick={start}
+        // The words on the control are the same on every surface (ADR 0045); what differs is
+        // what it says it would walk, which is the name and — as in the prototype — the tooltip.
         aria-label={`Show me around ${tour.surface}`}
+        title={`Show me around ${tour.surface}`}
       >
-        <Compass size={13} aria-hidden /> Show me around
+        <Compass size={17} aria-hidden focusable="false" /> Show me around
       </button>
     </>
   );

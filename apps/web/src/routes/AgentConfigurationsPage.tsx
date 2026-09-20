@@ -14,7 +14,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
 import {
@@ -129,7 +128,6 @@ export function AgentConfigurationsPage() {
       <PageHeader
         title="Agent configurations"
         description="What runs the support agent: framework, architecture, model, prompt, tools, and the support identity it adopts. Configurations are cross-shop — prompt variables resolve at experiment start and the resolved configuration is pinned to the run."
-        actions={<TourLaunch id="agent-configurations" />}
       />
 
       {loadError ? (

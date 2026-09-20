@@ -3,9 +3,11 @@ import {
   readAppLanding,
   readLastVisitedShop,
   readNavigationCollapsed,
+  readSettingsReturn,
   writeAppLanding,
   writeLastVisitedShop,
   writeNavigationCollapsed,
+  writeSettingsReturn,
 } from "./preferences";
 
 /**
@@ -17,6 +19,7 @@ import {
  */
 const NAVIGATION_COLLAPSED_KEY = "agent-lab.navigation-collapsed";
 const LAST_VISITED_SHOP_KEY = "agent-lab.last-visited-shop";
+const SETTINGS_RETURN_KEY = "agent-lab.settings-return";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -74,5 +77,33 @@ describe("the two view preferences", () => {
 
     window.localStorage.setItem("agent-lab.app-landing", "somewhere-else");
     expect(readAppLanding()).toBe("last-shop");
+  });
+});
+
+describe("what Settings returns to", () => {
+  it("remembers nothing until a location is recorded, and reads back what was", () => {
+    // A browser that opened `/settings` from a link has recorded nothing, and the toggle has
+    // the shops index to fall back on rather than a guess (ADR 0055).
+    expect(readSettingsReturn()).toBeNull();
+    expect(window.localStorage.getItem(SETTINGS_RETURN_KEY)).toBeNull();
+
+    writeSettingsReturn("/shops/shop-1/products?view=draft#top");
+
+    expect(readSettingsReturn()).toBe("/shops/shop-1/products?view=draft#top");
+  });
+
+  it("reads an empty value as none, and survives a browser that refuses storage", () => {
+    window.localStorage.setItem(SETTINGS_RETURN_KEY, "");
+    expect(readSettingsReturn()).toBeNull();
+
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+
+    expect(readSettingsReturn()).toBeNull();
+    expect(() => writeSettingsReturn("/shops")).not.toThrow();
   });
 });

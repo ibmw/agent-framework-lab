@@ -21,6 +21,7 @@
  * and checked against the one module that defines it.
  */
 
+import { matchPath } from "react-router-dom";
 import { chainPlacement, fillRoute, type RouteIds, type SetupStepId } from "./setupPath";
 
 export type TourId =
@@ -74,6 +75,24 @@ export interface Tour {
    * chain's own (ADR 0054, and ADR 0023's shape for a registry that is swept).
    */
   route: string;
+  /**
+   * Further addresses the same surface answers at, relative to `route`.
+   *
+   * The bar offers the tour of wherever the reader is standing, and it matches `route`
+   * **exactly** rather than by prefix — a prefix rule would hand the catalog's walk to the
+   * product editor beneath it, whose screen holds none of the catalog's anchors (ADR 0055). A
+   * surface that genuinely answers at more than one address says so here, and two do: the
+   * comparison is one layout behind three tabs, and the helpdesk replaces its own address with
+   * the ticket it opens as soon as its list answers. Both are the same screen at a second URL,
+   * which is why this is addressing and not a second tour.
+   *
+   * A parameter segment is written as it is in a route pattern, `:likeThis`. Unlike a literal
+   * it claims *every* child of the route, so it is only right while the route table sends them
+   * all to the same component: `/shops/:shopId/tickets/:ticketId` is `TicketsPage` today, and a
+   * second screen added under that segment would need its own row here rather than inheriting
+   * this one.
+   */
+  alsoAt?: readonly string[];
   /**
    * Where this surface sits in the setup chain, for the ten surfaces that sit on it.
    *
@@ -280,6 +299,9 @@ export const TOURS: Record<TourId, Tour> = {
   results: {
     surface: "this comparison",
     route: "/lab/bench/:shopId/:experimentId/results",
+    // The three tabs are one surface: the header, the arm cards and the provenance row this
+    // tour lights are the layout's, and all three are on screen whichever tab is open.
+    alsoAt: ["timeline", "traces"],
     steps: [
       {
         anchor: '[data-tour="results-arms"]',
@@ -323,6 +345,10 @@ export const TOURS: Record<TourId, Tour> = {
   tickets: {
     surface: "tickets",
     route: "/shops/:shopId/tickets",
+    // The helpdesk is one screen at two addresses. It opens its newest ticket as soon as the
+    // list answers and replaces its own URL doing it — "the list is a way in rather than a
+    // waiting room" — so the address a reader is standing on is almost never the bare index.
+    alsoAt: [":ticketId"],
     chain: { step: "ticket", anchor: PAGE_NAME },
     steps: [],
   },
@@ -476,4 +502,32 @@ export const TOUR_IDS = Object.keys(TOURS) as TourId[];
  */
 export function tourHref(id: TourId, ids: RouteIds): string {
   return fillRoute(TOURS[id].route, ids);
+}
+
+/**
+ * Every address a surface answers at, which is its route plus whatever tabs it declares.
+ *
+ * One composition, so the resolution below and the tests over it read the same list.
+ */
+function addressesOf(tour: Tour): string[] {
+  return [tour.route, ...(tour.alsoAt ?? []).map((rest) => `${tour.route}/${rest}`)];
+}
+
+/**
+ * The tour of the surface a location is on, or none (ADR 0055).
+ *
+ * This is how the bar's one launch control knows what it would walk: the table already names
+ * every surface's route, so the tour, its address and its control are one row and no route file
+ * names a tour a second time. The match is exact — a route's children are other surfaces, and
+ * offering a screen the walk of the screen above it would light anchors that are not on it.
+ */
+export function tourAt(pathname: string): TourId | null {
+  for (const id of TOUR_IDS) {
+    for (const address of addressesOf(TOURS[id])) {
+      if (matchPath(address, pathname) !== null) {
+        return id;
+      }
+    }
+  }
+  return null;
 }

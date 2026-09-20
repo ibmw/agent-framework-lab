@@ -1884,7 +1884,8 @@ describe("unsaved work is protected", () => {
     // Nothing typed in the row has reached the draft, which is exactly why `dirty` is false.
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("link", { name: "Agent Framework Lab" }));
+    // Out of the shop draft's reach, through the bar: Settings can save nothing of this shop's.
+    await user.click(screen.getByRole("link", { name: "Settings" }));
 
     const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
     expect(prompt).toHaveTextContent(
@@ -1896,7 +1897,7 @@ describe("unsaved work is protected", () => {
     expect(save).toHaveAccessibleDescription(/Stay, then press the row's own Save or Cancel/);
 
     await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Shops" })).toBeVisible();
+    expect(await screen.findByRole("heading", { level: 1, name: "Lab settings" })).toBeVisible();
   });
 });
 
@@ -2249,7 +2250,7 @@ describe("the lab is a mode", () => {
     expect(notice).toHaveTextContent("there is no shop to compose an experiment for");
     expect(screen.getByRole("link", { name: "Create a shop" })).toHaveAttribute("href", "/shops");
     expect(screen.queryByText(/The lab has no current shop/)).toBeNull();
-    expect(screen.queryByRole("combobox", { name: "Shop" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Switch shop/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Start experiment" })).toBeNull();
   });
 
@@ -2294,7 +2295,9 @@ describe("the lab is a mode", () => {
       expect(window.localStorage.getItem("agent-lab.last-visited-shop")).toBe(SHOP_ID),
     );
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Shop" })).toHaveValue(SHOP_ID),
+      expect(screen.getByRole("button", { name: /^Switch shop/ })).toHaveAccessibleName(
+        "Switch shop, current: Northstar Outfitters",
+      ),
     );
   });
 });

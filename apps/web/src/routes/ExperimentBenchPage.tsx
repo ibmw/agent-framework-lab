@@ -22,7 +22,6 @@ import {
 } from "../api/experiments";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   COMPARISON_DIMENSION,
@@ -223,16 +222,13 @@ export function ExperimentBenchPage() {
           </>
         }
         actions={
-          <>
-            <TourLaunch id="bench" />
-            <Link
-              className={outlineButtonClasses}
-              to={`/lab/bench/${shopId}/${experimentId}/results`}
-            >
-              <ButtonIcon verb="results" />
-              Results
-            </Link>
-          </>
+          <Link
+            className={outlineButtonClasses}
+            to={`/lab/bench/${shopId}/${experimentId}/results`}
+          >
+            <ButtonIcon verb="results" />
+            Results
+          </Link>
         }
       />
 

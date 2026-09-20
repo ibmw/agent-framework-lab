@@ -3,7 +3,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TourLaunch } from "./components/TourLaunch";
-import { TOUR_IDS, TOURS } from "./lib/tours";
+import { TOUR_IDS, TOURS, type TourId, tourHref } from "./lib/tours";
 
 /**
  * The control that offers a tour of the screen you are standing on.
@@ -12,6 +12,12 @@ import { TOUR_IDS, TOURS } from "./lib/tours";
  * filled by `make seed` derived that mode off and hid the offer from the reader who had not
  * found it yet. A control that does nothing until it is pressed has nothing to opt out of, so
  * there is no mode, no stored preference and — asserted below — no reading either.
+ *
+ * Its mount moved into the top bar with ADR 0055, and with it the question this suite asks. It
+ * used to be handed a tour identifier by the page that mounted it; it is now handed a location
+ * and resolves the identifier itself, so what is under test is the resolution as much as the
+ * control: every surface's own route offers its own tour, the comparison's three tabs are one
+ * surface, and a route with no tour draws nothing at all.
  */
 
 // Deliberately without handlers. Every request this suite could make is therefore unhandled,
@@ -27,10 +33,24 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-function launch(id: keyof typeof TOURS) {
+const SHOP_ID = "11111111-1111-4111-8111-111111111111";
+const SCENARIO_ID = "returns-window";
+const EXPERIMENT_ID = "22222222-2222-4222-8222-222222222222";
+
+/** Where a surface is, composed from the table rather than restated beside it. */
+function surfaceHref(id: TourId): string {
+  return tourHref(id, {
+    shopId: SHOP_ID,
+    scenarioId: SCENARIO_ID,
+    experimentId: EXPERIMENT_ID,
+  });
+}
+
+/** The bar's one mount, standing at a location. */
+function launch(at: string) {
   return render(
-    <MemoryRouter>
-      <TourLaunch id={id} />
+    <MemoryRouter initialEntries={[at]}>
+      <TourLaunch />
     </MemoryRouter>,
   );
 }
@@ -49,9 +69,9 @@ async function settle(): Promise<void> {
 }
 
 describe("the launch control", () => {
-  it("is offered on every surface that declares a tour, and names the one it would walk", async () => {
+  it("offers each surface's own tour at that surface's own address", async () => {
     for (const id of TOUR_IDS) {
-      const mounted = launch(id);
+      const mounted = launch(surfaceHref(id));
       const control = await screen.findByRole("button", {
         name: `Show me around ${TOURS[id].surface}`,
       });
@@ -66,11 +86,59 @@ describe("the launch control", () => {
     }
   });
 
+  it("treats the comparison's three tabs as the one surface they are", () => {
+    // Every element the comparison's tour lights belongs to the layout, and the layout is on
+    // screen whichever tab is open — so all three addresses offer it.
+    const results = surfaceHref("results");
+    for (const at of [results, `${results}/timeline`, `${results}/traces`]) {
+      const mounted = launch(at);
+      expect(
+        screen.getByRole("button", { name: `Show me around ${TOURS.results.surface}` }),
+        at,
+      ).toBeVisible();
+      mounted.unmount();
+    }
+  });
+
+  it("stays with the helpdesk when it opens a ticket and replaces its own address", () => {
+    // The list is a way in rather than a waiting room: `TicketsPage` navigates to its newest
+    // ticket as soon as the listing answers. Both addresses are the one surface, and the bar
+    // went blank at the second one until the table said so.
+    for (const at of [`/shops/${SHOP_ID}/tickets`, `/shops/${SHOP_ID}/tickets/T-204`]) {
+      const mounted = launch(at);
+      expect(
+        screen.getByRole("button", { name: `Show me around ${TOURS.tickets.surface}` }),
+        at,
+      ).toBeVisible();
+      mounted.unmount();
+    }
+  });
+
+  it("draws nothing where the route names no tour", async () => {
+    // The product editor is a child of the catalog's route and a different screen. A rule that
+    // matched by prefix would offer the catalog's walk here, whose anchors are not on it.
+    for (const at of [
+      `/shops/${SHOP_ID}/products/alpine-shell`,
+      `/shops/${SHOP_ID}/customers/someone`,
+      // Two segments past the helpdesk is nothing this application answers at all.
+      `/shops/${SHOP_ID}/tickets/T-204/anything`,
+      "/lab/agent-configurations/config-1",
+      "/lab/history",
+      "/settings",
+      "/shops",
+    ]) {
+      const mounted = launch(at);
+      await settle();
+      expect(screen.queryByRole("button", { name: /Show me around/ }), at).toBeNull();
+      mounted.unmount();
+    }
+  });
+
   it("reads nothing at all to decide whether to appear", async () => {
     const requested: string[] = [];
     server.events.on("request:start", ({ request }) => requested.push(request.url));
 
-    launch("bench");
+    launch(surfaceHref("bench"));
     await settle();
 
     // The control is there on the first frame and stays, because nothing is consulted. A build
@@ -84,14 +152,14 @@ describe("the launch control", () => {
     // the control must not be reachable through it in either direction (ADR 0046).
     window.localStorage.setItem("agent-lab.guide-mode", "off");
 
-    launch("scenario");
+    launch(surfaceHref("scenario"));
     await settle();
 
     expect(screen.getByRole("button", { name: /Show me around/ })).toBeVisible();
   });
 
   it("performs nothing itself: the tour points at the page and the reader acts on it", async () => {
-    launch("shop-home");
+    launch(surfaceHref("shop-home"));
     await settle();
 
     // One control, and it opens a tour. ADR 0043's refusal reaches here too: nothing the guide

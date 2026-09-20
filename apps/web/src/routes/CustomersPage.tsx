@@ -11,7 +11,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
 import {
@@ -191,7 +190,6 @@ export function CustomersPage() {
       <PageHeader
         title="Customers"
         description="Profiles attached to this shop. A profile — identity, persona, and address book — is reusable across shops; orders, tickets, and support history stay here."
-        actions={<TourLaunch id="customers" />}
       />
 
       {loadError ? (

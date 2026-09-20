@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { glossaryTerm, parseGlossaryProse, referencedTerms } from "./glossary";
 import { chainPlacement, SETUP_CHAIN, SETUP_GUIDE_STEPS, stepHref } from "./setupPath";
-import { TOUR_IDS, TOURS, tourHref, tourSteps } from "./tours";
+import { TOUR_IDS, TOURS, tourAt, tourHref, tourSteps } from "./tours";
 
 /**
  * The tour table, held to what it claims.
@@ -208,5 +208,68 @@ describe("the chain a tour opens with", () => {
     // controls to justify the control appearing: one honest step is what they have to say.
     expect(TOURS.customers.steps).toHaveLength(0);
     expect(tourSteps("customers")).toHaveLength(1);
+  });
+});
+
+/**
+ * What the top bar reads to know which tour it is offering (ADR 0055).
+ *
+ * The bar has one launch control and no identifier: it resolves the surface from the location
+ * against this table. So the table's `route` has stopped being only the sweep's navigation and
+ * become the declaration — which makes "every surface answers at its own address, and no
+ * address answers for two surfaces" a property worth holding here rather than discovering in a
+ * browser.
+ */
+describe("the tour a location is on", () => {
+  const IDS = { shopId: "shop-1", scenarioId: "recipe-1", experimentId: "run-1" };
+
+  it("resolves every surface at its own address, and only its own", () => {
+    for (const id of TOUR_IDS) {
+      expect(tourAt(tourHref(id, IDS)), id).toBe(id);
+    }
+  });
+
+  it("gives the comparison's tabs the comparison's tour", () => {
+    const results = tourHref("results", IDS);
+    expect(TOURS.results.alsoAt).toEqual(["timeline", "traces"]);
+    for (const tab of TOURS.results.alsoAt ?? []) {
+      expect(tourAt(`${results}/${tab}`)).toBe("results");
+    }
+  });
+
+  it("keeps the helpdesk's tour at the ticket it opens for itself", () => {
+    // Tickets replaces its own address with its newest ticket as soon as the list answers, so
+    // the bare index is an address almost no reader is standing on. Both are the one screen.
+    expect(tourAt("/shops/shop-1/tickets")).toBe("tickets");
+    expect(tourAt("/shops/shop-1/tickets/t-204")).toBe("tickets");
+  });
+
+  it("declares every second address as one segment under its route, never a path of its own", () => {
+    // A second address is addressing, not a second tour: it must be the declared route plus
+    // one segment, so it cannot drift away from the surface it belongs to. What it may *not*
+    // check is that a parameter segment names one screen — that is the route table's to say,
+    // and `alsoAt`'s docblock is where the dependency is written down.
+    for (const id of TOUR_IDS) {
+      for (const rest of TOURS[id].alsoAt ?? []) {
+        expect(rest, `${id} declares an absolute second address`).not.toContain("/");
+        expect(rest, `${id} declares an empty second address`).not.toBe("");
+      }
+    }
+  });
+
+  it("answers nothing for a route that is a different surface underneath one with a tour", () => {
+    // Matching by prefix would hand the catalog's walk to the product editor, and the recipe's
+    // to the starting states, whose own tour would then never be reached.
+    expect(tourAt("/shops/shop-1/products/alpine-shell")).toBeNull();
+    expect(tourAt("/shops/shop-1/customers/someone")).toBeNull();
+    expect(tourAt("/lab/judges/judge-1")).toBeNull();
+    expect(tourAt("/lab/history")).toBeNull();
+    expect(tourAt("/settings")).toBeNull();
+    expect(tourAt("/shops")).toBeNull();
+  });
+
+  it("keeps the recipe and its starting states apart, which share a prefix", () => {
+    expect(tourAt(tourHref("scenario", IDS))).toBe("scenario");
+    expect(tourAt(tourHref("snapshots", IDS))).toBe("snapshots");
   });
 });

@@ -7,7 +7,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
 import {
@@ -106,7 +105,6 @@ export function JudgeConfigurationsPage() {
       <PageHeader
         title="Judges"
         description="What scores the objectives no rule can decide: a rubric, a model, and the parts of an arm's record the judge is shown. Judges are cross-shop, and every verdict records the exact version that produced it — so a result stays explainable after the rubric moves on."
-        actions={<TourLaunch id="judges" />}
       />
 
       {loadError ? (

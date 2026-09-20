@@ -18,7 +18,6 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { SandboxToolConsole } from "../components/SandboxToolConsole";
-import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   Fingerprint,
@@ -150,7 +149,6 @@ export function SnapshotsPage() {
     <>
       <PageHeader
         title={loading ? "Starting states" : `${name} · starting states`}
-        actions={<TourLaunch id="snapshots" />}
         description={
           <>
             <Link className="font-semibold text-lab-ink" to=".." relative="path">

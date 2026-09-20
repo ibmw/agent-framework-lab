@@ -468,9 +468,12 @@ describe("scenario editor", () => {
     // the editor has a tour that says what they mean where they are used (ADR 0045).
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
 
+    // The bar offers the tour from the route, so it is on screen before the editor is; what
+    // the tour points *at* is the editor's, and is asserted once the editor has drawn it.
     expect(
-      await screen.findByRole("button", { name: `Show me around ${TOURS.scenario.surface}` }),
+      screen.getByRole("button", { name: `Show me around ${TOURS.scenario.surface}` }),
     ).toBeVisible();
+    await screen.findByRole("heading", { name: "Wrong shipping address" });
     for (const step of TOURS.scenario.steps) {
       expect(document.querySelectorAll(step.anchor), step.anchor).toHaveLength(1);
     }

@@ -15,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { TOURS, tourAt } from "./lib/tours";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 
@@ -426,6 +427,25 @@ describe("ticket list", () => {
 
     expect(
       await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ }),
+    ).toBeVisible();
+  });
+
+  it("opens on an address the tour table still knows as tickets", async () => {
+    // The defect this is written for shipped: the bar reads the surface's tour from the route
+    // (ADR 0055), this page replaces its own address with the ticket it opens, and the table
+    // named only the index — so the helpdesk lost its *Show me around* one frame after
+    // loading, on every lab holding a ticket. The browser sweep catches it too; this catches
+    // it with no browser and no timing, by asking the table about the address the redirect
+    // actually produced.
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets`);
+    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`),
+    );
+
+    expect(tourAt(router.state.location.pathname)).toBe("tickets");
+    expect(
+      screen.getByRole("button", { name: `Show me around ${TOURS.tickets.surface}` }),
     ).toBeVisible();
   });
 

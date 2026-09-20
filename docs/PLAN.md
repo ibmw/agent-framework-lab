@@ -123,7 +123,7 @@ consistently.
 | 7 — Guided setup and lab settings | The settings surface, the seed from it, per-surface tours, guide mode and the written guides retired. | ADR 0043–0049 |
 | UX — Forms that guide the operator | Hints, derived identifiers, enum labels, currencies at creation, typed controls, closed sets, edit-in-place, the unsaved-work guard. Slices 1–8 of the 13 September plan. | ADR 0050–0051, `docs/history/PLAN-UX-2026-09-13.md` |
 | UX — The refresh's pattern layer | Pine primary and the glyph vocabulary, the field row, the rail's metrics, filter chips, display type, search, control metrics, row copy. | `docs/history/workspace-refresh-pattern-slices.md` |
-| **8 — The workspace becomes the prototype** | **Open.** Two modes with their rails, the top bar, creation as a page, the overview, documents, settings in three zones, the model connection, and the behaviour the prototype specifies everywhere. | ADR 0052–0054 accepted; slices in `docs/PLAN-UX.md` |
+| **8 — The workspace becomes the prototype** | **Open.** Two modes with their rails, the top bar, creation as a page, the overview, documents, settings in three zones, the model connection, and the behaviour the prototype specifies everywhere. | ADR 0052–0055; slices in `docs/PLAN-UX.md` |
 
 ## Milestone 8 — The workspace becomes the prototype
 

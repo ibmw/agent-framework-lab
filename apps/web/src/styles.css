@@ -6,7 +6,28 @@
   --color-lab-canvas-bottom: #eeeade;
   --color-lab-paper: #fffdf8;
   --color-lab-ink: #173c34;
-  --color-lab-ink-hover: #215347;
+  /*
+   * The forest action's hover, from the handoff's token table and from the prototype, which
+   * draw the same value. It was `#215347`, a token that predated the handoff and was therefore
+   * licensed to stand by the Authority's rule 5; the departures table recorded it with the
+   * instruction to revisit it with the top bar. Revisited, there is nothing for rule 5 to
+   * protect it from — the README states `#22544a` and the prototype draws it, so rules 3 and 2
+   * agree and the row leaves the table (ADR 0055).
+   */
+  --color-lab-ink-hover: #22544a;
+  /*
+   * The top bar's ground (ADR 0055). Its own name because the handoff's token table gives the
+   * role its own row — "Top bar, `#16332d`, close to `--color-lab-ink` `#173c34`" — and
+   * `lab-ink` is kept for the button variants and the tour popover that already read it. The
+   * bar's hover pill `#21453b` stays a literal in `lib/ui.ts`: one role, one file, no token.
+   */
+  --color-lab-bar: #16332d;
+  /*
+   * The bar's soft ink: the app title under the pointer and the switcher's chevron pair. One
+   * role drawn by two files — the shell and the switcher — which is what earns it a name
+   * rather than a literal in each (`docs/design-direction.md`, *Tokens, type and glyphs*).
+   */
+  --color-lab-bar-soft: #cfe0d8;
   --color-lab-ink-soft: #3e5951;
   --color-lab-muted: #65746f;
   --color-lab-border: #aebbb5;

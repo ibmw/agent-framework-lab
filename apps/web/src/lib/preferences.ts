@@ -14,6 +14,7 @@
 
 const NAVIGATION_COLLAPSED_KEY = "agent-lab.navigation-collapsed";
 const LAST_VISITED_SHOP_KEY = "agent-lab.last-visited-shop";
+const SETTINGS_RETURN_KEY = "agent-lab.settings-return";
 
 function readStored(key: string): string | null {
   try {
@@ -52,6 +53,28 @@ export function readLastVisitedShop(): string | null {
 
 export function writeLastVisitedShop(shopId: string): void {
   writeStored(LAST_VISITED_SHOP_KEY, shopId);
+}
+
+/**
+ * What the top bar's *Settings* toggle returns to: the last location that was not `/settings`,
+ * path, query and fragment together (ADR 0055).
+ *
+ * A location rather than `history.back()`, because a reload leaves the settings page at the top
+ * of its own entry with nothing behind it — and the reader who reloads a settings page is the
+ * reader most likely to have been on it a while. A preference rather than component state for
+ * the same reason: it has to survive the reload it exists to answer.
+ *
+ * It is not resolved against anything before the move. Doing so would mean a second copy of the
+ * route tree; a remembered address whose shop has since been removed is answered by the
+ * application the way it answers any other dead address.
+ */
+export function readSettingsReturn(): string | null {
+  const stored = readStored(SETTINGS_RETURN_KEY);
+  return stored === null || stored === "" ? null : stored;
+}
+
+export function writeSettingsReturn(location: string): void {
+  writeStored(SETTINGS_RETURN_KEY, location);
 }
 
 /**

@@ -20,7 +20,6 @@ import {
   replaceScenarioDraft,
 } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
@@ -209,7 +208,6 @@ export function ScenarioEditorPage() {
         }
         actions={
           <>
-            <TourLaunch id="scenario" />
             <EditorSaveActions
               dirty={editor.dirty}
               saving={editor.saving}

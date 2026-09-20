@@ -40,7 +40,8 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
-  modes and the routes. Where a slice takes a
+  modes and the routes, and ADR 0055 the top bar — the switcher's menu, the one tour mount that
+  reads the route, and Settings as a toggle over a remembered location. Where a slice takes a
   decision of its own — a route scheme, a confirm policy, a preference — it writes an ADR.
 - **Accessible names do not move casually.** `nav[aria-label="Shop workspace"]`, the tour
   anchors and every button's name are what eleven Playwright specs reach the app by — as is
@@ -65,13 +66,12 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Slice 10 is next: the lab-as-a-mode slice moved every lab route and left the mode tabs as two
-plain links, and the top bar is what they belong in. Slices 12, 13 and 14 follow, because they
-change what every index page is and what every journey clicks through to create; they are
-independent of each other. Slices 11, 15, 16, 17 and 18 are then independent and can proceed in
-parallel. Slice 19 is the backend milestone and runs beside Group B; Slice 20 needs it. Group C's
-slices 21–25 depend on nothing in Group B except that 25 waits for 12–14, since the sticky header
-is on the pages they create. Slices 26 and 27 close the milestone, and 28 is optional.
+Slices 12, 13 and 14 are next, because they change what every index page is and what every
+journey clicks through to create; they are independent of each other. Slices 11, 15, 16, 17 and
+18 are then independent and can proceed in parallel. Slice 19 is the backend milestone and runs
+beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B except
+that 25 waits for 12–14, since the sticky header is on the pages they create. Slices 26 and 27
+close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -85,36 +85,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group A — Chrome and information architecture
-
-#### Slice 10 — The top bar
-
-- [ ] Mode tabs — *Shop fixture* and *Experiment lab* — with the glyph, the 2px underline and the
-  inactive `#a8c1b8`, present in shop and lab scope, absent on the shops index and on Settings.
-- [ ] The switcher becomes a button opening the 300px panel: the current shop with a check, the
-  others with their version, a divider, an "All shops" row; dismissed on outside click, on
-  `Escape` and on navigation; the shop's badge is its initials on `lab-ink` until Slice 28 gives
-  it a logo. It is a `menu` with roving focus, not a `<select>` — one of the eleven specs picks a
-  shop by its name and changes with it.
-- [ ] *Show me around* moves into the bar: one `TourLaunch` mount reading the current surface's
-  tour from the route, lit only where a tour exists, with the page-header launch removed from
-  every route file. The tour itself, its table and its anchors do not change (ADR 0049).
-- [ ] *Settings* renders lit with a close glyph while its page is open and returns to what was
-  underneath on the second click — the remembered location rather than history, so a reload does
-  not strand it.
-- [ ] The app title returns to the shops index and hovers `#cfe0d8`; the bar takes the README's
-  56px and `#16332d`, recorded in `styles.css` as the top bar's own token if `lab-ink` is kept
-  for the buttons that use it.
-
-Frames: `Workspace.dc.html` :58–:82 and the README's *Chrome* section.
-
-Branch: `feat/top-bar`. Checks: `AppShell.test.tsx` for the tabs' active state per route, the
-panel's open, choose, dismiss and focus order, the tour control's presence per surface, and the
-Settings toggle; `TourLaunch.test.tsx` moves its mount; Playwright `workspace-shell`, `tour` and
-`tour-anchors`, and any spec that opened a tour from a page header.
-
-Slice evidence: an operator switches from Northstar to Alpenglow from the bar without leaving
-the page's mode, opens the tour for the screen they are on from the same bar, and closes Settings
-back onto the product they were editing.
 
 #### Slice 11 — Counts on the rail
 
@@ -543,8 +513,8 @@ Branch: `feat/shop-logo`. Checks: contract and schema tests; `Shops.test.tsx`.
 - **The next-step sentence from `SETUP_CHAIN`**, `GuideProse` card footers, the matrix's per-cell
   evidence sentence and a copy control on `Fingerprint` — the parts of the old Slices 13 and 16
   the prototype does not draw.
-- **A component library or a new UI dependency.** The `CreatePage` layout, `ConfirmRemove`,
-  `ActionStatus` and the switcher panel are small components on the existing chrome.
+- **A component library or a new UI dependency.** The `CreatePage` layout, `ConfirmRemove` and
+  `ActionStatus` are small components on the existing chrome, as the switcher's panel was.
 - **Read-only version pages for configurations and scenarios.** Slice 26 links to the editor
   with the version chip; a frozen view per definition is worth its own slice in `docs/PLAN.md`
   if a review journey needs it.

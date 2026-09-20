@@ -23,7 +23,6 @@ import {
   replayExperiment,
 } from "../api/experiments";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { TourLaunch } from "../components/TourLaunch";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
 import {
@@ -199,7 +198,6 @@ export function ExperimentResultsLayout() {
         title={experiment.label}
         actions={
           <div className="flex items-center gap-2">
-            <TourLaunch id="results" />
             <button
               className={subtleButtonClasses}
               type="button"

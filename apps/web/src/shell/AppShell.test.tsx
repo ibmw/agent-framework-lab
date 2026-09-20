@@ -1,5 +1,5 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,6 +27,7 @@ import { AppShell } from "./AppShell";
  */
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
+const OTHER_SHOP_ID = "8a7b6c5d-4e3f-4a2b-9c8d-7e6f5a4b3c2d";
 
 const SHOPS: ShopSummarySchema[] = [
   {
@@ -37,15 +38,31 @@ const SHOPS: ShopSummarySchema[] = [
     latest_published_version: null,
     published_version_count: 0,
   },
+  {
+    shop_id: OTHER_SHOP_ID,
+    name: "Alpenglow Supply",
+    slug: "alpenglow",
+    updated_at: "2026-09-18T09:00:00+00:00",
+    latest_published_version: 3,
+    published_version_count: 3,
+  },
 ];
 
 /**
  * The shell in one of its three states: a shop, the lab, or — with no mode — a frameless
  * lab-level surface, where there is no rail at all.
+ *
+ * The router is real rather than a stub, because three of the bar's controls move: the
+ * switcher navigates in shop mode, *All shops* navigates from either, and the Settings toggle
+ * returns to a location the shell recorded. What each one did is read off `router.state`.
  */
 function renderShell(
   mode?: "shop" | "lab",
-  { at, onShopChange }: { at?: string; onShopChange?: (shopId: string) => void } = {},
+  {
+    at,
+    onShopChange,
+    shops = SHOPS,
+  }: { at?: string; onShopChange?: (shopId: string) => void; shops?: ShopSummarySchema[] } = {},
 ) {
   const router = createMemoryRouter(
     [
@@ -53,7 +70,7 @@ function renderShell(
         path: "*",
         element: (
           <AppShell
-            shops={SHOPS}
+            shops={shops}
             currentShopId={mode === undefined ? undefined : SHOP_ID}
             mode={mode}
             onShopChange={onShopChange}
@@ -65,7 +82,12 @@ function renderShell(
     ],
     { initialEntries: [at ?? (mode === "lab" ? "/lab/bench" : `/shops/${SHOP_ID}`)] },
   );
-  return render(<RouterProvider router={router} />);
+  return { router, ...render(<RouterProvider router={router} />) };
+}
+
+/** The bar's switcher, which is a button and not a select (ADR 0055). */
+function switcher() {
+  return screen.getByRole("button", { name: /^Switch shop/ });
 }
 
 function rail(name = "Shop workspace") {
@@ -297,15 +319,18 @@ describe("the two rails", () => {
 });
 
 describe("the mode tabs", () => {
+  function tabs() {
+    return screen.getByRole("navigation", { name: "Workspace mode" });
+  }
+
   it("offer both modes in either one, and mark the one you are in", () => {
     renderShell("shop");
 
-    const tabs = screen.getByRole("navigation", { name: "Workspace mode" });
-    expect(within(tabs).getByRole("link", { name: "Shop fixture" })).toHaveAttribute(
+    expect(within(tabs()).getByRole("link", { name: "Shop fixture" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    const lab = within(tabs).getByRole("link", { name: "Experiment lab" });
+    const lab = within(tabs()).getByRole("link", { name: "Experiment lab" });
     expect(lab).not.toHaveAttribute("aria-current");
     expect(lab).toHaveAttribute("href", "/lab/bench");
   });
@@ -313,15 +338,36 @@ describe("the mode tabs", () => {
   it("returns to the current shop from the lab", () => {
     renderShell("lab");
 
-    const tabs = screen.getByRole("navigation", { name: "Workspace mode" });
-    expect(within(tabs).getByRole("link", { name: "Experiment lab" })).toHaveAttribute(
+    expect(within(tabs()).getByRole("link", { name: "Experiment lab" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(within(tabs).getByRole("link", { name: "Shop fixture" })).toHaveAttribute(
+    expect(within(tabs()).getByRole("link", { name: "Shop fixture" })).toHaveAttribute(
       "href",
       `/shops/${SHOP_ID}`,
     );
+  });
+
+  it("underlines the tab you are on in 2px and dims the other to #a8c1b8", () => {
+    // The README gives the underline 2px and the prototype draws 3px: one value against one
+    // value in one role, which the Authority's rule 3 settles for the README (ADR 0055).
+    renderShell("shop");
+
+    const here = within(tabs()).getByRole("link", { name: "Shop fixture" });
+    const elsewhere = within(tabs()).getByRole("link", { name: "Experiment lab" });
+
+    expect(here.className).toContain("border-b-2");
+    expect(here.className).toContain("border-lab-paper");
+    expect(here.className).toContain("text-white");
+    expect(elsewhere.className).toContain("border-transparent");
+    expect(elsewhere.className).toContain("text-[#a8c1b8]");
+    // Each tab carries its glyph, at the size the prototype draws it, named by the word beside
+    // it rather than by itself.
+    for (const tab of [here, elsewhere]) {
+      const glyph = tab.querySelector("svg");
+      expect(glyph).toHaveAttribute("width", "17");
+      expect(glyph).toHaveAttribute("aria-hidden", "true");
+    }
   });
 
   it("are absent where there is no mode to be in", () => {
@@ -331,19 +377,314 @@ describe("the mode tabs", () => {
   });
 });
 
+describe("the bar's focus ring", () => {
+  /**
+   * The prototype rings the bar's own controls in the same pine it rings everything else, and
+   * on the bar's `#16332d` that measures 1.86:1 — under WCAG 2.2's 3:1 for a focus indicator.
+   * `docs/design-direction.md`'s *Principles* outrank any measurement below them, so the bar
+   * takes the paper ring instead, at 13.37:1 (ADR 0055). Asserted on every control the bar
+   * draws, because a ring is the one thing a keyboard reader has and the one thing nobody
+   * using a pointer would notice missing.
+   */
+  it("rings every control it draws in the bar's paper, not in the pine that vanishes on it", () => {
+    renderShell("shop");
+
+    const tabs = screen.getByRole("navigation", { name: "Workspace mode" });
+    const controls = [
+      switcher(),
+      within(tabs).getByRole("link", { name: "Shop fixture" }),
+      within(tabs).getByRole("link", { name: "Experiment lab" }),
+      screen.getByRole("button", { name: /^Show me around/ }),
+      screen.getByRole("link", { name: "Settings" }),
+    ];
+
+    for (const control of controls) {
+      expect(control.className, control.textContent ?? "").toContain(
+        "focus-visible:outline-lab-paper",
+      );
+      expect(control.className).toContain("focus-visible:outline-2");
+      expect(control.className).not.toContain("focus-visible:outline-lab-primary");
+    }
+  });
+
+  it("draws the ring inside the controls that are the bar's whole height", () => {
+    // A tab is `self-stretch` in a 56px bar, so an outward offset puts its top band above the
+    // bar — clipped — and its bottom band on the pane below, where the paper reads 1.06:1 on
+    // `admin-canvas`. Inset, all four edges are on the forest. The three controls that sit
+    // *within* the bar's height keep the outward offset, which is the ring the handoff draws.
+    renderShell("shop");
+
+    const tabs = screen.getByRole("navigation", { name: "Workspace mode" });
+    for (const name of ["Shop fixture", "Experiment lab"]) {
+      const tab = within(tabs).getByRole("link", { name });
+      expect(tab.className, name).toContain("focus-visible:-outline-offset-2");
+    }
+    for (const control of [
+      switcher(),
+      screen.getByRole("button", { name: /^Show me around/ }),
+      screen.getByRole("link", { name: "Settings" }),
+    ]) {
+      expect(control.className, control.textContent ?? "").toContain(
+        "focus-visible:outline-offset-2",
+      );
+      expect(control.className).not.toContain("focus-visible:-outline-offset-2");
+    }
+  });
+
+  it("keeps the pine ring on the panel's rows, which are on white", async () => {
+    renderShell("shop");
+    await userEvent.click(switcher());
+
+    for (const row of screen.getAllByRole("menuitem")) {
+      expect(row.className).toContain("focus-visible:outline-lab-primary");
+    }
+  });
+
+  it("rings the app title too, inside it, where the bar draws it instead of the switcher", () => {
+    renderShell();
+
+    // The title is full height under the header's `items-stretch`, so it takes the inset ring
+    // for the same reason a tab does.
+    const title = screen.getByRole("link", { name: "Agent Framework Lab" });
+    expect(title.className).toContain("focus-visible:outline-lab-paper");
+    expect(title.className).toContain("focus-visible:-outline-offset-2");
+  });
+});
+
 describe("the shop switcher", () => {
+  it("names the verb it performs and the shop it is showing", () => {
+    renderShell("shop");
+
+    expect(switcher()).toHaveAccessibleName("Switch shop, current: Northstar Outfitters");
+    expect(switcher()).toHaveAttribute("aria-haspopup", "menu");
+    expect(switcher()).toHaveAttribute("aria-expanded", "false");
+    // The badge is the shop's initials until Slice 28 gives it a logo, and it says nothing a
+    // reader has to hear: the name is beside it.
+    expect(within(switcher()).getByText("NO")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("opens a menu holding the current shop, the others with their version, and All shops", async () => {
+    renderShell("shop");
+
+    await userEvent.click(switcher());
+
+    const menu = screen.getByRole("menu", { name: "Shops" });
+    expect(switcher()).toHaveAttribute("aria-expanded", "true");
+    const rows = within(menu).getAllByRole("menuitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "NONorthstar Outfitters, current shop",
+      "ASAlpenglow Supplyv3",
+      "All shops",
+    ]);
+    expect(rows[0]).toHaveAttribute("aria-current", "true");
+    // Opening it puts the reader on the shop they are in rather than at the top of a list.
+    expect(rows[0]).toHaveFocus();
+  });
+
+  it("says Draft where a shop has published nothing", async () => {
+    // A version is what a reader chooses between, so a shop with none says so rather than
+    // showing an empty column.
+    renderShell("lab", {
+      shops: [
+        ...SHOPS,
+        {
+          shop_id: "5c4b3a29-1817-4655-9443-322110ffeedd",
+          name: "Harbour Goods",
+          slug: "harbour",
+          updated_at: "2026-09-17T09:00:00+00:00",
+          latest_published_version: null,
+          published_version_count: 0,
+        },
+      ],
+    });
+
+    await userEvent.click(switcher());
+
+    expect(screen.getByRole("menuitem", { name: /Harbour Goods/ })).toHaveTextContent("Draft");
+  });
+
   it("navigates in shop mode and sets the lab's shop in lab mode", async () => {
-    const chosen: string[] = [];
     const shopMode = renderShell("shop");
-    // No handler in shop mode: the switcher navigates, which is the shell's own default and
-    // is covered by the journey specs. What is asserted here is that the lab's handler is
-    // what runs instead when one is given.
-    expect(screen.getByRole("combobox", { name: "Shop" })).toHaveValue(SHOP_ID);
+    await userEvent.click(switcher());
+    await userEvent.click(screen.getByRole("menuitem", { name: /Alpenglow Supply/ }));
+
+    expect(shopMode.router.state.location.pathname).toBe(`/shops/${OTHER_SHOP_ID}`);
     shopMode.unmount();
 
-    renderShell("lab", { onShopChange: (shopId) => chosen.push(shopId) });
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Shop" }), SHOP_ID);
+    const chosen: string[] = [];
+    const labMode = renderShell("lab", { onShopChange: (shopId) => chosen.push(shopId) });
+    await userEvent.click(switcher());
+    await userEvent.click(screen.getByRole("menuitem", { name: /Alpenglow Supply/ }));
 
-    expect(chosen).toEqual([SHOP_ID]);
+    expect(chosen).toEqual([OTHER_SHOP_ID]);
+    // Nowhere in the lab to navigate a shop to, so the lab stays where it is (ADR 0054).
+    expect(labMode.router.state.location.pathname).toBe("/lab/bench");
+  });
+
+  it("goes to the index from its own row, and closes on the way", async () => {
+    const { router } = renderShell("shop");
+
+    await userEvent.click(switcher());
+    await userEvent.click(screen.getByRole("menuitem", { name: "All shops" }));
+
+    expect(router.state.location.pathname).toBe("/shops");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("moves focus with the arrows and wraps at both ends", async () => {
+    renderShell("shop");
+    await userEvent.click(switcher());
+
+    const rows = () => screen.getAllByRole("menuitem");
+    expect(rows()[0]).toHaveFocus();
+
+    await userEvent.keyboard("{ArrowDown}");
+    expect(rows()[1]).toHaveFocus();
+    await userEvent.keyboard("{End}");
+    expect(rows()[2]).toHaveFocus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(rows()[0]).toHaveFocus();
+    await userEvent.keyboard("{ArrowUp}");
+    expect(rows()[2]).toHaveFocus();
+    await userEvent.keyboard("{Home}");
+    expect(rows()[0]).toHaveFocus();
+
+    // Exactly one row is in the tab order, which is what roving focus means.
+    expect(rows().filter((row) => row.getAttribute("tabindex") === "0")).toHaveLength(1);
+  });
+
+  it("closes on Escape, giving the keyboard back to the control it came from", async () => {
+    renderShell("shop");
+    await userEvent.click(switcher());
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(switcher()).toHaveFocus();
+  });
+
+  it("hands the keyboard back to its button when a reader tabs out of it", async () => {
+    // The panel is rendered right after the button, so the element a plain Tab would move to
+    // is a row this press unmounts. It closes and returns instead, as Escape does.
+    renderShell("shop");
+    await userEvent.click(switcher());
+    expect(screen.getAllByRole("menuitem")[0]).toHaveFocus();
+
+    await userEvent.tab();
+
+    // Closed, and the keyboard is on the button rather than wherever a browser would have put
+    // it after the row this press unmounted.
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(switcher()).toHaveFocus();
+  });
+
+  it("closes on a press outside it, without moving anybody's focus", async () => {
+    renderShell("shop");
+    await userEvent.click(switcher());
+
+    await userEvent.click(screen.getByRole("heading", { level: 1, name: "Home" }));
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(switcher()).not.toHaveFocus();
+  });
+
+  it("closes when the workspace navigates underneath it", async () => {
+    const { router } = renderShell("shop");
+    await userEvent.click(switcher());
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    await act(async () => {
+      await router.navigate(`/shops/${SHOP_ID}/orders`);
+    });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+});
+
+describe("the bar's identity", () => {
+  it("is the switcher where there is a shop to name", () => {
+    renderShell("shop");
+
+    expect(switcher()).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Agent Framework Lab" })).toBeNull();
+  });
+
+  it("is the app title outside a mode, and it returns to the index", () => {
+    renderShell();
+
+    expect(screen.queryByRole("button", { name: /^Switch shop/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "Agent Framework Lab" })).toHaveAttribute(
+      "href",
+      "/shops",
+    );
+  });
+
+  it("is the app title in a lab that holds no shops at all", () => {
+    // The one composition the prototype has not got: there is no shop to name, and a bar with
+    // an empty left half is not a control worth inventing.
+    renderShell("lab", { shops: [] });
+
+    expect(screen.getByRole("link", { name: "Agent Framework Lab" })).toBeInTheDocument();
+  });
+});
+
+describe("the tour control", () => {
+  it("offers the tour of the surface the route names", () => {
+    renderShell("shop");
+
+    expect(screen.getByRole("button", { name: /^Show me around/ })).toBeVisible();
+  });
+
+  it("is absent where the route names no tour", () => {
+    renderShell("lab", { at: "/lab/history" });
+
+    expect(screen.queryByRole("button", { name: /^Show me around/ })).toBeNull();
+  });
+});
+
+describe("the Settings toggle", () => {
+  it("is a link to Settings anywhere else, and records what it would return to", async () => {
+    renderShell("shop", { at: `/shops/${SHOP_ID}/products?view=draft` });
+
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    await waitFor(() =>
+      expect(window.localStorage.getItem("agent-lab.settings-return")).toBe(
+        `/shops/${SHOP_ID}/products?view=draft`,
+      ),
+    );
+  });
+
+  it("is lit on its own page and returns to what was underneath", async () => {
+    window.localStorage.setItem("agent-lab.settings-return", `/shops/${SHOP_ID}/orders`);
+    const { router } = renderShell(undefined, { at: "/settings" });
+
+    const toggle = screen.getByRole("button", { name: "Settings, back to workspace" });
+    expect(toggle).toHaveAttribute("title", "Back to workspace");
+    expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
+
+    await userEvent.click(toggle);
+
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`);
+  });
+
+  it("does not overwrite what it returns to while Settings is open", async () => {
+    window.localStorage.setItem("agent-lab.settings-return", `/shops/${SHOP_ID}/orders`);
+    renderShell(undefined, { at: "/settings" });
+
+    // The reader who reloads a settings page is the reader `history.back()` strands; the
+    // preference is untouched by being on the page it answers for (ADR 0055).
+    await waitFor(() =>
+      expect(window.localStorage.getItem("agent-lab.settings-return")).toBe(
+        `/shops/${SHOP_ID}/orders`,
+      ),
+    );
+  });
+
+  it("returns to the shops index when this browser remembers nowhere", async () => {
+    const { router } = renderShell(undefined, { at: "/settings" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Settings, back to workspace" }));
+
+    expect(router.state.location.pathname).toBe("/shops");
   });
 });

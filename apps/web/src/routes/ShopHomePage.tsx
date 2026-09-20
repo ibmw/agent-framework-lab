@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { listShopVersions } from "../api/shops";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
   canPublish,
@@ -79,17 +78,14 @@ export function ShopHomePage() {
         title="Home"
         chips={<VersionChips preview={preview} />}
         actions={
-          <>
-            <TourLaunch id="shop-home" />
-            <EditorSaveActions
-              tone="accent"
-              dirty={dirty}
-              saving={saving}
-              discarding={discarding}
-              onSave={() => void save()}
-              onDiscard={() => void discard()}
-            />
-          </>
+          <EditorSaveActions
+            tone="accent"
+            dirty={dirty}
+            saving={saving}
+            discarding={discarding}
+            onSave={() => void save()}
+            onDiscard={() => void discard()}
+          />
         }
       />
 
