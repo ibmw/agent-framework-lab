@@ -86,7 +86,6 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | What | Handoff | Built | Why |
 | --- | --- | --- | --- |
 | Primary token | redefine `lab-accent` to pine | new `lab-primary`; the clay stays on trace bars, the review star, a ticket's emphasis and the armed seed | those four are not the refresh's to repaint |
-| Forest hover | `#22544a` | `lab-ink-hover` `#215347` | pre-existing token, rule 5; revisit with the top bar (Slice 10) |
 | Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px | one component, no variant yet; rule 3 |
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
 | Compact controls | 42/40px in sub-editors and filters | the one 44px control | no compact component exists to size |
@@ -95,6 +94,9 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Setup checklist | drawn on Shop details | not built | ADR 0044, ADR 0045 |
 | Preferences | seven rows | two now, a third read by `/` and written in Slice 18, a fourth with the confirm slice | a preference no surface reads is not a slice |
 | Support identities in shop scope | drawn on both rails, filed under Shop scope | one lab address on both rails | there is one library; two routes rendering one list would make the mode depend on which door was used (ADR 0054) |
+| Mode tabs on Settings | drawn — the prototype's settings is an overlay on a mode | absent | `/settings` is a route in neither mode, and tabs there would be the one place the mode is not the branch of the tree you stand in (ADR 0054); rule 5 |
+| Shop badge | a per-shop ground and ink, or a logo | initials on `lab-ink` | the payload carries no logo and no colour pair to draw; Slice 28 is where a shop gets one |
+| Focus ring on the bar | `2px solid #1d6241` offset outward, as everywhere else | the bar's paper, inset on the two controls that are the bar's full height | pine on `#16332d` is 1.86:1, under WCAG 2.2's 3:1 for a focus indicator, and an outward offset puts half the ring off the bar; *Principles* outrank a measurement (ADR 0055) |
 
 Two items the handoff names are not built and not refused: Georgia on the results' stat
 numerals, and the `open` button verb and `document` chip kind. Each lands with the surface that
@@ -118,18 +120,25 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   what every spec reaches it by and does not move; the lab's is
   `nav[aria-label="Experiment lab workspace"]`. The foot control's name, copy and tooltip are one
   string. Counts per entry: *planned*, Slice 11.
-- **The top bar** carries the title, the shop switcher as a panel, the mode tabs, *Show me
-  around* and *Settings*, lit while its page is open. *Planned*, Slice 10; today the mode tabs
-  are two plain links — the lab has to be reachable for it to be a mode — the switcher is a
-  native select, and the tour control sits in each page header.
+- **The top bar** (ADR 0055) sits on a token of its own and carries four things. The identity at
+  the left is the shop switcher wherever there is a shop to name and the app title otherwise,
+  never both; the title returns to the shops index. The **switcher is a button opening a
+  `menu`** — not a select — with roving focus, `Escape`, an outside press and a navigation all
+  dismissing it, and the shop's badge is its initials until Slice 28 gives it a logo. The **mode
+  tabs** are drawn in a mode and absent outside one. At the right, **one** *Show me around*
+  mount resolves the surface's tour from the location and is absent where no tour exists, and
+  **Settings** is a toggle: lit with a close glyph while its page is open, returning to the last
+  location that was not `/settings` — a browser preference, never a row (ADR 0044) — and to the
+  shops index when a browser remembers none.
 - **Settings is three zones** told apart by surface: per-browser preferences, saved on change;
   the lab-wide model connection with explicit Save and Discard (ADR 0052); a collapsed read-only
   runtime zone with a "To change it:" line (ADR 0044's character). The seed is its own zone
   (ADR 0047). *Planned*, Slices 18 and 19.
-- **Tours** (ADR 0045, 0046, 0049): one control per surface, the same words everywhere; an
-  overlay above the page, never in it; nothing starts unbidden, nothing is remembered, no tour
-  crosses a screen, a popover explains and never performs; every step declared in one table and
-  swept by Playwright against its surface.
+- **Tours** (ADR 0045, 0046, 0049, 0055): one tour per surface, the same words everywhere,
+  offered from one control in the bar that reads the surface's tour from the route; an overlay
+  above the page, never in it; nothing starts unbidden, nothing is remembered, no tour crosses a
+  screen, a popover explains and never performs; every step and every surface's route declared
+  in one table and swept by Playwright against that surface.
 - **Nothing about progress is stored and no surface reads it** (ADR 0044, ADR 0045). The
   overview's readiness card reads one listing and says one sentence.
 
