@@ -134,12 +134,16 @@ behaviour stops being reviewable as a layout slice.
 
 - **The product editor's category offers no list of the draft's categories.**
   `docs/history/PLAN-UX-2026-09-13.md` Slice 6 records "Products: category offers a datalist of categories already in
-  the draft" as delivered, and half of it was: `ProductsPage.tsx:184` gives the create form
-  `list="product-categories"` and a `<datalist>` built from `draftCategories`, while the editor's
-  own category input at `apps/web/src/routes/ProductEditorPage.tsx` has neither. So the same field
-  offers the draft's existing categories when a product is created and nothing when it is edited,
-  which is where a category is most likely to be corrected into a second spelling of one that
-  already exists — the exact fragmentation the datalist was added to prevent.
+  the draft" as delivered, and half of it was: the products create card gave the create form
+  `list="product-categories"` and a `<datalist>` built from the draft's own categories, while the
+  editor's own category input at `apps/web/src/routes/ProductEditorPage.tsx` had neither. So the
+  same field offered the draft's existing categories when a product was created and nothing when
+  it was edited, which is where a category is most likely to be corrected into a second spelling
+  of one that already exists — the exact fragmentation the datalist was added to prevent.
+  **PLAN-UX Slice 12 removed that create card** — creating is a page now, and a product is made by
+  appending an empty one to the draft and opening its editor — so the editor's Category row is the
+  only surface that asks for a category at all, the half that worked is gone with the card, and
+  the fix belongs there alone.
   The consequence is already visible in the copy: `PRODUCT_CATEGORY_RULE` in `lib/fieldRules.ts`
   reads "Pick one the draft already uses, or type a new one", and that row therefore ships with no
   hint at all, because a rule that promises a pick list the surface does not render is worse than

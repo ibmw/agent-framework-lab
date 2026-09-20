@@ -86,7 +86,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | What | Handoff | Built | Why |
 | --- | --- | --- | --- |
 | Primary token | redefine `lab-accent` to pine | new `lab-primary`; the clay stays on trace bars, the review star, a ticket's emphasis and the armed seed | those four are not the refresh's to repaint |
-| Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px | one component, no variant yet; rule 3 |
+| Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px, and `CreatePage`'s own header at the same size | one size for the workspace, no variant yet; rule 3 |
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
 | Compact controls | 42/40px in sub-editors and filters | the one 44px control | no compact component exists to size |
 | Filter chips on Tickets, the block libraries, Policies & FAQ | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked; Slice 16 gives documents one |
@@ -99,6 +99,9 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Count on the bench entry | "1 live" | nothing | a tally of running arms in one shop, not the length of any listing the shell reads; a figure the payload lacks is not faked (ADR 0056) |
 | Count on *Policies & FAQ* | `DOCUMENTS.length` — policies, guidelines and FAQ entries on one screen | policies plus FAQ entries, the two lists that page draws | the support guidelines are a different route the rail does not name, and a figure counting rows the page does not show is the disagreement the count exists to prevent (ADR 0056). **Slice 16 merges the three into one table and moves the figure with them**, and this row ends there |
 | Focus ring on the bar | `2px solid #1d6241` offset outward, as everywhere else | the bar's paper, inset on the two controls that are the bar's full height | pine on `#16332d` is 1.86:1, under WCAG 2.2's 3:1 for a focus indicator, and an outward offset puts half the ring off the bar; *Principles* outrank a measurement (ADR 0055) |
+| The create page's side column | 312px of notes beside the form — *What happens next*, *In a hurry?*, *Summary*, *Soundness* | the one 790px column; the notes that carry a rule are cards in it, the rest are not drawn | `form-decisions.md`'s layout 2b sizes the *form*, and a second column of prose beside a create form that asks four questions is a column that mostly repeats the hints under them; a note computed from a form nothing has written yet (*Summary*, *Soundness*) is a figure the page lacks |
+| An untitled product's heading | the bound title, empty | "Untitled product" | *New product* appends a product with no title, and an empty `<h1>` leaves the page — and the tour's first anchor — with nothing to read; *Principles*, every state is designed for |
+| *Attach existing* on Customers | a secondary header button that opens nothing | the same button, opening one inline row with the profile picker | the prototype's attach is a fixture with no panel behind it, and an attach in this workspace has to ask which profile; the row is not the side card the slice removed — it is the one control the question needs |
 
 Two items the handoff names are not built and not refused: Georgia on the results' stat
 numerals, and the `open` button verb and `document` chip kind. Each lands with the surface that
@@ -205,9 +208,18 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **A number field says what it accepts** and refuses at the save what a pattern cannot. A
   closed set of five is five named radios.
 - **A create form asks for what constrains the work that follows** and names where the rest
-  lives. Creation is a **page**, not a side card — `form-decisions.md` layout 2b, sticky header,
-  Cancel, a Create that is dashed and disabled with its reason until the form can submit — and
-  lands in the editor. *Planned*, Slices 12 to 14.
+  lives. Creation is a **page**, not a side card — `form-decisions.md` layout 2b, `CreatePage`:
+  sticky header, back arrow, breadcrumb, the typed name as the title, Cancel, and a Create that
+  is dashed and disabled with its reason until the form can submit — and it lands in the editor
+  of what it made, refreshing the listing its rail counts on the way (ADR 0056). A create that
+  is refused keeps the operator on the page with the reason under the button. A half-typed
+  create form is not unsaved work and is not asked about (ADR 0051); **a create that takes
+  two writes holds unsaved work from the moment the first one lands**, declares it under
+  the same rule as any editor, and its running write stands down when the operator leaves. Built for the
+  shop, the order, the profile and the identity; *planned*, Slices 13 and 14 for the lab's four
+  and the scenario. **A product is the exception**: it is a row of the shop draft rather than a
+  definition, so *New product* appends an empty one and opens its editor, and the handle it is
+  addressed by is answered there. Ticket authoring stays inside the three-pane screen.
 - **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
   for the add form and the open row; one row open per list, siblings' Edit disabled with a line
   saying why and that an open row is not in the draft until Save; Cancel writes nothing; the row
@@ -218,7 +230,11 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **Removing is deliberate**: two presses, the confirm replacing the row and stating the whole
   consequence, the first press walkable back. *Planned*, Slice 21.
 - **A blocked primary action says why**: dashed, disabled, the reason in `title` and inline; a
-  validation message under the control, in its accessible description. *Planned*, Slice 22.
+  validation message under the control, in its accessible description. `blockedButtonClasses`
+  in `lib/ui.ts` is that weight — deliberately outside the button table, because every row of
+  it is swept for a hover and a focus ring that a permanently disabled control can never show.
+  The four create pages wear it; Publish, Start, Save connection and Compose adopt it in
+  Slice 22, which also puts the validation message on the `Field` row.
 
 ## Lists and counts
 
@@ -233,8 +249,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **Every index can be searched** (`SearchField`), in the card's header opposite the title with
   the chips beneath; a miss reads "No X matches this view". Experiment history keeps its
   submitted, URL-backed form.
-- **Every header spans the content width** and holds the page's actions; sticky on editor and
-  create pages with Slice 25.
+- **Every header spans the content width** and holds the page's actions; sticky on a create
+  page, and on the editors with Slice 25.
 
 ## Proposals, not decisions
 
