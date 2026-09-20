@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { alreadyTakenMessage } from "../lib/fieldRules";
 import { fieldControlClasses } from "../lib/ui";
-import { FieldHint } from "./FieldHint";
+import { type Arrangement, FieldHint } from "./FieldHint";
 
 export function savedAsPreview(id: string): ReactNode {
   return (
@@ -44,6 +44,7 @@ export function DerivedIdField({
   title,
   placeholder,
   required = false,
+  arrangement,
   normalize,
   onChange,
 }: {
@@ -62,6 +63,11 @@ export function DerivedIdField({
   title?: string;
   placeholder?: string;
   required?: boolean;
+  /**
+   * `FieldHint`'s, passed straight through: this field labels itself, so a card on the form
+   * pattern asks it to draw itself as a row rather than wrapping it in one.
+   */
+  arrangement?: Arrangement;
   normalize?: (value: string) => string;
   onChange: (value: string) => void;
 }) {
@@ -172,7 +178,13 @@ export function DerivedIdField({
   ) : undefined;
 
   return (
-    <FieldHint label={label} hint={hint} extra={extra} extraTone={colliding ? "error" : "muted"}>
+    <FieldHint
+      label={label}
+      hint={hint}
+      extra={extra}
+      extraTone={colliding ? "error" : "muted"}
+      arrangement={arrangement}
+    >
       <input
         ref={inputRef}
         id={generatedId}

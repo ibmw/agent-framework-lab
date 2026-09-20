@@ -333,27 +333,165 @@ describe("customer workspace", () => {
     expect(screen.queryByRole("link", { name: "Priya Raman" })).toBeNull();
   });
 
-  it("puts each new-customer field's hint in that control's accessible description", async () => {
+  it("offers a New customer button and an Attach existing beside it", async () => {
+    const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/customers`);
 
-    const card = within(await screen.findByRole("region", { name: "New customer" }));
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    // The side card is gone: creating is a page, and *Attach existing* stays here as the
+    // prototype's secondary button (PLAN-UX Slice 12).
+    expect(screen.queryByRole("region", { name: "New customer" })).toBeNull();
+    expect(screen.getByRole("link", { name: "New customer" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/customers/new`,
+    );
+
+    const attach = screen.getByRole("button", { name: "Attach existing" });
+    expect(attach).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Profile to attach")).toBeNull();
+    await user.click(attach);
+    expect(attach).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByLabelText("Profile to attach")).toBeVisible();
+  });
+
+  it("offers the unattached profiles to attach, and attaches one to this shop", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    const picker = await screen.findByLabelText("Profile to attach");
+    // Only profiles this shop does not already use are offered.
+    expect(within(picker).getByRole("option", { name: /Tomás Rivera/ })).toBeVisible();
+    expect(within(picker).queryByRole("option", { name: /Maya Laurent/ })).toBeNull();
+
+    await user.selectOptions(picker, UNATTACHED.profile_id);
+    await user.click(screen.getByRole("button", { name: "Attach to this shop" }));
+
+    await waitFor(() => expect(attachedProfileIds).toEqual([UNATTACHED.profile_id]));
+  });
+});
+
+describe("the new-customer page", () => {
+  async function newCustomer() {
+    const rendered = renderAt(`/shops/${SHOP_ID}/customers/new`);
+    await screen.findByRole("heading", { level: 1, name: "New customer" });
+    return rendered;
+  }
+
+  async function fillProfile(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText("Given name"), "Camille");
+    await user.type(screen.getByLabelText("Family name"), "Dupont");
+    await user.type(screen.getByLabelText("Email"), "camille.dupont@example.org");
+  }
+
+  it("names Customers above it and becomes the name as it is typed", async () => {
+    const user = userEvent.setup();
+    await newCustomer();
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header");
+    expect(header).not.toBeNull();
+    expect(within(header as HTMLElement).getByRole("link", { name: "Customers" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/customers`,
+    );
+    expect(within(header as HTMLElement).getByText(/creating a profile/)).toBeVisible();
+
+    await user.type(screen.getByLabelText("Given name"), "Camille");
+    await user.type(screen.getByLabelText("Family name"), "Dupont");
+    expect(screen.getByRole("heading", { level: 1, name: "Camille Dupont" })).toBeVisible();
+  });
+
+  it("refuses Create until the profile is named and addressed, and says why", async () => {
+    const user = userEvent.setup();
+    await newCustomer();
+
+    const create = () => screen.getByRole("button", { name: "Create profile" });
+    expect(create()).toBeDisabled();
+    expect(create()).toHaveAccessibleDescription(/given name and a family name/i);
+    expect(create()).toHaveAttribute("title", expect.stringMatching(/given name/i));
+
+    await user.type(screen.getByLabelText("Given name"), "Camille");
+    await user.type(screen.getByLabelText("Family name"), "Dupont");
+    expect(create()).toBeDisabled();
+    expect(create()).toHaveAccessibleDescription(/needs an email address/i);
+
+    await user.type(screen.getByLabelText("Email"), "camille.dupont@example.org");
+    expect(create()).toBeEnabled();
+  });
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    await newCustomer();
+
     // Exact, because the editor's four rows read the same three exports. A substring would
     // pass while the two surfaces drifted apart, which is what put these rules in one module.
-    expect(card.getByLabelText("Given name")).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Given name")).toHaveAccessibleDescription(
       wholeDescription(CUSTOMER_NAME_RULE),
     );
-    expect(card.getByLabelText("Family name")).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Family name")).toHaveAccessibleDescription(
       wholeDescription(CUSTOMER_NAME_RULE),
     );
-    expect(card.getByLabelText("Email")).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Email")).toHaveAccessibleDescription(
       wholeDescription(CUSTOMER_EMAIL_RULE),
     );
-    expect(card.getByLabelText("Customer since")).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Customer since")).toHaveAccessibleDescription(
       wholeDescription(CUSTOMER_SINCE_RULE),
     );
   });
 
-  it("shows a refused create beside the button, not above the customer list", async () => {
+  it("creates the profile attached to this shop and lands in its editor", async () => {
+    const user = userEvent.setup();
+    let command: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/v1/customer-profiles", async ({ request }) => {
+        command = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
+      }),
+    );
+    const { router } = await newCustomer();
+    await fillProfile(user);
+
+    await user.click(screen.getByRole("button", { name: "Create profile" }));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`),
+    );
+    expect(command).toMatchObject({ shop_id: SHOP_ID });
+  });
+
+  it("moves the rail's figure with the index when a profile is created", async () => {
+    const user = userEvent.setup();
+    let attached = [MAYA];
+    server.use(
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped ? attached : [...attached, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+      http.post("*/api/v1/customer-profiles", () => {
+        attached = [
+          ...attached,
+          { ...MAYA, profile_id: UNATTACHED.profile_id, display_name: "Camille Dupont" },
+        ];
+        return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    expect(within(railEntry("Customers")).getByText("1")).toBeVisible();
+
+    await user.click(screen.getByRole("link", { name: "New customer" }));
+    await screen.findByRole("heading", { level: 1, name: "New customer" });
+    await fillProfile(user);
+    await user.click(screen.getByRole("button", { name: "Create profile" }));
+
+    // The create moved off the index, and the refresh moved with it (ADR 0056).
+    await waitFor(() => expect(within(railEntry("Customers")).getByText("2")).toBeVisible());
+  });
+
+  it("keeps a refused create on the page, with the reason under the button", async () => {
     server.use(
       http.post("*/api/v1/customer-profiles", () =>
         HttpResponse.json(
@@ -367,145 +505,35 @@ describe("customer workspace", () => {
       ),
     );
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/customers`);
-    const card = within(await screen.findByRole("region", { name: "New customer" }));
+    const { router } = await newCustomer();
+    await fillProfile(user);
 
-    await user.type(card.getByLabelText("Given name"), "Maya");
-    await user.type(card.getByLabelText("Family name"), "Laurent");
-    await user.type(card.getByLabelText("Email"), "maya.laurent@example.org");
-    await user.click(card.getByRole("button", { name: "Create and attach" }));
+    await user.click(screen.getByRole("button", { name: "Create profile" }));
 
-    expect(await card.findByRole("alert")).toHaveTextContent(/email already exists/i);
-    expect(screen.getByRole("heading", { name: "Customers" }).closest("div")).not.toBeNull();
-    const listing = screen.getByRole("link", { name: "Maya Laurent" }).closest("section");
-    expect(listing).not.toBeNull();
-    expect(within(listing as HTMLElement).queryByRole("alert")).toBeNull();
-  });
-
-  it("reports a failed listing reload as a load error, not a failed create", async () => {
-    let created = false;
-    server.use(
-      http.post("*/api/v1/customer-profiles", () => {
-        created = true;
-        return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
-      }),
-      http.get("*/api/v1/customer-profiles", ({ request }) => {
-        if (created) {
-          return HttpResponse.json(
-            { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
-            { status: 503 },
-          );
-        }
-        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
-        return HttpResponse.json({
-          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED],
-        } satisfies CustomerProfileListResponse);
-      }),
+    const refusal = await screen.findByRole("alert");
+    expect(refusal).toHaveTextContent(/email already exists/i);
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/new`);
+    // Nothing the operator typed is lost, and the reason is on the control they pressed.
+    expect(screen.getByLabelText("Given name")).toHaveValue("Camille");
+    expect(screen.getByRole("button", { name: "Create profile" })).toHaveAccessibleDescription(
+      /email already exists/i,
     );
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/customers`);
-    const card = within(await screen.findByRole("region", { name: "New customer" }));
-
-    await user.type(card.getByLabelText("Given name"), "Camille");
-    await user.type(card.getByLabelText("Family name"), "Dupont");
-    await user.type(card.getByLabelText("Email"), "camille.dupont@example.org");
-    await user.click(card.getByRole("button", { name: "Create and attach" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
-    expect(card.queryByRole("alert")).toBeNull();
   });
 
-  it("clears a page-level load error when a later listing reload succeeds", async () => {
-    let created = 0;
-    server.use(
-      http.post("*/api/v1/customer-profiles", () => {
-        created += 1;
-        return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
-      }),
-      http.get("*/api/v1/customer-profiles", ({ request }) => {
-        if (created === 1) {
-          return HttpResponse.json(
-            { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
-            { status: 503 },
-          );
-        }
-        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
-        return HttpResponse.json({
-          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED],
-        } satisfies CustomerProfileListResponse);
-      }),
-    );
+  it("returns to the index with nothing created when Cancel is pressed", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/customers`);
-    const card = within(await screen.findByRole("region", { name: "New customer" }));
+    const { router } = await newCustomer();
+    await user.type(screen.getByLabelText("Given name"), "Camille");
 
-    await user.type(card.getByLabelText("Given name"), "Camille");
-    await user.type(card.getByLabelText("Family name"), "Dupont");
-    await user.type(card.getByLabelText("Email"), "camille.dupont@example.org");
-    await user.click(card.getByRole("button", { name: "Create and attach" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
+    await user.click(screen.getByRole("link", { name: "Cancel" }));
 
-    await user.type(card.getByLabelText("Given name"), "Jules");
-    await user.type(card.getByLabelText("Family name"), "Martin");
-    await user.type(card.getByLabelText("Email"), "jules.martin@example.org");
-    await user.click(card.getByRole("button", { name: "Create and attach" }));
-
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    // A half-typed create form is not an edit to something that exists (ADR 0051).
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers`));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
+});
 
-  it("clears an initial load error when a later listing reload succeeds", async () => {
-    let listings = 0;
-    server.use(
-      http.get("*/api/v1/customer-profiles", ({ request }) => {
-        listings += 1;
-        if (listings <= 2) {
-          return HttpResponse.json(
-            {
-              code: "unavailable",
-              message: "The customer service is unavailable.",
-              request_id: "r",
-            },
-            { status: 503 },
-          );
-        }
-        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
-        return HttpResponse.json({
-          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED],
-        } satisfies CustomerProfileListResponse);
-      }),
-      http.post("*/api/v1/customer-profiles", () =>
-        HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/customers`);
-    expect(await screen.findByRole("alert")).toHaveTextContent(/customer service is unavailable/i);
-
-    const card = within(screen.getByRole("region", { name: "New customer" }));
-    await user.type(card.getByLabelText("Given name"), "Camille");
-    await user.type(card.getByLabelText("Family name"), "Dupont");
-    await user.type(card.getByLabelText("Email"), "camille.dupont@example.org");
-    await user.click(card.getByRole("button", { name: "Create and attach" }));
-
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-  });
-
-  it("offers the unattached profiles to attach, and attaches one to this shop", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/customers`);
-
-    await screen.findByRole("link", { name: "Maya Laurent" });
-    const picker = await screen.findByLabelText("Profile to attach");
-    // Only profiles this shop does not already use are offered.
-    expect(within(picker).getByRole("option", { name: /Tomás Rivera/ })).toBeVisible();
-    expect(within(picker).queryByRole("option", { name: /Maya Laurent/ })).toBeNull();
-
-    await user.selectOptions(picker, UNATTACHED.profile_id);
-    await user.click(screen.getByRole("button", { name: "Attach to this shop" }));
-
-    await waitFor(() => expect(attachedProfileIds).toEqual([UNATTACHED.profile_id]));
-  });
-
+describe("customer workspace", () => {
   it("shows the publish gate and blocks publication while the draft has errors", async () => {
     renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
 

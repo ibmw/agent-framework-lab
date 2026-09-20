@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 
 /**
@@ -43,12 +44,7 @@ test("the rail keeps its controls on screen in every section", async ({ page }) 
   const unique = Date.now().toString(36);
   await page.setViewportSize(VIEWPORT);
 
-  await page.goto("/shops");
-  const createShop = page.getByRole("region", { name: "Create a shop" });
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   // Enough authored content that shop details runs past a short window.
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Shop details" }).click();
@@ -76,12 +72,7 @@ test("the rail collapses only when the author asks, in every section", async ({ 
   const unique = Date.now().toString(36);
   await page.setViewportSize(VIEWPORT);
 
-  await page.goto("/shops");
-  const createShop = page.getByRole("region", { name: "Create a shop" });
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   // Arriving anywhere — the helpdesk included — leaves the rail as the author left it.
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
@@ -104,24 +95,19 @@ test("the rail collapses only when the author asks, in every section", async ({ 
 test("asks before the rail carries an unsaved product edit out of reach", async ({ page }) => {
   const unique = Date.now().toString(36);
 
-  await page.goto("/shops");
-  const createShop = page.getByRole("region", { name: "Create a shop" });
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Products" }).click();
-  const newProduct = page.getByRole("region", { name: "Add a product" });
-  await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
-  await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
-  await newProduct.getByRole("button", { name: "Add to draft" }).click();
+  await page.getByRole("button", { name: "New product" }).click();
+  const details = page.getByRole("region", { name: "Details" });
+  await details.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
+  await details.getByLabel("Category", { exact: true }).fill("Jackets");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 
-  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
-  await page
-    .getByRole("region", { name: "Details" })
+  // Already standing in the editor: *New product* lands here (PLAN-UX Slice 12), so the
+  // journey no longer walks back to the catalog to open what it just made.
+  await details
     .getByLabel("Description", { exact: true })
     .fill("Three-layer waterproof shell with taped seams.");
 
@@ -159,17 +145,8 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
 }) => {
   const unique = Date.now().toString(36);
 
-  async function createShop(name: string, slug: string) {
-    await page.goto("/shops");
-    const form = page.getByRole("region", { name: "Create a shop" });
-    await form.getByLabel("Name", { exact: true }).fill(name);
-    await form.getByLabel("Slug", { exact: true }).fill(slug);
-    await form.getByRole("button", { name: "Create shop" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
-  }
-
-  await createShop(`Alpenglow ${unique}`, `alpenglow-${unique}`);
-  await createShop(`Northstar ${unique}`, `northstar-${unique}`);
+  await createShop(page, { name: `Alpenglow ${unique}`, slug: `alpenglow-${unique}` });
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Products" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
@@ -199,13 +176,13 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
   // of one product, which is a deeper address than the catalog and the one a reader would
   // notice losing.
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Products" }).click();
-  const newProduct = page.getByRole("region", { name: "Add a product" });
-  await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
-  await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
-  await newProduct.getByRole("button", { name: "Add to draft" }).click();
+  await page.getByRole("button", { name: "New product" }).click();
+  const details = page.getByRole("region", { name: "Details" });
+  await details.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
+  await details.getByLabel("Category", { exact: true }).fill("Jackets");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
-  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
+  // *New product* lands in the editor, which is the deeper address this case is about.
   await expect(page.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
   const editorUrl = page.url();
 

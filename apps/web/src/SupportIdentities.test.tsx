@@ -222,15 +222,16 @@ describe("support identity workspace", () => {
     expect(screen.queryByRole("link", { name: "Northstar tier 1" })).toBeNull();
   });
 
-  it("puts each field's hint in that control's accessible description", async () => {
+  it("offers a New identity button rather than a form beside the table", async () => {
     renderAt("/lab/support-identities");
 
-    const card = within(await screen.findByRole("region", { name: "New support identity" }));
-    expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
-      /how the identity is listed.*adopt a published identity/i,
-    );
-    expect(card.getByLabelText("Role title")).toHaveAccessibleDescription(
-      /the role the support agent presents as/i,
+    await screen.findByRole("link", { name: "Northstar tier 1" });
+    // The side card is gone: creating is a page (PLAN-UX Slice 12), and the library's is the
+    // lab's because the library left shop scope with ADR 0054.
+    expect(screen.queryByRole("region", { name: "New support identity" })).toBeNull();
+    expect(screen.getByRole("link", { name: "New identity" })).toHaveAttribute(
+      "href",
+      "/lab/support-identities/new",
     );
   });
 
@@ -380,6 +381,159 @@ describe("editing a saved guidance note in place", () => {
  * The rail's figure and this index are one listing, read once by the shell and handed to
  * both, so they cannot come to disagree (ADR 0056).
  */
+describe("the new-identity page", () => {
+  const NEW_IDENTITY_ID = "5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9";
+
+  async function newIdentity() {
+    const rendered = renderAt("/lab/support-identities/new");
+    await screen.findByRole("heading", { level: 1, name: "New support identity" });
+    return rendered;
+  }
+
+  it("names Support identities above it and becomes the name as it is typed", async () => {
+    const user = userEvent.setup();
+    await newIdentity();
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header");
+    expect(header).not.toBeNull();
+    expect(
+      within(header as HTMLElement).getByRole("link", { name: "Support identities" }),
+    ).toHaveAttribute("href", "/lab/support-identities");
+    expect(within(header as HTMLElement).getByText(/creating an identity/)).toBeVisible();
+
+    await user.type(screen.getByLabelText("Name"), "Northstar tier 3");
+    expect(screen.getByRole("heading", { level: 1, name: "Northstar tier 3" })).toBeVisible();
+  });
+
+  it("refuses Create until the role is named and titled, and says why", async () => {
+    const user = userEvent.setup();
+    await newIdentity();
+
+    const create = () => screen.getByRole("button", { name: "Create identity" });
+    expect(create()).toBeDisabled();
+    expect(create()).toHaveAccessibleDescription(/needs a name/i);
+    expect(create()).toHaveAttribute("title", expect.stringMatching(/needs a name/i));
+
+    await user.type(screen.getByLabelText("Name"), "Northstar tier 3");
+    expect(create()).toBeDisabled();
+    expect(create()).toHaveAccessibleDescription(/role title the agent presents as/i);
+
+    await user.type(screen.getByLabelText("Role title"), "Senior support");
+    expect(create()).toBeEnabled();
+  });
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    await newIdentity();
+
+    expect(screen.getByLabelText("Name")).toHaveAccessibleDescription(
+      /how the identity is listed.*adopt a published identity/i,
+    );
+    expect(screen.getByLabelText("Role title")).toHaveAccessibleDescription(
+      /the role the support agent presents as/i,
+    );
+    expect(screen.getByLabelText("Remit (optional)")).toHaveAccessibleDescription(
+      /what this identity is for/i,
+    );
+  });
+
+  it("creates the identity, moves the rail's figure, and lands in its editor", async () => {
+    const user = userEvent.setup();
+    let listed = identities.identities;
+    let command: Record<string, unknown> | null = null;
+    server.use(
+      http.get("*/api/v1/support-identities", () => HttpResponse.json({ identities: listed })),
+      http.post("*/api/v1/support-identities", async ({ request }) => {
+        command = (await request.json()) as Record<string, unknown>;
+        listed = [
+          ...listed,
+          {
+            ...identities.identities[0],
+            identity_id: NEW_IDENTITY_ID,
+            name: "Northstar tier 3",
+          },
+        ];
+        return HttpResponse.json(
+          {
+            identity_id: NEW_IDENTITY_ID,
+            lifecycle_state: "draft",
+            content: currentIdentity,
+            created_at: "2026-08-23T12:00:00+00:00",
+            updated_at: "2026-08-23T12:05:00+00:00",
+          } satisfies SupportIdentityDraftResponse,
+          { status: 201 },
+        );
+      }),
+      http.get(`*/api/v1/support-identities/${NEW_IDENTITY_ID}/draft`, () =>
+        HttpResponse.json({
+          identity_id: NEW_IDENTITY_ID,
+          lifecycle_state: "draft",
+          content: currentIdentity,
+          created_at: "2026-08-23T12:00:00+00:00",
+          updated_at: "2026-08-23T12:05:00+00:00",
+        } satisfies SupportIdentityDraftResponse),
+      ),
+      http.get(`*/api/v1/support-identities/${NEW_IDENTITY_ID}/draft/preview`, () =>
+        HttpResponse.json(currentPreview),
+      ),
+    );
+    renderAt("/lab/support-identities");
+
+    await screen.findByRole("link", { name: "Northstar tier 1" });
+    expect(
+      within(railEntry("Support identities", "Experiment lab workspace")).getByText("1"),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("link", { name: "New identity" }));
+    await screen.findByRole("heading", { level: 1, name: "New support identity" });
+    await user.type(screen.getByLabelText("Name"), "Northstar tier 3");
+    await user.type(screen.getByLabelText("Role title"), "Senior support");
+    await user.click(screen.getByRole("button", { name: "Create identity" }));
+
+    // The create moved off the index, and the refresh moved with it (ADR 0056).
+    await waitFor(() =>
+      expect(
+        within(railEntry("Support identities", "Experiment lab workspace")).getByText("2"),
+      ).toBeVisible(),
+    );
+    expect(command).toMatchObject({
+      role: { name: "Northstar tier 3", title: "Senior support" },
+    });
+  });
+
+  it("keeps a refused create on the page, with the reason under the button", async () => {
+    server.use(
+      http.post("*/api/v1/support-identities", () =>
+        HttpResponse.json(
+          { code: "conflict", message: "An identity with this name exists.", request_id: "r" },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    const { router } = await newIdentity();
+
+    await user.type(screen.getByLabelText("Name"), "Northstar tier 1");
+    await user.type(screen.getByLabelText("Role title"), "Senior support");
+    await user.click(screen.getByRole("button", { name: "Create identity" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/identity with this name exists/i);
+    expect(router.state.location.pathname).toBe("/lab/support-identities/new");
+    expect(screen.getByLabelText("Name")).toHaveValue("Northstar tier 1");
+  });
+
+  it("returns to the library with nothing created when Cancel is pressed", async () => {
+    const user = userEvent.setup();
+    const { router } = await newIdentity();
+    await user.type(screen.getByLabelText("Name"), "Northstar tier 3");
+
+    await user.click(screen.getByRole("link", { name: "Cancel" }));
+
+    // A half-typed create form is not an edit to something that exists (ADR 0051).
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lab/support-identities"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
 describe("the rail's figure and this index", () => {
   it("says on both rails what the table has rows", async () => {
     renderAt("/lab/support-identities");

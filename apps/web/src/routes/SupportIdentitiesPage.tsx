@@ -1,10 +1,10 @@
 import type { SupportIdentitySummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { type FormEvent, useId, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createSupportIdentity } from "../api/supportIdentities";
-import { ButtonIcon } from "../components/ButtonIcon";
-import { FieldHint } from "../components/FieldHint";
+import { CreatePage } from "../components/CreatePage";
+import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -15,6 +15,7 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  textAreaClasses,
 } from "../lib/ui";
 import { useLabWorkspace } from "../shell/LabWorkspace";
 
@@ -51,29 +52,8 @@ export function SupportIdentitiesPage() {
   const identities = listings.supportIdentities.rows;
   const loading = listings.supportIdentities.loading;
   const loadError = listings.supportIdentities.error;
-  const [formError, setFormError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [title, setTitle] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCreating(true);
-    setFormError(null);
-    try {
-      await createSupportIdentity({ role: { name, title, description: "" } });
-      setName("");
-      setTitle("");
-    } catch (cause: unknown) {
-      setFormError(describeApiError(cause, "The support identity could not be created."));
-      setCreating(false);
-      return;
-    }
-    await listings.supportIdentities.refresh();
-    setCreating(false);
-  }
 
   // Name and title, the two the prototype's identities search reads (its `shownIdentities`
   // filter) and the two this table prints in its first column.
@@ -87,6 +67,11 @@ export function SupportIdentitiesPage() {
       <PageHeader
         title="Support identities"
         description="What the support agent is and what it may do. Identities are cross-shop; tone of voice comes from the shop, and an agent configuration adopts one published identity."
+        actions={
+          <Link className={accentButtonClasses} to="new">
+            New identity
+          </Link>
+        }
       />
 
       {loadError ? (
@@ -95,78 +80,145 @@ export function SupportIdentitiesPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to search and count. A chip is a filter, and a row of
+      <section className={`${surfaceClasses} overflow-hidden`}>
+        {/* Only once there are rows to search and count. A chip is a filter, and a row of
               zeros over "Loading…" — or over a listing that failed — filters nothing and
               answers nothing; it is the stat band this slice exists to avoid, drawn at its
               least useful moment. The search box keeps the same company: a box that can only
               narrow nothing is a control that does nothing. Both arrive with the table they
               belong to. */}
-          {loading || loadError ? null : (
-            <>
-              <SearchRow>
-                <SearchField label="Search identities" onChange={setQuery} value={query} />
-              </SearchRow>
-              <FilterChips
-                legend="Filter support identities"
-                chips={chips}
-                selected={filter}
-                onSelect={setFilter}
-              />
-            </>
-          )}
-          {loading ? (
-            <p className="p-4 text-[13px] text-admin-muted">Loading support identities…</p>
-          ) : identities.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">
-              No support identity yet. Create one to define an agent's role and permissions.
-            </p>
-          ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No identity matches this view.</p>
-          ) : (
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr>
-                  <th className={tableHeadClasses}>Identity</th>
-                  <th className={tableHeadClasses}>Permissions</th>
-                  <th className={tableHeadClasses}>Guidance</th>
-                  <th className={tableHeadClasses}>Published</th>
-                  <th className={tableHeadClasses}>Draft updated</th>
+        {loading || loadError ? null : (
+          <>
+            <SearchRow>
+              <SearchField label="Search identities" onChange={setQuery} value={query} />
+            </SearchRow>
+            <FilterChips
+              legend="Filter support identities"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          </>
+        )}
+        {loading ? (
+          <p className="p-4 text-[13px] text-admin-muted">Loading support identities…</p>
+        ) : identities.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">
+            No support identity yet. Create one to define an agent's role and permissions.
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">No identity matches this view.</p>
+        ) : (
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr>
+                <th className={tableHeadClasses}>Identity</th>
+                <th className={tableHeadClasses}>Permissions</th>
+                <th className={tableHeadClasses}>Guidance</th>
+                <th className={tableHeadClasses}>Published</th>
+                <th className={tableHeadClasses}>Draft updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((identity) => (
+                <tr key={identity.identity_id}>
+                  <td className={tableCellClasses}>
+                    <Link
+                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                      to={identity.identity_id}
+                    >
+                      {identity.name}
+                    </Link>
+                    <div className="text-admin-muted">{identity.title}</div>
+                  </td>
+                  <td className={tableCellClasses}>{identity.permission_count}</td>
+                  <td className={tableCellClasses}>{identity.guidance_count}</td>
+                  <td className={tableCellClasses}>
+                    {identity.latest_published_version === null
+                      ? "Never published"
+                      : `v${identity.latest_published_version} · ${identity.published_version_count} version(s)`}
+                  </td>
+                  <td className={tableCellClasses}>{formatTimestamp(identity.updated_at)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {visible.map((identity) => (
-                  <tr key={identity.identity_id}>
-                    <td className={tableCellClasses}>
-                      <Link
-                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                        to={identity.identity_id}
-                      >
-                        {identity.name}
-                      </Link>
-                      <div className="text-admin-muted">{identity.title}</div>
-                    </td>
-                    <td className={tableCellClasses}>{identity.permission_count}</td>
-                    <td className={tableCellClasses}>{identity.guidance_count}</td>
-                    <td className={tableCellClasses}>
-                      {identity.latest_published_version === null
-                        ? "Never published"
-                        : `v${identity.latest_published_version} · ${identity.published_version_count} version(s)`}
-                    </td>
-                    <td className={tableCellClasses}>{formatTimestamp(identity.updated_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </>
+  );
+}
 
-        <Card title="New support identity">
-          <form className="grid gap-3" onSubmit={submit}>
-            <FieldHint
+/**
+ * `/lab/support-identities/new` — the identity, authored on a page
+ * (`Workspace.dc.html`:1643).
+ *
+ * The library left shop scope with ADR 0054 and is reached from both rails, so its create page
+ * is the lab's too. Permissions and guidance — the two cards the prototype also draws here —
+ * belong to the editor this lands in: a new identity grants nothing, and what it may do is the
+ * whole subject of the screen it opens on.
+ */
+export function NewSupportIdentityPage() {
+  const { listings } = useLabWorkspace();
+  const navigate = useNavigate();
+  const formId = useId();
+  const [formError, setFormError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [remit, setRemit] = useState("");
+
+  const blockedBy =
+    name.trim() === ""
+      ? "The identity needs a name before it can be created."
+      : title.trim() === ""
+        ? "The identity needs the role title the agent presents as."
+        : undefined;
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (blockedBy !== undefined) {
+      return;
+    }
+    setCreating(true);
+    setFormError(null);
+    let identityId: string;
+    try {
+      const created = await createSupportIdentity({
+        role: { name, title, description: remit },
+      });
+      identityId = created.identity_id;
+    } catch (cause: unknown) {
+      setFormError(describeApiError(cause, "The support identity could not be created."));
+      setCreating(false);
+      return;
+    }
+    // The lab holds one identity more than it did, so the listing the rail counts and this
+    // index renders is read again before the editor opens (ADR 0056).
+    await listings.supportIdentities.refresh();
+    navigate(`/lab/support-identities/${identityId}`);
+  }
+
+  return (
+    <CreatePage
+      backTo="/lab/support-identities"
+      backLabel="Support identities"
+      breadcrumb="creating an identity"
+      title={name}
+      untitled="New support identity"
+      formId={formId}
+      createLabel="Create identity"
+      creating={creating}
+      creatingLabel="Creating…"
+      blockedBy={blockedBy}
+      error={formError}
+    >
+      <form id={formId} className="grid gap-4" onSubmit={submit}>
+        <Card title="Role">
+          <FieldRows>
+            <Field
               label="Name"
-              hint="How the identity is listed. Agent configurations adopt a published identity."
+              hint="How the identity is listed. Agent configurations adopt a published identity by this name."
             >
               <input
                 className={fieldControlClasses}
@@ -175,8 +227,11 @@ export function SupportIdentitiesPage() {
                 placeholder="Northstar tier 1"
                 onChange={(event) => setName(event.target.value)}
               />
-            </FieldHint>
-            <FieldHint label="Role title" hint="The role the support agent presents as.">
+            </Field>
+            <Field
+              label="Role title"
+              hint="The role the support agent presents as. A customer may see it, so it is part of the fiction."
+            >
               <input
                 className={fieldControlClasses}
                 value={title}
@@ -184,23 +239,30 @@ export function SupportIdentitiesPage() {
                 placeholder="Customer support representative"
                 onChange={(event) => setTitle(event.target.value)}
               />
-            </FieldHint>
-            {formError ? (
-              <p role="alert" className="text-[13px] text-lab-error">
-                {formError}
-              </p>
-            ) : null}
-            <button className={accentButtonClasses} type="submit" disabled={creating}>
-              <ButtonIcon verb="save" />
-              {creating ? "Creating…" : "Create identity"}
-            </button>
-            <p className="text-xs text-admin-muted">
-              A new identity grants nothing. Permissions and guidance are added in the editor, then
-              published together.
-            </p>
-          </form>
+            </Field>
+            <Field
+              label="Remit"
+              optional
+              hint="What this identity is for, in its own words. Keep it to scope — anything factual belongs in a policy document a scenario can require."
+              extra="Tone of voice is not authored here: it belongs to the shop, and an agent configuration selects the shop default or a named override."
+            >
+              <textarea
+                className={textAreaClasses}
+                value={remit}
+                placeholder="First contact for delivery, returns and payment questions."
+                onChange={(event) => setRemit(event.target.value)}
+              />
+            </Field>
+          </FieldRows>
         </Card>
-      </div>
-    </>
+
+        <Card title="Created as a draft">
+          <p className="text-[13px] leading-relaxed text-admin-ink-soft">
+            A new identity grants nothing, so no configuration can adopt it yet. Permissions and
+            guidance are added in the editor, then published together.
+          </p>
+        </Card>
+      </form>
+    </CreatePage>
   );
 }

@@ -1,6 +1,6 @@
 import type { CustomerProfileSummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
   attachCustomerProfileToShop,
@@ -8,7 +8,8 @@ import {
   listCustomerProfiles,
 } from "../api/customerProfiles";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { FieldHint } from "../components/FieldHint";
+import { CreatePage } from "../components/CreatePage";
+import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -84,13 +85,11 @@ export function CustomersPage() {
   const [everythingError, setEverythingError] = useState<string | null>(null);
   const loading = listings.customers.loading || loadingEverything;
   const loadError = listings.customers.error ?? everythingError;
-  const [createError, setCreateError] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [givenName, setGivenName] = useState("");
-  const [familyName, setFamilyName] = useState("");
-  const [email, setEmail] = useState("");
-  const [customerSince, setCustomerSince] = useState("2024-01-01");
+  const [attaching, setAttaching] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  // What the disclosure's button controls, so a reader it tells "expanded" can be taken there.
+  const attachPanelId = useId();
   const [attachId, setAttachId] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -120,53 +119,24 @@ export function CustomersPage() {
     return () => controller.abort();
   }, [readEverything]);
 
-  /** Both lists, after a write that changed which profiles this shop has. */
-  const reload = useCallback(async () => {
-    await Promise.all([listings.customers.refresh(), readEverything()]);
-  }, [listings.customers, readEverything]);
-
-  async function addProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setCreateError(null);
-    try {
-      await createCustomerProfile({
-        identity: {
-          given_name: givenName,
-          family_name: familyName,
-          email,
-          locale: "en-GB",
-          phone: null,
-        },
-        customer_since: customerSince,
-        shop_id: shopId,
-      });
-      setGivenName("");
-      setFamilyName("");
-      setEmail("");
-    } catch (cause: unknown) {
-      setCreateError(describeApiError(cause, "The profile could not be created."));
-      setBusy(false);
-      return;
-    }
-    await reload();
-    setBusy(false);
-  }
-
   async function attach(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
+    setAttaching(true);
     setAttachError(null);
     try {
       await attachCustomerProfileToShop(attachId, shopId);
       setAttachId("");
     } catch (cause: unknown) {
       setAttachError(describeApiError(cause, "The profile could not be attached."));
-      setBusy(false);
+      setAttaching(false);
       return;
     }
-    await reload();
-    setBusy(false);
+    // Attaching changes what this shop's customer listing holds, so the listing the rail is
+    // drawn from is read again (ADR 0056). The cross-shop list moves with it: the profile
+    // that was just attached is no longer attachable.
+    await Promise.all([listings.customers.refresh(), readEverything()]);
+    setAttaching(false);
+    setAttachOpen(false);
   }
 
   // Name or email, the pair the prototype's customers search reads (its `shownCustomers`
@@ -185,6 +155,26 @@ export function CustomersPage() {
       <PageHeader
         title="Customers"
         description="Profiles attached to this shop. A profile — identity, persona, and address book — is reusable across shops; orders, tickets, and support history stay here."
+        actions={
+          <>
+            {/* The prototype's secondary button in the header (`Workspace.dc.html`:1133). It
+                opens the one control an attach needs — which profile — rather than a second
+                create form, so the index keeps no side card. */}
+            <button
+              className={outlineButtonClasses}
+              type="button"
+              aria-expanded={attachOpen}
+              aria-controls={attachPanelId}
+              onClick={() => setAttachOpen((open) => !open)}
+            >
+              <ButtonIcon verb="create" />
+              Attach existing
+            </button>
+            <Link className={accentButtonClasses} to="new">
+              New customer
+            </Link>
+          </>
+        }
       />
 
       {loadError ? (
@@ -193,139 +183,11 @@ export function CustomersPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to search and count. A chip is a filter, and a row of
-              zeros over "Loading…" — or over a listing that failed — filters nothing and
-              answers nothing; it is the stat band this slice exists to avoid, drawn at its
-              least useful moment. The search box keeps the same company: a box that can only
-              narrow nothing is a control that does nothing. Both arrive with the table they
-              belong to. */}
-          {loading || loadError ? null : (
-            <>
-              <SearchRow>
-                <SearchField label="Search by name or email" onChange={setQuery} value={query} />
-              </SearchRow>
-              <FilterChips
-                legend="Filter customers"
-                chips={chips}
-                selected={filter}
-                onSelect={setFilter}
-              />
-            </>
-          )}
-          {loading ? (
-            <p className="p-4 text-[13px] text-admin-muted">Loading customers…</p>
-          ) : attached.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">
-              No customer is attached to this shop yet. Create one, or attach an existing profile.
-            </p>
-          ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No customer matches this view.</p>
-          ) : (
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr>
-                  <th className={tableHeadClasses}>Customer</th>
-                  <th className={tableHeadClasses}>Persona</th>
-                  <th className={tableHeadClasses}>Addresses</th>
-                  <th className={tableHeadClasses}>Shops</th>
-                  <th className={tableHeadClasses}>Published</th>
-                  <th className={tableHeadClasses}>Draft updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((profile) => (
-                  <tr key={profile.profile_id}>
-                    <td className={tableCellClasses}>
-                      <Link
-                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                        to={profile.profile_id}
-                      >
-                        {profile.display_name}
-                      </Link>
-                      <div className="text-admin-muted">{profile.email}</div>
-                    </td>
-                    <td className={tableCellClasses}>
-                      {profile.persona_traits.length === 0
-                        ? "—"
-                        : profile.persona_traits.join(" · ")}
-                    </td>
-                    <td className={tableCellClasses}>
-                      {profile.address_count}
-                      {profile.default_address_label
-                        ? ` · default: ${profile.default_address_label}`
-                        : " · no default"}
-                    </td>
-                    <td className={tableCellClasses}>{profile.attached_shop_count}</td>
-                    <td className={tableCellClasses}>{publishedLabel(profile)}</td>
-                    <td className={tableCellClasses}>{formatTimestamp(profile.updated_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-
-        <div className="grid content-start gap-4">
-          <Card title="New customer">
-            <form className="grid gap-3" onSubmit={addProfile}>
-              <FieldHint label="Given name" hint={CUSTOMER_NAME_RULE}>
-                <input
-                  className={fieldControlClasses}
-                  value={givenName}
-                  required
-                  placeholder="Maya"
-                  onChange={(event) => setGivenName(event.target.value)}
-                />
-              </FieldHint>
-              <FieldHint label="Family name" hint={CUSTOMER_NAME_RULE}>
-                <input
-                  className={fieldControlClasses}
-                  value={familyName}
-                  required
-                  placeholder="Laurent"
-                  onChange={(event) => setFamilyName(event.target.value)}
-                />
-              </FieldHint>
-              <FieldHint label="Email" hint={CUSTOMER_EMAIL_RULE}>
-                <input
-                  className={fieldControlClasses}
-                  type="email"
-                  value={email}
-                  required
-                  placeholder="maya.laurent@example.org"
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </FieldHint>
-              <FieldHint label="Customer since" hint={CUSTOMER_SINCE_RULE}>
-                <input
-                  className={fieldControlClasses}
-                  type="date"
-                  value={customerSince}
-                  required
-                  onChange={(event) => setCustomerSince(event.target.value)}
-                />
-              </FieldHint>
-              {createError ? (
-                <p role="alert" className="text-[13px] text-lab-error">
-                  {createError}
-                </p>
-              ) : null}
-              <button className={accentButtonClasses} type="submit" disabled={busy}>
-                <ButtonIcon verb="save" />
-                Create and attach
-              </button>
-              <p className="text-xs text-admin-muted">
-                Every customer is fictional. The address book and persona are added in the editor,
-                then published together.
-              </p>
-            </form>
-          </Card>
-
-          <Card title="Attach existing profile">
-            <form className="grid gap-3" onSubmit={attach}>
-              <label className={fieldLabelClasses}>
+      {attachOpen ? (
+        <div className="mb-4" id={attachPanelId}>
+          <Card title="Attach an existing profile">
+            <form className="flex flex-wrap items-end gap-3" onSubmit={attach}>
+              <label className={`${fieldLabelClasses} min-w-[260px] flex-1`}>
                 Profile
                 <select
                   className={fieldControlClasses}
@@ -342,27 +204,228 @@ export function CustomersPage() {
                   ))}
                 </select>
               </label>
-              {attachError ? (
-                <p role="alert" className="text-[13px] text-lab-error">
-                  {attachError}
-                </p>
-              ) : null}
               <button
                 className={outlineButtonClasses}
                 type="submit"
-                disabled={busy || attachable.length === 0}
+                disabled={attaching || attachable.length === 0}
               >
                 <ButtonIcon verb="create" />
                 Attach to this shop
               </button>
-              <p className="text-xs text-admin-muted">
+              {attachError ? (
+                <p role="alert" className="w-full text-[13px] text-lab-error">
+                  {attachError}
+                </p>
+              ) : null}
+              <p className="w-full text-xs text-admin-muted">
                 Attaching reuses the same profile. Its history in another shop never travels with
                 it.
               </p>
             </form>
           </Card>
         </div>
-      </div>
+      ) : null}
+
+      <section className={`${surfaceClasses} overflow-hidden`}>
+        {/* Only once there are rows to search and count. A chip is a filter, and a row of
+            zeros over "Loading…" — or over a listing that failed — filters nothing and
+            answers nothing; it is the stat band this slice exists to avoid, drawn at its
+            least useful moment. The search box keeps the same company: a box that can only
+            narrow nothing is a control that does nothing. Both arrive with the table they
+            belong to. */}
+        {loading || loadError ? null : (
+          <>
+            <SearchRow>
+              <SearchField label="Search by name or email" onChange={setQuery} value={query} />
+            </SearchRow>
+            <FilterChips
+              legend="Filter customers"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          </>
+        )}
+        {loading ? (
+          <p className="p-4 text-[13px] text-admin-muted">Loading customers…</p>
+        ) : attached.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">
+            No customer is attached to this shop yet. Create one, or attach an existing profile.
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">No customer matches this view.</p>
+        ) : (
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr>
+                <th className={tableHeadClasses}>Customer</th>
+                <th className={tableHeadClasses}>Persona</th>
+                <th className={tableHeadClasses}>Addresses</th>
+                <th className={tableHeadClasses}>Shops</th>
+                <th className={tableHeadClasses}>Published</th>
+                <th className={tableHeadClasses}>Draft updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((profile) => (
+                <tr key={profile.profile_id}>
+                  <td className={tableCellClasses}>
+                    <Link
+                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                      to={profile.profile_id}
+                    >
+                      {profile.display_name}
+                    </Link>
+                    <div className="text-admin-muted">{profile.email}</div>
+                  </td>
+                  <td className={tableCellClasses}>
+                    {profile.persona_traits.length === 0 ? "—" : profile.persona_traits.join(" · ")}
+                  </td>
+                  <td className={tableCellClasses}>
+                    {profile.address_count}
+                    {profile.default_address_label
+                      ? ` · default: ${profile.default_address_label}`
+                      : " · no default"}
+                  </td>
+                  <td className={tableCellClasses}>{profile.attached_shop_count}</td>
+                  <td className={tableCellClasses}>{publishedLabel(profile)}</td>
+                  <td className={tableCellClasses}>{formatTimestamp(profile.updated_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
     </>
+  );
+}
+
+/**
+ * `/shops/:shopId/customers/new` — the profile, authored on a page
+ * (`Workspace.dc.html`:1333).
+ *
+ * The four things that constrain what follows: who the customer is, how they are addressed,
+ * and since when. The address book and the persona the prototype also draws here belong to
+ * the editor this lands in — *A create form asks for what constrains the work that follows
+ * and names where the rest lives* — and the profile's publish gate names both the moment the
+ * operator arrives there.
+ */
+export function NewCustomerPage() {
+  const { shopId, listings } = useShopWorkspace();
+  const navigate = useNavigate();
+  const formId = useId();
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [givenName, setGivenName] = useState("");
+  const [familyName, setFamilyName] = useState("");
+  const [email, setEmail] = useState("");
+  const [customerSince, setCustomerSince] = useState("2024-01-01");
+
+  const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
+  const blockedBy =
+    givenName.trim() === "" || familyName.trim() === ""
+      ? "The profile needs a given name and a family name."
+      : email.trim() === ""
+        ? "The profile needs an email address: it is what identifies it wherever it is reused."
+        : undefined;
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (blockedBy !== undefined) {
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    let profileId: string;
+    try {
+      const created = await createCustomerProfile({
+        identity: {
+          given_name: givenName,
+          family_name: familyName,
+          email,
+          locale: "en-GB",
+          phone: null,
+        },
+        customer_since: customerSince,
+        shop_id: shopId,
+      });
+      profileId = created.profile_id;
+    } catch (cause: unknown) {
+      setCreateError(describeApiError(cause, "The profile could not be created."));
+      setCreating(false);
+      return;
+    }
+    // This shop now has a customer it did not have, so the listing the rail counts and the
+    // index renders is read again before the operator lands in the editor (ADR 0056).
+    await listings.customers.refresh();
+    navigate(`/shops/${shopId}/customers/${profileId}`);
+  }
+
+  return (
+    <CreatePage
+      backTo={`/shops/${shopId}/customers`}
+      backLabel="Customers"
+      breadcrumb="creating a profile"
+      title={displayName}
+      untitled="New customer"
+      formId={formId}
+      createLabel="Create profile"
+      creating={creating}
+      creatingLabel="Creating…"
+      blockedBy={blockedBy}
+      error={createError}
+    >
+      <form id={formId} className="grid gap-4" onSubmit={submit}>
+        <Card title="Identity">
+          <FieldRows>
+            <Field label="Given name" hint={CUSTOMER_NAME_RULE}>
+              <input
+                className={fieldControlClasses}
+                value={givenName}
+                required
+                placeholder="Maya"
+                onChange={(event) => setGivenName(event.target.value)}
+              />
+            </Field>
+            <Field label="Family name" hint={CUSTOMER_NAME_RULE}>
+              <input
+                className={fieldControlClasses}
+                value={familyName}
+                required
+                placeholder="Laurent"
+                onChange={(event) => setFamilyName(event.target.value)}
+              />
+            </Field>
+            <Field label="Email" hint={CUSTOMER_EMAIL_RULE}>
+              <input
+                className={fieldControlClasses}
+                type="email"
+                value={email}
+                required
+                placeholder="maya.laurent@example.org"
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </Field>
+            <Field label="Customer since" hint={CUSTOMER_SINCE_RULE}>
+              <input
+                className={fieldControlClasses}
+                type="date"
+                value={customerSince}
+                required
+                onChange={(event) => setCustomerSince(event.target.value)}
+              />
+            </Field>
+          </FieldRows>
+        </Card>
+
+        <Card title="What happens next">
+          <p className="text-[13px] leading-relaxed text-admin-ink-soft">
+            Every customer is fictional. The profile is created attached to this shop and
+            unpublished: the address book and the behavioral persona are authored in the editor, and
+            the publish gate names both until they are there.
+          </p>
+        </Card>
+      </form>
+    </CreatePage>
   );
 }

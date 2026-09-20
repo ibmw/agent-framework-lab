@@ -242,11 +242,30 @@ describe("every rule this module publishes is imported by a module that ships", 
     expect(importedFromFieldRules("// A_RULE is deliberately not shown here.")).toEqual([]);
   });
 
-  it("leaves no export unconsumed", () => {
+  /**
+   * The one rule this workspace publishes and shows nowhere, and the reason it is allowed to.
+   *
+   * `PRODUCT_CATEGORY_RULE` promises a pick list — "Pick one the draft already uses" — and
+   * the only surface that rendered one was the products create card, which PLAN-UX Slice 12
+   * removed when creation became a page. The product editor's category row is the last place
+   * that asks for a category and it deliberately shows no hint, because a rule promising a
+   * list the surface does not draw is worse than a rule withheld; that is a defect
+   * `docs/decisions-and-next-step.md` records and PLAN-UX Slice 27 owns.
+   *
+   * Written as a named list of one rather than as a softer sweep, so it is a single visible
+   * debt with an owner, and as an *equality* rather than an exclusion: the day Slice 27 adds
+   * the datalist the rule stops being an orphan, the list stops matching, and this case
+   * fails until the constant is deleted with it. The allowance cannot outlive the debt.
+   */
+  const AWAITING_ITS_SURFACE = ["PRODUCT_CATEGORY_RULE"];
+
+  it("leaves no export unconsumed but the one a slice owes a surface", () => {
     const consumed = new Set(
       consumers.flatMap(([, source]) => importedFromFieldRules(source as string)),
     );
     const orphans = exportedNames(fieldRulesSource).filter((name) => !consumed.has(name));
-    expect(orphans, "exported by lib/fieldRules.ts and imported by nothing").toEqual([]);
+    expect(orphans, "exported by lib/fieldRules.ts and imported by nothing").toEqual(
+      AWAITING_ITS_SURFACE,
+    );
   });
 });

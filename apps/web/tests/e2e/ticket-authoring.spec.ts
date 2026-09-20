@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -37,12 +38,7 @@ async function addMessage(page: Page, role: string, body: string, sentAt: string
 test("an author publishes the wrong-address ticket for one shop's customer", async ({ page }) => {
   const unique = Date.now().toString(36);
 
-  await page.goto("/shops");
-  const createShop = card(page, "Create a shop");
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   // A ticket suggests the shop's own documents and pins the shop version it was authored
   // against, so the shop is completed and published first.
@@ -76,12 +72,14 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await saveDraft(page);
 
   await openSection(page, "Products", "Products");
-  const newProduct = card(page, "Add a product");
-  await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
-  await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
-  await newProduct.getByRole("button", { name: "Add to draft" }).click();
+  // *New product* appends an empty product to the shop draft and opens its editor, where
+  // the title, the category and the handle it derives are authored (PLAN-UX Slice 12).
+  await page.getByRole("button", { name: "New product" }).click();
+  const identity = card(page, "Details");
+  await identity.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
+  await identity.getByLabel("Category", { exact: true }).fill("Jackets");
+  await expect(identity.getByLabel("Handle", { exact: true })).toHaveValue("alpine-shell-jacket");
   await saveDraft(page);
-  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
   const options = card(page, "Options");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
   await options.getByLabel("New value", { exact: true }).fill("Ocean Blue");
@@ -99,12 +97,13 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
 
   // The customer the incident is about; a published ticket pins an exact profile version.
   await openSection(page, "Customers", "Customers");
-  const newCustomer = card(page, "New customer");
-  await newCustomer.getByLabel("Given name", { exact: true }).fill("Maya");
-  await newCustomer.getByLabel("Family name", { exact: true }).fill("Laurent");
-  await newCustomer.getByLabel("Email", { exact: true }).fill(`maya.${unique}@example.org`);
-  await newCustomer.getByRole("button", { name: "Create and attach" }).click();
-  await page.getByRole("link", { name: "Maya Laurent" }).click();
+  // Creating a profile is a page that lands in its editor (PLAN-UX Slice 12), so the
+  // journey no longer walks back to the index to open what it just made.
+  await page.getByRole("link", { name: "New customer" }).click();
+  await page.getByLabel("Given name", { exact: true }).fill("Maya");
+  await page.getByLabel("Family name", { exact: true }).fill("Laurent");
+  await page.getByLabel("Email", { exact: true }).fill(`maya.${unique}@example.org`);
+  await page.getByRole("button", { name: "Create profile" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Maya Laurent" })).toBeVisible();
 
   const addAddress = card(page, "Address book").getByRole("group", { name: "Add an address" });
@@ -123,21 +122,27 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
 
   // The order the incident is about, shipping to the stale address.
   await openSection(page, "Orders", "Orders");
-  const createOrder = card(page, "Create order");
-  await createOrder.getByLabel("Customer", { exact: true }).selectOption({ label: "Maya Laurent" });
-  await expect(createOrder.getByLabel("Reference", { exact: true })).toHaveValue(/^[A-Z0-9]+-1$/);
-  await createOrder.getByLabel("Reference", { exact: true }).fill("NS-10482");
-  await createOrder.getByRole("button", { name: "Create order" }).click();
-  await page.getByRole("link", { name: "NS-10482" }).click();
+  // The create page will not go without a line and takes the shipping address from the
+  // customer's own book, so both are answered on the way in and the editor is left with the
+  // fixture's state (PLAN-UX Slice 12).
+  await page.getByRole("link", { name: "New order" }).click();
+  await page.getByLabel("Customer", { exact: true }).selectOption({ label: "Maya Laurent" });
+  await expect(page.getByLabel("Reference", { exact: true })).toHaveValue(/^[A-Z0-9]+-1$/);
+  await page.getByLabel("Reference", { exact: true }).fill("NS-10482");
+  await page.getByLabel("Variant", { exact: true }).selectOption("NS-ASJ-OB-M");
+  await page.getByRole("radio", { name: /Bordeaux previous flat/ }).check();
+  await page.getByRole("button", { name: "Create order" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "NS-10482" })).toBeVisible();
   const lines = card(page, "Line items & payment");
-  await lines.getByLabel("Add product", { exact: true }).selectOption("NS-ASJ-OB-M");
-  await lines.getByRole("button", { name: "Add line" }).click();
   await lines.getByLabel("Payment status", { exact: true }).selectOption("paid");
   await lines.getByLabel("Payment method", { exact: true }).selectOption("card");
   await lines.getByLabel("Paid at", { exact: true }).fill("2026-08-21T13:12");
   const shipping = card(page, "Fulfilment & shipping");
   await shipping.getByLabel("Fulfilment method", { exact: true }).selectOption("standard");
-  await shipping.getByLabel("Ship to", { exact: true }).selectOption("bordeaux-previous-flat");
+  // The frozen copy the create page already selected, read off the card rather than
+  // re-chosen: the *Ship to* select offers the same label, so the street is what says
+  // which entry this order actually froze.
+  await expect(shipping.getByText(/42 cours de la Marne/)).toBeVisible();
   await page.getByRole("button", { name: "Save order" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 

@@ -266,6 +266,26 @@ describe("the tour a location is on", () => {
     expect(tourAt("/lab/history")).toBeNull();
     expect(tourAt("/settings")).toBeNull();
     expect(tourAt("/shops")).toBeNull();
+    // A create page is its own surface and has no tour of its own; offering it the index's
+    // would light anchors that are not on it (PLAN-UX Slice 12).
+    expect(tourAt("/shops/new")).toBeNull();
+    expect(tourAt("/shops/shop-1/orders/new")).toBeNull();
+    expect(tourAt("/shops/shop-1/customers/new")).toBeNull();
+    expect(tourAt("/lab/support-identities/new")).toBeNull();
+  });
+
+  it("excludes the create pages by address, not by a last segment that reads like one", () => {
+    // The two cases that tell an address list from "anything ending in /new", which is what
+    // this exclusion used to be. A ticket *is* a surface with a tour at a second address,
+    // so a ticket whose reference is spelled `new` must keep the helpdesk's walk…
+    expect(tourAt("/shops/shop-1/tickets/new")).toBe("tickets");
+    // …and a trailing slash must not slip a create page past the exclusion into the tour of
+    // the index behind it.
+    expect(tourAt("/shops/new/")).toBeNull();
+    // A product an operator names `new` is a product editor, not a create page, and keeps
+    // whatever tour that surface is one day given rather than losing it to a spelling.
+    expect(tourAt("/shops/shop-1/products/new")).toBeNull();
+    expect(tourAt("/shops/shop-1/products")).toBe("products");
   });
 
   it("keeps the recipe and its starting states apart, which share a prefix", () => {

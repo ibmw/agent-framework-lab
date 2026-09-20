@@ -6,8 +6,8 @@ import type {
   ReviewSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
 import { DerivedIdField } from "../components/DerivedIdField";
@@ -46,6 +46,7 @@ import {
   MONEY_RULE,
   OPTION_VALUES_RULE,
   PRODUCT_DESCRIPTION_RULE,
+  PRODUCT_HANDLE_RULE,
   PRODUCT_STATUS_RULE,
   PRODUCT_TITLE_RULE,
   REFERENCE_PATTERN,
@@ -56,6 +57,7 @@ import {
 import {
   findProduct,
   issuesForProduct,
+  productTitle,
   ratingLabel,
   replaceProduct,
   variantOptionLabel,
@@ -80,17 +82,107 @@ const ATTRIBUTE_TYPES = optionsOf(ATTRIBUTE_TYPE);
 const PRODUCT_STATUSES = optionsOf(PRODUCT_STATUS);
 
 export function ProductEditorPage() {
-  const { handle = "" } = useParams();
-  const { content, preview, edit, save, saving, discard, discarding, dirty, error } =
+  const { handle: addressed = "" } = useParams();
+  const { shopId, content, preview, edit, save, saving, discard, discarding, dirty, error } =
     useShopWorkspace();
-  const product = findProduct(content, handle);
+  const navigate = useNavigate();
+  /**
+   * The handle of the product this editor is showing, which is the address until the Handle
+   * row changes it.
+   *
+   * A product is addressed *by* its handle, so renaming one moves the page it is on. The draft
+   * and the router are two stores and settle in two commits, so looking the product up by the
+   * route parameter alone would find nothing for one render after a rename and draw "Product
+   * not found" over a product that is right there. This holds what is being edited, and the
+   * effect below puts the address back on it.
+   */
+  const [shown, setShown] = useState(addressed);
+  /**
+   * Where in the draft the product being edited sits, so a rename that is undone can be
+   * followed back.
+   *
+   * A rename lives only in the draft until it is saved, so *Discard changes* can take the
+   * handle this page is standing on out of existence: the draft goes back to what the lab
+   * holds, the address and `shown` both name a product that is no longer in it, and the page
+   * would draw "Product not found" over a product that is right there under its old name.
+   *
+   * The position is what survives that, and a remembered *handle* does not: `discard` marks
+   * the draft clean before the read that restores it (ADR 0051), so there is a commit in
+   * which the editor is clean and the content is still the edited one — and anything keyed
+   * on "clean" would record the handle that is about to disappear. Nothing renames, adds or
+   * reorders products behind this page, so the slot is stable.
+   */
+  const at = content.products.findIndex((entry) => entry.handle === shown);
+  const slot = useRef(at);
+  const product = at === -1 ? undefined : content.products[at];
+  const elsewhere = findProduct(content, addressed);
+
+  useEffect(() => {
+    if (at !== -1) {
+      slot.current = at;
+      return;
+    }
+    const back = content.products[slot.current];
+    if (back !== undefined) {
+      setShown(back.handle);
+      setTypedHandle(null);
+    }
+  }, [at, content]);
+
+  useEffect(() => {
+    if (addressed === shown) {
+      return;
+    }
+    if (elsewhere) {
+      // A real navigation — a link, the back button — to another product in the same draft.
+      setShown(addressed);
+      setTypedHandle(null);
+      return;
+    }
+    // A rename, or a discard that undid one: the address is stale, and `replace` keeps one
+    // history entry per product rather than one per keystroke of the handle.
+    navigate(`/shops/${shopId}/products/${shown}`, { replace: true });
+  }, [addressed, shown, elsewhere, navigate, shopId]);
+
+  /**
+   * The handles the *other* products hold, by identity rather than by spelling.
+   *
+   * Renaming rewrites this product's own handle in the draft as it is typed, so a list
+   * filtered by spelling would stop recognising the product being renamed and start
+   * recognising its own new handle as taken.
+   */
+  const takenHandles = content.products
+    .filter((entry) => entry.handle !== shown)
+    .map((entry) => entry.handle);
+  /**
+   * What the handle would be if it followed the title, never nothing.
+   *
+   * On a create form an untitled product suggests an empty handle and the field simply sits
+   * empty. Here the field is bound to something that exists and is addressed by it, so a
+   * suggestion of "" would rename the product to nothing the moment it was followed. An
+   * untitled product therefore suggests the handle it already has, which is a no-op.
+   */
+  const derivedHandle = slugify(product?.title ?? "", "");
+  const { value: suggestedHandle, takenBase: takenHandleBase } = uniqueSuggestion(
+    derivedHandle === "" ? shown : derivedHandle,
+    takenHandles,
+  );
+  /**
+   * What is in the Handle field, while it differs from the handle the draft holds.
+   *
+   * Emptying the field is how `DerivedIdField` is told to follow the title again, and it
+   * reports the empty string on the way. A product cannot be addressed by nothing, so the
+   * draft is left alone until there is a handle to write; the field shows what was typed and
+   * restores the suggestion on blur, exactly as it does on every other surface.
+   */
+  const [typedHandle, setTypedHandle] = useState<string | null>(null);
 
   if (!product) {
     return (
       <>
         <PageHeader title="Product not found" />
         <p className="text-[13px] text-admin-muted">
-          This draft has no product <code>{handle}</code>.{" "}
+          This draft has no product <code>{addressed}</code>.{" "}
           <Link className="font-semibold text-lab-ink" to=".." relative="path">
             Back to products
           </Link>
@@ -100,13 +192,21 @@ export function ProductEditorPage() {
   }
 
   function update(next: ProductViewSchema) {
-    edit(replaceProduct(content, handle, next));
+    edit(replaceProduct(content, shown, next));
+    if (next.handle !== shown) {
+      setShown(next.handle);
+    }
   }
 
   return (
     <>
       <PageHeader
-        title={product.title}
+        // A product created from the catalog's *New product* arrives with no title — it is an
+        // empty row of the draft, and naming it is the first thing this editor is for. An
+        // empty `<h1>` would leave the page, and the tour's own first anchor, with nothing to
+        // read, so the heading stands in until the Title row has an answer. The catalog's own
+        // link uses the same stand-in, from the same place.
+        title={productTitle(product)}
         chips={<VersionChips preview={preview} />}
         description={`Editing the shop draft · ${ratingLabel(product)}`}
         actions={
@@ -141,6 +241,42 @@ export function ProductEditorPage() {
                   onChange={(event) => update({ ...product, title: event.target.value })}
                 />
               </Field>
+              {/*
+               * The handle the tools address this product by, asked here because the catalog
+               * no longer asks it: *New product* appends an empty row and opens this editor
+               * (PLAN-UX Slice 12), so this is the one surface that can name it. It follows
+               * the title exactly as every other derived identifier does, and the page's own
+               * address follows it — see `shown` above.
+               */}
+              <DerivedIdField
+                arrangement="row"
+                label="Handle"
+                hint={PRODUCT_HANDLE_RULE}
+                value={typedHandle ?? product.handle}
+                suggested={suggestedHandle}
+                taken={takenHandles}
+                takenBase={takenHandleBase}
+                takenPlace="in the draft"
+                pattern={KEBAB_PATTERN}
+                title={PRODUCT_HANDLE_RULE}
+                placeholder="alpine-shell-jacket"
+                required
+                onChange={(next) => {
+                  // The field reports the handle back on mount, when it follows the title
+                  // and when it is emptied. Only a *different*, non-empty, free handle is
+                  // written: re-writing the same one would mark a clean draft dirty, and
+                  // writing a taken one would put two products under one address, which is
+                  // the collision the field is refusing on screen.
+                  if (next === product.handle) {
+                    setTypedHandle(null);
+                    return;
+                  }
+                  setTypedHandle(next);
+                  if (next !== "" && !takenHandles.includes(next)) {
+                    update({ ...product, handle: next });
+                  }
+                }}
+              />
               <Field label="Status" hint={PRODUCT_STATUS_RULE}>
                 <select
                   className={fieldControlClasses}
@@ -161,13 +297,14 @@ export function ProductEditorPage() {
               </Field>
               {/* Still no hint, and now the only row in this card without one.
                   `PRODUCT_CATEGORY_RULE`'s second sentence — "Pick one the draft already
-                  uses" — is true on the create form because that form renders a `<datalist>`
-                  of the draft's categories beside the input, and false here because this one
-                  does not. The copy slice re-read it and left it: the anti-fragmentation
-                  rule *is* the useful thing to say about a category, so any other sentence
-                  written here would satisfy the sweep, silence this reminder, and still not
-                  tell the reader the one thing they need. The datalist is behaviour and this
-                  row stays bare until it lands — see `docs/decisions-and-next-step.md`. */}
+                  uses" — promises a pick list, and this row renders none. It was true on the
+                  create form, which rendered a `<datalist>` of the draft's categories; PLAN-UX
+                  Slice 12 removed that form, so the promise is now unbacked everywhere rather
+                  than on one surface of two. The anti-fragmentation rule *is* the useful thing
+                  to say about a category, so any other sentence written here would satisfy the
+                  sweep, silence this reminder, and still not tell the reader the one thing they
+                  need. The datalist is behaviour and this row stays bare until it lands — see
+                  `docs/decisions-and-next-step.md`, and PLAN-UX Slice 27. */}
               <Field label="Category">
                 <input
                   className={fieldControlClasses}

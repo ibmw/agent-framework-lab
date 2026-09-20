@@ -99,6 +99,21 @@ export function issuesForProduct(
   return issues.filter((issue) => issue.path === prefix || issue.path.startsWith(`${prefix}.`));
 }
 
+/**
+ * What a product is called on screen before anyone has named it.
+ *
+ * *New product* appends a product with no title and opens its editor (PLAN-UX Slice 12), and
+ * the operator can leave it unnamed — the catalog saves the shop draft too, so nothing asks
+ * on the way back. An empty string would leave the catalog with a link that has no
+ * accessible name and nothing to click, and the editor with an empty `<h1>`. One stand-in
+ * here so the two surfaces cannot come to disagree about what an unnamed product is called.
+ */
+export const UNTITLED_PRODUCT = "Untitled product";
+
+export function productTitle(product: ProductViewSchema): string {
+  return product.title === "" ? UNTITLED_PRODUCT : product.title;
+}
+
 export function ratingLabel(product: ProductViewSchema): string {
   if (product.ratings.review_count === 0) {
     return "No reviews";

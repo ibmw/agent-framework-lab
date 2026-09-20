@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 
 /**
@@ -21,23 +22,27 @@ test("an author publishes a customer profile with an address book and persona", 
 }) => {
   const unique = Date.now().toString(36);
 
-  await page.goto("/shops");
-  const createShop = card(page, "Create a shop");
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Customers" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Customers" })).toBeVisible();
 
-  const newCustomer = card(page, "New customer");
-  await newCustomer.getByLabel("Given name", { exact: true }).fill("Maya");
-  await newCustomer.getByLabel("Family name", { exact: true }).fill("Laurent");
-  await newCustomer.getByLabel("Email", { exact: true }).fill(`maya.${unique}@example.org`);
-  await newCustomer.getByRole("button", { name: "Create and attach" }).click();
+  // Creating a profile is a page (PLAN-UX Slice 12): the operator names it, reads the name
+  // back as the page's own title, and is refused until the profile can be identified.
+  await page.getByRole("link", { name: "New customer" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "New customer" })).toBeVisible();
+  const create = page.getByRole("button", { name: "Create profile" });
+  await expect(create).toBeDisabled();
+  await page.getByLabel("Given name", { exact: true }).fill("Maya");
+  await page.getByLabel("Family name", { exact: true }).fill("Laurent");
+  await expect(page.getByRole("heading", { level: 1, name: "Maya Laurent" })).toBeVisible();
+  await expect(create).toBeDisabled();
+  await expect(page.getByText(/needs an email address/)).toBeVisible();
+  await page.getByLabel("Email", { exact: true }).fill(`maya.${unique}@example.org`);
+  await expect(create).toBeEnabled();
+  await create.click();
 
-  await page.getByRole("link", { name: "Maya Laurent" }).click();
+  // And lands in that profile's editor.
   await expect(page.getByRole("heading", { level: 1, name: "Maya Laurent" })).toBeVisible();
   await expect(page.getByText("Never published")).toBeVisible();
 

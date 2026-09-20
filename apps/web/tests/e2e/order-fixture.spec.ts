@@ -1,4 +1,11 @@
 import type { Page } from "@playwright/test";
+import {
+  addProduct,
+  createCustomer,
+  createOrder,
+  createShop,
+  saveDraft,
+} from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -10,11 +17,6 @@ import { openSection } from "./support/navigate";
 
 function card(page: Page, name: string) {
   return page.getByRole("region", { name });
-}
-
-async function saveDraft(page: Page) {
-  await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page.getByText("All changes saved")).toBeVisible();
 }
 
 async function addAddress(
@@ -33,22 +35,15 @@ async function addAddress(
 test("an author builds a paid order shipping to the customer's stale address", async ({ page }) => {
   const unique = Date.now().toString(36);
 
-  await page.goto("/shops");
-  const createShop = card(page, "Create a shop");
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  // Said rather than defaulted into. The form now ticks the locale's currency for you, which
-  // makes the point sharper rather than stale: a journey that asserts a price in euros ticks
-  // EUR itself and unticks the pound `en-GB` suggested, so the shop sells in euros because
-  // this test said so. One currency left also means the variant form asks for no currency.
-  // EUR first, then the pound: the last ticked box is disabled, so unticking GBP while it
-  // is the only currency would be a click on a disabled control.
-  const shopCurrencies = createShop.getByRole("group", { name: "Currencies" });
-  await shopCurrencies.getByRole("checkbox", { name: "EUR — Euro" }).check();
-  await shopCurrencies.getByRole("checkbox", { name: "GBP — Pound sterling" }).uncheck();
-  await expect(shopCurrencies.getByRole("checkbox", { name: "EUR — Euro" })).toBeChecked();
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  // Said rather than defaulted into. The form ticks the locale's currency for you, so a
+  // journey that asserts a price in euros ticks EUR itself and unticks the pound `en-GB`
+  // suggested; the shop sells in euros because this test said so, and one currency left
+  // means the variant form asks for none.
+  await createShop(page, {
+    name: `Northstar ${unique}`,
+    slug: `northstar-${unique}`,
+    sells: { code: "EUR", insteadOf: "GBP" },
+  });
 
   // An order selects its payment and fulfilment method from the shop's configuration.
   await openSection(page, "Shop details", "Shop details");
@@ -63,15 +58,10 @@ test("an author builds a paid order shipping to the customer's stale address", a
   await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
   await saveDraft(page);
 
-  // ...and its line items from the catalog.
-  await openSection(page, "Products", "Products");
-  const newProduct = card(page, "Add a product");
-  await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
-  await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
-  await newProduct.getByRole("button", { name: "Add to draft" }).click();
-  await saveDraft(page);
+  // ...and its line items from the catalog. *New product* appends an empty product and
+  // opens its editor, where the title and the category are authored (PLAN-UX Slice 12).
+  await addProduct(page, { title: "Alpine Shell Jacket", category: "Jackets" });
 
-  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
   const options = card(page, "Options");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
   await options.getByLabel("New value", { exact: true }).fill("Ocean Blue");
@@ -84,15 +74,11 @@ test("an author builds a paid order shipping to the customer's stale address", a
   await saveDraft(page);
 
   // A customer whose default address moved to Lyon while an old order still ships to Bordeaux.
-  await openSection(page, "Customers", "Customers");
-  const newCustomer = card(page, "New customer");
-  await newCustomer.getByLabel("Given name", { exact: true }).fill("Maya");
-  await newCustomer.getByLabel("Family name", { exact: true }).fill("Laurent");
-  await newCustomer.getByLabel("Email", { exact: true }).fill(`maya.${unique}@example.org`);
-  await newCustomer.getByRole("button", { name: "Create and attach" }).click();
-
-  await page.getByRole("link", { name: "Maya Laurent" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Maya Laurent" })).toBeVisible();
+  await createCustomer(page, {
+    givenName: "Maya",
+    familyName: "Laurent",
+    email: `maya.${unique}@example.org`,
+  });
   await addAddress(page, {
     label: "Home",
     street: "18 rue des Écoles",
@@ -107,31 +93,25 @@ test("an author builds a paid order shipping to the customer's stale address", a
   });
   await saveDraft(page);
 
-  // The order fixture itself.
-  await openSection(page, "Orders", "Orders");
-  const createOrder = card(page, "Create order");
-  await createOrder.getByLabel("Customer", { exact: true }).selectOption({ label: "Maya Laurent" });
-  await expect(createOrder.getByLabel("Reference", { exact: true })).toHaveValue(/^[A-Z0-9]+-1$/);
-  await createOrder.getByLabel("Reference", { exact: true }).fill("NS-10482");
-  await createOrder.getByRole("button", { name: "Create order" }).click();
-
-  await page.getByRole("link", { name: "NS-10482" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "NS-10482" })).toBeVisible();
-  await expect(card(page, "Findings").getByText(/must carry at least one line item/)).toBeVisible();
+  // The order fixture itself. An order cannot be created without a line, so the line the
+  // editor used to take is answered on the way in, and so is the stale address it ships to:
+  // the create page chooses an entry from the customer's own book (PLAN-UX Slice 12).
+  await createOrder(page, {
+    reference: "NS-10482",
+    customer: "Maya Laurent",
+    variant: "Alpine Shell Jacket · NS-ASJ-OB-M",
+    address: "Bordeaux previous flat",
+  });
 
   const lines = card(page, "Line items & payment");
-  await lines.getByLabel("Add product", { exact: true }).selectOption("NS-ASJ-OB-M");
-  await lines.getByRole("button", { name: "Add line" }).click();
   await lines.getByLabel("Payment status", { exact: true }).selectOption("paid");
   await lines.getByLabel("Payment method", { exact: true }).selectOption("card");
   await lines.getByLabel("Paid at", { exact: true }).fill("2026-08-21T13:12");
 
   const shipping = card(page, "Fulfilment & shipping");
   await shipping.getByLabel("Fulfilment method", { exact: true }).selectOption("standard");
-  await shipping.getByLabel("Ship to", { exact: true }).selectOption({
-    label: "Bordeaux previous flat",
-  });
-  await expect(shipping.getByText(/Saving freezes a new copy/)).toBeVisible();
+  // The frozen copy is already the Bordeaux one the create page selected.
+  await expect(shipping.getByText(/42 cours de la Marne/)).toBeVisible();
 
   await page.getByRole("button", { name: "Save order" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();

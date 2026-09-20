@@ -69,12 +69,12 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Slices 12, 13 and 14 are next, because they change what every index page is and what every
-journey clicks through to create; they are independent of each other. Slices 15, 16, 17 and 18
-are then independent and can proceed in parallel. Slice 19 is the backend milestone and runs
-beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B except
-that 25 waits for 12–14, since the sticky header is on the pages they create. Slices 26 and 27
-close the milestone, and 28 is optional.
+Slices 13 and 14 are next, because they change what every remaining index page is and what a
+journey clicks through to create; they are independent of each other and of the shop's creates,
+which have landed with the `CreatePage` layout they both build on. Slices 15, 16, 17 and 18 are
+then independent and can proceed in parallel. Slice 19 is the backend milestone and runs beside
+Group B; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B. Slices 26 and
+27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -89,42 +89,9 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
 
-#### Slice 12 — Creating is a page, in the shop
-
-- [ ] A `CreatePage` layout: the sticky header with its back arrow, breadcrumb ("Orders ·
-  creating an order fixture"), the typed name as the title with "nothing created yet" beside it,
-  Cancel, and a Create button that is dashed and disabled with the reason in `title` and inline
-  until the form can submit; the body in the 790px column. The layout ships with its four
-  consumers below and no others.
-- [ ] New shop (`/shops/new`): Identity, Commerce, Channels, on the fields Slices 2 and 4 built.
-- [ ] New order (`/shops/:id/orders/new`): Who and when, the address from the customer's book,
-  lines, and the reference `nextReference` prefills.
-- [ ] New customer (`/shops/:id/customers/new`), and *Attach existing* stays on the index as the
-  prototype's secondary button.
-- [ ] New identity (`/lab/support-identities/new`): the library left shop scope with ADR 0054
-  and is reached from both rails, so its create page is the lab's too.
-- [ ] Products: no page. "New product" appends a draft product and opens its editor, as the
-  prototype does (:6931); the side card goes.
-- [ ] Every one of the five indexes loses its side card, gains the primary "New …" button in the
-  header, and lands in the editor of what was created. A create that fails keeps the operator on
-  the page with the error under the button.
-- [ ] Tickets keep their authoring inside the three-pane screen: the prototype draws no ticket
-  creation, and the list panel's form is left as it is.
-
-Frames: `Workspace.dc.html` :212, :1202, :1333, :1643; DEPRECADED frames 2c, 6b for the editors
-landed in.
-
-Branch: `feat/create-pages-shop`. Checks: `CreatePage` tests for the blocked state, the reason,
-Cancel and the landing; `Shops`, `Orders`, `Customers`, `SupportIdentities` and `Products` page
-tests moved from the card to the page; Playwright `shop-publication`, `order-fixture`,
-`customer-publication` and `ticket-authoring` shorten by the step they used to take into the
-editor and change with the form.
-
-Slice evidence: an operator presses *New order*, is on a page called "New order" that names
-Orders above it, watches the title become "NS-10483" as they type, cannot press Create while a
-line is missing and can read why, and after pressing it is standing in that order's editor.
-
 #### Slice 13 — Creating is a page, in the lab
+
+On the `CreatePage` layout Slice 12 built, and on the `blockedButtonClasses` weight it minted.
 
 - [ ] New configuration (`/lab/agent-configurations/new`): name and model required, the reason on
   the disabled control (README, *Interactions*).
@@ -338,9 +305,16 @@ variants before the second press, and can walk the first back.
 
 #### Slice 22 — Refused with a reason
 
-- [ ] A `blockedButtonClasses` variant — dashed, disabled, the reason in `title` — for every
-  primary action that cannot proceed: create pages already use it; Publish, Start, Save
-  connection and Compose adopt it.
+- [ ] `blockedButtonClasses` — the dashed, disabled weight with the reason in `title`, minted
+  in Slice 12 and worn by its four create pages — on **every** primary action that cannot
+  proceed. Publish, Start, Save connection and Compose are the named adopters; the sweep is
+  for the rest, and *Attach to this shop* on Customers is one of them, `disabled` today with
+  its reason nowhere.
+- [ ] Decide whether the weight is `disabled` or `aria-disabled`. Natively disabled, it leaves
+  the tab order and only the inline reason carries — which is the rule as
+  `docs/design-direction.md` states it, and enough, but a keyboard reader never reaches the
+  control to be told. The slice that puts the weight on every blocked primary is the slice to
+  settle it on all of them at once rather than on four pages ahead of the rest.
 - [ ] Validation messages sit under the control at 13px 600 `#9d3028`, in the control's
   accessible description, on the `Field` row.
 - [ ] The rules the September plan listed and the gate still says first: fulfilment max transit
@@ -392,9 +366,10 @@ both are done, without the page changing only a button label.
 
 #### Slice 25 — Save stays in reach
 
-- [ ] `PageHeader` sticks to the top of the scrolling main pane on every editor and create page,
-  with the canvas background and the 1px rule the prototype draws (:207), so Save, Publish and
-  Create are in view at the foot of a six-card editor; `PublishReasons` stays beside Publish.
+- [ ] `PageHeader` sticks to the top of the scrolling main pane on every editor, with the canvas
+  background and the 1px rule the prototype draws (:207), so Save and Publish are in view at the
+  foot of a six-card editor; `PublishReasons` stays beside Publish. The create pages' own header
+  already sticks — `CreatePage` draws it — so this is the editors' half of that rule.
 
 Frames: `Workspace.dc.html` :207, :387, :483, :890, :1197, :1328, :1638, :1746.
 
@@ -434,8 +409,9 @@ that produced it.
 The three defects `docs/decisions-and-next-step.md` lists, each behaviour a layout or copy slice
 was right to leave and a plan is wrong to leave longer.
 
-- [ ] The product editor's category offers the draft's categories, as the create form does, and
-  `PRODUCT_CATEGORY_RULE` lands on the row (the test that pins the row bare is inverted).
+- [ ] The product editor's category offers the draft's categories, and `PRODUCT_CATEGORY_RULE`
+  lands on the row (the test that pins the row bare is inverted, and the rule leaves
+  `fieldRules.test.ts`'s one allowed orphan).
 - [ ] Shop details refuses a slug another shop already has, reading the listing the create form
   reads; the row's hint then says so.
 - [ ] The three narrow widths: decide whether they are wanted — the prototype draws the quantity

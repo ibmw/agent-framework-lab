@@ -1,5 +1,5 @@
 import type { ShopListResponse } from "@agent-lab/contracts";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -38,15 +38,26 @@ function renderShops() {
   return renderApp("/shops");
 }
 
-function currencies(card: ReturnType<typeof within>) {
+function renderNewShop() {
+  return renderApp("/shops/new");
+}
+
+function currencies(card: Scope) {
   return within(card.getByRole("group", { name: "Currencies" }));
 }
 
-async function createShopCard() {
-  const heading = await screen.findByRole("heading", { name: "Create a shop" });
-  const card = heading.closest("div")?.parentElement;
-  if (!card) throw new Error("the Create a shop card has no container");
-  return within(card as HTMLElement);
+/**
+ * The whole create page, not a card inside it (PLAN-UX Slice 12).
+ *
+ * Creating a shop was a 380px side card on the index and is now `/shops/new`, whose sticky
+ * header carries Create and Cancel while the form fills the 790px column beneath. Nothing
+ * scopes the two together but the page, so the queries are the page's.
+ */
+type Scope = typeof screen;
+
+async function createShopPage(): Promise<Scope> {
+  await screen.findByRole("heading", { level: 1, name: "New shop" });
+  return screen;
 }
 
 describe("the shops table", () => {
@@ -67,11 +78,78 @@ describe("the shops table", () => {
   });
 });
 
+describe("the shops index and its create page", () => {
+  it("offers a New shop button rather than a form beside the table", async () => {
+    renderShops();
+
+    await screen.findByRole("heading", { level: 2, name: "All shops" });
+    // The side card is gone: creating is a page (PLAN-UX Slice 12).
+    expect(screen.queryByRole("heading", { name: "Create a shop" })).toBeNull();
+    expect(screen.getByRole("link", { name: "New shop" })).toHaveAttribute("href", "/shops/new");
+  });
+
+  it("names All shops above it and becomes the shop's name as it is typed", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const card = await createShopPage();
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header");
+    expect(header).not.toBeNull();
+    expect(within(header as HTMLElement).getByRole("link", { name: "All shops" })).toHaveAttribute(
+      "href",
+      "/shops",
+    );
+    expect(within(header as HTMLElement).getByText(/creating a shop/)).toBeVisible();
+
+    await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
+    expect(screen.getByRole("heading", { level: 1, name: "Harbour Lane Supply" })).toBeVisible();
+  });
+
+  it("refuses Create until the shop is named, and says why on the control", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const card = await createShopPage();
+
+    const create = () => card.getByRole("button", { name: "Create shop" });
+    expect(create()).toBeDisabled();
+    expect(create()).toHaveAccessibleDescription(/needs a name/i);
+    expect(create()).toHaveAttribute("title", expect.stringMatching(/needs a name/i));
+
+    await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
+    expect(create()).toBeEnabled();
+  });
+
+  it("lands in the new shop's workspace", async () => {
+    const user = userEvent.setup();
+    const { router } = renderNewShop();
+    const card = await createShopPage();
+
+    await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
+    await user.click(card.getByRole("button", { name: "Create shop" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}`));
+  });
+
+  it("returns to the index with nothing created when Cancel is pressed", async () => {
+    const user = userEvent.setup();
+    const { router } = renderNewShop();
+    const card = await createShopPage();
+
+    await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
+    await user.click(card.getByRole("link", { name: "Cancel" }));
+
+    // A half-typed create form is not an edit to something that exists (ADR 0051).
+    await waitFor(() => expect(router.state.location.pathname).toBe("/shops"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(created).toBeNull();
+  });
+});
+
 describe("creating a shop from an example", () => {
   it("fills every field the form requires, so the example is publishable as typed", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.click(card.getByRole("button", { name: "Use an example shop" }));
 
@@ -83,8 +161,8 @@ describe("creating a shop from an example", () => {
 
   it("creates nothing until the operator presses Create shop", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.click(card.getByRole("button", { name: "Use an example shop" }));
 
@@ -93,8 +171,8 @@ describe("creating a shop from an example", () => {
 
   it("writes what the form holds rather than the example, and the slug follows a rename", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.click(card.getByRole("button", { name: "Use an example shop" }));
     await user.clear(card.getByLabelText("Name"));
@@ -116,8 +194,8 @@ describe("creating a shop from an example", () => {
 
   it("does not claim the identity the seed writes, which arrives with content behind it", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.click(card.getByRole("button", { name: "Use an example shop" }));
 
@@ -126,8 +204,8 @@ describe("creating a shop from an example", () => {
 
   it("says the example is filled in rather than created", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.click(card.getByRole("button", { name: "Use an example shop" }));
 
@@ -140,8 +218,8 @@ describe("creating a shop from an example", () => {
 describe("the slug a name suggests", () => {
   it("writes itself as the name is typed", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
 
@@ -150,8 +228,8 @@ describe("the slug a name suggests", () => {
 
   it("stops following once the operator answers the slug themselves", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Harbour Lane");
     await user.clear(card.getByLabelText("Slug"));
@@ -165,8 +243,8 @@ describe("the slug a name suggests", () => {
 
   it("follows the name again once the slug is emptied", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Harbour");
     await user.clear(card.getByLabelText("Slug"));
@@ -198,8 +276,8 @@ describe("the slug a name suggests", () => {
       ),
     );
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
 
@@ -217,8 +295,8 @@ describe("the slug a name suggests", () => {
 
   it("sends the derived slug, so a name alone is enough to create a shop", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Café Noël");
     await user.click(card.getByRole("button", { name: "Create shop" }));
@@ -237,8 +315,8 @@ describe("the slug a name suggests", () => {
 
 describe("the locale a shop is given", () => {
   it("suggests the locales the lab knows, keyed by the tag that gets written", async () => {
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
     const field = card.getByLabelText("Locale");
 
     const suggestions = document.getElementById(field.getAttribute("list") ?? "");
@@ -250,8 +328,8 @@ describe("the locale a shop is given", () => {
 
   it("still accepts a locale the suggestions leave out, which the lab would have taken", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Reykjavik Supply");
     await user.clear(card.getByLabelText("Locale"));
@@ -267,8 +345,8 @@ describe("the locale a shop is given", () => {
 describe("the currencies a shop sells in", () => {
   it("ticks the currency the locale implies, as the locale is chosen", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.clear(card.getByLabelText("Locale"));
     await user.type(card.getByLabelText("Locale"), "ja-JP");
@@ -281,8 +359,8 @@ describe("the currencies a shop sells in", () => {
 
   it("stops following once the operator ticks a currency themselves", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.click(currencies(card).getByRole("checkbox", { name: "USD — US dollar" }));
     await user.clear(card.getByLabelText("Locale"));
@@ -298,8 +376,8 @@ describe("the currencies a shop sells in", () => {
 
   it("leaves the currency alone for a locale it has no currency for", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.clear(card.getByLabelText("Locale"));
     await user.type(card.getByLabelText("Locale"), "is-IS");
@@ -310,8 +388,8 @@ describe("the currencies a shop sells in", () => {
   });
 
   it("offers every currency the lab can express, named as well as coded", async () => {
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     const boxes = currencies(card).getAllByRole("checkbox");
 
@@ -321,8 +399,8 @@ describe("the currencies a shop sells in", () => {
 
   it("creates a shop selling in more than one, the first of them the default", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Zurich Supply");
     await user.clear(card.getByLabelText("Locale"));
@@ -352,8 +430,8 @@ describe("the currencies a shop sells in", () => {
 
   it("holds the last currency ticked, so the shop is never created without one", async () => {
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     const only = currencies(card).getByRole("checkbox", { name: "GBP — Pound sterling" });
     await user.click(only);
@@ -364,8 +442,8 @@ describe("the currencies a shop sells in", () => {
 
 describe("create-form guidance", () => {
   it("puts each field's hint in that control's accessible description", async () => {
-    renderShops();
-    const card = await createShopCard();
+    renderNewShop();
+    const card = await createShopPage();
 
     // Exact: Shop details' own Name row reads the same export, and the pair is the point.
     expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
@@ -386,7 +464,7 @@ describe("create-form guidance", () => {
     );
   });
 
-  it("shows a refused create beside the button, not above the shop list", async () => {
+  it("keeps a refused create on the page, with the reason under the button", async () => {
     server.use(
       http.post("*/api/v1/shops", () =>
         HttpResponse.json(
@@ -396,15 +474,20 @@ describe("create-form guidance", () => {
       ),
     );
     const user = userEvent.setup();
-    renderShops();
-    const card = await createShopCard();
+    const { router } = renderNewShop();
+    const card = await createShopPage();
 
     await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
     await user.click(card.getByRole("button", { name: "Create shop" }));
 
-    expect(await card.findByRole("alert")).toHaveTextContent(/slug already exists/i);
-    const listing = screen.getByRole("heading", { name: "All shops" }).closest("section");
-    expect(listing).not.toBeNull();
-    expect(within(listing as HTMLElement).queryByRole("alert")).toBeNull();
+    // The operator stays where they were, with everything they typed, and reads why beside
+    // the control they pressed (PLAN-UX Slice 12).
+    const refusal = await card.findByRole("alert");
+    expect(refusal).toHaveTextContent(/slug already exists/i);
+    expect(router.state.location.pathname).toBe("/shops/new");
+    expect(card.getByLabelText("Name")).toHaveValue("Harbour Lane Supply");
+    const create = card.getByRole("button", { name: "Create shop" });
+    expect(create).toHaveAccessibleDescription(/slug already exists/i);
+    expect(create.compareDocumentPosition(refusal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

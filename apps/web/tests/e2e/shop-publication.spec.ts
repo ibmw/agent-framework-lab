@@ -24,18 +24,22 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await page.goto("/shops");
   await expect(page.getByRole("heading", { level: 1, name: "Shops" })).toBeVisible();
 
-  const createShop = card(page, "Create a shop");
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
+  // Creating a shop is a page now, not a side card on the index (PLAN-UX Slice 12).
+  await page.getByRole("link", { name: "New shop" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "New shop" })).toBeVisible();
+  await page.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
+  await page.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
+  // The page is what is being typed: the title reads back the name before anything exists.
+  await expect(page.getByRole("heading", { level: 1, name: `Northstar ${unique}` })).toBeVisible();
   // A Swiss shop, which sells in two currencies from the first form it meets. The locale
   // answers the first — and reads back as the place it names — and the operator ticks the
   // second here rather than being sent to Shop details to add it after the fact.
-  await createShop.getByLabel("Locale", { exact: true }).fill("de-CH");
-  await expect(createShop.getByText("German (Switzerland)")).toBeVisible();
-  const currencies = createShop.getByRole("group", { name: "Currencies" });
+  await page.getByLabel("Locale", { exact: true }).fill("de-CH");
+  await expect(page.getByText("German (Switzerland)")).toBeVisible();
+  const currencies = page.getByRole("group", { name: "Currencies" });
   await expect(currencies.getByRole("checkbox", { name: "CHF — Swiss franc" })).toBeChecked();
   await currencies.getByRole("checkbox", { name: "EUR — Euro" }).check();
-  await createShop.getByRole("button", { name: "Create shop" }).click();
+  await page.getByRole("button", { name: "Create shop" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
   await expect(page.getByText("Never published")).toBeVisible();
@@ -72,16 +76,17 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await tone.getByRole("button", { name: "Add tone of voice" }).click();
   await saveDraft(page);
 
-  // Catalog: one product with colour and size options and two priced variants.
+  // Catalog: one product with colour and size options and two priced variants. *New product*
+  // appends an empty product to the draft and opens its editor, so the title, the category
+  // and the handle it derives are all authored there (PLAN-UX Slice 12).
   await openSection(page, "Products", "Products");
-  const newProduct = card(page, "Add a product");
-  await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
-  await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
-  await expect(newProduct.getByLabel("Handle", { exact: true })).toHaveValue("alpine-shell-jacket");
-  await newProduct.getByRole("button", { name: "Add to draft" }).click();
-  await saveDraft(page);
-
-  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
+  await page.getByRole("button", { name: "New product" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Untitled product" })).toBeVisible();
+  await card(page, "Details").getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
+  await card(page, "Details").getByLabel("Category", { exact: true }).fill("Jackets");
+  await expect(card(page, "Details").getByLabel("Handle", { exact: true })).toHaveValue(
+    "alpine-shell-jacket",
+  );
   await expect(page.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
   await card(page, "Details")
     .getByLabel("Description", { exact: true })

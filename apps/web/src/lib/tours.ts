@@ -404,10 +404,10 @@ export const TOURS: Record<TourId, Tour> = {
         ],
       },
       {
-        anchor: '[aria-label="Add a product"]',
-        title: "A handle, and then the editor",
+        anchor: '[data-tour="new-product"]',
+        title: "New product opens the editor",
         body: [
-          "A product is created with the handle it is addressed by and filled in afterwards — variants, prices, options, media and attributes belong to the product editor. A variant priced in a currency the shop does not sell is refused at the gate, so the currencies on the shop's details are what bound this catalog rather than the other way round.",
+          "A product has nothing to answer for before it exists: pressing this appends an empty one to the draft and opens its editor, where the title, variants, prices, options, media and attributes are authored. A variant priced in a currency the shop does not sell is refused at the gate, so the currencies on the shop's details are what bound this catalog rather than the other way round.",
         ],
       },
     ],
@@ -514,6 +514,25 @@ function addressesOf(tour: Tour): string[] {
 }
 
 /**
+ * The create pages, which are surfaces of their own and have no tour (PLAN-UX Slice 12).
+ *
+ * One of them has to be named rather than inferred: `/shops/new` is matched by the shop
+ * overview's `/shops/:shopId`, because `tourAt` resolves against the tour table's patterns
+ * and not against the route table, so without this it would be offered the overview's walk
+ * and light anchors that are not on it.
+ *
+ * Written as the four addresses rather than as "anything ending in `/new`", which has two
+ * edges: a trailing slash slips past it, and a product an operator names `new` would lose
+ * whatever tour its editor is one day given. Slices 13 and 14 add theirs here.
+ */
+const CREATE_ROUTES = [
+  "/shops/new",
+  "/shops/:shopId/orders/new",
+  "/shops/:shopId/customers/new",
+  "/lab/support-identities/new",
+];
+
+/**
  * The tour of the surface a location is on, or none (ADR 0055).
  *
  * This is how the bar's one launch control knows what it would walk: the table already names
@@ -522,6 +541,9 @@ function addressesOf(tour: Tour): string[] {
  * offering a screen the walk of the screen above it would light anchors that are not on it.
  */
 export function tourAt(pathname: string): TourId | null {
+  if (CREATE_ROUTES.some((route) => matchPath(route, pathname) !== null)) {
+    return null;
+  }
   for (const id of TOUR_IDS) {
     for (const address of addressesOf(TOURS[id])) {
       if (matchPath(address, pathname) !== null) {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import themeSource from "../styles.css?raw";
 import {
   type ButtonVerb,
+  blockedButtonClasses,
   buttonIcon,
   buttonVariantClasses,
   type FilterChipKind,
@@ -96,6 +97,42 @@ describe("button variants", () => {
       "destructiveOutline",
       "destructiveSubtle",
     ]);
+  });
+});
+
+/**
+ * The blocked weight, minted with the create pages of PLAN-UX Slice 12 and adopted by four
+ * more primary actions in Slice 22.
+ *
+ * It is not a row of `buttonVariantClasses`, so the table's rules above do not reach it and
+ * these are written out. What it must be is the prototype's dashed, quiet slab
+ * (`Workspace.dc.html`:2933) at the shape of the primary action it replaces — and what it
+ * must *not* have is a hover or a focus ring, because it is drawn only on a control that is
+ * always `disabled` and neither would ever be seen.
+ */
+describe("the blocked primary action", () => {
+  it("is dashed, quiet, and says a press will not work", () => {
+    expect(blockedButtonClasses).toContain("border-dashed");
+    expect(blockedButtonClasses).toContain("border-[#d4d8db]");
+    expect(blockedButtonClasses).toContain("bg-[#fafbfb]");
+    expect(blockedButtonClasses).toContain("text-[#9aa2a8]");
+    expect(blockedButtonClasses).toContain("cursor-not-allowed");
+  });
+
+  it("keeps the shape of the action it stands in for", () => {
+    // Same height, radius, padding, type and glyph gap as the accent button, so a form does
+    // not resize when its Create becomes pressable.
+    for (const utility of ["min-h-10", "rounded-lg", "px-4", "text-sm", "font-semibold", "gap-2"]) {
+      expect(blockedButtonClasses, utility).toContain(utility);
+      expect(buttonVariantClasses.accent, utility).toContain(utility);
+    }
+  });
+
+  it("claims no state it can never show", () => {
+    expect(blockedButtonClasses).not.toMatch(/(^|\s)hover:/);
+    expect(blockedButtonClasses).not.toContain("focus-visible:");
+    // And it is not in the table, so the sweep above is not quietly passing over it.
+    expect(Object.values(buttonVariantClasses)).not.toContain(blockedButtonClasses);
   });
 });
 

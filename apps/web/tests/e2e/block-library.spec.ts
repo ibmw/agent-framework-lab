@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -21,12 +22,7 @@ async function saveDraft(page: Page) {
 }
 
 async function openWorkspace(page: Page, unique: string) {
-  await page.goto("/shops");
-  const createShop = card(page, "Create a shop");
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 }
 
 test("an author publishes an objective block the whole lab can bind", async ({ page }) => {

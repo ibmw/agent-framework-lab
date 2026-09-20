@@ -1,4 +1,5 @@
 import { TOURS, tourSteps } from "../../src/lib/tours";
+import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 
 /**
@@ -19,12 +20,7 @@ test("a tour walks the screen it was launched from, and leaves when it is told t
 }) => {
   const unique = Date.now().toString(36);
 
-  await page.goto("/shops");
-  const createShop = page.getByRole("region", { name: "Create a shop" });
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   // Nothing has appeared unbidden: the tour is an offer, not a first run.
   const popover = page.getByRole("dialog");

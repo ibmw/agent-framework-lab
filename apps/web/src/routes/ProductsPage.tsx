@@ -1,35 +1,29 @@
 import type { DefinitionIssueSchema, ProductViewSchema } from "@agent-lab/contracts";
-import { type FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
-import { ButtonIcon } from "../components/ButtonIcon";
-import { DerivedIdField } from "../components/DerivedIdField";
-import { FieldHint } from "../components/FieldHint";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import {
-  Card,
   EditorSaveActions,
   PageHeader,
   StatusPill,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { slugify, uniqueSuggestion } from "../lib/entryIds";
+import { uniqueId } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
-import {
-  KEBAB_PATTERN,
-  PRODUCT_CATEGORY_RULE,
-  PRODUCT_HANDLE_RULE,
-  PRODUCT_TITLE_RULE,
-} from "../lib/fieldRules";
-import { issuesForProduct, ratingLabel } from "../lib/shop";
-import {
-  accentButtonClasses,
-  fieldControlClasses,
-  surfaceClasses,
-  tableCellClasses,
-  tableHeadClasses,
-} from "../lib/ui";
+import { issuesForProduct, productTitle, ratingLabel } from "../lib/shop";
+import { accentButtonClasses, surfaceClasses, tableCellClasses, tableHeadClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
+
+/**
+ * The handle a brand-new product is addressed by, before it has a title to derive one from.
+ *
+ * The prototype appends a record with an empty handle and lets the editor ask for one
+ * (:6931); this workspace addresses a product editor *by* its handle, so a product with no
+ * handle has no address and cannot be opened. The draft's own handles decide the suffix, so a
+ * second unnamed product is `new-product-2` rather than a collision.
+ */
+const NEW_PRODUCT_HANDLE = "new-product";
 
 function emptyProduct(handle: string, title: string, category: string): ProductViewSchema {
   return {
@@ -95,36 +89,35 @@ function productFilters(
 }
 
 export function ProductsPage() {
-  const { content, preview, edit, save, saving, discard, discarding, dirty, error } =
+  const { shopId, content, preview, edit, save, saving, discard, discarding, dirty, error } =
     useShopWorkspace();
-  const [handle, setHandle] = useState("");
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const takenHandles = content.products.map((product) => product.handle);
-  // Sorted and de-duplicated, so the list reads as a vocabulary rather than as the order
-  // products happened to be added in. A product with no category yet offers nothing.
-  const draftCategories = [
-    ...new Set(content.products.map((product) => product.category).filter(Boolean)),
-  ].sort((left, right) => left.localeCompare(right));
-  const { value: suggestedHandle, takenBase: takenHandleBase } = uniqueSuggestion(
-    slugify(title, ""),
-    takenHandles,
-  );
 
-  function addProduct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!handle || takenHandles.includes(handle)) {
-      return;
-    }
+  /**
+   * Products are the one create in the workspace that is not a page (PLAN-UX Slice 12).
+   *
+   * A product has no identity of its own to answer for: it is a row of the shop draft the
+   * shell already holds, so there is nothing to POST, nothing to be refused and nothing to
+   * wait for. The prototype appends a draft product and opens its editor (:6931), and so does
+   * this — which also moves the rail's figure in the same commit, because that figure is
+   * `draft.products.length` and not a listing at all (ADR 0056).
+   *
+   * The draft is left dirty and unsaved, which is the editor's own subject: the editor draws
+   * the shop draft's Save, and `shopDraftIsSavableAt` covers `/products/:handle`, so the
+   * navigation asks nothing (ADR 0051).
+   */
+  function newProduct() {
+    const handle = uniqueId(
+      NEW_PRODUCT_HANDLE,
+      content.products.map((product) => product.handle),
+    );
     edit({
       ...content,
-      products: [...content.products, emptyProduct(handle, title, category)],
+      products: [...content.products, emptyProduct(handle, "", "")],
     });
-    setHandle("");
-    setTitle("");
-    setCategory("");
+    navigate(`/shops/${shopId}/products/${handle}`);
   }
 
   // The title alone, which is what the prototype's products search reads (`p.title` in its
@@ -143,14 +136,24 @@ export function ProductsPage() {
         chips={<VersionChips preview={preview} />}
         description="The product editor edits the shop draft. Publishing the shop freezes the catalog."
         actions={
-          <EditorSaveActions
-            tone="accent"
-            dirty={dirty}
-            saving={saving}
-            discarding={discarding}
-            onSave={() => void save()}
-            onDiscard={() => void discard()}
-          />
+          <>
+            <EditorSaveActions
+              tone="outline"
+              dirty={dirty}
+              saving={saving}
+              discarding={discarding}
+              onSave={() => void save()}
+              onDiscard={() => void discard()}
+            />
+            <button
+              className={accentButtonClasses}
+              type="button"
+              data-tour="new-product"
+              onClick={newProduct}
+            >
+              New product
+            </button>
+          </>
         }
       />
 
@@ -160,139 +163,75 @@ export function ProductsPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className={`${surfaceClasses} overflow-hidden`} data-tour="product-index">
-          {/* Not gated on a load, as the chip row beside it is not: this catalog is the shop
+      <section className={`${surfaceClasses} overflow-hidden`} data-tour="product-index">
+        {/* Not gated on a load, as the chip row beside it is not: this catalog is the shop
               draft, already in hand when the route renders. */}
-          <SearchRow>
-            <SearchField label="Search products" onChange={setQuery} value={query} />
-          </SearchRow>
-          <FilterChips
-            legend="Filter products"
-            chips={chips}
-            selected={filter}
-            onSelect={setFilter}
-          />
-          {content.products.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">
-              This shop sells nothing yet. A published shop must sell at least one product.
-            </p>
-          ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No product matches this view.</p>
-          ) : (
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr>
-                  <th className={tableHeadClasses}>Product</th>
-                  <th className={tableHeadClasses}>Status</th>
-                  <th className={tableHeadClasses}>Variants</th>
-                  <th className={tableHeadClasses}>Ratings</th>
-                  <th className={tableHeadClasses}>Findings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((product) => {
-                  const findings = issuesForProduct(preview?.issues ?? [], product.handle);
-                  const errors = findings.filter((issue) => issue.severity === "error").length;
-                  return (
-                    <tr key={product.handle}>
-                      <td className={tableCellClasses}>
-                        <Link
-                          className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                          to={product.handle}
-                        >
-                          {product.title}
-                        </Link>
-                        <div className="text-admin-muted">{product.category}</div>
-                      </td>
-                      <td className={tableCellClasses}>
-                        <StatusPill
-                          tone="product"
-                          label={labelOf(PRODUCT_STATUS, product.status)}
-                        />
-                      </td>
-                      <td className={tableCellClasses}>{product.variants.length}</td>
-                      <td className={tableCellClasses}>{ratingLabel(product)}</td>
-                      <td className={tableCellClasses}>
-                        {errors > 0 ? (
-                          <span className="font-semibold text-lab-error">
-                            {errors} error{errors === 1 ? "" : "s"}
-                          </span>
-                        ) : findings.length > 0 ? (
-                          <span className="text-admin-draft-ink">
-                            {findings.length} warning{findings.length === 1 ? "" : "s"}
-                          </span>
-                        ) : (
-                          <span className="text-lab-success">Clear</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </section>
-
-        <Card title="Add a product">
-          <form className="grid gap-3" onSubmit={addProduct}>
-            <FieldHint label="Title" hint={PRODUCT_TITLE_RULE}>
-              <input
-                className={fieldControlClasses}
-                value={title}
-                required
-                placeholder="Alpine Shell Jacket"
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </FieldHint>
-            {/*
-             * A datalist rather than a select: a catalog's first product has no category to
-             * pick from, and the second is usually a new one too. The draft's own categories
-             * are offered because reaching for "Jackets" when the draft already holds
-             * "jackets" is how one catalog ends up with two of everything — `CountryField`'s
-             * reasoning, over a set this shop wrote rather than a register.
-             */}
-            <FieldHint label="Category" hint={PRODUCT_CATEGORY_RULE}>
-              <input
-                className={fieldControlClasses}
-                list="product-categories"
-                value={category}
-                required
-                placeholder="Jackets"
-                autoComplete="off"
-                onChange={(event) => setCategory(event.target.value)}
-              />
-            </FieldHint>
-            <datalist id="product-categories">
-              {draftCategories.map((entry) => (
-                <option key={entry} value={entry} />
-              ))}
-            </datalist>
-            <DerivedIdField
-              label="Handle"
-              hint={PRODUCT_HANDLE_RULE}
-              value={handle}
-              suggested={suggestedHandle}
-              taken={takenHandles}
-              takenBase={takenHandleBase}
-              takenPlace="in the draft"
-              pattern={KEBAB_PATTERN}
-              title={PRODUCT_HANDLE_RULE}
-              placeholder="alpine-shell-jacket"
-              required
-              onChange={setHandle}
-            />
-            <button className={accentButtonClasses} type="submit">
-              <ButtonIcon verb="save" />
-              Add to draft
-            </button>
-            <p className="text-xs text-admin-muted">
-              New products start without variants; add options and variants in the editor, then save
-              the draft.
-            </p>
-          </form>
-        </Card>
-      </div>
+        <SearchRow>
+          <SearchField label="Search products" onChange={setQuery} value={query} />
+        </SearchRow>
+        <FilterChips
+          legend="Filter products"
+          chips={chips}
+          selected={filter}
+          onSelect={setFilter}
+        />
+        {content.products.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">
+            This shop sells nothing yet. A published shop must sell at least one product.
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">No product matches this view.</p>
+        ) : (
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr>
+                <th className={tableHeadClasses}>Product</th>
+                <th className={tableHeadClasses}>Status</th>
+                <th className={tableHeadClasses}>Variants</th>
+                <th className={tableHeadClasses}>Ratings</th>
+                <th className={tableHeadClasses}>Findings</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((product) => {
+                const findings = issuesForProduct(preview?.issues ?? [], product.handle);
+                const errors = findings.filter((issue) => issue.severity === "error").length;
+                return (
+                  <tr key={product.handle}>
+                    <td className={tableCellClasses}>
+                      <Link
+                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                        to={product.handle}
+                      >
+                        {productTitle(product)}
+                      </Link>
+                      <div className="text-admin-muted">{product.category}</div>
+                    </td>
+                    <td className={tableCellClasses}>
+                      <StatusPill tone="product" label={labelOf(PRODUCT_STATUS, product.status)} />
+                    </td>
+                    <td className={tableCellClasses}>{product.variants.length}</td>
+                    <td className={tableCellClasses}>{ratingLabel(product)}</td>
+                    <td className={tableCellClasses}>
+                      {errors > 0 ? (
+                        <span className="font-semibold text-lab-error">
+                          {errors} error{errors === 1 ? "" : "s"}
+                        </span>
+                      ) : findings.length > 0 ? (
+                        <span className="text-admin-draft-ink">
+                          {findings.length} warning{findings.length === 1 ? "" : "s"}
+                        </span>
+                      ) : (
+                        <span className="text-lab-success">Clear</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
     </>
   );
 }

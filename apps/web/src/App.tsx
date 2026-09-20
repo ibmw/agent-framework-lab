@@ -14,7 +14,7 @@ import { AgentConfigurationsPage } from "./routes/AgentConfigurationsPage";
 import { MutationBlockEditorPage, ObjectiveBlockEditorPage } from "./routes/BlockEditorPage";
 import { MutationBlocksPage, ObjectiveBlocksPage } from "./routes/BlockLibraryPage";
 import { CustomerEditorPage } from "./routes/CustomerEditorPage";
-import { CustomersPage } from "./routes/CustomersPage";
+import { CustomersPage, NewCustomerPage } from "./routes/CustomersPage";
 import { ExperimentBenchPage } from "./routes/ExperimentBenchPage";
 import { ExperimentHistoryPage } from "./routes/ExperimentHistoryPage";
 import { ExperimentResultsLayout } from "./routes/ExperimentResultsLayout";
@@ -27,7 +27,7 @@ import { JudgeConfigurationEditorPage } from "./routes/JudgeConfigurationEditorP
 import { JudgeConfigurationsPage } from "./routes/JudgeConfigurationsPage";
 import { LabSettingsPage } from "./routes/LabSettingsPage";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
-import { OrdersPage } from "./routes/OrdersPage";
+import { NewOrderPage, OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
 import { ScenarioEditorPage } from "./routes/ScenarioEditorPage";
@@ -39,10 +39,10 @@ import {
   SupportGuidelinesPage,
   ToneOfVoicePage,
 } from "./routes/ShopSetupPages";
-import { ShopsPage } from "./routes/ShopsPage";
+import { NewShopPage, ShopsPage } from "./routes/ShopsPage";
 import { ShopVersionPage } from "./routes/ShopVersionPage";
 import { SnapshotsPage } from "./routes/SnapshotsPage";
-import { SupportIdentitiesPage } from "./routes/SupportIdentitiesPage";
+import { NewSupportIdentityPage, SupportIdentitiesPage } from "./routes/SupportIdentitiesPage";
 import { SupportIdentityEditorPage } from "./routes/SupportIdentityEditorPage";
 import { TicketsPage } from "./routes/TicketsPage";
 import { useLabSurface } from "./shell/LabSurface";
@@ -104,6 +104,10 @@ export const routeTree = createRoutesFromElements(
   <Route element={<UnsavedChangesGuard />}>
     <Route path="/" element={<Landing />} />
     <Route path="/shops" element={<ShopsPage />} />
+    {/* Creating a shop is a page, not a side card on the index (PLAN-UX Slice 12). It sits
+        beside `/shops` rather than under `/shops/:shopId`, because there is no shop to be
+        the workspace of yet; `new` is a static segment and outranks `:shopId`. */}
+    <Route path="/shops/new" element={<NewShopPage />} />
     {/* Lab-level surfaces sit beside /shops rather than inside one: the first step of the
         chain is creating the shop a new operator does not have yet (ADR 0044). */}
     <Route path="/settings" element={<LabSettingsPage />} />
@@ -136,6 +140,9 @@ export const routeTree = createRoutesFromElements(
       <Route path="judges" element={<JudgeConfigurationsPage />} />
       <Route path="judges/:judgeId" element={<JudgeConfigurationEditorPage />} />
       <Route path="support-identities" element={<SupportIdentitiesPage />} />
+      {/* The library left shop scope with ADR 0054 and is reached from both rails, so its
+          create page is the lab's too (PLAN-UX Slice 12). */}
+      <Route path="support-identities/new" element={<NewSupportIdentityPage />} />
       <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
       <Route path="objective-blocks" element={<ObjectiveBlocksPage />} />
       <Route path="objective-blocks/:blockId" element={<ObjectiveBlockEditorPage />} />
@@ -156,8 +163,10 @@ export const routeTree = createRoutesFromElements(
       <Route path="products" element={<ProductsPage />} />
       <Route path="products/:handle" element={<ProductEditorPage />} />
       <Route path="orders" element={<OrdersPage />} />
+      <Route path="orders/new" element={<NewOrderPage />} />
       <Route path="orders/:orderId" element={<OrderEditorPage />} />
       <Route path="customers" element={<CustomersPage />} />
+      <Route path="customers/new" element={<NewCustomerPage />} />
       <Route path="tickets" element={<TicketsPage />} />
       <Route path="tickets/:ticketId" element={<TicketsPage />} />
       <Route path="customers/:profileId" element={<CustomerEditorPage />} />

@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -21,12 +22,7 @@ async function saveDraft(page: Page) {
 
 /** A published shop, so the prompt's `{{shop.*}}` variables have something to resolve to. */
 async function publishShop(page: Page, unique: string) {
-  await page.goto("/shops");
-  const createShop = card(page, "Create a shop");
-  await createShop.getByLabel("Name", { exact: true }).fill(`Northstar ${unique}`);
-  await createShop.getByLabel("Slug", { exact: true }).fill(`northstar-${unique}`);
-  await createShop.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
   await openSection(page, "Tone of voice", "Tone of voice");
   const tone = card(page, "Guidelines");
@@ -59,13 +55,14 @@ async function publishShop(page: Page, unique: string) {
   await saveDraft(page);
 
   await openSection(page, "Products", "Products");
-  const newProduct = card(page, "Add a product");
-  await newProduct.getByLabel("Handle", { exact: true }).fill("alpine-shell-jacket");
-  await newProduct.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
-  await newProduct.getByLabel("Category", { exact: true }).fill("Jackets");
-  await newProduct.getByRole("button", { name: "Add to draft" }).click();
+  // *New product* appends an empty product to the shop draft and opens its editor, where
+  // the title, the category and the handle it derives are authored (PLAN-UX Slice 12).
+  await page.getByRole("button", { name: "New product" }).click();
+  const identity = card(page, "Details");
+  await identity.getByLabel("Title", { exact: true }).fill("Alpine Shell Jacket");
+  await identity.getByLabel("Category", { exact: true }).fill("Jackets");
+  await expect(identity.getByLabel("Handle", { exact: true })).toHaveValue("alpine-shell-jacket");
   await saveDraft(page);
-  await page.getByRole("link", { name: "Alpine Shell Jacket" }).click();
   const options = card(page, "Options");
   await options.getByLabel("Option key", { exact: true }).fill("color");
   await options.getByLabel("Option name", { exact: true }).fill("Color");
@@ -86,13 +83,13 @@ async function publishShop(page: Page, unique: string) {
 /** A read-only published identity: it may look an order up, and may not move it. */
 async function publishReadOnlyIdentity(page: Page, name: string) {
   await openSection(page, "Support identities", "Support identities");
-  const newIdentity = card(page, "New support identity");
-  await newIdentity.getByLabel("Name", { exact: true }).fill(name);
-  await newIdentity
-    .getByLabel("Role title", { exact: true })
-    .fill("Customer support representative");
-  await newIdentity.getByRole("button", { name: "Create identity" }).click();
-  await page.getByRole("link", { name }).click();
+  // The library's create page is the lab's, and it lands in the identity's editor
+  // (PLAN-UX Slice 12, ADR 0054).
+  await page.getByRole("link", { name: "New identity" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByLabel("Role title", { exact: true }).fill("Customer support representative");
+  await page.getByRole("button", { name: "Create identity" }).click();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
 
   const permissions = card(page, "Permissions");
   await permissions.getByLabel(/^Read orders —/).check();

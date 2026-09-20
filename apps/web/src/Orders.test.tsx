@@ -302,8 +302,17 @@ const server = setupServer(
   ),
   http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () => HttpResponse.json(ORDERS)),
   http.post(`*/api/v1/shops/${SHOP_ID}/orders`, async ({ request }) => {
-    createdOrders.push((await request.json()) as Record<string, unknown>);
-    return HttpResponse.json(currentOrder, { status: 201 });
+    const command = (await request.json()) as Record<string, unknown>;
+    createdOrders.push(command);
+    // Echoing the reference it was sent, which is what the lab answers with and what the
+    // page then freezes its suggestion to.
+    return HttpResponse.json(
+      {
+        ...currentOrder,
+        content: { ...currentOrder.content, reference: String(command.reference), lines: [] },
+      } satisfies ShopOrderResponse,
+      { status: 201 },
+    );
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, () => HttpResponse.json(currentOrder)),
   http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
@@ -561,7 +570,135 @@ describe("order index", () => {
     expect(entry).toHaveAccessibleDescription(`${rows} orders`);
   });
 
-  it("moves the rail's figure with the table when an order is created", async () => {
+  it("offers a New order button rather than a form beside the table", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    await screen.findByRole("heading", { level: 1, name: "Orders" });
+    // The side card is gone: creating is a page (PLAN-UX Slice 12).
+    expect(screen.queryByRole("region", { name: "Create order" })).toBeNull();
+    expect(screen.getByRole("link", { name: "New order" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/orders/new`,
+    );
+  });
+});
+
+describe("the new-order page", () => {
+  /** The order a create makes, which is not one the fixture listing already holds. */
+  const MADE_ORDER_ID = "4d5e6f70-8192-4a3b-9c4d-5e6f708192ab";
+
+  /** The page, whose header carries Create and whose column carries the form. */
+  async function newOrder() {
+    const rendered = renderAt(`/shops/${SHOP_ID}/orders/new`);
+    // The breadcrumb rather than the title: the title *is* the reference, and the prefill
+    // lands as soon as the listing does, so "New order" is a heading this page holds only
+    // until it knows what to call itself.
+    await screen.findByText(/creating an order fixture/);
+    return rendered;
+  }
+
+  /** The sticky header, where the breadcrumb, Cancel and Create are. */
+  function pageHeader(): HTMLElement {
+    const header = screen.getByRole("heading", { level: 1 }).closest("header");
+    if (!header) throw new Error("the create page has no header");
+    return header;
+  }
+
+  async function fillOrder(user: ReturnType<typeof userEvent.setup>) {
+    await screen.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483"));
+    await user.selectOptions(screen.getByLabelText("Variant"), "NS-ASJ-OB-M");
+  }
+
+  it("names Orders above it and becomes the reference as it is typed", async () => {
+    const user = userEvent.setup();
+    await newOrder();
+
+    // In the page's own header, beside the back arrow — not the rail entry of the same name.
+    expect(within(pageHeader()).getByRole("link", { name: "Orders" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/orders`,
+    );
+    expect(within(pageHeader()).getByLabelText("Back to Orders")).toBeVisible();
+    expect(within(pageHeader()).getByText(/creating an order fixture/)).toBeVisible();
+
+    await screen.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
+
+    // The prefilled reference is the page's own title from the moment it lands in the field.
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1, name: "NS-10483" })).toBeVisible(),
+    );
+  });
+
+  it("refuses Create while a line is missing, and says why on the control", async () => {
+    const user = userEvent.setup();
+    await newOrder();
+
+    await screen.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483"));
+
+    const create = screen.getByRole("button", { name: "Create order" });
+    expect(create).toBeDisabled();
+    expect(create).toHaveAttribute("title", expect.stringMatching(/at least one line/i));
+    expect(create).toHaveAccessibleDescription(/at least one line/i);
+    // The reason is on screen as well as in `title`, which is never the only carrier.
+    expect(screen.getByText(/An order needs at least one line/)).toBeVisible();
+
+    await user.selectOptions(screen.getByLabelText("Variant"), "NS-ASJ-OB-M");
+    expect(screen.getByRole("button", { name: "Create order" })).toBeEnabled();
+  });
+
+  it("asks for the customer before it will take one", async () => {
+    await newOrder();
+
+    await screen.findByRole("option", { name: "Maya Laurent" });
+    const create = screen.getByRole("button", { name: "Create order" });
+    expect(create).toBeDisabled();
+    expect(create).toHaveAccessibleDescription(/needs the customer it belongs to/i);
+  });
+
+  it("creates the order with its line and lands in that order's editor", async () => {
+    const user = userEvent.setup();
+    const { router } = await newOrder();
+    await fillOrder(user);
+
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    await waitFor(() => expect(createdOrders).toHaveLength(1));
+    expect(createdOrders[0]).toMatchObject({
+      reference: "NS-10483",
+      customer_profile_id: PROFILE_ID,
+    });
+    // The contract wants an explicit offset; the browser resolves the picked day once.
+    expect(String(createdOrders[0].placed_at)).toMatch(/Z$/);
+    // `CreateOrderRequest` carries no lines, so the line the page refused to go without is
+    // sent as a selection in the write that follows.
+    expect(savedRequests).toHaveLength(1);
+    expect(savedRequests[0].lines).toEqual([{ sku: "NS-ASJ-OB-M", quantity: 1 }]);
+    // The customer's default entry, chosen from their book rather than typed.
+    expect(savedRequests[0].shipping_address_id).toBe("home");
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders/${ORDER_ID}`),
+    );
+  });
+
+  it("ships to the entry the operator picks from the customer's book", async () => {
+    const user = userEvent.setup();
+    await newOrder();
+    await fillOrder(user);
+
+    await user.click(await screen.findByRole("radio", { name: /Bordeaux/ }));
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].shipping_address_id).toBe("bordeaux-previous-flat");
+  });
+
+  it("moves the rail's figure when an order is created from the page", async () => {
     const user = userEvent.setup();
     let listed = ORDERS.orders;
     server.use(
@@ -584,35 +721,14 @@ describe("order index", () => {
     await waitFor(() => expect(bodyRows(table)).toBe(3));
     expect(within(railEntry("Orders")).getByText("3")).toBeVisible();
 
-    const form = card("Create order");
-    await within(form).findByRole("option", { name: "Maya Laurent" });
-    await user.selectOptions(within(form).getByLabelText("Customer"), PROFILE_ID);
-    await waitFor(() => expect(within(form).getByLabelText("Reference")).toHaveValue("NS-10483"));
-    await user.click(within(form).getByRole("button", { name: "Create order" }));
+    await user.click(screen.getByRole("link", { name: "New order" }));
+    await screen.findByText(/creating an order fixture/);
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
 
-    // No reload, no second door: the page read the listing the rail draws from.
+    // The create moved off the index with the form, and the refresh moved with it: the rail
+    // is read again before the operator lands in the editor (ADR 0056).
     await waitFor(() => expect(within(railEntry("Orders")).getByText("4")).toBeVisible());
-    expect(bodyRows(screen.getByRole("table"))).toBe(4);
-  });
-
-  it("creates an order for a customer attached to this shop", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/orders`);
-    await screen.findByRole("heading", { name: "Orders" });
-    const form = card("Create order");
-
-    await within(form).findByRole("option", { name: "Maya Laurent" });
-    await user.selectOptions(within(form).getByLabelText("Customer"), PROFILE_ID);
-    await waitFor(() => expect(within(form).getByLabelText("Reference")).toHaveValue("NS-10483"));
-    await user.click(within(form).getByRole("button", { name: "Create order" }));
-
-    await waitFor(() => expect(createdOrders).toHaveLength(1));
-    expect(createdOrders[0]).toMatchObject({
-      reference: "NS-10483",
-      customer_profile_id: PROFILE_ID,
-    });
-    // The contract wants an explicit offset; the browser resolves the picked day once.
-    expect(String(createdOrders[0].placed_at)).toMatch(/Z$/);
   });
 
   /**
@@ -666,40 +782,33 @@ describe("order index", () => {
         } satisfies ShopPreviewResponse),
       ),
     );
-    const { router } = renderAt(`/shops/${SHOP_ID}/orders`);
+    const { router } = await newOrder();
 
-    await screen.findByRole("table");
-    expect(within(railEntry("Orders")).getByText("3")).toBeVisible();
-
-    const form = card("Create order");
-    await within(form).findByRole("option", { name: "Maya Laurent" });
-    await user.selectOptions(within(form).getByLabelText("Customer"), PROFILE_ID);
-    await waitFor(() => expect(within(form).getByLabelText("Reference")).toHaveValue("NS-10483"));
-    await user.click(within(form).getByRole("button", { name: "Create order" }));
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
     await refreshed;
+    // The chip is what says the `POST` has landed and the page is holding an order, which is
+    // the state the rest of this case is about.
+    await screen.findByText("created · its line is not saved yet");
 
-    // The same shell, a different shop: the listing is read again for the shop now on screen,
-    // and the other shop holds none.
+    // The same shell, a different shop. The order exists by now, so its unsaved line is an
+    // edit to something that exists and the guard asks on the way out; Discard is the answer
+    // that leaves the order as the lab holds it.
+    // Not wrapped in `act`: a blocked navigation does not settle until the prompt is
+    // answered, so awaiting it here would deadlock and not awaiting it inside `act` is the
+    // interleaving React warns about. The queries below flush their own updates.
+    const moved = router.navigate(`/shops/${OTHER_SHOP_ID}/orders`);
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
     await act(async () => {
-      await router.navigate(`/shops/${OTHER_SHOP_ID}/orders`);
+      await moved;
     });
+
+    // The listing is read again for the shop now on screen, and the other shop holds none.
     await waitFor(() => expect(within(railEntry("Orders")).getByText("0")).toBeVisible());
 
     answer();
-
-    // The page's own busy flag is what says the held answer has been *read*. It spans the
-    // create and the refresh it fires — `setBusy(false)` runs only after `refresh()` has
-    // resolved, which is after the response was consumed, after `load` returned and after
-    // the state update that would have applied it — and this component instance survived the
-    // change of shop, so it is still the one waiting. Anchoring on it is what stops this
-    // assertion from running in the gap before the dropped answer has arrived at all, which
-    // would let it pass against the bug it exists to catch.
-    await waitFor(() =>
-      expect(
-        within(card("Create order")).getByRole("button", { name: "Create order" }),
-      ).toBeEnabled(),
-    );
-    expect(reads).toBe(2);
+    await waitFor(() => expect(reads).toBe(2));
 
     // The shop that was left answers four. The rail is not its rail any more.
     expect(within(railEntry("Orders")).queryByText("4")).toBeNull();
@@ -707,41 +816,46 @@ describe("order index", () => {
   });
 
   it("puts each field's hint in that control's accessible description", async () => {
-    renderAt(`/shops/${SHOP_ID}/orders`);
+    await newOrder();
 
-    const form = within(await screen.findByRole("region", { name: "Create order" }));
-    expect(form.getByLabelText("Customer")).toHaveAccessibleDescription(
-      /belongs to a customer attached to this shop/i,
+    expect(screen.getByLabelText("Customer")).toHaveAccessibleDescription(
+      /only customers attached to this shop/i,
     );
-    expect(form.getByLabelText("Reference")).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Reference")).toHaveAccessibleDescription(
       /uppercase letters, digits, and hyphens.*named in tickets/i,
     );
-    expect(form.getByLabelText("Placed on")).toHaveAccessibleDescription(
+    expect(screen.getByLabelText("Placed on")).toHaveAccessibleDescription(
       /calendar day the fixture was placed/i,
     );
+    expect(screen.getByLabelText("Variant")).toHaveAccessibleDescription(/a line names a variant/i);
   });
 
   it("prefills the next free reference, resumes when emptied, and refuses a duplicate", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/orders`);
-    const form = within(await screen.findByRole("region", { name: "Create order" }));
+    await newOrder();
 
-    await waitFor(() => expect(form.getByLabelText("Reference")).toHaveValue("NS-10483"));
-    await user.clear(form.getByLabelText("Reference"));
-    await user.type(form.getByLabelText("Reference"), "NS-10999");
-    await user.clear(form.getByLabelText("Reference"));
-    expect(form.getByLabelText("Reference")).toHaveValue("");
+    await screen.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
+    await user.selectOptions(screen.getByLabelText("Variant"), "NS-ASJ-OB-M");
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483"));
+    await user.clear(screen.getByLabelText("Reference"));
+    await user.type(screen.getByLabelText("Reference"), "NS-10999");
+    await user.clear(screen.getByLabelText("Reference"));
+    expect(screen.getByLabelText("Reference")).toHaveValue("");
     await user.tab();
-    expect(form.getByLabelText("Reference")).toHaveValue("NS-10483");
+    expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483");
 
-    await user.clear(form.getByLabelText("Reference"));
-    await user.type(form.getByLabelText("Reference"), "NS-10482");
-    expect(form.getByLabelText("Reference")).toBeInvalid();
-    expect(form.getByLabelText("Reference")).toHaveAccessibleDescription(
+    await user.clear(screen.getByLabelText("Reference"));
+    await user.type(screen.getByLabelText("Reference"), "NS-10482");
+    expect(screen.getByLabelText("Reference")).toBeInvalid();
+    expect(screen.getByLabelText("Reference")).toHaveAccessibleDescription(
       /ns-10482 is already used by an order in this shop/i,
     );
-    await user.click(form.getByRole("button", { name: "Create order" }));
-    expect(createdOrders).toHaveLength(0);
+    // And the page will not go: a taken reference is one of the reasons Create states.
+    expect(screen.getByRole("button", { name: "Create order" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create order" })).toHaveAccessibleDescription(
+      /ns-10482 is already used by an order in this shop/i,
+    );
   });
 
   it("takes no reference until it knows which references are free", async () => {
@@ -754,57 +868,17 @@ describe("order index", () => {
         return HttpResponse.json(ORDERS);
       }),
     );
-    renderAt(`/shops/${SHOP_ID}/orders`);
-    const form = within(await screen.findByRole("region", { name: "Create order" }));
+    await newOrder();
 
     // Which reference is free is exactly what the listing still has to say. A field that is
     // open for typing before it lands writes the suggestion over whatever was typed into it.
-    expect(form.getByLabelText("Reference")).toBeDisabled();
-    expect(form.getByLabelText("Reference")).toHaveValue("");
+    expect(screen.getByLabelText("Reference")).toBeDisabled();
+    expect(screen.getByLabelText("Reference")).toHaveValue("");
 
     (release as unknown as () => void)();
-    await waitFor(() => expect(form.getByLabelText("Reference")).toBeEnabled());
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toBeEnabled());
     // Enabled and already holding the suggestion: never enabled and empty.
-    expect(form.getByLabelText("Reference")).toHaveValue("NS-10483");
-  });
-
-  it("takes no reference while a create is in flight either", async () => {
-    const user = userEvent.setup();
-    let release: (() => void) | null = null;
-    let reads = 0;
-    server.use(
-      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
-        reads += 1;
-        if (reads === 1) {
-          return HttpResponse.json(ORDERS);
-        }
-        // The reload a create triggers, held open: the listing that decides the next free
-        // reference has not answered yet, so neither has the suggestion.
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        return HttpResponse.json({
-          orders: [...ORDERS.orders, { ...ORDERS.orders[0], reference: "NS-10483" }],
-        } satisfies OrderListResponse);
-      }),
-    );
-    renderAt(`/shops/${SHOP_ID}/orders`);
-    const form = within(await screen.findByRole("region", { name: "Create order" }));
-    await form.findByRole("option", { name: "Maya Laurent" });
-    await user.selectOptions(form.getByLabelText("Customer"), PROFILE_ID);
-    await waitFor(() => expect(form.getByLabelText("Reference")).toHaveValue("NS-10483"));
-
-    await user.click(form.getByRole("button", { name: "Create order" }));
-
-    // The page stays here after a create, and the listing behind the suggestion is moving.
-    // Left open, the field would be back where it started: empty, editable, and about to be
-    // written over — or still showing the reference that has just been used.
-    await waitFor(() => expect(form.getByLabelText("Reference")).toBeDisabled());
-    expect(form.getByLabelText("Reference")).toHaveValue("");
-
-    (release as unknown as () => void)();
-    await waitFor(() => expect(form.getByLabelText("Reference")).toBeEnabled());
-    expect(form.getByLabelText("Reference")).toHaveValue("NS-10484");
+    expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483");
   });
 
   it("does not guess a reference after the listing fails to load", async () => {
@@ -816,11 +890,427 @@ describe("order index", () => {
         ),
       ),
     );
-    renderAt(`/shops/${SHOP_ID}/orders`);
+    await newOrder();
     expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
-    expect(
-      within(screen.getByRole("region", { name: "Create order" })).getByLabelText("Reference"),
-    ).toHaveValue("");
+    expect(screen.getByLabelText("Reference")).toHaveValue("");
+  });
+
+  it("keeps a refused create on the page and does not make a second order on the retry", async () => {
+    const user = userEvent.setup();
+    let puts = 0;
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        puts += 1;
+        if (puts === 1) {
+          return HttpResponse.json(
+            { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+            { status: 422 },
+          );
+        }
+        savedRequests.push((await request.json()) as ReplaceOrderRequest);
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not in the catalog/i);
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders/new`);
+    expect(createdOrders).toHaveLength(1);
+
+    // Creating an order is two writes, so a retry finishes the one that failed rather than
+    // making a second fixture under a second reference.
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders/${ORDER_ID}`),
+    );
+    expect(createdOrders).toHaveLength(1);
+    expect(puts).toBe(2);
+  });
+
+  /**
+   * The consequence a late refresh has, in the one place an operator would meet it.
+   *
+   * The `POST` changes the listing whether or not the `PUT` that follows it lands, and
+   * ADR 0056's rule is about what the surface *did*: refreshing only on the way out leaves
+   * the index and the rail an order short after a refusal, and — the part that bites — the
+   * next create reads the stale rows for the next free reference and offers one the lab has
+   * already taken, which the backend then refuses for an order the operator cannot see.
+   *
+   * Fails against a page that refreshes only after the `PUT`: the second visit suggests
+   * NS-10483 again.
+   */
+  it("reads the listing again as soon as the order exists, refused line or not", async () => {
+    const user = userEvent.setup();
+    let listed = ORDERS.orders;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () => HttpResponse.json({ orders: listed })),
+      http.post(`*/api/v1/shops/${SHOP_ID}/orders`, async ({ request }) => {
+        createdOrders.push((await request.json()) as Record<string, unknown>);
+        listed = [
+          ...listed,
+          { ...ORDERS.orders[0], order_id: MADE_ORDER_ID, reference: "NS-10483" },
+        ];
+        return HttpResponse.json(
+          {
+            ...currentOrder,
+            order_id: MADE_ORDER_ID,
+            content: { ...currentOrder.content, reference: "NS-10483", lines: [] },
+          } satisfies ShopOrderResponse,
+          { status: 201 },
+        );
+      }),
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${MADE_ORDER_ID}`, () =>
+        HttpResponse.json(
+          { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    await screen.findByRole("table");
+    expect(within(railEntry("Orders")).getByText("3")).toBeVisible();
+
+    await user.click(screen.getByRole("link", { name: "New order" }));
+    await screen.findByText(/creating an order fixture/);
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/not in the catalog/i);
+
+    // The order exists, so the rail says so even though the page has not finished.
+    await waitFor(() => expect(within(railEntry("Orders")).getByText("4")).toBeVisible());
+    // And it says what is standing rather than "nothing created yet".
+    expect(screen.getByText("created · its line is not saved yet")).toBeVisible();
+    // The reference the operator is still editing is not refused as taken by its own order.
+    expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483");
+    expect(screen.getByLabelText("Reference")).toBeValid();
+
+    // Leaving strands the line and the address, which is an edit to something that exists
+    // now, so the guard asks — and Discard leaves the lineless order the lab holds.
+    await user.click(screen.getByRole("link", { name: "Cancel" }));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(/NS-10483 was created without its line/);
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+
+    await waitFor(() => expect(bodyRows(screen.getByRole("table"))).toBe(4));
+
+    // The next create reads the rows the lab actually holds, so it steps past the reference
+    // the refused attempt already used.
+    await user.click(screen.getByRole("link", { name: "New order" }));
+    await screen.findByText(/creating an order fixture/);
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10484"));
+  });
+
+  it("finishes a refused create from the prompt rather than abandoning the order", async () => {
+    const user = userEvent.setup();
+    let puts = 0;
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        puts += 1;
+        if (puts === 1) {
+          return HttpResponse.json(
+            { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+            { status: 422 },
+          );
+        }
+        savedRequests.push((await request.json()) as ReplaceOrderRequest);
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await screen.findByRole("alert");
+
+    await user.click(screen.getByRole("link", { name: "Cancel" }));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].lines).toEqual([{ sku: "NS-ASJ-OB-M", quantity: 1 }]);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`));
+    expect(createdOrders).toHaveLength(1);
+  });
+
+  it("sends the reference the operator corrected after a refusal, not the one it froze", async () => {
+    const user = userEvent.setup();
+    let puts = 0;
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        puts += 1;
+        if (puts === 1) {
+          return HttpResponse.json(
+            { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+            { status: 422 },
+          );
+        }
+        savedRequests.push((await request.json()) as ReplaceOrderRequest);
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await screen.findByRole("alert");
+
+    await user.clear(screen.getByLabelText("Reference"));
+    await user.type(screen.getByLabelText("Reference"), "NS-20001");
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    // Retyping after a refusal is not thrown away, and the title above is not left naming
+    // an order the lab does not hold.
+    expect(savedRequests[0].reference).toBe("NS-20001");
+    expect(createdOrders).toHaveLength(1);
+  });
+
+  it("lands in the editor even when the listing it re-reads cannot be read", async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () => {
+        reads += 1;
+        return reads === 1
+          ? HttpResponse.json(ORDERS)
+          : HttpResponse.json(
+              { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+              { status: 503 },
+            );
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    // The refresh is how the rail keeps up, not a condition of the create: an order that
+    // exists takes the operator to its editor whatever the listing then answers.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders/${ORDER_ID}`),
+    );
+  });
+
+  /**
+   * ADR 0051: *Discard and leave* "throws each piece away … and proceeds".
+   *
+   * `submit` outlives the page — it is a plain async continuation — so answering the prompt
+   * while its `PUT` is in flight has to stop it, not merely un-block the navigation. Left
+   * running it would write, mark itself landed, re-read the listing through a closure that
+   * may belong to a shop nobody is standing in, and navigate an operator who has gone
+   * somewhere else into an order editor.
+   *
+   * Fails against a page whose continuation does not check that it has been left: the
+   * router ends on the order editor and the `PUT` lands.
+   */
+  it("stops the running create when the prompt is answered with Discard", async () => {
+    const user = userEvent.setup();
+    let release = () => {};
+    let reached = () => {};
+    const putting = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        reached();
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        savedRequests.push((await request.json()) as ReplaceOrderRequest);
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await putting;
+    await screen.findByText("created · its line is not saved yet");
+
+    const leaving = router.navigate(`/shops/${SHOP_ID}/orders`);
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    await act(async () => {
+      await leaving;
+    });
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`);
+
+    // The write that was in flight is let go of, and nothing that follows it happens.
+    release();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`));
+    expect(screen.queryByRole("heading", { level: 1, name: "NS-10483" })).toBeNull();
+    // The order the lab already holds is left as it is: created, with no line.
+    expect(createdOrders).toHaveLength(1);
+  });
+
+  /**
+   * The same rule where it bites hardest: the continuation's `refresh` belongs to the shop
+   * the page was opened in, and `listings.ts`'s counter orders reads that have already
+   * started — a stale closure starting one *later* becomes the latest and lands. So a run
+   * that has been left must not start one at all (ADR 0056, ADR 0051).
+   */
+  it("writes nothing to the shop the operator has moved on from", async () => {
+    const user = userEvent.setup();
+    let release = () => {};
+    let reached = () => {};
+    const putting = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        reached();
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        savedRequests.push((await request.json()) as ReplaceOrderRequest);
+        return HttpResponse.json(currentOrder);
+      }),
+      http.get(`*/api/v1/shops/${OTHER_SHOP_ID}/draft`, () =>
+        HttpResponse.json({
+          shop_id: OTHER_SHOP_ID,
+          lifecycle_state: "draft",
+          content: SHOP_CONTENT,
+          created_at: "2026-08-23T12:00:00+00:00",
+          updated_at: "2026-08-23T12:05:00+00:00",
+        } satisfies ShopDraftResponse),
+      ),
+      http.get(`*/api/v1/shops/${OTHER_SHOP_ID}/draft/preview`, () =>
+        HttpResponse.json({
+          shop_id: OTHER_SHOP_ID,
+          publishable: false,
+          issues: [],
+          changes: [],
+          content_fingerprint: "d".repeat(64),
+          latest_published_version: null,
+          next_version: 1,
+          matches_latest_published: false,
+          content: SHOP_CONTENT,
+        } satisfies ShopPreviewResponse),
+      ),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await putting;
+    await screen.findByText("created · its line is not saved yet");
+
+    const leaving = router.navigate(`/shops/${OTHER_SHOP_ID}/orders`);
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    await act(async () => {
+      await leaving;
+    });
+    await waitFor(() => expect(within(railEntry("Orders")).getByText("0")).toBeVisible());
+
+    release();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // The shop that was left does not reach across into the one on screen — neither its
+    // count, nor its order's editor.
+    await waitFor(() => expect(within(railEntry("Orders")).getByText("0")).toBeVisible());
+    expect(within(railEntry("Orders")).queryByText("4")).toBeNull();
+    expect(router.state.location.pathname).toBe(`/shops/${OTHER_SHOP_ID}/orders`);
+  });
+
+  it("keeps the reference and the retry when the listing it re-reads fails", async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () => {
+        reads += 1;
+        return reads === 1
+          ? HttpResponse.json(ORDERS)
+          : HttpResponse.json(
+              { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+              { status: 503 },
+            );
+      }),
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, () =>
+        HttpResponse.json(
+          { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+          { status: 422 },
+        ),
+      ),
+    );
+    await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await screen.findByText("created · its line is not saved yet");
+
+    // The listing failing is not the operator's problem to solve: the order exists and is
+    // called what the lab called it, so the field keeps it and the retry is still pressable.
+    expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483");
+    expect(screen.getByRole("heading", { level: 1, name: "NS-10483" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create order" })).toBeEnabled();
+  });
+
+  it("hands the order's own reference back when the field is emptied after a refusal", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, () =>
+        HttpResponse.json(
+          { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+          { status: 422 },
+        ),
+      ),
+    );
+    await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await screen.findByText("created · its line is not saved yet");
+
+    await user.clear(screen.getByLabelText("Reference"));
+    await user.tab();
+
+    // `DerivedIdField`'s own promise: emptied, the suggestion comes back — and after a
+    // create the suggestion is the reference the order actually has.
+    expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483");
+  });
+
+  it("fixes the customer at creation, because the second write cannot move one", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, () =>
+        HttpResponse.json(
+          { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+          { status: 422 },
+        ),
+      ),
+    );
+    await newOrder();
+    await fillOrder(user);
+    expect(screen.getByLabelText("Customer")).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await screen.findByText("created · its line is not saved yet");
+
+    // `ReplaceOrderRequest` carries no customer and the lab keeps the one the order was
+    // made for, so a select that stayed live would let the form name somebody the order
+    // does not belong to — and send an address out of the wrong book.
+    expect(screen.getByLabelText("Customer")).toBeDisabled();
+    expect(screen.getByLabelText("Customer")).toHaveAccessibleDescription(
+      /a customer is fixed at creation/i,
+    );
+  });
+
+  it("returns to the index with nothing created when Cancel is pressed", async () => {
+    const user = userEvent.setup();
+    const { router } = await newOrder();
+
+    await screen.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
+    await user.click(screen.getByRole("link", { name: "Cancel" }));
+
+    // A half-typed create form is not an edit to something that exists, so nothing asks
+    // about it on the way out (ADR 0051).
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(createdOrders).toHaveLength(0);
   });
 });
 
@@ -916,6 +1406,59 @@ describe("order editor", () => {
     expect(within(findings).getByText(/no longer exists/)).toBeVisible();
     expect(within(findings).getByText("Warning")).toBeVisible();
     expect(within(card("Fulfilment & shipping")).getByText(/42 cours de la Marne/)).toBeVisible();
+  });
+
+  /**
+   * The gate rule the `order-fixture` journey used to read on a freshly created order.
+   *
+   * It cannot read it there any more: the create page refuses to go without a line
+   * (PLAN-UX Slice 12), so no order reaches its editor lineless from that door. The rule
+   * itself has not moved — `order_without_line` in `domain/order_fixture.py`, covered by
+   * `test_order_domain.py` and `test_order_api.py` — and the state is still reachable in
+   * this editor, which is the one surface that can take the last line off an order. So the
+   * assertion moves here, where what it proves is what the deleted one proved: that an
+   * order left with no line to derive a total from reports it, and that the workspace
+   * prints the lab's sentence rather than one of its own. The sentence below is this
+   * suite's stub speaking, so nothing here pins it to `domain/order_fixture.py`; the two
+   * backend cases named above are what hold the gate to its wording.
+   */
+  it("shows the gate's own words when the last line is taken off an order", async () => {
+    const user = userEvent.setup();
+    const lineless =
+      "an order must carry at least one line item, because its totals are derived from them";
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        const body = (await request.json()) as ReplaceOrderRequest;
+        savedRequests.push(body);
+        // What the lab answers for an order with nothing to total, as the gate writes it.
+        return HttpResponse.json({
+          ...currentOrder,
+          content: { ...currentOrder.content, lines: [] },
+          issues:
+            body.lines.length === 0
+              ? [
+                  {
+                    severity: "error",
+                    code: "order_without_line",
+                    message: lineless,
+                    path: "lines",
+                  },
+                ]
+              : [],
+        } satisfies ShopOrderResponse);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+
+    await screen.findByRole("heading", { name: "NS-10482" });
+    await user.click(screen.getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].lines).toEqual([]);
+    expect(
+      within(await screen.findByRole("region", { name: "Findings" })).getByText(lineless),
+    ).toBeVisible();
   });
 
   it("adds a line item from the catalog rather than typed content", async () => {

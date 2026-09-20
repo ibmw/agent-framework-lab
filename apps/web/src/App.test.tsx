@@ -266,60 +266,93 @@ function renderAt(path: string) {
   return renderApp(path);
 }
 
-describe("adding a product", () => {
-  it("puts each field's hint in that control's accessible description", async () => {
+describe("creating a product", () => {
+  /**
+   * Products are the slice's one create that is not a page (PLAN-UX Slice 12): a product is a
+   * row of the shop draft, so there is nothing to POST and nothing to be refused, and the
+   * prototype appends an empty one and opens its editor (`Workspace.dc.html`:6931).
+   */
+  it("appends an empty product to the draft and lands in its editor", async () => {
+    const user = userEvent.setup();
+    currentContent = EMPTY_CONTENT;
+    const { router } = renderAt(`/shops/${SHOP_ID}/products`);
+
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    expect(within(railEntry("Products")).getByText("0")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "New product" }));
+
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/new-product`);
+    expect(screen.getByRole("heading", { level: 1, name: "Untitled product" })).toBeVisible();
+    // The rail's product figure is the draft's own length, so it moves in the same commit
+    // the draft does (ADR 0056) — no listing, no refresh, no reload.
+    expect(within(railEntry("Products")).getByText("1")).toBeVisible();
+  });
+
+  it("gives an unnamed product something to be called on the catalog too", async () => {
+    const user = userEvent.setup();
+    currentContent = EMPTY_CONTENT;
     renderAt(`/shops/${SHOP_ID}/products`);
 
-    const card = within(await screen.findByRole("region", { name: "Add a product" }));
-    // Exact, not a substring: this sentence is also the product editor's Title row, and the
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    await user.click(screen.getByRole("button", { name: "New product" }));
+    // The catalog saves the same draft, so walking back asks nothing — and a link named by
+    // an empty title would have no accessible name and nothing to click.
+    await user.click(screen.getByRole("link", { name: "Products" }));
+
+    const row = within(await screen.findByRole("table"));
+    expect(row.getByRole("link", { name: "Untitled product" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/products/new-product`,
+    );
+  });
+
+  it("steps the handle past one the draft already holds", async () => {
+    const user = userEvent.setup();
+    const { router } = renderAt(`/shops/${SHOP_ID}/products`);
+
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    await user.click(screen.getByRole("button", { name: "New product" }));
+    await user.click(screen.getByRole("link", { name: "Products" }));
+    await user.click(await screen.findByRole("button", { name: "New product" }));
+
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/new-product-2`);
+  });
+});
+
+describe("the product editor's identity rows", () => {
+  /** The editor of a product this test has just created, which is where naming one happens. */
+  async function openNewProduct(user: ReturnType<typeof userEvent.setup>) {
+    renderAt(`/shops/${SHOP_ID}/products`);
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    await user.click(screen.getByRole("button", { name: "New product" }));
+    return within(await screen.findByRole("region", { name: "Details" }));
+  }
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const card = within(await screen.findByRole("region", { name: "Details" }));
+    // Exact, not a substring: this sentence was also the create card's Title row, and the
     // pair only means anything if the two are the same string.
     expect(card.getByLabelText("Title")).toHaveAccessibleDescription(
       wholeDescription(PRODUCT_TITLE_RULE),
     );
-    expect(card.getByLabelText("Category")).toHaveAccessibleDescription(
-      /groups the product in the catalog/i,
-    );
     expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
       /lowercase with hyphens.*tools address the product/i,
     );
-    expect(precedes(card.getByLabelText("Title"), card.getByLabelText("Category"))).toBe(true);
-    expect(precedes(card.getByLabelText("Category"), card.getByLabelText("Handle"))).toBe(true);
+    expect(precedes(card.getByLabelText("Title"), card.getByLabelText("Handle"))).toBe(true);
+    // Category is deliberately bare and stays Slice 27's; the case under "the field pattern
+    // on the shop editors" is what pins it.
   });
 
-  it("offers the categories the draft already uses, and takes a new one", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products`);
-    const card = within(await screen.findByRole("region", { name: "Add a product" }));
-
-    const category = card.getByLabelText("Category");
-    const list = category.getAttribute("list");
-    expect(
-      [...document.querySelectorAll(`#${list} option`)].map((option) =>
-        option.getAttribute("value"),
-      ),
-    ).toEqual(["Jackets"]);
-    expect(category).toHaveAccessibleDescription(/pick one the draft already uses/i);
-
-    // A datalist suggests; it never refuses. The second category a catalog gets is new.
-    await user.type(category, "Trousers");
-    expect(category).toHaveValue("Trousers");
-    expect(category).toBeValid();
-  });
-
-  it("suggests no category on an empty draft", async () => {
-    currentContent = EMPTY_CONTENT;
-    renderAt(`/shops/${SHOP_ID}/products`);
-    const card = within(await screen.findByRole("region", { name: "Add a product" }));
-
-    const list = card.getByLabelText("Category").getAttribute("list");
-    expect(document.querySelectorAll(`#${list} option`)).toHaveLength(0);
-  });
-
-  it("derives the handle from the title and previews what it will save", async () => {
+  it("derives the handle from the title, previews it, and moves the page onto it", async () => {
     const user = userEvent.setup();
     currentContent = EMPTY_CONTENT;
-    renderAt(`/shops/${SHOP_ID}/products`);
-    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+    const { router } = renderAt(`/shops/${SHOP_ID}/products`);
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    await user.click(screen.getByRole("button", { name: "New product" }));
+    const card = within(await screen.findByRole("region", { name: "Details" }));
 
     await user.type(card.getByLabelText("Title"), "Alpine Shell Jacket");
 
@@ -327,13 +360,17 @@ describe("adding a product", () => {
     expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
       /saved as alpine-shell-jacket/i,
     );
+    // A product is addressed by its handle, so renaming one moves the page it is on.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/alpine-shell-jacket`),
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
   });
 
   it("stops following once the handle is edited, and follows again once emptied", async () => {
     const user = userEvent.setup();
     currentContent = EMPTY_CONTENT;
-    renderAt(`/shops/${SHOP_ID}/products`);
-    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+    const card = await openNewProduct(user);
 
     await user.type(card.getByLabelText("Title"), "Alpine Shell Jacket");
     await user.clear(card.getByLabelText("Handle"));
@@ -347,13 +384,36 @@ describe("adding a product", () => {
     expect(card.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket-xl-petite");
   });
 
-  it("offers a free handle and refuses one already in the draft", async () => {
+  it("puts the page back on a renamed product when the rename is discarded", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products`);
-    const card = within(await screen.findByRole("region", { name: "Add a product" }));
+    const { router } = renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const card = within(await screen.findByRole("region", { name: "Details" }));
+
+    await user.clear(card.getByLabelText("Handle"));
+    await user.type(card.getByLabelText("Handle"), "alpine-jacket");
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/alpine-jacket`),
+    );
+
+    // Discard re-reads what the lab holds, which still calls the product by its old handle.
+    // The page has to follow it back rather than draw "Product not found" over a product
+    // that is right there.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/alpine-shell-jacket`),
+    );
+    expect(screen.queryByRole("heading", { name: "Product not found" })).toBeNull();
+    expect(
+      within(screen.getByRole("region", { name: "Details" })).getByLabelText("Handle"),
+    ).toHaveValue("alpine-shell-jacket");
+  });
+
+  it("offers a free handle and refuses one another product already holds", async () => {
+    const user = userEvent.setup();
+    const card = await openNewProduct(user);
 
     await user.type(card.getByLabelText("Title"), "Alpine Shell Jacket");
-    await user.type(card.getByLabelText("Category"), "Jackets");
 
     expect(card.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket-2");
     expect(card.getByLabelText("Handle")).toHaveAccessibleDescription(
@@ -363,8 +423,6 @@ describe("adding a product", () => {
     await user.clear(card.getByLabelText("Handle"));
     await user.type(card.getByLabelText("Handle"), "alpine-shell-jacket");
     expect(card.getByLabelText("Handle")).toBeInvalid();
-    await user.click(card.getByRole("button", { name: "Add to draft" }));
-    expect(screen.getAllByRole("link", { name: "Alpine Shell Jacket" })).toHaveLength(1);
   });
 });
 
@@ -1698,6 +1756,7 @@ describe("the route tree under the data router", () => {
     expect(routedElements(routeTree)).toStrictEqual([
       ["/", "Landing"],
       ["/shops", "ShopsPage"],
+      ["/shops/new", "NewShopPage"],
       ["/settings", "LabSettingsPage"],
       ["/glossary", "GlossaryPage"],
       ["/guides", "Navigate"],
@@ -1717,6 +1776,7 @@ describe("the route tree under the data router", () => {
       ["/lab/judges", "JudgeConfigurationsPage"],
       ["/lab/judges/:judgeId", "JudgeConfigurationEditorPage"],
       ["/lab/support-identities", "SupportIdentitiesPage"],
+      ["/lab/support-identities/new", "NewSupportIdentityPage"],
       ["/lab/support-identities/:identityId", "SupportIdentityEditorPage"],
       ["/lab/objective-blocks", "ObjectiveBlocksPage"],
       ["/lab/objective-blocks/:blockId", "ObjectiveBlockEditorPage"],
@@ -1744,8 +1804,10 @@ describe("the route tree under the data router", () => {
       ["/shops/:shopId/products", "ProductsPage"],
       ["/shops/:shopId/products/:handle", "ProductEditorPage"],
       ["/shops/:shopId/orders", "OrdersPage"],
+      ["/shops/:shopId/orders/new", "NewOrderPage"],
       ["/shops/:shopId/orders/:orderId", "OrderEditorPage"],
       ["/shops/:shopId/customers", "CustomersPage"],
+      ["/shops/:shopId/customers/new", "NewCustomerPage"],
       ["/shops/:shopId/tickets", "TicketsPage"],
       ["/shops/:shopId/tickets/:ticketId", "TicketsPage"],
       ["/shops/:shopId/customers/:profileId", "CustomerEditorPage"],
