@@ -61,6 +61,13 @@ matrix is the clearest rendering of per-arm deterministic evidence.
 > pine `#1d6241` and the warm red is reserved for destructive; every other token in the list above
 > stands. The reasoning is in the *workspace refresh* revision at the foot of this document.
 
+> Navigation, planned (2026-09-20). The prototype realises *Studio / Bench / History* as two
+> modes in the top bar — *Shop fixture* with the shop's rail, *Experiment lab* with a rail of
+> Bench, History and a Library — and `docs/PLAN-UX.md` Slice 9 moves the lab's routes out of
+> shop scope to match, under an ADR written before the code. Until that slice lands the lab is
+> still a section of the shop's rail, and this bullet describes the direction rather than the
+> shell.
+
 ## Revision — shop workspace and ticket model (2026-08-23)
 
 After reviewing the merged stage-one frames, the Studio is restructured as a **shop-scoped admin
@@ -897,6 +904,15 @@ sets in `lib/ui.ts`, the chrome in `components/WorkspaceChrome.tsx` — with no 
 `docs/implementation-plan.md` breaks it into slices in this repository's own format, and the two
 architecture decisions it carries are ADR 0052 and ADR 0053. This section records what changes in
 the **selected direction**; the handoff holds the measurements and is not restated here.
+
+> Re-planned (2026-09-20). `docs/implementation-plan.md`'s eight pattern slices have all landed
+> and that document is now their as-built record; the rest of the refresh — the two-mode
+> navigation, the top bar, creation as a page, the overview, Settings and the model connection,
+> the new-scenario flow, and the behaviour that crosses every screen — is `docs/PLAN-UX.md`
+> Milestone 8, whose *Where the work stands* section reads the prototype screen by screen
+> against the application and says why the pattern layer alone did not reach it. Three things
+> the prototype draws are decided there rather than in a slice: the lab as a mode, the Setup
+> checklist (refused, per ADR 0045) and which of the five proposed preferences earn a consumer.
 
 **What a UI slice cites now.** The workspace prototype is the authority for what crosses every
 screen — navigation chrome, the form row, button language and colour, list density, the search

@@ -258,9 +258,11 @@ tested slices.
   boundary.
 - Do not add compatibility layers for discarded local POC data unless the slice declares that
   starting state supported.
-- UI-bearing slices implement the frames named in their "Frames:" line from the Milestone 0.5
-  authoritative set (`docs/design-direction.md`; local export with index in
-  `tmp/design-frames/README.md`) instead of inventing layout ad hoc.
+- UI-bearing slices implement the frames named in their "Frames:" line instead of inventing
+  layout ad hoc. Since 19 September 2026 the authority is the whole-workspace prototype
+  `tmp/design-frames/Workspace.html` with its handoff `README.md`, and the Milestone 0.5 frames
+  under `tmp/design-frames/DEPRECADED/` where the prototype does not contradict them;
+  `docs/design-direction.md`'s *workspace refresh* revision says which wins where they disagree.
 - Mark an outcome complete only when its tests, contracts, migrations, documentation, and UI where
   applicable are present.
 - `make check` passes before handoff. Frontend/build changes also pass `pnpm build`; essential changed
@@ -1252,6 +1254,43 @@ accepted because each of those steps already answers on the surface it names.
   about either secret.
 - Every element a tour points at is checked against the surface it describes, off the one table the
   tours are declared in, so a control that moves fails a test rather than a reader.
+
+## Milestone 8 — The workspace becomes the prototype
+
+### Goal
+
+Bring `apps/web` to the whole-workspace design handed over on 19 September 2026
+(`tmp/design-frames/Workspace.html`), on the primitives the workspace already has and without a
+new UI dependency. The milestone is planned slice by slice in `docs/PLAN-UX.md`, which is the
+authority for its scope, order and checks; this section only places it in the roadmap.
+
+### What precedes it
+
+Two smaller plans delivered into the same surface first and are complete. The 13 September plan's
+Slices 1–8 — hints under every field, derived identifiers, enum labels, currencies at creation,
+typed controls, closed sets from the proven table, edit-in-place, and the unsaved-work guard with
+its router migration (ADR 0051) — and the handoff's eight pattern slices, recorded as built in
+`docs/implementation-plan.md`: pine as the primary action, the field row, the rail's metrics,
+filter chips with counts, the display type, the search field, the shared control's metrics and
+the rows' copy. ADR 0052 (the model connection is a capability of the lab) and ADR 0053 (a
+configuration names its provider) were written before their code, as the handoff asked.
+
+### Outcomes
+
+`docs/PLAN-UX.md` groups the remaining work as chrome and information architecture (the lab as
+a mode with its own rail, the top bar, counts on the rail), the screens the prototype recomposes
+(creation as a page, the new-scenario flow, the shop overview, documents, tone of voice,
+settings in three zones, the model connection and the provider note it enables), and the
+behaviour the prototype specifies on every screen (deliberate removal, refusal with a reason,
+defaults, long-running actions, the sticky header, a naming sweep, and the debts the pattern
+slices reported). The lab-as-a-mode slice writes an ADR before its code, because it moves every
+lab route out of shop scope.
+
+### Acceptance criteria
+
+Those of `docs/PLAN-UX.md` Milestone 8, plus: nothing about progress is stored (ADR 0044,
+ADR 0045 stand), the connection never enters a fingerprint (ADR 0052), and the eleven Playwright
+journeys pass on the new routes without the application having been bent to them.
 
 ## Deferred decision triggers
 

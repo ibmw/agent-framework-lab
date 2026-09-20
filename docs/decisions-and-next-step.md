@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-09-05
+Status: current — 2026-09-20
 
 ## Authoritative direction
 
@@ -98,7 +98,10 @@ SDK immediately.
 
 ## Known application defects, found but not fixed
 
-Both were found on 15 September 2026 while making the Playwright suite trustworthy in parallel
+Five entries. The first two are backend defects, unscheduled, and each wants an ADR as its entry
+says. The three workspace defects after them are scheduled: `docs/PLAN-UX.md` Slice 27 owns them.
+
+The first two were found on 15 September 2026 while making the Playwright suite trustworthy in parallel
 (`fix(test): give every Playwright worker its own stack`). Neither is a test defect and neither was
 touched by that change: a suite must not have application code bent to suit it. Both are latent at
 lab scale now that the suite no longer provokes them, and both want their own slice.
@@ -143,7 +146,7 @@ behaviour stops being reviewable as a layout slice.
   a rule withheld. A test on the editor asserts the row has no `list` attribute and an empty
   accessible description, so whoever adds the datalist is sent to the hint in the same change.
   The fix is small — the editor already holds every product in `content` — and it is behaviour, so
-  it wants the slice that also re-ticks the line in `docs/PLAN-UX.md` rather than a drive-by.
+  it is `docs/PLAN-UX.md` Slice 27's rather than a drive-by.
 
 Found on 20 September 2026 while giving the shared field control the handoff's metrics
 (`feat(web): give every field the handoff's own metrics and border`). Reported rather than fixed
@@ -305,9 +308,15 @@ input is no longer reviewable as a copy slice.
    is a current classification. A tag is folded to one lowercase kebab-case spelling — and
    refused rather than mangled when the fold cannot make a slug of it — so the shelf history
    narrows by has one identity. The listing shows the tags, counts the notes, and searches both.
-18. Next is the rest of Milestone 5: traces (frame 9b), the code excerpt of frame 9c, replay and
-   fork provenance, and judge failure/rerun tested apart from the deterministic outcome
-   calculation.
+18. Milestones 5, 6 and 7 are complete: traces, replay and fork provenance and the judge
+   evidence (ADRs 0037–0040); the second framework and the first controlled comparison
+   (ADRs 0041–0042); the settings surface, the tours and the retired guides (ADRs 0044–0049).
+   The 13 September UX plan's Slices 1–8 (ADRs 0050–0051) and the handoff's eight pattern slices
+   (`docs/implementation-plan.md`) are delivered, and ADR 0052 and ADR 0053 are accepted ahead of
+   their code.
+19. Next is `docs/PLAN.md` Milestone 8, planned in `docs/PLAN-UX.md`: the workspace becomes the
+   19 September prototype. Slice 9 — the lab as a mode, with its ADR — goes first and alone,
+   because every later slice, spec and tour anchor is written against the routes it leaves.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

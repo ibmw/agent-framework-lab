@@ -1,4 +1,13 @@
-# Landing this mockup in `agent-framework-lab`
+# The workspace refresh — the pattern slices, as built
+
+Status: record — 2026-09-20. This document was the handoff's plan for landing
+`tmp/design-frames/Workspace.html`; its eight pattern slices (UI-1 to UI-8) have all landed, and
+each section below is that slice's as-built record — its census, its measurements and its
+departures — kept because `docs/design-direction.md` cites them. **It is no longer a plan.** What
+remains of the refresh — the two-mode navigation, the top bar, creation as a page, the overview,
+Settings, the model connection, the new-scenario flow and the behaviour that crosses every
+screen — is planned in `docs/PLAN-UX.md` (Milestone 8), which superseded this document's
+behaviour, ADR and ordering sections on 20 September 2026.
 
 Written against the repo's own conventions: `docs/PLAN.md` delivery rules, `docs/PLAN-UX.md`
 slice format, `docs/design-direction.md` frame authority, ADRs for decisions. Nothing below
@@ -687,83 +696,19 @@ them, and adding an export nobody imports fails the sweep by name.
 
 ---
 
-## 3. The behaviour slices
+## 3. What followed
 
-### B-1 · Guideline editing
-`ShopSetupPages.tsx`. Inline expand-in-place per row — name + body + slug preview, Done/Cancel,
-Delete with the shop default protected. New-then-cancel must remove the appended row, and a
-nameless guideline must not be committable or selectable as default. (Both were bugs in the
-mock; the tests should encode them.)
+Sections 3 to 6 of the original — the three behaviour slices, the two ADRs, the suggested order
+and the two proposals — are superseded. The ADRs were written and accepted as ADR 0052 and
+ADR 0053. Of the behaviour slices, B-3 was confirmed already correct (every editor loads the
+record from its route parameter), B-1 was mostly delivered by the 13 September plan's Slice 7
+(edit-in-place on the tone rows) with its remainder now `docs/PLAN-UX.md` Slice 17, and B-2 is
+Slice 14 there. The order and the two proposals are decided in that plan's *Decisions the
+prototype forces* and *Sequencing*.
 
-### B-2 · Scenario creation
-`ScenariosPage` gains a real create route matching the mock: name, ticket (customer and shop
-version derived), hidden facts, objective blocks, mutation blocks. Blocked until name + at
-least one objective, with the reason on the disabled control. Ticket select values are the
-bare ref — the composed label belongs in the hint, not the option value.
-
-### B-3 · Editors bind to the clicked row
-`ProductEditorPage` and `CustomerEditorPage` load the record from the route param rather than a
-single fixture. Likely already correct in the real app; confirm before writing a slice for it.
-
----
-
-## 4. The two ADRs
-
-### ADR · Where the model connection lives
-The decision, not the form: does the provider connection move into the lab's database, and if
-so how is the key stored, who may change it, and what does a run pin?
-
-The mock's position, worth arguing for or against explicitly:
-
-- One connection per lab, OpenAI-compatible only. Presets for OpenAI, Ollama, vLLM, OpenRouter,
-  Together, plus Custom; base URL editable in every case.
-- The key is per provider, stored encrypted, never returned — the API returns a mask and an
-  added-date, never the value.
-- Saving a connection affects runs started afterwards. A recorded run keeps provider, base URL
-  and model, and Results reads them back from the run.
-- Env remains the bootstrap: a lab with no saved connection falls back to
-  `AGENT_LAB_OPENAI_API_KEY`, which is what keeps `make seed` and CI working unattended.
-
-This is where ADR 0044's "no settings table" is revisited. The distinction that lets both hold:
-0044 refused *stored operator progress*; this stores *a capability of the lab*. Say so in the
-ADR or the two decisions will read as contradictory later.
-
-Backend work it implies: contract types, a migration, secret handling, a `POST .../test`
-endpoint for the connection check, and provider/base-URL/model columns on the run record.
-
-### ADR · Provider on an agent configuration
-Additive field, validated against the proven table: an unproven *framework, architecture or
-provider* is refused at publication; an unproven *model* is a warning that publishes anyway —
-that asymmetry already exists and should be stated rather than re-derived. A configuration
-naming a provider the lab is not currently pointed at is valid but unrunnable, and the editor
-says so.
-
----
-
-## 5. Suggested order
-
-1. Two ADRs (parallel, no code).
-2. UI-1, UI-2 — everything else inherits them.
-3. UI-3, UI-4, UI-5, UI-6 — independent, parallelisable.
-4. UI-7, then UI-8 — both fell out of UI-2 and neither blocks anything above.
-5. B-1, B-2, B-3.
-6. Provider milestone: contracts → migration → API → `LabSettingsPage` → agent configuration
-   field.
-
-UI-1 and UI-2 first is the load-bearing call: every later slice touches buttons and fields, and
-doing them last means editing the same lines twice.
-
-UI-7 sits after the independent four rather than beside UI-2 because it repaints every control in
-the workspace: doing it while four branches are open would make each of them answer for a
-diff it did not cause. UI-8 follows UI-7 because a hint is written against the control the reader
-is looking at.
-
----
-
-## 6. Two things in the mock that are proposals, not requirements
-
-- **Five new browser preferences** — where the app opens, auto-offer tour, confirm before
-  delete, timestamp format, table density. Each needs a real consumer to exist, per the house
-  rule. Cut any that do not earn one.
-- **Shop logo** (icon, background, mark colour) — three columns on the shop record and a
-  contrast check in the editor. Pleasant, not load-bearing; sequence it last or drop it.
+The reason for moving them, stated once: this document's slices were the *pattern* layer of the
+refresh — colour, the field row, the rail's metrics, chips, type, search, control metrics, copy —
+and after all eight the application still opened on the shell, routes, create forms and settings
+page it had before the handoff. What makes the prototype the prototype is structural, and a plan
+for it had to start from the screens rather than from the primitives. `docs/PLAN-UX.md`'s *Where
+the work stands* is that reading.
