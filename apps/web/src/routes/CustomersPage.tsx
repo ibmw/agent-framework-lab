@@ -74,11 +74,16 @@ const FILTERS: FilterChipDefinition<Filter, CustomerProfileSummarySchema>[] = [
 ];
 
 export function CustomersPage() {
-  const { shopId } = useShopWorkspace();
-  const [attached, setAttached] = useState<CustomerProfileSummarySchema[]>([]);
+  // The attached profiles are the listing the rail counts, read once by the shop's shell
+  // (ADR 0056). The cross-shop list beside it belongs to this page alone — it is what the
+  // attach control offers and nothing else reads it — so it stays here.
+  const { shopId, listings } = useShopWorkspace();
+  const attached = listings.customers.rows;
   const [everything, setEverything] = useState<CustomerProfileSummarySchema[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingEverything, setLoadingEverything] = useState(true);
+  const [everythingError, setEverythingError] = useState<string | null>(null);
+  const loading = listings.customers.loading || loadingEverything;
+  const loadError = listings.customers.error ?? everythingError;
   const [createError, setCreateError] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -90,35 +95,35 @@ export function CustomersPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
 
-  const reload = useCallback(
-    async (signal?: AbortSignal) => {
-      const [scoped, all] = await Promise.all([
-        listCustomerProfiles(shopId, signal),
-        listCustomerProfiles(undefined, signal),
-      ]);
-      setAttached(scoped.profiles);
+  const readEverything = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const all = await listCustomerProfiles(undefined, signal);
+      if (signal?.aborted) {
+        return;
+      }
       setEverything(all.profiles);
-      setLoadError(null);
-    },
-    [shopId],
-  );
+      setEverythingError(null);
+    } catch (cause: unknown) {
+      if (!signal?.aborted) {
+        setEverythingError(describeApiError(cause, UNAVAILABLE));
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setLoadingEverything(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    reload(controller.signal)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoadError(describeApiError(cause, UNAVAILABLE));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+    void readEverything(controller.signal);
     return () => controller.abort();
-  }, [reload]);
+  }, [readEverything]);
+
+  /** Both lists, after a write that changed which profiles this shop has. */
+  const reload = useCallback(async () => {
+    await Promise.all([listings.customers.refresh(), readEverything()]);
+  }, [listings.customers, readEverything]);
 
   async function addProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,13 +149,8 @@ export function CustomersPage() {
       setBusy(false);
       return;
     }
-    try {
-      await reload();
-    } catch (cause: unknown) {
-      setLoadError(describeApiError(cause, UNAVAILABLE));
-    } finally {
-      setBusy(false);
-    }
+    await reload();
+    setBusy(false);
   }
 
   async function attach(event: FormEvent<HTMLFormElement>) {
@@ -165,13 +165,8 @@ export function CustomersPage() {
       setBusy(false);
       return;
     }
-    try {
-      await reload();
-    } catch (cause: unknown) {
-      setLoadError(describeApiError(cause, UNAVAILABLE));
-    } finally {
-      setBusy(false);
-    }
+    await reload();
+    setBusy(false);
   }
 
   // Name or email, the pair the prototype's customers search reads (its `shownCustomers`

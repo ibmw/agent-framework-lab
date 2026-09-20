@@ -1,9 +1,8 @@
-import type { ScenarioSummarySchema, TicketSummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import type { ScenarioSummarySchema } from "@agent-lab/contracts";
+import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { createScenario, listScenarios } from "../api/scenarios";
-import { listTickets } from "../api/tickets";
+import { createScenario } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
@@ -18,8 +17,6 @@ import {
   tableHeadClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
-
-const UNAVAILABLE = "The scenario workspace is unavailable.";
 
 /**
  * The Studio's scenario index (the rail's "Scenarios").
@@ -54,47 +51,20 @@ const FILTERS: FilterChipDefinition<Filter, ScenarioSummarySchema>[] = [
 ];
 
 export function ScenariosPage() {
-  const { shopId } = useShopWorkspace();
-  const [scenarios, setScenarios] = useState<ScenarioSummarySchema[]>([]);
-  const [tickets, setTickets] = useState<TicketSummarySchema[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The listing this page renders is the one the rail counts, read once by the shop's shell
+  // and read again here whenever this page changes what it lists (ADR 0056). The tickets the
+  // create form is built on are the same listing the Tickets index renders.
+  const { shopId, listings } = useShopWorkspace();
+  const scenarios = listings.scenarios.rows;
+  const tickets = listings.tickets.rows;
+  const loading = listings.scenarios.loading || listings.tickets.loading;
+  const loadError = listings.scenarios.error ?? listings.tickets.error;
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [ticketId, setTicketId] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-
-  const reload = useCallback(
-    async (signal?: AbortSignal) => {
-      const [scenarioList, ticketList] = await Promise.all([
-        listScenarios(shopId, signal),
-        listTickets(shopId, signal),
-      ]);
-      setScenarios(scenarioList.scenarios);
-      setTickets(ticketList.tickets);
-      setLoadError(null);
-    },
-    [shopId],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    reload(controller.signal)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoadError(describeApiError(cause, UNAVAILABLE));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [reload]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,13 +78,10 @@ export function ScenariosPage() {
       setCreating(false);
       return;
     }
-    try {
-      await reload();
-    } catch (cause: unknown) {
-      setLoadError(describeApiError(cause, UNAVAILABLE));
-    } finally {
-      setCreating(false);
-    }
+    // The page has just changed what it lists, so the shell's listing is read again — which
+    // is what moves the rail's figure and this table together (ADR 0056).
+    await listings.scenarios.refresh();
+    setCreating(false);
   }
 
   // Name, and the customer the scenario is about — the two the prototype's scenarios search

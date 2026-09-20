@@ -1,5 +1,5 @@
 import type { BlockSummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { describeApiError } from "../api/client";
@@ -18,6 +18,8 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
+import { useLabWorkspace } from "../shell/LabWorkspace";
+import type { Listing } from "../shell/listings";
 
 interface LibraryCopy {
   title: string;
@@ -29,7 +31,6 @@ interface LibraryCopy {
   noMatch: string;
   createLabel: string;
   typeHeading: string;
-  unavailable: string;
   namePlaceholder: string;
 }
 
@@ -43,7 +44,6 @@ const OBJECTIVE_COPY: LibraryCopy = {
   noMatch: "No objective block matches this view.",
   createLabel: "New objective block",
   typeHeading: "Assessment · evidence",
-  unavailable: "The objective-block library is unavailable.",
   namePlaceholder: "read-required-document",
 };
 
@@ -57,51 +57,29 @@ const MUTATION_COPY: LibraryCopy = {
   noMatch: "No mutation block matches this view.",
   createLabel: "New mutation block",
   typeHeading: "Effect",
-  unavailable: "The mutation-block library is unavailable.",
   namePlaceholder: "tool-timeout",
 };
 
 function BlockLibrary({
   copy,
-  list,
+  listing,
   create,
 }: {
   copy: LibraryCopy;
-  list: (signal?: AbortSignal) => Promise<{ blocks: BlockSummarySchema[] }>;
+  /**
+   * The library this page renders, read once by the lab's shell so that the rail's figure
+   * and this table are one answer (ADR 0056). A create here reads it again.
+   */
+  listing: Listing<BlockSummarySchema>;
   create: (command: { name: string }) => Promise<unknown>;
 }) {
-  const [blocks, setBlocks] = useState<BlockSummarySchema[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const blocks = listing.rows;
+  const loading = listing.loading;
+  const loadError = listing.error;
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [query, setQuery] = useState("");
-
-  const reload = useCallback(
-    async (signal?: AbortSignal) => {
-      setBlocks((await list(signal)).blocks);
-      setLoadError(null);
-    },
-    [list],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    reload(controller.signal)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoadError(describeApiError(cause, copy.unavailable));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [reload, copy.unavailable]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,13 +93,8 @@ function BlockLibrary({
       setCreating(false);
       return;
     }
-    try {
-      await reload();
-    } catch (cause: unknown) {
-      setLoadError(describeApiError(cause, copy.unavailable));
-    } finally {
-      setCreating(false);
-    }
+    await listing.refresh();
+    setCreating(false);
   }
 
   // The name alone, which is what the prototype's two library searches read (`x.name` in its
@@ -261,17 +234,23 @@ function BlockLibrary({
 }
 
 export function ObjectiveBlocksPage() {
+  const { listings } = useLabWorkspace();
   return (
     <BlockLibrary
       copy={OBJECTIVE_COPY}
-      list={objectiveBlocks.list}
+      listing={listings.objectiveBlocks}
       create={objectiveBlocks.create}
     />
   );
 }
 
 export function MutationBlocksPage() {
+  const { listings } = useLabWorkspace();
   return (
-    <BlockLibrary copy={MUTATION_COPY} list={mutationBlocks.list} create={mutationBlocks.create} />
+    <BlockLibrary
+      copy={MUTATION_COPY}
+      listing={listings.mutationBlocks}
+      create={mutationBlocks.create}
+    />
   );
 }

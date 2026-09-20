@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OBJECTIVE_ID = "1a2b3c4d-5e6f-4708-9a0b-1c2d3e4f5a6b";
@@ -263,6 +264,9 @@ const server = setupServer(
   http.get(`*/api/v1/mutation-blocks/${MUTATION_ID}/draft/preview`, () =>
     HttpResponse.json(mutationPreview()),
   ),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -576,5 +580,23 @@ describe("mutation block editor", () => {
     await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
     expect(screen.getByLabelText("Perturbs")).toHaveValue("entity_mutation");
     expect(screen.queryByLabelText("Assessed by")).toBeNull();
+  });
+});
+
+/**
+ * The rail's figure and this index are one listing, read once by the shell and handed to
+ * both, so they cannot come to disagree (ADR 0056).
+ */
+describe("the rail's figures and the two libraries", () => {
+  it.each([
+    ["/lab/objective-blocks", "Objective blocks"],
+    ["/lab/mutation-blocks", "Mutation blocks"],
+  ])("says on the rail what %s has rows", async (path, label) => {
+    renderAt(path);
+
+    const rows = bodyRows(await screen.findByRole("table"));
+    const entry = railEntry(label, "Experiment lab workspace");
+    expect(within(entry).getByText(String(rows))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${rows} block${rows === 1 ? "" : "s"}`);
   });
 });

@@ -77,7 +77,7 @@ interface CatalogVariant {
 /** Frame 2b — the order fixture editor: typed, fully editable, selection-driven. */
 export function OrderEditorPage() {
   const { orderId = "" } = useParams();
-  const { shopId, content: shop } = useShopWorkspace();
+  const { shopId, content: shop, listings } = useShopWorkspace();
   const navigate = useNavigate();
   const [order, setOrder] = useState<ShopOrderResponse | null>(null);
   const [content, setContent] = useState<OrderContentSchema | null>(null);
@@ -159,6 +159,9 @@ export function OrderEditorPage() {
           shipping_address_id: addressId,
         }),
       );
+      // The index this editor was opened from prints the row that has just changed, and it
+      // renders the shell's listing rather than reading its own (ADR 0056).
+      void listings.orders.refresh();
       return null;
     } catch (cause: unknown) {
       const message = describeApiError(cause, UNAVAILABLE);
@@ -167,7 +170,7 @@ export function OrderEditorPage() {
     } finally {
       setSaving(false);
     }
-  }, [content, addressId, shopId, orderId, apply]);
+  }, [content, addressId, shopId, orderId, apply, listings.orders]);
 
   /**
    * Discard: read the order back from the lab, which is what Save would have written over.
@@ -240,6 +243,7 @@ export function OrderEditorPage() {
     try {
       await deleteOrder(shopId, orderId);
       deleted.current = true;
+      void listings.orders.refresh();
       navigate(`/shops/${shopId}/orders`);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "The order could not be deleted."));

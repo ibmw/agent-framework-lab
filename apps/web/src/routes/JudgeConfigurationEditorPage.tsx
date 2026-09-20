@@ -42,6 +42,7 @@ import {
   fieldLabelClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { useLabWorkspace } from "../shell/LabWorkspace";
 
 const CLIENT: DefinitionClient<
   JudgeConfigurationPayloadSchema,
@@ -71,8 +72,11 @@ const CLIENT: DefinitionClient<
  */
 export function JudgeConfigurationEditorPage() {
   const { judgeId = "" } = useParams();
+  const { listings } = useLabWorkspace();
   const editor = useDefinitionEditor(judgeId, CLIENT, {
     label: "The judge draft has unsaved changes.",
+    // The library index prints the row this editor is changing (ADR 0056).
+    afterSave: listings.judges.refresh,
   });
   const { content, preview, edit } = editor;
   const [resources, setResources] = useState<JudgeConfigurationResourcesResponse | null>(null);
@@ -187,7 +191,14 @@ export function JudgeConfigurationEditorPage() {
               className={accentButtonClasses}
               type="button"
               onClick={() => {
-                void editor.publish().then((version) => setPublishedVersion(version));
+                // A frozen version is printed by the index this editor was opened from, and
+                // that index renders the shell's listing (ADR 0056).
+                void editor.publish().then((version) => {
+                  setPublishedVersion(version);
+                  if (version !== null) {
+                    void listings.judges.refresh();
+                  }
+                });
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >

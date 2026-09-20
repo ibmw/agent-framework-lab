@@ -98,9 +98,12 @@ const VARIABLE_PATTERN = /\{\{([^{}]*)\}\}/g;
 
 export function AgentConfigurationEditorPage() {
   const { configurationId = "" } = useParams();
-  const { currentShop, loading: shopsLoading } = useLabWorkspace();
+  const { currentShop, loading: shopsLoading, listings } = useLabWorkspace();
   const editor = useDefinitionEditor(configurationId, CLIENT, {
     label: "The agent configuration draft has unsaved changes.",
+    // The library index prints the row this editor is changing, and it renders the shell's
+    // listing rather than reading its own (ADR 0056).
+    afterSave: listings.agentConfigurations.refresh,
   });
   const { content, preview, edit } = editor;
   const [resources, setResources] = useState<AgentConfigurationResourcesResponse | null>(null);
@@ -218,8 +221,11 @@ export function AgentConfigurationEditorPage() {
   const publish = useCallback(async () => {
     const version = await publishDraft();
     await resolve();
+    if (version !== null) {
+      void listings.agentConfigurations.refresh();
+    }
     return version;
-  }, [publishDraft, resolve]);
+  }, [publishDraft, resolve, listings.agentConfigurations]);
 
   const insertVariable = useCallback(
     (name: string) => {

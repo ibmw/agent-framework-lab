@@ -33,16 +33,17 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
   `pnpm build` pass before handoff, and `pnpm test:e2e` when the *Checks* line names a spec.
 - **No new UI dependency.** The primitives are the class sets in `lib/ui.ts` and the chrome in
   `components/WorkspaceChrome.tsx` and `shell/AppShell.tsx`.
-- **No backend change unless the slice says so.** Three slices carry one: the model connection
-  (ADR 0052), the reachable-provider read it enables (ADR 0053), and the shop counts the rail
-  needs if the listings the shell already has cannot supply them. Each ships the OpenAPI update,
-  the backend and the consumer together.
+- **No backend change unless the slice says so.** Two slices carry one: the model connection
+  (ADR 0052) and the reachable-provider read it enables (ADR 0053). Each ships the OpenAPI
+  update, the backend and the consumer together.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
-  modes and the routes, and ADR 0055 the top bar — the switcher's menu, the one tour mount that
-  reads the route, and Settings as a toggle over a remembered location. Where a slice takes a
-  decision of its own — a route scheme, a confirm policy, a preference — it writes an ADR.
+  modes and the routes, ADR 0055 the top bar — the switcher's menu, the one tour mount that
+  reads the route, and Settings as a toggle over a remembered location — and ADR 0056 puts the
+  listings a rail counts on the workspace, with the index reading the same one. Where a slice
+  takes a decision of its own — a route scheme, a confirm policy, a preference — it writes an
+  ADR.
 - **Accessible names do not move casually.** `nav[aria-label="Shop workspace"]`, the tour
   anchors and every button's name are what eleven Playwright specs reach the app by — as is
   `nav[aria-label="Experiment lab workspace"]` beside it. A slice that renames one lists the
@@ -57,6 +58,8 @@ Three things the prototype draws are decided outside this plan, so that no slice
   slice below is written against the routes it left behind.
 - **The Setup checklist is not built**, and the overview's readiness card reads one listing —
   `docs/design-direction.md`, *Navigation and chrome*.
+- **A rail entry's count comes from the listing its index renders**, held by the workspace —
+  ADR 0056, which also measured and refused the additive counts read. Landed.
 - **Two of the five proposed preferences earn a consumer**, and the logo is the optional last
   slice — `docs/design-direction.md`, *Proposals, not decisions*.
 
@@ -67,8 +70,8 @@ application, and the verdict on each slice of the 13 September plan — is
 ## Sequencing
 
 Slices 12, 13 and 14 are next, because they change what every index page is and what every
-journey clicks through to create; they are independent of each other. Slices 11, 15, 16, 17 and
-18 are then independent and can proceed in parallel. Slice 19 is the backend milestone and runs
+journey clicks through to create; they are independent of each other. Slices 15, 16, 17 and 18
+are then independent and can proceed in parallel. Slice 19 is the backend milestone and runs
 beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B except
 that 25 waits for 12–14, since the sticky header is on the pages they create. Slices 26 and 27
 close the milestone, and 28 is optional.
@@ -83,30 +86,6 @@ that lands in the editor, an overview built around the version timeline and the 
 settings page whose three zones say what may be touched, and a lab-wide model connection that a
 run pins. Everything the September plans delivered — hints, derived identifiers, labels, chips,
 edit-in-place, the guard, pine, the field row — is still there underneath.
-
-### Group A — Chrome and information architecture
-
-#### Slice 11 — Counts on the rail
-
-- [ ] Each rail entry carries its listing's count, right-aligned, muted, absent while the listing
-  is in flight or failed — the same rule the chip row observes. Shop rail: products, tone
-  guidelines and documents from the draft in hand; orders, customers, tickets and scenarios from
-  their listings. Lab rail: history's total and each library's count.
-- [ ] The workspace context loads and caches those listings once per shop and hands them to both
-  the rail and the index that renders them, so a count and a table cannot disagree; an index that
-  changes what it lists refreshes the same cache.
-- [ ] If the four shop listings prove too heavy to hold at the shell, one additive read
-  (`GET /shops/{id}/counts`) replaces them — shipped with its contract and a test that its
-  figures equal the listings'. Decide by measuring, and say which way in the branch.
-
-Frames: `Workspace.dc.html` :4753, :4822; the README's *Navigation rail*.
-
-Branch: `feat/rail-counts`. Checks: `AppShell.test.tsx` for a count per entry, its absence in
-flight, and the accessible name still the label alone; one index test per listing that the rail
-and the table agree; a contract test if the read is added.
-
-Slice evidence: the rail says *Orders 12* and the orders table has twelve rows; creating an
-order makes it thirteen without a reload.
 
 ### Group B — Screens the prototype recomposes
 
@@ -225,6 +204,9 @@ product.
 - [ ] The three payload lists stay as they are: this is a presentation of `content.policies`,
   `content.faq` and `content.support_guidelines`, not a merge of them, so nothing in the shop's
   canonical document or its fingerprint moves.
+- [ ] The rail's *Policies & FAQ* figure counts the three lists this table draws rather than the
+  two it draws today, and the departure `docs/design-direction.md` records for it is removed
+  (ADR 0056).
 
 Frames: `Workspace.dc.html` :1518, :3163.
 

@@ -11,7 +11,9 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { HISTORY_TOTAL_PAGE_SIZE } from "./shell/listings";
 import { renderApp } from "./test/app";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OTHER_SHOP_ID = "6a5b4c3d-2e1f-4a0b-8c9d-1e2f3a4b5c6d";
@@ -229,7 +231,7 @@ const server = setupServer(
   ),
   http.get("*/api/v1/experiments", ({ request }) => {
     const url = new URL(request.url);
-    asked.push(url.searchParams);
+    record(url);
     if (unavailable) {
       return HttpResponse.json(
         {
@@ -271,6 +273,9 @@ const server = setupServer(
       { status: 500 },
     ),
   ),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -291,6 +296,20 @@ afterAll(() => server.close());
 
 function renderHistory(search = "") {
   return renderApp(`/lab/history${search}`);
+}
+
+/**
+ * What the *page* asked for.
+ *
+ * The lab's shell reads this same route for the one figure the rail draws beside *History* —
+ * a single row asked for its `total` and nothing else (ADR 0056). That is not a narrowing
+ * anybody chose, so it is not what this suite means by "what was asked". Every handler that
+ * records goes through here, so `asked` means one thing across the whole file.
+ */
+function record(url: URL): void {
+  if (url.searchParams.get("page_size") !== String(HISTORY_TOTAL_PAGE_SIZE)) {
+    asked.push(url.searchParams);
+  }
 }
 
 function lastAsked(): URLSearchParams {
@@ -527,7 +546,7 @@ describe("experiment history", () => {
         } satisfies ShopPreviewResponse),
       ),
       http.get("*/api/v1/experiments", ({ request }) => {
-        asked.push(new URL(request.url).searchParams);
+        record(new URL(request.url));
         return HttpResponse.json({ ...historyOf(EVERY_ROW), page: 1, total: 42 });
       }),
     );
@@ -567,7 +586,7 @@ describe("experiment history", () => {
 
     server.use(
       http.get("*/api/v1/experiments", async ({ request }) => {
-        asked.push(new URL(request.url).searchParams);
+        record(new URL(request.url));
         await new Promise<void>((resolve) => {
           answer = resolve;
         });
@@ -699,5 +718,31 @@ describe("experiment history", () => {
         name: "Shop",
       }),
     ).toHaveValue(SHOP_ID);
+  });
+});
+
+/**
+ * The rail says how many experiments the lab has run, which is the whole list and not the
+ * page on screen — the rule the chip row observes and the reason the shell asks for the
+ * total rather than holding the rows (ADR 0056).
+ */
+describe("the rail's figure and this index", () => {
+  const LAB = "Experiment lab workspace";
+
+  it("says on the rail what the unnarrowed table has rows", async () => {
+    renderHistory();
+
+    const rows = bodyRows(await screen.findByRole("table"));
+    const entry = railEntry("History", LAB);
+    await waitFor(() => expect(within(entry).getByText(String(rows))).toBeVisible());
+    expect(entry).toHaveAccessibleDescription(`${rows} experiment${rows === 1 ? "" : "s"}`);
+  });
+
+  it("keeps saying the whole lab's total while the table is narrowed to one shop", async () => {
+    renderHistory(`?shop=${OTHER_SHOP_ID}`);
+
+    const table = await screen.findByRole("table");
+    await waitFor(() => expect(bodyRows(table)).toBe(1));
+    expect(within(railEntry("History", LAB)).getByText("2")).toBeVisible();
   });
 });

@@ -1,8 +1,8 @@
 import type { JudgeConfigurationSummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { createJudgeConfiguration, listJudgeConfigurations } from "../api/judgeConfigurations";
+import { createJudgeConfiguration } from "../api/judgeConfigurations";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
@@ -17,8 +17,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-
-const UNAVAILABLE = "The judge service is unavailable.";
+import { useLabWorkspace } from "../shell/LabWorkspace";
 
 type Filter = "all" | "published";
 
@@ -41,36 +40,17 @@ const FILTERS: FilterChipDefinition<Filter, JudgeConfigurationSummarySchema>[] =
 ];
 
 export function JudgeConfigurationsPage() {
-  const [judges, setJudges] = useState<JudgeConfigurationSummarySchema[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The library this page renders is the one the lab's rail counts, read once by the lab's
+  // shell and read again here whenever this page changes what it lists (ADR 0056).
+  const { listings } = useLabWorkspace();
+  const judges = listings.judges.rows;
+  const loading = listings.judges.loading;
+  const loadError = listings.judges.error;
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-
-  const reload = useCallback(async (signal?: AbortSignal) => {
-    setJudges((await listJudgeConfigurations(signal)).judges);
-    setLoadError(null);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    reload(controller.signal)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoadError(describeApiError(cause, UNAVAILABLE));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [reload]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,13 +64,8 @@ export function JudgeConfigurationsPage() {
       setCreating(false);
       return;
     }
-    try {
-      await reload();
-    } catch (cause: unknown) {
-      setLoadError(describeApiError(cause, UNAVAILABLE));
-    } finally {
-      setCreating(false);
-    }
+    await listings.judges.refresh();
+    setCreating(false);
   }
 
   // The name alone, which is what the prototype's judges search reads (its `shownJudges`

@@ -23,7 +23,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { TourLaunch } from "../components/TourLaunch";
 import {
@@ -59,6 +59,48 @@ interface NavEntry {
   exact?: boolean;
   /** Sections whose slice has not landed yet stay visible but inert. */
   milestone?: string;
+  /**
+   * What this entry's listing holds, right-aligned and muted beside the label (ADR 0056).
+   *
+   * `null` is "not known" and draws nothing — a listing in flight or failed, the same rule
+   * the chip row observes. `0` is a real count and is drawn. A figure the payload lacks is
+   * never faked, so an entry that counts nothing simply carries no `count` at all.
+   */
+  count?: number | null;
+  /**
+   * Singular and plural of what the count counts, for the reader who cannot see the column
+   * it is in. The digits alone are the whole of what the eye needs; "12 orders" is the whole
+   * of what a screen reader needs, and it is the entry's description rather than its name.
+   */
+  noun?: readonly [string, string];
+}
+
+/** What a count says when it is read out rather than seen. */
+function countPhrase(count: number, [one, many]: readonly [string, string]): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
+ * The figures either rail draws, keyed by the entry that carries them (ADR 0056).
+ *
+ * Every value is `number | null | undefined`: a number is drawn, `null` is a listing in
+ * flight or failed and draws nothing, and an absent key is an entry with no listing behind
+ * it at all — Overview, Shop details and the bench.
+ */
+export interface RailCounts {
+  products?: number | null;
+  orders?: number | null;
+  customers?: number | null;
+  tickets?: number | null;
+  scenarios?: number | null;
+  documents?: number | null;
+  supportIdentities?: number | null;
+  tone?: number | null;
+  history?: number | null;
+  agentConfigurations?: number | null;
+  judges?: number | null;
+  objectiveBlocks?: number | null;
+  mutationBlocks?: number | null;
 }
 
 interface NavSection {
@@ -78,25 +120,73 @@ interface NavSection {
  * prototype draws it on both rails, so both rails point at the one address and following this
  * entry changes mode.
  */
-function shopSections(shopId: string): NavSection[] {
+function shopSections(shopId: string, counts: RailCounts): NavSection[] {
   const base = `/shops/${shopId}`;
   return [
     {
       entries: [
         { label: "Overview", to: base, icon: Home, exact: true },
-        { label: "Products", to: `${base}/products`, icon: Tag },
-        { label: "Orders", to: `${base}/orders`, icon: Boxes },
-        { label: "Customers", to: `${base}/customers`, icon: Users },
-        { label: "Tickets", to: `${base}/tickets`, icon: MessageSquare },
-        { label: "Scenarios", to: `${base}/scenarios`, icon: ClipboardList },
+        {
+          label: "Products",
+          to: `${base}/products`,
+          icon: Tag,
+          count: counts.products,
+          noun: ["product", "products"],
+        },
+        {
+          label: "Orders",
+          to: `${base}/orders`,
+          icon: Boxes,
+          count: counts.orders,
+          noun: ["order", "orders"],
+        },
+        {
+          label: "Customers",
+          to: `${base}/customers`,
+          icon: Users,
+          count: counts.customers,
+          noun: ["customer", "customers"],
+        },
+        {
+          label: "Tickets",
+          to: `${base}/tickets`,
+          icon: MessageSquare,
+          count: counts.tickets,
+          noun: ["ticket", "tickets"],
+        },
+        {
+          label: "Scenarios",
+          to: `${base}/scenarios`,
+          icon: ClipboardList,
+          count: counts.scenarios,
+          noun: ["scenario", "scenarios"],
+        },
       ],
     },
     {
       title: "Shop setup",
       entries: [
-        { label: "Policies & FAQ", to: `${base}/setup/policies`, icon: FileText },
-        { label: "Support identities", to: "/lab/support-identities", icon: UserCog },
-        { label: "Tone of voice", to: `${base}/setup/tone`, icon: Shapes },
+        {
+          label: "Policies & FAQ",
+          to: `${base}/setup/policies`,
+          icon: FileText,
+          count: counts.documents,
+          noun: ["document", "documents"],
+        },
+        {
+          label: "Support identities",
+          to: "/lab/support-identities",
+          icon: UserCog,
+          count: counts.supportIdentities,
+          noun: ["support identity", "support identities"],
+        },
+        {
+          label: "Tone of voice",
+          to: `${base}/setup/tone`,
+          icon: Shapes,
+          count: counts.tone,
+          noun: ["guideline", "guidelines"],
+        },
         { label: "Shop details", to: `${base}/setup/identity`, icon: Store },
       ],
     },
@@ -109,22 +199,61 @@ function shopSections(shopId: string): NavSection[] {
  * Bench and History, and then everything shared by every shop in this lab under *Library*.
  * None of it takes a shop, which is why none of these paths carries one (ADR 0054).
  */
-function labSections(): NavSection[] {
+function labSections(counts: RailCounts): NavSection[] {
   return [
     {
       entries: [
+        // The bench carries no count. The prototype draws "1 live" there, which is a
+        // per-shop tally of running arms and not the length of anything this shell reads;
+        // a figure the payload lacks is not faked (`docs/design-direction.md`).
         { label: "Bench", to: "/lab/bench", icon: Play, exact: true },
-        { label: "History", to: "/lab/history", icon: Clock },
+        {
+          label: "History",
+          to: "/lab/history",
+          icon: Clock,
+          count: counts.history,
+          noun: ["experiment", "experiments"],
+        },
       ],
     },
     {
       title: "Library",
       entries: [
-        { label: "Agent configurations", to: "/lab/agent-configurations", icon: Bot },
-        { label: "Judges", to: "/lab/judges", icon: Scale },
-        { label: "Support identities", to: "/lab/support-identities", icon: UserCog },
-        { label: "Objective blocks", to: "/lab/objective-blocks", icon: Target },
-        { label: "Mutation blocks", to: "/lab/mutation-blocks", icon: Zap },
+        {
+          label: "Agent configurations",
+          to: "/lab/agent-configurations",
+          icon: Bot,
+          count: counts.agentConfigurations,
+          noun: ["configuration", "configurations"],
+        },
+        {
+          label: "Judges",
+          to: "/lab/judges",
+          icon: Scale,
+          count: counts.judges,
+          noun: ["judge", "judges"],
+        },
+        {
+          label: "Support identities",
+          to: "/lab/support-identities",
+          icon: UserCog,
+          count: counts.supportIdentities,
+          noun: ["support identity", "support identities"],
+        },
+        {
+          label: "Objective blocks",
+          to: "/lab/objective-blocks",
+          icon: Target,
+          count: counts.objectiveBlocks,
+          noun: ["block", "blocks"],
+        },
+        {
+          label: "Mutation blocks",
+          to: "/lab/mutation-blocks",
+          icon: Zap,
+          count: counts.mutationBlocks,
+          noun: ["block", "blocks"],
+        },
       ],
     },
   ];
@@ -180,12 +309,14 @@ const footInkClasses = "text-admin-muted hover:text-admin-ink";
 
 function SidebarEntry({ entry, collapsed }: { entry: NavEntry; collapsed: boolean }) {
   const Icon = entry.icon;
+  const labelId = useId();
+  const countId = useId();
   // The label is never dropped, only hidden: a destination the collapsed rail cannot name is a
   // destination a screen reader cannot reach, and `title` alone is not an accessible name.
-  const label = collapsed ? (
-    <span className="sr-only">{entry.label}</span>
-  ) : (
-    <span>{entry.label}</span>
+  const label = (
+    <span id={labelId} className={collapsed ? "sr-only" : undefined}>
+      {entry.label}
+    </span>
   );
   // Hidden from assistive technology, as every other glyph in this workspace is: the row is
   // named by its label, and a drawing that announced itself would rename every row.
@@ -212,20 +343,59 @@ function SidebarEntry({ entry, collapsed }: { entry: NavEntry; collapsed: boolea
     );
   }
 
+  const count = entry.count ?? null;
+  const phrase = count !== null && entry.noun ? countPhrase(count, entry.noun) : null;
+
   return (
-    <NavLink
-      to={entry.to}
-      end={entry.exact ?? false}
-      title={collapsed ? entry.label : undefined}
-      className={({ isActive }) =>
-        isActive
-          ? `${layout} ${activeEntryClasses} no-underline`
-          : `${layout} ${inactive} no-underline`
-      }
-    >
-      {glyph}
-      {label}
-    </NavLink>
+    <>
+      <NavLink
+        to={entry.to}
+        end={entry.exact ?? false}
+        title={collapsed ? entry.label : undefined}
+        // The name is the label and only ever the label — it is what eleven Playwright specs
+        // and every tour anchor reach this rail by. Naming the row from its label explicitly
+        // fixes that whatever else the link comes to contain, rather than leaving the name to
+        // be recomputed from the row's contents every time something is added to it.
+        aria-labelledby={labelId}
+        aria-describedby={phrase === null ? undefined : countId}
+        className={({ isActive }) =>
+          isActive
+            ? `${layout} ${activeEntryClasses} no-underline`
+            : `${layout} ${inactive} no-underline`
+        }
+      >
+        {({ isActive }) => (
+          <>
+            {glyph}
+            {label}
+            {/* The strip has room for a centred glyph and nothing else, and the prototype
+                draws no count in it (`Workspace.dc.html` :127). The digits are the eye's
+                alone: the phrase below is what is spoken, and a reader in browse mode would
+                otherwise hear the figure twice — once as the link's contents and once as its
+                description. */}
+            {phrase === null || collapsed ? null : (
+              <span
+                aria-hidden="true"
+                // The prototype's own two inks: the row's `#14352e` where you are standing,
+                // `admin-muted` everywhere else (`Workspace.dc.html` :110, :113).
+                className={`ml-auto text-[12px] ${isActive ? "" : "text-admin-muted"}`}
+              >
+                {count}
+              </span>
+            )}
+          </>
+        )}
+      </NavLink>
+      {/* Outside the link, so it is the row's description and never part of what the row
+          reads out. `sr-only` is out of flow, so it is not one of the rail's grid rows
+          either. It is drawn in both states: collapsing is a statement about how much room
+          the operator wants on screen, and a description takes none (ADR 0056). */}
+      {phrase === null ? null : (
+        <span id={countId} className="sr-only">
+          {phrase}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -248,15 +418,32 @@ interface AppShellProps {
    * and what the choice actually changes is which shop the lab composes for.
    */
   onShopChange?: (shopId: string) => void;
+  /**
+   * What each rail entry's listing holds (ADR 0056). The shell that owns the listings passes
+   * them; a shell with none — or a rail drawn before any have answered — passes nothing and
+   * the rail draws no figures.
+   */
+  counts?: RailCounts;
   children: ReactNode;
 }
 
-export function AppShell({ shops, currentShopId, mode, onShopChange, children }: AppShellProps) {
+export function AppShell({
+  shops,
+  currentShopId,
+  mode,
+  onShopChange,
+  counts = {},
+  children,
+}: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const current = shops.find((shop) => shop.shop_id === currentShopId) ?? null;
   const sections =
-    mode === "lab" ? labSections() : currentShopId ? shopSections(currentShopId) : null;
+    mode === "lab"
+      ? labSections(counts)
+      : currentShopId
+        ? shopSections(currentShopId, counts)
+        : null;
   // One rail for every section, collapsed only when the author says so. Routes deliberately
   // do not override this: a navigation that folded the menu on its own would make the same
   // control mean different things depending on where you happened to be standing. What the

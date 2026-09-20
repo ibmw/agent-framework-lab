@@ -12,12 +12,10 @@ import type {
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { listCustomerProfiles } from "../api/customerProfiles";
 import {
   createTicket,
   getTicketContext,
   getTicketDraft,
-  listTickets,
   previewTicketDraft,
   publishTicket,
   replaceTicketDraft,
@@ -111,40 +109,19 @@ function matches(ticket: TicketSummarySchema, filter: Filter): boolean {
  * customer" and "as a past support agent" and nothing else.
  */
 export function TicketsPage() {
-  const { shopId } = useShopWorkspace();
+  // The listing this page renders is the one the rail counts, read once by the shop's shell
+  // and read again here whenever this page changes what it lists (ADR 0056).
+  const { shopId, listings } = useShopWorkspace();
   const { ticketId } = useParams();
   const navigate = useNavigate();
-  const [tickets, setTickets] = useState<TicketSummarySchema[]>([]);
-  const [loading, setLoading] = useState(true);
+  const tickets = listings.tickets.rows;
+  const loading = listings.tickets.loading;
+  const listError = listings.tickets.error;
   const [filter, setFilter] = useState<Filter>("all");
-  const [listError, setListError] = useState<string | null>(null);
   /** The ticket a create on this page is opening, while its navigation is in flight. */
   const opening = useRef<string | null>(null);
 
-  const reload = useCallback(
-    async (signal?: AbortSignal) => {
-      setTickets((await listTickets(shopId, signal)).tickets);
-      setListError(null);
-    },
-    [shopId],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    reload(controller.signal)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setListError(describeApiError(cause, UNAVAILABLE));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [reload]);
+  const reload = listings.tickets.refresh;
 
   const visible = useMemo(
     () => tickets.filter((ticket) => matches(ticket, filter)),
@@ -154,9 +131,7 @@ export function TicketsPage() {
   // Stable, because the editor beside the list builds its guard from it: an `onSaved` rebuilt
   // every render would rebuild the guard, and with it the editor's own `save`.
   const onTicketSaved = useCallback(() => {
-    reload().catch(() => {
-      // The list keeps what it has; the save itself landed and said so.
-    });
+    void reload();
   }, [reload]);
 
   // The list is a way in rather than a waiting room: an operator who opens Tickets is shown the
@@ -273,11 +248,7 @@ export function TicketsPage() {
             loading={loading}
             onCreated={async (created) => {
               opening.current = created;
-              try {
-                await reload();
-              } catch (cause: unknown) {
-                setListError(describeApiError(cause, UNAVAILABLE));
-              }
+              await reload();
               navigate(`/shops/${shopId}/tickets/${created}`);
             }}
           />
@@ -318,12 +289,17 @@ function NewTicketForm({
   loading: boolean;
   onCreated: (ticketId: string) => Promise<void>;
 }) {
-  const { content } = useShopWorkspace();
+  const { content, listings } = useShopWorkspace();
   const [reference, setReference] = useState("");
   const [subject, setSubject] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [channel, setChannel] = useState<SupportChannel>(content.identity.channels[0] ?? "chat");
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  // The same attached profiles the Customers index lists and the rail counts. The picker
+  // simply stays empty when that listing failed; the form explains why below.
+  const customers = listings.customers.rows.map((profile) => ({
+    id: profile.profile_id,
+    name: profile.display_name,
+  }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A create in flight is about to change the list, so which reference is free is unknown
@@ -341,23 +317,6 @@ function NewTicketForm({
       setError(null);
     }
   }, [loading]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void listCustomerProfiles(shopId, controller.signal)
-      .then((listed) => {
-        setCustomers(
-          listed.profiles.map((profile) => ({
-            id: profile.profile_id,
-            name: profile.display_name,
-          })),
-        );
-      })
-      .catch(() => {
-        // The picker simply stays empty; the form explains why below.
-      });
-    return () => controller.abort();
-  }, [shopId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

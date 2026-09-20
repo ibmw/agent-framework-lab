@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { SHOP_NAME_RULE } from "./lib/fieldRules";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
+import { shellListings } from "./test/shell";
 
 const SHOP_ID = "9c8b7a6d-5e4f-4a3b-9c8d-7e6f5a4b3c2d";
 
@@ -20,6 +21,9 @@ const server = setupServer(
     created = (await request.json()) as Record<string, unknown>;
     return HttpResponse.json({ shop_id: SHOP_ID }, { status: 201 });
   }),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

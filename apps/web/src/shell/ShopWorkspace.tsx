@@ -17,7 +17,8 @@ import {
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { writeLastVisitedShop } from "../lib/preferences";
 import { shopDraftIsSavableAt, toPayload } from "../lib/shop";
-import { AppShell } from "./AppShell";
+import { AppShell, type RailCounts } from "./AppShell";
+import { type ShopListings, useShopListings } from "./listings";
 
 const CLIENT: DefinitionClient<ShopContentSchema, ShopPayloadSchema, ShopPreviewResponse> = {
   getDraft: getShopDraft,
@@ -31,6 +32,12 @@ const CLIENT: DefinitionClient<ShopContentSchema, ShopPayloadSchema, ShopPreview
 export interface ShopWorkspaceValue {
   shopId: string;
   shops: ShopSummarySchema[];
+  /**
+   * The shop's four listings, read once here and handed to the rail and to the index that
+   * renders each of them, so a count and a table cannot disagree (ADR 0056). An index that
+   * changes what it lists calls that listing's `refresh`.
+   */
+  listings: ShopListings;
   content: ShopContentSchema;
   preview: ShopPreviewResponse | null;
   dirty: boolean;
@@ -73,6 +80,9 @@ export function ShopWorkspace() {
     }
   }, []);
 
+  // The listings this shop's rail counts and its indexes render, read once here (ADR 0056).
+  const listings = useShopListings(shopId);
+
   // This editor outlives the page editing it, so what strands its draft is leaving the reach of
   // its Save rather than leaving a route (`shopDraftIsSavableAt`). And the switcher shows each
   // shop's authored name, so the list follows any write that can change it — declared here, on
@@ -112,9 +122,25 @@ export function ShopWorkspace() {
     return version;
   }, [publishDraft, refreshShops]);
 
+  // Products, the shop's documents and its tone guidelines are counted off the draft this
+  // shell already holds, so they cost nothing and cannot disagree with the pages that edit
+  // them; the other five are the listings above. A draft that has not arrived counts nothing
+  // rather than zero (`docs/design-direction.md`, *Lists and counts*).
+  const draft = editor.content;
+  const counts: RailCounts = {
+    products: draft === null ? null : draft.products.length,
+    documents: draft === null ? null : draft.policies.length + draft.faq.length,
+    tone: draft === null ? null : draft.tone_of_voice_guidelines.length,
+    orders: listings.orders.count,
+    customers: listings.customers.count,
+    tickets: listings.tickets.count,
+    scenarios: listings.scenarios.count,
+    supportIdentities: listings.supportIdentities.count,
+  };
+
   if (editor.loading) {
     return (
-      <AppShell shops={shops} currentShopId={shopId} mode="shop">
+      <AppShell shops={shops} currentShopId={shopId} mode="shop" counts={counts}>
         <p className="text-sm text-admin-muted">Loading shop…</p>
       </AppShell>
     );
@@ -131,11 +157,12 @@ export function ShopWorkspace() {
   }
 
   return (
-    <AppShell shops={shops} currentShopId={shopId} mode="shop">
+    <AppShell shops={shops} currentShopId={shopId} mode="shop" counts={counts}>
       <WorkspaceContext.Provider
         value={{
           shopId,
           shops,
+          listings,
           content: editor.content,
           preview: editor.preview,
           dirty: editor.dirty,

@@ -143,6 +143,7 @@ export function ExperimentSetupPage() {
  */
 function ExperimentSetup({ shopId }: { shopId: string }) {
   const navigate = useNavigate();
+  const { listings } = useLabWorkspace();
   const [scenarios, setScenarios] = useState<ScenarioSummarySchema[]>([]);
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
   const [experiments, setExperiments] = useState<ExperimentSummarySchema[]>([]);
@@ -261,6 +262,9 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     setIssues([]);
     try {
       const started = await startExperiment(shopId, chosen);
+      // The lab has one more experiment than it had, and History's figure on the rail is
+      // read from the same listing that would say so (ADR 0056).
+      void listings.history.refresh();
       navigate(`/lab/bench/${shopId}/${started.experiment_id}`);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This experiment could not be started."));

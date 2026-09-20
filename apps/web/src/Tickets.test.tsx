@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS, tourAt } from "./lib/tours";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
+import { railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const PROFILE_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -300,6 +301,9 @@ const server = setupServer(
     published += 1;
     return HttpResponse.json({ version: 1 }, { status: 201 });
   }),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -1032,6 +1036,22 @@ describe("saving and publishing", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/has no published version to pin/);
     expect(screen.getByRole("region", { name: "Ticket thread" })).toBeVisible();
+  });
+});
+
+/**
+ * The rail's figure and this index are one listing, read once by the shell and handed to
+ * both, so they cannot come to disagree (ADR 0056).
+ */
+describe("the rail's figure and this index", () => {
+  it("says on the rail what the list has entries", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    const list = await screen.findByRole("region", { name: "Tickets" });
+    const entries = within(list).getAllByRole("listitem").length;
+    const entry = railEntry("Tickets");
+    expect(within(entry).getByText(String(entries))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${entries} ticket${entries === 1 ? "" : "s"}`);
   });
 });
 

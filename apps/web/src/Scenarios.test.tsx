@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -334,6 +335,9 @@ const server = setupServer(
       { status: 201 },
     ),
   ),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -661,5 +665,59 @@ describe("scenario editor", () => {
 
     expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
     expect(screen.getByText(/publishing freezes the saved draft, not unsaved edits/)).toBeVisible();
+  });
+});
+
+/**
+ * The rail's figure and this index are one listing, read once by the shell and handed to
+ * both, so they cannot come to disagree (ADR 0056).
+ */
+describe("the rail's figure and this index", () => {
+  it("says on the rail what the table has rows", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+
+    const rows = bodyRows(await screen.findByRole("table"));
+    const entry = railEntry("Scenarios");
+    expect(within(entry).getByText(String(rows))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${rows} scenario${rows === 1 ? "" : "s"}`);
+  });
+
+  /**
+   * The assertion above agrees by construction while both reads answer from one fixture; this
+   * is the one that can fail. A create changes what the index lists, so it has to move the
+   * figure on the chrome with it — which it can only do by reading the listing the chrome is
+   * drawn from.
+   */
+  it("moves the rail's figure with the table when a scenario is created", async () => {
+    const user = userEvent.setup();
+    let listed = scenarioIndex.scenarios;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: listed }),
+      ),
+      http.post(`*/api/v1/shops/${SHOP_ID}/scenarios`, () => {
+        listed = [
+          ...listed,
+          {
+            ...scenarioIndex.scenarios[0],
+            scenario_id: "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+            name: "Damaged delivery",
+          },
+        ];
+        return HttpResponse.json(draft(current), { status: 201 });
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+
+    const table = await screen.findByRole("table");
+    await waitFor(() => expect(bodyRows(table)).toBe(1));
+    expect(within(railEntry("Scenarios")).getByText("1")).toBeVisible();
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await user.selectOptions(screen.getByLabelText("Built on ticket"), TICKET_ID);
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    await waitFor(() => expect(within(railEntry("Scenarios")).getByText("2")).toBeVisible());
+    expect(bodyRows(screen.getByRole("table"))).toBe(2);
   });
 });

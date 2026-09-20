@@ -8,15 +8,17 @@ import type {
   ShopOrderResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { delay, HttpResponse, http } from "msw";
+import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ORDER_METHOD_RULE } from "./lib/fieldRules";
 import { renderApp, wholeDescription } from "./test/app";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
+const OTHER_SHOP_ID = "8a7b6c5d-4e3f-4a2b-9c8d-7e6f5a4b3c2d";
 const PROFILE_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const ORDER_ID = "9f8e7d6c-5b4a-4938-8271-6a5b4c3d2e1f";
 const PLACED_AT = "2026-08-20T14:55:00.000000Z";
@@ -323,6 +325,9 @@ const server = setupServer(
     deleted.push(ORDER_ID);
     return new HttpResponse(null, { status: 204 });
   }),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -465,17 +470,30 @@ describe("order index", () => {
    * avoid, drawn at the moment it is least true.
    */
   it("withholds the chip row until there are rows to count", async () => {
+    // Held open by hand rather than by a delay. The shell asks for this listing beside the
+    // shop's draft rather than after it (ADR 0056), so a listing that answers in a fixed
+    // number of milliseconds is racing the draft for which lands first.
+    let answer = () => {};
+    let reached = () => {};
+    const asked = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
-        await delay(40);
+        reached();
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
         return HttpResponse.json(ORDERS);
       }),
     );
     renderAt(`/shops/${SHOP_ID}/orders`);
+    await asked;
 
     expect(await screen.findByText("Loading orders…")).toBeVisible();
     expect(screen.queryByRole("group", { name: "Filter orders" })).toBeNull();
 
+    answer();
     expect(await screen.findByRole("group", { name: "Filter orders" })).toBeVisible();
   });
 
@@ -527,6 +545,56 @@ describe("order index", () => {
     expect(screen.queryByRole("link", { name: "NS-10476" })).toBeNull();
   });
 
+  /**
+   * The rail's figure and this table are one listing, read once by the shop's shell and
+   * handed to both (ADR 0056), so they cannot come to disagree — and a create moves them
+   * together without a reload.
+   */
+  it("says on the rail what the table has rows", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    const table = await screen.findByRole("table");
+    const rows = bodyRows(table);
+    expect(rows).toBe(ORDERS.orders.length);
+    const entry = railEntry("Orders");
+    expect(within(entry).getByText(String(rows))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${rows} orders`);
+  });
+
+  it("moves the rail's figure with the table when an order is created", async () => {
+    const user = userEvent.setup();
+    let listed = ORDERS.orders;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () => HttpResponse.json({ orders: listed })),
+      http.post(`*/api/v1/shops/${SHOP_ID}/orders`, () => {
+        listed = [
+          ...listed,
+          {
+            ...ORDERS.orders[0],
+            order_id: "4d5e6f70-8192-4a3b-9c4d-5e6f708192ab",
+            reference: "NS-10483",
+          },
+        ];
+        return HttpResponse.json(currentOrder, { status: 201 });
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    const table = await screen.findByRole("table");
+    await waitFor(() => expect(bodyRows(table)).toBe(3));
+    expect(within(railEntry("Orders")).getByText("3")).toBeVisible();
+
+    const form = card("Create order");
+    await within(form).findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(within(form).getByLabelText("Customer"), PROFILE_ID);
+    await waitFor(() => expect(within(form).getByLabelText("Reference")).toHaveValue("NS-10483"));
+    await user.click(within(form).getByRole("button", { name: "Create order" }));
+
+    // No reload, no second door: the page read the listing the rail draws from.
+    await waitFor(() => expect(within(railEntry("Orders")).getByText("4")).toBeVisible());
+    expect(bodyRows(screen.getByRole("table"))).toBe(4);
+  });
+
   it("creates an order for a customer attached to this shop", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders`);
@@ -545,6 +613,97 @@ describe("order index", () => {
     });
     // The contract wants an explicit offset; the browser resolves the picked day once.
     expect(String(createdOrders[0].placed_at)).toMatch(/Z$/);
+  });
+
+  /**
+   * A refresh is fired from a handler and has no controller to be cancelled by, so the only
+   * thing that can say whether its answer is still wanted is which read started last
+   * (ADR 0056). Without that, a save or a create whose refresh outlives a shop change writes
+   * the shop the operator left onto the rail of the shop they are standing in — which is the
+   * one thing a count on the chrome must never do.
+   */
+  it("drops a refresh that outlived the shop it was asked for", async () => {
+    const user = userEvent.setup();
+    let answer = () => {};
+    let reached = () => {};
+    const refreshed = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let reads = 0;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
+        reads += 1;
+        if (reads === 1) {
+          return HttpResponse.json(ORDERS);
+        }
+        // The refresh the create below fires, held open until the operator has moved.
+        reached();
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json({ orders: [...ORDERS.orders, ORDERS.orders[0]] });
+      }),
+      http.get(`*/api/v1/shops/${OTHER_SHOP_ID}/draft`, () =>
+        HttpResponse.json({
+          shop_id: OTHER_SHOP_ID,
+          lifecycle_state: "draft",
+          content: SHOP_CONTENT,
+          created_at: "2026-08-23T12:00:00+00:00",
+          updated_at: "2026-08-23T12:05:00+00:00",
+        } satisfies ShopDraftResponse),
+      ),
+      http.get(`*/api/v1/shops/${OTHER_SHOP_ID}/draft/preview`, () =>
+        HttpResponse.json({
+          shop_id: OTHER_SHOP_ID,
+          publishable: false,
+          issues: [],
+          changes: [],
+          content_fingerprint: "d".repeat(64),
+          latest_published_version: null,
+          next_version: 1,
+          matches_latest_published: false,
+          content: SHOP_CONTENT,
+        } satisfies ShopPreviewResponse),
+      ),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/orders`);
+
+    await screen.findByRole("table");
+    expect(within(railEntry("Orders")).getByText("3")).toBeVisible();
+
+    const form = card("Create order");
+    await within(form).findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(within(form).getByLabelText("Customer"), PROFILE_ID);
+    await waitFor(() => expect(within(form).getByLabelText("Reference")).toHaveValue("NS-10483"));
+    await user.click(within(form).getByRole("button", { name: "Create order" }));
+    await refreshed;
+
+    // The same shell, a different shop: the listing is read again for the shop now on screen,
+    // and the other shop holds none.
+    await act(async () => {
+      await router.navigate(`/shops/${OTHER_SHOP_ID}/orders`);
+    });
+    await waitFor(() => expect(within(railEntry("Orders")).getByText("0")).toBeVisible());
+
+    answer();
+
+    // The page's own busy flag is what says the held answer has been *read*. It spans the
+    // create and the refresh it fires — `setBusy(false)` runs only after `refresh()` has
+    // resolved, which is after the response was consumed, after `load` returned and after
+    // the state update that would have applied it — and this component instance survived the
+    // change of shop, so it is still the one waiting. Anchoring on it is what stops this
+    // assertion from running in the gap before the dropped answer has arrived at all, which
+    // would let it pass against the bug it exists to catch.
+    await waitFor(() =>
+      expect(
+        within(card("Create order")).getByRole("button", { name: "Create order" }),
+      ).toBeEnabled(),
+    );
+    expect(reads).toBe(2);
+
+    // The shop that was left answers four. The rail is not its rail any more.
+    expect(within(railEntry("Orders")).queryByText("4")).toBeNull();
+    expect(within(railEntry("Orders")).getByText("0")).toBeVisible();
   });
 
   it("puts each field's hint in that control's accessible description", async () => {

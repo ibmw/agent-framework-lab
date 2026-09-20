@@ -92,6 +92,7 @@ export function ExperimentHistoryPage() {
   // alone, and the list is narrowed by the URL alone; a sentence that mixed the two would be
   // false at `?shop=…`, which is the state people actually share (ADR 0054).
   const lab = useLabWorkspace();
+  const refreshTotal = lab.listings.history.refresh;
   const labShopMissing = !lab.loading && lab.currentShop === null;
   // The switcher clause is true only where the switcher is drawn, and the top bar draws it
   // from the same fact: a lab with shops (`AppShell`). A lab whose list is empty or whose list
@@ -116,6 +117,9 @@ export function ExperimentHistoryPage() {
       setError(null);
       try {
         const derived = await replayExperiment(experiment.shop_id, experiment.experiment_id);
+        // A replay is a new experiment, so history holds one more than it did and the rail
+        // says so before this page is left (ADR 0056).
+        void refreshTotal();
         navigate(`/lab/bench/${experiment.shop_id}/${derived.experiment_id}/results`);
       } catch (cause: unknown) {
         setError(describeApiError(cause, "This experiment could not be replayed."));
@@ -123,7 +127,7 @@ export function ExperimentHistoryPage() {
         setDeriving(null);
       }
     },
-    [navigate],
+    [navigate, refreshTotal],
   );
 
   /**
@@ -148,6 +152,7 @@ export function ExperimentHistoryPage() {
             version: arm.agent_configuration_latest_version ?? arm.agent_configuration_version,
           })),
         });
+        void refreshTotal();
         navigate(`/lab/bench/${experiment.shop_id}/${derived.experiment_id}/results`);
       } catch (cause: unknown) {
         setError(describeApiError(cause, "This experiment could not be forked."));
@@ -155,7 +160,7 @@ export function ExperimentHistoryPage() {
         setDeriving(null);
       }
     },
-    [navigate],
+    [navigate, refreshTotal],
   );
 
   const shopId = params.get("shop") ?? "";

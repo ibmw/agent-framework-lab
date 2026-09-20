@@ -1,9 +1,8 @@
-import type { CustomerProfileSummarySchema, OrderSummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import type { OrderSummarySchema } from "@agent-lab/contracts";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { listCustomerProfiles } from "../api/customerProfiles";
-import { createOrder, listOrders } from "../api/orders";
+import { createOrder } from "../api/orders";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
@@ -22,8 +21,6 @@ import {
   tableHeadClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/ShopWorkspace";
-
-const UNAVAILABLE = "The order service is unavailable.";
 
 /** Completes "{reference} is already {…}." wherever an order reference is refused. */
 const ORDER_REFERENCE_TAKEN_PLACE = "used by an order in this shop";
@@ -69,12 +66,15 @@ const FILTERS: FilterChipDefinition<Filter, OrderSummarySchema>[] = [
 
 /** Frame 2 — the shop's authored order fixtures. */
 export function OrdersPage() {
-  const { shopId, content } = useShopWorkspace();
-  const [orders, setOrders] = useState<OrderSummarySchema[]>([]);
-  const [customers, setCustomers] = useState<CustomerProfileSummarySchema[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The listing this page renders is the one the rail counts, read once by the shop's shell
+  // and refreshed here whenever this page changes what it lists (ADR 0056). The attached
+  // customers the create form offers are the same listing the Customers index renders.
+  const { shopId, content, listings } = useShopWorkspace();
+  const orders = listings.orders.rows;
+  const customers = listings.customers.rows;
+  const loading = listings.orders.loading || listings.customers.loading;
   const [busy, setBusy] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadError = listings.orders.error ?? listings.customers.error;
   const [formError, setFormError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -82,41 +82,11 @@ export function OrdersPage() {
   const [customerId, setCustomerId] = useState("");
   const [placedOn, setPlacedOn] = useState(todayInput);
 
-  const reload = useCallback(
-    async (signal?: AbortSignal) => {
-      const [listed, attached] = await Promise.all([
-        listOrders(shopId, signal),
-        listCustomerProfiles(shopId, signal),
-      ]);
-      setOrders(listed.orders);
-      setCustomers(attached.profiles);
-      setLoadError(null);
-    },
-    [shopId],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    reload(controller.signal)
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setLoadError(describeApiError(cause, UNAVAILABLE));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [reload]);
-
   const takenReferences = orders.map((order) => order.reference);
   // A create in flight is about to change the listing, so which reference is free is unknown
-  // again until the reload it triggers lands — the same state the page opens in, down to the
-  // field being nobody's, and closed the same way. `busy` spans the create *and* the reload,
-  // which `reload` itself does not report through `loading`.
+  // again until the refresh it triggers lands — the same state the page opens in, down to the
+  // field being nobody's, and closed the same way. `busy` spans the create *and* the refresh,
+  // which the shell's listing does not report through `loading`.
   const settling = loading || busy;
   const suggestedReference =
     loading || loadError || busy
@@ -166,13 +136,10 @@ export function OrdersPage() {
       setBusy(false);
       return;
     }
-    try {
-      await reload();
-    } catch (cause: unknown) {
-      setLoadError(describeApiError(cause, UNAVAILABLE));
-    } finally {
-      setBusy(false);
-    }
+    // The page has just changed what it lists, so the shell's listing is read again — which
+    // is what moves the rail's figure and this table together (ADR 0056).
+    await listings.orders.refresh();
+    setBusy(false);
   }
 
   // Reference or customer, the pair the prototype's orders search reads (its `shownOrders`

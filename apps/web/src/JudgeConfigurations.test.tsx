@@ -14,6 +14,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const JUDGE_ID = "7c8d9e0f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
@@ -183,6 +184,9 @@ const server = setupServer(
       { status: 201 },
     );
   }),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -427,5 +431,20 @@ describe("judge workspace", () => {
     expect(
       await screen.findByText(/Published version 1\. Every verdict records the version/),
     ).toBeVisible();
+  });
+});
+
+/**
+ * The rail's figure and this index are one listing, read once by the shell and handed to
+ * both, so they cannot come to disagree (ADR 0056).
+ */
+describe("the rail's figure and this index", () => {
+  it("says on the rail what the table has rows", async () => {
+    renderAt("/lab/judges");
+
+    const rows = bodyRows(await screen.findByRole("table"));
+    const entry = railEntry("Judges", "Experiment lab workspace");
+    expect(within(entry).getByText(String(rows))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${rows} judge${rows === 1 ? "" : "s"}`);
   });
 });

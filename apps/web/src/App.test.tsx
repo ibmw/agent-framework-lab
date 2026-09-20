@@ -18,6 +18,7 @@ import { PRODUCT_TITLE_RULE, SHOP_NAME_RULE } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -246,6 +247,9 @@ const server = setupServer(
     });
     return HttpResponse.json(published, { status: 201 });
   }),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -2299,5 +2303,76 @@ describe("the lab is a mode", () => {
         "Switch shop, current: Northstar Outfitters",
       ),
     );
+  });
+});
+
+/**
+ * Three of the shop rail's figures are counted off the draft the shell already holds rather
+ * than off a listing of their own, so the figure and the page that edits them are the same
+ * object and cannot come to disagree (ADR 0056).
+ */
+describe("the rail's figures that come from the draft", () => {
+  it("counts the products the index lists", async () => {
+    renderAt(`/shops/${SHOP_ID}/products`);
+
+    const rows = bodyRows(await screen.findByRole("table"));
+    const entry = railEntry("Products");
+    expect(within(entry).getByText(String(rows))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${rows} product${rows === 1 ? "" : "s"}`);
+  });
+
+  /**
+   * Each saved entry is an `EntryCard`, which titles itself in an `h3`. Counting those rather
+   * than the list items is what makes this read the entries and not the "No policy yet." line
+   * an empty list puts in a `<li>` of its own.
+   */
+  function entriesIn(region: HTMLElement): number {
+    return within(region).getAllByRole("heading", { level: 3 }).length;
+  }
+
+  it("counts a shop's documents as its policies and its FAQ entries together", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+
+    const policies = await screen.findByRole("region", { name: "Policies" });
+    const faq = screen.getByRole("region", { name: "FAQ" });
+    const documents = entriesIn(policies) + entriesIn(faq);
+    expect(documents).toBe(READY_CONTENT.policies.length + READY_CONTENT.faq.length);
+    const entry = railEntry("Policies & FAQ");
+    expect(within(entry).getByText(String(documents))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${documents} document${documents === 1 ? "" : "s"}`);
+    // The page draws no support guideline, so the figure counts none — the departure
+    // `docs/design-direction.md` records until Slice 16 merges the three lists into one table.
+    expect(READY_CONTENT.support_guidelines.length).toBeGreaterThan(0);
+    expect(documents).not.toBe(
+      READY_CONTENT.policies.length +
+        READY_CONTENT.faq.length +
+        READY_CONTENT.support_guidelines.length,
+    );
+  });
+
+  it("counts the tone guidelines the page lists", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+
+    const guidelines = entriesIn(await screen.findByRole("region", { name: "Guidelines" }));
+    expect(guidelines).toBe(READY_CONTENT.tone_of_voice_guidelines.length);
+    const entry = railEntry("Tone of voice");
+    expect(within(entry).getByText(String(guidelines))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(
+      `${guidelines} guideline${guidelines === 1 ? "" : "s"}`,
+    );
+  });
+
+  it("follows an edit to the draft without a reload", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    await screen.findByRole("region", { name: "Guidelines" });
+    expect(within(railEntry("Tone of voice")).getByText("1")).toBeVisible();
+
+    const form = within(screen.getByRole("region", { name: "Guidelines" }));
+    await user.type(form.getByLabelText("Name"), "Brief");
+    await user.type(form.getByLabelText("Guidance"), "One paragraph, under forty words.");
+    await user.click(form.getByRole("button", { name: "Add tone of voice" }));
+
+    await waitFor(() => expect(within(railEntry("Tone of voice")).getByText("2")).toBeVisible());
   });
 });

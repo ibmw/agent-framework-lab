@@ -3,7 +3,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
-import { AppShell } from "./AppShell";
+import { AppShell, type RailCounts } from "./AppShell";
 
 /**
  * The navigation rail, measured.
@@ -62,7 +62,13 @@ function renderShell(
     at,
     onShopChange,
     shops = SHOPS,
-  }: { at?: string; onShopChange?: (shopId: string) => void; shops?: ShopSummarySchema[] } = {},
+    counts,
+  }: {
+    at?: string;
+    onShopChange?: (shopId: string) => void;
+    shops?: ShopSummarySchema[];
+    counts?: RailCounts;
+  } = {},
 ) {
   const router = createMemoryRouter(
     [
@@ -74,6 +80,7 @@ function renderShell(
             currentShopId={mode === undefined ? undefined : SHOP_ID}
             mode={mode}
             onShopChange={onShopChange}
+            counts={counts}
           >
             <h1>Home</h1>
           </AppShell>
@@ -315,6 +322,145 @@ describe("the two rails", () => {
 
     const lab = rail("Experiment lab workspace");
     expect(within(lab).getByRole("link", { name: "Bench" })).not.toHaveAttribute("aria-current");
+  });
+});
+
+describe("the counts on a rail entry", () => {
+  /**
+   * The figure beside each label (`Workspace.dc.html` :110, :113; the README's *Navigation
+   * rail*), under the rule the chip row already observes: the count is of the whole list, a
+   * listing in flight or failed shows none, zero is real and is drawn, and a figure the
+   * payload lacks is never faked (`docs/design-direction.md`, *Lists and counts*).
+   *
+   * How it reaches a reader is ADR 0056: the row is *named* by its label alone — the handle
+   * eleven Playwright specs and every tour anchor use — and the figure is its **description**,
+   * spelled out with what it counts. So the digits are the eye's and the phrase is the ear's,
+   * and neither is the name.
+   */
+  function entry(label: string, railName?: string) {
+    return within(rail(railName)).getByRole("link", { name: label });
+  }
+
+  it("draws each listing's figure beside its label, right-aligned and muted", () => {
+    renderShell("shop", { counts: { orders: 12, tickets: 4 } });
+
+    const orders = entry("Orders");
+    const figure = within(orders).getByText("12");
+    expect(figure).toBeVisible();
+    // The digits are the eye's alone; the phrase a reader hears is the row's description,
+    // outside the link, so the figure is never spoken twice.
+    expect(figure).toHaveAttribute("aria-hidden", "true");
+    expect(figure.className).toContain("ml-auto");
+    expect(figure.className).toContain("text-[12px]");
+    // Muted on a row you are not standing on; on the active row the count takes the row's
+    // own ink, which is the prototype's two colours.
+    expect(figure.className).toContain("text-admin-muted");
+    expect(within(entry("Tickets")).getByText("4")).toBeVisible();
+  });
+
+  it("takes the active row's ink on the row you are standing on", () => {
+    renderShell("shop", { at: `/shops/${SHOP_ID}/orders`, counts: { orders: 12 } });
+
+    const figure = within(entry("Orders")).getByText("12");
+    expect(entry("Orders")).toHaveAttribute("aria-current", "page");
+    expect(figure.className).not.toContain("text-admin-muted");
+  });
+
+  it("draws a zero, because zero is a count", () => {
+    renderShell("shop", { counts: { scenarios: 0 } });
+
+    expect(within(entry("Scenarios")).getByText("0")).toBeVisible();
+    expect(entry("Scenarios")).toHaveAccessibleDescription("0 scenarios");
+  });
+
+  it("draws nothing at all while the listing is in flight or has failed", () => {
+    renderShell("shop", { counts: { orders: null, customers: undefined } });
+
+    for (const label of ["Orders", "Customers"]) {
+      const row = entry(label);
+      expect(row).toHaveTextContent(new RegExp(`^${label}$`));
+      expect(row).not.toHaveAccessibleDescription();
+    }
+  });
+
+  it("carries no figure on the shop entries that list nothing", () => {
+    renderShell("shop", { counts: { orders: 12 } });
+
+    expect(entry("Overview")).toHaveTextContent(/^Overview$/);
+    expect(entry("Shop details")).toHaveTextContent(/^Shop details$/);
+  });
+
+  it("carries none on the bench either", () => {
+    // The prototype draws "1 live" there. It is a tally of running arms in one shop rather
+    // than the length of anything this shell reads, and a figure the payload lacks is not
+    // faked (`docs/design-direction.md`).
+    renderShell("lab", { counts: { history: 7 } });
+
+    expect(entry("Bench", "Experiment lab workspace")).toHaveTextContent(/^Bench$/);
+  });
+
+  it("keeps the accessible name the label alone, and says the figure as a description", () => {
+    renderShell("shop", { counts: { orders: 12, tickets: 1, supportIdentities: 3 } });
+
+    expect(entry("Orders")).toHaveAccessibleName("Orders");
+    expect(entry("Orders")).toHaveAccessibleDescription("12 orders");
+    // One of a thing is one of a thing.
+    expect(entry("Tickets")).toHaveAccessibleDescription("1 ticket");
+    expect(entry("Support identities")).toHaveAccessibleDescription("3 support identities");
+  });
+
+  it("says the figure once: the digits are drawn, the phrase is the description", () => {
+    // A screen reader in browse mode reads a link's own contents as well as its description.
+    // The phrase therefore lives outside the link, so nobody hears "Orders, 12 orders, 12
+    // orders" (ADR 0056).
+    renderShell("shop", { counts: { orders: 12 } });
+
+    const row = entry("Orders");
+    expect(row).toHaveTextContent(/^Orders12$/);
+    expect(row.textContent).not.toContain("12 orders");
+    expect(row).toHaveAccessibleDescription("12 orders");
+  });
+
+  it("counts every listing the lab's rail points at", () => {
+    renderShell("lab", {
+      counts: {
+        history: 7,
+        agentConfigurations: 6,
+        judges: 3,
+        supportIdentities: 2,
+        objectiveBlocks: 5,
+        mutationBlocks: 4,
+      },
+    });
+
+    const lab = "Experiment lab workspace";
+    for (const [label, figure, described] of [
+      ["History", "7", "7 experiments"],
+      ["Agent configurations", "6", "6 configurations"],
+      ["Judges", "3", "3 judges"],
+      ["Support identities", "2", "2 support identities"],
+      ["Objective blocks", "5", "5 blocks"],
+      ["Mutation blocks", "4", "4 blocks"],
+    ] as const) {
+      const row = entry(label, lab);
+      expect(within(row).getByText(figure)).toBeVisible();
+      expect(row).toHaveAccessibleName(label);
+      expect(row).toHaveAccessibleDescription(described);
+    }
+  });
+
+  it("draws no figure in the collapsed strip and still says it", async () => {
+    // The strip has room for a centred glyph and nothing else, and the prototype draws no
+    // count in it. Collapsing is a statement about room on screen, and a description takes
+    // none — so a reader hears the same figure either way (ADR 0056).
+    renderShell("shop", { counts: { orders: 12 } });
+
+    await userEvent.click(toggle());
+
+    const orders = entry("Orders");
+    expect(within(orders).queryByText("12")).toBeNull();
+    expect(orders).toHaveAccessibleName("Orders");
+    expect(orders).toHaveAccessibleDescription("12 orders");
   });
 });
 

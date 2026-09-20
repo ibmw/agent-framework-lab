@@ -17,6 +17,7 @@ import { toProfilePayload } from "./api/customerProfiles";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OTHER_SHOP_ID = "8c7b6a59-4d3e-42f1-a0b9-8c7d6e5f4a3b";
@@ -255,6 +256,9 @@ const server = setupServer(
       { status: 201 },
     );
   }),
+  // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
+  // handler this suite declares for one of these routes still wins.
+  ...shellListings(),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -891,5 +895,20 @@ describe("the field pattern on the customer editor", () => {
     const persona = within(screen.getByRole("region", { name: "Behavioral persona" }));
     expect(persona.getByLabelText("Summary")).toBeVisible();
     expect(persona.getAllByRole("group", { name: "Traits" })).toHaveLength(1);
+  });
+});
+
+/**
+ * The rail's figure and this index are one listing, read once by the shell and handed to
+ * both, so they cannot come to disagree (ADR 0056).
+ */
+describe("the rail's figure and this index", () => {
+  it("says on the rail what the table has rows", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    const rows = bodyRows(await screen.findByRole("table"));
+    const entry = railEntry("Customers");
+    expect(within(entry).getByText(String(rows))).toBeVisible();
+    expect(entry).toHaveAccessibleDescription(`${rows} customer${rows === 1 ? "" : "s"}`);
   });
 });

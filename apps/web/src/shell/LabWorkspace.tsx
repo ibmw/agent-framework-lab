@@ -4,11 +4,18 @@ import { Link, Outlet, useMatch } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listShops } from "../api/shops";
 import { readLastVisitedShop, writeLastVisitedShop } from "../lib/preferences";
-import { AppShell } from "./AppShell";
+import { AppShell, type RailCounts } from "./AppShell";
+import { type LabListings, useLabListings } from "./listings";
 
 export interface LabWorkspaceValue {
   /** Every shop the lab holds, for the switcher and for any surface that names one. */
   shops: ShopSummarySchema[];
+  /**
+   * The lab's five libraries and history's total, read once here and handed to the rail and
+   * to the index that renders each of them, so a count and a table cannot disagree
+   * (ADR 0056). An index that changes what it lists calls that listing's `refresh`.
+   */
+  listings: LabListings;
   /**
    * The shop the lab composes for, resolved against the list rather than trusted: a remembered
    * identifier can name a shop that has since been removed, and composing an experiment for a
@@ -156,19 +163,30 @@ export function LabWorkspace() {
 
   const currentShop = shops.find((shop) => shop.shop_id === rememberedId) ?? null;
 
+  const listings = useLabListings();
+  const counts: RailCounts = {
+    history: listings.history.count,
+    agentConfigurations: listings.agentConfigurations.count,
+    judges: listings.judges.count,
+    supportIdentities: listings.supportIdentities.count,
+    objectiveBlocks: listings.objectiveBlocks.count,
+    mutationBlocks: listings.mutationBlocks.count,
+  };
+
   return (
     <AppShell
       shops={shops}
       currentShopId={currentShop?.shop_id}
       mode="lab"
       onShopChange={chooseShop}
+      counts={counts}
     >
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
           {error}
         </p>
       ) : null}
-      <LabContext.Provider value={{ shops, currentShop, loading, error }}>
+      <LabContext.Provider value={{ shops, listings, currentShop, loading, error }}>
         <Outlet />
       </LabContext.Provider>
     </AppShell>

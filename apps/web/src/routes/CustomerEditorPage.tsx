@@ -199,9 +199,12 @@ function HiddenFactFieldset({
 
 export function CustomerEditorPage() {
   const { profileId = "" } = useParams();
-  const { shopId, shops } = useShopWorkspace();
+  const { shopId, shops, listings } = useShopWorkspace();
   const editor = useDefinitionEditor(profileId, CLIENT, {
     label: "The customer profile draft has unsaved changes.",
+    // The Customers index prints the row this editor is changing, and it renders the shell's
+    // listing rather than reading its own (ADR 0056).
+    afterSave: listings.customers.refresh,
   });
   const { content, preview, edit } = editor;
   const [attachedShops, setAttachedShops] = useState<string[]>([]);
@@ -394,7 +397,14 @@ export function CustomerEditorPage() {
               className={accentButtonClasses}
               type="button"
               onClick={() => {
-                void editor.publish().then((version) => setPublishedVersion(version));
+                // A frozen version is printed by the index this editor was opened from, and
+                // that index renders the shell's listing (ADR 0056).
+                void editor.publish().then((version) => {
+                  setPublishedVersion(version);
+                  if (version !== null) {
+                    void listings.customers.refresh();
+                  }
+                });
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >

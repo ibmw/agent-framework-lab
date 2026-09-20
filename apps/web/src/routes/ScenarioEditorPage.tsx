@@ -100,7 +100,7 @@ const SEVERITIES = optionsOf(OBJECTIVE_SEVERITY);
  * would it freeze" are one question read together.
  */
 export function ScenarioEditorPage() {
-  const { shopId } = useShopWorkspace();
+  const { shopId, listings } = useShopWorkspace();
   const { scenarioId = "" } = useParams();
   // Memoized on the shop, not rebuilt per render: the client is a dependency of the
   // editor's load effect, and a new object each render would reload the draft forever.
@@ -123,6 +123,9 @@ export function ScenarioEditorPage() {
   );
   const editor = useDefinitionEditor(scenarioId, client, {
     label: "The scenario draft has unsaved changes.",
+    // The Scenarios index prints the row this editor is changing, and it renders the shell's
+    // listing rather than reading its own (ADR 0056).
+    afterSave: listings.scenarios.refresh,
   });
   const { content, preview, edit: editDraft } = editor;
   const [state, setState] = useState<ResourceState>({ status: "loading" });
@@ -219,7 +222,14 @@ export function ScenarioEditorPage() {
               className={accentButtonClasses}
               type="button"
               onClick={() => {
-                void editor.publish().then((version) => setPublishedVersion(version));
+                // A frozen version is printed by the index this editor was opened from, and
+                // that index renders the shell's listing (ADR 0056).
+                void editor.publish().then((version) => {
+                  setPublishedVersion(version);
+                  if (version !== null) {
+                    void listings.scenarios.refresh();
+                  }
+                });
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >

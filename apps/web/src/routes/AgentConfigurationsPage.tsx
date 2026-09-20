@@ -2,11 +2,10 @@ import type {
   AgentConfigurationSummarySchema,
   SupportIdentityOptionSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   createAgentConfiguration,
-  listAgentConfigurations,
   readAgentConfigurationResources,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
@@ -24,6 +23,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
+import { useLabWorkspace } from "../shell/LabWorkspace";
 
 const UNAVAILABLE = "The agent-configuration service is unavailable.";
 
@@ -56,10 +56,16 @@ const FILTERS: FilterChipDefinition<Filter, AgentConfigurationSummarySchema>[] =
 ];
 
 export function AgentConfigurationsPage() {
-  const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
+  // The library this page renders is the one the lab's rail counts, read once by the lab's
+  // shell and read again here whenever this page changes what it lists (ADR 0056). What a
+  // configuration may *adopt* is a different read, and it stays on the page that asks.
+  const { listings } = useLabWorkspace();
+  const configurations = listings.agentConfigurations.rows;
   const [identities, setIdentities] = useState<SupportIdentityOptionSchema[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingResources, setLoadingResources] = useState(true);
+  const [resourcesError, setResourcesError] = useState<string | null>(null);
+  const loading = listings.agentConfigurations.loading || loadingResources;
+  const loadError = listings.agentConfigurations.error ?? resourcesError;
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -67,33 +73,26 @@ export function AgentConfigurationsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
 
-  const reload = useCallback(async (signal?: AbortSignal) => {
-    const [listed, resources] = await Promise.all([
-      listAgentConfigurations(signal),
-      readAgentConfigurationResources(signal),
-    ]);
-    setConfigurations(listed.configurations);
-    setIdentities(resources.support_identities);
-    setIdentityId((current) => current || (resources.support_identities[0]?.identity_id ?? ""));
-    setLoadError(null);
-  }, []);
-
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    reload(controller.signal)
+    readAgentConfigurationResources(controller.signal)
+      .then((resources) => {
+        setIdentities(resources.support_identities);
+        setIdentityId((current) => current || (resources.support_identities[0]?.identity_id ?? ""));
+        setResourcesError(null);
+      })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setLoadError(describeApiError(cause, UNAVAILABLE));
+          setResourcesError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) {
-          setLoading(false);
+          setLoadingResources(false);
         }
       });
     return () => controller.abort();
-  }, [reload]);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,13 +106,8 @@ export function AgentConfigurationsPage() {
       setCreating(false);
       return;
     }
-    try {
-      await reload();
-    } catch (cause: unknown) {
-      setLoadError(describeApiError(cause, UNAVAILABLE));
-    } finally {
-      setCreating(false);
-    }
+    await listings.agentConfigurations.refresh();
+    setCreating(false);
   }
 
   // Name and model, the two the prototype's configurations search reads (its `shownAgents`

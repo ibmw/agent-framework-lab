@@ -1,6 +1,7 @@
 import type {
   BlockParameterKind,
   BlockParameterSchema,
+  BlockSummarySchema,
   MutationBlockPayloadSchema,
   MutationBlockPreviewResponse,
   MutationEffect,
@@ -51,6 +52,8 @@ import {
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { useLabWorkspace } from "../shell/LabWorkspace";
+import type { Listing } from "../shell/listings";
 
 const OBJECTIVE_CLIENT: DefinitionClient<
   ObjectiveBlockPayloadSchema,
@@ -106,6 +109,7 @@ function BlockEditor<
 >({
   blockId,
   client,
+  listing,
   noun,
   backLabel,
   typeAxis,
@@ -113,6 +117,8 @@ function BlockEditor<
 }: {
   blockId: string;
   client: DefinitionClient<PayloadT, PayloadT, PreviewT>;
+  /** The library index's listing, which prints the row this editor changes (ADR 0056). */
+  listing: Listing<BlockSummarySchema>;
   noun: string;
   backLabel: string;
   typeAxis: (content: PayloadT, edit: (next: PayloadT) => void) => ReactNode;
@@ -120,6 +126,9 @@ function BlockEditor<
 }) {
   const editor = useDefinitionEditor(blockId, client, {
     label: `The ${noun} draft has unsaved changes.`,
+    // Declared on the editor rather than on the button, because the navigation prompt saves
+    // this draft too.
+    afterSave: listing.refresh,
   });
   const { content, preview, edit } = editor;
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
@@ -170,7 +179,14 @@ function BlockEditor<
               className={accentButtonClasses}
               type="button"
               onClick={() => {
-                void editor.publish().then((version) => setPublishedVersion(version));
+                // A frozen version is printed by the library index this editor was opened
+                // from, and that index renders the shell's listing (ADR 0056).
+                void editor.publish().then((version) => {
+                  setPublishedVersion(version);
+                  if (version !== null) {
+                    void listing.refresh();
+                  }
+                });
               }}
               disabled={editor.publishing || !canPublish(preview, editor.dirty)}
             >
@@ -499,10 +515,12 @@ function ParameterForm({
 
 export function ObjectiveBlockEditorPage() {
   const { blockId = "" } = useParams();
+  const { listings } = useLabWorkspace();
   return (
     <BlockEditor
       blockId={blockId}
       client={OBJECTIVE_CLIENT}
+      listing={listings.objectiveBlocks}
       noun="objective block"
       backLabel="Objective blocks"
       publishedNote="A scenario binds this exact version."
@@ -573,10 +591,12 @@ export function ObjectiveBlockEditorPage() {
 
 export function MutationBlockEditorPage() {
   const { blockId = "" } = useParams();
+  const { listings } = useLabWorkspace();
   return (
     <BlockEditor
       blockId={blockId}
       client={MUTATION_CLIENT}
+      listing={listings.mutationBlocks}
       noun="mutation block"
       backLabel="Mutation blocks"
       publishedNote="A scenario binds this exact version."
