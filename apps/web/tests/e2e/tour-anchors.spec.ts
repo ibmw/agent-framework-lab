@@ -93,11 +93,15 @@ test("mounts each chain step on the surface the chain sends a reader to", () => 
       continue;
     }
     const step = SETUP_CHAIN.find((entry) => entry.id === chain.step);
-    expect(step, `${id} claims a chain step the chain does not have`).toBeDefined();
+    if (step === undefined) {
+      // Naming a step the chain does not hold is the failure itself, and throwing it here also
+      // narrows the step away from `undefined` for the comparison below.
+      throw new Error(`${id} claims a chain step the chain does not have`);
+    }
     expect(
       SURFACES[id]({ shopId: SHOP } as BuiltLab),
       `${id} carries the ${chain.step} step but is not the surface the guide links to`,
-    ).toBe(stepHref(step!, SHOP));
+    ).toBe(stepHref(step, SHOP));
   }
 });
 

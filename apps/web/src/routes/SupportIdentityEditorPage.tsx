@@ -4,7 +4,7 @@ import type {
   SupportIdentityPreviewResponse,
   SupportPermission,
 } from "@agent-lab/contracts";
-import { type ReactNode, useId, useState } from "react";
+import { useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getSupportIdentityDraft,

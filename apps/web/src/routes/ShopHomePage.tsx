@@ -15,7 +15,6 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { groupIssues } from "../lib/shop";
 import {
   formatTimestamp,
   inkButtonClasses,
@@ -61,9 +60,6 @@ export function ShopHomePage() {
     return () => controller.abort();
   }, [shopId]);
 
-  const issues = groupIssues(preview?.issues ?? []);
-  // Republishing byte-identical content would mint a second version with the same fingerprint.
-  const unchanged = preview?.matches_latest_published ?? false;
   const variantCount = content.products.reduce(
     (total, product) => total + product.variants.length,
     0,

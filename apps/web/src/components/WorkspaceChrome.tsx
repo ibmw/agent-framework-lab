@@ -452,7 +452,7 @@ export interface PublishGate extends VersionProvenance {
  * a weaker gate than the shop's.
  */
 export function canPublish(preview: PublishGate | null, dirty: boolean): boolean {
-  return preview !== null && preview.publishable && !dirty && !preview.matches_latest_published;
+  return preview?.publishable === true && !dirty && !preview.matches_latest_published;
 }
 
 /** Why the publish button is disabled, in the order an author can act on. */
