@@ -25,6 +25,35 @@ export const labNoteClasses = "rounded-[10px] border border-[#b7d9cc] bg-[#eaf4f
 export const surfaceClasses =
   "rounded-[10px] border border-admin-border bg-admin-surface shadow-[0_1px_2px_rgb(22_51_45/6%)]";
 
+/**
+ * A card's own title, in the workspace's display face.
+ *
+ * The handoff's *Type* line gives card titles as Georgia 17–18px 700. The prototype draws
+ * three treatments rather than one, and this constant flattens all three into the first:
+ *
+ * - **17px at `-0.01em`** where the title sits in a bordered header above a table — twelve of
+ *   them (`Workspace.dc.html`:162, 826, 1067, 3569 and eight more);
+ * - **18px** where it heads an editor's section card, which has no header rule and carries its
+ *   title and description in the body — sixty-six of them;
+ * - and **sans**, at the page's own size, on the small side-panel note card, a title over a
+ *   paragraph in a `13px 16px` bordered header — forty-four of them (`:1433`, `:1436`).
+ *
+ * One `Card` serves all three here and no slice has given it a variant. Both Georgia values sit
+ * in the handoff's range, so either is compliant; 17 is taken because the bordered header over
+ * the card's content is the shape this component draws. The census cuts the other way and is
+ * said rather than left to be found — of the hundred-and-thirty-seven `Card`s in this
+ * workspace only about a dozen stand where the prototype draws its table card, and the rest
+ * where it draws the 18px section card. Putting display type on the note-card class at all is
+ * a departure from the prototype, recorded with the other two in
+ * `docs/implementation-plan.md` UI-5.
+ *
+ * It lives here rather than inside `Card` because two surfaces draw a card header in open
+ * code: the shops table, which needs a filter row between the title and the table, and the
+ * tickets list panel, which carries its filter in the header line. A card title spelled three
+ * times is a card title that ends up spelled three ways.
+ */
+export const cardTitleClasses = "font-display text-[17px] font-bold tracking-[-0.01em]";
+
 const fieldSurfaceClasses =
   "w-full rounded-lg border border-admin-border bg-admin-surface px-3 text-sm text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65";
 

@@ -928,6 +928,22 @@ that takes the prototype's number over a stated one is departing and says so. Se
 also the hover it gives every white secondary, and the prototype's inline style draws
 `#f4f6f7`.
 
+> Narrowed as built (2026-09-20). **The clause settles a value, never a context.** It reaches
+> only where the README states a value for a role and the prototype draws a different value for
+> that same role — one number against one number, as the chip hover was. It does not reach a
+> distinction the prototype draws *consistently across a class* of elements that the README's
+> summary does not enumerate: such a class is a rule the handoff summarised away rather than a
+> value it decided, so it falls under the paragraph above, where the prototype governs. A slice
+> may still flatten the distinction — on the ground that one component serves both classes and
+> no slice has yet given it a variant — but it flattens it as a **departure from the
+> prototype**, and records the prototype's rule so the variant can be added later without
+> redoing the reading. Settled in `ui/display-type`, where the type ranges hid two such
+> classes: the prototype sizes a page title by whether it is a bound name (22px) or a fixed
+> label (24px), which the README's "24–27px" summarises away, and it heads its side-panel note
+> cards in sans where its table and section cards are Georgia, which "card titles" summarises
+> away. Both are flattened by one `PageHeader` and one `Card`, and both are written up in
+> `docs/implementation-plan.md` UI-5.
+
 **Pine takes the primary action, and the warm red is reserved for destructive.** This is the one
 recorded token the refresh changes. Primary actions move to `#1d6241`, hover `#14452e`; the clay
 accent `#c2532d` stops being the colour of the safe, expected action, and `#9d3028` (hover

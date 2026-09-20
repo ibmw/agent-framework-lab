@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { EntryEdit } from "../lib/entryEdit";
 import {
   accentButtonClasses,
+  cardTitleClasses,
   outlineButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
@@ -47,6 +48,28 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
   );
 }
 
+/**
+ * The page's own name, in the workspace's display face.
+ *
+ * The handoff's *Type* line gives page titles as Georgia 24–27px 700. The prototype draws
+ * something more particular than a range, and the distinction is recorded here because this
+ * component flattens it. Its rule is **a bound name against a fixed label**, not an editor
+ * against an index: all fifteen titles it binds to data — `{{ prodTitle }}`, `{{ agName }}`,
+ * `{{ ordRef }}`, `{{ scnNameShown }}` — are 22px, below the stated floor, and all fourteen it
+ * writes as a fixed label are 24px, two of them editors (Tone of voice `:1897`, Shop details
+ * `:1997`). Outside those two classes it draws 26px on Shops `:153` and the shop overview
+ * `:722`, and 27px on Settings `:3854`.
+ *
+ * One `PageHeader` renders both classes and no slice has given it a variant, so it takes 24px
+ * at `-0.015em`: the size of the fixed-label class, and the only one of the two the handoff's
+ * range admits. That is a departure from the prototype for the fifteen bound names, written
+ * down in `docs/implementation-plan.md` UI-5 so the variant can be added rather than the census
+ * rediscovered — and what to watch when it is added is a long product or customer name wrapping
+ * at 24px Georgia where 22px would have held it on one line.
+ *
+ * The 5px between the title and its description is the prototype's own
+ * (`Workspace.dc.html`:154, 816), and it is the whole of this header's density change.
+ */
 export function PageHeader({
   title,
   chips,
@@ -59,11 +82,11 @@ export function PageHeader({
   description?: ReactNode;
 }) {
   return (
-    <header className="mb-4 grid gap-2">
+    <header className="mb-4 grid gap-[5px]">
       <div className="flex flex-wrap items-center gap-3">
         {/* The chain step of a tour lights the page's own name: it is the one element
             every surface has, and it is what the step is about — where you have arrived. */}
-        <h1 className="text-xl font-bold tracking-tight" data-tour="page-name">
+        <h1 className="font-display text-2xl font-bold tracking-[-0.015em]" data-tour="page-name">
           {title}
         </h1>
         {chips}
@@ -151,7 +174,7 @@ export function Card({
   return (
     <section aria-label={accessibleName} className={`${surfaceClasses} overflow-hidden`}>
       {title ? (
-        <h2 className="border-b border-admin-border px-4 py-3 text-sm font-semibold">{title}</h2>
+        <h2 className={`border-b border-admin-border px-4 py-3 ${cardTitleClasses}`}>{title}</h2>
       ) : null}
       <div className="grid gap-3 p-4">{children}</div>
       {footer ? <div className="border-t border-admin-border px-4 py-3">{footer}</div> : null}

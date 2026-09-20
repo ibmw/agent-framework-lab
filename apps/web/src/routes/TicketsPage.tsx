@@ -69,6 +69,7 @@ import {
 } from "../lib/tickets";
 import {
   accentButtonClasses,
+  cardTitleClasses,
   fieldControlClasses,
   fieldLabelClasses,
   outlineButtonClasses,
@@ -198,7 +199,7 @@ export function TicketsPage() {
       <div className="grid min-h-0 gap-4 xl:grid-cols-[262px_minmax(0,1fr)]">
         <section className={`${surfaceClasses} overflow-hidden`} aria-label="Tickets">
           <div className="flex items-center gap-2 border-b border-admin-border px-3 py-2.5">
-            <h2 className="text-sm font-bold">Tickets</h2>
+            <h2 className={cardTitleClasses}>Tickets</h2>
             <label className="ml-auto text-xs">
               <span className="sr-only">Filter tickets</span>
               <select
@@ -559,7 +560,10 @@ function TicketWorkspace({
       <div className="grid min-w-0 content-start gap-4">
         <header className="grid gap-2">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h2 className="text-lg font-bold tracking-tight">
+            {/* The thread's own subject, the one heading the prototype draws between a
+                page title and a card title: Georgia 19px 700, no tracking
+                (`Workspace.dc.html`:2200). */}
+            <h2 className="font-display text-[19px] font-bold">
               {content.reference} · {content.subject}
             </h2>
             <StatusBadge status={content.status} />

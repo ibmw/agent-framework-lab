@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { cardTitleClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 
 const SHOP_ID = "9c8b7a6d-5e4f-4a3b-9c8d-7e6f5a4b3c2d";
@@ -42,6 +43,24 @@ async function createShopCard() {
   if (!card) throw new Error("the Create a shop card has no container");
   return within(card as HTMLElement);
 }
+
+describe("the shops table", () => {
+  // The one card header on this page is drawn in open code, because the filter row has to sit
+  // between the title and the table. A copy is a thing that drifts, so it is held to the
+  // spelling `Card` uses rather than to a repeat of the numbers.
+  it("titles itself the way every other card in the workspace does", async () => {
+    renderShops();
+
+    const title = await screen.findByRole("heading", { level: 2, name: "All shops" });
+
+    for (const className of cardTitleClasses.split(" ")) {
+      expect(title.className).toContain(className);
+    }
+    // Presence alone would pass a header that kept a sans size beside the shared one, which is
+    // exactly how a copy half-reverts.
+    expect(title.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/);
+  });
+});
 
 describe("creating a shop from an example", () => {
   it("fills every field the form requires, so the example is publishable as typed", async () => {

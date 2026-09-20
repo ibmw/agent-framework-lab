@@ -236,12 +236,91 @@ ring and the handoff's chip metrics, and the six-kind vocabulary as a table, in 
 assertions moved inside `getByRole("table")`, because "Never published" and "Active" are now
 also chip labels.
 
-### UI-5 · Page header alignment
-`branch: ui/page-header-full-width`
+### UI-5 · The workspace's display type
+`branch: ui/display-type`
 
-`PageHeader` in `WorkspaceChrome.tsx` gains the variant the mock uses on Tone of voice, Shop
-details and Tickets: title and actions span the full content width, side panel starts below.
-This is why the Save button currently sits in a different place on three pages.
+This plan asked for a full-width header variant. **Every header already spans the full content
+width.** In every one of the twenty-seven files that draw one, `PageHeader` renders before that
+file's `grid-cols-[…]`, so no header sits in a column beside a side panel — and Tone of voice,
+Shop details and Tickets, the three pages this plan named, each put `EditorSaveActions` in
+that full-width header already. There is no misplaced Save button to move; whoever built the
+side-panel layout built the alignment with it.
+
+What was never applied is the header's **type**. `styles.css` has defined `--font-display` as
+Georgia since the POC, and `font-display` had exactly one consumer in the application — the app
+title in the top bar — beside the tour popover's own title in CSS. So a page title read at 20px
+in the sans stack where the handoff's *Type* line asks for Georgia 24–27px 700, and a card
+title at 14px where it asks for Georgia 17–18px 700. That, and not the alignment, is the slice.
+
+**Where in each range this workspace lands.** `PageHeader`'s `h1` takes 24px at `-0.015em`,
+the size the prototype gives the fourteen titles it writes as a **fixed label** — the ten
+indexes and libraries, plus Tone of voice, Shop details, New experiment and History. It is not
+the size that prototype uses most: the modal page title there is 22px, on the fifteen titles
+bound to data, and 24 is the most common of those the handoff's 24–27px range admits. Shops
+`:153` and the shop overview `:722` are drawn at 26 and Settings `:3854` at 27; 24 stands for
+all three, because a `size` prop worth two pixels on two screens is not warranted and Settings
+draws no `PageHeader` variant of its own. `Card`'s `h2` takes 17px at `-0.01em`, spelled once
+as `cardTitleClasses` in `lib/ui.ts`: both Georgia values are in range, and 17 is the one the
+prototype draws on the shape this component has — a bordered header over the card's content.
+
+**Three headings are drawn in open code and take the same type**, because a card title left in
+sans beside four Georgia ones is the inconsistency this slice exists to remove: the shops
+table's header, which is `Card`'s header letter for letter, open-coded so the filter row can sit
+between the title and the table; the tickets list panel's, which carries its filter in the
+header line; and the ticket thread's subject, the one heading the prototype draws between a page
+title and a card title, at Georgia 19px (`Workspace.dc.html`:2200).
+
+**The density knock-on, measured rather than assumed.** A page title's line box goes from 28px
+to 32px, and the 8px under it becomes the prototype's 5px (`Workspace.dc.html`:154, 816), so a
+header with a description is one pixel taller than it was and one without is four. A card's
+title loses `text-sm`'s 20px line box for the 1.5 the page inherits — 25.5px at 17px — which
+makes a card header 49.5px where it was 44px, against the prototype's own 54px: the change
+moves toward the design rather than past it, and nothing else on a card moves. No surface
+breaks under either size.
+
+**Where this follows the codebase against the prototype**, per the rule in
+`docs/design-direction.md`. Three times, and the first two are **not** the README-wins clause,
+which settles one stated number against one drawn one and does not reach a distinction drawn
+consistently across a class. Both of these are such a class, so the prototype governs them and
+flattening them is a departure — taken on the ground that one component renders both classes
+and no slice has given it a variant, and written down here with the prototype's own rule so the
+variant can be added later without redoing the census.
+
+- **Page titles.** The prototype's rule is a **bound name against a fixed label**, not an editor
+  against an index: all fifteen titles it binds to data (`{{ prodTitle }}`, `{{ agName }}`,
+  `{{ ordRef }}`, `{{ scnNameShown }}`…) are 22px, and all fourteen fixed labels are 24px —
+  including Tone of voice `:1897` and Shop details `:1997`, which are editors. One `h1` draws
+  both, so the fifteen bound names are 2px larger here than drawn. What to watch when the
+  variant arrives: a long product or customer name wraps at 24px Georgia where 22 holds it.
+- **Card titles.** The prototype gives its small side-panel note card — a title over a
+  paragraph, in a `13px 16px` bordered header — a **sans** header, in forty-four places
+  (`:1433`, `:1436`), where its table cards are Georgia 17 and its section cards Georgia 18.
+  One `Card` draws all three here, so the note-card class gains display type it is not drawn
+  with. Of the hundred-and-thirty-seven `Card`s in this workspace about a dozen stand where the
+  prototype draws its table card and the rest where it draws the section card.
+- **Card header padding.** `px-4 py-3` rather than the prototype's `17px 20px`. The horizontal
+  value is the column the card's body and `tableHeadClasses` already share, and a title that
+  missed the rows it labels by four pixels would read as a second, narrower card — UI-4's
+  argument, unchanged. The vertical value is the card's own rhythm, and with it kept the line
+  box above is the whole of the header's growth.
+
+**What is deliberately left in sans.** Entry-row titles, which the prototype draws at 13.5px
+sans like every other saved row; the per-arm run label on the results screen, where the
+prototype puts sans 13.5px on the label and reserves Georgia for the numeral beside it
+(`Workspace.dc.html`:2581) — those numerals are the *Type* line's third clause and nobody's
+slice yet; and the unsaved-changes dialog's title, which the prototype has no modal to draw. The
+top bar's shop switcher is left too, although the handoff gives it Georgia 16px 700: it is a
+native `<select>` here and a button over a 300px panel there, so its type arrives with its
+control, in the top-bar remainder UI-3 named as nobody's slice.
+
+*Watch:* the `h1` is the anchor of every tour's first step through `data-tour="page-name"`, and
+`tour-anchors.spec.ts` holds each step to exactly one visible element. Type moves neither the
+attribute nor a heading level: an `h1` stays an `h1` and an `h2` an `h2`.
+
+*Checks:* a new `WorkspaceChrome.test.tsx` — the page title's face, size, weight and tracking,
+the card title's, and each read off the heading level and the tour anchor that must not move.
+Then one assertion per open-coded header in `Shops.test.tsx` and `Tickets.test.tsx`, holding the
+copies to `cardTitleClasses` rather than repeating its numbers.
 
 ### UI-6 · Search affordance
 `branch: ui/search-field`

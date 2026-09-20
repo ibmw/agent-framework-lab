@@ -17,6 +17,7 @@ import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
 import { shopSlugFromName } from "../lib/shop";
 import {
   accentButtonClasses,
+  cardTitleClasses,
   fieldControlClasses,
   formatTimestamp,
   outlineButtonClasses,
@@ -158,7 +159,9 @@ export function ShopsPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
-          <h2 className="border-b border-admin-border px-4 py-3 text-sm font-semibold">
+          {/* The card header `Card` draws, open-coded because the filter row has to sit
+              between the title and the table. The title itself is the shared one. */}
+          <h2 className={`border-b border-admin-border px-4 py-3 ${cardTitleClasses}`}>
             All shops
           </h2>
           {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
