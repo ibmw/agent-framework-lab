@@ -3,9 +3,9 @@
 Read `docs/product-direction.md`, `docs/architecture.md`, and `docs/PLAN.md` before changing code,
 plus the relevant guideline/ADR for the task. The plans (`docs/PLAN.md`, `docs/PLAN-UX.md`) hold
 open work only, and `docs/design-direction.md` holds the design rules in force; how either was
-reached is under `docs/history/`, read on demand and never by default. The running application is a POC; do not extend its
-persona-first scenario model or treat the old Vercel milestone as current direction unless a new
-roadmap slice explicitly requires it.
+reached is under `docs/history/`, read on demand and never by default. The running application
+is a POC; do not extend its persona-first scenario model or treat the old Vercel milestone as
+current direction unless a new roadmap slice explicitly requires it.
 
 - Preserve the dependency rule: presentation/infrastructure -> application -> domain. Domain and
   application must not import FastAPI, SQLAlchemy, agent SDKs, Phoenix or Temporal.
@@ -35,6 +35,11 @@ roadmap slice explicitly requires it.
 - Create commits only when the user explicitly requests or approves them, with one standing
   exception: work on a short-lived task branch is committed as it goes, so that a review can be
   handed one round of changes rather than a whole branch. Those commits are scaffolding.
+- In the supervised loop, one implementor owns a slice from its first commit to its landing and
+  commits on the task branch as it works. Each round of review fixes is **one commit** whose
+  subject is `fixup: review round N`, never `fix:`, so that a fresh reviewer can be handed that
+  round alone (`git diff <SHA the last reviewer saw>..HEAD`) and can tell a scaffolding round
+  from a landed bug fix by the subject.
 - Keep every commit atomic, independently reviewable, and limited to one logical purpose. That
   is a rule about what **lands**; an iteration commit on a task branch is exempt from it and
   does not survive to the main branch.
@@ -44,10 +49,15 @@ roadmap slice explicitly requires it.
 - Do not name `PLAN.md` steps or milestones in commit messages; describe the technical outcome.
 - Never mention AI assistance or add AI/tool attribution, generation metadata, or trailers.
 - Collapse a task branch's iteration commits before landing it, so the main branch records the
-  finished work and not how it was reached. Use `git reset --soft` onto the merge base and
-  commit again: it moves the pointer without touching the working tree, so the tree that passed
-  `make check` is the tree that lands. Prove it — `git diff <the branch tip you recorded> HEAD`
-  must be empty — and record the tip in the report before resetting.
+  finished work and not how it was reached. The implementor that wrote the branch does this,
+  because it is the one that knows which purposes the branch holds. Use `git reset --soft` onto
+  the merge base and commit again: it moves the pointer without touching the working tree, so
+  the tree that passed `make check` is the tree that lands. Prove it — `git diff <the branch
+  tip you recorded> HEAD` must be empty — and record the tip in the report before resetting.
+- The main branch is linear: a branch lands by `git merge --ff-only` and nothing else, never a
+  merge commit. The implementor lands it; the supervisor then verifies with its own commands —
+  the empty diff recomputed from the recorded tip, and the checks re-run on the main branch —
+  before accepting the landing.
 - Never amend, squash, rewrite, or force-push history without explicit user approval, outside
   that one case: a short-lived, unpushed task branch being cleaned immediately before it
   fast-forwards into the main branch. The main branch, any pushed branch, and anything another

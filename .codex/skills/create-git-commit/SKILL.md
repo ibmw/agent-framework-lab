@@ -16,7 +16,8 @@ description: Prepare, review, or create clean atomic Git commits for Agent Frame
 3. Confirm the work is on a short-lived branch created from `main`. If `main` has no initial commit,
    stop and obtain approval for a baseline commit before creating the task branch.
 4. Split the diff into independent logical changes. Propose the split before committing when more
-   than one commit is needed or file ownership is ambiguous.
+   than one commit is needed or file ownership is ambiguous. An implementor in the supervised loop
+   cannot wait for an answer: it states the split in its report and proceeds.
 5. Run the checks appropriate to each change. Do not use a commit to bypass a failing hook or test.
 6. Stage only the files or hunks for the next atomic change and inspect `git diff --cached`.
 7. Create the commit with the format below, then verify the commit and remaining working tree.
@@ -37,11 +38,14 @@ description: Prepare, review, or create clean atomic Git commits for Agent Frame
 
 An **iteration commit** lives on a task branch and exists so a reviewer can be handed one round
 of changes instead of a whole branch. It may be as small or as messy as the work is, and a round
-answering review findings is one commit with a `fixup:` subject. None of these reaches `main`.
+answering review findings is one commit whose subject is `fixup: review round N` — `fixup:`,
+never `fix:`, because `fix` is a type that lands and a reviewer must be able to tell a
+scaffolding round from a bug fix by the subject alone. None of these reaches `main`.
 
 A **landing commit** is what the branch becomes before it is merged: the content rules below
-apply to it in full. Collapse with `git reset --soft $(git merge-base main HEAD)` and commit
-again — the working tree is untouched, so the tree that passed `make check` is the tree that
+apply to it in full. The implementor that wrote the branch writes it, then lands it with
+`git merge --ff-only`; the supervisor verifies afterwards rather than doing it in its place.
+Collapse with `git reset --soft $(git merge-base main HEAD)` and commit again — the working tree is untouched, so the tree that passed `make check` is the tree that
 lands, and `git diff <the recorded branch tip> HEAD` must print nothing. Do not use
 `git rebase -i`; it is unavailable in the agent environment and unnecessary for a branch
 collapsing to one commit.
