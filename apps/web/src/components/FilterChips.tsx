@@ -26,7 +26,7 @@ export interface FilterChip<Id extends string> {
  * The band of filter chips above a list index.
  *
  * Every chip filters. The refresh moves an index's counts out of a stat band and onto the
- * control that produces them (`docs/design-direction.md`, "the workspace refresh"), and a chip
+ * control that produces them (`docs/design-direction.md`, *Lists and counts*), and a chip
  * that showed a number without narrowing the list when pressed would be that band again in a
  * smaller typeface — so the component takes no chip it cannot act on. Where this workspace
  * holds no figure for a subset the prototype draws, the chip is left off rather than rendered

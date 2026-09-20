@@ -45,8 +45,8 @@ import type { Currency } from "./currencies";
  * keep publishing it and read its table from here, so their call sites are unchanged.
  *
  * Not yet every closed set in the workspace: the tables that pre-date this module are listed
- * in `docs/design-direction.md` under *Revision — enum labels and the status pill*, with the
- * rule that each moves here as the slice that next touches its surface moves it.
+ * in `docs/design-direction-history.md` under *Revision — enum labels and the status pill*,
+ * with the rule that each moves here as the slice that next touches its surface moves it.
  */
 
 /**

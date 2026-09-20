@@ -10,8 +10,8 @@ pattern slices built rather than a plan.
 the design it was handed on 19 September 2026: the whole-workspace prototype in
 `tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Read, in
 order, `AGENTS.md`, `docs/product-direction.md`, `docs/architecture.md`, `docs/PLAN.md`'s delivery
-rules, `docs/design-direction.md` (the *workspace refresh* revision settles which authority governs
-where the prototype, the README and the codebase disagree), then this plan and the ADRs a slice
+rules, `docs/design-direction.md` (its *Authority* section settles which authority governs where the
+prototype, the README and the codebase disagree), then this plan and the ADRs a slice
 names. ADR 0052 and ADR 0053 are already accepted and precede the slices that implement them.
 
 The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
@@ -26,7 +26,8 @@ before the slices say what to do about it.
 derived identifiers, enum labels, currencies on the create form, chip and country and number
 controls, closed sets from the proven table, edit-in-place on every saved row, and the unsaved-work
 guard with the router migration it needed (ADR 0051). All eight are ticked in Git history and
-recorded as revisions in `docs/design-direction.md`. The prototype assumes every one of them —
+recorded, rule by rule, in `docs/design-direction.md` and, with their reasoning, in
+`docs/design-direction-history.md`. The prototype assumes every one of them —
 its 107 form rows carry hints, its saved rows open where they stand, its headers say "All changes
 saved" — so nothing here was wasted, and none of it is redone below.
 
@@ -112,7 +113,7 @@ lists under *Known application defects* are given a slice instead of a footnote.
 - **The prototype is the frame.** A `Frames:` line names the screen by its line in
   `Workspace.dc.html` and the numbered frame under `tmp/design-frames/DEPRECADED/` where one
   still describes the surface's composition. Where the prototype, the README and the codebase
-  disagree, `docs/design-direction.md`'s *workspace refresh* revision decides, and the slice writes
+  disagree, `docs/design-direction.md`'s *Authority* section decides, and the slice writes
   the departure in one sentence. "The handoff is silent" is not a licence.
 - **The primitive ships with its first consumers.** A component or a token no page uses is not a
   slice.

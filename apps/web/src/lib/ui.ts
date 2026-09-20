@@ -108,8 +108,8 @@ export const cardTitleClasses = "font-display text-[17px] font-bold tracking-[-0
  * 2–4px of height and half a point of type on those thirty-odd controls. The text area is
  * **not** flattened: it is a distinct export with its own consumers, so the one-component
  * argument does not reach it, and the prototype's seven are consistent enough to be a class the
- * `Inputs:` bullet summarised away — the case `docs/design-direction.md`'s narrowed clause
- * hands to the prototype. It keeps 14px, `11px 14px` and `line-height:1.6`.
+ * `Inputs:` bullet summarised away — the case rule 3 of `docs/design-direction.md`'s
+ * *Authority* hands to the prototype. It keeps 14px, `11px 14px` and `line-height:1.6`.
  *
  * **The four borderless controls have no class here and are a departure that predates this
  * slice**: `ChipListField`, the results tag box and the variant table's cells all draw a
@@ -209,7 +209,7 @@ const smallButtonBaseClasses = `inline-flex min-h-8 items-center justify-center 
  * The named exports below are read off this record rather than written beside it, so a variant
  * cannot exist that `ui.test.ts` does not check for its hover and its focus ring.
  *
- * The colours are the refresh's (`docs/design-direction.md`, "the workspace refresh"):
+ * The colours are the refresh's (`docs/design-direction.md`, *Tokens, type and glyphs*):
  *
  * - **accent** — pine `#1d6241`, the safe and expected action. It used to be the clay accent,
  *   which read as a warning while sitting on *Save draft*.
@@ -446,8 +446,8 @@ export const filterChipIcon: Readonly<Record<FilterChipKind, LucideIcon>> = {
  * "applies to 107 rows" — a label, a hint and a control in a form row. A search box in a
  * card's header is none of those, and the prototype draws it differently in every one of the
  * five values, in all eleven places and nowhere else: `#bdc7cf` occurs exactly eleven times in
- * that document and they are these eleven fields. That is the class the narrowed clause in
- * `docs/design-direction.md` describes — a distinction the prototype draws consistently which
+ * that document and they are these eleven fields. That is the class rule 3 of
+ * `docs/design-direction.md`'s *Authority* describes — a distinction the prototype draws consistently which
  * the README's summary does not enumerate — so the prototype governs and these are its
  * numbers. `#bdc7cf` is written as a literal for the reason `labNoteClasses` writes its two:
  * a colour one file uses is not yet a token.

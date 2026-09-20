@@ -6,7 +6,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef 
  * Two kinds exist and they are not the same kind of thing. A **draft** is content the editor
  * holds and its own Save writes to the lab; it can be saved from anywhere, so it carries a
  * `save`. An **open row** is `EntryCard` edit mode: its typing is deliberately outside the
- * draft's `content` (ADR 0051, and the Slice 7 revision in `docs/design-direction.md`), so the
+ * draft's `content` (ADR 0051, and *A saved row opens where it stands* in `docs/design-direction.md`), so the
  * page's Save does not carry it and neither does this prompt — it has no `save`, and the
  * prompt says where it can be saved instead.
  */

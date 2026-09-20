@@ -16,8 +16,9 @@ Read documents in this order before changing code:
 4. this roadmap; and
 5. the task-specific guideline and ADRs.
 
-For target UI work, also read `docs/design-brief.md` and `docs/design-direction.md` (the selected
-direction and its retained mockups).
+For target UI work, also read `docs/design-direction.md` (the rules that govern the workspace
+today; `docs/design-direction-history.md` holds how each was reached, with the retained mockups)
+and `docs/design-brief.md` (the exploration the direction was selected from).
 
 When an old ADR describes currently implemented POC behavior and conflicts with the approved target
 product, preserve it as history but follow ADR 0011 and this roadmap for new work.
@@ -262,7 +263,7 @@ tested slices.
   layout ad hoc. Since 19 September 2026 the authority is the whole-workspace prototype
   `tmp/design-frames/Workspace.html` with its handoff `README.md`, and the Milestone 0.5 frames
   under `tmp/design-frames/DEPRECADED/` where the prototype does not contradict them;
-  `docs/design-direction.md`'s *workspace refresh* revision says which wins where they disagree.
+  `docs/design-direction.md`'s *Authority* section says which wins where they disagree.
 - Mark an outcome complete only when its tests, contracts, migrations, documentation, and UI where
   applicable are present.
 - `make check` passes before handoff. Frontend/build changes also pass `pnpm build`; essential changed
@@ -1110,7 +1111,7 @@ standing offline qualification that ADR 0042 established and ADR 0043 could only
 
 Frames: one new frame for the guide strip, designed before the slice lands. It is a cross-cutting
 band across the top of frames 1, 4, 7 and 9, which were designed without one, and is the half of
-this milestone that is inside the authoritative set (ADR 0044). `docs/design-direction.md` gains
+this milestone that is inside the authoritative set (ADR 0044). `docs/design-direction-history.md` gains
 the revision paragraph recording both halves of that split. *Superseded by Slice 4: the band and
 its frame are removed and the authoritative set is eighteen again (ADR 0045).*
 
@@ -1137,7 +1138,7 @@ about this reading is left to be on or off (ADR 0046).*
 Frames: none new. The explainers are drawn on the band Slice 2's frame already specifies, hosted
 below each page header on frames 4, 4a, 4b, 8 and 9 and on the frameless starting-states page —
 which is a different list from the frames that band was drawn to carry the next-step reading on.
-`docs/design-direction.md` records which surfaces host which, and the set stays at nineteen because
+`docs/design-direction-history.md` records which surfaces host which, and the set stays at nineteen because
 the band is one element in both readings (ADR 0044). *Superseded by Slice 4: the notes are replaced
 by a tour of each of those screens (ADR 0045).*
 
@@ -1169,7 +1170,7 @@ what that costs.
 Frames: none, and one retired. The authoritative set returns to **eighteen**: the nineteenth frame
 existed because the band was a shape drawn into surfaces designed without one, and a tour adds no
 shape — one control in `PageHeader`'s existing actions slot, and an overlay that is above the page
-rather than in it and leaves nothing behind when it is dismissed. `docs/design-direction.md` argues
+rather than in it and leaves nothing behind when it is dismissed. `docs/design-direction-history.md` argues
 that position and records the pattern's own rules in place of a frame (ADR 0045).
 
 Slice evidence: an operator standing on the live bench asks to be shown around and is walked through
@@ -1203,7 +1204,7 @@ thing Slice 2 built that survived it, because the shape it was built for is gone
   each was actually protecting.
 
 Frames: none. The control was already in `PageHeader`'s existing actions slot on every surface that
-has a tour; what changes is that it is there whatever the lab holds. `docs/design-direction.md`'s
+has a tour; what changes is that it is there whatever the lab holds. `docs/design-direction-history.md`'s
 paragraph on the three headers that gained a control loses the clause that made it conditional.
 
 Slice evidence: an operator runs `make seed`, opens the lab, and finds *Show me around* in the
