@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  FlaskConical,
   Home,
   type LucideIcon,
   MessageSquare,
@@ -35,18 +36,14 @@ interface NavEntry {
    */
   icon: LucideIcon;
   /**
-   * Match the path exactly instead of by prefix. Only Home needs it: every other section
-   * owns nested editor routes and must stay highlighted while one is open.
+   * Match the path exactly instead of by prefix. Only Overview and the bench need it: every
+   * other section owns nested editor routes and must stay highlighted while one is open, and
+   * the bench's own nest is `/lab/bench/:shopId/:experimentId`, which is a live run rather
+   * than the composition screen the entry points at.
    */
   exact?: boolean;
   /** Sections whose slice has not landed yet stay visible but inert. */
   milestone?: string;
-  /**
-   * Nested entries, indented under their parent. Only Scenarios has them: the two block
-   * libraries live under it because a scenario is what composes them, even though the
-   * libraries themselves are shared across shops.
-   */
-  children?: NavEntry[];
 }
 
 interface NavSection {
@@ -54,69 +51,65 @@ interface NavSection {
   entries: NavEntry[];
 }
 
-function studioSections(shopId: string): NavSection[] {
+/**
+ * The shop's rail, from the prototype at `Workspace.dc.html` :4753.
+ *
+ * Ten entries and one heading. The cross-shop section this rail used to end in is the lab's
+ * rail now (ADR 0054) — a section that had to announce that its contents were not what the
+ * rail was about was a section in the wrong rail. The two block libraries went with it, out of
+ * the Scenarios nest they sat in, so nothing here nests any more.
+ *
+ * *Support identities* is the one entry that leaves shop scope. There is one library and the
+ * prototype draws it on both rails, so both rails point at the one address and following this
+ * entry changes mode.
+ */
+function shopSections(shopId: string): NavSection[] {
   const base = `/shops/${shopId}`;
   return [
     {
       entries: [
-        { label: "Home", to: base, icon: Home, exact: true },
+        { label: "Overview", to: base, icon: Home, exact: true },
         { label: "Products", to: `${base}/products`, icon: Tag },
         { label: "Orders", to: `${base}/orders`, icon: Boxes },
         { label: "Customers", to: `${base}/customers`, icon: Users },
         { label: "Tickets", to: `${base}/tickets`, icon: MessageSquare },
-        {
-          label: "Scenarios",
-          to: `${base}/scenarios`,
-          icon: ClipboardList,
-          children: [
-            {
-              label: "All scenarios",
-              to: `${base}/scenarios`,
-              icon: ClipboardList,
-            },
-            {
-              label: "Objective blocks",
-              to: `${base}/objective-blocks`,
-              icon: Target,
-            },
-            {
-              label: "Mutation blocks",
-              to: `${base}/mutation-blocks`,
-              icon: Zap,
-            },
-          ],
-        },
+        { label: "Scenarios", to: `${base}/scenarios`, icon: ClipboardList },
       ],
     },
     {
       title: "Shop setup",
       entries: [
         { label: "Policies & FAQ", to: `${base}/setup/policies`, icon: FileText },
-        {
-          label: "Support guidelines",
-          to: `${base}/setup/support`,
-          icon: ClipboardList,
-        },
+        { label: "Support identities", to: "/lab/support-identities", icon: UserCog },
         { label: "Tone of voice", to: `${base}/setup/tone`, icon: Shapes },
         { label: "Shop details", to: `${base}/setup/identity`, icon: Store },
       ],
     },
+  ];
+}
+
+/**
+ * The lab's rail, from the prototype at `Workspace.dc.html` :4822.
+ *
+ * Bench and History, and then everything shared by every shop in this lab under *Library*.
+ * None of it takes a shop, which is why none of these paths carries one (ADR 0054).
+ */
+function labSections(): NavSection[] {
+  return [
     {
-      title: "Experiment lab · cross-shop",
       entries: [
-        {
-          label: "Support identities",
-          to: `${base}/support-identities`,
-          icon: UserCog,
-        },
-        {
-          label: "Agent configurations",
-          to: `${base}/agent-configurations`,
-          icon: Bot,
-        },
-        { label: "Judges", to: `${base}/judges`, icon: Scale },
-        { label: "Bench", to: `${base}/bench`, icon: Play },
-        { label: "History", to: `${base}/history`, icon: Clock },
+        { label: "Bench", to: "/lab/bench", icon: Play, exact: true },
+        { label: "History", to: "/lab/history", icon: Clock },
+      ],
+    },
+    {
+      title: "Library",
+      entries: [
+        { label: "Agent configurations", to: "/lab/agent-configurations", icon: Bot },
+        { label: "Judges", to: "/lab/judges", icon: Scale },
+        { label: "Support identities", to: "/lab/support-identities", icon: UserCog },
+        { label: "Objective blocks", to: "/lab/objective-blocks", icon: Target },
+        { label: "Mutation blocks", to: "/lab/mutation-blocks", icon: Zap },
       ],
     },
   ];
@@ -170,16 +163,7 @@ const collapsedFootClasses = `flex h-9 w-full items-center justify-center rounde
 
 const footInkClasses = "text-admin-muted hover:text-admin-ink";
 
-function SidebarEntry({
-  entry,
-  collapsed,
-  nested = false,
-}: {
-  entry: NavEntry;
-  collapsed: boolean;
-  /** Indent only while the rail is expanded; a collapsed rail has no room for a hierarchy. */
-  nested?: boolean;
-}) {
+function SidebarEntry({ entry, collapsed }: { entry: NavEntry; collapsed: boolean }) {
   const Icon = entry.icon;
   // The label is never dropped, only hidden: a destination the collapsed rail cannot name is a
   // destination a screen reader cannot reach, and `title` alone is not an accessible name.
@@ -189,15 +173,11 @@ function SidebarEntry({
     <span>{entry.label}</span>
   );
   // Hidden from assistive technology, as every other glyph in this workspace is: the row is
-  // named by its label, and a drawing that announced itself would rename all fifteen.
+  // named by its label, and a drawing that announced itself would rename every row.
   const glyph = (
     <Icon aria-hidden="true" className="flex-none" focusable="false" size={collapsed ? 19 : 17} />
   );
-  const layout = collapsed
-    ? collapsedEntryClasses
-    : nested
-      ? `${expandedEntryClasses} ml-3.5 border-l border-admin-border pl-3`
-      : expandedEntryClasses;
+  const layout = collapsed ? collapsedEntryClasses : expandedEntryClasses;
   const inactive = collapsed ? inactiveCollapsedClasses : inactiveExpandedClasses;
 
   if (!entry.to) {
@@ -244,15 +224,33 @@ const labEntries = [{ label: "Settings", to: "/settings", icon: <Settings size={
 const headerLinkClasses =
   "flex items-center gap-1.5 rounded-full border border-white/25 px-2.5 py-1 text-[11px] font-semibold no-underline transition";
 
+/**
+ * Which of the two modes is being drawn, or neither (ADR 0054).
+ *
+ * `undefined` is the frameless case — the shops index, Settings and the glossary — and it is a
+ * different answer from "the lab, with no current shop": the first draws no rail and no mode
+ * tabs, the second draws the lab's rail and says on the surface that it has no shop.
+ */
+export type WorkspaceMode = "shop" | "lab";
+
 interface AppShellProps {
   shops: ShopSummarySchema[];
   currentShopId?: string;
+  mode?: WorkspaceMode;
+  /**
+   * What choosing a shop in the switcher means here. In shop mode it navigates, which is the
+   * default; the lab passes its own, because there is nowhere in the lab to navigate a shop to
+   * and what the choice actually changes is which shop the lab composes for.
+   */
+  onShopChange?: (shopId: string) => void;
   children: ReactNode;
 }
 
-export function AppShell({ shops, currentShopId, children }: AppShellProps) {
+export function AppShell({ shops, currentShopId, mode, onShopChange, children }: AppShellProps) {
   const navigate = useNavigate();
   const current = shops.find((shop) => shop.shop_id === currentShopId);
+  const sections =
+    mode === "lab" ? labSections() : currentShopId ? shopSections(currentShopId) : null;
   // One rail for every section, collapsed only when the author says so. Routes deliberately
   // do not override this: a navigation that folded the menu on its own would make the same
   // control mean different things depending on where you happened to be standing. What the
@@ -284,7 +282,11 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
               aria-label="Shop"
               className="h-8 rounded-lg border border-white/20 bg-white/10 px-2.5 text-[12.5px] font-semibold text-white outline-none"
               value={current?.shop_id ?? ""}
-              onChange={(event) => navigate(`/shops/${event.target.value}`)}
+              onChange={(event) =>
+                onShopChange
+                  ? onShopChange(event.target.value)
+                  : navigate(`/shops/${event.target.value}`)
+              }
             >
               {!current && <option value="">Select a shop</option>}
               {shops.map((shop) => (
@@ -294,6 +296,34 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
               ))}
             </select>
           </label>
+        ) : null}
+        {mode ? (
+          // The two modes, so that the lab is reachable at all. Their glyph, underline and
+          // inactive ink are Slice 10's; what ships here is the pair and where each one goes.
+          // With no current shop, *Shop fixture* can only offer the index — there is no shop
+          // to return to, and a tab that went nowhere would be worse than one that says pick.
+          <nav aria-label="Workspace mode" className="flex items-center gap-2">
+            {(
+              [
+                ["Shop fixture", current ? `/shops/${current.shop_id}` : "/shops", Store, "shop"],
+                ["Experiment lab", "/lab/bench", FlaskConical, "lab"],
+              ] as const
+            ).map(([label, to, Glyph, forMode]) => (
+              <NavLink
+                key={label}
+                to={to}
+                aria-current={mode === forMode ? "page" : undefined}
+                className={
+                  mode === forMode
+                    ? `${headerLinkClasses} border-white/50 bg-white/15 text-white`
+                    : `${headerLinkClasses} text-[#b9cdc5] hover:bg-white/10 hover:text-white`
+                }
+              >
+                <Glyph size={13} aria-hidden="true" focusable="false" />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
         ) : null}
         <nav aria-label="Lab" className="ml-auto flex items-center gap-2">
           {labEntries.map((entry) => (
@@ -314,9 +344,9 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {currentShopId ? (
+        {sections ? (
           <nav
-            aria-label="Shop workspace"
+            aria-label={mode === "lab" ? "Experiment lab workspace" : "Shop workspace"}
             // 216px expanded, a 52px strip collapsed (handoff, *Navigation rail*). The strip's
             // 8px gutters leave exactly the 36px a centred 19px glyph is drawn in.
             className={`flex flex-none flex-col border-r border-admin-border bg-admin-sidebar ${
@@ -329,7 +359,7 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
                 collapsed ? "px-2" : "px-2.5"
               }`}
             >
-              {studioSections(currentShopId).map((section) => (
+              {sections.map((section) => (
                 <div key={section.title ?? "primary"} className="grid gap-0.5">
                   {section.title && !collapsed ? (
                     <div className="px-[11px] pt-[18px] pb-1.5 text-[10.5px] font-bold tracking-[0.07em] text-[#8c9196] uppercase">
@@ -340,17 +370,7 @@ export function AppShell({ shops, currentShopId, children }: AppShellProps) {
                     <div className="mx-2 mt-[13px] mb-[7px] h-px bg-admin-border" />
                   ) : null}
                   {section.entries.map((entry) => (
-                    <div key={entry.label} className="grid gap-0.5">
-                      <SidebarEntry entry={entry} collapsed={collapsed} />
-                      {entry.children?.map((child) => (
-                        <SidebarEntry
-                          key={child.label}
-                          entry={child}
-                          collapsed={collapsed}
-                          nested={!collapsed}
-                        />
-                      ))}
-                    </div>
+                    <SidebarEntry key={entry.label} entry={entry} collapsed={collapsed} />
                   ))}
                 </div>
               ))}

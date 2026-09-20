@@ -33,7 +33,6 @@ import {
   inkButtonClasses,
   subtleButtonClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
 
@@ -78,8 +77,8 @@ export function useExperimentResults(): ExperimentResults {
  * run, free to disagree the moment one of them was reloaded and the other was not.
  */
 export function ExperimentResultsLayout() {
-  const { shopId } = useShopWorkspace();
-  const { experimentId = "" } = useParams();
+  // Both identifiers come from the address; see `ExperimentBenchPage` (ADR 0054).
+  const { shopId = "", experimentId = "" } = useParams();
   const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
   const [annotations, setAnnotations] = useState<ExperimentAnnotationsResponse | null>(null);
@@ -100,7 +99,7 @@ export function ExperimentResultsLayout() {
     setError(null);
     try {
       const derived = await replayExperiment(shopId, experimentId);
-      navigate(`/shops/${shopId}/bench/${derived.experiment_id}/results`);
+      navigate(`/lab/bench/${shopId}/${derived.experiment_id}/results`);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This experiment could not be replayed."));
     } finally {
@@ -120,7 +119,7 @@ export function ExperimentResultsLayout() {
       setError(null);
       try {
         const derived = await forkExperiment(shopId, experimentId, { arms });
-        navigate(`/shops/${shopId}/bench/${derived.experiment_id}/results`);
+        navigate(`/lab/bench/${shopId}/${derived.experiment_id}/results`);
       } catch (cause: unknown) {
         setError(describeApiError(cause, "This experiment could not be forked."));
       } finally {
@@ -230,7 +229,7 @@ export function ExperimentResultsLayout() {
           <>
             <Link
               className="font-semibold text-lab-ink"
-              to={`/shops/${shopId}/bench/${experimentId}`}
+              to={`/lab/bench/${shopId}/${experimentId}`}
             >
               Back to the live bench
             </Link>{" "}
@@ -241,7 +240,7 @@ export function ExperimentResultsLayout() {
                 {` · ${experiment.derived_from.kind} of `}
                 <Link
                   className="font-semibold text-lab-ink"
-                  to={`/shops/${shopId}/bench/${experiment.derived_from.experiment_id}/results`}
+                  to={`/lab/bench/${shopId}/${experiment.derived_from.experiment_id}/results`}
                 >
                   {experiment.derived_from.label}
                 </Link>

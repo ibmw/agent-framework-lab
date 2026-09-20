@@ -30,7 +30,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 
@@ -794,7 +794,22 @@ let replayFails = false;
 let forked: { configuration_id: string; version: number }[][] = [];
 
 const server = setupServer(
-  http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
+  // The lab resolves its current shop against this list rather than trusting the remembered
+  // identifier, so the bench only composes for a shop the lab actually holds (ADR 0054).
+  http.get("*/api/v1/shops", () =>
+    HttpResponse.json({
+      shops: [
+        {
+          shop_id: SHOP_ID,
+          name: "Northstar Outfitters",
+          slug: "northstar",
+          updated_at: "2026-08-25T12:05:00+00:00",
+          latest_published_version: 1,
+          published_version_count: 1,
+        },
+      ],
+    } satisfies ShopListResponse),
+  ),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
       shop_id: SHOP_ID,
@@ -985,7 +1000,12 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+// The bench composes for the lab's current shop, which is the remembered-shop preference
+// resolved against the shop list (ADR 0054). Without one it says so instead, which is its own
+// case below.
+beforeEach(() => window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID));
 afterEach(() => {
+  window.localStorage.clear();
   server.resetHandlers();
   started = [];
   delivered = [];
@@ -1013,23 +1033,23 @@ afterEach(() => {
 afterAll(() => server.close());
 
 function renderSetup() {
-  return renderApp(`/shops/${SHOP_ID}/bench`);
+  return renderApp("/lab/bench");
 }
 
 function renderTimeline() {
-  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/timeline`);
+  return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/timeline`);
 }
 
 function renderTraces() {
-  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results/traces`);
+  return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/traces`);
 }
 
 function renderResults() {
-  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`);
+  return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results`);
 }
 
 function renderBench() {
-  return renderApp(`/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}`);
+  return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}`);
 }
 
 async function chooseArm(user: ReturnType<typeof userEvent.setup>, position: number, name: string) {
@@ -2052,12 +2072,12 @@ describe("replay", () => {
   });
 
   it("says which run a derived experiment replays, and links back to it", async () => {
-    renderApp(`/shops/${SHOP_ID}/bench/${REPLAY_ID}/results`);
+    renderApp(`/lab/bench/${SHOP_ID}/${REPLAY_ID}/results`);
 
     const back = await screen.findByRole("link", {
       name: "Wrong address — framework comparison",
     });
-    expect(back).toHaveAttribute("href", `/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`);
+    expect(back).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results`);
   });
 
   it("reports a replay the backend refuses without leaving the run being read", async () => {
@@ -2112,12 +2132,12 @@ describe("replay", () => {
   });
 
   it("says which run a fork came from and what it changed", async () => {
-    renderApp(`/shops/${SHOP_ID}/bench/${FORK_ID}/results`);
+    renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}/results`);
 
     const back = await screen.findByRole("link", {
       name: "Wrong address — framework comparison",
     });
-    expect(back).toHaveAttribute("href", `/shops/${SHOP_ID}/bench/${EXPERIMENT_ID}/results`);
+    expect(back).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results`);
     expect(await screen.findByText(/fork of/)).toHaveTextContent("changed prompt");
   });
 
@@ -2126,7 +2146,7 @@ describe("replay", () => {
     // moved from the run it came from — and the chip strip is ADR 0025's, over the arms this
     // experiment actually holds. A fork is the operation most likely to turn a one-variable
     // source into a two-variable run, and the screen it lands on has to say so.
-    renderApp(`/shops/${SHOP_ID}/bench/${FORK_ID}/results`);
+    renderApp(`/lab/bench/${SHOP_ID}/${FORK_ID}/results`);
 
     expect(
       await screen.findByText(
@@ -2188,7 +2208,7 @@ describe("replay", () => {
   });
 
   it("names the run a derived thread was driven by, where there is one to name", async () => {
-    renderApp(`/shops/${SHOP_ID}/bench/${REPLAY_ID}`);
+    renderApp(`/lab/bench/${SHOP_ID}/${REPLAY_ID}`);
 
     const composer = await screen.findByRole("region", { name: "Customer composer" });
 

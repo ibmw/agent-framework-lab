@@ -48,7 +48,6 @@ import {
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
 
 const UNAVAILABLE = "This experiment is unavailable.";
 
@@ -73,8 +72,9 @@ const UNAVAILABLE = "This experiment is unavailable.";
  * bench that has forgotten it.
  */
 export function ExperimentBenchPage() {
-  const { shopId } = useShopWorkspace();
-  const { experimentId = "" } = useParams();
+  // Both identifiers come from the address: an experiment belongs to the shop it was started
+  // in for good, and the API addresses it under that shop (ADR 0054).
+  const { shopId = "", experimentId = "" } = useParams();
   const [experiment, setExperiment] = useState<ExperimentResponse | null>(null);
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
   const { judges, judgeId, setJudgeId } = usePublishedJudges();
@@ -215,7 +215,7 @@ export function ExperimentBenchPage() {
         title={experiment.label}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to={`/shops/${shopId}/bench`}>
+            <Link className="font-semibold text-lab-ink" to="/lab/bench">
               Back to the bench
             </Link>{" "}
             · scenario v{experiment.scenario_version} · seed {experiment.seed} · started{" "}
@@ -227,7 +227,7 @@ export function ExperimentBenchPage() {
             <TourLaunch id="bench" />
             <Link
               className={outlineButtonClasses}
-              to={`/shops/${shopId}/bench/${experimentId}/results`}
+              to={`/lab/bench/${shopId}/${experimentId}/results`}
             >
               <ButtonIcon verb="results" />
               Results

@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./support/e2e";
+import { openSection } from "./support/navigate";
 
 /**
  * Milestone 2 block-library acceptance evidence: an author publishes the two templates the
@@ -34,8 +35,8 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
 
   await openWorkspace(page, unique);
 
-  await page.getByLabel("Shop workspace").getByRole("link", { name: "Objective blocks" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Objective blocks" })).toBeVisible();
+  // The libraries are the lab's now, not one shop's nest under Scenarios (ADR 0054).
+  await openSection(page, "Objective blocks", "Objective blocks");
   await expect(page.getByText("Shared across shops")).toBeVisible();
 
   const create = card(page, "New objective block");
@@ -93,7 +94,7 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
   await saveDraft(page);
   await expect(page.getByText(/Draft v2 in progress/)).toBeVisible();
 
-  await page.getByLabel("Shop workspace").getByRole("link", { name: "Objective blocks" }).click();
+  await openSection(page, "Objective blocks", "Objective blocks");
   const row = page.getByRole("row").filter({ hasText: name });
   await expect(row.getByText("v1 · 1 version(s)")).toBeVisible();
   await expect(row.getByText("deterministic · event")).toBeVisible();
@@ -106,7 +107,7 @@ test("a mutation block cannot be published until it says when it fires", async (
 
   await openWorkspace(page, unique);
 
-  await page.getByLabel("Shop workspace").getByRole("link", { name: "Mutation blocks" }).click();
+  await openSection(page, "Mutation blocks", "Mutation blocks");
   const create = card(page, "New mutation block");
   await create.getByLabel("Name", { exact: true }).fill(name);
   await create.getByRole("button", { name: "Create block" }).click();

@@ -21,7 +21,7 @@
  * and checked against the one module that defines it.
  */
 
-import { chainPlacement, type SetupStepId } from "./setupPath";
+import { chainPlacement, fillRoute, type RouteIds, type SetupStepId } from "./setupPath";
 
 export type TourId =
   | "shop-home"
@@ -65,6 +65,15 @@ export interface TourStep {
 export interface Tour {
   /** What the tour is of, used as the launch control's accessible name. */
   surface: string;
+  /**
+   * Where the surface is, as a route pattern over `shopId`, `scenarioId` and `experimentId`.
+   *
+   * Named here rather than in a list kept beside this table, so that a tour cannot come to
+   * describe a screen at an address nothing reaches: the anchor sweep composes its own
+   * navigation from this field, and the ten chain surfaces' routes are asserted against the
+   * chain's own (ADR 0054, and ADR 0023's shape for a registry that is swept).
+   */
+  route: string;
   /**
    * Where this surface sits in the setup chain, for the ten surfaces that sit on it.
    *
@@ -127,13 +136,14 @@ export function tourSteps(id: TourId): readonly TourStep[] {
 export const TOURS: Record<TourId, Tour> = {
   "shop-home": {
     surface: "this shop",
+    route: "/shops/:shopId",
     chain: { step: "shop", anchor: PAGE_NAME },
     steps: [
       {
         anchor: 'nav[aria-label="Shop workspace"]',
         title: "Everything is authored inside a shop",
         body: [
-          "This rail is one [[shop]]'s workspace: its catalog and its policies, the customers and orders a sandbox is built from, the [[ticket|tickets]] an incident arrives on, and — under Scenarios — the recipes composed on them beside the two block libraries those recipes bind. The experiment lab at the foot of the rail is marked cross-shop, and what it holds is shared by every shop in this lab: the support identities, the agent configurations, the judges, the bench and the history.",
+          "This rail is one [[shop]]'s workspace: its catalog and its policies, the customers and orders a sandbox is built from, the [[ticket|tickets]] an incident arrives on, and the recipes composed on them under Scenarios. Everything shared by every shop in this lab is the other mode in the bar above — the [[support-identity|support identities]], the [[agent-configuration|agent configurations]], the [[judge-configuration|judges]], the two block libraries, the bench and the history — which is why Experiment lab is a tab there rather than a section down here.",
         ],
       },
       {
@@ -155,6 +165,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   "objective-blocks": {
     surface: "the objective-block library",
+    route: "/lab/objective-blocks",
     chain: { step: "blocks", anchor: PAGE_NAME },
     steps: [
       {
@@ -176,6 +187,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   "mutation-blocks": {
     surface: "the mutation-block library",
+    route: "/lab/mutation-blocks",
     steps: [
       {
         anchor: '[data-tour="block-index"]',
@@ -196,6 +208,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   scenario: {
     surface: "the scenario editor",
+    route: "/shops/:shopId/scenarios/:scenarioId",
     steps: [
       {
         anchor: '[aria-label="Recipe"]',
@@ -223,6 +236,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   snapshots: {
     surface: "the starting states",
+    route: "/shops/:shopId/scenarios/:scenarioId/snapshots",
     steps: [
       {
         anchor: '[aria-label="Freeze a published version"]',
@@ -243,6 +257,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   bench: {
     surface: "the live bench",
+    route: "/lab/bench/:shopId/:experimentId",
     steps: [
       {
         anchor: '[data-tour="bench-arms"]',
@@ -264,6 +279,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   results: {
     surface: "this comparison",
+    route: "/lab/bench/:shopId/:experimentId/results",
     steps: [
       {
         anchor: '[data-tour="results-arms"]',
@@ -292,48 +308,56 @@ export const TOURS: Record<TourId, Tour> = {
 
   customers: {
     surface: "customers",
+    route: "/shops/:shopId/customers",
     chain: { step: "customer", anchor: PAGE_NAME },
     steps: [],
   },
 
   orders: {
     surface: "orders",
+    route: "/shops/:shopId/orders",
     chain: { step: "order", anchor: PAGE_NAME },
     steps: [],
   },
 
   tickets: {
     surface: "tickets",
+    route: "/shops/:shopId/tickets",
     chain: { step: "ticket", anchor: PAGE_NAME },
     steps: [],
   },
 
   scenarios: {
     surface: "scenarios",
+    route: "/shops/:shopId/scenarios",
     chain: { step: "scenario", anchor: PAGE_NAME },
     steps: [],
   },
 
   "support-identities": {
     surface: "support identities",
+    route: "/lab/support-identities",
     chain: { step: "support-identity", anchor: PAGE_NAME },
     steps: [],
   },
 
   "agent-configurations": {
     surface: "agent configurations",
+    route: "/lab/agent-configurations",
     chain: { step: "agent-configurations", anchor: PAGE_NAME },
     steps: [],
   },
 
   judges: {
     surface: "judges",
+    route: "/lab/judges",
     chain: { step: "judge", anchor: PAGE_NAME },
     steps: [],
   },
 
   "bench-setup": {
     surface: "the bench",
+    route: "/lab/bench",
     // The chain's tenth step is `/bench`, which is this page. The live bench is where an
     // experiment is *watched*, and a reader only reaches it by starting one — so a chain step
     // there would be an answer offered after the question had stopped being asked.
@@ -343,6 +367,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   products: {
     surface: "the catalog",
+    route: "/shops/:shopId/products",
     steps: [
       {
         anchor: '[data-tour="product-index"]',
@@ -364,6 +389,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   "shop-details": {
     surface: "shop details",
+    route: "/shops/:shopId/setup/identity",
     steps: [
       {
         anchor: '[aria-label="Shop identity"]',
@@ -391,6 +417,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   "policies-and-faq": {
     surface: "policies and FAQ",
+    route: "/shops/:shopId/setup/policies",
     steps: [
       {
         anchor: '[aria-label="Policies"]',
@@ -411,6 +438,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   "support-guidelines": {
     surface: "support guidelines",
+    route: "/shops/:shopId/setup/support",
     steps: [
       {
         anchor: '[aria-label="Guidelines"]',
@@ -424,6 +452,7 @@ export const TOURS: Record<TourId, Tour> = {
 
   "tone-of-voice": {
     surface: "tone of voice",
+    route: "/shops/:shopId/setup/tone",
     steps: [
       {
         anchor: '[aria-label="Guidelines"]',
@@ -438,3 +467,13 @@ export const TOURS: Record<TourId, Tour> = {
 
 /** Every surface with a tour. The sweep and the table tests both walk this rather than a list. */
 export const TOUR_IDS = Object.keys(TOURS) as TourId[];
+
+/**
+ * Where a surface is, for a reader that has to go there.
+ *
+ * The one composition of a tour's route, so the sweep navigates to the address this table
+ * declares rather than to one somebody kept in step with it by hand.
+ */
+export function tourHref(id: TourId, ids: RouteIds): string {
+  return fillRoute(TOURS[id].route, ids);
+}

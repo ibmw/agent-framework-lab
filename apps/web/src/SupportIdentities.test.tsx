@@ -178,7 +178,7 @@ function renderAt(path: string) {
 
 describe("support identity workspace", () => {
   it("lists identities with their permission and publication state", async () => {
-    renderAt(`/shops/${SHOP_ID}/support-identities`);
+    renderAt("/lab/support-identities");
 
     expect(await screen.findByRole("heading", { name: "Support identities" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Northstar tier 1" })).toBeVisible();
@@ -204,7 +204,7 @@ describe("support identity workspace", () => {
         } satisfies SupportIdentityListResponse),
       ),
     );
-    renderAt(`/shops/${SHOP_ID}/support-identities`);
+    renderAt("/lab/support-identities");
     await screen.findByRole("link", { name: "Northstar tier 1" });
     const filters = within(screen.getByRole("group", { name: "Filter support identities" }));
 
@@ -219,7 +219,7 @@ describe("support identity workspace", () => {
   });
 
   it("puts each field's hint in that control's accessible description", async () => {
-    renderAt(`/shops/${SHOP_ID}/support-identities`);
+    renderAt("/lab/support-identities");
 
     const card = within(await screen.findByRole("region", { name: "New support identity" }));
     expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
@@ -231,7 +231,7 @@ describe("support identity workspace", () => {
   });
 
   it("shows why an order mutation without read access blocks publication", async () => {
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     expect(await screen.findByRole("heading", { name: "Northstar tier 1" })).toBeVisible();
     expect(screen.getByText(/acts on an order the identity is not allowed to read/)).toBeVisible();
@@ -243,7 +243,7 @@ describe("support identity workspace", () => {
   });
 
   it("says what a permission grants on the checkbox that grants it", async () => {
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
     const permissions = within(screen.getByRole("region", { name: "Permissions" }));
@@ -259,7 +259,7 @@ describe("support identity workspace", () => {
 
   it("grants a permission and saves the whole payload", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
     await user.click(screen.getByLabelText("Read orders — look up this customer's orders"));
@@ -274,13 +274,13 @@ describe("support identity workspace", () => {
   });
 
   it("names what publishing would freeze", async () => {
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     expect(await screen.findByText("Granted read_orders")).toBeVisible();
   });
 
   it("blocks publication while the permission gate is unmet", async () => {
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
 
@@ -290,7 +290,7 @@ describe("support identity workspace", () => {
 
   it("enters escalation conditions one at a time, refusing a repeat", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
     const conditions = within(screen.getByRole("group", { name: "Conditions" }));
@@ -317,7 +317,7 @@ describe("support identity workspace", () => {
   it("publishes a clean draft and reports the frozen version", async () => {
     const user = userEvent.setup();
     currentPreview = identityPreview({ publishable: true, issues: [] });
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
@@ -346,7 +346,7 @@ describe("editing a saved guidance note in place", () => {
     // payload: reading the baseline afterwards would compare the save to itself and the
     // assertion could not fail.
     const before = structuredClone(currentIdentity);
-    renderAt(`/shops/${SHOP_ID}/support-identities/${IDENTITY_ID}`);
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 
     const card = within(await screen.findByRole("region", { name: "Guidance" }));
     await user.click(card.getByRole("button", { name: "Edit Refunds" }));

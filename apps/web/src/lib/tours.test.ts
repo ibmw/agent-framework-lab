@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { glossaryTerm, parseGlossaryProse, referencedTerms } from "./glossary";
-import { chainPlacement, SETUP_CHAIN, SETUP_GUIDE_STEPS } from "./setupPath";
-import { TOUR_IDS, TOURS, tourSteps } from "./tours";
+import { chainPlacement, SETUP_CHAIN, SETUP_GUIDE_STEPS, stepHref } from "./setupPath";
+import { TOUR_IDS, TOURS, tourHref, tourSteps } from "./tours";
 
 /**
  * The tour table, held to what it claims.
@@ -59,6 +59,35 @@ describe("the tour table", () => {
     const named = /^[a-z]*\[(aria-label|data-tour)="[^"]+"\]$/;
     for (const [id, step] of STEPS) {
       expect(step.anchor, `${id}: ${step.anchor} is not a stable anchor`).toMatch(named);
+    }
+  });
+
+  it("names the route each surface is at, filled from the identifiers a route can carry", () => {
+    // The sweep in `tests/e2e/tour-anchors.spec.ts` navigates by this field, so a tour whose
+    // route is wrong is a tour swept on the wrong screen (ADR 0054).
+    const ids = { shopId: "s1", scenarioId: "r1", experimentId: "x1" };
+    for (const id of TOUR_IDS) {
+      expect(TOURS[id].route, `${id} does not say where it is`).toMatch(/^\/(shops|lab)\//);
+      expect(tourHref(id, ids), `${id} leaves a parameter unfilled`).not.toContain(":");
+    }
+    expect(tourHref("bench-setup", ids)).toBe("/lab/bench");
+    expect(tourHref("bench", ids)).toBe("/lab/bench/s1/x1");
+    expect(tourHref("snapshots", ids)).toBe("/shops/s1/scenarios/r1/snapshots");
+  });
+
+  it("puts each chain surface exactly where the chain sends a reader", () => {
+    // The defect this catches: a route moved on one of the two tables and not the other, so
+    // the guide links one way and the tour is swept on the other.
+    for (const id of TOUR_IDS) {
+      const chain = TOURS[id].chain;
+      if (chain === undefined) {
+        continue;
+      }
+      const step = SETUP_CHAIN.find((entry) => entry.id === chain.step);
+      expect(step, `${id} claims a chain step the chain does not have`).toBeDefined();
+      expect(tourHref(id, { shopId: "s1" }), `${id} is not the surface the chain links to`).toBe(
+        stepHref(step as (typeof SETUP_CHAIN)[number], "s1"),
+      );
     }
   });
 

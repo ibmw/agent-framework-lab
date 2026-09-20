@@ -15,6 +15,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
+import { NoCurrentShop, useLabWorkspace } from "../shell/LabWorkspace";
 
 const UNAVAILABLE = "Experiment history is unavailable.";
 const PAGE_SIZE = 20;
@@ -83,6 +84,15 @@ export function ExperimentHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [deriving, setDeriving] = useState<string | null>(null);
   const navigate = useNavigate();
+  // History is cross-shop by design (ADR 0034) and stays so: the lab's current shop narrows
+  // nothing here, and the filter below is URL-backed rather than seeded from a preference (ADR
+  // 0033). What the notice reports is therefore the lab's state and never this list's — which
+  // is why its words say what the top bar's switcher holds and what this filter does with it,
+  // and say nothing about how many runs are on screen. This notice renders on the lab's shop
+  // alone, and the list is narrowed by the URL alone; a sentence that mixed the two would be
+  // false at `?shop=…`, which is the state people actually share (ADR 0054).
+  const lab = useLabWorkspace();
+  const labShopMissing = !lab.loading && lab.currentShop === null;
 
   /**
    * Derive a new experiment from a row and open the evidence it produced.
@@ -97,7 +107,7 @@ export function ExperimentHistoryPage() {
       setError(null);
       try {
         const derived = await replayExperiment(experiment.shop_id, experiment.experiment_id);
-        navigate(`/shops/${experiment.shop_id}/bench/${derived.experiment_id}/results`);
+        navigate(`/lab/bench/${experiment.shop_id}/${derived.experiment_id}/results`);
       } catch (cause: unknown) {
         setError(describeApiError(cause, "This experiment could not be replayed."));
       } finally {
@@ -129,7 +139,7 @@ export function ExperimentHistoryPage() {
             version: arm.agent_configuration_latest_version ?? arm.agent_configuration_version,
           })),
         });
-        navigate(`/shops/${experiment.shop_id}/bench/${derived.experiment_id}/results`);
+        navigate(`/lab/bench/${experiment.shop_id}/${derived.experiment_id}/results`);
       } catch (cause: unknown) {
         setError(describeApiError(cause, "This experiment could not be forked."));
       } finally {
@@ -284,6 +294,11 @@ export function ExperimentHistoryPage() {
             ))}
           </select>
         </label>
+        {labShopMissing ? (
+          <div className="basis-full">
+            <NoCurrentShop what="the shop switcher in the top bar names none, and this filter does not follow it" />
+          </div>
+        ) : null}
         <label className={fieldLabelClasses}>
           Scenario
           <select
@@ -467,7 +482,7 @@ function HistoryRow({
   onFork: (experiment: ExperimentHistoryEntrySchema) => void;
   deriving: boolean;
 }) {
-  const bench = `/shops/${experiment.shop_id}/bench/${experiment.experiment_id}`;
+  const bench = `/lab/bench/${experiment.shop_id}/${experiment.experiment_id}`;
   const meaning = STATUSES[experiment.status];
   // What the row's fork would actually move. Nothing newer anywhere is nothing to fork onto.
   const newer = experiment.arms.some(
@@ -493,7 +508,7 @@ function HistoryRow({
             {experiment.derived_from.kind} of{" "}
             <Link
               className="text-lab-ink underline-offset-2 hover:underline"
-              to={`/shops/${experiment.shop_id}/bench/${experiment.derived_from.experiment_id}/results`}
+              to={`/lab/bench/${experiment.shop_id}/${experiment.derived_from.experiment_id}/results`}
             >
               {experiment.derived_from.label}
             </Link>

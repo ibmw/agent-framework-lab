@@ -123,17 +123,18 @@ consistently.
 | 7 — Guided setup and lab settings | The settings surface, the seed from it, per-surface tours, guide mode and the written guides retired. | ADR 0043–0049 |
 | UX — Forms that guide the operator | Hints, derived identifiers, enum labels, currencies at creation, typed controls, closed sets, edit-in-place, the unsaved-work guard. Slices 1–8 of the 13 September plan. | ADR 0050–0051, `docs/history/PLAN-UX-2026-09-13.md` |
 | UX — The refresh's pattern layer | Pine primary and the glyph vocabulary, the field row, the rail's metrics, filter chips, display type, search, control metrics, row copy. | `docs/history/workspace-refresh-pattern-slices.md` |
-| **8 — The workspace becomes the prototype** | **Open.** Two modes with their rails, the top bar, creation as a page, the overview, documents, settings in three zones, the model connection, and the behaviour the prototype specifies everywhere. | ADR 0052–0053 accepted; slices in `docs/PLAN-UX.md` |
+| **8 — The workspace becomes the prototype** | **Open.** Two modes with their rails, the top bar, creation as a page, the overview, documents, settings in three zones, the model connection, and the behaviour the prototype specifies everywhere. | ADR 0052–0054 accepted; slices in `docs/PLAN-UX.md` |
 
 ## Milestone 8 — The workspace becomes the prototype
 
 Bring `apps/web` to the whole-workspace design handed over on 19 September 2026
 (`tmp/design-frames/Workspace.html`), on the primitives the workspace already has and without a
 new UI dependency. `docs/PLAN-UX.md` is the authority for its scope, order and checks. The
-lab-as-a-mode slice writes an ADR before its code, because it moves every lab route out of shop
-scope. Acceptance is that plan's, plus: nothing about progress is stored (ADR 0044, ADR 0045
-stand), the connection never enters a fingerprint (ADR 0052), and the eleven Playwright journeys
-pass on the new routes without the application having been bent to them.
+lab-as-a-mode slice wrote its ADR before its code, because it moves every lab route out of shop
+scope: ADR 0054 is the route scheme every later slice is written against. Acceptance is that
+plan's, plus: nothing about progress is stored (ADR 0044, ADR 0045 stand), the connection never
+enters a fingerprint (ADR 0052), and the eleven Playwright journeys pass on the new routes
+without the application having been bent to them.
 
 ## Deferred decision triggers
 

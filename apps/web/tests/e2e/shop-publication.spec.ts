@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./support/e2e";
+import { openSection } from "./support/navigate";
 
 /**
  * Milestone 1 Slice 2 acceptance evidence: an author publishes a shop containing a product
@@ -13,12 +14,6 @@ function card(page: Page, name: string) {
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
-}
-
-async function openSection(page: Page, link: string, heading: string) {
-  // Scoped to the rail: the guide strip on the shop home links to the same sections by name.
-  await page.getByLabel("Shop workspace").getByRole("link", { name: link }).click();
-  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
 }
 
 test("an author publishes a shop with size and colour variants and reads the frozen version", async ({
@@ -132,7 +127,7 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await saveDraft(page);
 
   // Publish the whole shop, then read the frozen version back.
-  await openSection(page, "Home", "Home");
+  await openSection(page, "Overview", "Home");
   const publish = page.getByRole("button", { name: "Publish v1" });
   await expect(publish).toBeEnabled();
   await publish.click();
@@ -173,7 +168,7 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(saved.getByText("despatch").first()).toBeVisible();
   await saveDraft(page);
 
-  await openSection(page, "Home", "Home");
+  await openSection(page, "Overview", "Home");
   await expect(card(page, "Draft changes").getByText("1", { exact: true })).toBeVisible();
   const freeze = card(page, "What publishing would freeze");
   await expect(freeze.getByRole("listitem")).toHaveCount(1);

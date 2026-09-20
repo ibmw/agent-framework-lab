@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./support/e2e";
+import { openSection } from "./support/navigate";
 
 /**
  * Milestone 2 order-fixture acceptance evidence: an author builds the wrong-address
@@ -14,12 +15,6 @@ function card(page: Page, name: string) {
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
-}
-
-async function openSection(page: Page, link: string, heading: string) {
-  // Scoped to the rail: the guide strip on the shop home links to the same sections by name.
-  await page.getByLabel("Shop workspace").getByRole("link", { name: link }).click();
-  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
 }
 
 async function addAddress(

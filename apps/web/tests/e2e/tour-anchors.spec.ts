@@ -1,5 +1,5 @@
 import { SETUP_CHAIN, stepHref } from "../../src/lib/setupPath";
-import { TOUR_IDS, TOURS, type TourId, tourSteps } from "../../src/lib/tours";
+import { TOUR_IDS, TOURS, type TourId, tourHref, tourSteps } from "../../src/lib/tours";
 import { test as base, expect } from "./support/e2e";
 import { type BuiltLab, buildLab } from "./support/lab";
 import { webOrigin } from "./support/stack";
@@ -14,33 +14,26 @@ import { webOrigin } from "./support/stack";
  * step; and a step declared in `src/lib/tours.ts` joins this sweep the day it is declared, because
  * the cases below are that table's rows rather than a list kept beside them (ADR 0023's shape).
  *
- * The route and the state each surface needs are deliberately *here* rather than in the product
- * module, keyed exhaustively by the tour identifier, so a tour added without a way to reach it
- * fails to compile instead of being silently swept over.
+ * The state each surface needs is built once below; the route each one is at comes from the tour
+ * table itself, so a tour declared without a way to reach it fails to compile instead of being
+ * silently swept over (ADR 0054).
  */
 
-const SURFACES: Record<TourId, (lab: BuiltLab) => string> = {
-  "shop-home": (lab) => `/shops/${lab.shopId}`,
-  products: (lab) => `/shops/${lab.shopId}/products`,
-  "shop-details": (lab) => `/shops/${lab.shopId}/setup/identity`,
-  "policies-and-faq": (lab) => `/shops/${lab.shopId}/setup/policies`,
-  "support-guidelines": (lab) => `/shops/${lab.shopId}/setup/support`,
-  "tone-of-voice": (lab) => `/shops/${lab.shopId}/setup/tone`,
-  customers: (lab) => `/shops/${lab.shopId}/customers`,
-  orders: (lab) => `/shops/${lab.shopId}/orders`,
-  tickets: (lab) => `/shops/${lab.shopId}/tickets`,
-  "objective-blocks": (lab) => `/shops/${lab.shopId}/objective-blocks`,
-  "mutation-blocks": (lab) => `/shops/${lab.shopId}/mutation-blocks`,
-  scenarios: (lab) => `/shops/${lab.shopId}/scenarios`,
-  scenario: (lab) => `/shops/${lab.shopId}/scenarios/${lab.scenarioId}`,
-  snapshots: (lab) => `/shops/${lab.shopId}/scenarios/${lab.scenarioId}/snapshots`,
-  "support-identities": (lab) => `/shops/${lab.shopId}/support-identities`,
-  "agent-configurations": (lab) => `/shops/${lab.shopId}/agent-configurations`,
-  judges: (lab) => `/shops/${lab.shopId}/judges`,
-  "bench-setup": (lab) => `/shops/${lab.shopId}/bench`,
-  bench: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}`,
-  results: (lab) => `/shops/${lab.shopId}/bench/${lab.experimentId}/results`,
-};
+/**
+ * Where each surface is, composed from the tour table's own `route` rather than restated.
+ *
+ * The addresses used to live here, keyed exhaustively by tour identifier, so that a tour added
+ * without a way to reach it failed to compile. `lib/tours.ts` names the route now (ADR 0054),
+ * which is the same guarantee one step earlier: a tour cannot be declared without one, and the
+ * chain assertion below holds the ten chain surfaces to the chain's own answer.
+ */
+function surfaceHref(id: TourId, lab: BuiltLab): string {
+  return tourHref(id, {
+    shopId: lab.shopId,
+    scenarioId: lab.scenarioId,
+    experimentId: lab.experimentId,
+  });
+}
 
 /**
  * The whole chain, built once and shared by every case in this worker.
@@ -99,7 +92,7 @@ test("mounts each chain step on the surface the chain sends a reader to", () => 
       throw new Error(`${id} claims a chain step the chain does not have`);
     }
     expect(
-      SURFACES[id]({ shopId: SHOP } as BuiltLab),
+      tourHref(id, { shopId: SHOP }),
       `${id} carries the ${chain.step} step but is not the surface the guide links to`,
     ).toBe(stepHref(step, SHOP));
   }
@@ -111,7 +104,7 @@ for (const id of TOUR_IDS) {
     lab,
   }) => {
     const tour = TOURS[id];
-    await page.goto(SURFACES[id](lab));
+    await page.goto(surfaceHref(id, lab));
 
     // The surface offers the tour at all: a tour declared for a screen that never mounts its
     // control is as stale as one pointing at a control that moved.

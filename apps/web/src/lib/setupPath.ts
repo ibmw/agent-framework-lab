@@ -33,8 +33,12 @@ export interface SetupStepShape {
   id: SetupStepId;
   /** The word the guide's heading shows. */
   label: string;
-  /** The surface the work is done on, relative to a shop. Empty for the shop's own home. */
-  surface: string;
+  /**
+   * The route the work is done on, as a pattern. Five of the ten steps are lab surfaces and
+   * carry no shop at all since ADR 0054, so this is a whole path rather than a segment hung
+   * off `/shops/:shopId` — a base that is no longer true of half the chain.
+   */
+  route: string;
   /** What a link to that surface is called, so a reader is never sent to one place under two names. */
   linkLabel: string;
   /**
@@ -54,7 +58,7 @@ export const SETUP_CHAIN = [
   {
     id: "shop",
     label: "Shop",
-    surface: "",
+    route: "/shops/:shopId",
     linkLabel: "Open the shop's home",
     publishes: true,
     terms: ["shop", "definition"],
@@ -62,7 +66,7 @@ export const SETUP_CHAIN = [
   {
     id: "customer",
     label: "Customer",
-    surface: "customers",
+    route: "/shops/:shopId/customers",
     linkLabel: "Open customers",
     publishes: true,
     terms: ["customer-profile", "ticket"],
@@ -70,7 +74,7 @@ export const SETUP_CHAIN = [
   {
     id: "order",
     label: "Order",
-    surface: "orders",
+    route: "/shops/:shopId/orders",
     linkLabel: "Open orders",
     publishes: false,
     terms: ["order", "sandbox-snapshot"],
@@ -78,7 +82,7 @@ export const SETUP_CHAIN = [
   {
     id: "ticket",
     label: "Ticket",
-    surface: "tickets",
+    route: "/shops/:shopId/tickets",
     linkLabel: "Open tickets",
     publishes: true,
     terms: ["ticket"],
@@ -86,7 +90,7 @@ export const SETUP_CHAIN = [
   {
     id: "blocks",
     label: "Blocks",
-    surface: "objective-blocks",
+    route: "/lab/objective-blocks",
     linkLabel: "Open objective blocks",
     publishes: true,
     terms: ["objective-block", "mutation-block", "scenario"],
@@ -94,7 +98,7 @@ export const SETUP_CHAIN = [
   {
     id: "scenario",
     label: "Scenario",
-    surface: "scenarios",
+    route: "/shops/:shopId/scenarios",
     linkLabel: "Open scenarios",
     publishes: true,
     terms: ["scenario", "objective-block", "mutation-block"],
@@ -102,7 +106,7 @@ export const SETUP_CHAIN = [
   {
     id: "support-identity",
     label: "Support identity",
-    surface: "support-identities",
+    route: "/lab/support-identities",
     linkLabel: "Open support identities",
     publishes: true,
     terms: ["support-identity", "shop"],
@@ -110,7 +114,7 @@ export const SETUP_CHAIN = [
   {
     id: "agent-configurations",
     label: "Agent configurations",
-    surface: "agent-configurations",
+    route: "/lab/agent-configurations",
     linkLabel: "Open agent configurations",
     publishes: true,
     terms: ["agent-configuration", "support-identity", "run"],
@@ -118,7 +122,7 @@ export const SETUP_CHAIN = [
   {
     id: "judge",
     label: "Judge",
-    surface: "judges",
+    route: "/lab/judges",
     linkLabel: "Open judges",
     publishes: true,
     terms: ["judge-configuration", "evaluation", "objective-block"],
@@ -126,7 +130,7 @@ export const SETUP_CHAIN = [
   {
     id: "experiment",
     label: "Experiment",
-    surface: "bench",
+    route: "/lab/bench",
     linkLabel: "Open the bench",
     publishes: false,
     terms: ["experiment", "sandbox-snapshot", "participant-driver"],
@@ -134,14 +138,44 @@ export const SETUP_CHAIN = [
 ] as const satisfies readonly SetupStepShape[];
 
 /**
- * The route a step's work is done on, inside one shop.
+ * The identifiers a route pattern in this application can ask for.
+ *
+ * Three, because three is what the routes carry: the shop, the recipe and the run. A pattern
+ * naming anything else is a mistake this refuses rather than renders.
+ */
+export type RouteParam = "shopId" | "scenarioId" | "experimentId";
+
+export type RouteIds = { shopId: string } & Partial<Record<RouteParam, string>>;
+
+function isRouteParam(name: string): name is RouteParam {
+  return name === "shopId" || name === "scenarioId" || name === "experimentId";
+}
+
+/**
+ * One substitution of a route pattern, shared by the chain and by the tour table.
+ *
+ * Both name surfaces by route and both are read by the anchor sweep, so a second spelling of
+ * "replace the parameters" is a second place for the two to come to disagree.
+ */
+export function fillRoute(pattern: string, ids: RouteIds): string {
+  return pattern.replaceAll(/:([A-Za-z]+)/g, (_match, name: string) => {
+    const value = isRouteParam(name) ? ids[name] : undefined;
+    /* v8 ignore next 3 -- a pattern is a literal in one of two tables, both swept against it */
+    if (value === undefined) {
+      throw new Error(`${pattern} needs ${name}`);
+    }
+    return value;
+  });
+}
+
+/**
+ * The route a step's work is done on.
  *
  * One composition of the path, so a tour that names a step and the sweep that reaches it agree
  * on the surface the chain actually names.
  */
 export function stepHref(step: SetupStepShape, shopId: string): string {
-  const base = `/shops/${shopId}`;
-  return step.surface === "" ? base : `${base}/${step.surface}`;
+  return fillRoute(step.route, { shopId });
 }
 
 /**

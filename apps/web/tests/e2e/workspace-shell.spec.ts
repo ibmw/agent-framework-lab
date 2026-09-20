@@ -13,11 +13,16 @@ import { expect, test } from "./support/e2e";
 /** Short enough that any real section overflows it. */
 const VIEWPORT = { width: 1280, height: 620 };
 
+/**
+ * Rail label, then the heading it lands on. The rail says *Overview* where the page still says
+ * *Home*: ADR 0054 renamed the entry and left the page's composition to its own slice. Support
+ * guidelines is no longer on the rail at all — the prototype draws four setup entries, and
+ * Slice 16 folds guidelines into the documents table.
+ */
 const SECTIONS = [
-  ["Home", "Home"],
+  ["Overview", "Home"],
   ["Customers", "Customers"],
   ["Policies & FAQ", "Policies & FAQ"],
-  ["Support guidelines", "Support guidelines"],
   ["Tone of voice", "Tone of voice"],
   ["Shop details", "Shop details"],
   ["Orders", "Orders"],

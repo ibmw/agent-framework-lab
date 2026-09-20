@@ -114,7 +114,7 @@ export function ShopWorkspace() {
 
   if (editor.loading) {
     return (
-      <AppShell shops={shops} currentShopId={shopId}>
+      <AppShell shops={shops} currentShopId={shopId} mode="shop">
         <p className="text-sm text-admin-muted">Loading shop…</p>
       </AppShell>
     );
@@ -131,7 +131,7 @@ export function ShopWorkspace() {
   }
 
   return (
-    <AppShell shops={shops} currentShopId={shopId}>
+    <AppShell shops={shops} currentShopId={shopId} mode="shop">
       <WorkspaceContext.Provider
         value={{
           shopId,

@@ -239,7 +239,7 @@ beforeEach(() => {
 afterAll(() => server.close());
 
 function renderHistory(search = "") {
-  return renderApp(`/shops/${SHOP_ID}/history${search}`);
+  return renderApp(`/lab/history${search}`);
 }
 
 function lastAsked(): URLSearchParams {
@@ -301,11 +301,11 @@ describe("experiment history", () => {
 
     expect(within(row).getByRole("link", { name: "View evidence" })).toHaveAttribute(
       "href",
-      `/shops/${OTHER_SHOP_ID}/bench/${RUNNING_ID}/results`,
+      `/lab/bench/${OTHER_SHOP_ID}/${RUNNING_ID}/results`,
     );
     expect(within(row).getByRole("link", { name: "Open live bench" })).toHaveAttribute(
       "href",
-      `/shops/${OTHER_SHOP_ID}/bench/${RUNNING_ID}`,
+      `/lab/bench/${OTHER_SHOP_ID}/${RUNNING_ID}`,
     );
   });
 
@@ -324,7 +324,7 @@ describe("experiment history", () => {
 
     expect(
       within(derived).getByRole("link", { name: "Prompt A against prompt B" }),
-    ).toHaveAttribute("href", `/shops/${SHOP_ID}/bench/${FINISHED_ID}/results`);
+    ).toHaveAttribute("href", `/lab/bench/${SHOP_ID}/${FINISHED_ID}/results`);
     // Provenance is on the derived row alone: the run it came from is not a replay of
     // anything, and a marker on both would make the pair unreadable.
     expect(within(source).queryByText(/^replay of/)).toBeNull();
@@ -550,12 +550,56 @@ describe("experiment history", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
-  it("is reachable from the workspace rail", async () => {
+  it("is reachable from the lab's rail, and carries no shop in its address", async () => {
+    // History has listed every run in the lab since ADR 0034, and it is now addressed the way
+    // it reads: outside any one shop (ADR 0054).
     renderHistory();
     await screen.findByRole("table");
 
     expect(
-      within(screen.getByLabelText("Shop workspace")).getByRole("link", { name: "History" }),
-    ).toHaveAttribute("href", `/shops/${SHOP_ID}/history`);
+      within(screen.getByLabelText("Experiment lab workspace")).getByRole("link", {
+        name: "History",
+      }),
+    ).toHaveAttribute("href", "/lab/history");
+  });
+
+  it("says the lab has no current shop, and says only what is true of the top bar", async () => {
+    // The notice reports the lab's state and never this list's. It renders on the lab's shop
+    // alone; the narrowing is the URL's (ADR 0033). It must therefore not describe how many
+    // runs are on screen, and it must name the control it is about — this page has a Shop
+    // filter of its own, and the top bar's switcher carries the same accessible name.
+    renderHistory();
+    await screen.findByRole("table");
+
+    const notice = screen.getByText(/The lab has no current shop/);
+    expect(notice).toBeVisible();
+    expect(notice).toHaveTextContent("the shop switcher in the top bar names none");
+    expect(notice).toHaveTextContent("this filter does not follow it");
+    expect(screen.getByRole("link", { name: "Open a shop" })).toHaveAttribute("href", "/shops");
+
+    // And the filter itself is untouched by the notice: every shop with a run is offered.
+    const filter = within(screen.getByRole("form", { name: "Narrow history" })).getByRole(
+      "combobox",
+      { name: "Shop" },
+    );
+    expect(filter).toHaveValue("");
+    expect(within(filter).getByRole("option", { name: "All shops" })).toBeInTheDocument();
+  });
+
+  it("does not claim the list is unnarrowed when the URL has narrowed it", async () => {
+    // The state people actually share: a link kept at the narrowing the finding was found in
+    // (ADR 0033), opened in a browser with no remembered shop. The notice renders here, and a
+    // sentence about how much of the lab is on screen would be false under a one-shop list.
+    renderHistory(`?shop=${SHOP_ID}`);
+    await screen.findByRole("table");
+
+    const notice = screen.getByText(/The lab has no current shop/);
+    expect(notice).toBeVisible();
+    expect(notice).not.toHaveTextContent(/every run in the lab/);
+    expect(
+      within(screen.getByRole("form", { name: "Narrow history" })).getByRole("combobox", {
+        name: "Shop",
+      }),
+    ).toHaveValue(SHOP_ID);
   });
 });

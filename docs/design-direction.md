@@ -93,7 +93,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Filter chips on Tickets, the block libraries, Policies & FAQ | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked; Slice 16 gives documents one |
 | Model on the connection, masked key | drawn | neither | ADR 0052 |
 | Setup checklist | drawn on Shop details | not built | ADR 0044, ADR 0045 |
-| Preferences | seven rows | two now, a third with the confirm slice | a preference no surface reads is not a slice |
+| Preferences | seven rows | two now, a third read by `/` and written in Slice 18, a fourth with the confirm slice | a preference no surface reads is not a slice |
+| Support identities in shop scope | drawn on both rails, filed under Shop scope | one lab address on both rails | there is one library; two routes rendering one list would make the mode depend on which door was used (ADR 0054) |
 
 Two items the handoff names are not built and not refused: Georgia on the results' stat
 numerals, and the `open` button verb and `document` chip kind. Each lands with the surface that
@@ -103,19 +104,24 @@ first draws it.
 
 The values are in `shell/AppShell.tsx`; the rules are these.
 
-- **Two modes.** *Shop fixture* with the shop's rail and *Experiment lab* with a rail of Bench,
-  History and a Library. Lab routes live outside shop scope, experiment pages carry their shop
-  in the path, and the lab keeps a current shop through the switcher, present in both modes.
-  *Planned*, Slice 9, under an ADR written first; until then the lab is a section of the shop's
-  rail.
+- **Two modes** (ADR 0054). *Shop fixture* with the shop's rail and *Experiment lab* with a rail
+  of Bench, History and a Library. Lab routes live outside shop scope under `/lab`, the two
+  surfaces that read one run carry its shop in the path, every old shop-scoped lab path
+  redirects and carries its shop into the remembered-shop preference, and the lab keeps a
+  current shop through the switcher, present in both modes — navigating in shop mode, setting
+  the lab's shop in lab mode. A lab surface that needs a shop and has none says so and links to
+  the shops index; it never guesses. `/` resolves through the *where the app opens* preference,
+  defaulting to the remembered shop.
 - **The rail** collapses to a strip whose rows keep their accessible names; the collapsed state
-  is a browser preference and never a database row (ADR 0044). It is hidden on the shops index
-  and on Settings. `nav[aria-label="Shop workspace"]` is what every spec reaches it by and does
-  not move. The foot control's name, copy and tooltip are one string. Counts per entry:
-  *planned*, Slice 11.
+  is a browser preference and never a database row (ADR 0044), and it is one preference for both
+  rails. It is hidden on the shops index and on Settings. `nav[aria-label="Shop workspace"]` is
+  what every spec reaches it by and does not move; the lab's is
+  `nav[aria-label="Experiment lab workspace"]`. The foot control's name, copy and tooltip are one
+  string. Counts per entry: *planned*, Slice 11.
 - **The top bar** carries the title, the shop switcher as a panel, the mode tabs, *Show me
-  around* and *Settings*, lit while its page is open. *Planned*, Slice 10; today the switcher is
-  a native select and the tour control sits in each page header.
+  around* and *Settings*, lit while its page is open. *Planned*, Slice 10; today the mode tabs
+  are two plain links — the lab has to be reachable for it to be a mode — the switcher is a
+  native select, and the tour control sits in each page header.
 - **Settings is three zones** told apart by surface: per-browser preferences, saved on change;
   the lab-wide model connection with explicit Save and Discard (ADR 0052); a collapsed read-only
   runtime zone with a "To change it:" line (ADR 0044's character). The seed is its own zone

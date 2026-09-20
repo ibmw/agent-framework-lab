@@ -457,7 +457,7 @@ describe("the fast path", () => {
     expect(posted).toBe(1);
     expect(await card.findByRole("link", { name: "Read the comparison" })).toHaveAttribute(
       "href",
-      `/shops/${SHOP_ID}/bench/${SEEDED.experiment_id}/results`,
+      `/lab/bench/${SHOP_ID}/${SEEDED.experiment_id}/results`,
     );
   });
 

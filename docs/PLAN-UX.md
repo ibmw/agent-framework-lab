@@ -12,7 +12,8 @@ the design it was handed on 19 September 2026: the whole-workspace prototype in
 order, `AGENTS.md`, `docs/product-direction.md`, `docs/architecture.md`, `docs/PLAN.md`'s delivery
 rules, `docs/design-direction.md` (its *Authority* section settles which authority governs where the
 prototype, the README and the codebase disagree), then the slice's brief below and the ADRs it
-names. ADR 0052 and ADR 0053 are already accepted and precede the slices that implement them.
+names. ADR 0052 and ADR 0053 are already accepted and precede the slices that implement them;
+ADR 0054 is the route scheme every slice below is written against.
 
 The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
 
@@ -38,18 +39,21 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
   the backend and the consumer together.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
-  once; ADR 0052 and ADR 0053 decide the connection and the provider. Where a slice takes a
+  once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
+  modes and the routes. Where a slice takes a
   decision of its own — a route scheme, a confirm policy, a preference — it writes an ADR.
 - **Accessible names do not move casually.** `nav[aria-label="Shop workspace"]`, the tour
-  anchors and every button's name are what eleven Playwright specs reach the app by. A slice that
-  renames one lists the specs it touched.
+  anchors and every button's name are what eleven Playwright specs reach the app by — as is
+  `nav[aria-label="Experiment lab workspace"]` beside it. A slice that renames one lists the
+  specs it touched.
 
 ## Decisions already taken
 
 Three things the prototype draws are decided outside this plan, so that no slice has to:
 
-- **The lab is a mode, and the routes say so** — Slice 9 writes the ADR; the route scheme, the
-  current-shop rule and the redirects are in its bullets.
+- **The lab is a mode, and the routes say so** — ADR 0054: the two modes, the `/lab` route
+  scheme, the current-shop rule, the redirects, and what the shop rail lost. Landed; every
+  slice below is written against the routes it left behind.
 - **The Setup checklist is not built**, and the overview's readiness card reads one listing —
   `docs/design-direction.md`, *Navigation and chrome*.
 - **Two of the five proposed preferences earn a consumer**, and the logo is the optional last
@@ -61,14 +65,13 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Slice 9 first and alone: it moves routes, and every later slice, spec and tour anchor is written
-against the routes it leaves behind. Slice 10 follows it because the top bar draws the mode tabs
-Slice 9 creates. Slices 12, 13 and 14 next, because they change what every index page is and what
-every journey clicks through to create; they are independent of each other. Slices 11, 15, 16,
-17 and 18 are then independent and can proceed in parallel. Slice 19 is the backend milestone and
-runs beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B
-except that 25 waits for 12–14, since the sticky header is on the pages they create. Slices 26 and
-27 close the milestone, and 28 is optional.
+Slice 10 is next: the lab-as-a-mode slice moved every lab route and left the mode tabs as two
+plain links, and the top bar is what they belong in. Slices 12, 13 and 14 follow, because they
+change what every index page is and what every journey clicks through to create; they are
+independent of each other. Slices 11, 15, 16, 17 and 18 are then independent and can proceed in
+parallel. Slice 19 is the backend milestone and runs beside Group B; Slice 20 needs it. Group C's
+slices 21–25 depend on nothing in Group B except that 25 waits for 12–14, since the sticky header
+is on the pages they create. Slices 26 and 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -82,44 +85,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group A — Chrome and information architecture
-
-#### Slice 9 — The lab is a mode
-
-- [ ] Write the ADR: two modes, the route scheme above, the current-shop rule, the redirects, and
-  what the shop rail loses. Written before the code, as ADR 0052 was.
-- [ ] Move the routes. `/lab/bench`, `/lab/bench/:shopId/:experimentId` and its `results`,
-  `timeline` and `traces` children, `/lab/history`, `/lab/agent-configurations(/:id)`,
-  `/lab/judges(/:id)`, `/lab/support-identities(/:id)`, `/lab/objective-blocks(/:id)`,
-  `/lab/mutation-blocks(/:id)`. Every old `/shops/:shopId/…` lab path redirects to its new one,
-  carrying the shop into the remembered-shop preference on the way. Scenario snapshots stay in
-  shop scope.
-- [ ] A `LabWorkspace` shell beside `ShopWorkspace`: the same `AppShell`, the lab rail from a
-  second section table, the current shop resolved from the preference against the shop list, and
-  a bench that says which shop it composes for. With no shop remembered, the bench and the
-  history's shop filter say so and link to the shops index; the library screens need none.
-- [ ] The shop rail becomes the prototype's: Overview, Products, Orders, Customers, Tickets,
-  Scenarios; *Shop setup*: Policies & FAQ, Support identities, Tone of voice, Shop details. The
-  cross-shop section goes, the block libraries leave the Scenarios nest for the lab's Library,
-  and Support identities is on both rails because the prototype draws it on both. "Home" is
-  renamed "Overview" here and nowhere else in this slice — the page's composition is Slice 15's.
-- [ ] `/` decides where the app opens from the *Where the app opens* preference — the remembered
-  shop, the shops index, or the lab — defaulting to the remembered shop; the control for it
-  arrives in Slice 18 and the default is the only path until then.
-- [ ] The tours follow their surfaces: `lib/tours.ts` names each surface by route, and the
-  `tour-anchors` spec holds every step to one visible element on the new path.
-
-Frames: `Workspace.dc.html` :4753 and :4822 for the two rails; the *Chrome* section of the
-README for the rail's hidden states.
-
-Branch: `feat/lab-mode`. Checks: `App.test.tsx` for the route tree, the redirects and the landing
-rule; `AppShell.test.tsx` for both rails and every collapsed destination still named; every
-Playwright spec, because every one navigates and `workspace-shell`, `tour`, `tour-anchors`,
-`experiment-start`, `agent-configuration` and `block-library` address lab routes by path.
-
-Slice evidence: an operator on Northstar's Overview clicks *Experiment lab* and stands on the
-bench with Northstar's published scenario offered and the rail reading Bench, History, Library;
-a bookmarked `/shops/…/bench/…/results` still opens the same results. A new operator with no shop
-lands on the shops index and is not offered a bench that would compose for nobody.
 
 #### Slice 10 — The top bar
 
@@ -187,8 +152,8 @@ order makes it thirteen without a reload.
   lines, and the reference `nextReference` prefills.
 - [ ] New customer (`/shops/:id/customers/new`), and *Attach existing* stays on the index as the
   prototype's secondary button.
-- [ ] New identity (`/shops/:id/support-identities/new`) — drawn in shop scope and reached from
-  both rails.
+- [ ] New identity (`/lab/support-identities/new`): the library left shop scope with ADR 0054
+  and is reached from both rails, so its create page is the lab's too.
 - [ ] Products: no page. "New product" appends a draft product and opens its editor, as the
   prototype does (:6931); the side card goes.
 - [ ] Every one of the five indexes loses its side card, gains the primary "New …" button in the
@@ -284,8 +249,9 @@ product.
   FAQ: kind chips (Policies, Guidelines, FAQ, Required by a scenario — the last computed from the
   scenarios listing's context documents), the search field, and "New document" opening a
   document editor page (`/shops/:id/setup/documents/:kind/:docId`) with the kind as a select.
-- [ ] `/setup/support` redirects to the documents table filtered to Guidelines; the rail entry
-  goes (Slice 9 already draws the prototype's four).
+- [ ] `/setup/support` redirects to the documents table filtered to Guidelines. Its rail entry
+  has already gone — the rail draws the prototype's four setup entries (ADR 0054) — so the page
+  is reachable by address alone until this lands.
 - [ ] The three payload lists stay as they are: this is a presentation of `content.policies`,
   `content.faq` and `content.support_guidelines`, not a merge of them, so nothing in the shop's
   canonical document or its fingerprint moves.
@@ -320,7 +286,8 @@ without first choosing another, and can read which configuration would notice.
 - [ ] `LabSettingsPage` becomes the prototype's: a centred 1024px column, "← Back to workspace"
   above the title returning to what was underneath, and three zones distinguished by surface.
 - [ ] *Your preferences* on white, saved on change, with Reset to defaults: where the app opens
-  (three options, feeding Slice 9's landing rule), last-visited shop with Forget, rail starts
+  (three options, written into the preference `/` already reads, ADR 0054), last-visited
+  shop with Forget, rail starts
   collapsed, timestamps relative or absolute (consumed by `formatTimestamp` everywhere). The
   other three rows are not drawn — see *Decisions the prototype forces*.
 - [ ] *Runtime configuration · Read only* as a collapsed disclosure: grey `#f6f7f8` cards with a

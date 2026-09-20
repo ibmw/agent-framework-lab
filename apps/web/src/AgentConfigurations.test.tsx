@@ -249,8 +249,31 @@ let currentPreview = preview();
 let savedPayloads: Array<Record<string, unknown>> = [];
 let previewShopIds: Array<string | null> = [];
 
+const SHOP_LISTING: ShopListResponse = {
+  shops: [
+    {
+      shop_id: SHOP_ID,
+      name: "Northstar Outfitters",
+      slug: "northstar",
+      updated_at: "2026-08-25T12:05:00+00:00",
+      latest_published_version: 3,
+      published_version_count: 3,
+    },
+    {
+      shop_id: OTHER_SHOP_ID,
+      name: "Southline Supply",
+      slug: "southline",
+      updated_at: "2026-08-25T12:05:00+00:00",
+      latest_published_version: 1,
+      published_version_count: 1,
+    },
+  ],
+};
+
 const server = setupServer(
-  http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
+  // The lab resolves its current shop against this list rather than trusting the remembered
+  // identifier, so a shop the lab does not hold is not a current shop (ADR 0054).
+  http.get("*/api/v1/shops", () => HttpResponse.json(SHOP_LISTING)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
       shop_id: SHOP_ID,
@@ -343,6 +366,7 @@ const server = setupServer(
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
+  window.localStorage.clear();
   server.resetHandlers();
   currentConfiguration = CONFIGURATION;
   currentPreview = preview();
@@ -357,7 +381,7 @@ function renderAt(path: string) {
 
 describe("agent configuration workspace", () => {
   it("lists configurations with their framework, model, and publication state", async () => {
-    renderAt(`/shops/${SHOP_ID}/agent-configurations`);
+    renderAt("/lab/agent-configurations");
 
     expect(await screen.findByRole("heading", { name: "Agent configurations" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Frontline single agent" })).toBeVisible();
@@ -386,7 +410,7 @@ describe("agent configuration workspace", () => {
         } satisfies AgentConfigurationListResponse),
       ),
     );
-    renderAt(`/shops/${SHOP_ID}/agent-configurations`);
+    renderAt("/lab/agent-configurations");
     await screen.findByRole("link", { name: "Frontline single agent" });
     const filters = within(screen.getByRole("group", { name: "Filter agent configurations" }));
 
@@ -401,7 +425,7 @@ describe("agent configuration workspace", () => {
   });
 
   it("puts each field's hint in that control's accessible description", async () => {
-    renderAt(`/shops/${SHOP_ID}/agent-configurations`);
+    renderAt("/lab/agent-configurations");
 
     const card = within(await screen.findByRole("region", { name: "New agent configuration" }));
     expect(await card.findByLabelText("Name")).toHaveAccessibleDescription(
@@ -414,7 +438,7 @@ describe("agent configuration workspace", () => {
 
   it("constrains the temperature and puts its range and its exactness under the field", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const temperature = await screen.findByLabelText("Temperature");
     expect(temperature).toHaveAttribute("inputmode", "decimal");
@@ -432,7 +456,7 @@ describe("agent configuration workspace", () => {
   });
 
   it("repeats the pinning sentence on the editor", async () => {
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
     expect(
       await screen.findByText(
         /publishing pins the support-identity version a configuration names/i,
@@ -446,7 +470,7 @@ describe("agent configuration workspace", () => {
         HttpResponse.json({ ...RESOURCES, support_identities: [] }),
       ),
     );
-    renderAt(`/shops/${SHOP_ID}/agent-configurations`);
+    renderAt("/lab/agent-configurations");
     expect(
       await screen.findByText(
         /publishing pins the support-identity version a configuration names/i,
@@ -456,7 +480,7 @@ describe("agent configuration workspace", () => {
   });
 
   it("renders each prompt variable as a chip carrying its resolved value", async () => {
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const resolved = await screen.findByRole("region", { name: "Resolved prompt" });
     expect(within(resolved).getByText("shop.name: Northstar Outfitters")).toBeVisible();
@@ -467,7 +491,7 @@ describe("agent configuration workspace", () => {
   });
 
   it("explains why a tool-discovered fact cannot be injected into the prompt", async () => {
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     expect(
       await screen.findByText(/customer, order, and ticket facts are discovered through tools/),
@@ -478,7 +502,7 @@ describe("agent configuration workspace", () => {
 
   it("inserts a variable into the prompt at the caret", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const prompt = await screen.findByLabelText("Prompt template");
     await user.clear(prompt);
@@ -490,7 +514,7 @@ describe("agent configuration workspace", () => {
 
   it("inserts a variable mid-text and leaves the caret after the chip", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const prompt = await screen.findByLabelText("Prompt template");
     await user.clear(prompt);
@@ -507,7 +531,7 @@ describe("agent configuration workspace", () => {
   });
 
   it("marks a write tool the support identity could never be authorized to use", async () => {
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const binding = await screen.findByLabelText(/orders.propose_address_change/);
     expect(binding).not.toBeChecked();
@@ -516,7 +540,11 @@ describe("agent configuration workspace", () => {
 
   it("resolves the prompt against the shop the author selects", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    // With a *different* shop current, so that the author's pick is held against the lab's
+    // preference rather than against nothing: the pick wins because it is first in the
+    // precedence, not because there is no competitor (ADR 0054).
+    window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const resolved = await screen.findByRole("region", { name: "Resolved prompt" });
     expect(await screen.findByText(/Northstar Outfitters v3 · Northstar tier 1 v1/)).toBeVisible();
@@ -532,9 +560,92 @@ describe("agent configuration workspace", () => {
     expect(await within(promptCard).findByText(/Values:/)).toHaveTextContent("Southline Supply v1");
   });
 
+  it("opens the preview on the lab's current shop, and on the first offered one when there is none", async () => {
+    // The editor is the lab's now and no longer sits inside a shop, so the shop it resolves a
+    // prompt against comes from the lab's current shop (ADR 0054). Both halves of that sentence
+    // are held here: the remembered shop when the lab has one, and — because a select showing a
+    // value that is not among its options is a control showing something nobody picked — the
+    // first shop the resources offer when it does not.
+    window.localStorage.setItem("agent-lab.last-visited-shop", OTHER_SHOP_ID);
+    const remembered = renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Preview context")).toHaveValue(OTHER_SHOP_ID),
+    );
+    await waitFor(() => expect(previewShopIds).toContain(OTHER_SHOP_ID));
+    remembered.unmount();
+
+    window.localStorage.clear();
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    await waitFor(() => expect(screen.getByLabelText("Preview context")).toHaveValue(SHOP_ID));
+  });
+
+  it("follows the lab's switcher while the author has chosen no shop of their own", async () => {
+    // New behaviour, and the point of deriving the preview shop rather than storing it: the
+    // lab's current shop can change under a page that is already open, and an editor still
+    // showing the shop the lab has left would resolve the prompt against a context the
+    // switcher no longer names (ADR 0054).
+    const user = userEvent.setup();
+    window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    await waitFor(() => expect(screen.getByLabelText("Preview context")).toHaveValue(SHOP_ID));
+
+    // The top bar's switcher, which in lab mode sets the current shop instead of navigating.
+    await user.selectOptions(screen.getByRole("combobox", { name: "Shop" }), OTHER_SHOP_ID);
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Preview context")).toHaveValue(OTHER_SHOP_ID),
+    );
+    await waitFor(() => expect(previewShopIds).toContain(OTHER_SHOP_ID));
+  });
+
+  it("waits for the shop list rather than settling on a shop nobody chose", async () => {
+    // The resources and the lab's shops are two reads, and they answer in either order. When
+    // the resources win, the fallback must not fire: drawing the picker on the first shop
+    // offered and resolving the prompt against it, only to jump to the remembered shop a
+    // moment later, is correct at rest and wrong to watch.
+    //
+    // The shop list is held open deliberately rather than delayed by a timer, so this pins the
+    // order instead of racing it.
+    let releaseShops: (() => void) | null = null;
+    server.use(
+      http.get("*/api/v1/shops", async () => {
+        await new Promise<void>((release) => {
+          releaseShops = release;
+        });
+        return HttpResponse.json(SHOP_LISTING);
+      }),
+    );
+    window.localStorage.setItem("agent-lab.last-visited-shop", OTHER_SHOP_ID);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    // The resources have answered: the picker has both shops, and the lab has none yet.
+    const picker = await screen.findByLabelText("Preview context");
+    await waitFor(() =>
+      expect(within(picker).getByRole("option", { name: /Southline Supply/ })).toBeInTheDocument(),
+    );
+    await waitFor(() => expect(releaseShops).not.toBeNull());
+
+    // Nothing is settled, so the control says so rather than naming the first shop offered —
+    // a select whose value matches no option shows that option anyway — and nothing has been
+    // resolved for a shop nobody chose.
+    expect(picker).toHaveValue("");
+    expect(within(picker).getByRole("option", { name: "Choosing a shop…" })).toBeInTheDocument();
+    expect(previewShopIds).not.toContain(SHOP_ID);
+
+    (releaseShops as unknown as () => void)();
+
+    await waitFor(() => expect(picker).toHaveValue(OTHER_SHOP_ID));
+    expect(previewShopIds).not.toContain(SHOP_ID);
+    // And the placeholder goes with the question it was asking.
+    expect(within(picker).queryByRole("option", { name: "Choosing a shop…" })).toBeNull();
+  });
+
   it("offers the providers and models the chosen framework is proven on", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
     const provider = runtime.getByLabelText("Provider");
@@ -568,7 +679,7 @@ describe("agent configuration workspace", () => {
       ...CONFIGURATION,
       model: { ...CONFIGURATION.model, provider: "anthropic" },
     };
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
     const provider = runtime.getByLabelText("Provider");
@@ -583,7 +694,7 @@ describe("agent configuration workspace", () => {
 
   it("moves the provider and the model onto the framework the author just chose", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
     await user.selectOptions(screen.getByLabelText("Framework"), "fake");
@@ -596,7 +707,7 @@ describe("agent configuration workspace", () => {
 
   it("keeps a typed model when the framework changes but the provider does not", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
     const model = runtime.getByLabelText("Model");
@@ -615,7 +726,7 @@ describe("agent configuration workspace", () => {
   });
 
   it("says nothing about a model that is on the proven list", async () => {
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
     expect(runtime.getByLabelText("Model")).not.toHaveAccessibleDescription(
@@ -625,7 +736,7 @@ describe("agent configuration workspace", () => {
 
   it("offers the preview shop's own tone guidelines and echoes the one it resolves to", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const tone = within(await screen.findByRole("region", { name: "Tone of voice" }));
     await user.selectOptions(tone.getByLabelText("Tone of voice source"), "override");
@@ -650,7 +761,7 @@ describe("agent configuration workspace", () => {
 
   it("says when an override names nothing the preview shop publishes", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const tone = within(await screen.findByRole("region", { name: "Tone of voice" }));
     await user.selectOptions(tone.getByLabelText("Tone of voice source"), "override");
@@ -684,7 +795,7 @@ describe("agent configuration workspace", () => {
         ),
       ),
     );
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     await user.click(await screen.findByLabelText(/orders.propose_address_change/));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
@@ -696,7 +807,7 @@ describe("agent configuration workspace", () => {
   it("saves the enabled tool set and then publishes the saved draft", async () => {
     const user = userEvent.setup();
     currentPreview = preview({ publishable: true, issues: [] });
-    renderAt(`/shops/${SHOP_ID}/agent-configurations/${CONFIGURATION_ID}`);
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 
     const binding = await screen.findByLabelText(/orders.propose_address_change/);
     await user.click(binding);

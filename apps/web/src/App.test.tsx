@@ -12,7 +12,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { isValidElement } from "react";
 import type { RouteObject } from "react-router-dom";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { routeTree } from "./App";
 import { PRODUCT_TITLE_RULE, SHOP_NAME_RULE } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
@@ -452,9 +452,9 @@ describe("shop workspace", () => {
     currentPreview = preview({ publishable: true, issues: [] });
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
-    // Dirty the workspace, then move to Home without saving.
+    // Dirty the workspace, then move to the overview without saving.
     await userEvent.type(await screen.findByLabelText("Price for NS-ASJ-OB-L"), "9");
-    await userEvent.click(screen.getByRole("link", { name: "Home" }));
+    await userEvent.click(screen.getByRole("link", { name: "Overview" }));
 
     const publish = await screen.findByRole("button", { name: "Publish v1" });
     expect(publish).toBeDisabled();
@@ -1683,7 +1683,7 @@ function routedElements(routes: RouteObject[], prefix = ""): [string, string][] 
 }
 
 describe("the route tree under the data router", () => {
-  it("answers the same URLs it did, with one guard above all of them", () => {
+  it("is two modes and a set of redirects, with one guard above all of them", () => {
     expect(routeTree).toHaveLength(1);
     const root = routeTree[0];
     // Pathless: it matches no URL of its own, so nothing about the tree's shape moved.
@@ -1692,13 +1692,49 @@ describe("the route tree under the data router", () => {
     expect(isValidElement(root.element) ? root.element.type : null).toBe(UnsavedChangesGuard);
 
     expect(routedElements(routeTree)).toStrictEqual([
-      ["/", "Navigate"],
+      ["/", "Landing"],
       ["/shops", "ShopsPage"],
       ["/settings", "LabSettingsPage"],
       ["/glossary", "GlossaryPage"],
       ["/guides", "Navigate"],
       ["/guides/setup", "Navigate"],
       ["/guides/glossary", "RedirectRetiredGlossary"],
+      ["/lab", "LabWorkspace"],
+      ["/lab [index]", "Navigate"],
+      ["/lab/bench", "ExperimentSetupPage"],
+      ["/lab/bench/:shopId/:experimentId", "ExperimentBenchPage"],
+      ["/lab/bench/:shopId/:experimentId/results", "ExperimentResultsLayout"],
+      ["/lab/bench/:shopId/:experimentId/results [index]", "ExperimentResultsPage"],
+      ["/lab/bench/:shopId/:experimentId/results/timeline", "ExperimentTimelinePage"],
+      ["/lab/bench/:shopId/:experimentId/results/traces", "ExperimentTracesPage"],
+      ["/lab/history", "ExperimentHistoryPage"],
+      ["/lab/agent-configurations", "AgentConfigurationsPage"],
+      ["/lab/agent-configurations/:configurationId", "AgentConfigurationEditorPage"],
+      ["/lab/judges", "JudgeConfigurationsPage"],
+      ["/lab/judges/:judgeId", "JudgeConfigurationEditorPage"],
+      ["/lab/support-identities", "SupportIdentitiesPage"],
+      ["/lab/support-identities/:identityId", "SupportIdentityEditorPage"],
+      ["/lab/objective-blocks", "ObjectiveBlocksPage"],
+      ["/lab/objective-blocks/:blockId", "ObjectiveBlockEditorPage"],
+      ["/lab/mutation-blocks", "MutationBlocksPage"],
+      ["/lab/mutation-blocks/:blockId", "MutationBlockEditorPage"],
+      // Every lab path the shop layout used to hold, kept as a redirect and nothing else.
+      ["/shops/:shopId/bench", "LabRedirect"],
+      ["/shops/:shopId/bench/:experimentId", "LabRedirect"],
+      ["/shops/:shopId/bench/:experimentId/results", "LabRedirect"],
+      ["/shops/:shopId/bench/:experimentId/results/timeline", "LabRedirect"],
+      ["/shops/:shopId/bench/:experimentId/results/traces", "LabRedirect"],
+      ["/shops/:shopId/history", "LabRedirect"],
+      ["/shops/:shopId/agent-configurations", "LabRedirect"],
+      ["/shops/:shopId/agent-configurations/:configurationId", "LabRedirect"],
+      ["/shops/:shopId/judges", "LabRedirect"],
+      ["/shops/:shopId/judges/:judgeId", "LabRedirect"],
+      ["/shops/:shopId/support-identities", "LabRedirect"],
+      ["/shops/:shopId/support-identities/:identityId", "LabRedirect"],
+      ["/shops/:shopId/objective-blocks", "LabRedirect"],
+      ["/shops/:shopId/objective-blocks/:blockId", "LabRedirect"],
+      ["/shops/:shopId/mutation-blocks", "LabRedirect"],
+      ["/shops/:shopId/mutation-blocks/:blockId", "LabRedirect"],
       ["/shops/:shopId", "ShopWorkspace"],
       ["/shops/:shopId [index]", "ShopHomePage"],
       ["/shops/:shopId/products", "ProductsPage"],
@@ -1709,26 +1745,9 @@ describe("the route tree under the data router", () => {
       ["/shops/:shopId/tickets", "TicketsPage"],
       ["/shops/:shopId/tickets/:ticketId", "TicketsPage"],
       ["/shops/:shopId/customers/:profileId", "CustomerEditorPage"],
-      ["/shops/:shopId/bench", "ExperimentSetupPage"],
-      ["/shops/:shopId/bench/:experimentId", "ExperimentBenchPage"],
-      ["/shops/:shopId/bench/:experimentId/results", "ExperimentResultsLayout"],
-      ["/shops/:shopId/bench/:experimentId/results [index]", "ExperimentResultsPage"],
-      ["/shops/:shopId/bench/:experimentId/results/timeline", "ExperimentTimelinePage"],
-      ["/shops/:shopId/bench/:experimentId/results/traces", "ExperimentTracesPage"],
-      ["/shops/:shopId/history", "ExperimentHistoryPage"],
       ["/shops/:shopId/scenarios", "ScenariosPage"],
       ["/shops/:shopId/scenarios/:scenarioId", "ScenarioEditorPage"],
       ["/shops/:shopId/scenarios/:scenarioId/snapshots", "SnapshotsPage"],
-      ["/shops/:shopId/objective-blocks", "ObjectiveBlocksPage"],
-      ["/shops/:shopId/objective-blocks/:blockId", "ObjectiveBlockEditorPage"],
-      ["/shops/:shopId/mutation-blocks", "MutationBlocksPage"],
-      ["/shops/:shopId/mutation-blocks/:blockId", "MutationBlockEditorPage"],
-      ["/shops/:shopId/support-identities", "SupportIdentitiesPage"],
-      ["/shops/:shopId/agent-configurations", "AgentConfigurationsPage"],
-      ["/shops/:shopId/agent-configurations/:configurationId", "AgentConfigurationEditorPage"],
-      ["/shops/:shopId/judges", "JudgeConfigurationsPage"],
-      ["/shops/:shopId/judges/:judgeId", "JudgeConfigurationEditorPage"],
-      ["/shops/:shopId/support-identities/:identityId", "SupportIdentityEditorPage"],
       ["/shops/:shopId/setup/identity", "ShopIdentityPage"],
       ["/shops/:shopId/setup/policies", "PoliciesAndFaqPage"],
       ["/shops/:shopId/setup/support", "SupportGuidelinesPage"],
@@ -2061,5 +2080,190 @@ describe("index filter chips", () => {
 
     expect(screen.getByRole("link", { name: "Alpine Shell Jacket" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Trailhead Cap" })).toBeNull();
+  });
+});
+
+describe("the lab is a mode", () => {
+  const LAB_LISTINGS = [
+    http.get("*/api/v1/agent-configurations", () => HttpResponse.json({ configurations: [] })),
+    http.get("*/api/v1/judge-configurations", () => HttpResponse.json({ judges: [] })),
+    http.get("*/api/v1/support-identities", () => HttpResponse.json({ identities: [] })),
+    http.get("*/api/v1/objective-blocks", () => HttpResponse.json({ blocks: [] })),
+    http.get("*/api/v1/mutation-blocks", () => HttpResponse.json({ blocks: [] })),
+    http.get("*/api/v1/experiments", () =>
+      HttpResponse.json({
+        experiments: [],
+        total: 0,
+        page: 1,
+        page_size: 20,
+        shops: [],
+        scenarios: [],
+        frameworks: [],
+        tags: [],
+      }),
+    ),
+    http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () => HttpResponse.json({ scenarios: [] })),
+    http.get(`*/api/v1/shops/${SHOP_ID}/experiments`, () => HttpResponse.json({ experiments: [] })),
+    // The editors a redirect can land on read a draft each. What they render is not what is
+    // being asserted here — where the address ended up is — so they are answered "gone" and
+    // draw their own error, which is the honest answer for the identifiers invented above.
+    ...[
+      "agent-configurations",
+      "judge-configurations",
+      "support-identities",
+      "objective-blocks",
+      "mutation-blocks",
+    ].map((collection) =>
+      http.get(`*/api/v1/${collection}/*`, () => HttpResponse.json({}, { status: 404 })),
+    ),
+    http.get(`*/api/v1/shops/${SHOP_ID}/experiments/*`, () =>
+      HttpResponse.json({}, { status: 404 }),
+    ),
+  ];
+
+  beforeEach(() => server.use(...LAB_LISTINGS));
+
+  /**
+   * Every lab path the shop layout used to hold, and where a bookmark to it now lands.
+   *
+   * A table rather than a case each, because the claim is about the set: a lab address that
+   * stopped redirecting would be a bookmark that fell through to the catch-all and quietly
+   * reopened the shops index (ADR 0054).
+   */
+  const REDIRECTS: [string, string][] = [
+    [`/shops/${SHOP_ID}/bench`, "/lab/bench"],
+    [`/shops/${SHOP_ID}/bench/e1`, `/lab/bench/${SHOP_ID}/e1`],
+    [`/shops/${SHOP_ID}/bench/e1/results`, `/lab/bench/${SHOP_ID}/e1/results`],
+    [`/shops/${SHOP_ID}/bench/e1/results/timeline`, `/lab/bench/${SHOP_ID}/e1/results/timeline`],
+    [`/shops/${SHOP_ID}/bench/e1/results/traces`, `/lab/bench/${SHOP_ID}/e1/results/traces`],
+    [`/shops/${SHOP_ID}/history`, "/lab/history"],
+    [`/shops/${SHOP_ID}/agent-configurations`, "/lab/agent-configurations"],
+    [`/shops/${SHOP_ID}/agent-configurations/c1`, "/lab/agent-configurations/c1"],
+    [`/shops/${SHOP_ID}/judges`, "/lab/judges"],
+    [`/shops/${SHOP_ID}/judges/j1`, "/lab/judges/j1"],
+    [`/shops/${SHOP_ID}/support-identities`, "/lab/support-identities"],
+    [`/shops/${SHOP_ID}/support-identities/i1`, "/lab/support-identities/i1"],
+    [`/shops/${SHOP_ID}/objective-blocks`, "/lab/objective-blocks"],
+    [`/shops/${SHOP_ID}/objective-blocks/b1`, "/lab/objective-blocks/b1"],
+    [`/shops/${SHOP_ID}/mutation-blocks`, "/lab/mutation-blocks"],
+    [`/shops/${SHOP_ID}/mutation-blocks/b1`, "/lab/mutation-blocks/b1"],
+  ];
+
+  afterEach(() => window.localStorage.clear());
+
+  it.each(REDIRECTS)("rescues %s onto %s, carrying the shop with it", async (from, to) => {
+    // Every source carries a narrowing and a fragment, because a redirect that rebuilds the
+    // path is exactly where they get dropped: experiment history keeps its filters in the URL
+    // so a finding can be shared at the narrowing it was found in (ADR 0033).
+    const { router, unmount } = renderApp(`${from}?scenario=x&q=returns#evidence`);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(to));
+    expect(router.state.location.search).toBe("?scenario=x&q=returns");
+    expect(router.state.location.hash).toBe("#evidence");
+    // The one thing the new address does not carry is the one thing the lab needs from the
+    // old one: an operator who bookmarked this shop's bench composes for this shop.
+    expect(window.localStorage.getItem("agent-lab.last-visited-shop")).toBe(SHOP_ID);
+    // Replaced rather than pushed: going back returns to wherever they came from, not to a
+    // URL whose only behaviour is to bounce.
+    expect(router.state.historyAction).toBe("REPLACE");
+    unmount();
+  });
+
+  it("opens on the remembered shop, and on the shops index when there is none", async () => {
+    const none = renderApp("/");
+    await waitFor(() => expect(none.router.state.location.pathname).toBe("/shops"));
+    none.unmount();
+
+    window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID);
+    const remembered = renderApp("/");
+    await waitFor(() =>
+      expect(remembered.router.state.location.pathname).toBe(`/shops/${SHOP_ID}`),
+    );
+    remembered.unmount();
+  });
+
+  it("opens on the shops index when the remembered shop is no longer there", async () => {
+    // Resolved against the list rather than dereferenced: a shop removed since the last visit
+    // would otherwise open the workspace's own error page (ADR 0054).
+    window.localStorage.setItem(
+      "agent-lab.last-visited-shop",
+      "11111111-2222-4333-8444-555555555555",
+    );
+    const { router } = renderApp("/");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/shops"));
+  });
+
+  it("opens where the preference says, when it says something else", async () => {
+    window.localStorage.setItem("agent-lab.app-landing", "lab");
+    const { router } = renderApp("/");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lab/bench"));
+  });
+
+  it("offers the lab from a shop, and the shop from the lab", async () => {
+    // The assertion the shells owe the tabs: `AppShell` draws them from the mode it is given,
+    // and a shell that forgot to say which mode it was would draw a rail and no way out of it.
+    const shop = renderApp(`/shops/${SHOP_ID}`);
+    const fromShop = within(await screen.findByRole("navigation", { name: "Workspace mode" }));
+    expect(fromShop.getByRole("link", { name: "Experiment lab" })).toHaveAttribute(
+      "href",
+      "/lab/bench",
+    );
+    expect(fromShop.getByRole("link", { name: "Shop fixture" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    shop.unmount();
+
+    window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID);
+    renderApp("/lab/bench");
+    const fromLab = within(await screen.findByRole("navigation", { name: "Workspace mode" }));
+    await waitFor(() =>
+      expect(fromLab.getByRole("link", { name: "Shop fixture" })).toHaveAttribute(
+        "href",
+        `/shops/${SHOP_ID}`,
+      ),
+    );
+    expect(fromLab.getByRole("link", { name: "Experiment lab" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("says the bench has no shop to compose for, and offers one", async () => {
+    renderApp("/lab/bench");
+
+    expect(await screen.findByText(/The lab has no current shop/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open a shop" })).toHaveAttribute("href", "/shops");
+    // And nothing that would freeze a starting state for nobody is on screen.
+    expect(screen.queryByRole("button", { name: "Start experiment" })).toBeNull();
+  });
+
+  it("composes for the remembered shop, and says which one", async () => {
+    window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID);
+    renderApp("/lab/bench");
+
+    expect(await screen.findByText(/Composing for Northstar Outfitters/)).toBeVisible();
+    expect(screen.queryByText(/The lab has no current shop/)).toBeNull();
+  });
+
+  it("takes the run's shop from the address, so the switcher names it", async () => {
+    server.use(
+      ...LAB_LISTINGS,
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/e1`, () =>
+        HttpResponse.json({}, { status: 404 }),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/e1/evaluation`, () =>
+        HttpResponse.json({}, { status: 404 }),
+      ),
+    );
+    renderApp(`/lab/bench/${SHOP_ID}/e1`);
+
+    await waitFor(() =>
+      expect(window.localStorage.getItem("agent-lab.last-visited-shop")).toBe(SHOP_ID),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Shop" })).toHaveValue(SHOP_ID),
+    );
   });
 });

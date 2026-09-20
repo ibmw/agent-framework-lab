@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  readAppLanding,
   readLastVisitedShop,
   readNavigationCollapsed,
+  writeAppLanding,
   writeLastVisitedShop,
   writeNavigationCollapsed,
 } from "./preferences";
@@ -59,5 +61,18 @@ describe("the two view preferences", () => {
     expect(readLastVisitedShop()).toBeNull();
     expect(() => writeNavigationCollapsed(true)).not.toThrow();
     expect(() => writeLastVisitedShop(SHOP_ID)).not.toThrow();
+  });
+
+  it("opens where the preference says, and on the remembered shop when it says nothing", () => {
+    // The control that writes this arrives with the settings zones; the reader ships with the
+    // route that needs it, and anything unrecognised is the default rather than a landing
+    // nothing can render (ADR 0054).
+    expect(readAppLanding()).toBe("last-shop");
+
+    writeAppLanding("lab");
+    expect(readAppLanding()).toBe("lab");
+
+    window.localStorage.setItem("agent-lab.app-landing", "somewhere-else");
+    expect(readAppLanding()).toBe("last-shop");
   });
 });

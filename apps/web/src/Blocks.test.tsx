@@ -292,7 +292,7 @@ function renderAt(path: string) {
 
 describe("block libraries", () => {
   it("lists objective blocks with their type axis and publication state", async () => {
-    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    renderAt("/lab/objective-blocks");
 
     expect(await screen.findByRole("heading", { name: "Objective blocks" })).toBeVisible();
     expect(screen.getByText("Shared across shops")).toBeVisible();
@@ -304,7 +304,7 @@ describe("block libraries", () => {
   });
 
   it("shows a parameterless template as a legitimate design rather than a gap", async () => {
-    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    renderAt("/lab/objective-blocks");
 
     const row = (await screen.findByRole("link", { name: "verify-before-disclosure" })).closest(
       "tr",
@@ -323,7 +323,7 @@ describe("block libraries", () => {
    */
   it("narrows the library to the blocks the word is in", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    renderAt("/lab/objective-blocks");
     await screen.findByRole("link", { name: "read-required-document" });
 
     await user.type(screen.getByRole("searchbox", { name: "Search the library" }), "verify");
@@ -334,7 +334,7 @@ describe("block libraries", () => {
 
   it("leaves a sentence rather than a blank card when the word is in nothing", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    renderAt("/lab/objective-blocks");
     await screen.findByRole("link", { name: "read-required-document" });
 
     await user.type(screen.getByRole("searchbox", { name: "Search the library" }), "no-such-block");
@@ -345,7 +345,7 @@ describe("block libraries", () => {
 
   it("creates a block under a slug derived from what the author typed", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    renderAt("/lab/objective-blocks");
 
     await screen.findByRole("heading", { name: "Objective blocks" });
     await user.type(screen.getByLabelText("Name"), "Identify entity");
@@ -357,33 +357,36 @@ describe("block libraries", () => {
   });
 
   it("puts the name hint in that control's accessible description on both libraries", async () => {
-    const objectivesPage = renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    const objectivesPage = renderAt("/lab/objective-blocks");
     const objectives = within(await screen.findByRole("region", { name: "New objective block" }));
     expect(objectives.getByLabelText("Name")).toHaveAccessibleDescription(
       /saved as a lowercase slug.*binds this template/i,
     );
     objectivesPage.unmount();
 
-    renderAt(`/shops/${SHOP_ID}/mutation-blocks`);
+    renderAt("/lab/mutation-blocks");
     const mutations = within(await screen.findByRole("region", { name: "New mutation block" }));
     expect(mutations.getByLabelText("Name")).toHaveAccessibleDescription(
       /saved as a lowercase slug.*binds this template/i,
     );
   });
 
-  it("reaches both libraries from the Scenarios section of the rail", async () => {
-    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+  it("reaches both libraries from the lab's Library, which is where they are shared from", async () => {
+    // They left the Scenarios nest with ADR 0054: a scenario composes them, but they belong to
+    // no shop, and the rail they sat in was one shop's.
+    renderAt("/lab/objective-blocks");
 
     await screen.findByRole("heading", { name: "Objective blocks" });
-    expect(screen.getByRole("link", { name: "Objective blocks" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Mutation blocks" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "All scenarios" })).toBeVisible();
+    const rail = within(screen.getByRole("navigation", { name: "Experiment lab workspace" }));
+    expect(rail.getByRole("link", { name: "Objective blocks" })).toBeVisible();
+    expect(rail.getByRole("link", { name: "Mutation blocks" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "All scenarios" })).not.toBeInTheDocument();
   });
 
   it("offers to show a reader around, on both libraries", async () => {
     // The vocabulary these two screens use is the lab's own — a template with open parameters
     // is not a thing a commerce admin has — so each library has a tour of its own (ADR 0045).
-    const objectives = renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    const objectives = renderAt("/lab/objective-blocks");
     expect(
       await screen.findByRole("button", {
         name: `Show me around ${TOURS["objective-blocks"].surface}`,
@@ -396,7 +399,7 @@ describe("block libraries", () => {
     }
     objectives.unmount();
 
-    const mutations = renderAt(`/shops/${SHOP_ID}/mutation-blocks`);
+    const mutations = renderAt("/lab/mutation-blocks");
     expect(
       await screen.findByRole("button", {
         name: `Show me around ${TOURS["mutation-blocks"].surface}`,
@@ -408,7 +411,7 @@ describe("block libraries", () => {
 
 describe("objective block editor", () => {
   it("marks the parameter a scenario must resolve inside its own shop", async () => {
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     expect(await screen.findByRole("heading", { name: "read-required-document" })).toBeVisible();
     expect(screen.getByText("bound same-shop")).toBeVisible();
@@ -418,7 +421,7 @@ describe("objective block editor", () => {
   });
 
   it("offers a default only for a parameter whose kind can carry one", async () => {
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     expect(screen.getByLabelText("Default of severity")).toHaveValue("required");
@@ -428,7 +431,7 @@ describe("objective block editor", () => {
 
   it("drops a default the new kind cannot carry when a parameter is retyped", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.selectOptions(screen.getByLabelText("Kind of severity"), "entity_reference");
@@ -444,7 +447,7 @@ describe("objective block editor", () => {
 
   it("moves the evidence with the assessment so the pairing always exists", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.selectOptions(screen.getByLabelText("Assessed by"), "judge");
@@ -459,7 +462,7 @@ describe("objective block editor", () => {
 
   it("adds a parameter in authored order and saves the whole payload", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     const form = screen.getByRole("form", { name: "Add a parameter" });
@@ -477,7 +480,7 @@ describe("objective block editor", () => {
 
   it("asks for a label, previews the identifier, and does not suggest typing doc_ref", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     const form = screen.getByRole("form", { name: "Add a parameter" });
@@ -499,7 +502,7 @@ describe("objective block editor", () => {
 
   it("reorders parameters, because order is what a scenario binds in", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.click(screen.getByRole("button", { name: "Move severity up" }));
@@ -512,7 +515,7 @@ describe("objective block editor", () => {
 
   it("publishes a clean draft and names the frozen version", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
@@ -525,7 +528,7 @@ describe("objective block editor", () => {
 
   it("refuses to publish edits that have not been saved", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/objective-blocks/${OBJECTIVE_ID}`);
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.type(screen.getByLabelText("Statement"), " now");
@@ -537,7 +540,7 @@ describe("objective block editor", () => {
 
 describe("mutation block editor", () => {
   it("shows why a mutation with no timing parameter cannot be published", async () => {
-    renderAt(`/shops/${SHOP_ID}/mutation-blocks/${MUTATION_ID}`);
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
 
     expect(
       await screen.findByRole("heading", { name: "concurrent-entity-mutation" }),
@@ -548,7 +551,7 @@ describe("mutation block editor", () => {
 
   it("adds the timing parameter the gate asks for", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/mutation-blocks/${MUTATION_ID}`);
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
 
     await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
     const form = screen.getByRole("form", { name: "Add a parameter" });
@@ -568,7 +571,7 @@ describe("mutation block editor", () => {
   });
 
   it("carries its own type axis rather than the objective's", async () => {
-    renderAt(`/shops/${SHOP_ID}/mutation-blocks/${MUTATION_ID}`);
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
 
     await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
     expect(screen.getByLabelText("Perturbs")).toHaveValue("entity_mutation");

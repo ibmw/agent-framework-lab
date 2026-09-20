@@ -53,3 +53,26 @@ export function readLastVisitedShop(): string | null {
 export function writeLastVisitedShop(shopId: string): void {
   writeStored(LAST_VISITED_SHOP_KEY, shopId);
 }
+
+/**
+ * Where the app opens when `/` is asked for.
+ *
+ * The control that writes this is Slice 18's; the reader ships now because `/` has to resolve
+ * somewhere and writing that resolution twice — once as a constant and once as a preference —
+ * is how the two come to disagree (ADR 0054). Anything unrecognised reads as the default, which
+ * is the same guard every other accessor here applies to a value a person can edit by hand.
+ */
+export type AppLanding = "last-shop" | "shops" | "lab";
+
+const APP_LANDING_KEY = "agent-lab.app-landing";
+
+const APP_LANDINGS: readonly AppLanding[] = ["last-shop", "shops", "lab"];
+
+export function readAppLanding(): AppLanding {
+  const stored = readStored(APP_LANDING_KEY);
+  return APP_LANDINGS.find((landing) => landing === stored) ?? "last-shop";
+}
+
+export function writeAppLanding(landing: AppLanding): void {
+  writeStored(APP_LANDING_KEY, landing);
+}

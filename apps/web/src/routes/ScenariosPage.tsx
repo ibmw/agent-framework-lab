@@ -23,7 +23,7 @@ import { useShopWorkspace } from "../shell/ShopWorkspace";
 const UNAVAILABLE = "The scenario workspace is unavailable.";
 
 /**
- * The Studio's scenario index (the rail's "All scenarios").
+ * The Studio's scenario index (the rail's "Scenarios").
  *
  * A scenario is created on a ticket and never moves off it, so the create form's only real
  * choice is which incident to build on — the name is the index's own key.

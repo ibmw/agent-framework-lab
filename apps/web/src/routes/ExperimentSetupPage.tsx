@@ -31,7 +31,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { NoCurrentShop, useLabWorkspace } from "../shell/LabWorkspace";
 
 const UNAVAILABLE = "The experiment bench is unavailable.";
 const DEFAULT_SEED = 20260828;
@@ -100,15 +100,50 @@ function setupOf({
 }
 
 /**
+ * The bench, which composes for the lab's current shop and says which one that is.
+ *
+ * The shop is not in this address: nothing here is identified by one yet, and a shop in the
+ * path would be a second address for one screen (ADR 0054). It comes from the lab shell, and
+ * where there is none the page says so rather than guessing — a bench that quietly composed
+ * for the first shop in the list would freeze a starting state of a world nobody chose.
+ */
+export function ExperimentSetupPage() {
+  const { currentShop, loading } = useLabWorkspace();
+  return (
+    <>
+      <PageHeader
+        title="New experiment"
+        actions={<TourLaunch id="bench-setup" />}
+        description={
+          currentShop
+            ? `Composing for ${currentShop.name}. One scenario, one or two agent configurations, isolated arms. Every referenced version is pinned at start.`
+            : "One scenario, one or two agent configurations, isolated arms. Every referenced version is pinned at start."
+        }
+      />
+      {currentShop ? (
+        <ExperimentSetup key={currentShop.shop_id} shopId={currentShop.shop_id} />
+      ) : loading ? (
+        <p className="text-[13px] text-admin-muted">Loading the lab's shops…</p>
+      ) : (
+        <NoCurrentShop what="there is no shop to compose an experiment for" />
+      )}
+    </>
+  );
+}
+
+/**
  * Frame 7 — new experiment: one scenario, one or two agent configurations, isolated arms.
  *
  * The page's job is to make the comparison legible *before* anything is frozen. The matrix
  * is the server's answer rather than a local diff of two payloads, so what the operator
  * reads here is exactly what the gate will judge — including the warning that arms differing
  * in more than one dimension measure none of them.
+ *
+ * It takes the shop rather than reading one, and is remounted when that shop changes, so
+ * every listing and every draft on it belongs to one shop and no answer for the shop before
+ * it can arrive late into the form.
  */
-export function ExperimentSetupPage() {
-  const { shopId } = useShopWorkspace();
+function ExperimentSetup({ shopId }: { shopId: string }) {
   const navigate = useNavigate();
   const [scenarios, setScenarios] = useState<ScenarioSummarySchema[]>([]);
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
@@ -228,7 +263,7 @@ export function ExperimentSetupPage() {
     setIssues([]);
     try {
       const started = await startExperiment(shopId, chosen);
-      navigate(`/shops/${shopId}/bench/${started.experiment_id}`);
+      navigate(`/lab/bench/${shopId}/${started.experiment_id}`);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This experiment could not be started."));
       setIssues(cause instanceof LabApiError ? cause.issues : []);
@@ -243,12 +278,6 @@ export function ExperimentSetupPage() {
 
   return (
     <>
-      <PageHeader
-        title="New experiment"
-        actions={<TourLaunch id="bench-setup" />}
-        description="One scenario, one or two agent configurations, isolated arms. Every referenced version is pinned at start."
-      />
-
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
           {error}
@@ -446,7 +475,7 @@ export function ExperimentSetupPage() {
                     <button
                       className="text-left text-[13px] font-semibold text-lab-ink underline-offset-2 hover:underline"
                       type="button"
-                      onClick={() => navigate(`/shops/${shopId}/bench/${experiment.experiment_id}`)}
+                      onClick={() => navigate(`/lab/bench/${shopId}/${experiment.experiment_id}`)}
                     >
                       {experiment.label}
                     </button>

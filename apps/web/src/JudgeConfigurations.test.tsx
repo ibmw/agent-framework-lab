@@ -201,7 +201,7 @@ function renderAt(path: string) {
 
 describe("judge workspace", () => {
   it("lists judges with the model that scores and their publication state", async () => {
-    renderAt(`/shops/${SHOP_ID}/judges`);
+    renderAt("/lab/judges");
 
     expect(await screen.findByRole("heading", { name: "Judges" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Resolution quality" })).toBeVisible();
@@ -228,7 +228,7 @@ describe("judge workspace", () => {
         } satisfies JudgeConfigurationListResponse),
       ),
     );
-    renderAt(`/shops/${SHOP_ID}/judges`);
+    renderAt("/lab/judges");
     await screen.findByRole("link", { name: "Resolution quality" });
     const filters = within(screen.getByRole("group", { name: "Filter judges" }));
 
@@ -243,7 +243,7 @@ describe("judge workspace", () => {
 
   it("creates a judge with no rubric, because the rubric is what an author writes", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges`);
+    renderAt("/lab/judges");
 
     await user.type(await screen.findByLabelText("Name"), "Tone");
     await user.click(screen.getByRole("button", { name: "Create judge" }));
@@ -252,7 +252,7 @@ describe("judge workspace", () => {
   });
 
   it("puts the name hint in that control's accessible description", async () => {
-    renderAt(`/shops/${SHOP_ID}/judges`);
+    renderAt("/lab/judges");
 
     const card = within(await screen.findByRole("region", { name: "New judge" }));
     expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
@@ -262,7 +262,7 @@ describe("judge workspace", () => {
 
   it("constrains the judge's temperature the way the agent editor constrains its own", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const temperature = await screen.findByLabelText("Temperature");
     expect(temperature).toHaveAttribute("inputmode", "decimal");
@@ -279,7 +279,7 @@ describe("judge workspace", () => {
 
   it("moves the model onto the provider the author just chose", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const model = within(await screen.findByRole("region", { name: "Model" }));
     expect(model.getByLabelText("Model")).toHaveValue("gpt-5-mini");
@@ -293,7 +293,7 @@ describe("judge workspace", () => {
 
   it("offers only the models the chosen provider is proven on", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const card = within(await screen.findByRole("region", { name: "Model" }));
     const list = card.getByLabelText("Model").getAttribute("list");
@@ -311,7 +311,7 @@ describe("judge workspace", () => {
     // Reachable through the API: `judge_capability_issues` takes any provider string. A select
     // that dropped the option would display `openai` while the payload held `acme`.
     currentJudge = { ...JUDGE, model: { ...JUDGE.model, provider: "acme" } };
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const card = within(await screen.findByRole("region", { name: "Model" }));
     const provider = card.getByLabelText("Provider");
@@ -325,7 +325,7 @@ describe("judge workspace", () => {
   });
 
   it("spells a provider the way the rest of the workspace spells it", async () => {
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const card = within(await screen.findByRole("region", { name: "Model" }));
     const provider = card.getByLabelText("Provider");
@@ -337,7 +337,7 @@ describe("judge workspace", () => {
 
   it("warns in the field about a model the lab does not exercise", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const card = within(await screen.findByRole("region", { name: "Model" }));
     const model = card.getByLabelText("Model");
@@ -352,7 +352,7 @@ describe("judge workspace", () => {
 
   it("saves the provider and the model a provider change moved together", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const model = within(await screen.findByRole("region", { name: "Model" }));
     await user.selectOptions(model.getByLabelText("Provider"), "fake");
@@ -366,7 +366,7 @@ describe("judge workspace", () => {
   });
 
   it("shows what each kind of evidence puts in front of the judge", async () => {
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const evidence = await screen.findByRole("region", { name: "Evidence" });
     expect(
@@ -380,7 +380,7 @@ describe("judge workspace", () => {
 
   it("saves a change to what the judge is shown, because it changes the question", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const evidence = await screen.findByRole("region", { name: "Evidence" });
     await user.click(within(evidence).getByRole("checkbox", { name: /State changes/ }));
@@ -391,7 +391,7 @@ describe("judge workspace", () => {
   });
 
   it("names the words a rubric may not contain, read from the server", async () => {
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const anonymity = await screen.findByRole("region", { name: "Anonymity" });
     expect(within(anonymity).getByText(/pydantic-ai/)).toBeVisible();
@@ -411,7 +411,7 @@ describe("judge workspace", () => {
         },
       ],
     });
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     const gate = await screen.findByRole("region", { name: "Publish gate" });
     expect(within(gate).getByText(/the rubric names pydantic-ai/)).toBeVisible();
@@ -420,7 +420,7 @@ describe("judge workspace", () => {
 
   it("publishes the judge every later verdict will name", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/judges/${JUDGE_ID}`);
+    renderAt(`/lab/judges/${JUDGE_ID}`);
 
     await user.click(await screen.findByRole("button", { name: "Publish v1" }));
 

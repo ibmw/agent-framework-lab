@@ -50,7 +50,7 @@ import {
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useLabWorkspace } from "../shell/LabWorkspace";
 
 const UNAVAILABLE = "The agent-configuration service is unavailable.";
 
@@ -98,14 +98,20 @@ const VARIABLE_PATTERN = /\{\{([^{}]*)\}\}/g;
 
 export function AgentConfigurationEditorPage() {
   const { configurationId = "" } = useParams();
-  const { shopId } = useShopWorkspace();
+  const { currentShop, loading: shopsLoading } = useLabWorkspace();
   const editor = useDefinitionEditor(configurationId, CLIENT, {
     label: "The agent configuration draft has unsaved changes.",
   });
   const { content, preview, edit } = editor;
   const [resources, setResources] = useState<AgentConfigurationResourcesResponse | null>(null);
   const [resolution, setResolution] = useState<AgentConfigurationResolutionSchema | null>(null);
-  const [previewShopId, setPreviewShopId] = useState(shopId);
+  // The shop the author has picked, or null while they have picked none. The preview shop
+  // itself is *derived* below rather than stored: two answers the page is waiting for decide
+  // it — the lab's current shop and the shops the resources offer — and they arrive in either
+  // order. Seeding state from the first render instead would have settled the question before
+  // either had come back, which is how a lab with a remembered shop opened this editor on
+  // somebody else's (ADR 0054).
+  const [chosenShopId, setChosenShopId] = useState<string | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
   const [contextError, setContextError] = useState<string | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
@@ -129,6 +135,32 @@ export function AgentConfigurationEditorPage() {
       });
     return () => controller.abort();
   }, []);
+
+  /**
+   * The shop the prompt is resolved against: what the author chose, else the lab's current
+   * shop, else the first the resources offer.
+   *
+   * Each candidate has to be one the resources actually offer. A select holding a value that
+   * is not among its options is a control showing something nobody picked, and the read it
+   * would drive is a read for a shop this editor cannot name. Empty until the resources
+   * answer, which is also when the picker has nothing to draw.
+   *
+   * The fallback waits for the shop list. Two reads settle this — the resources and the lab's
+   * shops — and the fallback is only correct once the second has answered: reaching for it
+   * while the list is still in flight would draw the picker on the first shop offered, resolve
+   * the prompt against it, and then jump to the author's remembered shop a moment later. That
+   * is right at rest and wrong to watch, so `loading` is read for the reason `LabWorkspace`
+   * documents it — until the list answers, "there is no current shop" is a fact this page has
+   * not established. The empty interval is the shop-free gate read the editor already makes,
+   * so waiting costs no request class it did not have.
+   */
+  const offeredShop = (shopId: string | null | undefined): string | undefined =>
+    shopId && resources?.preview_shops.some((shop) => shop.shop_id === shopId) ? shopId : undefined;
+  const previewShopId =
+    offeredShop(chosenShopId) ??
+    offeredShop(currentShop?.shop_id) ??
+    (shopsLoading ? "" : resources?.preview_shops[0]?.shop_id) ??
+    "";
 
   const resolve = useCallback(async () => {
     inFlight.current?.abort();
@@ -416,8 +448,13 @@ export function AgentConfigurationEditorPage() {
                 className={fieldControlClasses}
                 aria-label="Preview context"
                 value={previewShopId}
-                onChange={(event) => setPreviewShopId(event.target.value)}
+                onChange={(event) => setChosenShopId(event.target.value)}
               >
+                {/* A select whose value matches no option shows its first one, so "nothing is
+                    settled yet" needs an option of its own to be visible at all — otherwise
+                    this control names a shop while the prompt beside it resolves against none.
+                    The same shape as the top bar's switcher before a shop is chosen. */}
+                {previewShopId === "" ? <option value="">Choosing a shop…</option> : null}
                 {(resources?.preview_shops ?? []).map((shop) => (
                   <option key={shop.shop_id} value={shop.shop_id}>
                     {shop.name}

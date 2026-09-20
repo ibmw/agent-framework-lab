@@ -116,7 +116,7 @@ function SeedCard({ shops, onSeeded }: { shops: ShopSummarySchema[]; onSeeded: (
             </Link>
             <Link
               className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-              to={`/shops/${seeded.shop_id}/bench/${seeded.experiment_id}/results`}
+              to={`/lab/bench/${seeded.shop_id}/${seeded.experiment_id}/results`}
             >
               Read the comparison
             </Link>

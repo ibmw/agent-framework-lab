@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./support/e2e";
+import { openSection } from "./support/navigate";
 
 /**
  * Milestone 3 Slice 1 acceptance evidence: an author composes a shop-independent agent
@@ -16,12 +17,6 @@ function card(page: Page, name: string) {
 async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
-}
-
-async function openSection(page: Page, link: string, heading: string) {
-  // Scoped to the rail: the guide strip on the shop home links to the same sections by name.
-  await page.getByLabel("Shop workspace").getByRole("link", { name: link }).click();
-  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
 }
 
 /** A published shop, so the prompt's `{{shop.*}}` variables have something to resolve to. */
@@ -83,7 +78,7 @@ async function publishShop(page: Page, unique: string) {
   await variants.getByRole("button", { name: "Add variant" }).click();
   await saveDraft(page);
 
-  await openSection(page, "Home", "Home");
+  await openSection(page, "Overview", "Home");
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(page.getByText(/Published v1\. That version is immutable/)).toBeVisible();
 }
