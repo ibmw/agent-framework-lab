@@ -21,3 +21,8 @@ description: Implement or review the React/Vite frontend of Agent Framework Capa
 
 Before starting Vite, check port 5173 and reuse a healthy existing server. Do not stop or restart a
 developer's process without an identified reason.
+
+Ports 8001-8004 and 5174-5177 belong to Playwright, which starts and stops every one of them
+itself: the suite runs a whole stack per worker so that no two workers share a database. Never
+reuse or serve from them; anything found listening there is a leftover to remove, not a stack to
+adopt.
