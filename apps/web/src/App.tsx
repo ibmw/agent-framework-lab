@@ -39,7 +39,7 @@ import { NewOrderPage, OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
 import { ScenarioEditorPage } from "./routes/ScenarioEditorPage";
-import { ScenariosPage } from "./routes/ScenariosPage";
+import { NewScenarioPage, ScenariosPage } from "./routes/ScenariosPage";
 import { ShopHomePage } from "./routes/ShopHomePage";
 import {
   PoliciesAndFaqPage,
@@ -186,6 +186,9 @@ export const routeTree = createRoutesFromElements(
       <Route path="tickets/:ticketId" element={<TicketsPage />} />
       <Route path="customers/:profileId" element={<CustomerEditorPage />} />
       <Route path="scenarios" element={<ScenariosPage />} />
+      {/* Creating the recipe is a page too (PLAN-UX Slice 14): `new` is a static segment and
+          outranks the identifier beside it. */}
+      <Route path="scenarios/new" element={<NewScenarioPage />} />
       <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
       <Route path="scenarios/:scenarioId/snapshots" element={<SnapshotsPage />} />
       <Route path="setup/identity" element={<ShopIdentityPage />} />

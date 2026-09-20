@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createBlock, createShop } from "./support/authoring";
+import { createBlock, createScenario, createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -268,32 +268,28 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await publishSupportIdentity(page, identity);
   await publishTemplates(page, objective, mutation);
 
-  // The recipe itself, built on the ticket and never moving off it.
-  await openSection(page, "Scenarios", "Scenarios");
-  const create = card(page, "New scenario");
-  await create.getByLabel("Name", { exact: true }).fill("Wrong shipping address");
-  await create
-    .getByLabel("Built on ticket", { exact: true })
-    .selectOption({ label: "T-204 — Wrong address concern" });
-  await create.getByRole("button", { name: "Create scenario" }).click();
-  await page.getByRole("link", { name: "Wrong shipping address" }).click();
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Wrong shipping address" }),
-  ).toBeVisible();
+  // The recipe itself, built on the ticket and never moving off it. Creating it is a page
+  // that composes the objective and lands in the editor of what it made (PLAN-UX Slice 14):
+  // the customer and the shop version are read off the ticket and the shop rather than typed.
+  await createScenario(page, {
+    name: "Wrong shipping address",
+    ticket: "T-204",
+    composes: [objective],
+    reads: { customer: "Maya Laurent", shopVersion: "v1" },
+  });
 
-  // A recipe that asserts nothing produces no evidence, and the gate says so.
+  // The objective the create page composed is here, and the gate names the binding it owes
+  // rather than saying the recipe asserts nothing.
   const gate = card(page, "Publish gate");
-  await expect(gate.getByText(/must assert something/)).toBeVisible();
+  await expect(
+    gate.getByText(/doc_ref is required and the template carries no default/),
+  ).toBeVisible();
   await expect(gate.getByText(/must say what a resolved incident looks like/)).toBeVisible();
   // The ticket's suggestion pre-filled the context, so the incident already names its document.
   const documents = card(page, "Context documents");
   await expect(documents.getByLabel("Address-change policy")).toBeChecked();
 
   const objectives = card(page, "Objectives");
-  await objectives
-    .getByLabel("Add objective block", { exact: true })
-    .selectOption({ label: `${objective} — v1` });
-  await objectives.getByRole("button", { name: "Add" }).click();
   await objectives
     .getByLabel(`doc_ref of ${objective}`, { exact: true })
     .selectOption("policy:address-change");

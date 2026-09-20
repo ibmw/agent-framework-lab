@@ -119,6 +119,46 @@ export async function createOrder(
 }
 
 /**
+ * A scenario, from Scenarios into its own editor.
+ *
+ * The recipe is built on one ticket, and the create page reads the customer and the shop
+ * version off it rather than asking — `reads` is where a journey says so. Create is refused
+ * without an objective, so the templates it composes are not optional: they are pressed as
+ * chips, because a binding needs the scenario's own resources and there is no scenario yet
+ * (PLAN-UX Slice 14). Every binding, the context documents and the completion statement are
+ * the editor's, which is where this leaves the operator.
+ */
+export async function createScenario(
+  page: Page,
+  scenario: {
+    name: string;
+    /** The bare reference the option carries — "T-204", not the composed label. */
+    ticket: string;
+    composes: string[];
+    reads?: { customer: string; shopVersion: string };
+  },
+) {
+  await openSection(page, "Scenarios", "Scenarios");
+  await page.getByRole("link", { name: "New scenario" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "New scenario" })).toBeVisible();
+
+  await page.getByLabel("Name", { exact: true }).fill(scenario.name);
+  await page.getByLabel("Ticket", { exact: true }).selectOption({ label: scenario.ticket });
+  if (scenario.reads !== undefined) {
+    await expect(page.getByLabel("Customer", { exact: true })).toHaveText(scenario.reads.customer);
+    await expect(page.getByLabel("Shop version", { exact: true })).toHaveText(
+      scenario.reads.shopVersion,
+    );
+  }
+  for (const template of scenario.composes) {
+    await page.getByRole("button", { name: template, exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Create scenario" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: scenario.name })).toBeVisible();
+}
+
+/**
  * An agent configuration, from the library into its own editor.
  *
  * The create page asks for the name and the model the arm will run on, and the model follows

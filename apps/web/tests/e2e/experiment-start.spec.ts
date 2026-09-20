@@ -1,5 +1,11 @@
 import type { Page } from "@playwright/test";
-import { createBlock, createConfiguration, createJudge, createShop } from "./support/authoring";
+import {
+  createBlock,
+  createConfiguration,
+  createJudge,
+  createScenario,
+  createShop,
+} from "./support/authoring";
 import { expect as baseExpect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -349,27 +355,18 @@ async function publishJudge(page: Page, name: string) {
 }
 
 async function publishScenario(page: Page, objective: string, judged: string, mutation: string) {
-  await openSection(page, "Scenarios", "Scenarios");
-  const create = card(page, "New scenario");
-  await create.getByLabel("Name", { exact: true }).fill("Wrong shipping address");
-  await create
-    .getByLabel("Built on ticket", { exact: true })
-    .selectOption({ label: "T-204 — Wrong address concern" });
-  await create.getByRole("button", { name: "Create scenario" }).click();
-  await page.getByRole("link", { name: "Wrong shipping address" }).click();
+  // Both objectives are composed on the create page, which will not go without one, and the
+  // page lands in the editor where their bindings are made (PLAN-UX Slice 14).
+  await createScenario(page, {
+    name: "Wrong shipping address",
+    ticket: "T-204",
+    composes: [objective, judged],
+  });
 
   const objectives = card(page, "Objectives");
   await objectives
-    .getByLabel("Add objective block", { exact: true })
-    .selectOption({ label: `${objective} — v1` });
-  await objectives.getByRole("button", { name: "Add" }).click();
-  await objectives
     .getByLabel(`doc_ref of ${objective}`, { exact: true })
     .selectOption("policy:address-change");
-  await objectives
-    .getByLabel("Add objective block", { exact: true })
-    .selectOption({ label: `${judged} — v1` });
-  await objectives.getByRole("button", { name: "Add" }).click();
 
   const mutations = card(page, "Mutations");
   await mutations

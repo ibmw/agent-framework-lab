@@ -1,5 +1,8 @@
 import type {
+  BlockListResponse,
   BoundObjectiveSchema,
+  MutationBlockDraftResponse,
+  ObjectiveBlockDraftResponse,
   ScenarioContentSchema,
   ScenarioDraftResponse,
   ScenarioListResponse,
@@ -11,7 +14,7 @@ import type {
   ShopPreviewResponse,
   TicketListResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -28,6 +31,8 @@ const PROFILE_ID = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac101";
 const READ_BLOCK_ID = "a1c31b6e-5f0d-4f1e-9b5a-2c4e6f8a0b11";
 const FORBIDDEN_BLOCK_ID = "c3e53d80-7b2f-4b30-9d7c-4e6a8b0c2d33";
 const MUTATION_BLOCK_ID = "b2d42c7f-6a1e-4a2f-8c6b-3d5f7a9b1c22";
+/** A template whose author set its severity default to `expected` rather than `required`. */
+const EXPECTED_BLOCK_ID = "d4f64e91-8c3a-4c41-9e8d-5f7b9c1d3e44";
 
 const SHOP_CONTENT: ShopDraftResponse["content"] = {
   identity: {
@@ -124,6 +129,24 @@ const RESOURCES: ScenarioResourcesSchema = {
           required: true,
           default: null,
           shop_bound: true,
+        },
+      ],
+    },
+    {
+      block_id: EXPECTED_BLOCK_ID,
+      name: "acknowledge-the-delay",
+      statement: "Acknowledge the delay",
+      description: "Warns when the arm never says the order is late.",
+      type_label: "deterministic · event",
+      latest_published_version: 1,
+      parameters: [
+        {
+          name: "severity",
+          kind: "severity",
+          description: "A missed acknowledgement warns rather than fails the run.",
+          required: true,
+          default: "expected",
+          shop_bound: false,
         },
       ],
     },
@@ -258,6 +281,119 @@ const ticketIndex: TicketListResponse = {
   ],
 };
 
+/**
+ * The two libraries as the **listings** carry them, which is all the create page can read.
+ *
+ * `BlockSummarySchema` has `parameter_count` and `shop_bound_parameter_count` where
+ * `ScenarioBlockOptionSchema` above has the parameters themselves, and the rows here are the
+ * same two templates `RESOURCES` describes in full — so a test can compare what the create
+ * page composes from the listing against what the editor composes from the resources.
+ */
+const OBJECTIVE_LIBRARY: BlockListResponse = {
+  blocks: [
+    {
+      block_id: READ_BLOCK_ID,
+      name: "read-required-document",
+      statement: "Read document",
+      type_label: "deterministic · event",
+      parameter_count: 2,
+      shop_bound_parameter_count: 1,
+      updated_at: "2026-08-25T11:00:00+00:00",
+      latest_published_version: 1,
+      published_version_count: 1,
+    },
+    {
+      block_id: FORBIDDEN_BLOCK_ID,
+      name: "forbidden-disclosure",
+      statement: "Forbidden: reveal",
+      type_label: "deterministic · forbidden",
+      parameter_count: 1,
+      shop_bound_parameter_count: 1,
+      updated_at: "2026-08-25T11:00:00+00:00",
+      latest_published_version: 1,
+      published_version_count: 1,
+    },
+    {
+      block_id: EXPECTED_BLOCK_ID,
+      name: "acknowledge-the-delay",
+      statement: "Acknowledge the delay",
+      type_label: "deterministic · event",
+      // The listing says one parameter and none of this shop's — and says nothing at all
+      // about the severity default those counts are hiding, which is the whole point.
+      parameter_count: 1,
+      shop_bound_parameter_count: 0,
+      updated_at: "2026-08-25T11:00:00+00:00",
+      latest_published_version: 1,
+      published_version_count: 1,
+    },
+  ],
+};
+
+/**
+ * The template drafts the create page reads as it composes, keyed the way the API addresses
+ * them.
+ *
+ * Their parameters are `RESOURCES`' own, which is both what the parity test needs and the
+ * limit of what it can prove: two endpoints projected from one fixture cannot show that the
+ * API's two endpoints agree — `test_blocks.py` is where that lives. What the `toEqual` does
+ * show is that the create page threads a draft's parameters through
+ * `libraryOption → addObjective` exactly as the editor threads the resources' through the
+ * same helper, which is the only place the two surfaces could have diverged.
+ *
+ * The teeth are in the severity case: its **listing** row carries counts alone, so nothing
+ * the create page reads from the listing could produce the answer either surface lands on.
+ */
+function objectiveDraft(blockId: string): ObjectiveBlockDraftResponse {
+  const option = RESOURCES.objective_blocks.find((entry) => entry.block_id === blockId);
+  return {
+    block_id: blockId,
+    lifecycle_state: "draft",
+    content: {
+      name: option?.name ?? "",
+      statement: option?.statement ?? "",
+      description: option?.description ?? "",
+      assessment: "deterministic",
+      evidence: "event",
+      parameters: option?.parameters ?? [],
+    },
+    created_at: "2026-08-25T11:00:00+00:00",
+    updated_at: "2026-08-25T11:00:00+00:00",
+  };
+}
+
+function mutationDraft(blockId: string): MutationBlockDraftResponse {
+  const option = RESOURCES.mutation_blocks.find((entry) => entry.block_id === blockId);
+  return {
+    block_id: blockId,
+    lifecycle_state: "draft",
+    content: {
+      name: option?.name ?? "",
+      statement: option?.statement ?? "",
+      description: option?.description ?? "",
+      effect: "entity_mutation",
+      parameters: option?.parameters ?? [],
+    },
+    created_at: "2026-08-25T11:00:00+00:00",
+    updated_at: "2026-08-25T11:00:00+00:00",
+  };
+}
+
+const MUTATION_LIBRARY: BlockListResponse = {
+  blocks: [
+    {
+      block_id: MUTATION_BLOCK_ID,
+      name: "concurrent-entity-mutation",
+      statement: "Concurrent mutation of",
+      type_label: "entity_mutation",
+      parameter_count: 2,
+      shop_bound_parameter_count: 1,
+      updated_at: "2026-08-25T11:00:00+00:00",
+      latest_published_version: null,
+      published_version_count: 0,
+    },
+  ],
+};
+
 let current = EMPTY_CONTENT;
 let savedPayloads: Array<Record<string, unknown>> = [];
 let created: Array<Record<string, unknown>> = [];
@@ -291,8 +427,9 @@ const server = setupServer(
       issues: [],
       changes: [],
       content_fingerprint: "c".repeat(64),
-      latest_published_version: null,
-      next_version: 1,
+      // The shop the create page reads "shop v3" off, without anybody typing it.
+      latest_published_version: 3,
+      next_version: 4,
       matches_latest_published: false,
       content: SHOP_CONTENT,
     } satisfies ShopPreviewResponse),
@@ -300,7 +437,11 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () => HttpResponse.json(ticketIndex)),
   http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () => HttpResponse.json(scenarioIndex)),
   http.post(`*/api/v1/shops/${SHOP_ID}/scenarios`, async ({ request }) => {
-    created.push((await request.json()) as Record<string, unknown>);
+    const body = (await request.json()) as { name: string; ticket_id: string };
+    created.push(body);
+    // What the lab actually makes: the name and the ticket the request carried, and the
+    // context documents that ticket suggests, copied in at creation.
+    current = { ...EMPTY_CONTENT, name: body.name, ticket_id: body.ticket_id };
     return HttpResponse.json(draft(current), { status: 201 });
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/draft`, () =>
@@ -334,6 +475,14 @@ const server = setupServer(
       } satisfies ScenarioVersionResponse,
       { status: 201 },
     ),
+  ),
+  http.get("*/api/v1/objective-blocks", () => HttpResponse.json(OBJECTIVE_LIBRARY)),
+  http.get("*/api/v1/mutation-blocks", () => HttpResponse.json(MUTATION_LIBRARY)),
+  http.get("*/api/v1/objective-blocks/:blockId/draft", ({ params }) =>
+    HttpResponse.json(objectiveDraft(String(params.blockId))),
+  ),
+  http.get("*/api/v1/mutation-blocks/:blockId/draft", ({ params }) =>
+    HttpResponse.json(mutationDraft(String(params.blockId))),
   ),
   // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
   // handler this suite declares for one of these routes still wins.
@@ -424,31 +573,460 @@ describe("scenario index", () => {
     expect(screen.queryByRole("link", { name: "Wrong shipping address" })).toBeNull();
   });
 
-  it("creates a scenario on a ticket it never afterwards moves off", async () => {
+  it("is created from the index's own header, which carries no create card", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/scenarios`);
 
-    await screen.findByRole("heading", { name: "Scenarios" });
-    // The create form arrives with the ticket list: a scenario is built on an incident.
-    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
-    await user.selectOptions(screen.getByLabelText("Built on ticket"), TICKET_ID);
-    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await screen.findByRole("link", { name: "Wrong shipping address" });
+    expect(screen.queryByRole("region", { name: "New scenario" })).toBeNull();
 
-    await waitFor(() =>
-      expect(created).toEqual([{ name: "Damaged delivery", ticket_id: TICKET_ID }]),
+    await user.click(screen.getByRole("link", { name: "New scenario" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "New scenario" })).toBeVisible();
+    expect(screen.getByText(/creating a scenario/)).toBeVisible();
+  });
+});
+
+/**
+ * Compose one template on the create page, which is a chip rather than a picker: the
+ * bindings it will need are the editor's, so there is nothing here to pick them from.
+ *
+ * It waits for the chip to go down, because composing reads the template's own draft and the
+ * chip is not pressed until that answer is in. A bare click passed only while MSW happened
+ * to answer inside `userEvent`'s own gaps between actions, which is a flake in every test
+ * that composes rather than a property of any of them.
+ */
+async function compose(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const chip = screen.getByRole("button", { name });
+  await user.click(chip);
+  await waitFor(() => expect(chip).toHaveAttribute("aria-pressed", "true"));
+}
+
+describe("the new-scenario page", () => {
+  it("refuses the create until there is a name and something to score", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    const create = await screen.findByRole("button", { name: "Create scenario" });
+    const unnamed = "Give the scenario a name first.";
+    await waitFor(() => expect(create).toHaveAccessibleDescription(unnamed));
+    expect(create).toBeDisabled();
+    expect(screen.getByText(unnamed)).toBeVisible();
+
+    await user.type(screen.getByLabelText("Name"), "Damaged delivery");
+
+    // The reason moves to what is actually missing next, and is read beside the control
+    // rather than only hovered.
+    const unscored = "Compose at least one objective — a run needs something to be scored against.";
+    expect(create).toBeDisabled();
+    expect(create).toHaveAccessibleDescription(unscored);
+    expect(create).toHaveAttribute("title", unscored);
+    expect(screen.getByText(unscored)).toBeVisible();
+
+    await compose(user, "read-required-document");
+
+    expect(create).toBeEnabled();
+    expect(screen.queryByText(unscored)).toBeNull();
+  });
+
+  it("refuses a name this shop already answers to, until the scenario exists", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Wrong shipping address");
+    await compose(user, "read-required-document");
+
+    const create = screen.getByRole("button", { name: "Create scenario" });
+    expect(create).toBeDisabled();
+    expect(create).toHaveAccessibleDescription(
+      "Wrong shipping address is the name of a scenario this shop already holds.",
     );
   });
 
-  it("puts each field's hint in that control's accessible description", async () => {
-    renderAt(`/shops/${SHOP_ID}/scenarios`);
+  it("reads the customer and the shop version off the ticket rather than asking", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
 
-    const card = within(await screen.findByRole("region", { name: "New scenario" }));
-    expect(await card.findByLabelText("Name")).toHaveAccessibleDescription(
-      /how this scenario is listed/i,
+    // Neither is a control: both follow the incident, and a second authored copy could
+    // contradict the thread the scenario is built on.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Customer")).toHaveTextContent("Maya Laurent"),
     );
-    expect(card.getByLabelText("Built on ticket")).toHaveAccessibleDescription(
-      /fixed here.*this incident/i,
+    expect(screen.queryByRole("combobox", { name: "Customer" })).toBeNull();
+    expect(screen.getByLabelText("Shop version")).toHaveTextContent("v3");
+    expect(screen.getByRole("region", { name: "It starts as a draft" })).toHaveTextContent(
+      /ticket T-204, Maya Laurent and shop v3/,
     );
+  });
+
+  it("offers the bare reference and puts the composed label under the control", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    const ticket = await screen.findByLabelText("Ticket");
+    // The option is the reference and nothing else; the subject and the customer are the
+    // hint under the select, which is where the prototype draws them.
+    expect(within(ticket).getByRole("option", { name: "T-204" })).toBeInTheDocument();
+    expect(within(ticket).queryByRole("option", { name: /Wrong address concern/ })).toBeNull();
+    await waitFor(() =>
+      expect(ticket).toHaveAccessibleDescription(/Wrong address concern · Maya Laurent/),
+    );
+  });
+
+  it("says what creating freezes and what publishing pins", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    // A frozen thing nobody is told about is a trap, and the two halves happen at different
+    // moments: the ticket and its suggested documents at creation, the version at publication.
+    expect(await screen.findByLabelText("Ticket")).toHaveAccessibleDescription(
+      /a scenario never moves off its ticket.*documents this ticket suggests are copied into it now.*Publishing the scenario is what pins the ticket version/i,
+    );
+  });
+
+  it("names what each composed template still owes, and where it is bound", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await screen.findByRole("button", { name: "read-required-document" });
+    await compose(user, "read-required-document");
+
+    const composed = within(screen.getByRole("list", { name: "Composed objectives" }));
+    expect(
+      composed.getByText("1 binding to this shop's objects, made in the editor"),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "read-required-document" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("composes a template at the severity its author meant, not at the strictest one", async () => {
+    // The one parameter that changes what a run *means*: a failed required objective fails
+    // the run, where an expected one warns. `BlockSummarySchema` carries a template's
+    // parameters as two counts, so composing from the listing alone would default every
+    // objective to `required` — including this one, whose author wrote `expected`. The page
+    // reads the template's own draft as it composes it, which is what makes the severity the
+    // template's answer rather than the create page's.
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Late delivery");
+    await compose(user, "acknowledge-the-delay");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].objectives).toEqual([
+      {
+        id: "acknowledge-the-delay",
+        block_id: EXPECTED_BLOCK_ID,
+        severity: "expected",
+        bindings: [],
+      },
+    ]);
+  });
+
+  it("makes the scenario, saves what it composed, and lands in its editor", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await user.type(screen.getByLabelText("New hidden fact"), "The parcel was left in the rain.");
+    await user.click(screen.getByRole("button", { name: "Add fact" }));
+    await compose(user, "read-required-document");
+    await compose(user, "concurrent-entity-mutation");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    // The create request carries the two the contract takes and nothing else.
+    await waitFor(() =>
+      expect(created).toEqual([{ name: "Damaged delivery", ticket_id: TICKET_ID }]),
+    );
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0]).toEqual({
+      name: "Damaged delivery",
+      // Copied in by the create from the ticket's own suggestion, and carried through
+      // untouched by the write that follows.
+      context_documents: [{ kind: "policy", document_id: "address-change" }],
+      objectives: [
+        {
+          id: "read-required-document",
+          block_id: READ_BLOCK_ID,
+          severity: "required",
+          bindings: [],
+        },
+      ],
+      // The template's own `timing` default rides in with the instance, exactly as it does
+      // when the editor's picker adds one: the parameters came from the template's draft.
+      mutations: [
+        {
+          id: "concurrent-entity-mutation",
+          block_id: MUTATION_BLOCK_ID,
+          bindings: [{ parameter: "timing", value: "after_first_read" }],
+        },
+      ],
+      hidden_facts: "The parcel was left in the rain.",
+      completion: { statement: "", max_turns: 12 },
+    });
+
+    // And the operator ends in the scenario editor with the name they typed in its header.
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Damaged delivery" }),
+    ).toBeVisible();
+  });
+
+  it("writes the draft the editor would have saved for the same answers", async () => {
+    // "Creation writes the same draft the editor would save" is the slice's own claim, and
+    // the honest form of it is this: the same answers given on the two surfaces produce one
+    // payload. The create page composes from the library *listing* and the editor from the
+    // scenario's resources, which is exactly where the two could drift apart.
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await user.type(screen.getByLabelText("New hidden fact"), "The parcel was left in the rain.");
+    await user.click(screen.getByRole("button", { name: "Add fact" }));
+    await compose(user, "read-required-document");
+    // The second one carries a severity default of its own, so this comparison is about the
+    // field that decides a verdict and not only about the ids.
+    await compose(user, "acknowledge-the-delay");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const fromTheCreatePage = savedPayloads[0];
+
+    cleanup();
+    savedPayloads = [];
+    // Back to the draft the first write made, which is where the editor would start.
+    current = { ...EMPTY_CONTENT, name: "Damaged delivery", ticket_id: TICKET_ID };
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    await screen.findByRole("heading", { level: 1, name: "Damaged delivery" });
+    await addBlock(user, "Objectives", "Add objective block", READ_BLOCK_ID);
+    await addBlock(user, "Objectives", "Add objective block", EXPECTED_BLOCK_ID);
+    await user.type(screen.getByLabelText("Hidden facts"), "The parcel was left in the rain.");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(fromTheCreatePage).toEqual(savedPayloads[0]);
+  });
+
+  it("asks about what it composed once the scenario exists and the write was refused", async () => {
+    // ADR 0051 keeps a half-typed create form out of the register — nothing exists to lose.
+    // It stops being true the moment the first write lands: the objectives are on screen and
+    // nowhere else, so the page declares them with its own second write as the save.
+    const user = userEvent.setup();
+    let refuse = true;
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/draft`, async ({ request }) => {
+        if (refuse) {
+          refuse = false;
+          return HttpResponse.error();
+        }
+        const body = (await request.json()) as { payload: Record<string, unknown> };
+        savedPayloads.push(body.payload);
+        current = { ...current, ...(body.payload as Partial<ScenarioContentSchema>) };
+        return HttpResponse.json(draft(current));
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await compose(user, "read-required-document");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+    expect(
+      await screen.findByText(/The scenario was created, but what it composes could not be saved/),
+    ).toBeVisible();
+
+    await user.click(railEntry("Tickets"));
+
+    const prompt = within(await screen.findByRole("dialog", { name: "Unsaved changes" }));
+    expect(
+      prompt.getByText(
+        "Scenario Damaged delivery was created without the objectives composed for it.",
+      ),
+    ).toBeVisible();
+
+    await user.click(prompt.getByRole("button", { name: "Save and leave" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].objectives).toHaveLength(1);
+  });
+
+  it("re-reads the listing the moment the scenario exists, refused second write or not", async () => {
+    // ADR 0056's invalidation rule is about what the surface *did*, not about whether it
+    // finished: the shop holds one scenario more from the `POST`, so the rail must already
+    // say so while the operator is still standing here reading why the rest did not save.
+    const user = userEvent.setup();
+    let listed = scenarioIndex.scenarios;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: listed }),
+      ),
+      http.post(`*/api/v1/shops/${SHOP_ID}/scenarios`, () => {
+        listed = [
+          ...listed,
+          {
+            ...scenarioIndex.scenarios[0],
+            scenario_id: SCENARIO_ID,
+            name: "Damaged delivery",
+          },
+        ];
+        current = { ...EMPTY_CONTENT, name: "Damaged delivery", ticket_id: TICKET_ID };
+        return HttpResponse.json(draft(current), { status: 201 });
+      }),
+      http.put(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/draft`, () =>
+        HttpResponse.error(),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await waitFor(() => expect(within(railEntry("Scenarios")).getByText("1")).toBeVisible());
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await compose(user, "read-required-document");
+    await user.click(screen.getByRole("button", { name: "Create scenario" }));
+
+    expect(
+      await screen.findByText(/The scenario was created, but what it composes could not be saved/),
+    ).toBeVisible();
+    // Still on the create page — and the rail has already moved, before any retry.
+    expect(screen.getByText("created · what it composes is not saved yet")).toBeVisible();
+    expect(within(railEntry("Scenarios")).getByText("2")).toBeVisible();
+    // And the listing it just re-read holds this page's own name, which is the "until the
+    // scenario exists" half of the taken-name refusal: counting it would refuse the retry of
+    // the create that made it.
+    expect(screen.getByRole("button", { name: "Create scenario" })).toBeEnabled();
+  });
+
+  it("says the libraries failed rather than that it is still reading them", async () => {
+    // A failed listing stays empty and unsettled, so a reason asked "loading first" would
+    // report a read in flight for ever while the alert above it said the request failed.
+    server.use(
+      http.get("*/api/v1/objective-blocks", () => HttpResponse.error()),
+      http.get("*/api/v1/mutation-blocks", () => HttpResponse.error()),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    const create = await screen.findByRole("button", { name: "Create scenario" });
+    const reason =
+      "The block libraries could not be read, so there is nothing to compose from yet.";
+    await waitFor(() => expect(create).toHaveAccessibleDescription(reason));
+    expect(create).toHaveAttribute("title", reason);
+    expect(screen.getByText(reason)).toBeVisible();
+    // And the compose cards stop claiming to be loading, from the same predicate.
+    expect(screen.queryByText("Loading the library…")).toBeNull();
+  });
+
+  it("says the incidents failed rather than that this shop has none", async () => {
+    // `useShopListings` answers `rows: []` on a failed read, so an empty listing and a
+    // listing that never arrived look identical from here — and "this shop has none yet"
+    // is a page contradicting the alert above it.
+    server.use(http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () => HttpResponse.error()));
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    const create = await screen.findByRole("button", { name: "Create scenario" });
+    await waitFor(() =>
+      expect(create).toHaveAccessibleDescription(
+        "This shop's incidents could not be read, so there is nothing to build on yet.",
+      ),
+    );
+    expect(screen.queryByText(/this shop has none yet/)).toBeNull();
+  });
+
+  it("will not create while a template it has just composed is still being read", async () => {
+    // `run` composes the payload from the render the press happened in, so a template whose
+    // draft lands a moment later would be an answer on screen that never reaches the draft —
+    // and, because the page composed without it, nothing would register to prompt about
+    // either. The gate asks `reading` before it asks for an objective.
+    const user = userEvent.setup();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`*/api/v1/objective-blocks/${EXPECTED_BLOCK_ID}/draft`, async () => {
+        await held;
+        return HttpResponse.json(objectiveDraft(EXPECTED_BLOCK_ID));
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await compose(user, "read-required-document");
+    const create = screen.getByRole("button", { name: "Create scenario" });
+    expect(create).toBeEnabled();
+
+    // The second template's draft is held open, so the page is composing something it
+    // cannot build yet.
+    const heldChip = screen.getByRole("button", { name: "acknowledge-the-delay" });
+    await user.click(heldChip);
+    const reason = "Reading what the template just composed declares…";
+    await waitFor(() => expect(create).toHaveAccessibleDescription(reason));
+    expect(create).toBeDisabled();
+    expect(screen.getByText(reason)).toBeVisible();
+    // The chip keeps its place in the tab order while it waits: a browser blurs a focused
+    // control the moment it is disabled, and jsdom does not, so this is asserted rather
+    // than left to a browser to contradict.
+    expect(heldChip).toBeEnabled();
+    expect(heldChip).toHaveAttribute("aria-busy", "true");
+
+    release();
+
+    await waitFor(() => expect(create).toBeEnabled());
+    await user.click(create);
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    // Both, not one: the press waited for the answer rather than composing without it.
+    expect(savedPayloads[0].objectives).toHaveLength(2);
+  });
+
+  it("says the scenarios failed rather than reading a free name off an empty listing", async () => {
+    // The listing a taken name is refused against answers `rows: []` when it fails, so
+    // without this the page would offer to create a name the lab refuses and report the
+    // refusal as a create that went wrong.
+    server.use(http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () => HttpResponse.error()));
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    const create = await screen.findByRole("button", { name: "Create scenario" });
+    await waitFor(() =>
+      expect(create).toHaveAccessibleDescription(
+        "This shop's scenarios could not be read, so a free name cannot be told from a taken one.",
+      ),
+    );
+    expect(create).toBeDisabled();
+  });
+
+  it("composes nothing when the template it was asked for cannot be read", async () => {
+    // The chip goes down only once the template's parameters are in hand: composing it from
+    // nothing would give it the strictest severity there is rather than its author's.
+    const user = userEvent.setup();
+    server.use(
+      http.get(`*/api/v1/objective-blocks/${READ_BLOCK_ID}/draft`, () => HttpResponse.error()),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    // Not `compose`: that helper waits for the chip to go down, and the whole claim here is
+    // that it does not.
+    await user.click(screen.getByRole("button", { name: "read-required-document" }));
+
+    expect(
+      await screen.findByText(/That template could not be read, so it was not composed/),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "read-required-document" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.queryByRole("list", { name: "Composed objectives" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Create scenario" })).toBeDisabled();
+  });
+
+  it("asks nothing while the create form is only half filled", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
+    await compose(user, "read-required-document");
+    await user.click(railEntry("Tickets"));
+
+    // A half-typed create form is not an edit to something that exists (ADR 0051).
+    expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull();
   });
 });
 
@@ -688,22 +1266,20 @@ describe("the rail's figure and this index", () => {
    * figure on the chrome with it — which it can only do by reading the listing the chrome is
    * drawn from.
    */
-  it("moves the rail's figure with the table when a scenario is created", async () => {
+  it("moves the rail's figure when a scenario is created, without a reload", async () => {
     const user = userEvent.setup();
     let listed = scenarioIndex.scenarios;
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
         HttpResponse.json({ scenarios: listed }),
       ),
-      http.post(`*/api/v1/shops/${SHOP_ID}/scenarios`, () => {
+      http.post(`*/api/v1/shops/${SHOP_ID}/scenarios`, async ({ request }) => {
+        const body = (await request.json()) as { name: string; ticket_id: string };
         listed = [
           ...listed,
-          {
-            ...scenarioIndex.scenarios[0],
-            scenario_id: "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
-            name: "Damaged delivery",
-          },
+          { ...scenarioIndex.scenarios[0], scenario_id: SCENARIO_ID, name: body.name },
         ];
+        current = { ...EMPTY_CONTENT, name: body.name, ticket_id: body.ticket_id };
         return HttpResponse.json(draft(current), { status: 201 });
       }),
     );
@@ -713,11 +1289,12 @@ describe("the rail's figure and this index", () => {
     await waitFor(() => expect(bodyRows(table)).toBe(1));
     expect(within(railEntry("Scenarios")).getByText("1")).toBeVisible();
 
+    // Created from the page the header opens, which is the only place a scenario is made.
+    await user.click(screen.getByRole("link", { name: "New scenario" }));
     await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
-    await user.selectOptions(screen.getByLabelText("Built on ticket"), TICKET_ID);
+    await compose(user, "read-required-document");
     await user.click(screen.getByRole("button", { name: "Create scenario" }));
 
     await waitFor(() => expect(within(railEntry("Scenarios")).getByText("2")).toBeVisible());
-    expect(bodyRows(screen.getByRole("table"))).toBe(2);
   });
 });

@@ -523,7 +523,7 @@ function addressesOf(tour: Tour): string[] {
  *
  * Written as the addresses rather than as "anything ending in `/new`", which has two edges:
  * a trailing slash slips past it, and a product an operator names `new` would lose whatever
- * tour its editor is one day given. Slice 13 added the lab's four; Slice 14 adds the
+ * tour its editor is one day given. Slice 13 added the lab's four and Slice 14 the
  * scenario's.
  *
  * Only `/shops/new` currently *needs* excluding: `tourAt` matches a tour's addresses
@@ -538,6 +538,7 @@ export const CREATE_ROUTES = [
   "/shops/new",
   "/shops/:shopId/orders/new",
   "/shops/:shopId/customers/new",
+  "/shops/:shopId/scenarios/new",
   "/lab/support-identities/new",
   "/lab/agent-configurations/new",
   "/lab/judges/new",

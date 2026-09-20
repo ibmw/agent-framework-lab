@@ -1751,12 +1751,12 @@ describe("the tree's create pages and the tour table", () => {
     // has never heard of can be handed the walk of the index above it and light anchors
     // that are not on the screen (PLAN-UX Slice 12, extended to the lab's four in 13). The
     // cases are the route tree's own rows rather than a list kept beside them, so a create
-    // route added tomorrow fails here instead of being remembered.
+    // route added tomorrow fails here instead of being remembered. Slice 14 made it nine.
     const declared = routedElements(routeTree)
       .map(([path]) => path)
       .filter((path) => path.endsWith("/new"));
 
-    expect(declared).toHaveLength(8);
+    expect(declared).toHaveLength(9);
     expect([...declared].sort()).toEqual([...CREATE_ROUTES].sort());
     for (const path of declared) {
       expect(tourAt(path.replaceAll(/:[A-Za-z]+/g, "x")), `${path} was offered a tour`).toBeNull();
@@ -1836,6 +1836,7 @@ describe("the route tree under the data router", () => {
       ["/shops/:shopId/tickets/:ticketId", "TicketsPage"],
       ["/shops/:shopId/customers/:profileId", "CustomerEditorPage"],
       ["/shops/:shopId/scenarios", "ScenariosPage"],
+      ["/shops/:shopId/scenarios/new", "NewScenarioPage"],
       ["/shops/:shopId/scenarios/:scenarioId", "ScenarioEditorPage"],
       ["/shops/:shopId/scenarios/:scenarioId/snapshots", "SnapshotsPage"],
       ["/shops/:shopId/setup/identity", "ShopIdentityPage"],

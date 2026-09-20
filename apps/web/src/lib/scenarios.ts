@@ -1,5 +1,6 @@
 import type {
   BlockParameterSchema,
+  BlockSummarySchema,
   BoundMutationSchema,
   BoundObjectiveSchema,
   ContextDocumentSchema,
@@ -265,6 +266,58 @@ export function bindTemplate(
       .filter((parameter) => parameter.default)
       .map((parameter) => ({ parameter: parameter.name, value: parameter.default as string })),
   };
+}
+
+/**
+ * A library row and what its template actually declares, as the composition helpers read it.
+ *
+ * The create page composes from the two block **listings**, and a `BlockSummarySchema` carries
+ * a template's parameters as `parameter_count` and `shop_bound_parameter_count` rather than as
+ * the list — the list belongs to `ScenarioResourcesSchema`, which is addressed under a scenario
+ * that does not exist until Create is pressed. So the page reads each template's own draft as
+ * it composes it and hands the parameters here, and `addObjective` and `addMutation` then
+ * answer exactly as they do in the editor.
+ *
+ * **The parameters have to be real rather than assumed, and severity is why.** `addObjective`
+ * reads the instance's severity off the template's `severity` default and falls back to
+ * `required` when it cannot see one — the strictest answer there is, because a failed required
+ * objective fails the run. A page composing from the counts alone would turn a template whose
+ * author wrote `expected` into an objective that means something else, on the one field that
+ * decides what a run's verdict is. `bindTemplate`'s literal defaults ride on the same read.
+ *
+ * `description` is the one field left empty: it explains a template to whoever binds it, no
+ * instance built from this carries it, and the editor reads it from the resources.
+ */
+export function libraryOption(
+  summary: BlockSummarySchema,
+  parameters: readonly BlockParameterSchema[],
+): ScenarioBlockOptionSchema {
+  return {
+    block_id: summary.block_id,
+    name: summary.name,
+    statement: summary.statement,
+    description: "",
+    type_label: summary.type_label,
+    latest_published_version: summary.latest_published_version,
+    parameters: [...parameters],
+  };
+}
+
+/**
+ * How many of a composed template's bindings are to this shop's own objects.
+ *
+ * `shop_bound_parameter_count` and not `parameter_count`: a shop-bound parameter can never be
+ * defaulted — a template may not default an object it does not own — while `parameter_count`
+ * also counts the `severity` an objective answers as a field and the literals a template has
+ * often already answered for itself.
+ *
+ * It is therefore exact about what it names and says nothing about the rest. A **required
+ * literal with no default** is also bound in the editor and is none of these, so the line the
+ * create page draws from this figure claims only bindings to this shop rather than claiming
+ * there is nothing left to do.
+ */
+export function bindingsOwed(summary: BlockSummarySchema): number {
+  return summary.shop_bound_parameter_count;
 }
 
 export function addObjective(

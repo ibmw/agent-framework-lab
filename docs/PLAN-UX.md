@@ -69,12 +69,10 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Slice 14 is next, because it changes what a journey clicks through to create the recipe every
-later slice runs; it is independent of the creates that have landed — the shop's four and the
-lab's four — on the `CreatePage` layout it builds on. Slices 15, 16, 17 and 18 are then
-independent and can proceed in parallel. Slice 19 is the backend milestone and runs beside
-Group B; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B. Slices 26 and
-27 close the milestone, and 28 is optional.
+Group B's remaining slices — 15, 16, 17 and 18 — are independent and can proceed in parallel;
+creation is a page on every index now, so none of them waits on another. Slice 19 is the
+backend milestone and runs beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on
+nothing in Group B. Slices 26 and 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -88,31 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
-
-#### Slice 14 — New scenario
-
-- [ ] `/shops/:id/scenarios/new` on the `CreatePage` layout: Built on (name; ticket, whose value
-  is the bare ref and whose composed label is the hint; customer and shop version derived and
-  shown read-only), Hidden facts as a chip list, Objectives composed from the library with a
-  binding each, Mutations with a trigger each.
-- [ ] Create is refused until a name and at least one objective exist, with the reason on the
-  control and inline; the ticket the scenario is built on is frozen at its current version and
-  the hint says so.
-- [ ] Creation writes the same draft the editor would save, and lands in the scenario editor.
-      `CreateScenarioRequest` carries a name and a ticket and nothing else, so this is a create
-      that takes two writes: `lib/createDefinition.ts` holds that shape — the second write sent
-      only where it is owed, the retry that finishes the first press, the unsaved work declared
-      between the two, and the stand-down when the operator leaves (ADR 0051, ADR 0056).
-
-Frames: `Workspace.dc.html` :2925; DEPRECADED frame 4 for the editor landed in.
-
-Branch: `feat/new-scenario`. Checks: page tests for the refusal, the derived fields, the bare
-option value, and the payload; Playwright `scenario-authoring`, which today creates from the
-card.
-
-Slice evidence: an operator names a scenario, picks T-204, reads "Maya Laurent" and "shop v3"
-without typing either, composes one objective, and is standing in the editor of a draft that
-already holds it.
 
 #### Slice 15 — The shop overview
 
@@ -290,7 +263,7 @@ variants before the second press, and can walk the first back.
 #### Slice 22 — Refused with a reason
 
 - [ ] `blockedButtonClasses` — the dashed, disabled weight with the reason in `title`, minted
-  in Slice 12 and worn by the eight create pages and nothing else — on **every** primary action
+  in Slice 12 and worn by the nine create pages and nothing else — on **every** primary action
   that cannot proceed. Publish, Start, Save connection and Compose are the named adopters; the sweep is
   for the rest, and *Attach to this shop* on Customers is one of them, `disabled` today with
   its reason nowhere.
