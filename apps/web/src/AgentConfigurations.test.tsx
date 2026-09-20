@@ -361,9 +361,43 @@ describe("agent configuration workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Agent configurations" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Frontline single agent" })).toBeVisible();
-    expect(screen.getByText("Pydantic AI")).toBeVisible();
-    expect(screen.getByText("gpt-5-mini")).toBeVisible();
-    expect(screen.getByText("Never published")).toBeVisible();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("Pydantic AI")).toBeVisible();
+    expect(table.getByText("gpt-5-mini")).toBeVisible();
+    // Scoped to the table: "Never published" is also a filter chip's label now.
+    expect(table.getByText("Never published")).toBeVisible();
+  });
+
+  it("counts the configurations an arm could adopt, and filters to them", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({
+          configurations: [
+            ...configurations.configurations,
+            {
+              ...configurations.configurations[0],
+              configuration_id: "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9",
+              name: "Deterministic control",
+              latest_published_version: 2,
+              published_version_count: 2,
+            },
+          ],
+        } satisfies AgentConfigurationListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/agent-configurations`);
+    await screen.findByRole("link", { name: "Frontline single agent" });
+    const filters = within(screen.getByRole("group", { name: "Filter agent configurations" }));
+
+    expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Adoptable 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Never published 1" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Adoptable 1" }));
+
+    expect(screen.getByRole("link", { name: "Deterministic control" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Frontline single agent" })).toBeNull();
   });
 
   it("puts each field's hint in that control's accessible description", async () => {

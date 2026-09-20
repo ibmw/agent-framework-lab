@@ -12,6 +12,7 @@ import {
 import { describeApiError } from "../api/client";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
@@ -26,6 +27,34 @@ import {
 
 const UNAVAILABLE = "The agent-configuration service is unavailable.";
 
+type Filter = "all" | "published" | "draft";
+
+/**
+ * The prototype's configuration chips (`tmp/design-frames/Workspace.dc.html`:6221–6224), less
+ * one.
+ *
+ * *Pydantic AI* is not here. It filters the prototype's fixture by one framework of the two
+ * it holds; this lab proves three — Pydantic AI, the OpenAI Agents SDK and the deterministic
+ * fake — and a chip for one of them would hard-code a backend label on the index while
+ * leaving the other two unreachable. A framework chip belongs to whichever slice gives this
+ * page a framework control, and it is one chip per framework or none.
+ */
+const FILTERS: FilterChipDefinition<Filter, AgentConfigurationSummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "published",
+    label: "Adoptable",
+    kind: "published",
+    matches: (configuration) => configuration.latest_published_version !== null,
+  },
+  {
+    id: "draft",
+    label: "Never published",
+    kind: "draft",
+    matches: (configuration) => configuration.latest_published_version === null,
+  },
+];
+
 export function AgentConfigurationsPage() {
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
   const [identities, setIdentities] = useState<SupportIdentityOptionSchema[]>([]);
@@ -35,6 +64,7 @@ export function AgentConfigurationsPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [identityId, setIdentityId] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     const [listed, resources] = await Promise.all([
@@ -85,6 +115,8 @@ export function AgentConfigurationsPage() {
     }
   }
 
+  const { chips, visible } = filterList(configurations, FILTERS, filter);
+
   return (
     <>
       <PageHeader
@@ -101,11 +133,27 @@ export function AgentConfigurationsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
+          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
+              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
+              it is the stat band this slice exists to avoid, drawn at its least useful moment.
+              The row arrives with the table it belongs to. */}
+          {loading || loadError ? null : (
+            <FilterChips
+              legend="Filter agent configurations"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading agent configurations…</p>
           ) : configurations.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               No agent configuration yet. Create one to describe the agent an experiment runs.
+            </p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">
+              No configuration matches this filter.
             </p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
@@ -120,7 +168,7 @@ export function AgentConfigurationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {configurations.map((configuration) => (
+                {visible.map((configuration) => (
                   <tr key={configuration.configuration_id}>
                     <td className={tableCellClasses}>
                       <Link

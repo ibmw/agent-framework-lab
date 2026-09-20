@@ -7,6 +7,7 @@ import { createOrder, listOrders } from "../api/orders";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
@@ -29,25 +30,42 @@ const ORDER_REFERENCE_TAKEN_PLACE = "used by an order in this shop";
 
 type Filter = "all" | "open" | "unfulfilled" | "unpaid";
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "open", label: "Open" },
-  { id: "unfulfilled", label: "Unfulfilled" },
-  { id: "unpaid", label: "Unpaid" },
+/**
+ * The prototype's order chips (`tmp/design-frames/Workspace.dc.html`:6884–6888), less one.
+ *
+ * *Payment unsettled* is the prototype's wording for what this page called *Unpaid*, and the
+ * change of word is a change of predicate. `PaymentStatus` has four members — `pending`,
+ * `authorized`, `paid`, `refunded` — and the chip takes the two where the money has not landed
+ * yet. A refund is settled, in the other direction: it is a finished movement, not an open
+ * one, and counting it under a word that means "still owing" would make the chip say something
+ * its own number contradicts. The old *Unpaid* label read `!== "paid"` and survived only
+ * because the prototype's fixture holds no refund.
+ *
+ * The fifth chip the prototype draws, *Referenced by a ticket*, is not here: an order carries
+ * no ticket on `OrderSummarySchema`, the link lives on a ticket's content, and reading it
+ * would mean fetching every ticket's draft from an index — a payload this slice may not add.
+ */
+const FILTERS: FilterChipDefinition<Filter, OrderSummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "open",
+    label: "Open",
+    kind: "published",
+    matches: (order) => order.fulfilment_status !== "fulfilled",
+  },
+  {
+    id: "unfulfilled",
+    label: "Unfulfilled",
+    kind: "unfulfilled",
+    matches: (order) => order.fulfilment_status === "unfulfilled",
+  },
+  {
+    id: "unpaid",
+    label: "Payment unsettled",
+    kind: "attention",
+    matches: (order) => order.payment_status === "pending" || order.payment_status === "authorized",
+  },
 ];
-
-function matches(order: OrderSummarySchema, filter: Filter): boolean {
-  switch (filter) {
-    case "open":
-      return order.fulfilment_status !== "fulfilled";
-    case "unfulfilled":
-      return order.fulfilment_status === "unfulfilled";
-    case "unpaid":
-      return order.payment_status !== "paid";
-    default:
-      return true;
-  }
-}
 
 /** Frame 2 — the shop's authored order fixtures. */
 export function OrdersPage() {
@@ -156,7 +174,7 @@ export function OrdersPage() {
     }
   }
 
-  const visible = orders.filter((order) => matches(order, filter));
+  const { chips, visible } = filterList(orders, FILTERS, filter);
 
   return (
     <>
@@ -174,27 +192,18 @@ export function OrdersPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
-          <fieldset className="flex flex-wrap items-center gap-1.5 border-b border-admin-border px-4 py-2.5">
-            <legend className="sr-only">Filter orders</legend>
-            {FILTERS.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                aria-pressed={filter === entry.id}
-                onClick={() => setFilter(entry.id)}
-                className={
-                  filter === entry.id
-                    ? "rounded-md bg-[#e8f0ed] px-2.5 py-1 text-xs font-semibold text-lab-ink"
-                    : "rounded-md px-2.5 py-1 text-xs font-semibold text-admin-muted hover:bg-admin-canvas"
-                }
-              >
-                {entry.label}
-                <span className="ml-1.5 text-admin-muted">
-                  {orders.filter((order) => matches(order, entry.id)).length}
-                </span>
-              </button>
-            ))}
-          </fieldset>
+          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
+              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
+              it is the stat band this slice exists to avoid, drawn at its least useful moment.
+              The row arrives with the table it belongs to. */}
+          {loading || loadError ? null : (
+            <FilterChips
+              legend="Filter orders"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          )}
 
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading orders…</p>

@@ -9,6 +9,7 @@ import {
 } from "../api/customerProfiles";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -32,6 +33,45 @@ function publishedLabel(profile: CustomerProfileSummarySchema): string {
   return `v${profile.latest_published_version} · ${profile.published_version_count} version(s)`;
 }
 
+type Filter = "all" | "published" | "draft" | "shared" | "noaddress";
+
+/**
+ * The prototype's customer chips, whole (`tmp/design-frames/Workspace.dc.html`:6908–6912).
+ *
+ * *Without a default address* is the one the refresh calls out by name, and it is the reason
+ * this page wanted a chip row: an order's ship-to is a frozen copy of an address chosen from
+ * the book, so a profile with no default is the shape of profile an order fixture stalls on.
+ * The index already writes "no default" in the Addresses column; the chip is that column
+ * counted and made pressable.
+ */
+const FILTERS: FilterChipDefinition<Filter, CustomerProfileSummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "published",
+    label: "Published",
+    kind: "published",
+    matches: (profile) => profile.latest_published_version !== null,
+  },
+  {
+    id: "draft",
+    label: "Never published",
+    kind: "draft",
+    matches: (profile) => profile.latest_published_version === null,
+  },
+  {
+    id: "shared",
+    label: "Shared",
+    kind: "referenced",
+    matches: (profile) => profile.attached_shop_count > 1,
+  },
+  {
+    id: "noaddress",
+    label: "Without a default address",
+    kind: "attention",
+    matches: (profile) => profile.default_address_label === null,
+  },
+];
+
 export function CustomersPage() {
   const { shopId } = useShopWorkspace();
   const [attached, setAttached] = useState<CustomerProfileSummarySchema[]>([]);
@@ -46,6 +86,7 @@ export function CustomersPage() {
   const [email, setEmail] = useState("");
   const [customerSince, setCustomerSince] = useState("2024-01-01");
   const [attachId, setAttachId] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
@@ -131,6 +172,8 @@ export function CustomersPage() {
     }
   }
 
+  const { chips, visible } = filterList(attached, FILTERS, filter);
+
   const attachable = everything.filter(
     (profile) => !attached.some((row) => row.profile_id === profile.profile_id),
   );
@@ -151,12 +194,26 @@ export function CustomersPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
+          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
+              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
+              it is the stat band this slice exists to avoid, drawn at its least useful moment.
+              The row arrives with the table it belongs to. */}
+          {loading || loadError ? null : (
+            <FilterChips
+              legend="Filter customers"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading customers…</p>
           ) : attached.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               No customer is attached to this shop yet. Create one, or attach an existing profile.
             </p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">No customer matches this filter.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>
@@ -170,7 +227,7 @@ export function CustomersPage() {
                 </tr>
               </thead>
               <tbody>
-                {attached.map((profile) => (
+                {visible.map((profile) => (
                   <tr key={profile.profile_id}>
                     <td className={tableCellClasses}>
                       <Link

@@ -5,6 +5,7 @@ import { describeApiError } from "../api/client";
 import { createJudgeConfiguration, listJudgeConfigurations } from "../api/judgeConfigurations";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
@@ -19,6 +20,26 @@ import {
 
 const UNAVAILABLE = "The judge service is unavailable.";
 
+type Filter = "all" | "published";
+
+/**
+ * The prototype's judge chips (`tmp/design-frames/Workspace.dc.html`:6260–6262), less one.
+ *
+ * *No rubric* is not here. The rubric is the whole of what a judge is, so a judge without one
+ * is exactly the row an author wants picked out — but `JudgeConfigurationSummarySchema`
+ * carries the model, the provider and an evidence count and says nothing about the rubric.
+ * The chip arrives with the field, not before it.
+ */
+const FILTERS: FilterChipDefinition<Filter, JudgeConfigurationSummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "published",
+    label: "Usable",
+    kind: "published",
+    matches: (judge) => judge.latest_published_version !== null,
+  },
+];
+
 export function JudgeConfigurationsPage() {
   const [judges, setJudges] = useState<JudgeConfigurationSummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +47,7 @@ export function JudgeConfigurationsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     setJudges((await listJudgeConfigurations(signal)).judges);
@@ -70,6 +92,8 @@ export function JudgeConfigurationsPage() {
     }
   }
 
+  const { chips, visible } = filterList(judges, FILTERS, filter);
+
   return (
     <>
       <PageHeader
@@ -86,12 +110,26 @@ export function JudgeConfigurationsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
+          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
+              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
+              it is the stat band this slice exists to avoid, drawn at its least useful moment.
+              The row arrives with the table it belongs to. */}
+          {loading || loadError ? null : (
+            <FilterChips
+              legend="Filter judges"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading judges…</p>
           ) : judges.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               No judge yet. Create one to score the objectives a scenario leaves to a judge.
             </p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">No judge matches this filter.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>
@@ -105,7 +143,7 @@ export function JudgeConfigurationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {judges.map((judge) => (
+                {visible.map((judge) => (
                   <tr key={judge.judge_id}>
                     <td className={tableCellClasses}>
                       <Link

@@ -39,6 +39,15 @@
   --color-admin-ink: #202223;
   --color-admin-ink-soft: #42474c;
   --color-admin-muted: #6d7175;
+  /*
+   * The selected filter chip, the third of the handoff's token additions (design-direction,
+   * "the workspace refresh"): `#eaf5ed` on `#b6d9c4`, hovering to `#ddeee3`. Its ink is
+   * `--color-lab-primary`, which the refresh already added, so the trio needs three names and
+   * not four. Its first consumer is the shared filter-chip row in `components/FilterChips.tsx`.
+   */
+  --color-admin-chip: #eaf5ed;
+  --color-admin-chip-border: #b6d9c4;
+  --color-admin-chip-hover: #ddeee3;
   --color-admin-published: #dff0e7;
   --color-admin-published-ink: #0f5132;
   --color-admin-draft: #ffe9a3;

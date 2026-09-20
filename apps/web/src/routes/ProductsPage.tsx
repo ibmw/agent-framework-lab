@@ -1,9 +1,10 @@
-import type { ProductViewSchema } from "@agent-lab/contracts";
+import type { DefinitionIssueSchema, ProductViewSchema } from "@agent-lab/contracts";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
@@ -41,12 +42,60 @@ function emptyProduct(handle: string, title: string, category: string): ProductV
   };
 }
 
+type Filter = "all" | "active" | "draft" | "issues";
+
+/**
+ * The prototype's product chips, whole (`tmp/design-frames/Workspace.dc.html`:4775–4780).
+ *
+ * *Needs attention* counts the Findings column rather than a second reading of it: the same
+ * `issuesForProduct` the rows draw from, so a product the table calls clear can never be in
+ * the chip's number. The findings arrive with the draft preview, so the count is 0 until that
+ * lands — which is the same moment the column itself stops saying "Clear" for everything.
+ *
+ * The seven server-backed indexes withhold their chip row until the listing lands, because a
+ * row of zeros over "Loading…" filters nothing. This page does not, and deliberately: the
+ * catalog is the shop draft, which is already in hand when the route renders, so the table is
+ * there from the first frame and three of the four chips filter it correctly at once.
+ * Withholding the row for the fourth would make it appear *after* the table it labels, and
+ * *Needs attention 0* is not a wrong answer in the meantime — it is the same answer the
+ * Findings column beside it is giving.
+ *
+ * `archived` has no chip, as in the prototype. It is reachable through *All*, which is where
+ * a status nobody filters for belongs.
+ */
+function productFilters(
+  issues: DefinitionIssueSchema[],
+): FilterChipDefinition<Filter, ProductViewSchema>[] {
+  return [
+    { id: "all", label: "All", kind: "all", matches: () => true },
+    {
+      id: "active",
+      label: "Active",
+      kind: "published",
+      matches: (product) => product.status === "active",
+    },
+    {
+      id: "draft",
+      label: "Draft",
+      kind: "draft",
+      matches: (product) => product.status === "draft",
+    },
+    {
+      id: "issues",
+      label: "Needs attention",
+      kind: "attention",
+      matches: (product) => issuesForProduct(issues, product.handle).length > 0,
+    },
+  ];
+}
+
 export function ProductsPage() {
   const { content, preview, edit, save, saving, discard, discarding, dirty, error } =
     useShopWorkspace();
   const [handle, setHandle] = useState("");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
   const takenHandles = content.products.map((product) => product.handle);
   // Sorted and de-duplicated, so the list reads as a vocabulary rather than as the order
   // products happened to be added in. A product with no category yet offers nothing.
@@ -71,6 +120,12 @@ export function ProductsPage() {
     setTitle("");
     setCategory("");
   }
+
+  const { chips, visible } = filterList(
+    content.products,
+    productFilters(preview?.issues ?? []),
+    filter,
+  );
 
   return (
     <>
@@ -101,10 +156,18 @@ export function ProductsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`} data-tour="product-index">
+          <FilterChips
+            legend="Filter products"
+            chips={chips}
+            selected={filter}
+            onSelect={setFilter}
+          />
           {content.products.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               This shop sells nothing yet. A published shop must sell at least one product.
             </p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">No product matches this filter.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>
@@ -117,7 +180,7 @@ export function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {content.products.map((product) => {
+                {visible.map((product) => {
                   const findings = issuesForProduct(preview?.issues ?? [], product.handle);
                   const errors = findings.filter((issue) => issue.severity === "error").length;
                   return (

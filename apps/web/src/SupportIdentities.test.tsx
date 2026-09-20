@@ -182,7 +182,40 @@ describe("support identity workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Support identities" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Northstar tier 1" })).toBeVisible();
-    expect(screen.getByText("Never published")).toBeVisible();
+    // Scoped to the table: "Never published" is also a filter chip's label now.
+    expect(within(screen.getByRole("table")).getByText("Never published")).toBeVisible();
+  });
+
+  it("counts the identities a configuration could adopt, and filters to them", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/support-identities", () =>
+        HttpResponse.json({
+          identities: [
+            ...identities.identities,
+            {
+              ...identities.identities[0],
+              identity_id: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d",
+              name: "Northstar tier 2",
+              latest_published_version: 1,
+              published_version_count: 1,
+            },
+          ],
+        } satisfies SupportIdentityListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/support-identities`);
+    await screen.findByRole("link", { name: "Northstar tier 1" });
+    const filters = within(screen.getByRole("group", { name: "Filter support identities" }));
+
+    expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Adoptable 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Never published 1" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Adoptable 1" }));
+
+    expect(screen.getByRole("link", { name: "Northstar tier 2" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Northstar tier 1" })).toBeNull();
   });
 
   it("puts each field's hint in that control's accessible description", async () => {

@@ -388,6 +388,38 @@ describe("scenario index", () => {
     expect(within(row as HTMLElement).getByText("v1 · 1 version(s)")).toBeVisible();
   });
 
+  it("counts the recipes an experiment could run, and filters to the drafts", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({
+          scenarios: [
+            ...scenarioIndex.scenarios,
+            {
+              ...scenarioIndex.scenarios[0],
+              scenario_id: "2c1b0a9f-8e7d-4c6b-9a58-4f3e2d1c0b9a",
+              name: "Damaged delivery",
+              latest_published_version: null,
+              published_version_count: 0,
+            },
+          ],
+        } satisfies ScenarioListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+    await screen.findByRole("link", { name: "Wrong shipping address" });
+    const filters = within(screen.getByRole("group", { name: "Filter scenarios" }));
+
+    expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Runnable 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Draft 1" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Draft 1" }));
+
+    expect(screen.getByRole("link", { name: "Damaged delivery" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Wrong shipping address" })).toBeNull();
+  });
+
   it("creates a scenario on a ticket it never afterwards moves off", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/scenarios`);

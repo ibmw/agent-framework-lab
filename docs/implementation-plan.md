@@ -142,14 +142,99 @@ which is nobody's slice yet.
 ### UI-4 · List pages: counts move into the filters
 `branch: ui/filter-counts`
 
-Delete the KPI stat strip from all eleven index routes; the filter chips carry the counts and
-gain the matching icon. Five counts have no chip today and must gain one or the number is lost:
-*Without a default address* (customers), *Required by a scenario* (policies), *Referenced by a
-ticket* (orders), *Not composed yet* (both block libraries). Delete the now-unused count
-selectors rather than leaving them computed.
+This plan said the counts *move*. They do not: **there is no KPI stat strip in `apps/web`**,
+nothing is at risk of being lost, and there are no count selectors to delete. What there was
+is one hand-rolled chip row on `OrdersPage`, a `<select>` of counted options on `TicketsPage`,
+and nine index routes with no filter at all. So the slice is additive, and being additive
+raises the bar on every chip: a count nobody asked for is clutter, and only the prototype
+decides which ones were asked for.
 
-*Checks:* each index page's existing spec asserts the count renders — repoint the assertion at
-the chip.
+What it builds is **one filter-chip row** — `FilterChips` in `components/`, its class sets and
+its glyph table in `lib/ui.ts` — and adopts it on the indexes whose chips the prototype draws
+and this workspace can compute. `OrdersPage`'s hand-rolled row goes; the eight are Shops,
+Products, Orders, Customers, Scenarios, Support identities, Agent configurations and Judges.
+A chip's kind names a glyph on a **closed vocabulary of six**, encoded once beside `buttonIcon`
+and deliberately not an extension of `ButtonVerb`: a chip's check means "the published ones"
+and a button's means "save". The seventh kind the handoff's *Assets* list gives — the page, for
+a document chip — is left out because nothing draws it, per the house rule that a primitive no
+page uses is not a slice.
+
+**A chip row waits for something to filter.** The seven server-backed indexes render it inside
+the same branch as their table, so it is absent while the listing is in flight and absent when
+the listing failed: a row of zeros over "Loading…" answers nothing and presses to nothing,
+which is the stat band again at the moment it is least true. `ProductsPage` is the exception
+and is not gated — its catalog is the shop draft, already in hand when the route renders, so
+the table is there from the first frame and three of its four chips filter correctly at once.
+Its *Needs attention* count is 0 until the draft preview lands, which is the same moment the
+Findings column beside it stops saying "Clear" for everything.
+
+**Every chip filters.** A chip that showed a number and narrowed nothing would be the stat
+strip again in a smaller typeface, so `filterList` returns the counts and the visible rows from
+one pass over one table of predicates: an index cannot say *Unfulfilled 3* over a list of two.
+A chip counting zero is still drawn and still pressable, which is what the prototype does —
+its rows map every entry unconditionally with `String(count)` — and the list answers in words.
+The count is in each chip's accessible name, set explicitly because an accessible name is the
+element's children run together and the gap between label and number is a flex `gap`.
+
+**Seven of the prototype's chips are not built, and none of them is faked.** Six want a figure
+this workspace's index payloads do not carry, and a slice that may not add a route or a payload
+cannot invent one: *Referenced by a ticket* (orders — the link lives on a ticket's content),
+*Not composed yet* on each of the two block libraries (no composition figure on
+`BlockSummarySchema`), *Behind the shop* (scenarios — no pinned shop version on the summary),
+*Cannot publish* (identities — publish-readiness is a preview of one draft) and *No rubric*
+(judges — the summary names the model and the evidence and not the rubric). The seventh,
+*Required by a scenario*, wants no figure but a **table**, and is treated below with the
+surfaces that get no chips at all.
+
+Of the five counts this plan named, **one is built and four are not**: *Without a default
+address* is built; *Required by a scenario* wants the table; *Referenced by a ticket* and both
+*Not composed yet* want a payload. All four are pending, not lost.
+
+**Three index surfaces end with no chips**, and each for the prototype's own reason rather than
+for want of effort. **Tickets** — the prototype's three-pane screen draws no filter control at
+all, only "4 in this shop" under the panel title, so the `<select>` this workspace already has
+is more than the design asks for and stays. **The two block libraries** — beyond *All*, the
+prototype's chips are *Decided by a rule* / *Scored by a judge* and *Fault hooks* / *Setup
+mutations*, and `BlockSummarySchema` carries neither an assessment nor an effect, only the
+display string `type_label` the API composes from them; filtering by splitting a caption is
+reading a label as data, and the mutation binary does not map onto this lab's four effects
+either way. **Policies & FAQ** — the prototype filters one documents table by *Policies*,
+*Guidelines*, *FAQ* and *Required by a scenario*; this workspace has no such table (policies
+and FAQ are two authored lists on one page and guidelines are a third page), and merging them
+is a restructure this slice does not own.
+
+**Where this follows the codebase against the prototype**, per the rule in
+`docs/design-direction.md`: the row takes the card's own `px-4` and `py-2.5` rather than the
+prototype's `11px 20px`, because the chips sit directly above `tableHeadClasses`, which is
+exactly those two values, and a row that missed the column it labels by a pixel would read as
+a second, narrower card; and it wraps, which the prototype does not declare and the handoff's
+*Responsive* rule requires of every row. The *Pydantic AI* chip on agent configurations is
+dropped: it filters the prototype's fixture by one framework of the two it holds, this lab
+proves three, and a chip for one of them would hard-code a backend label while leaving the
+other two unreachable.
+
+**Where the README and the prototype conflict**, the README wins, which is the sentence this
+slice added to that rule. One value: the unselected chip's hover is the README's `#f6f7f8` —
+the hover it gives every white secondary — where the prototype's inline style draws `#f4f6f7`.
+This is not a case of following the codebase, which had no chip hover to follow.
+
+**And where the README is ambiguous**, the prototype governs as before. The chip's `7px`
+radius is that case: *Radii* offers "8px … chips, 7px small chips" without saying which a 34px
+filter chip is, and the prototype draws 7. The unselected ink `#58636d` and the two glyph
+opacities (90% selected, 50% otherwise — the prototype nests a 0.55 span inside a 0.9 svg,
+and 0.55 × 0.9 is 0.495) are silence rather than ambiguity, and are the prototype's.
+
+The selected-chip trio finds its first consumer here and lands as three tokens in `styles.css`
+(`--color-admin-chip`, `-border`, `-hover`); its ink is `--color-lab-primary`, which UI-1
+already added.
+
+*Checks:* `FilterChips.test.tsx` — the count in the name, the name against the words on the
+chip, `aria-pressed` moving, a zero chip drawn and pressable, every glyph hidden, and each
+chip leaving exactly as many rows as it claimed. `lib/ui.test.ts` — the two states' hover and
+ring and the handoff's chip metrics, and the six-kind vocabulary as a table, in the spirit of
+`enumLabels.test.ts`. Then one test per adopting index in its own spec. Three existing
+assertions moved inside `getByRole("table")`, because "Never published" and "Active" are now
+also chip labels.
 
 ### UI-5 · Page header alignment
 `branch: ui/page-header-full-width`
@@ -163,6 +248,16 @@ This is why the Save button currently sits in a different place on three pages.
 
 One `SearchField` component: magnifier, 36px left padding, the `Search <thing>` placeholder
 convention. Eleven consumers.
+
+*Decide, do not discover:* every one of the eleven indexes puts the search box **on the same
+card as a filter-chip row**, in the header directly above it (`Workspace.dc.html`:163, 827,
+1068, 1142, 1460, 1534, 1595, 3238, 3419, 3570, 3714). So this slice has to settle whether a
+chip's count is of the whole list or of what the search left. The prototype answers: the whole
+list. Each of its chip tables counts the unsearched array — `shopFilters` reads `s.shopList`
+while the table renders the searched `shownShops`, and the other ten do the same — so a count
+never moves as you type, and the search narrows only what is under the chips. Whichever way
+UI-6 goes, `filterList` in `components/FilterChips.tsx` is the one place to decide it, because
+the count and the filtering come out of it together.
 
 ### UI-7 · The field control itself
 `branch: ui/field-control`

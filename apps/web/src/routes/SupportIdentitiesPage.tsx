@@ -5,6 +5,7 @@ import { describeApiError } from "../api/client";
 import { createSupportIdentity, listSupportIdentities } from "../api/supportIdentities";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -18,6 +19,32 @@ import {
 
 const UNAVAILABLE = "The support-identity service is unavailable.";
 
+type Filter = "all" | "published" | "draft";
+
+/**
+ * The prototype's identity chips (`tmp/design-frames/Workspace.dc.html`:6386–6389), less one.
+ *
+ * *Cannot publish* is not here. In the prototype it counts identities whose permission set is
+ * unsound; in this workspace publish-readiness is a preview of one draft, and
+ * `SupportIdentitySummarySchema` carries no finding — the index would have to fetch a preview
+ * per row to know, which is a payload this slice may not add.
+ */
+const FILTERS: FilterChipDefinition<Filter, SupportIdentitySummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "published",
+    label: "Adoptable",
+    kind: "published",
+    matches: (identity) => identity.latest_published_version !== null,
+  },
+  {
+    id: "draft",
+    label: "Never published",
+    kind: "draft",
+    matches: (identity) => identity.latest_published_version === null,
+  },
+];
+
 export function SupportIdentitiesPage() {
   const [identities, setIdentities] = useState<SupportIdentitySummarySchema[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +53,7 @@ export function SupportIdentitiesPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     setIdentities((await listSupportIdentities(signal)).identities);
@@ -71,6 +99,8 @@ export function SupportIdentitiesPage() {
     }
   }
 
+  const { chips, visible } = filterList(identities, FILTERS, filter);
+
   return (
     <>
       <PageHeader
@@ -87,12 +117,26 @@ export function SupportIdentitiesPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
+          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
+              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
+              it is the stat band this slice exists to avoid, drawn at its least useful moment.
+              The row arrives with the table it belongs to. */}
+          {loading || loadError ? null : (
+            <FilterChips
+              legend="Filter support identities"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading support identities…</p>
           ) : identities.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               No support identity yet. Create one to define an agent's role and permissions.
             </p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">No identity matches this filter.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>
@@ -105,7 +149,7 @@ export function SupportIdentitiesPage() {
                 </tr>
               </thead>
               <tbody>
-                {identities.map((identity) => (
+                {visible.map((identity) => (
                   <tr key={identity.identity_id}>
                     <td className={tableCellClasses}>
                       <Link

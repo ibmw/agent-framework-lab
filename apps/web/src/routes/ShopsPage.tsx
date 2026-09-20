@@ -7,6 +7,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { LocaleField } from "../components/LocaleField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
@@ -44,6 +45,25 @@ const EXAMPLE_SHOP = {
   locale: "en-GB",
 } as const satisfies Record<string, string>;
 
+type Filter = "all" | "published" | "draft";
+
+/** The prototype's shop chips, whole (`tmp/design-frames/Workspace.dc.html`:5750–5752). */
+const FILTERS: FilterChipDefinition<Filter, ShopSummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "published",
+    label: "Published",
+    kind: "published",
+    matches: (shop) => shop.latest_published_version !== null,
+  },
+  {
+    id: "draft",
+    label: "Never published",
+    kind: "draft",
+    matches: (shop) => shop.latest_published_version === null,
+  },
+];
+
 export function ShopsPage() {
   const navigate = useNavigate();
   const [shops, setShops] = useState<ShopSummarySchema[]>([]);
@@ -56,6 +76,7 @@ export function ShopsPage() {
   const [currencies, setCurrencies] = useState<Currency[]>([DEFAULT_LOCALE.currency]);
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
   // One token for both derived fields: the example answers a name and a locale, and both the
   // slug and the currencies are things those two derive, so they resume together.
   const [exampleFill, setExampleFill] = useState(0);
@@ -120,6 +141,8 @@ export function ShopsPage() {
     }
   }
 
+  const { chips, visible } = filterList(shops, FILTERS, filter);
+
   return (
     <AppShell shops={shops}>
       <PageHeader
@@ -138,12 +161,26 @@ export function ShopsPage() {
           <h2 className="border-b border-admin-border px-4 py-3 text-sm font-semibold">
             All shops
           </h2>
+          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
+              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
+              it is the stat band this slice exists to avoid, drawn at its least useful moment.
+              The row arrives with the table it belongs to. */}
+          {loading || loadError ? null : (
+            <FilterChips
+              legend="Filter shops"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading shops…</p>
           ) : shops.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               No shops yet. Create the first one to start authoring a catalog.
             </p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">No shop matches this filter.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>
@@ -154,7 +191,7 @@ export function ShopsPage() {
                 </tr>
               </thead>
               <tbody>
-                {shops.map((shop) => (
+                {visible.map((shop) => (
                   <tr key={shop.shop_id}>
                     <td className={tableCellClasses}>
                       <Link

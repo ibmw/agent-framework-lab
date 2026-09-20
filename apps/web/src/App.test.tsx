@@ -367,7 +367,8 @@ describe("shop workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Shops" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Northstar Outfitters" })).toBeVisible();
-    expect(screen.getByText("Never published")).toBeVisible();
+    // Scoped to the table: "Never published" is also a filter chip's label now.
+    expect(within(screen.getByRole("table")).getByText("Never published")).toBeVisible();
   });
 
   it("blocks publication while the draft has errors and names the failing variant", async () => {
@@ -1027,7 +1028,9 @@ describe("every enum has a name", () => {
   it("names a product's status in the index, with a glyph beside the word", async () => {
     renderAt(`/shops/${SHOP_ID}/products`);
 
-    const status = await screen.findByText("Active");
+    // Scoped to the table: "Active" is also a filter chip's label now.
+    await screen.findByRole("table");
+    const status = within(screen.getByRole("table")).getByText("Active");
     expect(status).toBeVisible();
     // Never colour alone: the mark is there, and it is decorative — the word carries it.
     // Asserted in two steps on purpose: `glyph?.textContent` on a pill with no mark at all
@@ -1938,5 +1941,89 @@ describe("the field pattern on the shop editors", () => {
     expect(identity.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
       /variants may only be priced in these; the first is the default/i,
     );
+  });
+});
+
+/**
+ * The refresh moves an index's counts onto the control that produces them, so each index's
+ * chips are asserted where that index's other rows are: the number is only worth anything if
+ * pressing it leaves exactly the rows it claimed.
+ */
+describe("index filter chips", () => {
+  it("counts the shops by publication and narrows the table to the pressed one", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/shops", () =>
+        HttpResponse.json({
+          shops: [
+            ...shops.shops,
+            {
+              shop_id: "5b1a0f6c-3d2e-4c1b-8a97-6f5e4d3c2b1a",
+              name: "Harbour Lane Supply",
+              slug: "harbour-lane",
+              updated_at: "2026-08-20T09:00:00+00:00",
+              latest_published_version: 3,
+              published_version_count: 3,
+            },
+          ],
+        } satisfies ShopListResponse),
+      ),
+    );
+    renderAt("/shops");
+    await screen.findByRole("link", { name: "Northstar Outfitters" });
+    const filters = within(screen.getByRole("group", { name: "Filter shops" }));
+
+    expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Published 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Never published 1" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Published 1" }));
+
+    expect(screen.getByRole("link", { name: "Harbour Lane Supply" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Northstar Outfitters" })).toBeNull();
+  });
+
+  it("counts the catalog by status and by finding, and filters to each", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        ...READY_CONTENT.products,
+        {
+          handle: "trailhead-cap",
+          title: "Trailhead Cap",
+          description: "",
+          status: "draft",
+          category: "Accessories",
+          options: [],
+          variants: [],
+          media: [],
+          attributes: [],
+          reviews: [],
+          ratings: { review_count: 0, average_rating: null },
+        },
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/products`);
+    await screen.findByRole("link", { name: "Alpine Shell Jacket" });
+    const filters = within(screen.getByRole("group", { name: "Filter products" }));
+
+    expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Active 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Draft 1" })).toBeVisible();
+    // The findings come from the draft preview, which flags one variant of the jacket.
+    await waitFor(() =>
+      expect(filters.getByRole("button", { name: "Needs attention 1" })).toBeVisible(),
+    );
+
+    await user.click(filters.getByRole("button", { name: "Draft 1" }));
+
+    expect(screen.getByRole("link", { name: "Trailhead Cap" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Alpine Shell Jacket" })).toBeNull();
+
+    await user.click(filters.getByRole("button", { name: "Needs attention 1" }));
+
+    expect(screen.getByRole("link", { name: "Alpine Shell Jacket" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Trailhead Cap" })).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { createScenario, listScenarios } from "../api/scenarios";
 import { listTickets } from "../api/tickets";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -26,6 +27,32 @@ const UNAVAILABLE = "The scenario workspace is unavailable.";
  * A scenario is created on a ticket and never moves off it, so the create form's only real
  * choice is which incident to build on — the name is the index's own key.
  */
+type Filter = "all" | "published" | "draft";
+
+/**
+ * The prototype's scenario chips (`tmp/design-frames/Workspace.dc.html`:6862–6865), less one.
+ *
+ * *Behind the shop* is not here. It counts scenarios pinned to an older shop version than the
+ * one published now, and `ScenarioSummarySchema` carries no pinned shop version — the index
+ * cannot tell a current scenario from a stale one, so the chip would answer a question this
+ * page has no figure for.
+ */
+const FILTERS: FilterChipDefinition<Filter, ScenarioSummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "published",
+    label: "Runnable",
+    kind: "published",
+    matches: (scenario) => scenario.latest_published_version !== null,
+  },
+  {
+    id: "draft",
+    label: "Draft",
+    kind: "draft",
+    matches: (scenario) => scenario.latest_published_version === null,
+  },
+];
+
 export function ScenariosPage() {
   const { shopId } = useShopWorkspace();
   const [scenarios, setScenarios] = useState<ScenarioSummarySchema[]>([]);
@@ -36,6 +63,7 @@ export function ScenariosPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [ticketId, setTicketId] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
@@ -88,6 +116,8 @@ export function ScenariosPage() {
     }
   }
 
+  const { chips, visible } = filterList(scenarios, FILTERS, filter);
+
   return (
     <>
       <PageHeader
@@ -104,12 +134,26 @@ export function ScenariosPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
+          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
+              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
+              it is the stat band this slice exists to avoid, drawn at its least useful moment.
+              The row arrives with the table it belongs to. */}
+          {loading || loadError ? null : (
+            <FilterChips
+              legend="Filter scenarios"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading scenarios…</p>
           ) : scenarios.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">
               No scenario yet. Build one on a ticket to turn the incident into an experiment.
             </p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">No scenario matches this filter.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-[13px]">
@@ -123,7 +167,7 @@ export function ScenariosPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {scenarios.map((scenario) => (
+                  {visible.map((scenario) => (
                     <tr key={scenario.scenario_id}>
                       <td className={tableCellClasses}>
                         <Link

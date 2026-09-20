@@ -10,7 +10,7 @@ import type {
 } from "@agent-lab/contracts";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HttpResponse, http } from "msw";
+import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
@@ -209,6 +209,21 @@ const ORDERS: OrderListResponse = {
       total: { amount: "89.00", currency: "EUR" },
       updated_at: "2026-08-24T12:05:00+00:00",
     },
+    // A refund, because `PaymentStatus` has four members and a fixture of paid orders lets a
+    // filter written as "not paid" pass while meaning something else. This order's money has
+    // moved and settled; it is not one an operator is waiting on.
+    {
+      order_id: "3c4d5e6f-7081-492a-b3c4-d5e6f708192a",
+      reference: "NS-10476",
+      customer_profile_id: PROFILE_ID,
+      customer_display_name: "Maya Laurent",
+      placed_at: "2026-08-11T09:00:00.000000Z",
+      payment_status: "refunded",
+      fulfilment_status: "fulfilled",
+      line_count: 1,
+      total: { amount: "42.00", currency: "EUR" },
+      updated_at: "2026-08-24T12:05:00+00:00",
+    },
   ],
 };
 
@@ -335,8 +350,9 @@ describe("order index", () => {
     expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "NS-10482" })).toBeVisible();
     const table = within(screen.getByRole("table"));
-    expect(table.getAllByText("Maya Laurent")).toHaveLength(2);
+    expect(table.getAllByText("Maya Laurent")).toHaveLength(3);
     expect(table.getAllByText("Paid")).toHaveLength(2);
+    expect(table.getByText("Refunded")).toBeVisible();
     expect(table.getByText("Unfulfilled")).toBeVisible();
     expect(table.getByText("249.00 EUR")).toBeVisible();
   });
@@ -347,10 +363,107 @@ describe("order index", () => {
     await screen.findByRole("link", { name: "NS-10482" });
 
     const filters = screen.getByRole("group", { name: "Filter orders" });
-    await user.click(within(filters).getByRole("button", { name: /Unfulfilled/ }));
+    await user.click(within(filters).getByRole("button", { name: "Unfulfilled 1" }));
 
     expect(screen.getByRole("link", { name: "NS-10482" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "NS-10479" })).toBeNull();
+  });
+
+  /**
+   * The count is on the chip, and it is the chip's own answer.
+   *
+   * *Payment unsettled* is the one to watch: the fixture holds two paid orders and a refunded
+   * one, and a refund is settled money — so the honest count is nothing. A predicate written
+   * as "not paid" would say 1 here, which is the whole reason the refund is in the fixture.
+   * A zero chip is still drawn and still pressable — pressing it is how an operator confirms
+   * there is nothing there, and the list says so in words.
+   */
+  it("counts each filter beside its name, and a refund is not money left owing", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    await screen.findByRole("link", { name: "NS-10482" });
+    const filters = within(screen.getByRole("group", { name: "Filter orders" }));
+
+    expect(filters.getByRole("button", { name: "All 3" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Open 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Unfulfilled 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Payment unsettled 0" })).toBeVisible();
+    // The refunded order is in the list and in no payment chip but *All*.
+    expect(screen.getByRole("link", { name: "NS-10476" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Payment unsettled 0" }));
+
+    expect(screen.queryByRole("link", { name: "NS-10482" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "NS-10476" })).toBeNull();
+    expect(screen.getByText("No order matches this filter.")).toBeVisible();
+  });
+
+  /**
+   * A chip is a filter, so the row waits for something to filter. Before the listing lands
+   * every count would be 0 and every press a no-op — the stat band this slice exists to
+   * avoid, drawn at the moment it is least true.
+   */
+  it("withholds the chip row until there are rows to count", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
+        await delay(40);
+        return HttpResponse.json(ORDERS);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    expect(await screen.findByText("Loading orders…")).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Filter orders" })).toBeNull();
+
+    expect(await screen.findByRole("group", { name: "Filter orders" })).toBeVisible();
+  });
+
+  it("withholds it again when the listing could not be read", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "boom", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Filter orders" })).toBeNull();
+  });
+
+  /**
+   * And the chip that does have something to count still counts it, so the fix above is not
+   * "the predicate now matches nothing". An order awaiting payment is money left owing.
+   */
+  it("counts an order still awaiting its payment", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+        HttpResponse.json({
+          orders: [
+            ...ORDERS.orders,
+            {
+              ...ORDERS.orders[0],
+              order_id: "4d5e6f70-8192-4a3b-c4d5-e6f708192a3b",
+              reference: "NS-10488",
+              payment_status: "pending",
+            },
+          ],
+        } satisfies OrderListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    await screen.findByRole("link", { name: "NS-10488" });
+    const filters = within(screen.getByRole("group", { name: "Filter orders" }));
+
+    expect(filters.getByRole("button", { name: "Payment unsettled 1" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Payment unsettled 1" }));
+
+    expect(screen.getByRole("link", { name: "NS-10488" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "NS-10476" })).toBeNull();
   });
 
   it("creates an order for a customer attached to this shop", async () => {

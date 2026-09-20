@@ -1,7 +1,12 @@
 import {
+  Box,
   ChartColumn,
   Check,
+  CircleCheck,
+  CircleDashed,
+  Clock,
   GitBranch,
+  Link,
   type LucideIcon,
   Pencil,
   Play,
@@ -10,6 +15,7 @@ import {
   RotateCw,
   Star,
   Trash2,
+  TriangleAlert,
   Upload,
 } from "lucide-react";
 
@@ -192,6 +198,120 @@ export const buttonIcon: Readonly<Record<ButtonVerb, LucideIcon>> = {
  * sets the space after it, and `flex-none` keeps a long label from squeezing the drawing.
  */
 export const iconLeadingClasses = "h-3.5 w-3.5 flex-none";
+
+/**
+ * The band of filter chips that sits above a list, and the one shape every index draws it in.
+ *
+ * The prototype's own declaration (`tmp/design-frames/Workspace.dc.html`, the `shopFilters`
+ * row at 164–173 and the nine rows that repeat it):
+ *
+ * ```
+ * row:          display:flex; gap:6px; padding:11px 20px; border-bottom:1px solid …
+ * chip:         min-height:34px; display:flex; align-items:center; gap:5px; padding:0 12px;
+ *               border-radius:7px; font-size:13px; font-weight:700
+ *   selected:   border #b6d9c4; background #eaf5ed; colour #1d6241; hover #ddeee3
+ *   unselected: border transparent; colour #58636d; hover (README) #f6f7f8
+ * count:        font-variant-numeric: tabular-nums; opacity .75
+ * ```
+ *
+ * Four values are not the prototype's, and each is named so that nobody has to re-measure:
+ *
+ * - **`px-4`, not 20px.** In this workspace the chips sit directly above `tableHeadClasses`,
+ *   which is `px-4`; a row indented differently from the column it labels reads as a second,
+ *   narrower card.
+ * - **`py-2.5` (10px), not 11px.** The same reason and the same neighbour: `tableHeadClasses`
+ *   is `py-2.5`, so the chip row and the column header it sits on share one rhythm rather
+ *   than missing each other by a pixel. It is also the one value here off Tailwind's 4px
+ *   scale otherwise.
+ * - **It wraps.** The prototype does not declare it; the handoff's *Responsive* rule requires
+ *   it of every row.
+ * - **`rounded-[7px]`.** Not a departure but a reading: the README's *Radii* line gives "8px
+ *   secondary buttons and chips, 7px small chips" and does not say which a 34px filter chip
+ *   is. Where the README is ambiguous and the prototype is specific the prototype governs
+ *   (`docs/design-direction.md`), and the prototype draws 7px.
+ *
+ * The unselected hover is the README's `#f6f7f8` where the prototype's inline style draws
+ * `#f4f6f7`: an outright conflict rather than a silence, which the same rule in
+ * `docs/design-direction.md` settles for the README. `#f6f7f8` is also the hover that document
+ * gives every white secondary, so the chip row does not introduce a second near-grey.
+ *
+ * `#58636d` is written as a literal for the reason `labNoteClasses` writes its two: it is the
+ * unselected chip's ink in the prototype, the README's token table does not name it, and a
+ * colour one file uses is not yet a token.
+ */
+export const filterChipRowClasses =
+  "flex flex-wrap items-center gap-1.5 border-b border-admin-border px-4 py-2.5";
+
+const filterChipBaseClasses = `inline-flex min-h-[34px] items-center gap-[5px] rounded-[7px] border px-3 text-[13px] font-bold transition ${focusRingClasses}`;
+
+/**
+ * The two states a chip is drawn in, as one record for the same reason `buttonVariants` is
+ * one: the named exports are read off it, so a state cannot lose its hover unnoticed.
+ */
+const filterChipStates = {
+  selected: `${filterChipBaseClasses} border-admin-chip-border bg-admin-chip text-lab-primary hover:bg-admin-chip-hover`,
+  unselected: `${filterChipBaseClasses} border-transparent text-[#58636d] hover:bg-[#f6f7f8]`,
+} as const;
+
+export type FilterChipState = keyof typeof filterChipStates;
+
+/** The table itself, for the test that holds both states to the same rules. */
+export const filterChipStateClasses: Readonly<Record<FilterChipState, string>> = filterChipStates;
+
+/** The number, in the same column width whatever the digits, and quieter than the label. */
+export const filterChipCountClasses = "tabular-nums opacity-75";
+
+/**
+ * What a filter chip's glyph may mean.
+ *
+ * A second closed vocabulary beside `ButtonVerb`, and deliberately not an extension of it: a
+ * chip names a *subset of a list*, a button names an *act*, and the two sets overlap nowhere —
+ * the check on a chip means "the published ones", not "save". The set is closed for the same
+ * reason the verbs are: what is fixed is which glyph means which kind of subset, so a page
+ * that invents a seventh does not compile.
+ *
+ * The kinds are the handoff's own, from `tmp/design-frames/README.md`, *Assets*: "cube = all ·
+ * check = published/active · dashed circle = draft · warning triangle = needs attention ·
+ * chain = shared/referenced · clock = unfulfilled · page = document".
+ *
+ * **Six of the seven.** The page — the document kind — is left out because nothing draws it.
+ * The prototype spends it on one screen, a single Policies & FAQ table filtered by *Policies*,
+ * *Guidelines* and *FAQ*; this workspace has no such table (policies and FAQ are two authored
+ * lists on `PoliciesAndFaqPage` and guidelines are a third page), so the chips that would
+ * carry it do not exist here. The house rule in `docs/design-direction.md` — a primitive no
+ * page uses is not a slice — decides it, and the kind is added by whichever slice builds that
+ * index.
+ */
+export type FilterChipKind =
+  | "all"
+  | "published"
+  | "draft"
+  | "attention"
+  | "referenced"
+  | "unfulfilled";
+
+/**
+ * Kind to glyph, written once so the pairing cannot drift across the ten chip rows.
+ *
+ * A page names a kind; it never names the icon. Which kind a chip takes is the prototype's
+ * own `filterKind` classifier (`Workspace.dc.html`:5568–5577) read over that chip's label —
+ * *Payment unsettled* and *Without a default address* are alerts by that function, *Shared* is
+ * a chain, and everything it does not otherwise place is the check.
+ *
+ * The drawings are `lucide-react`, as the button glyphs are, and they are the circled marks
+ * the prototype draws rather than the bare ones the buttons use: `FILTER_ICONS.ok` is a check
+ * inside a circle and `FILTER_ICONS.draft` a dashed one. The handoff's *Assets* section frees
+ * the drawing provided the semantic pairing holds, which is why lucide's dashed circle carries
+ * no inner stroke and the prototype's does.
+ */
+export const filterChipIcon: Readonly<Record<FilterChipKind, LucideIcon>> = {
+  all: Box,
+  published: CircleCheck,
+  draft: CircleDashed,
+  attention: TriangleAlert,
+  referenced: Link,
+  unfulfilled: Clock,
+};
 
 export const tableHeadClasses =
   "border-b border-admin-border px-4 py-2.5 text-left text-xs font-semibold text-admin-muted";

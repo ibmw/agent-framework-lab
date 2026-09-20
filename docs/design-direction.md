@@ -918,6 +918,16 @@ another slice owning the decision. "The handoff is silent" is not one of them. E
 slice writes the departure in one sentence, as `ui/rail-icons-collapse` — where this was
 settled — does for the rail.
 
+**And where the two conflict outright, the README wins.** Silence is one case; a value the
+README states and the prototype draws differently is another, and the rule above does not
+reach it. The README wins there because it is the handoff's deliberate statement of a value —
+written once, for the whole workspace, in a table of roles — while an inline style is one
+occurrence of a drawing, and the prototype has as many occurrences as it has elements. A slice
+that takes the prototype's number over a stated one is departing and says so. Settled in
+`ui/filter-counts`, over the unselected chip's hover: the README gives `#f6f7f8`, which is
+also the hover it gives every white secondary, and the prototype's inline style draws
+`#f4f6f7`.
+
 **Pine takes the primary action, and the warm red is reserved for destructive.** This is the one
 recorded token the refresh changes. Primary actions move to `#1d6241`, hover `#14452e`; the clay
 accent `#c2532d` stops being the colour of the safe, expected action, and `#9d3028` (hover
@@ -985,6 +995,30 @@ routes, and the filter chips carry the number beside their label. It is the same
 the place it can be acted on, and it removes a band that repeated on every list. Five counts have
 no chip today and must gain one rather than be lost — *without a default address*, *required by a
 scenario*, *referenced by a ticket*, and *not composed yet* on both block libraries.
+
+> Amended as built (2026-09-20). **There was no stat strip**: no route in `apps/web` drew one,
+> so nothing was removed and no number was at risk. The slice is therefore additive, which
+> raises rather than lowers the bar on each chip — a count nobody asked for is clutter — and
+> the prototype alone decides which chips an index gets. What landed is one `FilterChips` row
+> with its class sets and a closed six-kind glyph vocabulary in `lib/ui.ts`, adopted by eight
+> indexes; `OrdersPage`'s hand-rolled row went with it.
+>
+> **Of the five counts named above, one is built and four are not**, and the paragraph's
+> arithmetic is wrong twice over. *Without a default address* is built. Seven of the
+> prototype's chips are not: six of them want a figure the index payloads do not carry — an
+> order's ticket, a block's composition on either library, a scenario's pinned shop version,
+> an identity's publish-readiness, a judge's rubric — and three of those six are named above.
+> The seventh, *required by a scenario*, wants no figure at all but a **table**: the prototype
+> filters one documents index by kind, and this workspace has none, because policies and FAQ
+> are two authored lists on one page and guidelines are a third page. A slice that may add no
+> route and no payload cannot invent the six, and merging three authored lists is a
+> restructure it does not own, so all seven are pending rather than lost.
+>
+> Three surfaces end with no chips, each because the prototype gives it none or gives it a
+> list this workspace does not have: Tickets, whose three-pane screen draws no filter control
+> at all, and the two block libraries and Policies & FAQ. The selected-chip trio found its
+> first consumer here. The reasoning is in `docs/implementation-plan.md` UI-4 and in
+> `apps/web/src/components/FilterChips.tsx`.
 
 **The navigation rail gains icons and a collapse.** One glyph per destination, a collapse control
 at the foot, and a 52px strip of centred icons with the label on hover when collapsed. This is the

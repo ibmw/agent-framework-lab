@@ -3,12 +3,17 @@ import {
   type ButtonVerb,
   buttonIcon,
   buttonVariantClasses,
+  type FilterChipKind,
   fieldControlClasses,
   fieldRowClasses,
   fieldRowControlClasses,
   fieldRowHintClasses,
   fieldRowLabelClasses,
   fieldRowLabelTextClasses,
+  filterChipCountClasses,
+  filterChipIcon,
+  filterChipRowClasses,
+  filterChipStateClasses,
   focusRingClasses,
   iconLeadingClasses,
   textAreaClasses,
@@ -139,6 +144,115 @@ describe("the button glyph vocabulary", () => {
     expect(iconLeadingClasses).toContain("flex-none");
     expect(iconLeadingClasses).toMatch(/\bh-\S+\b/);
     expect(iconLeadingClasses).toMatch(/\bw-\S+\b/);
+  });
+});
+
+/**
+ * The filter chip is the second closed vocabulary in this file, and the rules it shares with
+ * the first are asserted the same way: over the record the named states are read off.
+ */
+const chipStates = Object.entries(filterChipStateClasses);
+
+describe("filter chip states", () => {
+  it("offers the two the prototype draws and no third", () => {
+    expect(Object.keys(filterChipStateClasses).sort()).toEqual(["selected", "unselected"]);
+  });
+
+  it.each(chipStates)("%s reacts to a pointer", (_name, classes) => {
+    expect(classes).toMatch(/(^|\s)hover:/);
+  });
+
+  it.each(chipStates)("%s draws a ring for a keyboard reader", (_name, classes) => {
+    expect(classes).toMatch(/(^|\s)focus-visible:outline-2(\s|$)/);
+    expect(classes).toMatch(/(^|\s)focus-visible:outline-offset-2(\s|$)/);
+    expect(classes).toMatch(/(^|\s)focus-visible:outline-lab-primary(\s|$)/);
+  });
+
+  /**
+   * The handoff's token table gives the selected chip as `#eaf5ed` on `#b6d9c4` in `#1d6241`,
+   * hovering to `#ddeee3`. Asserted against the token names rather than the hexadecimals,
+   * because the values live in `styles.css` and a chip that reached for a literal is a chip
+   * the theme can no longer move.
+   */
+  it("paints the selected chip in the refresh's own trio", () => {
+    expect(filterChipStateClasses.selected).toContain("bg-admin-chip");
+    expect(filterChipStateClasses.selected).toContain("border-admin-chip-border");
+    expect(filterChipStateClasses.selected).toContain("text-lab-primary");
+    expect(filterChipStateClasses.selected).toContain("hover:bg-admin-chip-hover");
+  });
+
+  it("gives the unselected chip a border of its own width, so pressing one moves nothing", () => {
+    expect(filterChipStateClasses.unselected).toContain("border-transparent");
+    for (const [, classes] of chipStates) {
+      expect(classes).toMatch(/(^|\s)border(\s|$)/);
+    }
+  });
+
+  it("carries the handoff's chip metrics", () => {
+    // min-height 34px, padding 0 12px, gap 5px, radius 7px, 13px 700.
+    for (const [, classes] of chipStates) {
+      expect(classes).toContain("min-h-[34px]");
+      expect(classes).toContain("px-3");
+      expect(classes).toContain("gap-[5px]");
+      expect(classes).toContain("rounded-[7px]");
+      expect(classes).toContain("text-[13px]");
+      expect(classes).toContain("font-bold");
+    }
+  });
+
+  it("wraps the row and rules it off from the list below", () => {
+    expect(filterChipRowClasses).toContain("flex-wrap");
+    expect(filterChipRowClasses).toContain("gap-1.5");
+    expect(filterChipRowClasses).toContain("border-b");
+  });
+
+  it("keeps the count in one column width and quieter than the label", () => {
+    expect(filterChipCountClasses).toContain("tabular-nums");
+    expect(filterChipCountClasses).toContain("opacity-75");
+  });
+});
+
+/**
+ * The chip vocabulary, asserted exactly as the button verbs are: the table is the
+ * specification, and a kind removed from it breaks here before it breaks a screen.
+ *
+ * The six are the handoff's *Assets* list less the page glyph, which nothing in this
+ * workspace draws — see the type's own note in `ui.ts`. That omission is asserted rather
+ * than merely absent, so a seventh kind cannot be added without saying which one it is.
+ */
+const CHIP_VOCABULARY: Record<FilterChipKind, string> = {
+  all: "Box",
+  published: "CircleCheck",
+  draft: "CircleDashed",
+  attention: "TriangleAlert",
+  referenced: "Link",
+  unfulfilled: "Clock",
+};
+
+describe("the filter chip glyph vocabulary", () => {
+  it("covers every kind and invents none", () => {
+    expect(Object.keys(filterChipIcon).sort()).toEqual(Object.keys(CHIP_VOCABULARY).sort());
+  });
+
+  it.each(Object.entries(CHIP_VOCABULARY))("%s is drawn as %s", (kind, drawing) => {
+    const glyph = filterChipIcon[kind as FilterChipKind];
+    expect(glyph).toBeTypeOf("object");
+    expect(glyph.displayName).toBe(drawing);
+  });
+
+  it("gives no two kinds the same drawing", () => {
+    const drawings = Object.values(filterChipIcon);
+    expect(new Set(drawings).size).toBe(drawings.length);
+  });
+
+  /**
+   * Two vocabularies, not one extended. A chip's check means "the published ones" and a
+   * button's means "save", so the drawings are allowed to differ — what may not happen is a
+   * page reaching into the wrong table, which is what one merged record would invite.
+   */
+  it("stays a separate set from the button verbs", () => {
+    expect(Object.keys(filterChipIcon)).not.toContain("save");
+    expect(Object.keys(buttonIcon)).not.toContain("all");
   });
 });
 

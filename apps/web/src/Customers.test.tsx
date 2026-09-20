@@ -285,6 +285,49 @@ describe("customer workspace", () => {
     expect(screen.queryByRole("link", { name: "Tomás Rivera" })).toBeNull();
   });
 
+  /**
+   * The two chips this page exists to gain. *Shared* is the Shops column counted, and
+   * *Without a default address* is the Addresses column counted — the profile an order
+   * fixture stalls on, because an order's ship-to is chosen from the address book.
+   */
+  it("counts the profiles by provenance, reach and address book, and filters to each", async () => {
+    const user = userEvent.setup();
+    const NO_DEFAULT: CustomerProfileListResponse["profiles"][number] = {
+      ...UNATTACHED,
+      profile_id: "7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2e",
+      display_name: "Priya Raman",
+      email: "priya.raman@example.org",
+      attached_shop_count: 1,
+    };
+    server.use(
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped ? [MAYA, NO_DEFAULT] : [MAYA, NO_DEFAULT, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    const filters = within(screen.getByRole("group", { name: "Filter customers" }));
+
+    expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Published 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Never published 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Shared 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Without a default address 1" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Without a default address 1" }));
+
+    expect(screen.getByRole("link", { name: "Priya Raman" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Maya Laurent" })).toBeNull();
+
+    await user.click(filters.getByRole("button", { name: "Shared 1" }));
+
+    expect(screen.getByRole("link", { name: "Maya Laurent" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Priya Raman" })).toBeNull();
+  });
+
   it("puts each new-customer field's hint in that control's accessible description", async () => {
     renderAt(`/shops/${SHOP_ID}/customers`);
 

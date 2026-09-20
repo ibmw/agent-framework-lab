@@ -205,8 +205,40 @@ describe("judge workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Judges" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Resolution quality" })).toBeVisible();
-    expect(screen.getByText("OpenAI")).toBeVisible();
-    expect(screen.getByText("Never published")).toBeVisible();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("OpenAI")).toBeVisible();
+    expect(table.getByText("Never published")).toBeVisible();
+  });
+
+  it("counts the judges a scenario could score with, and filters to them", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/judge-configurations", () =>
+        HttpResponse.json({
+          judges: [
+            ...LIST.judges,
+            {
+              ...LIST.judges[0],
+              judge_id: "9e8d7c6b-5a49-4837-9261-0f1e2d3c4b5a",
+              name: "Tone",
+              latest_published_version: 1,
+              published_version_count: 1,
+            },
+          ],
+        } satisfies JudgeConfigurationListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/judges`);
+    await screen.findByRole("link", { name: "Resolution quality" });
+    const filters = within(screen.getByRole("group", { name: "Filter judges" }));
+
+    expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Usable 1" })).toBeVisible();
+
+    await user.click(filters.getByRole("button", { name: "Usable 1" }));
+
+    expect(screen.getByRole("link", { name: "Tone" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Resolution quality" })).toBeNull();
   });
 
   it("creates a judge with no rubric, because the rubric is what an author writes", async () => {
