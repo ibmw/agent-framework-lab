@@ -395,7 +395,67 @@ describe("order index", () => {
 
     expect(screen.queryByRole("link", { name: "NS-10482" })).toBeNull();
     expect(screen.queryByRole("link", { name: "NS-10476" })).toBeNull();
-    expect(screen.getByText("No order matches this filter.")).toBeVisible();
+    expect(screen.getByText("No order matches this view.")).toBeVisible();
+  });
+
+  /**
+   * The rule UI-6 settled, asserted where an operator meets it: the search narrows the rows
+   * and moves no count. Every chip's whole rendered text is captured before the word is typed
+   * and compared after, so a count that recomputed over the searched list fails here whatever
+   * its figure happened to become — and the row assertion above it is what makes the
+   * comparison mean something, because a search that narrowed nothing would also move nothing.
+   */
+  it("narrows the orders to the search and leaves every count where it was", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    await screen.findByRole("link", { name: "NS-10482" });
+    const filters = within(screen.getByRole("group", { name: "Filter orders" }));
+    const counts = filters.getAllByRole("button").map((chip) => chip.textContent);
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search by reference or customer" }),
+      "10476",
+    );
+
+    expect(screen.getByRole("link", { name: "NS-10476" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "NS-10482" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "NS-10479" })).toBeNull();
+    expect(filters.getAllByRole("button").map((chip) => chip.textContent)).toEqual(counts);
+    expect(filters.getByRole("button", { name: "All 3" })).toBeVisible();
+  });
+
+  /** The word searches what the chip left, not the table: pressing one still holds. */
+  it("searches under the pressed chip rather than around it", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    await screen.findByRole("link", { name: "NS-10482" });
+    const filters = within(screen.getByRole("group", { name: "Filter orders" }));
+
+    await user.click(filters.getByRole("button", { name: "Open 1" }));
+    // Every fixture order is Maya Laurent's, so the word alone would leave all three.
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search by reference or customer" }),
+      "Maya",
+    );
+
+    expect(screen.getByRole("link", { name: "NS-10482" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "NS-10479" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "NS-10476" })).toBeNull();
+  });
+
+  /** A search that matches nothing leaves a sentence, never a blank card. */
+  it("says so when nothing in the shop matches the word", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders`);
+    await screen.findByRole("link", { name: "NS-10482" });
+
+    await user.type(
+      screen.getByRole("searchbox", { name: "Search by reference or customer" }),
+      "NS-90000",
+    );
+
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText("No order matches this view.")).toBeVisible();
   });
 
   /**

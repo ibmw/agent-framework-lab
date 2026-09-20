@@ -943,6 +943,17 @@ also the hover it gives every white secondary, and the prototype's inline style 
 > cards in sans where its table and section cards are Georgia, which "card titles" summarises
 > away. Both are flattened by one `PageHeader` and one `Card`, and both are written up in
 > `docs/implementation-plan.md` UI-5.
+>
+> Tightened as built (2026-09-20, `ui/search-field`). **A README value under a heading that
+> scopes itself is stated for that role only.** *The form pattern* says in its own title that
+> it "applies to 107 rows", so the `Inputs:` metrics under it decide a form row's control and
+> nothing else. A control outside that heading's scope is a case of **silence**, not conflict,
+> and the paragraph above governs: the prototype decides it. The test is whether the prototype
+> draws that control with its own consistent values — as it does the eleven search boxes, at
+> `#bdc7cf`, 38px and 13px, against the ninety form controls it borders in `#c9cccf`. Counted,
+> not impressed upon: `#bdc7cf` occurs in `Workspace.dc.html` exactly eleven times, and they
+> are those eleven fields. A slice taking this route counts the occurrences and writes the
+> count down, as UI-6 does; "the README's number looked wrong here" is not the same finding.
 
 **Pine takes the primary action, and the warm red is reserved for destructive.** This is the one
 recorded token the refresh changes. Primary actions move to `#1d6241`, hover `#14452e`; the clay

@@ -338,6 +338,105 @@ never moves as you type, and the search narrows only what is under the chips. Wh
 UI-6 goes, `filterList` in `components/FilterChips.tsx` is the one place to decide it, because
 the count and the filtering come out of it together.
 
+**The census holds, and its answer is taken.** Re-read rather than trusted: `#bdc7cf` — the
+border of the prototype's search input — occurs exactly eleven times in `Workspace.dc.html`,
+and the eleven are the lines above; the bundle holds eleven `Search …` strings and no twelfth.
+Every one of the eleven chip tables counts an unsearched array (`shopFilters` over
+`s.shopList`, `cusFilters` over `s.customerList`, `ordFilters` over `s.orderList`,
+`docFilters` over `DOCUMENTS`, `prodFilters` over a constant `PROD_FILTERS`, and the other six
+the same) while the table beside it renders the searched `shown…`. So counts are of the whole
+list and the search narrows only the rows, and that is settled in `filterList`, which now takes
+the search and returns the counts from `rows` and the visible rows from what the pressed chip
+left. A page cannot hold the two rules apart.
+
+**The eleven, against this workspace.** `:163` shops → `ShopsPage`; `:827` products →
+`ProductsPage`; `:1068` orders → `OrdersPage`; `:1142` customers → `CustomersPage`; `:1460`
+scenarios → `ScenariosPage`; `:1595` identities → `SupportIdentitiesPage`; `:3238` agent
+configurations → `AgentConfigurationsPage`; `:3419` judges → `JudgeConfigurationsPage`; `:3570`
+and `:3714`, the two block libraries → `BlockLibraryPage`, which renders both. **`:1534` has no
+counterpart here**: it is the prototype's single Documents table, and this workspace has no such
+index — policies and FAQ are two authored lists on `PoliciesAndFaqPage` and guidelines are a
+third page. That is the same surface, and the same reason, UI-4 left without chips; merging the
+three is a restructure neither slice owns, and a search box on each of two authored lists is not
+the control the prototype draws. So ten routes carry the field, eleven references are accounted
+for, and two of those routes have search and no chips. Not because the prototype draws none:
+it gives both libraries a chip row of their own (`obFilters` at `:6284`, `muFilters` at
+`:6305`). They are chipless *here* by UI-4's decision above — `BlockSummarySchema` carries the
+composed caption `type_label` and neither the assessment nor the effect those rows filter on,
+and filtering by splitting a caption is reading a label as data. So the count question does not
+arise on them for a reason this repository took, not one the design did.
+
+**Experiment history is not one of the eleven and was not touched.** The prototype's History
+screen (`:2670`–`:2683`) draws a Scenario select, a Configuration select, a Tag box and two
+buttons, and no search box at all. The field this workspace already has there is URL-backed and
+submitted rather than typed, sits in a labelled form beside its own *Search* button, and
+`docs/PLAN-UX.md` Slice 16 owns restructuring that form. Adopting `SearchField` there would mean
+changing what submits or what the label says; the slice stops at its edge.
+
+**Where the search sits.** The prototype puts it in the card's **header line**, right-aligned
+opposite the card title, with the chip row directly beneath — all eleven, without exception.
+Only the shops table draws that header in this workspace (open-coded, so the chip row can sit
+under it), and there the field goes into it exactly as drawn. The other nine cards have no title
+to sit opposite, so they draw `SearchRow` with the field alone: the same corner of the same
+card, in the same order relative to the chips, ruled off from them the way a header is. One
+component draws both cases — the shops header passes its `h2` in as a child rather than
+respelling the row — so the two cannot drift apart, which is the lesson `ui/display-type` paid
+for on card titles. Giving those cards the titles the
+prototype writes over them would change a page's heading outline and is not this slice.
+
+**Where this follows the prototype against the README.** The search box does not take the
+README's `Inputs:` metrics. That bullet belongs to *The form pattern*, which the same section
+says "applies to 107 rows" — a label, a hint and a control in a form row — and a box in a card
+header is none of those. The prototype draws it differently in all five values (38px not 44,
+`8px 12px 8px 36px` not `10px 14px`, `#bdc7cf` not `#c9cccf`, 8px not 9px, 13px not 14.5px) in
+all eleven places and nowhere else, which is a distinction across a class rather than one value
+against another — the case `docs/design-direction.md`'s narrowed clause hands to the prototype.
+
+**One known inconsistency, left as it is.** `ProductsPage` draws its search box — and its chip
+row, which arrived on `main` a slice earlier — over a catalog with nothing in it, where the rule
+stated above ("a box that can only narrow nothing is a control that does nothing") would hide
+both. The catalog is the shop draft and is in hand when the route renders, so there is no load
+to gate on and no moment at which the controls would appear; hiding the search while the chips
+stayed would make the two disagree on one card, which is worse than either. Named here so the
+next reader knows it was seen rather than missed, and so that whoever revisits the gate revisits
+both controls together.
+
+**And three values are not the prototype's.** The row takes the card header's `px-4 py-3` rather
+than `17px 20px`, UI-4's and UI-5's argument unchanged. One width, `min(300px, 34%)`, stands for
+the three the prototype draws (that on eight indexes, `min(320px, 36%)` on orders and customers,
+a flat `260px` on documents). And a 180px floor sits under that percentage, because 34% of a
+narrow card is not a field anyone can read their own word back from and the handoff's
+*Responsive* rule requires the row to survive its wrap.
+
+**Two more departures, both named rather than found.** The control is `type="search"`, where the
+prototype draws a plain text input: it is the semantic that drawing implies, it is what a reader
+is told they have landed in, and it is what a spec reaches for it by. What the role brings with
+it is refused rather than inherited — Tailwind's preflight resets `::-webkit-search-decoration`
+and sets no `appearance` for `[type=search]`, so WebKit would otherwise draw a native clear x
+once there is text, which the prototype has not got, no keyboard reaches and nothing names, and
+which on older Safari can overrule the field's own radius and padding; `searchFieldClasses`
+carries `appearance-none` and drops the cancel button, and `lib/ui.test.ts` holds it to both. And the "no rows" line on
+every adopting index now reads "No X matches this **view**" rather than "this filter", which is
+the prototype's own word and the
+only honest one once a search narrows beside a chip (`:199`, `:874`, `:1112`, `:1187`, `:1500`,
+`:1568`, `:3272`, `:3453` — eight of them, the documents index included). The two libraries gain
+the same sentence,
+which the prototype does not write for them — its `obEmpty` and `muEmpty` conflate "none match"
+with "none exist", where this workspace already distinguishes them.
+
+*Checks:* `SearchField.test.tsx` — the label as an element bound to the field rather than a
+placeholder standing in for one, one string in the box and in the name, the magnifier hidden,
+and every keystroke reported. `FilterChips.test.tsx` — the counts read off the rendered chips
+before and after a word is typed, the search narrowing under the pressed chip, and `searchRows`
+itself; its empty line is the harness's own markup and pins the wiring, not the copy.
+`Orders.test.tsx` and `Blocks.test.tsx` — the product copy, on the two paths that differ:
+Orders for an index that reaches the search through `filterList` under chips, where the count
+rule is asserted on a real table, and the objective library for the one that calls `searchRows`
+directly with no chips over it. Both assert a miss leaves the sentence and not a blank card.
+`lib/ui.test.ts` — the metrics above, so a later slice cannot fold this control into
+`fieldControlClasses` and lose the 36px the magnifier stands in, plus the two appearance resets
+that keep `type="search"` from drawing chrome of its own.
+
 ### UI-7 · The field control itself
 `branch: ui/field-control`
 

@@ -16,6 +16,10 @@ import {
   filterChipStateClasses,
   focusRingClasses,
   iconLeadingClasses,
+  searchFieldClasses,
+  searchFieldIconClasses,
+  searchFieldRowClasses,
+  searchFieldWrapClasses,
   textAreaClasses,
 } from "./ui";
 
@@ -307,5 +311,71 @@ describe("the form row", () => {
     expect(fieldRowHintClasses).toContain("text-[13px]");
     expect(fieldRowHintClasses).toContain("text-admin-ink-soft");
     expect(fieldRowHintClasses).toContain("[text-wrap:pretty]");
+  });
+});
+
+/**
+ * The search box's metrics, which are the prototype's and not the form pattern's — see the
+ * note on the class set itself for why the README's `Inputs:` bullet does not reach a box in
+ * a card header. Asserted so that a later slice cannot quietly fold this control into
+ * `fieldControlClasses` and lose the 36px the magnifier stands in.
+ */
+describe("the search field", () => {
+  it("carries the metrics the prototype draws on all eleven of them", () => {
+    // min-height 38px, padding 8px 12px 8px 36px, radius 8px, 13px, border #bdc7cf.
+    expect(searchFieldClasses).toContain("min-h-[38px]");
+    expect(searchFieldClasses).toContain("py-2");
+    expect(searchFieldClasses).toContain("pr-3");
+    expect(searchFieldClasses).toContain("pl-9");
+    expect(searchFieldClasses).toContain("rounded-lg");
+    expect(searchFieldClasses).toContain("text-[13px]");
+    expect(searchFieldClasses).toContain("border-[#bdc7cf]");
+  });
+
+  /**
+   * The control is a `searchbox`, and what WebKit adds to one is refused. Preflight resets
+   * `::-webkit-search-decoration` and nothing else, so without these two the browser draws a
+   * clear x the prototype has not got, no keyboard reaches and nothing names — and can
+   * overrule the radius above with a native box.
+   */
+  it("refuses the native search chrome the role would otherwise bring", () => {
+    expect(searchFieldClasses).toContain("appearance-none");
+    expect(searchFieldClasses).toContain("[&::-webkit-search-cancel-button]:appearance-none");
+  });
+
+  /**
+   * The glyph is a drawing inside the field's own padding, so it must not eat the click that
+   * belongs to the input underneath it, and it must not be the reason a 36px inset exists
+   * without anything in it.
+   */
+  it("insets the magnifier into the padding the field leaves for it", () => {
+    expect(searchFieldIconClasses).toContain("absolute");
+    expect(searchFieldIconClasses).toContain("left-3");
+    expect(searchFieldIconClasses).toContain("h-4");
+    expect(searchFieldIconClasses).toContain("w-4");
+    expect(searchFieldIconClasses).toContain("pointer-events-none");
+  });
+
+  /** The focus pair the README states and the prototype draws: pine border, 3px pine ring. */
+  it("answers a keyboard reader with the workspace's own focus pair", () => {
+    expect(searchFieldClasses).toContain("focus:border-lab-primary");
+    expect(searchFieldClasses).toContain("focus:ring-[3px]");
+    expect(searchFieldClasses).toContain("focus:ring-lab-primary/20");
+  });
+
+  /** The prototype's `margin-left:auto` and `width:min(300px,34%)`, with a floor under it. */
+  it("sits at the right end of its row, at the prototype's width", () => {
+    expect(searchFieldWrapClasses).toContain("ml-auto");
+    expect(searchFieldWrapClasses).toContain("w-[min(300px,34%)]");
+    expect(searchFieldWrapClasses).toContain("min-w-[180px]");
+    expect(searchFieldWrapClasses).toContain("relative");
+  });
+
+  /** The row it sits in shares the card header's padding and rules off from the chips below. */
+  it("wraps its row and rules it off from what is under it", () => {
+    expect(searchFieldRowClasses).toContain("flex-wrap");
+    expect(searchFieldRowClasses).toContain("px-4");
+    expect(searchFieldRowClasses).toContain("py-3");
+    expect(searchFieldRowClasses).toContain("border-b");
   });
 });

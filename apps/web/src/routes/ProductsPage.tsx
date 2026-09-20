@@ -5,6 +5,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import {
   Card,
@@ -96,6 +97,7 @@ export function ProductsPage() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
   const takenHandles = content.products.map((product) => product.handle);
   // Sorted and de-duplicated, so the list reads as a vocabulary rather than as the order
   // products happened to be added in. A product with no category yet offers nothing.
@@ -121,10 +123,13 @@ export function ProductsPage() {
     setCategory("");
   }
 
+  // The title alone, which is what the prototype's products search reads (`p.title` in its
+  // `shownProducts` filter).
   const { chips, visible } = filterList(
     content.products,
     productFilters(preview?.issues ?? []),
     filter,
+    { query, fields: (product) => [product.title] },
   );
 
   return (
@@ -156,6 +161,11 @@ export function ProductsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`} data-tour="product-index">
+          {/* Not gated on a load, as the chip row beside it is not: this catalog is the shop
+              draft, already in hand when the route renders. */}
+          <SearchRow>
+            <SearchField label="Search products" onChange={setQuery} value={query} />
+          </SearchRow>
           <FilterChips
             legend="Filter products"
             chips={chips}
@@ -167,7 +177,7 @@ export function ProductsPage() {
               This shop sells nothing yet. A published shop must sell at least one product.
             </p>
           ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No product matches this filter.</p>
+            <p className="p-4 text-[13px] text-admin-muted">No product matches this view.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>

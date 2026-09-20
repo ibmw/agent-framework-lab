@@ -314,6 +314,35 @@ describe("block libraries", () => {
     expect(within(row as HTMLElement).getByText("Draft")).toBeVisible();
   });
 
+  /**
+   * The two libraries are the only adopting path that does not go through `filterList`: they
+   * draw no chips — UI-4 left them chipless because `BlockSummarySchema` carries the composed
+   * caption `type_label` and not the assessment or effect the prototype's own chip rows
+   * (`obFilters`, `muFilters`) filter on — so they call `searchRows` directly. Without these
+   * two assertions the field on them narrows nothing and no test says so.
+   */
+  it("narrows the library to the blocks the word is in", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    await screen.findByRole("link", { name: "read-required-document" });
+
+    await user.type(screen.getByRole("searchbox", { name: "Search the library" }), "verify");
+
+    expect(screen.getByRole("link", { name: "verify-before-disclosure" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "read-required-document" })).toBeNull();
+  });
+
+  it("leaves a sentence rather than a blank card when the word is in nothing", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/objective-blocks`);
+    await screen.findByRole("link", { name: "read-required-document" });
+
+    await user.type(screen.getByRole("searchbox", { name: "Search the library" }), "no-such-block");
+
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText("No objective block matches this view.")).toBeVisible();
+  });
+
   it("creates a block under a slug derived from what the author typed", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/objective-blocks`);

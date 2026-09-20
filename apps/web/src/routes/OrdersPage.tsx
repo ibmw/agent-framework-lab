@@ -8,6 +8,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
@@ -77,6 +78,7 @@ export function OrdersPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
   const [reference, setReference] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [placedOn, setPlacedOn] = useState(todayInput);
@@ -174,7 +176,12 @@ export function OrdersPage() {
     }
   }
 
-  const { chips, visible } = filterList(orders, FILTERS, filter);
+  // Reference or customer, the pair the prototype's orders search reads (its `shownOrders`
+  // filter) and the pair its placeholder names.
+  const { chips, visible } = filterList(orders, FILTERS, filter, {
+    query,
+    fields: (order) => [order.reference, order.customer_display_name],
+  });
 
   return (
     <>
@@ -192,17 +199,28 @@ export function OrdersPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
-              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
-              it is the stat band this slice exists to avoid, drawn at its least useful moment.
-              The row arrives with the table it belongs to. */}
+          {/* Only once there are rows to search and count. A chip is a filter, and a row of
+              zeros over "Loading…" — or over a listing that failed — filters nothing and
+              answers nothing; it is the stat band this slice exists to avoid, drawn at its
+              least useful moment. The search box keeps the same company: a box that can only
+              narrow nothing is a control that does nothing. Both arrive with the table they
+              belong to. */}
           {loading || loadError ? null : (
-            <FilterChips
-              legend="Filter orders"
-              chips={chips}
-              selected={filter}
-              onSelect={setFilter}
-            />
+            <>
+              <SearchRow>
+                <SearchField
+                  label="Search by reference or customer"
+                  onChange={setQuery}
+                  value={query}
+                />
+              </SearchRow>
+              <FilterChips
+                legend="Filter orders"
+                chips={chips}
+                selected={filter}
+                onSelect={setFilter}
+              />
+            </>
           )}
 
           {loading ? (
@@ -211,7 +229,7 @@ export function OrdersPage() {
             <p className="p-4 text-[13px] text-admin-muted">
               {orders.length === 0
                 ? "This shop has no order fixtures yet. Create one for a customer attached to this shop."
-                : "No order matches this filter."}
+                : "No order matches this view."}
             </p>
           ) : (
             <table className="w-full border-collapse text-[13px]">

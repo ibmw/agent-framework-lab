@@ -6,6 +6,7 @@ import { createJudgeConfiguration, listJudgeConfigurations } from "../api/judgeC
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
@@ -48,6 +49,7 @@ export function JudgeConfigurationsPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     setJudges((await listJudgeConfigurations(signal)).judges);
@@ -92,7 +94,12 @@ export function JudgeConfigurationsPage() {
     }
   }
 
-  const { chips, visible } = filterList(judges, FILTERS, filter);
+  // The name alone, which is what the prototype's judges search reads (its `shownJudges`
+  // filter).
+  const { chips, visible } = filterList(judges, FILTERS, filter, {
+    query,
+    fields: (judge) => [judge.name],
+  });
 
   return (
     <>
@@ -110,17 +117,24 @@ export function JudgeConfigurationsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
-              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
-              it is the stat band this slice exists to avoid, drawn at its least useful moment.
-              The row arrives with the table it belongs to. */}
+          {/* Only once there are rows to search and count. A chip is a filter, and a row of
+              zeros over "Loading…" — or over a listing that failed — filters nothing and
+              answers nothing; it is the stat band this slice exists to avoid, drawn at its
+              least useful moment. The search box keeps the same company: a box that can only
+              narrow nothing is a control that does nothing. Both arrive with the table they
+              belong to. */}
           {loading || loadError ? null : (
-            <FilterChips
-              legend="Filter judges"
-              chips={chips}
-              selected={filter}
-              onSelect={setFilter}
-            />
+            <>
+              <SearchRow>
+                <SearchField label="Search judges" onChange={setQuery} value={query} />
+              </SearchRow>
+              <FilterChips
+                legend="Filter judges"
+                chips={chips}
+                selected={filter}
+                onSelect={setFilter}
+              />
+            </>
           )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading judges…</p>
@@ -129,7 +143,7 @@ export function JudgeConfigurationsPage() {
               No judge yet. Create one to score the objectives a scenario leaves to a judge.
             </p>
           ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No judge matches this filter.</p>
+            <p className="p-4 text-[13px] text-admin-muted">No judge matches this view.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>

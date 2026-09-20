@@ -13,6 +13,7 @@ import { describeApiError } from "../api/client";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
@@ -65,6 +66,7 @@ export function AgentConfigurationsPage() {
   const [name, setName] = useState("");
   const [identityId, setIdentityId] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     const [listed, resources] = await Promise.all([
@@ -115,7 +117,12 @@ export function AgentConfigurationsPage() {
     }
   }
 
-  const { chips, visible } = filterList(configurations, FILTERS, filter);
+  // Name and model, the two the prototype's configurations search reads (its `shownAgents`
+  // filter).
+  const { chips, visible } = filterList(configurations, FILTERS, filter, {
+    query,
+    fields: (configuration) => [configuration.name, configuration.model_id],
+  });
 
   return (
     <>
@@ -133,17 +140,24 @@ export function AgentConfigurationsPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
-              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
-              it is the stat band this slice exists to avoid, drawn at its least useful moment.
-              The row arrives with the table it belongs to. */}
+          {/* Only once there are rows to search and count. A chip is a filter, and a row of
+              zeros over "Loading…" — or over a listing that failed — filters nothing and
+              answers nothing; it is the stat band this slice exists to avoid, drawn at its
+              least useful moment. The search box keeps the same company: a box that can only
+              narrow nothing is a control that does nothing. Both arrive with the table they
+              belong to. */}
           {loading || loadError ? null : (
-            <FilterChips
-              legend="Filter agent configurations"
-              chips={chips}
-              selected={filter}
-              onSelect={setFilter}
-            />
+            <>
+              <SearchRow>
+                <SearchField label="Search configurations" onChange={setQuery} value={query} />
+              </SearchRow>
+              <FilterChips
+                legend="Filter agent configurations"
+                chips={chips}
+                selected={filter}
+                onSelect={setFilter}
+              />
+            </>
           )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading agent configurations…</p>
@@ -152,9 +166,7 @@ export function AgentConfigurationsPage() {
               No agent configuration yet. Create one to describe the agent an experiment runs.
             </p>
           ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">
-              No configuration matches this filter.
-            </p>
+            <p className="p-4 text-[13px] text-admin-muted">No configuration matches this view.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>

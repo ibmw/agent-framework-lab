@@ -6,6 +6,7 @@ import { createSupportIdentity, listSupportIdentities } from "../api/supportIden
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -54,6 +55,7 @@ export function SupportIdentitiesPage() {
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
   const reload = useCallback(async (signal?: AbortSignal) => {
     setIdentities((await listSupportIdentities(signal)).identities);
@@ -99,7 +101,12 @@ export function SupportIdentitiesPage() {
     }
   }
 
-  const { chips, visible } = filterList(identities, FILTERS, filter);
+  // Name and title, the two the prototype's identities search reads (its `shownIdentities`
+  // filter) and the two this table prints in its first column.
+  const { chips, visible } = filterList(identities, FILTERS, filter, {
+    query,
+    fields: (identity) => [identity.name, identity.title],
+  });
 
   return (
     <>
@@ -117,17 +124,24 @@ export function SupportIdentitiesPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
-              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
-              it is the stat band this slice exists to avoid, drawn at its least useful moment.
-              The row arrives with the table it belongs to. */}
+          {/* Only once there are rows to search and count. A chip is a filter, and a row of
+              zeros over "Loading…" — or over a listing that failed — filters nothing and
+              answers nothing; it is the stat band this slice exists to avoid, drawn at its
+              least useful moment. The search box keeps the same company: a box that can only
+              narrow nothing is a control that does nothing. Both arrive with the table they
+              belong to. */}
           {loading || loadError ? null : (
-            <FilterChips
-              legend="Filter support identities"
-              chips={chips}
-              selected={filter}
-              onSelect={setFilter}
-            />
+            <>
+              <SearchRow>
+                <SearchField label="Search identities" onChange={setQuery} value={query} />
+              </SearchRow>
+              <FilterChips
+                legend="Filter support identities"
+                chips={chips}
+                selected={filter}
+                onSelect={setFilter}
+              />
+            </>
           )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading support identities…</p>
@@ -136,7 +150,7 @@ export function SupportIdentitiesPage() {
               No support identity yet. Create one to define an agent's role and permissions.
             </p>
           ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No identity matches this filter.</p>
+            <p className="p-4 text-[13px] text-admin-muted">No identity matches this view.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>

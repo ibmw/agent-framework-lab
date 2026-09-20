@@ -10,6 +10,7 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import {
@@ -87,6 +88,7 @@ export function CustomersPage() {
   const [customerSince, setCustomerSince] = useState("2024-01-01");
   const [attachId, setAttachId] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
@@ -172,7 +174,12 @@ export function CustomersPage() {
     }
   }
 
-  const { chips, visible } = filterList(attached, FILTERS, filter);
+  // Name or email, the pair the prototype's customers search reads (its `shownCustomers`
+  // filter) and the pair its placeholder names.
+  const { chips, visible } = filterList(attached, FILTERS, filter, {
+    query,
+    fields: (profile) => [profile.display_name, profile.email],
+  });
 
   const attachable = everything.filter(
     (profile) => !attached.some((row) => row.profile_id === profile.profile_id),
@@ -194,17 +201,24 @@ export function CustomersPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
-              "Loading…" — or over a listing that failed — filters nothing and answers nothing;
-              it is the stat band this slice exists to avoid, drawn at its least useful moment.
-              The row arrives with the table it belongs to. */}
+          {/* Only once there are rows to search and count. A chip is a filter, and a row of
+              zeros over "Loading…" — or over a listing that failed — filters nothing and
+              answers nothing; it is the stat band this slice exists to avoid, drawn at its
+              least useful moment. The search box keeps the same company: a box that can only
+              narrow nothing is a control that does nothing. Both arrive with the table they
+              belong to. */}
           {loading || loadError ? null : (
-            <FilterChips
-              legend="Filter customers"
-              chips={chips}
-              selected={filter}
-              onSelect={setFilter}
-            />
+            <>
+              <SearchRow>
+                <SearchField label="Search by name or email" onChange={setQuery} value={query} />
+              </SearchRow>
+              <FilterChips
+                legend="Filter customers"
+                chips={chips}
+                selected={filter}
+                onSelect={setFilter}
+              />
+            </>
           )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading customers…</p>
@@ -213,7 +227,7 @@ export function CustomersPage() {
               No customer is attached to this shop yet. Create one, or attach an existing profile.
             </p>
           ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No customer matches this filter.</p>
+            <p className="p-4 text-[13px] text-admin-muted">No customer matches this view.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>

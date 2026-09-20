@@ -2,7 +2,13 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { type FilterChipDefinition, FilterChips, filterList } from "./components/FilterChips";
+import {
+  type FilterChipDefinition,
+  FilterChips,
+  filterList,
+  searchRows,
+} from "./components/FilterChips";
+import { SearchField } from "./components/SearchField";
 
 interface Row {
   readonly name: string;
@@ -145,5 +151,135 @@ describe("the filter chip row", () => {
       expect(written).not.toBe("");
       expect(chip.getAttribute("aria-label")).toBe(written?.replace(/(\D)(\d+)$/, "$1 $2"));
     }
+  });
+});
+
+/** The same index, with the search box the eleven searchable ones draw over their chips. */
+function SearchableIndex({ rows = ROWS }: { rows?: Row[] }) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const { chips, visible } = filterList(rows, FILTERS, filter, {
+    query,
+    fields: (row) => [row.name],
+  });
+  return (
+    <>
+      <SearchField label="Search shops" onChange={setQuery} value={query} />
+      <FilterChips legend="Filter shops" chips={chips} selected={filter} onSelect={setFilter} />
+      <ul>
+        {visible.map((row) => (
+          <li key={row.name}>{row.name}</li>
+        ))}
+      </ul>
+      {visible.length === 0 ? <p>No shop matches this view.</p> : null}
+    </>
+  );
+}
+
+function searchBox() {
+  return screen.getByRole("searchbox", { name: "Search shops" });
+}
+
+/**
+ * The question UI-6 had to settle, settled here and once: **a chip counts the whole list and
+ * the search narrows only the rows**.
+ *
+ * It is the prototype's own answer, censused rather than assumed — every one of its eleven
+ * chip tables counts the unsearched array (`shopFilters` reads `s.shopList` while the table
+ * renders the searched `shownShops`, `cusFilters` reads `s.customerList`, `docFilters` reads
+ * `DOCUMENTS`, `prodFilters` is a constant, and the other seven do the same). A count that
+ * moved as a word was typed would stop answering "how many of these are drafts?", which is a
+ * question about the list and not about the word.
+ *
+ * Because `filterList` returns both from one call, a page cannot wire the two rules
+ * differently: these assertions hold for every index that adopts it.
+ */
+describe("a search over a filtered list", () => {
+  it("leaves every count exactly where it was, whatever is typed", async () => {
+    const user = userEvent.setup();
+    render(<SearchableIndex />);
+    const before = chipRow()
+      .getAllByRole("button")
+      .map((chip) => chip.textContent);
+
+    await user.type(searchBox(), "harbour");
+
+    // The search did something — otherwise the assertion below could not fail.
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(
+      chipRow()
+        .getAllByRole("button")
+        .map((chip) => chip.textContent),
+    ).toEqual(before);
+    expect(chipRow().getByRole("button", { name: "All 3" })).toBeVisible();
+    expect(chipRow().getByRole("button", { name: "Never published 2" })).toBeVisible();
+  });
+
+  it("narrows what the pressed chip left, not the whole list", async () => {
+    const user = userEvent.setup();
+    render(<SearchableIndex />);
+
+    await user.click(chipRow().getByRole("button", { name: "Published 1" }));
+    await user.type(searchBox(), "harbour");
+
+    // Harbour Lane Supply matches the word and is not published, so the pressed chip holds.
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(screen.getByText("No shop matches this view.")).toBeVisible();
+  });
+
+  it("leaves the operator a sentence rather than a blank card", async () => {
+    const user = userEvent.setup();
+    render(<SearchableIndex />);
+
+    await user.type(searchBox(), "no-such-shop");
+
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    expect(screen.getByText("No shop matches this view.")).toBeVisible();
+  });
+
+  it("hands the whole list back when the box is emptied", async () => {
+    const user = userEvent.setup();
+    render(<SearchableIndex />);
+    await user.type(searchBox(), "harbour");
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    await user.clear(searchBox());
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  });
+});
+
+/**
+ * What "matches" means, asserted on the function rather than through a page: one definition
+ * for the whole workspace, so two indexes cannot disagree about whether a word in the middle
+ * of a slug counts.
+ */
+describe("the search itself", () => {
+  const rows = [{ name: "Northstar Outfitters", published: true }];
+  const over = (query: string) => searchRows(rows, { query, fields: (row) => [row.name] });
+
+  it("matches inside a value and ignores case on both sides", () => {
+    expect(over("STAR")).toHaveLength(1);
+    expect(over("outfit")).toHaveLength(1);
+    expect(over("northstar outfitters")).toHaveLength(1);
+  });
+
+  it("matches nothing the word is not in", () => {
+    expect(over("harbour")).toHaveLength(0);
+  });
+
+  it("narrows nothing at all for a box that is empty or holds only spaces", () => {
+    expect(over("")).toHaveLength(1);
+    expect(over("   ")).toHaveLength(1);
+    expect(searchRows(rows, undefined)).toHaveLength(1);
+  });
+
+  it("looks in every field the index named, not only the first", () => {
+    const found = searchRows(rows, {
+      query: "published",
+      fields: (row) => [row.name, row.published ? "published" : "draft"],
+    });
+
+    expect(found).toHaveLength(1);
   });
 });

@@ -6,6 +6,8 @@ import { describeApiError } from "../api/client";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { savedAsPreview } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
+import { searchRows } from "../components/FilterChips";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { toSlug } from "../lib/blocks";
@@ -27,6 +29,8 @@ interface LibraryCopy {
   /** What the library is, shown above the index the way frames 4a and 4b state it. */
   premise: string;
   emptyState: string;
+  /** What the card says when the library holds blocks but the search left none of them. */
+  noMatch: string;
   createLabel: string;
   typeHeading: string;
   unavailable: string;
@@ -41,6 +45,7 @@ const OBJECTIVE_COPY: LibraryCopy = {
   premise:
     "Blocks are shop-independent templates with typed parameters. A scenario binds those parameters to its own shop's objects — a binding can never point outside the scenario's shop.",
   emptyState: "No objective block yet. Create one to define what a scenario can assert.",
+  noMatch: "No objective block matches this view.",
   createLabel: "New objective block",
   typeHeading: "Assessment · evidence",
   unavailable: "The objective-block library is unavailable.",
@@ -55,6 +60,7 @@ const MUTATION_COPY: LibraryCopy = {
   premise:
     "Mutations are injected into a run's sandbox at a bound trigger time. They are never exposed as agent tools — an arm only ever observes their consequences, and both arms receive the identical schedule.",
   emptyState: "No mutation block yet. Create one to define a fault a scenario can inject.",
+  noMatch: "No mutation block matches this view.",
   createLabel: "New mutation block",
   typeHeading: "Effect",
   unavailable: "The mutation-block library is unavailable.",
@@ -76,6 +82,7 @@ function BlockLibrary({
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [query, setQuery] = useState("");
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
@@ -123,6 +130,12 @@ function BlockLibrary({
     }
   }
 
+  // The name alone, which is what the prototype's two library searches read (`x.name` in its
+  // `shownObBlocks` and `shownMutBlocks` filters). This library draws no filter chips — UI-4
+  // records why — so there is no count for the search to move, and `searchRows` is the same
+  // narrowing `filterList` applies under the chips on the eight indexes that have them.
+  const visible = searchRows(blocks, { query, fields: (block) => [block.name] });
+
   return (
     <>
       <PageHeader
@@ -147,10 +160,20 @@ function BlockLibrary({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         {/* The index has no name of its own, so it carries the tour's anchor (ADR 0045). */}
         <section data-tour="block-index" className={`${surfaceClasses} overflow-hidden`}>
+          {/* Only once there is a library to search: a box that can only narrow nothing is a
+              control that does nothing, which is the rule the chip rows on the eight indexes
+              with filters already follow. */}
+          {loading || loadError ? null : (
+            <SearchRow>
+              <SearchField label="Search the library" onChange={setQuery} value={query} />
+            </SearchRow>
+          )}
           {loading ? (
             <p className="p-4 text-[13px] text-admin-muted">Loading blocks…</p>
           ) : blocks.length === 0 ? (
             <p className="p-4 text-[13px] text-admin-muted">{copy.emptyState}</p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-[13px] text-admin-muted">{copy.noMatch}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-[13px]">
@@ -164,7 +187,7 @@ function BlockLibrary({
                   </tr>
                 </thead>
                 <tbody>
-                  {blocks.map((block) => (
+                  {visible.map((block) => (
                     <tr key={block.block_id}>
                       <td className={tableCellClasses}>
                         <Link

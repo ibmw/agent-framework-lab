@@ -342,6 +342,75 @@ export const filterChipIcon: Readonly<Record<FilterChipKind, LucideIcon>> = {
   unfulfilled: Clock,
 };
 
+/**
+ * The search box an index draws over its list, and the row it sits in.
+ *
+ * The prototype's own declaration, identical on all eleven indexes that carry one
+ * (`tmp/design-frames/Workspace.dc.html`:163, 827, 1068, 1142, 1460, 1534, 1595, 3238, 3419,
+ * 3570, 3714):
+ *
+ * ```
+ * input:  margin-left:auto; width:min(300px, 34%); min-height:38px;
+ *         padding:8px 12px 8px 36px; border:1px solid #bdc7cf; border-radius:8px;
+ *         font-size:13px
+ *   focus: border-color:#1d6241; box-shadow:0 0 0 3px rgb(29 98 65 / 20%)
+ * glyph:  a 16x16 magnifier in #6d7175, background-positioned at 12px 50%
+ * ```
+ *
+ * **It is not the form pattern's input, and does not take its metrics.** The README writes
+ * `min-height:44px; padding:10px 14px; border:1px solid #c9cccf; border-radius:9px;
+ * font-size:14.5px` under *The form pattern*, and says in the same breath that the pattern
+ * "applies to 107 rows" — a label, a hint and a control in a form row. A search box in a
+ * card's header is none of those, and the prototype draws it differently in every one of the
+ * five values, in all eleven places and nowhere else: `#bdc7cf` occurs exactly eleven times in
+ * that document and they are these eleven fields. That is the class the narrowed clause in
+ * `docs/design-direction.md` describes — a distinction the prototype draws consistently which
+ * the README's summary does not enumerate — so the prototype governs and these are its
+ * numbers. `#bdc7cf` is written as a literal for the reason `labNoteClasses` writes its two:
+ * a colour one file uses is not yet a token.
+ *
+ * Three values are not the prototype's, and each is named so that nobody re-measures:
+ *
+ * - **`px-4 py-3` on the row, not `17px 20px`.** The card header's own padding, spelled the
+ *   way `Card` and the shops table already spell it — UI-4's and UI-5's argument, unchanged:
+ *   a row indented differently from the column it labels reads as a second, narrower card.
+ * - **One width, `min(300px, 34%)`.** The prototype draws three — this on eight indexes,
+ *   `min(320px, 36%)` on orders and customers, and a flat `260px` on documents. The modal
+ *   value stands for all of them, as UI-5's single title size stands for two.
+ * - **A 180px floor under that width.** 34% of a card in the narrow column is not a field
+ *   anyone can read their own word back from, and the handoff's *Responsive* rule requires
+ *   every row to survive the wrap. The prototype, which is one fixed-width canvas, never
+ *   meets the case.
+ *
+ * The focus pair is the README's, which the prototype draws identically, and is spelled with
+ * the same two utilities every other control in this file uses rather than re-derived.
+ */
+export const searchFieldRowClasses =
+  "flex flex-wrap items-center gap-4 border-b border-admin-border px-4 py-3";
+
+/**
+ * The field's own box: the width, the `margin-left:auto` the prototype puts on the input
+ * itself, and the ground the glyph is positioned against. The auto margin lives here rather
+ * than in a wrapper because a percentage width resolves against the flex container, and a
+ * `ml-auto` box around the field would be sized by its content instead.
+ */
+export const searchFieldWrapClasses = "relative ml-auto w-[min(300px,34%)] min-w-[180px]";
+
+/** The magnifier: 16px, muted, at the left inset the 36px padding leaves for it. */
+export const searchFieldIconClasses =
+  "pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-admin-muted";
+
+/**
+ * The field itself. `appearance-none` and the cancel-button reset are not cosmetic
+ * preferences: the control is `type="search"`, Tailwind's preflight resets only
+ * `::-webkit-search-decoration` and sets no `appearance` for `[type=search]`, and WebKit's
+ * remaining `searchfield` appearance brings a native clear x that the prototype does not draw,
+ * that no keyboard reaches and that announces as nothing — and, on older Safari, a native box
+ * that can overrule the radius and padding declared here.
+ */
+export const searchFieldClasses =
+  "box-border min-h-[38px] w-full appearance-none rounded-lg border border-[#bdc7cf] bg-admin-surface py-2 pr-3 pl-9 text-[13px] text-admin-ink outline-none transition [&::-webkit-search-cancel-button]:appearance-none focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20";
+
 export const tableHeadClasses =
   "border-b border-admin-border px-4 py-2.5 text-left text-xs font-semibold text-admin-muted";
 

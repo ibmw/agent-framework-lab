@@ -9,6 +9,7 @@ import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
 import { LocaleField } from "../components/LocaleField";
+import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
 import { uniqueSuggestion } from "../lib/entryIds";
@@ -78,6 +79,7 @@ export function ShopsPage() {
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
   // One token for both derived fields: the example answers a name and a locale, and both the
   // slug and the currencies are things those two derive, so they resume together.
   const [exampleFill, setExampleFill] = useState(0);
@@ -142,7 +144,12 @@ export function ShopsPage() {
     }
   }
 
-  const { chips, visible } = filterList(shops, FILTERS, filter);
+  // Name or slug, the two the prototype's shops search reads (`Workspace.dc.html`, the
+  // `shownShops` filter) and the two this table prints in its first column.
+  const { chips, visible } = filterList(shops, FILTERS, filter, {
+    query,
+    fields: (shop) => [shop.name, shop.slug],
+  });
 
   return (
     <AppShell shops={shops}>
@@ -160,10 +167,16 @@ export function ShopsPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className={`${surfaceClasses} overflow-hidden`}>
           {/* The card header `Card` draws, open-coded because the filter row has to sit
-              between the title and the table. The title itself is the shared one. */}
-          <h2 className={`border-b border-admin-border px-4 py-3 ${cardTitleClasses}`}>
-            All shops
-          </h2>
+              between the title and the table. The title itself is the shared one, and so is
+              the row: this is the one card in this workspace with a title for the search box
+              to sit opposite, which is where the prototype puts it, so the title goes into
+              `SearchRow` rather than the row being spelled a second time here. */}
+          <SearchRow>
+            <h2 className={cardTitleClasses}>All shops</h2>
+            {loading || loadError ? null : (
+              <SearchField label="Search shops" onChange={setQuery} value={query} />
+            )}
+          </SearchRow>
           {/* Only once there are rows to count. A chip is a filter, and a row of zeros over
               "Loading…" — or over a listing that failed — filters nothing and answers nothing;
               it is the stat band this slice exists to avoid, drawn at its least useful moment.
@@ -183,7 +196,7 @@ export function ShopsPage() {
               No shops yet. Create the first one to start authoring a catalog.
             </p>
           ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No shop matches this filter.</p>
+            <p className="p-4 text-[13px] text-admin-muted">No shop matches this view.</p>
           ) : (
             <table className="w-full border-collapse text-[13px]">
               <thead>
