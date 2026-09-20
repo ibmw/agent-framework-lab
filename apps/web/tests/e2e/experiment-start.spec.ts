@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createShop } from "./support/authoring";
+import { createBlock, createConfiguration, createJudge, createShop } from "./support/authoring";
 import { expect as baseExpect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -230,25 +230,19 @@ async function publishSupportIdentity(page: Page, name: string) {
 
 /** The two templates the recipe composes, both published so a scenario can pin them. */
 async function publishTemplates(page: Page, objective: string, judged: string, mutation: string) {
-  await openSection(page, "Objective blocks", "Objective blocks");
-  const newObjective = card(page, "New objective block");
-  await newObjective.getByLabel("Name", { exact: true }).fill(objective);
-  await newObjective.getByRole("button", { name: "Create block" }).click();
-  await page.getByRole("link", { name: objective }).click();
+  // Creating is a page, and the parameters a scenario will bind are answered on it
+  // (PLAN-UX Slice 13); what each one means is the editor's.
+  await createBlock(page, {
+    library: "Objective blocks",
+    name: objective,
+    parameters: [{ label: "doc_ref", kind: "document_reference" }],
+  });
   const objectiveTemplate = card(page, "Template");
   await objectiveTemplate.getByLabel("Statement", { exact: true }).fill("Read document");
   await objectiveTemplate
     .getByLabel("Description", { exact: true })
     .fill("Passes when the arm reads the bound document through its tool before the run ends.");
   const objectiveParameters = card(page, "Parameters");
-  const addObjectiveParameter = objectiveParameters.getByRole("form", {
-    name: "Add a parameter",
-  });
-  await addObjectiveParameter.getByLabel("Label", { exact: true }).fill("doc_ref");
-  await addObjectiveParameter
-    .getByLabel("Kind", { exact: true })
-    .selectOption("document_reference");
-  await addObjectiveParameter.getByRole("button", { name: "Add parameter" }).click();
   await objectiveParameters
     .getByLabel("Description of doc_ref", { exact: true })
     .fill("The shop document the arm has to read.");
@@ -257,41 +251,35 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
   await expect(publicationNotice(page)).toContainText("Published version 1");
 
   // The other kind of objective: one no rule can decide, which a judge scores (ADR 0031).
-  await openSection(page, "Objective blocks", "Objective blocks");
-  const newJudged = card(page, "New objective block");
-  await newJudged.getByLabel("Name", { exact: true }).fill(judged);
-  await newJudged.getByRole("button", { name: "Create block" }).click();
-  await page.getByRole("link", { name: judged }).click();
+  // How it is assessed is asked for on the create page, because it is what the template is.
+  await createBlock(page, {
+    library: "Objective blocks",
+    name: judged,
+    axis: { label: "Assessed by", value: "judge" },
+  });
   const judgedTemplate = card(page, "Template");
   await judgedTemplate.getByLabel("Statement", { exact: true }).fill("Resolve the incident");
   await judgedTemplate
     .getByLabel("Description", { exact: true })
     .fill("Passes when the arm identified the order and said plainly what it changed.");
-  await card(page, "Assessment")
-    .getByRole("combobox", { name: "Assessed by" })
-    .selectOption("judge");
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(publicationNotice(page)).toContainText("Published version 1");
 
-  await openSection(page, "Mutation blocks", "Mutation blocks");
-  const newMutation = card(page, "New mutation block");
-  await newMutation.getByLabel("Name", { exact: true }).fill(mutation);
-  await newMutation.getByRole("button", { name: "Create block" }).click();
-  await page.getByRole("link", { name: mutation }).click();
+  await createBlock(page, {
+    library: "Mutation blocks",
+    name: mutation,
+    parameters: [
+      { label: "entity_ref", kind: "entity_reference" },
+      { label: "timing", kind: "timing" },
+    ],
+  });
   const mutationTemplate = card(page, "Template");
   await mutationTemplate.getByLabel("Statement", { exact: true }).fill("Concurrent mutation of");
   await mutationTemplate
     .getByLabel("Description", { exact: true })
     .fill("Mutates the bound entity out of band, bumping the version the arm holds.");
   const mutationParameters = card(page, "Parameters");
-  const addMutationParameter = mutationParameters.getByRole("form", { name: "Add a parameter" });
-  await addMutationParameter.getByLabel("Label", { exact: true }).fill("entity_ref");
-  await addMutationParameter.getByLabel("Kind", { exact: true }).selectOption("entity_reference");
-  await addMutationParameter.getByRole("button", { name: "Add parameter" }).click();
-  await addMutationParameter.getByLabel("Label", { exact: true }).fill("timing");
-  await addMutationParameter.getByLabel("Kind", { exact: true }).selectOption("timing");
-  await addMutationParameter.getByRole("button", { name: "Add parameter" }).click();
   await mutationParameters
     .getByLabel("Description of entity_ref", { exact: true })
     .fill("The order that moves under the arm.");
@@ -315,19 +303,13 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
  * permitted to change one.
  */
 async function publishConfiguration(page: Page, name: string, identity: string, prompt: string) {
-  await openSection(page, "Agent configurations", "Agent configurations");
-  const create = card(page, "New agent configuration");
-  await create.getByLabel("Name", { exact: true }).fill(name);
-  await create
-    .getByLabel("Support identity", { exact: true })
-    .selectOption({ label: `${identity} · Customer support representative` });
-  await create.getByRole("button", { name: "Create configuration" }).click();
-  await page.getByRole("link", { name }).click();
+  // The framework is chosen on the create page, because choosing one is choosing the model
+  // the arm runs on and that is what the page asks for (PLAN-UX Slice 13).
+  await createConfiguration(page, { name, identity, framework: "Deterministic fake" });
   await page.getByLabel("Prompt template", { exact: true }).fill(prompt);
 
-  await page.getByLabel("Framework", { exact: true }).selectOption({ label: "Deterministic fake" });
-  // Choosing the framework is choosing what the lab has proven it on: the provider select
-  // offers only that framework's providers, and the model follows the provider it belongs to.
+  // What the create page wrote is what the editor now holds: the provider follows the
+  // framework, and the model follows the provider it belongs to.
   const runtime = card(page, "LLM and runtime");
   await expect(runtime.getByLabel("Provider", { exact: true })).toHaveValue("fake");
   await expect(runtime.getByLabel("Model", { exact: true })).toHaveValue("deterministic");
@@ -346,24 +328,22 @@ async function publishConfiguration(page: Page, name: string, identity: string, 
 /** The published recipe both arms will run, built on the incident above. */
 /** The judge that will score the row no rule decides, published so a verdict can name it. */
 async function publishJudge(page: Page, name: string) {
-  await openSection(page, "Judges", "Judges");
-  const create = card(page, "New judge");
-  await create.getByLabel("Name", { exact: true }).fill(name);
-  await create.getByRole("button", { name: "Create judge" }).click();
-  await page.getByRole("link", { name }).click();
+  // The rubric is the whole of what a judge is, so the create page will not go without it
+  // (PLAN-UX Slice 13). The offline judge, so this journey needs no provider: its rule is
+  // declared, which is what lets the assertion below name the verdict.
+  await createJudge(page, {
+    name,
+    rubric: "Score whether the arm identified the order and said plainly what it changed.",
+    provider: "fake",
+  });
 
-  const rubric = card(page, "Rubric");
-  await rubric
-    .getByLabel("How this judge scores", { exact: true })
-    .fill("Score whether the arm identified the order and said plainly what it changed.");
-  // The offline judge, so this journey needs no provider: its rule is declared, which is
-  // what lets the assertion below name the verdict.
-  await card(page, "Model").getByRole("combobox", { name: "Provider" }).selectOption("fake");
-  // The provider change takes the model with it; `gpt-5-mini` is not something this runs.
+  // What the create page wrote is what the editor holds, model and all: a provider change
+  // takes the model with it, and `gpt-5-mini` is not something this runs. Nothing is left to
+  // save, which is the point of a create that lands in the editor of what it made.
   await expect(card(page, "Model").getByLabel("Model", { exact: true })).toHaveValue(
     "deterministic",
   );
-  await saveDraft(page);
+  await expect(page.getByText("All changes saved")).toBeVisible();
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(publicationNotice(page)).toContainText("Published version 1");
 }

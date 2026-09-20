@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createShop } from "./support/authoring";
+import { createBlock, createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -35,12 +35,13 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
   await openSection(page, "Objective blocks", "Objective blocks");
   await expect(page.getByText("Shared across shops")).toBeVisible();
 
-  const create = card(page, "New objective block");
-  await create.getByLabel("Name", { exact: true }).fill(name);
-  await create.getByRole("button", { name: "Create block" }).click();
-
-  await page.getByRole("link", { name }).click();
-  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  // Creating is a page: the name and the parameters a scenario will bind are answered on it,
+  // and it lands in the editor of the template it made (PLAN-UX Slice 13).
+  await createBlock(page, {
+    library: "Objective blocks",
+    name,
+    parameters: [{ label: "doc_ref" }],
+  });
   await expect(page.getByText("Never published")).toBeVisible();
 
   // A brand-new template says nothing a scenario could bind without guessing.
@@ -56,8 +57,6 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
 
   const parameters = card(page, "Parameters");
   const addParameter = parameters.getByRole("form", { name: "Add a parameter" });
-  await addParameter.getByLabel("Label", { exact: true }).fill("doc_ref");
-  await addParameter.getByRole("button", { name: "Add parameter" }).click();
 
   // A document reference is bound by the scenario, so the template cannot default it.
   await expect(parameters.getByText("bound same-shop")).toBeVisible();
@@ -103,12 +102,8 @@ test("a mutation block cannot be published until it says when it fires", async (
 
   await openWorkspace(page, unique);
 
-  await openSection(page, "Mutation blocks", "Mutation blocks");
-  const create = card(page, "New mutation block");
-  await create.getByLabel("Name", { exact: true }).fill(name);
-  await create.getByRole("button", { name: "Create block" }).click();
+  await createBlock(page, { library: "Mutation blocks", name });
 
-  await page.getByRole("link", { name }).click();
   const template = card(page, "Template");
   await template.getByLabel("Statement", { exact: true }).fill("Concurrent mutation of");
   await template

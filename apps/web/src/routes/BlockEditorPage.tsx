@@ -10,12 +10,11 @@ import type {
   ObjectiveBlockPreviewResponse,
   ObjectiveEvidence,
 } from "@agent-lab/contracts";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { savedAsPreview } from "../components/DerivedIdField";
-import { FieldHint } from "../components/FieldHint";
+import { ParameterForm } from "../components/ParameterForm";
 import {
   Card,
   canPublish,
@@ -27,18 +26,20 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import {
+  ASSESSMENTS,
   acceptsDefault,
   addParameter,
   type BlockPayload,
   bindsShopObject,
+  DETERMINISTIC_EVIDENCE,
+  EFFECTS,
+  evidenceFor,
   MAX_PARAMETERS,
   moveParameter,
   PARAMETER_KINDS,
   removeParameter,
   retypeParameter,
   shopBoundCount,
-  toIdentifier,
-  uniqueParameterName,
   updateParameter,
 } from "../lib/blocks";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
@@ -48,7 +49,6 @@ import {
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  inkButtonClasses,
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
@@ -81,25 +81,6 @@ const MUTATION_CLIENT: DefinitionClient<
   toPayload: (content) => content,
   unavailable: "The mutation-block library is unavailable.",
 };
-
-const ASSESSMENTS: { value: ObjectiveAssessment; label: string }[] = [
-  { value: "deterministic", label: "Deterministic — an encoded rule decides" },
-  { value: "judge", label: "Judge — an LLM scores a rubric dimension" },
-];
-
-const DETERMINISTIC_EVIDENCE: { value: ObjectiveEvidence; label: string }[] = [
-  { value: "event", label: "Event — a recorded tool call or read" },
-  { value: "policy", label: "Policy — an encoded rule over state and events" },
-  { value: "state", label: "State — the sandbox the run ended in" },
-  { value: "forbidden", label: "Forbidden — something that must never occur" },
-];
-
-const EFFECTS: { value: MutationEffect; label: string }[] = [
-  { value: "entity_mutation", label: "Entity mutation — an out-of-band write bumps a version" },
-  { value: "tool_fault", label: "Tool fault — a tool fails or times out" },
-  { value: "clock_shift", label: "Clock shift — sandbox time jumps forward" },
-  { value: "service_outage", label: "Service outage — a dependency is unavailable" },
-];
 
 const SEVERITIES = optionsOf(OBJECTIVE_SEVERITY);
 
@@ -452,67 +433,6 @@ function ParameterRow({
   );
 }
 
-function ParameterForm({
-  taken,
-  onAdd,
-  disabled,
-}: {
-  taken: readonly string[];
-  onAdd: (name: string, kind: BlockParameterKind) => void;
-  disabled: boolean;
-}) {
-  const [label, setLabel] = useState("");
-  const [kind, setKind] = useState<BlockParameterKind>("document_reference");
-  const identifier = uniqueParameterName(toIdentifier(label), taken);
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onAdd(label, kind);
-    setLabel("");
-  }
-
-  return (
-    <form className="flex flex-wrap items-end gap-2" aria-label="Add a parameter" onSubmit={submit}>
-      <div className="min-w-40 flex-1">
-        <FieldHint
-          label="Label"
-          hint="The name a scenario binds. Saved as a snake_case identifier."
-          extra={label ? savedAsPreview(identifier) : undefined}
-        >
-          <input
-            className={fieldControlClasses}
-            value={label}
-            required
-            placeholder="Document"
-            onChange={(event) => setLabel(event.target.value)}
-          />
-        </FieldHint>
-      </div>
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        Kind
-        {/* Named explicitly: a wrapping label around a select carries every option's text in
-            its own text content, so the control needs its own name to be addressable. */}
-        <select
-          aria-label="Kind"
-          className={fieldControlClasses}
-          value={kind}
-          onChange={(event) => setKind(event.target.value as BlockParameterKind)}
-        >
-          {PARAMETER_KINDS.map((entry) => (
-            <option key={entry.kind} value={entry.kind}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button className={inkButtonClasses} type="submit" disabled={disabled}>
-        <ButtonIcon verb="create" />
-        Add parameter
-      </button>
-    </form>
-  );
-}
-
 export function ObjectiveBlockEditorPage() {
   const { blockId = "" } = useParams();
   const { listings } = useLabWorkspace();
@@ -534,17 +454,12 @@ export function ObjectiveBlockEditorPage() {
               value={content.assessment}
               onChange={(event) => {
                 const assessment = event.target.value as ObjectiveAssessment;
-                // A judge scores a rubric dimension and nothing else, so the editor moves the
-                // evidence with it rather than leaving a pairing the publish gate refuses.
+                // A judge scores a rubric dimension and nothing else, and `evidenceFor` is
+                // where that pairing is decided for both this editor and the create page.
                 edit({
                   ...content,
                   assessment,
-                  evidence:
-                    assessment === "judge"
-                      ? "dimension"
-                      : content.evidence === "dimension"
-                        ? "event"
-                        : content.evidence,
+                  evidence: evidenceFor(assessment, content.evidence),
                 });
               }}
             >

@@ -177,11 +177,48 @@ const mutationIndex: BlockListResponse = {
   ],
 };
 
+const NEW_OBJECTIVE_ID = "3c4d5e6f-7081-4923-a456-7b8c9d0e1f20";
+const NEW_MUTATION_ID = "4d5e6f70-8192-4a34-b567-8c9d0e1f2031";
+
+/** What the lab makes from a create request: named, and nothing else decided. */
+function newObjective(name: string): ObjectiveBlockPayloadSchema {
+  return {
+    name,
+    statement: "",
+    description: "",
+    assessment: "deterministic",
+    evidence: "event",
+    parameters: [],
+  };
+}
+
+function newMutation(name: string): MutationBlockPayloadSchema {
+  return { name, statement: "", description: "", effect: "entity_mutation", parameters: [] };
+}
+
 let currentObjective = OBJECTIVE_CONTENT;
 let currentMutation = MUTATION_CONTENT;
 let savedPayloads: Array<Record<string, unknown>> = [];
 let createdNames: string[] = [];
+let completedDrafts: Array<Record<string, unknown>> = [];
+let objectiveListing: BlockListResponse = objectiveIndex;
+let mutationListing: BlockListResponse = mutationIndex;
 let publishAttempts = 0;
+
+/** The row a created template adds to its library, so the rail's figure has somewhere to go. */
+function listedRow(blockId: string, name: string, typeLabel: string) {
+  return {
+    block_id: blockId,
+    name,
+    statement: "",
+    type_label: typeLabel,
+    parameter_count: 0,
+    shop_bound_parameter_count: 0,
+    updated_at: "2026-08-25T12:20:00+00:00",
+    latest_published_version: null,
+    published_version_count: 0,
+  };
+}
 
 function draft(blockId: string, content: unknown) {
   return {
@@ -218,12 +255,36 @@ const server = setupServer(
     } satisfies ShopPreviewResponse),
   ),
 
-  http.get("*/api/v1/objective-blocks", () => HttpResponse.json(objectiveIndex)),
+  http.get("*/api/v1/objective-blocks", () => HttpResponse.json(objectiveListing)),
+  // A create makes the library hold one template more, which is what lets a test watch the
+  // rail's figure move rather than agree with a fixture (ADR 0056).
   http.post("*/api/v1/objective-blocks", async ({ request }) => {
     const body = (await request.json()) as { name: string };
     createdNames.push(body.name);
-    return HttpResponse.json(draft(OBJECTIVE_ID, currentObjective), { status: 201 });
+    objectiveListing = {
+      blocks: [
+        ...objectiveListing.blocks,
+        listedRow(NEW_OBJECTIVE_ID, body.name, "deterministic · event"),
+      ],
+    };
+    return HttpResponse.json(draft(NEW_OBJECTIVE_ID, newObjective(body.name)), { status: 201 });
   }),
+  http.put(`*/api/v1/objective-blocks/${NEW_OBJECTIVE_ID}/draft`, async ({ request }) => {
+    const body = (await request.json()) as { payload: Record<string, unknown> };
+    completedDrafts.push(body.payload);
+    return HttpResponse.json(draft(NEW_OBJECTIVE_ID, body.payload) as ObjectiveBlockDraftResponse);
+  }),
+  http.get(`*/api/v1/objective-blocks/${NEW_OBJECTIVE_ID}/draft`, () =>
+    HttpResponse.json(
+      draft(
+        NEW_OBJECTIVE_ID,
+        completedDrafts.at(-1) ?? newObjective(createdNames.at(-1) ?? ""),
+      ) as ObjectiveBlockDraftResponse,
+    ),
+  ),
+  http.get(`*/api/v1/objective-blocks/${NEW_OBJECTIVE_ID}/draft/preview`, () =>
+    HttpResponse.json(objectivePreview({ block_id: NEW_OBJECTIVE_ID })),
+  ),
   http.get(`*/api/v1/objective-blocks/${OBJECTIVE_ID}/draft`, () =>
     HttpResponse.json(draft(OBJECTIVE_ID, currentObjective) as ObjectiveBlockDraftResponse),
   ),
@@ -251,7 +312,31 @@ const server = setupServer(
     );
   }),
 
-  http.get("*/api/v1/mutation-blocks", () => HttpResponse.json(mutationIndex)),
+  http.get("*/api/v1/mutation-blocks", () => HttpResponse.json(mutationListing)),
+  http.post("*/api/v1/mutation-blocks", async ({ request }) => {
+    const body = (await request.json()) as { name: string };
+    createdNames.push(body.name);
+    mutationListing = {
+      blocks: [...mutationListing.blocks, listedRow(NEW_MUTATION_ID, body.name, "tool_fault")],
+    };
+    return HttpResponse.json(draft(NEW_MUTATION_ID, newMutation(body.name)), { status: 201 });
+  }),
+  http.put(`*/api/v1/mutation-blocks/${NEW_MUTATION_ID}/draft`, async ({ request }) => {
+    const body = (await request.json()) as { payload: Record<string, unknown> };
+    completedDrafts.push(body.payload);
+    return HttpResponse.json(draft(NEW_MUTATION_ID, body.payload) as MutationBlockDraftResponse);
+  }),
+  http.get(`*/api/v1/mutation-blocks/${NEW_MUTATION_ID}/draft`, () =>
+    HttpResponse.json(
+      draft(
+        NEW_MUTATION_ID,
+        completedDrafts.at(-1) ?? newMutation(createdNames.at(-1) ?? ""),
+      ) as MutationBlockDraftResponse,
+    ),
+  ),
+  http.get(`*/api/v1/mutation-blocks/${NEW_MUTATION_ID}/draft/preview`, () =>
+    HttpResponse.json(mutationPreview({ block_id: NEW_MUTATION_ID })),
+  ),
   http.get(`*/api/v1/mutation-blocks/${MUTATION_ID}/draft`, () =>
     HttpResponse.json(draft(MUTATION_ID, currentMutation) as MutationBlockDraftResponse),
   ),
@@ -277,6 +362,9 @@ afterEach(() => {
   currentMutation = MUTATION_CONTENT;
   savedPayloads = [];
   createdNames = [];
+  completedDrafts = [];
+  objectiveListing = objectiveIndex;
+  mutationListing = mutationIndex;
   publishAttempts = 0;
 });
 afterAll(() => server.close());
@@ -292,6 +380,15 @@ async function publicationNotice() {
 
 function renderAt(path: string) {
   return renderApp(path);
+}
+
+/** A promise this test resolves by hand, so a read can be held open while the page renders. */
+function heldOpen() {
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { held, release };
 }
 
 describe("block libraries", () => {
@@ -345,34 +442,6 @@ describe("block libraries", () => {
 
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByText("No objective block matches this view.")).toBeVisible();
-  });
-
-  it("creates a block under a slug derived from what the author typed", async () => {
-    const user = userEvent.setup();
-    renderAt("/lab/objective-blocks");
-
-    await screen.findByRole("heading", { name: "Objective blocks" });
-    await user.type(screen.getByLabelText("Name"), "Identify entity");
-    expect(screen.getByText("identify-entity")).toBeVisible();
-    expect(screen.getByLabelText("Name")).toHaveAccessibleDescription(/saved as identify-entity/i);
-    await user.click(screen.getByRole("button", { name: "Create block" }));
-
-    await waitFor(() => expect(createdNames).toEqual(["identify-entity"]));
-  });
-
-  it("puts the name hint in that control's accessible description on both libraries", async () => {
-    const objectivesPage = renderAt("/lab/objective-blocks");
-    const objectives = within(await screen.findByRole("region", { name: "New objective block" }));
-    expect(objectives.getByLabelText("Name")).toHaveAccessibleDescription(
-      /saved as a lowercase slug.*binds this template/i,
-    );
-    objectivesPage.unmount();
-
-    renderAt("/lab/mutation-blocks");
-    const mutations = within(await screen.findByRole("region", { name: "New mutation block" }));
-    expect(mutations.getByLabelText("Name")).toHaveAccessibleDescription(
-      /saved as a lowercase slug.*binds this template/i,
-    );
   });
 
   it("reaches both libraries from the lab's Library, which is where they are shared from", async () => {
@@ -584,6 +653,201 @@ describe("mutation block editor", () => {
 });
 
 /**
+ * Creating a template is a page, on the `CreatePage` layout with the parameter form the
+ * editor already draws (PLAN-UX Slice 13).
+ */
+describe("the two create pages", () => {
+  it("is reached from each index's own header, neither of which carries a create card", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks");
+
+    await screen.findByRole("link", { name: "read-required-document" });
+    expect(screen.queryByRole("region", { name: "New objective block" })).toBeNull();
+
+    await user.click(screen.getByRole("link", { name: "New objective block" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "New objective block" }),
+    ).toBeVisible();
+    expect(screen.getByText(/creating an objective block/)).toBeVisible();
+  });
+
+  it("derives the slug it will be saved under, and refuses Create until there is one", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks/new");
+
+    const create = await screen.findByRole("button", { name: "Create block" });
+    await waitFor(() => expect(create).toBeDisabled());
+    expect(create).toHaveAccessibleDescription(
+      "The template needs a name before it can be created.",
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Identify entity");
+
+    expect(screen.getByLabelText("Name")).toHaveAccessibleDescription(/saved as identify-entity/i);
+    expect(screen.getByRole("heading", { level: 1, name: "identify-entity" })).toBeVisible();
+    expect(create).toBeEnabled();
+  });
+
+  it("refuses a name this library already answers to, and says which", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks/new");
+
+    await user.type(await screen.findByLabelText("Name"), "read required document");
+
+    expect(screen.getByRole("button", { name: "Create block" })).toHaveAccessibleDescription(
+      "read-required-document is the name of a template this library already holds.",
+    );
+  });
+
+  it("creates under the derived slug alone when nothing else was answered", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Identify entity");
+    await user.click(screen.getByRole("button", { name: "Create block" }));
+
+    await waitFor(() => expect(createdNames).toEqual(["identify-entity"]));
+    // The contract creates a block with its name only, and the page asked for nothing the
+    // create could not carry — so there is no second write and nothing was ever unsaved.
+    await screen.findByRole("heading", { level: 1, name: "identify-entity" });
+    expect(completedDrafts).toEqual([]);
+  });
+
+  it("carries the type axis and the parameters into the template, and lands in its editor", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Identify entity");
+    await user.selectOptions(screen.getByLabelText("Assessed by"), "judge");
+    // A judged objective is scored on a rubric dimension, so the evidence follows rather
+    // than being asked for.
+    expect(screen.queryByLabelText("Evidence")).toBeNull();
+
+    const addParameter = within(screen.getByRole("form", { name: "Add a parameter" }));
+    await user.type(addParameter.getByLabelText("Label"), "doc_ref");
+    await user.click(addParameter.getByRole("button", { name: "Add parameter" }));
+    expect(screen.getByText("bound same-shop")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Create block" }));
+
+    await waitFor(() => expect(completedDrafts).toHaveLength(1));
+    expect(completedDrafts[0]).toMatchObject({
+      name: "identify-entity",
+      assessment: "judge",
+      evidence: "dimension",
+      parameters: [{ name: "doc_ref", kind: "document_reference" }],
+    });
+    expect(await screen.findByRole("heading", { level: 1, name: "identify-entity" })).toBeVisible();
+  });
+
+  it("takes a parameter back off before anything is created", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/mutation-blocks/new");
+
+    await user.type(await screen.findByLabelText("Name"), "tool timeout");
+    const addParameter = within(screen.getByRole("form", { name: "Add a parameter" }));
+    await user.type(addParameter.getByLabelText("Label"), "timing");
+    await user.selectOptions(addParameter.getByLabelText("Kind"), "timing");
+    await user.click(addParameter.getByRole("button", { name: "Add parameter" }));
+
+    await user.click(screen.getByRole("button", { name: "Remove timing" }));
+
+    await user.selectOptions(screen.getByLabelText("Perturbs"), "tool_fault");
+    await user.click(screen.getByRole("button", { name: "Create block" }));
+
+    await waitFor(() => expect(completedDrafts).toHaveLength(1));
+    expect(completedDrafts[0]).toMatchObject({ effect: "tool_fault", parameters: [] });
+  });
+
+  it("does not refuse its own retry with the name it has already taken", async () => {
+    // The listing is re-read the moment the block exists, so on a retry it holds this page's
+    // own template: a create page counting that against the operator would refuse the second
+    // press of the create that made it. The name is frozen instead, because it is what the
+    // create request carried and the write that follows cannot move one.
+    const user = userEvent.setup();
+    let refuse = true;
+    server.use(
+      http.put(`*/api/v1/objective-blocks/${NEW_OBJECTIVE_ID}/draft`, async ({ request }) => {
+        if (refuse) {
+          refuse = false;
+          return HttpResponse.error();
+        }
+        const body = (await request.json()) as { payload: Record<string, unknown> };
+        completedDrafts.push(body.payload);
+        return HttpResponse.json(
+          draft(NEW_OBJECTIVE_ID, body.payload) as ObjectiveBlockDraftResponse,
+        );
+      }),
+    );
+    renderAt("/lab/objective-blocks/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Identify entity");
+    const addParameter = within(screen.getByRole("form", { name: "Add a parameter" }));
+    await user.type(addParameter.getByLabelText("Label"), "doc_ref");
+    await user.click(addParameter.getByRole("button", { name: "Add parameter" }));
+    await user.click(screen.getByRole("button", { name: "Create block" }));
+
+    expect(
+      await screen.findByText(/The block was created, but its template could not be saved/),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Name")).toBeDisabled();
+    const create = screen.getByRole("button", { name: "Create block" });
+    expect(create).toBeEnabled();
+
+    await user.click(create);
+
+    await waitFor(() => expect(completedDrafts).toHaveLength(1));
+    expect(createdNames).toEqual(["identify-entity"]);
+  });
+
+  it("stops saying nothing has been created the moment something has", async () => {
+    // The chip is the page's statement about what it has written, and it has to be true on
+    // the one-write path too — where the block exists while the navigation into its editor
+    // is still on its way. The listing re-read is held open to stand in that interval.
+    const user = userEvent.setup();
+    const { held, release } = heldOpen();
+    let reads = 0;
+    server.use(
+      http.get("*/api/v1/objective-blocks", async () => {
+        reads += 1;
+        if (reads > 1) {
+          await held;
+        }
+        return HttpResponse.json(objectiveListing);
+      }),
+    );
+    renderAt("/lab/objective-blocks/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Identify entity");
+    expect(screen.getByText("nothing created yet")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Create block" }));
+
+    expect(await screen.findByText("created")).toBeVisible();
+    expect(screen.queryByText("nothing created yet")).toBeNull();
+
+    release();
+    expect(await screen.findByRole("heading", { level: 1, name: "identify-entity" })).toBeVisible();
+    // And it stayed a one-write create throughout: nothing was owed, so nothing says so.
+    expect(completedDrafts).toEqual([]);
+  });
+
+  it("puts the name hint in that control's accessible description on both libraries", async () => {
+    const objectivesPage = renderAt("/lab/objective-blocks/new");
+    expect(await screen.findByLabelText("Name")).toHaveAccessibleDescription(
+      /saved as a lowercase slug.*binds this template/i,
+    );
+    objectivesPage.unmount();
+
+    renderAt("/lab/mutation-blocks/new");
+    expect(await screen.findByLabelText("Name")).toHaveAccessibleDescription(
+      /saved as a lowercase slug.*binds this template/i,
+    );
+  });
+});
+
+/**
  * The rail's figure and this index are one listing, read once by the shell and handed to
  * both, so they cannot come to disagree (ADR 0056).
  */
@@ -599,4 +863,30 @@ describe("the rail's figures and the two libraries", () => {
     expect(within(entry).getByText(String(rows))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${rows} block${rows === 1 ? "" : "s"}`);
   });
+
+  it.each([
+    ["/lab/objective-blocks/new", "Objective blocks", "2", "3"],
+    ["/lab/mutation-blocks/new", "Mutation blocks", "1", "2"],
+  ])(
+    "moves %s's figure when a template is created, without a reload",
+    async (path, label, before, after) => {
+      // Created rather than compared: an agreement between two reads of one fixture is true
+      // by construction, and what ADR 0056 asks of a create is that it re-reads the listing.
+      const user = userEvent.setup();
+      renderAt(path);
+
+      await waitFor(() =>
+        expect(
+          within(railEntry(label, "Experiment lab workspace")).getByText(before),
+        ).toBeVisible(),
+      );
+
+      await user.type(await screen.findByLabelText("Name"), "Identify entity");
+      await user.click(screen.getByRole("button", { name: "Create block" }));
+
+      await waitFor(() =>
+        expect(within(railEntry(label, "Experiment lab workspace")).getByText(after)).toBeVisible(),
+      );
+    },
+  );
 });

@@ -10,9 +10,17 @@ import {
 } from "react-router-dom";
 import { readAppLanding, writeLastVisitedShop } from "./lib/preferences";
 import { AgentConfigurationEditorPage } from "./routes/AgentConfigurationEditorPage";
-import { AgentConfigurationsPage } from "./routes/AgentConfigurationsPage";
+import {
+  AgentConfigurationsPage,
+  NewAgentConfigurationPage,
+} from "./routes/AgentConfigurationsPage";
 import { MutationBlockEditorPage, ObjectiveBlockEditorPage } from "./routes/BlockEditorPage";
-import { MutationBlocksPage, ObjectiveBlocksPage } from "./routes/BlockLibraryPage";
+import {
+  MutationBlocksPage,
+  NewMutationBlockPage,
+  NewObjectiveBlockPage,
+  ObjectiveBlocksPage,
+} from "./routes/BlockLibraryPage";
 import { CustomerEditorPage } from "./routes/CustomerEditorPage";
 import { CustomersPage, NewCustomerPage } from "./routes/CustomersPage";
 import { ExperimentBenchPage } from "./routes/ExperimentBenchPage";
@@ -24,7 +32,7 @@ import { ExperimentTimelinePage } from "./routes/ExperimentTimelinePage";
 import { ExperimentTracesPage } from "./routes/ExperimentTracesPage";
 import { GlossaryPage } from "./routes/GlossaryPage";
 import { JudgeConfigurationEditorPage } from "./routes/JudgeConfigurationEditorPage";
-import { JudgeConfigurationsPage } from "./routes/JudgeConfigurationsPage";
+import { JudgeConfigurationsPage, NewJudgePage } from "./routes/JudgeConfigurationsPage";
 import { LabSettingsPage } from "./routes/LabSettingsPage";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
 import { NewOrderPage, OrdersPage } from "./routes/OrdersPage";
@@ -133,11 +141,16 @@ export const routeTree = createRoutesFromElements(
       </Route>
       <Route path="history" element={<ExperimentHistoryPage />} />
       <Route path="agent-configurations" element={<AgentConfigurationsPage />} />
+      {/* Creating is a page here too, and all four of the lab's libraries have one
+          (PLAN-UX Slice 13). `new` is a static segment and outranks the identifier
+          beside it, so a template an operator names `new` still reaches its editor. */}
+      <Route path="agent-configurations/new" element={<NewAgentConfigurationPage />} />
       <Route
         path="agent-configurations/:configurationId"
         element={<AgentConfigurationEditorPage />}
       />
       <Route path="judges" element={<JudgeConfigurationsPage />} />
+      <Route path="judges/new" element={<NewJudgePage />} />
       <Route path="judges/:judgeId" element={<JudgeConfigurationEditorPage />} />
       <Route path="support-identities" element={<SupportIdentitiesPage />} />
       {/* The library left shop scope with ADR 0054 and is reached from both rails, so its
@@ -145,8 +158,10 @@ export const routeTree = createRoutesFromElements(
       <Route path="support-identities/new" element={<NewSupportIdentityPage />} />
       <Route path="support-identities/:identityId" element={<SupportIdentityEditorPage />} />
       <Route path="objective-blocks" element={<ObjectiveBlocksPage />} />
+      <Route path="objective-blocks/new" element={<NewObjectiveBlockPage />} />
       <Route path="objective-blocks/:blockId" element={<ObjectiveBlockEditorPage />} />
       <Route path="mutation-blocks" element={<MutationBlocksPage />} />
+      <Route path="mutation-blocks/new" element={<NewMutationBlockPage />} />
       <Route path="mutation-blocks/:blockId" element={<MutationBlockEditorPage />} />
     </Route>
 

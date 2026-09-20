@@ -1,14 +1,24 @@
-import type { JudgeConfigurationSummarySchema } from "@agent-lab/contracts";
-import { type FormEvent, useState } from "react";
+import type {
+  JudgeConfigurationPayloadSchema,
+  JudgeConfigurationResourcesResponse,
+  JudgeConfigurationSummarySchema,
+} from "@agent-lab/contracts";
+import { useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
-import { createJudgeConfiguration } from "../api/judgeConfigurations";
-import { ButtonIcon } from "../components/ButtonIcon";
-import { FieldHint } from "../components/FieldHint";
+import {
+  createJudgeConfiguration,
+  readJudgeConfigurationResources,
+  replaceJudgeConfigurationDraft,
+} from "../api/judgeConfigurations";
+import { CreatePage } from "../components/CreatePage";
+import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { ProvenModelField } from "../components/ProvenModelField";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
+import { useCreateThenComplete } from "../lib/createDefinition";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -16,8 +26,11 @@ import {
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
+  textAreaClasses,
 } from "../lib/ui";
 import { useLabWorkspace } from "../shell/LabWorkspace";
+
+const UNAVAILABLE = "The judge service is unavailable.";
 
 type Filter = "all" | "published";
 
@@ -46,27 +59,8 @@ export function JudgeConfigurationsPage() {
   const judges = listings.judges.rows;
   const loading = listings.judges.loading;
   const loadError = listings.judges.error;
-  const [formError, setFormError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCreating(true);
-    setFormError(null);
-    try {
-      await createJudgeConfiguration({ name });
-      setName("");
-    } catch (cause: unknown) {
-      setFormError(describeApiError(cause, "The judge could not be created."));
-      setCreating(false);
-      return;
-    }
-    await listings.judges.refresh();
-    setCreating(false);
-  }
 
   // The name alone, which is what the prototype's judges search reads (its `shownJudges`
   // filter).
@@ -80,6 +74,11 @@ export function JudgeConfigurationsPage() {
       <PageHeader
         title="Judges"
         description="What scores the objectives no rule can decide: a rubric, a model, and the parts of an arm's record the judge is shown. Judges are cross-shop, and every verdict records the exact version that produced it — so a result stays explainable after the rubric moves on."
+        actions={
+          <Link className={accentButtonClasses} to="new">
+            New judge
+          </Link>
+        }
       />
 
       {loadError ? (
@@ -88,81 +87,191 @@ export function JudgeConfigurationsPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className={`${surfaceClasses} overflow-hidden`}>
-          {/* Only once there are rows to search and count. A chip is a filter, and a row of
+      <section className={`${surfaceClasses} overflow-hidden`}>
+        {/* Only once there are rows to search and count. A chip is a filter, and a row of
               zeros over "Loading…" — or over a listing that failed — filters nothing and
               answers nothing; it is the stat band this slice exists to avoid, drawn at its
               least useful moment. The search box keeps the same company: a box that can only
               narrow nothing is a control that does nothing. Both arrive with the table they
               belong to. */}
-          {loading || loadError ? null : (
-            <>
-              <SearchRow>
-                <SearchField label="Search judges" onChange={setQuery} value={query} />
-              </SearchRow>
-              <FilterChips
-                legend="Filter judges"
-                chips={chips}
-                selected={filter}
-                onSelect={setFilter}
-              />
-            </>
-          )}
-          {loading ? (
-            <p className="p-4 text-[13px] text-admin-muted">Loading judges…</p>
-          ) : judges.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">
-              No judge yet. Create one to score the objectives a scenario leaves to a judge.
-            </p>
-          ) : visible.length === 0 ? (
-            <p className="p-4 text-[13px] text-admin-muted">No judge matches this view.</p>
-          ) : (
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr>
-                  <th className={tableHeadClasses}>Judge</th>
-                  <th className={tableHeadClasses}>Provider</th>
-                  <th className={tableHeadClasses}>Model</th>
-                  <th className={tableHeadClasses}>Shown</th>
-                  <th className={tableHeadClasses}>Published</th>
-                  <th className={tableHeadClasses}>Draft updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((judge) => (
-                  <tr key={judge.judge_id}>
-                    <td className={tableCellClasses}>
-                      <Link
-                        className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                        to={judge.judge_id}
-                      >
-                        {judge.name}
-                      </Link>
-                    </td>
-                    {/* One spelling for the workspace: the index and the editor must not disagree
+        {loading || loadError ? null : (
+          <>
+            <SearchRow>
+              <SearchField label="Search judges" onChange={setQuery} value={query} />
+            </SearchRow>
+            <FilterChips
+              legend="Filter judges"
+              chips={chips}
+              selected={filter}
+              onSelect={setFilter}
+            />
+          </>
+        )}
+        {loading ? (
+          <p className="p-4 text-[13px] text-admin-muted">Loading judges…</p>
+        ) : judges.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">
+            No judge yet. Create one to score the objectives a scenario leaves to a judge.
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">No judge matches this view.</p>
+        ) : (
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr>
+                <th className={tableHeadClasses}>Judge</th>
+                <th className={tableHeadClasses}>Provider</th>
+                <th className={tableHeadClasses}>Model</th>
+                <th className={tableHeadClasses}>Shown</th>
+                <th className={tableHeadClasses}>Published</th>
+                <th className={tableHeadClasses}>Draft updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((judge) => (
+                <tr key={judge.judge_id}>
+                  <td className={tableCellClasses}>
+                    <Link
+                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                      to={judge.judge_id}
+                    >
+                      {judge.name}
+                    </Link>
+                  </td>
+                  {/* One spelling for the workspace: the index and the editor must not disagree
                         about a provider, and `lib/agents.ts` is where that word is decided. */}
-                    <td className={tableCellClasses}>{describeProvider(judge.provider)}</td>
-                    <td className={tableCellClasses}>{judge.model_id}</td>
-                    <td className={tableCellClasses}>{judge.evidence_count} kind(s) of evidence</td>
-                    <td className={tableCellClasses}>
-                      {judge.latest_published_version === null
-                        ? "Never published"
-                        : `v${judge.latest_published_version} · ${judge.published_version_count} version(s)`}
-                    </td>
-                    <td className={tableCellClasses}>{formatTimestamp(judge.updated_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+                  <td className={tableCellClasses}>{describeProvider(judge.provider)}</td>
+                  <td className={tableCellClasses}>{judge.model_id}</td>
+                  <td className={tableCellClasses}>{judge.evidence_count} kind(s) of evidence</td>
+                  <td className={tableCellClasses}>
+                    {judge.latest_published_version === null
+                      ? "Never published"
+                      : `v${judge.latest_published_version} · ${judge.published_version_count} version(s)`}
+                  </td>
+                  <td className={tableCellClasses}>{formatTimestamp(judge.updated_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </>
+  );
+}
 
-        <Card title="New judge">
-          <form className="grid gap-3" onSubmit={submit}>
-            <FieldHint
+/**
+ * `/lab/judges/new` — the judge, authored on a page (`Workspace.dc.html`:3468).
+ *
+ * **The rubric is asked for here, and Create is refused without it** (PLAN-UX Slice 13's own
+ * evidence: an operator creating a judge is told the rubric is missing beside the button that
+ * will not press). That is a **departure** from the prototype, which draws the same field
+ * under a note saying it can be left empty for now — and it is the rule
+ * `docs/design-direction.md` already states about a create form: it asks for what constrains
+ * the work that follows. A judge with no rubric constrains nothing. It is also what the lab
+ * itself says about the value, in `new_judge_configuration`: the rubric is the whole of what a
+ * judge is, so it is written rather than defaulted. The model and the evidence *are*
+ * defaulted, for the reason given in the same place — they have a right answer the lab has
+ * proven — which is why the Evidence card the prototype draws here is the editor's.
+ *
+ * **Creating a judge is therefore always two writes.** `CreateJudgeConfigurationRequest`
+ * carries a name and nothing else, so the page makes the judge and then puts the rubric on
+ * it; `useCreateThenComplete` holds that shape, the retry that finishes the first press
+ * rather than making a second judge, and the stand-down when the operator leaves.
+ */
+export function NewJudgePage() {
+  const { listings } = useLabWorkspace();
+  const formId = useId();
+  const [resources, setResources] = useState<JudgeConfigurationResourcesResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [resourcesError, setResourcesError] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [provider, setProvider] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [rubric, setRubric] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    readJudgeConfigurationResources(controller.signal)
+      .then((answer) => {
+        setResources(answer);
+        // Opened on what the lab proves first, which is what the create request defaults to
+        // anyway. Written only while the field is still empty, so a late answer never
+        // overwrites a choice already made.
+        setProvider((current) => current || (answer.judges[0]?.provider ?? ""));
+        setModelId((current) => current || (answer.judges[0]?.models[0] ?? ""));
+        setResourcesError(null);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setResourcesError(describeApiError(cause, UNAVAILABLE));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  const proven = resources?.judges ?? [];
+  const chosen = proven.find((entry) => entry.provider === provider);
+
+  const creating = useCreateThenComplete<JudgeConfigurationPayloadSchema>(
+    {
+      create: async () => {
+        const created = await createJudgeConfiguration({ name });
+        return { id: created.judge_id, draft: created.content };
+      },
+      compose: (made) => ({
+        ...made,
+        name,
+        rubric,
+        model: { ...made.model, provider, model_id: modelId },
+      }),
+      replace: replaceJudgeConfigurationDraft,
+      refresh: listings.judges.refresh,
+      editorAt: (id) => `/lab/judges/${id}`,
+      owes: `Judge ${name} was created without the rubric written for it.`,
+      standing: "created · its rubric is not saved yet",
+      whenCreateFails: "The judge could not be created.",
+      whenCompleteFails: "The judge was created, but its rubric could not be saved.",
+    },
+    () =>
+      loading
+        ? "Reading what this lab has proven it can judge with…"
+        : resourcesError !== null
+          ? "What a judge may name could not be read, so nothing can be created here yet."
+          : name.trim() === ""
+            ? "The judge needs a name before it can be created."
+            : rubric.trim() === ""
+              ? "The judge has no rubric yet, and the rubric is the whole of what a judge is: nothing can be scored until it is written."
+              : modelId.trim() === ""
+                ? "The judge needs the model that will score with it."
+                : undefined,
+  );
+
+  return (
+    <CreatePage
+      backTo="/lab/judges"
+      backLabel="Judges"
+      breadcrumb="creating a judge"
+      title={name}
+      untitled="New judge"
+      standing={creating.standing}
+      formId={formId}
+      createLabel="Create judge"
+      creating={creating.busy}
+      creatingLabel="Creating…"
+      blockedBy={creating.blockedBy}
+      error={creating.error ?? resourcesError}
+    >
+      <form id={formId} className="grid gap-4" onSubmit={creating.submit}>
+        <Card title="Judge">
+          <FieldRows>
+            <Field
               label="Name"
-              hint="How this judge is listed. The rubric is written in the editor."
+              hint="How this judge is listed. An objective names the judge that scores it."
             >
               <input
                 className={fieldControlClasses}
@@ -171,23 +280,66 @@ export function JudgeConfigurationsPage() {
                 placeholder="Resolution quality"
                 onChange={(event) => setName(event.target.value)}
               />
-            </FieldHint>
-            {formError ? (
-              <p role="alert" className="text-[13px] text-lab-error">
-                {formError}
-              </p>
-            ) : null}
-            <button className={accentButtonClasses} type="submit" disabled={creating}>
-              <ButtonIcon verb="save" />
-              {creating ? "Creating…" : "Create judge"}
-            </button>
-            <p className="text-xs text-admin-muted">
-              A new draft carries the model and evidence the lab has proven, and no rubric: the
-              rubric is the whole of what a judge is, so it is written rather than defaulted.
-            </p>
-          </form>
+            </Field>
+            <Field
+              label="Provider"
+              hint="The lab's own word for the provider, so no two screens spell it differently. Only providers the lab has proven it can judge with are offered."
+            >
+              <select
+                className={fieldControlClasses}
+                value={provider}
+                onChange={(event) => {
+                  setProvider(event.target.value);
+                  // A model belongs to its provider, so it follows one here exactly as it
+                  // does in the judge editor.
+                  setModelId(
+                    proven.find((entry) => entry.provider === event.target.value)?.models[0] ?? "",
+                  );
+                }}
+              >
+                {proven.map((entry) => (
+                  <option key={entry.provider} value={entry.provider}>
+                    {describeProvider(entry.provider)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <ProvenModelField
+              value={modelId}
+              models={chosen?.models ?? []}
+              proven={chosen === undefined ? provider : describeProvider(chosen.provider)}
+              onChange={setModelId}
+            />
+          </FieldRows>
         </Card>
-      </div>
-    </>
+
+        <Card title="Rubric">
+          <FieldRows>
+            <Field
+              label="Criteria"
+              hint="Write what a met objective looks like, not what a good agent looks like. The judge scores one arm's record at a time, and it is the whole of what this judge is — a judge with no rubric cannot be created here and could not be published either."
+            >
+              <textarea
+                className={textAreaClasses}
+                value={rubric}
+                rows={7}
+                required
+                placeholder="Score met when the agent reached the outcome the policy allows and said what happens next."
+                onChange={(event) => setRubric(event.target.value)}
+              />
+            </Field>
+          </FieldRows>
+        </Card>
+
+        <Card title="Created as a draft">
+          <p className="text-[13px] leading-relaxed text-admin-ink-soft">
+            The evidence this judge is shown starts at what the lab has proven, and is changed in
+            the editor. A judge runs after the conversation has ended, on an anonymised record, and
+            every verdict names the version that produced it — so publishing is what makes one
+            usable.
+          </p>
+        </Card>
+      </form>
+    </CreatePage>
   );
 }

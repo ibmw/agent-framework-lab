@@ -18,6 +18,7 @@ import {
   filterChipStateClasses,
   focusRingClasses,
   iconLeadingClasses,
+  readOnlyValueClasses,
   searchFieldClasses,
   searchFieldIconClasses,
   searchFieldRowClasses,
@@ -218,6 +219,24 @@ describe("field controls", () => {
     expect(read("admin-field-border")).not.toBe(read("admin-border"));
     // …and the card border is a token at all, so the line above cannot pass on two undefineds.
     expect(read("admin-border")).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  /**
+   * The row where the page has decided the answer and is showing it rather than asking. It
+   * has to stand in the control column at the control's height, and it must not read as
+   * something to type in — which is the whole distinction, so the two halves are asserted
+   * together (`Workspace.dc.html`:3325).
+   */
+  it("shows a decided value at the control's height and on no field border", () => {
+    expect(readOnlyValueClasses).toContain("min-h-[44px]");
+    expect(readOnlyValueClasses).toContain("rounded-[9px]");
+    expect(readOnlyValueClasses).toContain("px-3.5");
+    // The card's border on the canvas, not the field's border on the surface: a reader must
+    // not take it for a control, and a focus ring it can never show would say it was one.
+    expect(readOnlyValueClasses).toContain("border-admin-border");
+    expect(readOnlyValueClasses).not.toContain("admin-field-border");
+    expect(readOnlyValueClasses).not.toContain("bg-admin-surface");
+    expect(readOnlyValueClasses).not.toContain("focus");
   });
 
   /**

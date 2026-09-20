@@ -16,6 +16,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { routeTree } from "./App";
 import { PRODUCT_TITLE_RULE, SHOP_NAME_RULE } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
+import { CREATE_ROUTES, tourAt } from "./lib/tours";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -1744,6 +1745,25 @@ function routedElements(routes: RouteObject[], prefix = ""): [string, string][] 
   });
 }
 
+describe("the tree's create pages and the tour table", () => {
+  it("excludes every create route the tree declares from the tours", () => {
+    // `tourAt` resolves a surface's walk from the location, so a create page the tour table
+    // has never heard of can be handed the walk of the index above it and light anchors
+    // that are not on the screen (PLAN-UX Slice 12, extended to the lab's four in 13). The
+    // cases are the route tree's own rows rather than a list kept beside them, so a create
+    // route added tomorrow fails here instead of being remembered.
+    const declared = routedElements(routeTree)
+      .map(([path]) => path)
+      .filter((path) => path.endsWith("/new"));
+
+    expect(declared).toHaveLength(8);
+    expect([...declared].sort()).toEqual([...CREATE_ROUTES].sort());
+    for (const path of declared) {
+      expect(tourAt(path.replaceAll(/:[A-Za-z]+/g, "x")), `${path} was offered a tour`).toBeNull();
+    }
+  });
+});
+
 describe("the route tree under the data router", () => {
   it("is two modes and a set of redirects, with one guard above all of them", () => {
     expect(routeTree).toHaveLength(1);
@@ -1772,15 +1792,19 @@ describe("the route tree under the data router", () => {
       ["/lab/bench/:shopId/:experimentId/results/traces", "ExperimentTracesPage"],
       ["/lab/history", "ExperimentHistoryPage"],
       ["/lab/agent-configurations", "AgentConfigurationsPage"],
+      ["/lab/agent-configurations/new", "NewAgentConfigurationPage"],
       ["/lab/agent-configurations/:configurationId", "AgentConfigurationEditorPage"],
       ["/lab/judges", "JudgeConfigurationsPage"],
+      ["/lab/judges/new", "NewJudgePage"],
       ["/lab/judges/:judgeId", "JudgeConfigurationEditorPage"],
       ["/lab/support-identities", "SupportIdentitiesPage"],
       ["/lab/support-identities/new", "NewSupportIdentityPage"],
       ["/lab/support-identities/:identityId", "SupportIdentityEditorPage"],
       ["/lab/objective-blocks", "ObjectiveBlocksPage"],
+      ["/lab/objective-blocks/new", "NewObjectiveBlockPage"],
       ["/lab/objective-blocks/:blockId", "ObjectiveBlockEditorPage"],
       ["/lab/mutation-blocks", "MutationBlocksPage"],
+      ["/lab/mutation-blocks/new", "NewMutationBlockPage"],
       ["/lab/mutation-blocks/:blockId", "MutationBlockEditorPage"],
       // Every lab path the shop layout used to hold, kept as a redirect and nothing else.
       ["/shops/:shopId/bench", "LabRedirect"],

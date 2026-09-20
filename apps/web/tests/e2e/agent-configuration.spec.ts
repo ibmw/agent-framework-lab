@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createShop } from "./support/authoring";
+import { createConfiguration, createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -107,15 +107,8 @@ test("an author publishes an agent configuration the lab can actually run", asyn
   await publishShop(page, unique);
   await publishReadOnlyIdentity(page, identityName);
 
-  await openSection(page, "Agent configurations", "Agent configurations");
-  const newConfiguration = card(page, "New agent configuration");
-  await newConfiguration.getByLabel("Name", { exact: true }).fill(configurationName);
-  await newConfiguration
-    .getByLabel("Support identity", { exact: true })
-    .selectOption({ label: `${identityName} · Customer support representative` });
-  await newConfiguration.getByRole("button", { name: "Create configuration" }).click();
-  await page.getByRole("link", { name: configurationName }).click();
-  await expect(page.getByRole("heading", { level: 1, name: configurationName })).toBeVisible();
+  // Creating is a page, and it lands in the editor of what it made (PLAN-UX Slice 13).
+  await createConfiguration(page, { name: configurationName, identity: identityName });
 
   // A new draft can read the arm through every read tool and move it through none.
   const bindings = page.getByRole("region", { name: /Tool bindings/ });

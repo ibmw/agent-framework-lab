@@ -267,11 +267,44 @@ describe("the tour a location is on", () => {
     expect(tourAt("/settings")).toBeNull();
     expect(tourAt("/shops")).toBeNull();
     // A create page is its own surface and has no tour of its own; offering it the index's
-    // would light anchors that are not on it (PLAN-UX Slice 12).
+    // would light anchors that are not on it (PLAN-UX Slice 12, and Slice 13 for the lab's
+    // four libraries).
     expect(tourAt("/shops/new")).toBeNull();
     expect(tourAt("/shops/shop-1/orders/new")).toBeNull();
     expect(tourAt("/shops/shop-1/customers/new")).toBeNull();
     expect(tourAt("/lab/support-identities/new")).toBeNull();
+    expect(tourAt("/lab/agent-configurations/new")).toBeNull();
+    expect(tourAt("/lab/judges/new")).toBeNull();
+    expect(tourAt("/lab/objective-blocks/new")).toBeNull();
+    expect(tourAt("/lab/mutation-blocks/new")).toBeNull();
+  });
+
+  it("takes no tour off the index a create page sits under", () => {
+    // The other half of the exclusion. A surface silently losing its tour is a defect this
+    // series has already shipped once, and it is what an exclusion written as a prefix — or
+    // as "anything under this library" — would cause here: seven of the eight create pages
+    // sit directly under an index that has a walk of its own.
+    //
+    // Not swept over the whole table, because `/shops/:shopId/tickets/new` is a *ticket*
+    // rather than a create page: the helpdesk declares `:ticketId` as a second address, and
+    // the case above pins that reading deliberately.
+    const pages: [string, string | null][] = [
+      ["/shops/new", null],
+      ["/shops/shop-1/orders/new", "orders"],
+      ["/shops/shop-1/customers/new", "customers"],
+      ["/lab/support-identities/new", "support-identities"],
+      ["/lab/agent-configurations/new", "agent-configurations"],
+      ["/lab/judges/new", "judges"],
+      ["/lab/objective-blocks/new", "objective-blocks"],
+      ["/lab/mutation-blocks/new", "mutation-blocks"],
+    ];
+    for (const [address, index] of pages) {
+      expect(tourAt(address), `${address} was offered a tour`).toBeNull();
+      expect(
+        tourAt(address.slice(0, -"/new".length)),
+        `the index above ${address} lost its tour`,
+      ).toBe(index);
+    }
   });
 
   it("excludes the create pages by address, not by a last segment that reads like one", () => {

@@ -521,15 +521,28 @@ function addressesOf(tour: Tour): string[] {
  * and not against the route table, so without this it would be offered the overview's walk
  * and light anchors that are not on it.
  *
- * Written as the four addresses rather than as "anything ending in `/new`", which has two
- * edges: a trailing slash slips past it, and a product an operator names `new` would lose
- * whatever tour its editor is one day given. Slices 13 and 14 add theirs here.
+ * Written as the addresses rather than as "anything ending in `/new`", which has two edges:
+ * a trailing slash slips past it, and a product an operator names `new` would lose whatever
+ * tour its editor is one day given. Slice 13 added the lab's four; Slice 14 adds the
+ * scenario's.
+ *
+ * Only `/shops/new` currently *needs* excluding: `tourAt` matches a tour's addresses
+ * exactly, so an index whose route is the segment above a create page does not claim it.
+ * The rest are listed because this is the statement — a create page is a surface of its own
+ * and has no tour — and an exclusion that held only the addresses which happen to collide
+ * today would stop being that statement the moment an index declared a second address the
+ * way the helpdesk does. `App.test.tsx` sweeps the route tree against this list, so a
+ * create route added without a line here fails rather than being noticed later.
  */
-const CREATE_ROUTES = [
+export const CREATE_ROUTES = [
   "/shops/new",
   "/shops/:shopId/orders/new",
   "/shops/:shopId/customers/new",
   "/lab/support-identities/new",
+  "/lab/agent-configurations/new",
+  "/lab/judges/new",
+  "/lab/objective-blocks/new",
+  "/lab/mutation-blocks/new",
 ];
 
 /**

@@ -69,10 +69,10 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Slices 13 and 14 are next, because they change what every remaining index page is and what a
-journey clicks through to create; they are independent of each other and of the shop's creates,
-which have landed with the `CreatePage` layout they both build on. Slices 15, 16, 17 and 18 are
-then independent and can proceed in parallel. Slice 19 is the backend milestone and runs beside
+Slice 14 is next, because it changes what a journey clicks through to create the recipe every
+later slice runs; it is independent of the creates that have landed — the shop's four and the
+lab's four — on the `CreatePage` layout it builds on. Slices 15, 16, 17 and 18 are then
+independent and can proceed in parallel. Slice 19 is the backend milestone and runs beside
 Group B; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B. Slices 26 and
 27 close the milestone, and 28 is optional.
 
@@ -89,26 +89,6 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
 
-#### Slice 13 — Creating is a page, in the lab
-
-On the `CreatePage` layout Slice 12 built, and on the `blockedButtonClasses` weight it minted.
-
-- [ ] New configuration (`/lab/agent-configurations/new`): name and model required, the reason on
-  the disabled control (README, *Interactions*).
-- [ ] New judge (`/lab/judges/new`).
-- [ ] New objective block and New mutation block (`/lab/objective-blocks/new`,
-  `/lab/mutation-blocks/new`), on the `CreatePage` layout with the parameter form Slice 2 built.
-- [ ] The four indexes lose their side card and gain the header button; each create lands in its
-  editor.
-
-Frames: `Workspace.dc.html` :3293, :3468, :3628 and the block screens; DEPRECADED frame 5.
-
-Branch: `feat/create-pages-lab`. Checks: page tests per index; Playwright `agent-configuration`
-and `block-library`.
-
-Slice evidence: an operator creating a judge is told the rubric is missing beside the button
-that will not press, and ends in the judge editor with the name they typed in its header.
-
 #### Slice 14 — New scenario
 
 - [ ] `/shops/:id/scenarios/new` on the `CreatePage` layout: Built on (name; ticket, whose value
@@ -119,6 +99,10 @@ that will not press, and ends in the judge editor with the name they typed in it
   control and inline; the ticket the scenario is built on is frozen at its current version and
   the hint says so.
 - [ ] Creation writes the same draft the editor would save, and lands in the scenario editor.
+      `CreateScenarioRequest` carries a name and a ticket and nothing else, so this is a create
+      that takes two writes: `lib/createDefinition.ts` holds that shape — the second write sent
+      only where it is owed, the retry that finishes the first press, the unsaved work declared
+      between the two, and the stand-down when the operator leaves (ADR 0051, ADR 0056).
 
 Frames: `Workspace.dc.html` :2925; DEPRECADED frame 4 for the editor landed in.
 
@@ -306,8 +290,8 @@ variants before the second press, and can walk the first back.
 #### Slice 22 — Refused with a reason
 
 - [ ] `blockedButtonClasses` — the dashed, disabled weight with the reason in `title`, minted
-  in Slice 12 and worn by its four create pages — on **every** primary action that cannot
-  proceed. Publish, Start, Save connection and Compose are the named adopters; the sweep is
+  in Slice 12 and worn by the eight create pages and nothing else — on **every** primary action
+  that cannot proceed. Publish, Start, Save connection and Compose are the named adopters; the sweep is
   for the rest, and *Attach to this shop* on Customers is one of them, `disabled` today with
   its reason nowhere.
 - [ ] Decide whether the weight is `disabled` or `aria-disabled`. Natively disabled, it leaves
@@ -320,8 +304,9 @@ variants before the second press, and can walk the first back.
 - [ ] The rules the September plan listed and the gate still says first: fulfilment max transit
   at least min; stock zero while "in stock"; an active product with no priced variant, on the
   editor; `paid_at` and `shipped_at` prefilled from `placed_at`; scenario caps as "N of 12";
-  the block parameter's default-when-optional beside its checkbox; the judge's rubric required
-  with reserved terms highlighted; Start listing what is missing.
+  the block parameter's default-when-optional beside its checkbox; the judge editor's rubric
+  required with reserved terms highlighted — the create page already refuses without one; Start
+  listing what is missing.
 
 Frames: README, *The form pattern* and *Interactions*; DEPRECADED frames 2c, 4, 7.
 

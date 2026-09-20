@@ -8,7 +8,7 @@ import type {
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -98,10 +98,31 @@ function preview(
   };
 }
 
+const NEW_JUDGE_ID = "2b3c4d5e-6f70-4812-9345-6a7b8c9d0e1f";
+
+/** What the lab makes from a create request: a judge with the proven model and no rubric. */
+const NEW_DRAFT: JudgeConfigurationDraftResponse["content"] = {
+  name: "",
+  description: "",
+  rubric: "",
+  evidence: ["customer_turns", "agent_replies", "tool_calls"],
+  model: { provider: "openai", model_id: "gpt-5-mini", temperature: "0.00" },
+};
+
 let currentJudge: JudgeConfigurationDraftResponse["content"] = JUDGE;
 let currentPreview: JudgeConfigurationPreviewResponse = preview();
 let savedPayloads: Record<string, unknown>[] = [];
 let created: Record<string, unknown>[] = [];
+let completed: Record<string, unknown>[] = [];
+let listed: JudgeConfigurationListResponse = LIST;
+/**
+ * How many times the listing the lab's rail counts has been read.
+ *
+ * The figure alone cannot say *when* it moved, and two of the cases below are about exactly
+ * that: that the create re-reads the listing the moment the judge exists rather than on its
+ * way out, and that a run which has been stood down reads nothing further (ADR 0056).
+ */
+let listingReads = 0;
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -128,20 +149,70 @@ const server = setupServer(
     } satisfies ShopPreviewResponse),
   ),
   http.get("*/api/v1/judge-configurations/resources", () => HttpResponse.json(RESOURCES)),
-  http.get("*/api/v1/judge-configurations", () => HttpResponse.json(LIST)),
+  http.get("*/api/v1/judge-configurations", () => {
+    listingReads += 1;
+    return HttpResponse.json(listed);
+  }),
+  // A create makes the lab hold one judge more, which is what lets a test watch the rail's
+  // figure move rather than agree with a fixture (ADR 0056).
   http.post("*/api/v1/judge-configurations", async ({ request }) => {
-    created.push((await request.json()) as Record<string, unknown>);
+    const command = (await request.json()) as Record<string, unknown>;
+    created.push(command);
+    const content = { ...NEW_DRAFT, name: String(command.name) };
+    listed = {
+      judges: [
+        ...listed.judges,
+        {
+          judge_id: NEW_JUDGE_ID,
+          name: content.name,
+          provider: content.model.provider,
+          provider_label: "OpenAI",
+          model_id: content.model.model_id,
+          evidence_count: content.evidence.length,
+          updated_at: "2026-09-01T09:10:00+00:00",
+          latest_published_version: null,
+          published_version_count: 0,
+        },
+      ],
+    };
     return HttpResponse.json(
       {
-        judge_id: JUDGE_ID,
+        judge_id: NEW_JUDGE_ID,
         lifecycle_state: "draft",
-        content: { ...JUDGE, rubric: "" },
+        content,
         created_at: "2026-09-01T09:00:00+00:00",
         updated_at: "2026-09-01T09:00:00+00:00",
       } satisfies JudgeConfigurationDraftResponse,
       { status: 201 },
     );
   }),
+  http.put(`*/api/v1/judge-configurations/${NEW_JUDGE_ID}/draft`, async ({ request }) => {
+    const body = (await request.json()) as { payload: Record<string, unknown> };
+    completed.push(body.payload);
+    return HttpResponse.json({
+      judge_id: NEW_JUDGE_ID,
+      lifecycle_state: "draft",
+      content: body.payload as JudgeConfigurationDraftResponse["content"],
+      created_at: "2026-09-01T09:00:00+00:00",
+      updated_at: "2026-09-01T09:06:00+00:00",
+    } satisfies JudgeConfigurationDraftResponse);
+  }),
+  http.get(`*/api/v1/judge-configurations/${NEW_JUDGE_ID}/draft`, () =>
+    HttpResponse.json({
+      judge_id: NEW_JUDGE_ID,
+      lifecycle_state: "draft",
+      content: {
+        ...NEW_DRAFT,
+        name: String(created.at(-1)?.name ?? ""),
+        rubric: String((completed.at(-1)?.rubric as string | undefined) ?? ""),
+      },
+      created_at: "2026-09-01T09:00:00+00:00",
+      updated_at: "2026-09-01T09:06:00+00:00",
+    } satisfies JudgeConfigurationDraftResponse),
+  ),
+  http.get(`*/api/v1/judge-configurations/${NEW_JUDGE_ID}/draft/preview`, () =>
+    HttpResponse.json({ ...currentPreview, judge_id: NEW_JUDGE_ID }),
+  ),
   http.get(`*/api/v1/judge-configurations/${JUDGE_ID}/draft`, () =>
     HttpResponse.json({
       judge_id: JUDGE_ID,
@@ -196,11 +267,36 @@ afterEach(() => {
   currentPreview = preview();
   savedPayloads = [];
   created = [];
+  completed = [];
+  listed = LIST;
+  listingReads = 0;
 });
 afterAll(() => server.close());
 
 function renderAt(path: string) {
   return renderApp(path);
+}
+
+/** A promise this test resolves by hand, so a write can be held open while the operator acts. */
+function heldOpen() {
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { held, release };
+}
+
+/**
+ * Every turn a stood-down run would need to carry on in.
+ *
+ * `waitFor` proves something happened; nothing proves something did not except giving the
+ * continuation its turns and then looking. The run's remaining steps are all microtasks
+ * after one `await`, so a macrotask boundary is past every one of them.
+ */
+async function everyRemainingTurn() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }
 
 describe("judge workspace", () => {
@@ -243,25 +339,6 @@ describe("judge workspace", () => {
 
     expect(screen.getByRole("link", { name: "Tone" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Resolution quality" })).toBeNull();
-  });
-
-  it("creates a judge with no rubric, because the rubric is what an author writes", async () => {
-    const user = userEvent.setup();
-    renderAt("/lab/judges");
-
-    await user.type(await screen.findByLabelText("Name"), "Tone");
-    await user.click(screen.getByRole("button", { name: "Create judge" }));
-
-    await waitFor(() => expect(created).toEqual([{ name: "Tone" }]));
-  });
-
-  it("puts the name hint in that control's accessible description", async () => {
-    renderAt("/lab/judges");
-
-    const card = within(await screen.findByRole("region", { name: "New judge" }));
-    expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
-      /how this judge is listed.*rubric is written in the editor/i,
-    );
   });
 
   it("constrains the judge's temperature the way the agent editor constrains its own", async () => {
@@ -435,6 +512,270 @@ describe("judge workspace", () => {
 });
 
 /**
+ * Creating is a page, and this one will not go without the rubric (PLAN-UX Slice 13).
+ */
+describe("the new-judge page", () => {
+  it("is reached from the index's own header, which carries no create card", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/judges");
+
+    await screen.findByRole("link", { name: "Resolution quality" });
+    expect(screen.queryByRole("region", { name: "New judge" })).toBeNull();
+
+    await user.click(screen.getByRole("link", { name: "New judge" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "New judge" })).toBeVisible();
+    expect(screen.getByText(/creating a judge/)).toBeVisible();
+  });
+
+  it("tells an operator the rubric is missing, beside the button that will not press", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/judges/new");
+
+    const create = await screen.findByRole("button", { name: "Create judge" });
+    await user.type(screen.getByLabelText("Name"), "Tone");
+
+    // The slice's own evidence: the reason names what is actually missing, and it is read
+    // beside the control rather than only hovered.
+    expect(create).toBeDisabled();
+    const reason =
+      "The judge has no rubric yet, and the rubric is the whole of what a judge is: nothing can be scored until it is written.";
+    expect(create).toHaveAccessibleDescription(reason);
+    expect(create).toHaveAttribute("title", reason);
+    expect(screen.getByText(reason)).toBeVisible();
+
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the incident was resolved.");
+
+    expect(create).toBeEnabled();
+    expect(screen.queryByText(reason)).toBeNull();
+  });
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt("/lab/judges/new");
+
+    expect(await screen.findByLabelText("Name")).toHaveAccessibleDescription(
+      /how this judge is listed.*an objective names the judge that scores it/i,
+    );
+    expect(screen.getByLabelText("Criteria")).toHaveAccessibleDescription(
+      /what a met objective looks like.*cannot be created here/i,
+    );
+  });
+
+  it("names the judge before the rubric while there is no name either", async () => {
+    renderAt("/lab/judges/new");
+
+    const create = await screen.findByRole("button", { name: "Create judge" });
+    await waitFor(() =>
+      expect(create).toHaveAccessibleDescription(
+        "The judge needs a name before it can be created.",
+      ),
+    );
+  });
+
+  it("makes the judge, saves the rubric it could not carry, and lands in its editor", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/judges/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the tone stayed warm.");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+
+    // The create request carries the name the contract takes; the rubric is the second
+    // write, because `CreateJudgeConfigurationRequest` has nowhere to put it.
+    await waitFor(() => expect(created).toEqual([{ name: "Tone" }]));
+    await waitFor(() => expect(completed).toHaveLength(1));
+    expect(completed[0]).toMatchObject({
+      name: "Tone",
+      rubric: "Score whether the tone stayed warm.",
+    });
+
+    // And the operator ends in the judge editor with the name they typed in its header.
+    expect(await screen.findByRole("heading", { level: 1, name: "Tone" })).toBeVisible();
+  });
+
+  it("moves the model onto the provider the author just chose", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/judges/new");
+
+    expect(await screen.findByLabelText("Model")).toHaveValue("gpt-5-mini");
+    await user.selectOptions(screen.getByLabelText("Provider"), "fake");
+    expect(screen.getByLabelText("Model")).toHaveValue("deterministic");
+  });
+
+  it("asks about the rubric once the judge exists and the write that carries it was refused", async () => {
+    // ADR 0051 keeps a half-typed create form out of the register — nothing exists to lose.
+    // It stops being true the moment the first write lands: the rubric is on screen and
+    // nowhere else, so the page declares it with its own second write as the save.
+    const user = userEvent.setup();
+    let refuse = true;
+    server.use(
+      http.put(`*/api/v1/judge-configurations/${NEW_JUDGE_ID}/draft`, async ({ request }) => {
+        if (refuse) {
+          refuse = false;
+          return HttpResponse.error();
+        }
+        const body = (await request.json()) as { payload: Record<string, unknown> };
+        completed.push(body.payload);
+        return HttpResponse.json({
+          judge_id: NEW_JUDGE_ID,
+          lifecycle_state: "draft",
+          content: body.payload as JudgeConfigurationDraftResponse["content"],
+          created_at: "2026-09-01T09:00:00+00:00",
+          updated_at: "2026-09-01T09:06:00+00:00",
+        } satisfies JudgeConfigurationDraftResponse);
+      }),
+    );
+    renderAt("/lab/judges/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the tone stayed warm.");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+    expect(
+      await screen.findByText(/The judge was created, but its rubric could not be saved/),
+    ).toBeVisible();
+
+    const rail = within(screen.getByRole("navigation", { name: "Experiment lab workspace" }));
+    await user.click(rail.getByRole("link", { name: "Judges" }));
+
+    const prompt = within(await screen.findByRole("dialog", { name: "Unsaved changes" }));
+    expect(
+      prompt.getByText("Judge Tone was created without the rubric written for it."),
+    ).toBeVisible();
+
+    await user.click(prompt.getByRole("button", { name: "Save and leave" }));
+
+    await waitFor(() => expect(completed).toHaveLength(1));
+    expect(completed[0]).toMatchObject({ rubric: "Score whether the tone stayed warm." });
+    expect(await screen.findByRole("heading", { level: 1, name: "Judges" })).toBeVisible();
+  });
+
+  it("re-reads the listing the moment the judge exists, refused rubric or not", async () => {
+    // ADR 0056's invalidation rule is about what the surface *did*, not about whether it
+    // finished: the lab holds one judge more from the `POST`, so the rail must already say
+    // so while the operator is still standing here reading why the rubric did not save.
+    const user = userEvent.setup();
+    server.use(
+      http.put(`*/api/v1/judge-configurations/${NEW_JUDGE_ID}/draft`, () => HttpResponse.error()),
+    );
+    renderAt("/lab/judges/new");
+
+    const entry = railEntry("Judges", "Experiment lab workspace");
+    await waitFor(() => expect(within(entry).getByText("1")).toBeVisible());
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the tone stayed warm.");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+
+    expect(
+      await screen.findByText(/The judge was created, but its rubric could not be saved/),
+    ).toBeVisible();
+    // Still on the create page — and the rail has already moved, before any retry.
+    expect(screen.getByText("created · its rubric is not saved yet")).toBeVisible();
+    expect(within(railEntry("Judges", "Experiment lab workspace")).getByText("2")).toBeVisible();
+  });
+
+  it("sends the rubric as corrected after a refusal, not the one the first press held", async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    server.use(
+      http.put(`*/api/v1/judge-configurations/${NEW_JUDGE_ID}/draft`, async ({ request }) => {
+        if (refuse) {
+          refuse = false;
+          return HttpResponse.error();
+        }
+        const body = (await request.json()) as { payload: Record<string, unknown> };
+        completed.push(body.payload);
+        return HttpResponse.json({
+          judge_id: NEW_JUDGE_ID,
+          lifecycle_state: "draft",
+          content: body.payload as JudgeConfigurationDraftResponse["content"],
+          created_at: "2026-09-01T09:00:00+00:00",
+          updated_at: "2026-09-01T09:06:00+00:00",
+        } satisfies JudgeConfigurationDraftResponse);
+      }),
+    );
+    renderAt("/lab/judges/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+    await user.type(screen.getByLabelText("Criteria"), "Score the warmth.");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+    await screen.findByText(/The judge was created, but its rubric could not be saved/);
+
+    await user.clear(screen.getByLabelText("Criteria"));
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the tone stayed warm.");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+
+    // The second write sends the form's current answers, so a rubric corrected after a
+    // refusal is the one that lands — and no second judge was made.
+    await waitFor(() => expect(completed).toHaveLength(1));
+    expect(completed[0]).toMatchObject({ rubric: "Score whether the tone stayed warm." });
+    expect(created).toHaveLength(1);
+  });
+
+  it("stands the running write down when the operator discards it and leaves", async () => {
+    // `submit` is a plain async continuation and outlives this page, so every await in it is
+    // a place to leave from. A run that kept going would re-read a listing through a closure
+    // belonging to a shell nobody is standing in and navigate somebody who has gone
+    // elsewhere into an editor (ADR 0051's "Discard throws each piece away").
+    const user = userEvent.setup();
+    const { held, release } = heldOpen();
+    server.use(
+      http.put(`*/api/v1/judge-configurations/${NEW_JUDGE_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: Record<string, unknown> };
+        await held;
+        completed.push(body.payload);
+        return HttpResponse.json({
+          judge_id: NEW_JUDGE_ID,
+          lifecycle_state: "draft",
+          content: body.payload as JudgeConfigurationDraftResponse["content"],
+          created_at: "2026-09-01T09:00:00+00:00",
+          updated_at: "2026-09-01T09:06:00+00:00",
+        } satisfies JudgeConfigurationDraftResponse);
+      }),
+    );
+    renderAt("/lab/judges/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the tone stayed warm.");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+
+    // The `POST` has landed and the listing has been read again; the `PUT` is in the air.
+    await waitFor(() => expect(created).toHaveLength(1));
+    await waitFor(() => expect(listingReads).toBe(2));
+
+    const rail = within(screen.getByRole("navigation", { name: "Experiment lab workspace" }));
+    await user.click(rail.getByRole("link", { name: "Judges" }));
+    const prompt = within(await screen.findByRole("dialog", { name: "Unsaved changes" }));
+    await user.click(prompt.getByRole("button", { name: "Discard and leave" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Judges" })).toBeVisible();
+
+    release();
+    await waitFor(() => expect(completed).toHaveLength(1));
+    await everyRemainingTurn();
+
+    // The write that was already in the air lands, and the run that sent it does nothing
+    // else: no third read of the listing, and no navigation into the editor of the judge
+    // the operator walked away from.
+    expect(listingReads).toBe(2);
+    expect(screen.getByRole("heading", { level: 1, name: "Judges" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 1, name: "Tone" })).toBeNull();
+  });
+
+  it("asks nothing while the create form is only half typed", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/judges/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+
+    const rail = within(screen.getByRole("navigation", { name: "Experiment lab workspace" }));
+    await user.click(rail.getByRole("link", { name: "Judges" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Judges" })).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull();
+  });
+});
+
+/**
  * The rail's figure and this index are one listing, read once by the shell and handed to
  * both, so they cannot come to disagree (ADR 0056).
  */
@@ -446,5 +787,23 @@ describe("the rail's figure and this index", () => {
     const entry = railEntry("Judges", "Experiment lab workspace");
     expect(within(entry).getByText(String(rows))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${rows} judge${rows === 1 ? "" : "s"}`);
+  });
+
+  it("moves the figure when a judge is created, without a reload", async () => {
+    // Created rather than compared: an agreement between two reads of one fixture is true by
+    // construction, and what ADR 0056 asks of a create is that it re-reads the listing.
+    const user = userEvent.setup();
+    renderAt("/lab/judges/new");
+
+    const entry = railEntry("Judges", "Experiment lab workspace");
+    await waitFor(() => expect(within(entry).getByText("1")).toBeVisible());
+
+    await user.type(await screen.findByLabelText("Name"), "Tone");
+    await user.type(screen.getByLabelText("Criteria"), "Score whether the tone stayed warm.");
+    await user.click(screen.getByRole("button", { name: "Create judge" }));
+
+    await waitFor(() =>
+      expect(within(railEntry("Judges", "Experiment lab workspace")).getByText("2")).toBeVisible(),
+    );
   });
 });

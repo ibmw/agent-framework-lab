@@ -144,6 +144,24 @@ export const fieldControlClasses = `box-border min-h-[44px] py-2.5 text-[14.5px]
  */
 export const textAreaClasses = `box-border min-h-24 py-[11px] text-[14px] leading-[1.6] ${fieldSurfaceClasses}`;
 
+/**
+ * A form row's answer where the page decides it rather than asking: the control's box, on the
+ * canvas, with no border a reader could mistake for something to type in.
+ *
+ * The prototype draws exactly this on the new-configuration page's Provider row, as the
+ * alternative to the select (`Workspace.dc.html`:3325): a framework is proven on one provider
+ * here, and *a choice of one is not a choice*, so the page shows what the framework decided
+ * instead of offering a list with one entry. Minted with that row as its only consumer
+ * (PLAN-UX Slice 13).
+ *
+ * The ground is `admin-canvas` where the prototype writes `#f4f5f6`. One recessed ground for
+ * the workspace rather than a second literal a pixel away from the token that already means
+ * it; the border is the card's rather than the field's, which is the whole distinction the
+ * row is drawing.
+ */
+export const readOnlyValueClasses =
+  "box-border flex min-h-[44px] w-full items-center rounded-[9px] border border-admin-border bg-admin-canvas px-3.5 text-[14px] text-admin-ink-soft";
+
 export const fieldLabelClasses = "grid gap-1 text-xs font-semibold text-admin-muted";
 
 /**

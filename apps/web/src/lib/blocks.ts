@@ -2,7 +2,10 @@ import type {
   BlockParameterKind,
   BlockParameterSchema,
   MutationBlockPayloadSchema,
+  MutationEffect,
+  ObjectiveAssessment,
   ObjectiveBlockPayloadSchema,
+  ObjectiveEvidence,
 } from "@agent-lab/contracts";
 import { BLOCK_PARAMETER_KIND, optionsOf } from "./enumLabels";
 
@@ -45,6 +48,50 @@ const LITERAL_KINDS: readonly BlockParameterKind[] = ["severity", "timing", "dur
 export const PARAMETER_KINDS: readonly { kind: BlockParameterKind; label: string }[] = optionsOf(
   BLOCK_PARAMETER_KIND,
 ).map((entry) => ({ kind: entry.value, label: entry.option }));
+
+/**
+ * The three closed sets a template's type axis is chosen from, each option explained on its
+ * own row.
+ *
+ * Here rather than on one screen because two screens ask: the editor, and the create page
+ * each library gained in PLAN-UX Slice 13. They are not `enumLabels.ts` entries — that
+ * module holds one `LabelMap` per contract union, keyed and swept, and these carry a
+ * sentence of explanation on each option rather than a noun, which is what makes them the
+ * picker's copy rather than the workspace's word for the value.
+ */
+export const ASSESSMENTS: readonly { value: ObjectiveAssessment; label: string }[] = [
+  { value: "deterministic", label: "Deterministic — an encoded rule decides" },
+  { value: "judge", label: "Judge — an LLM scores a rubric dimension" },
+];
+
+export const DETERMINISTIC_EVIDENCE: readonly { value: ObjectiveEvidence; label: string }[] = [
+  { value: "event", label: "Event — a recorded tool call or read" },
+  { value: "policy", label: "Policy — an encoded rule over state and events" },
+  { value: "state", label: "State — the sandbox the run ended in" },
+  { value: "forbidden", label: "Forbidden — something that must never occur" },
+];
+
+export const EFFECTS: readonly { value: MutationEffect; label: string }[] = [
+  { value: "entity_mutation", label: "Entity mutation — an out-of-band write bumps a version" },
+  { value: "tool_fault", label: "Tool fault — a tool fails or times out" },
+  { value: "clock_shift", label: "Clock shift — sandbox time jumps forward" },
+  { value: "service_outage", label: "Service outage — a dependency is unavailable" },
+];
+
+/**
+ * A judged objective is scored on a rubric dimension and nothing else, so the evidence moves
+ * with the assessment rather than leaving a pairing the publish gate refuses. Read by the
+ * editor and by the create page, so the two cannot answer it differently.
+ */
+export function evidenceFor(
+  assessment: ObjectiveAssessment,
+  current: ObjectiveEvidence,
+): ObjectiveEvidence {
+  if (assessment === "judge") {
+    return "dimension";
+  }
+  return current === "dimension" ? "event" : current;
+}
 
 export function bindsShopObject(kind: BlockParameterKind): boolean {
   return SHOP_BOUND_KINDS.includes(kind);
@@ -101,23 +148,49 @@ export function uniqueParameterName(base: string, taken: readonly string[]): str
   return candidate;
 }
 
+/**
+ * One more parameter on a list of them.
+ *
+ * The list rather than the payload, because the create page holds its parameters before
+ * there is a payload to put them in: `/lab/objective-blocks/new` collects them, and the
+ * `POST` that makes the block carries a name and nothing else (PLAN-UX Slice 13). The
+ * payload-shaped helper below is this one with the payload rebuilt around it, so the create
+ * page and the editor cannot come to disagree about what adding a parameter means.
+ */
+export function addedParameter(
+  parameters: readonly BlockParameterSchema[],
+  name: string,
+  kind: BlockParameterKind,
+): BlockParameterSchema[] {
+  return [
+    ...parameters,
+    {
+      name: uniqueParameterName(
+        toIdentifier(name),
+        parameters.map((entry) => entry.name),
+      ),
+      kind,
+      description: "",
+      required: true,
+      default: null,
+      shop_bound: bindsShopObject(kind),
+    },
+  ];
+}
+
+export function withoutParameter(
+  parameters: readonly BlockParameterSchema[],
+  name: string,
+): BlockParameterSchema[] {
+  return parameters.filter((entry) => entry.name !== name);
+}
+
 export function addParameter<PayloadT extends BlockPayload>(
   payload: PayloadT,
   name: string,
   kind: BlockParameterKind,
 ): PayloadT {
-  const parameter: BlockParameterSchema = {
-    name: uniqueParameterName(
-      toIdentifier(name),
-      payload.parameters.map((entry) => entry.name),
-    ),
-    kind,
-    description: "",
-    required: true,
-    default: null,
-    shop_bound: bindsShopObject(kind),
-  };
-  return { ...payload, parameters: [...payload.parameters, parameter] };
+  return { ...payload, parameters: addedParameter(payload.parameters, name, kind) };
 }
 
 /**
@@ -167,7 +240,7 @@ export function removeParameter<PayloadT extends BlockPayload>(
   payload: PayloadT,
   name: string,
 ): PayloadT {
-  return { ...payload, parameters: payload.parameters.filter((entry) => entry.name !== name) };
+  return { ...payload, parameters: withoutParameter(payload.parameters, name) };
 }
 
 /** Moving a parameter is an authored change: order is what the editor and a binding follow. */

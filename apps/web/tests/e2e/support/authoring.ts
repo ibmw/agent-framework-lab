@@ -117,3 +117,97 @@ export async function createOrder(
 
   await expect(page.getByRole("heading", { level: 1, name: order.reference })).toBeVisible();
 }
+
+/**
+ * An agent configuration, from the library into its own editor.
+ *
+ * The create page asks for the name and the model the arm will run on, and the model follows
+ * the framework — so naming a framework here is naming what the lab has proven (PLAN-UX
+ * Slice 13). The prompt, the tools and the tone are the editor's.
+ */
+export async function createConfiguration(
+  page: Page,
+  configuration: { name: string; identity: string; framework?: string },
+) {
+  await openSection(page, "Agent configurations", "Agent configurations");
+  await page.getByRole("link", { name: "New configuration" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "New agent configuration" }),
+  ).toBeVisible();
+
+  await page.getByLabel("Name", { exact: true }).fill(configuration.name);
+  await page
+    .getByLabel("Adopted identity", { exact: true })
+    .selectOption({ label: `${configuration.identity} · Customer support representative` });
+  if (configuration.framework !== undefined) {
+    await page
+      .getByLabel("Framework", { exact: true })
+      .selectOption({ label: configuration.framework });
+  }
+  await page.getByRole("button", { name: "Create configuration" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: configuration.name })).toBeVisible();
+}
+
+/**
+ * A judge, from the library into its own editor.
+ *
+ * The rubric is answered on the way in: it is the whole of what a judge is, and Create is
+ * refused without it (PLAN-UX Slice 13).
+ */
+export async function createJudge(
+  page: Page,
+  judge: { name: string; rubric: string; provider?: string },
+) {
+  await openSection(page, "Judges", "Judges");
+  await page.getByRole("link", { name: "New judge" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "New judge" })).toBeVisible();
+
+  await page.getByLabel("Name", { exact: true }).fill(judge.name);
+  await page.getByLabel("Criteria", { exact: true }).fill(judge.rubric);
+  if (judge.provider !== undefined) {
+    await page.getByLabel("Provider", { exact: true }).selectOption(judge.provider);
+  }
+  await page.getByRole("button", { name: "Create judge" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: judge.name })).toBeVisible();
+}
+
+/**
+ * A block template, from either library into its own editor.
+ *
+ * The name, the type axis and the parameters a scenario will bind are what the create page
+ * asks for; the statement, the descriptions and the defaults are the editor's. The heading
+ * is the slug the name was saved under, which is what the library and every binding use.
+ */
+export async function createBlock(
+  page: Page,
+  block: {
+    library: "Objective blocks" | "Mutation blocks";
+    name: string;
+    /** "Assessed by" for an objective, "Perturbs" for a mutation. */
+    axis?: { label: "Assessed by" | "Perturbs"; value: string };
+    parameters?: { label: string; kind?: string }[];
+  },
+) {
+  await openSection(page, block.library, block.library);
+  const noun = block.library === "Objective blocks" ? "objective" : "mutation";
+  await page.getByRole("link", { name: `New ${noun} block` }).click();
+  await expect(page.getByRole("heading", { level: 1, name: `New ${noun} block` })).toBeVisible();
+
+  await page.getByLabel("Name", { exact: true }).fill(block.name);
+  if (block.axis !== undefined) {
+    await page.getByLabel(block.axis.label, { exact: true }).selectOption(block.axis.value);
+  }
+  const addParameter = page.getByRole("form", { name: "Add a parameter" });
+  for (const parameter of block.parameters ?? []) {
+    await addParameter.getByLabel("Label", { exact: true }).fill(parameter.label);
+    if (parameter.kind !== undefined) {
+      await addParameter.getByLabel("Kind", { exact: true }).selectOption(parameter.kind);
+    }
+    await addParameter.getByRole("button", { name: "Add parameter" }).click();
+  }
+  await page.getByRole("button", { name: "Create block" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: block.name })).toBeVisible();
+}

@@ -245,9 +245,31 @@ const configurations: AgentConfigurationListResponse = {
   ],
 };
 
+const NEW_CONFIGURATION_ID = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
+
+/**
+ * What the lab makes from a create request: an incomplete first draft on the framework it
+ * proves first, with every read tool on and every write off (`new_agent_configuration`).
+ */
+const NEW_DRAFT: AgentConfigurationDraftResponse["content"] = {
+  name: "",
+  description: "",
+  framework_id: "pydantic-ai",
+  architecture: "single_agent",
+  support_identity_id: IDENTITY_ID,
+  prompt: "",
+  tone_of_voice: { source: "shop_default", guideline_id: "" },
+  tools: ["orders.read_order"],
+  memory: "none",
+  model: { provider: "openai", model_id: "gpt-5-mini", temperature: "0.20", max_tool_rounds: 8 },
+};
+
 let currentConfiguration = CONFIGURATION;
 let currentPreview = preview();
 let savedPayloads: Array<Record<string, unknown>> = [];
+let createdDrafts: Array<Record<string, unknown>> = [];
+let completedDrafts: Array<Record<string, unknown>> = [];
+let listed: AgentConfigurationListResponse = configurations;
 let previewShopIds: Array<string | null> = [];
 
 const SHOP_LISTING: ShopListResponse = {
@@ -298,7 +320,68 @@ const server = setupServer(
     } satisfies ShopPreviewResponse),
   ),
   http.get("*/api/v1/agent-configurations/resources", () => HttpResponse.json(RESOURCES)),
-  http.get("*/api/v1/agent-configurations", () => HttpResponse.json(configurations)),
+  http.get("*/api/v1/agent-configurations", () => HttpResponse.json(listed)),
+  // A create makes the lab hold one configuration more, which is what lets a test watch the
+  // rail's figure move rather than agree with a fixture (ADR 0056).
+  http.post("*/api/v1/agent-configurations", async ({ request }) => {
+    const command = (await request.json()) as Record<string, unknown>;
+    createdDrafts.push(command);
+    const content = { ...NEW_DRAFT, name: String(command.name) };
+    listed = {
+      configurations: [
+        ...listed.configurations,
+        {
+          configuration_id: NEW_CONFIGURATION_ID,
+          name: content.name,
+          framework_id: content.framework_id,
+          framework_label: "Pydantic AI",
+          model_id: content.model.model_id,
+          support_identity_id: IDENTITY_ID,
+          tool_count: 1,
+          updated_at: "2026-08-27T12:07:00+00:00",
+          latest_published_version: null,
+          published_version_count: 0,
+        },
+      ],
+    };
+    return HttpResponse.json(
+      {
+        configuration_id: NEW_CONFIGURATION_ID,
+        lifecycle_state: "draft",
+        content,
+        created_at: "2026-08-27T12:07:00+00:00",
+        updated_at: "2026-08-27T12:07:00+00:00",
+      } satisfies AgentConfigurationDraftResponse,
+      { status: 201 },
+    );
+  }),
+  http.put(`*/api/v1/agent-configurations/${NEW_CONFIGURATION_ID}/draft`, async ({ request }) => {
+    const body = (await request.json()) as { payload: Record<string, unknown> };
+    completedDrafts.push(body.payload);
+    return HttpResponse.json({
+      configuration_id: NEW_CONFIGURATION_ID,
+      lifecycle_state: "draft",
+      content: body.payload as AgentConfigurationDraftResponse["content"],
+      created_at: "2026-08-27T12:07:00+00:00",
+      updated_at: "2026-08-27T12:08:00+00:00",
+    } satisfies AgentConfigurationDraftResponse);
+  }),
+  http.get(`*/api/v1/agent-configurations/${NEW_CONFIGURATION_ID}/draft`, () =>
+    HttpResponse.json({
+      configuration_id: NEW_CONFIGURATION_ID,
+      lifecycle_state: "draft",
+      content: { ...NEW_DRAFT, name: String(createdDrafts.at(-1)?.name ?? "") },
+      created_at: "2026-08-27T12:07:00+00:00",
+      updated_at: "2026-08-27T12:08:00+00:00",
+    } satisfies AgentConfigurationDraftResponse),
+  ),
+  http.get(`*/api/v1/agent-configurations/${NEW_CONFIGURATION_ID}/draft/preview`, () =>
+    HttpResponse.json({
+      ...currentPreview,
+      configuration_id: NEW_CONFIGURATION_ID,
+      content: { ...NEW_DRAFT, name: String(createdDrafts.at(-1)?.name ?? "") },
+    }),
+  ),
   http.get(`*/api/v1/agent-configurations/${CONFIGURATION_ID}/draft`, () =>
     HttpResponse.json({
       configuration_id: CONFIGURATION_ID,
@@ -375,6 +458,9 @@ afterEach(() => {
   currentConfiguration = CONFIGURATION;
   currentPreview = preview();
   savedPayloads = [];
+  createdDrafts = [];
+  completedDrafts = [];
+  listed = configurations;
   previewShopIds = [];
 });
 afterAll(() => server.close());
@@ -428,18 +514,6 @@ describe("agent configuration workspace", () => {
     expect(screen.queryByRole("link", { name: "Frontline single agent" })).toBeNull();
   });
 
-  it("puts each field's hint in that control's accessible description", async () => {
-    renderAt("/lab/agent-configurations");
-
-    const card = within(await screen.findByRole("region", { name: "New agent configuration" }));
-    expect(await card.findByLabelText("Name")).toHaveAccessibleDescription(
-      /listed on the bench and in history/i,
-    );
-    expect(card.getByLabelText("Support identity")).toHaveAccessibleDescription(
-      /publishing pins the support-identity version a configuration names/i,
-    );
-  });
-
   it("constrains the temperature and puts its range and its exactness under the field", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
@@ -466,21 +540,6 @@ describe("agent configuration workspace", () => {
         /publishing pins the support-identity version a configuration names/i,
       ),
     ).toBeVisible();
-  });
-
-  it("repeats the pinning sentence when no support identity exists yet", async () => {
-    server.use(
-      http.get("*/api/v1/agent-configurations/resources", () =>
-        HttpResponse.json({ ...RESOURCES, support_identities: [] }),
-      ),
-    );
-    renderAt("/lab/agent-configurations");
-    expect(
-      await screen.findByText(
-        /publishing pins the support-identity version a configuration names/i,
-      ),
-    ).toBeVisible();
-    expect(screen.queryByLabelText("Support identity")).toBeNull();
   });
 
   it("renders each prompt variable as a chip carrying its resolved value", async () => {
@@ -871,6 +930,182 @@ describe("agent configuration workspace", () => {
 });
 
 /**
+ * Creating is a page, and it lands in the editor of what it made (PLAN-UX Slice 13).
+ */
+describe("the new-configuration page", () => {
+  it("is reached from the index's own header, which carries no create card", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/agent-configurations");
+
+    await screen.findByRole("link", { name: "Frontline single agent" });
+    expect(screen.queryByRole("region", { name: "New agent configuration" })).toBeNull();
+
+    await user.click(screen.getByRole("link", { name: "New configuration" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "New agent configuration" }),
+    ).toBeVisible();
+    expect(screen.getByText(/creating a configuration/)).toBeVisible();
+  });
+
+  it("refuses Create with the reason, and reads the typed name back as the page's title", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/agent-configurations/new");
+
+    const create = await screen.findByRole("button", { name: "Create configuration" });
+    await waitFor(() => expect(create).toBeDisabled());
+    // The reason is beside the control and in its accessible description, not only in
+    // `title` — `docs/design-direction.md`, *The form language*.
+    expect(create).toHaveAccessibleDescription(
+      "The configuration needs a name before it can be created.",
+    );
+    expect(create).toHaveAttribute(
+      "title",
+      "The configuration needs a name before it can be created.",
+    );
+
+    await user.type(screen.getByLabelText("Name"), "Frontline B");
+
+    expect(screen.getByRole("heading", { level: 1, name: "Frontline B" })).toBeVisible();
+    expect(create).toBeEnabled();
+  });
+
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt("/lab/agent-configurations/new");
+
+    expect(await screen.findByLabelText("Name")).toHaveAccessibleDescription(
+      /listed on the bench and in history/i,
+    );
+    expect(screen.getByLabelText("Adopted identity")).toHaveAccessibleDescription(
+      /publishing pins the support-identity version a configuration names/i,
+    );
+  });
+
+  it("says why it cannot go while the lab has no identity to adopt", async () => {
+    server.use(
+      http.get("*/api/v1/agent-configurations/resources", () =>
+        HttpResponse.json({ ...RESOURCES, support_identities: [] }),
+      ),
+    );
+    renderAt("/lab/agent-configurations/new");
+
+    const create = await screen.findByRole("button", { name: "Create configuration" });
+    await waitFor(() =>
+      expect(create).toHaveAccessibleDescription(
+        "Author a support identity first: a configuration adopts exactly one.",
+      ),
+    );
+    // The row still says what publishing pins, because the rule is about the field and not
+    // about whether the lab happens to hold one yet.
+    expect(screen.getByLabelText("Adopted identity")).toHaveAccessibleDescription(
+      /publishing pins the support-identity version a configuration names/i,
+    );
+  });
+
+  it("moves the model onto the framework the author just chose, and names its provider", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/agent-configurations/new");
+
+    expect(await screen.findByLabelText("Model")).toHaveValue("gpt-5-mini");
+    // The provider row is a value the page decided rather than a control it offers, and it
+    // is still named by its own label: each proven framework runs on one provider, and a
+    // choice of one is not a choice.
+    expect(screen.getByLabelText("Provider")).toHaveTextContent("OpenAI");
+    expect(screen.queryByRole("combobox", { name: "Provider" })).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText("Framework"), "fake");
+
+    // `gpt-5-mini` is not something the offline control runs, so it is not a value the
+    // author could have meant by the framework they just chose.
+    expect(screen.getByLabelText("Model")).toHaveValue("deterministic");
+    expect(screen.getByLabelText("Provider")).toHaveTextContent("Deterministic control");
+  });
+
+  it("makes the configuration, saves the runtime it could not carry, and lands in the editor", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/agent-configurations/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Frontline B");
+    await user.selectOptions(screen.getByLabelText("Framework"), "fake");
+    await user.click(screen.getByRole("button", { name: "Create configuration" }));
+
+    // The create request carries what the contract takes; the framework and the model are
+    // the second write, because `CreateAgentConfigurationRequest` has nowhere to put them.
+    await waitFor(() =>
+      expect(createdDrafts).toEqual([{ name: "Frontline B", support_identity_id: IDENTITY_ID }]),
+    );
+    await waitFor(() => expect(completedDrafts).toHaveLength(1));
+    expect(completedDrafts[0]).toMatchObject({
+      name: "Frontline B",
+      framework_id: "fake",
+      model: { provider: "fake", model_id: "deterministic" },
+    });
+
+    // And the operator is standing in the editor of what they made, with the name they typed.
+    expect(await screen.findByRole("heading", { level: 1, name: "Frontline B" })).toBeVisible();
+    expect(screen.getByLabelText("Prompt template")).toBeVisible();
+  });
+
+  it("sends one write where the runtime the lab defaults to is the runtime asked for", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/agent-configurations/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Frontline B");
+    await user.click(screen.getByRole("button", { name: "Create configuration" }));
+
+    await waitFor(() => expect(createdDrafts).toHaveLength(1));
+    await screen.findByLabelText("Prompt template");
+    // Nothing on the page asked for anything the create could not carry, so nothing else
+    // was written — and nothing was ever unsaved (ADR 0051).
+    expect(completedDrafts).toEqual([]);
+  });
+
+  it("keeps the operator here when the second write is refused, and finishes it on the next press", async () => {
+    const user = userEvent.setup();
+    let refuse = true;
+    server.use(
+      http.put(
+        `*/api/v1/agent-configurations/${NEW_CONFIGURATION_ID}/draft`,
+        async ({ request }) => {
+          if (refuse) {
+            refuse = false;
+            // A transport failure rather than a refusal the lab explains, so what the
+            // operator reads is this page's own sentence about what did and did not land.
+            return HttpResponse.error();
+          }
+          const body = (await request.json()) as { payload: Record<string, unknown> };
+          completedDrafts.push(body.payload);
+          return HttpResponse.json({
+            configuration_id: NEW_CONFIGURATION_ID,
+            lifecycle_state: "draft",
+            content: body.payload as AgentConfigurationDraftResponse["content"],
+            created_at: "2026-08-27T12:07:00+00:00",
+            updated_at: "2026-08-27T12:08:00+00:00",
+          } satisfies AgentConfigurationDraftResponse);
+        },
+      ),
+    );
+    renderAt("/lab/agent-configurations/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Frontline B");
+    await user.selectOptions(screen.getByLabelText("Framework"), "fake");
+    await user.click(screen.getByRole("button", { name: "Create configuration" }));
+
+    expect(
+      await screen.findByText(/The configuration was created, but its runtime could not be saved/),
+    ).toBeVisible();
+    // Still on the create page, and the chip says what the lab now holds.
+    expect(screen.getByText("created · its runtime is not saved yet")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Create configuration" }));
+
+    // A second press finishes the first one rather than making a second configuration.
+    await waitFor(() => expect(completedDrafts).toHaveLength(1));
+    expect(createdDrafts).toHaveLength(1);
+  });
+});
+
+/**
  * The rail's figure and this index are one listing, read once by the shell and handed to
  * both, so they cannot come to disagree (ADR 0056).
  */
@@ -882,5 +1117,25 @@ describe("the rail's figure and this index", () => {
     const entry = railEntry("Agent configurations", "Experiment lab workspace");
     expect(within(entry).getByText(String(rows))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${rows} configuration${rows === 1 ? "" : "s"}`);
+  });
+
+  it("moves the figure when a configuration is created, without a reload", async () => {
+    // An agreement between two reads of one fixture is true by construction, so this one
+    // creates: the create page re-reads the listing the rail counts, and the figure has to
+    // follow (ADR 0056).
+    const user = userEvent.setup();
+    renderAt("/lab/agent-configurations/new");
+
+    const entry = railEntry("Agent configurations", "Experiment lab workspace");
+    await waitFor(() => expect(within(entry).getByText("1")).toBeVisible());
+
+    await user.type(await screen.findByLabelText("Name"), "Frontline B");
+    await user.click(screen.getByRole("button", { name: "Create configuration" }));
+
+    await waitFor(() =>
+      expect(
+        within(railEntry("Agent configurations", "Experiment lab workspace")).getByText("2"),
+      ).toBeVisible(),
+    );
   });
 });
