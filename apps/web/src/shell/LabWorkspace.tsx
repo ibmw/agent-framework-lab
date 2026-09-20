@@ -35,6 +35,41 @@ export function useLabWorkspace(): LabWorkspaceValue {
 }
 
 /**
+ * Why the lab has no current shop, in the three ways that can be true at rest.
+ *
+ * "No current shop" is one condition with three causes, and only one of them is the one the
+ * notice used to describe. A lab whose list came back empty has no shop to be current and
+ * nothing in the top bar naming one, and a lab whose list failed has not established that it
+ * has none at all — it only cannot say which. Each therefore states its own fact and offers
+ * the way out that follows from it, rather than one sentence that is true of a lab with shops
+ * and false of the two labs that have none on screen.
+ */
+function whyNoCurrentShop(
+  shops: ShopSummarySchema[],
+  error: string | null,
+): { fact: string; link: string; tail: string } {
+  if (error !== null) {
+    return {
+      fact: "The lab's shops did not load",
+      link: "Open the shops index",
+      tail: "to try again.",
+    };
+  }
+  if (shops.length === 0) {
+    return {
+      fact: "This lab has no shops yet",
+      link: "Create a shop",
+      tail: "and the lab will compose for it.",
+    };
+  }
+  return {
+    fact: "The lab has no current shop",
+    link: "Open a shop",
+    tail: "and the lab will compose for it.",
+  };
+}
+
+/**
  * The lab saying it has no current shop, on a surface where that matters.
  *
  * The bench and the history's shop filter are the two places that carry this notice, and they
@@ -49,15 +84,20 @@ export function useLabWorkspace(): LabWorkspaceValue {
  * from the current shop either: that filter is URL-backed so a finding can be shared at the
  * narrowing it was found in (ADR 0033), and seeding it from a browser preference would make two
  * operators open one link on two different lists.
+ *
+ * The *fact* is this shell's and is read from it rather than passed in, because which of the
+ * three it is depends on the shop list and on nothing the surface knows.
  */
 export function NoCurrentShop({ what }: { what: string }) {
+  const { shops, error } = useLabWorkspace();
+  const { fact, link, tail } = whyNoCurrentShop(shops, error);
   return (
     <p className="text-[13px] text-admin-muted">
-      The lab has no current shop, so {what}.{" "}
+      {fact}, so {what}.{" "}
       <Link className="text-lab-ink underline-offset-2 hover:underline" to="/shops">
-        Open a shop
+        {link}
       </Link>{" "}
-      and the lab will compose for it.
+      {tail}
     </p>
   );
 }

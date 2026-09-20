@@ -104,6 +104,11 @@ export function AgentConfigurationEditorPage() {
   });
   const { content, preview, edit } = editor;
   const [resources, setResources] = useState<AgentConfigurationResourcesResponse | null>(null);
+  // Whether the resources read is still in flight, which `resources === null` does not say: it
+  // is also how a failed read looks, and how a read that failed while a later preview cleared
+  // the error message looks. The preview picker needs the difference, because "nothing has
+  // answered yet" and "nothing came back" are the same value and opposite things to say.
+  const [resourcesLoading, setResourcesLoading] = useState(true);
   const [resolution, setResolution] = useState<AgentConfigurationResolutionSchema | null>(null);
   // The shop the author has picked, or null while they have picked none. The preview shop
   // itself is *derived* below rather than stored: two answers the page is waiting for decide
@@ -131,6 +136,11 @@ export function AgentConfigurationEditorPage() {
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setContextError(describeApiError(cause, UNAVAILABLE));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setResourcesLoading(false);
         }
       });
     return () => controller.abort();
@@ -161,6 +171,14 @@ export function AgentConfigurationEditorPage() {
     offeredShop(currentShop?.shop_id) ??
     (shopsLoading ? "" : resources?.preview_shops[0]?.shop_id) ??
     "";
+  const previewShops = resources?.preview_shops ?? [];
+  // The picker is still asking while either read is in flight — that is a statement about
+  // progress, and the value it happens to hold is not one. An empty `previewShopId` is also
+  // where a lab with no shops comes to rest, and a control that says "Choosing a shop…" for
+  // ever is progress copy over a final state; below, that state gets a sentence instead of a
+  // select with one option that chooses nothing (`docs/design-direction.md`, *The form
+  // language*).
+  const previewSettling = resourcesLoading || shopsLoading;
 
   const resolve = useCallback(async () => {
     inFlight.current?.abort();
@@ -442,29 +460,45 @@ export function AgentConfigurationEditorPage() {
               </p>
             }
           >
-            <label className={fieldLabelClasses}>
-              Preview context
-              <select
-                className={fieldControlClasses}
-                aria-label="Preview context"
-                value={previewShopId}
-                onChange={(event) => setChosenShopId(event.target.value)}
-              >
-                {/* A select whose value matches no option shows its first one, so "nothing is
-                    settled yet" needs an option of its own to be visible at all — otherwise
-                    this control names a shop while the prompt beside it resolves against none.
-                    The same shape as the top bar's switcher before a shop is chosen. */}
-                {previewShopId === "" ? <option value="">Choosing a shop…</option> : null}
-                {(resources?.preview_shops ?? []).map((shop) => (
-                  <option key={shop.shop_id} value={shop.shop_id}>
-                    {shop.name}
-                    {shop.latest_published_version === null
-                      ? " (never published)"
-                      : ` v${shop.latest_published_version}`}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {previewSettling || previewShops.length > 0 ? (
+              <label className={fieldLabelClasses}>
+                Preview context
+                <select
+                  className={fieldControlClasses}
+                  aria-label="Preview context"
+                  value={previewShopId}
+                  onChange={(event) => setChosenShopId(event.target.value)}
+                >
+                  {/* A select whose value matches no option shows its first one, so "nothing is
+                      settled yet" needs an option of its own to be visible at all — otherwise
+                      this control names a shop while the prompt beside it resolves against none.
+                      The same shape as the top bar's switcher before a shop is chosen. It is
+                      drawn while a read is in flight and never once both have answered: it is
+                      the question being asked, not the value that came back. */}
+                  {previewSettling ? <option value="">Choosing a shop…</option> : null}
+                  {previewShops.map((shop) => (
+                    <option key={shop.shop_id} value={shop.shop_id}>
+                      {shop.name}
+                      {shop.latest_published_version === null
+                        ? " (never published)"
+                        : ` v${shop.latest_published_version}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              // Both reads have answered and offered nothing, so there is no choice to make
+              // and no control to make it with. A select of one placeholder is the same
+              // sentence with a disclosure arrow on it.
+              <div className={fieldLabelClasses}>
+                <span>Preview context</span>
+                <p className="font-normal">
+                  {resources === null
+                    ? "The shops this prompt would resolve against could not be read."
+                    : "This lab has no shops, so there is nothing to resolve the prompt against."}
+                </p>
+              </div>
+            )}
             {resolution ? (
               <p className="text-xs text-admin-muted">
                 Values:{" "}

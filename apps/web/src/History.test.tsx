@@ -150,6 +150,50 @@ function historyOf(rows: ExperimentHistoryEntrySchema[]): ExperimentHistoryRespo
   };
 }
 
+/**
+ * A lab with shops, which is the lab this page is normally read in.
+ *
+ * It matters to the no-current-shop notice: the copy there is about the shop switcher in the
+ * top bar, and the top bar draws the switcher only where there are shops to switch between.
+ * A fixture with no shops would pin that copy in the one state it is not true of.
+ */
+const SHOP_LISTING: ShopListResponse = {
+  shops: [
+    {
+      shop_id: SHOP_ID,
+      name: "Northstar Outfitters",
+      slug: "northstar",
+      updated_at: "2026-08-28T09:00:00+00:00",
+      latest_published_version: 3,
+      published_version_count: 3,
+    },
+    {
+      shop_id: OTHER_SHOP_ID,
+      name: "Southline Supply",
+      slug: "southline",
+      updated_at: "2026-08-28T09:00:00+00:00",
+      latest_published_version: 1,
+      published_version_count: 1,
+    },
+  ],
+};
+
+/** The page's own Shop filter, which shares its accessible name with the top bar's switcher. */
+function shopFilter(): HTMLElement {
+  return within(screen.getByRole("form", { name: "Narrow history" })).getByRole("combobox", {
+    name: "Shop",
+  });
+}
+
+/** The top bar's shop switcher, or null where the lab has no shops to draw one from. */
+function shopSwitcher(): HTMLElement | null {
+  return (
+    screen
+      .queryAllByRole("combobox", { name: "Shop" })
+      .find((control) => !control.closest("form")) ?? null
+  );
+}
+
 let asked: URLSearchParams[] = [];
 let unavailable = false;
 let replayed: string[] = [];
@@ -158,7 +202,7 @@ let forked: { configuration_id: string; version: number }[][] = [];
 let rows: ExperimentHistoryEntrySchema[] = EVERY_ROW;
 
 const server = setupServer(
-  http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
+  http.get("*/api/v1/shops", () => HttpResponse.json(SHOP_LISTING)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
     HttpResponse.json({
       shop_id: SHOP_ID,
@@ -230,6 +274,11 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 beforeEach(() => {
+  // The lab remembers a shop in this browser, and a test that derived a run left one behind:
+  // the derivation lands on `/lab/bench/:shopId/…`, which writes the preference. Every test
+  // here starts from a browser that remembers none, which is the state the no-current-shop
+  // notice is about and the only one in which the rest of the page is unaffected.
+  window.localStorage.clear();
   asked = [];
   unavailable = false;
   replayed = [];
@@ -389,13 +438,13 @@ describe("experiment history", () => {
     renderHistory();
     await screen.findByRole("table");
 
-    await user.selectOptions(screen.getByLabelText("Shop"), "Southline Supply");
+    await user.selectOptions(shopFilter(), "Southline Supply");
 
     await waitFor(() => expect(lastAsked().get("shop_id")).toBe(OTHER_SHOP_ID));
     const table = await screen.findByRole("table");
     await waitFor(() => expect(within(table).getAllByRole("row")).toHaveLength(2));
     // Choosing one shop must not remove the other from the filter that chose it.
-    expect(within(screen.getByLabelText("Shop")).getAllByRole("option")).toHaveLength(3);
+    expect(within(shopFilter()).getAllByRole("option")).toHaveLength(3);
   });
 
   it("narrows by scenario, framework, status, outcome, and when a run started", async () => {
@@ -456,7 +505,7 @@ describe("experiment history", () => {
 
     await waitFor(() => expect(lastAsked().get("shop_id")).toBe(OTHER_SHOP_ID));
     expect(lastAsked().get("status")).toBe("running");
-    expect(screen.getByLabelText("Shop")).toHaveValue(OTHER_SHOP_ID);
+    expect(shopFilter()).toHaveValue(OTHER_SHOP_ID);
   });
 
   it("pages by number over the whole matching set and starts over when narrowed", async () => {
@@ -571,19 +620,67 @@ describe("experiment history", () => {
     renderHistory();
     await screen.findByRole("table");
 
-    const notice = screen.getByText(/The lab has no current shop/);
+    const notice = await screen.findByText(/The lab has no current shop/);
     expect(notice).toBeVisible();
     expect(notice).toHaveTextContent("the shop switcher in the top bar names none");
     expect(notice).toHaveTextContent("this filter does not follow it");
     expect(screen.getByRole("link", { name: "Open a shop" })).toHaveAttribute("href", "/shops");
 
+    // The control the copy sends the reader to is on screen, and it does name none. This is
+    // the claim, not the wording: a notice about the switcher may only be said where the top
+    // bar draws one.
+    const switcher = shopSwitcher();
+    expect(switcher).not.toBeNull();
+    expect(switcher).toHaveValue("");
+    expect(
+      within(switcher as HTMLElement).getByRole("option", { name: "Select a shop" }),
+    ).toBeInTheDocument();
+
     // And the filter itself is untouched by the notice: every shop with a run is offered.
-    const filter = within(screen.getByRole("form", { name: "Narrow history" })).getByRole(
-      "combobox",
-      { name: "Shop" },
-    );
+    const filter = shopFilter();
     expect(filter).toHaveValue("");
     expect(within(filter).getByRole("option", { name: "All shops" })).toBeInTheDocument();
+  });
+
+  it("does not send a shopless lab to a switcher the top bar is not drawing", async () => {
+    // A lab with no shops reaches the same notice, and the top bar draws no switcher there.
+    // The fact and the way out are the ones that are true of it.
+    server.use(
+      http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
+    );
+    renderHistory();
+    await screen.findByRole("table");
+
+    const notice = await screen.findByText(/This lab has no shops yet/);
+    expect(notice).toBeVisible();
+    expect(notice).not.toHaveTextContent("switcher");
+    expect(shopSwitcher()).toBeNull();
+    expect(screen.getByRole("link", { name: "Create a shop" })).toHaveAttribute("href", "/shops");
+    // What stays true of every state: this filter is never the lab's shop.
+    expect(notice).toHaveTextContent("this filter does not follow the lab's shop");
+    expect(screen.queryByText(/The lab has no current shop/)).toBeNull();
+  });
+
+  it("does not claim a lab has no current shop when it could not read its shops", async () => {
+    // A failed listing is not an answer. The shell has established nothing about which shop is
+    // current, so the notice reports the read rather than asserting the absence — and offers
+    // the index, where the list is asked for again.
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json({}, { status: 500 })));
+    renderHistory();
+    await screen.findByRole("table");
+
+    const notice = await screen.findByText(/The lab's shops did not load/);
+    expect(notice).toBeVisible();
+    expect(notice).not.toHaveTextContent("switcher");
+    expect(shopSwitcher()).toBeNull();
+    expect(screen.getByRole("link", { name: "Open the shops index" })).toHaveAttribute(
+      "href",
+      "/shops",
+    );
+    expect(screen.queryByText(/The lab has no current shop/)).toBeNull();
+    expect(screen.queryByText(/This lab has no shops yet/)).toBeNull();
+    // The history itself answered, so the page is still a page: the runs are on screen.
+    expect(within(screen.getByRole("table")).getByText("Prompt A against prompt B")).toBeVisible();
   });
 
   it("does not claim the list is unnarrowed when the URL has narrowed it", async () => {
@@ -593,7 +690,7 @@ describe("experiment history", () => {
     renderHistory(`?shop=${SHOP_ID}`);
     await screen.findByRole("table");
 
-    const notice = screen.getByText(/The lab has no current shop/);
+    const notice = await screen.findByText(/The lab has no current shop/);
     expect(notice).toBeVisible();
     expect(notice).not.toHaveTextContent(/every run in the lab/);
     expect(

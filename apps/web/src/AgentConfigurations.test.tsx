@@ -643,6 +643,49 @@ describe("agent configuration workspace", () => {
     expect(within(picker).queryByRole("option", { name: "Choosing a shop…" })).toBeNull();
   });
 
+  it("stops asking which shop once a lab with none has answered", async () => {
+    // A lab with no shops comes to rest with nothing to preview against, and both reads have
+    // answered. "Choosing a shop…" is progress, so it must not survive the progress; and a
+    // select holding that one option is a control that chooses nothing.
+    server.use(
+      http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] })),
+      http.get("*/api/v1/agent-configurations/resources", () =>
+        HttpResponse.json({ ...RESOURCES, preview_shops: [] }),
+      ),
+    );
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    expect(
+      await screen.findByText(/This lab has no shops, so there is nothing to resolve the prompt/),
+    ).toBeVisible();
+    await waitFor(() => expect(previewShopIds).toContain(null));
+    expect(screen.queryByRole("combobox", { name: "Preview context" })).toBeNull();
+    expect(screen.queryByText("Choosing a shop…")).toBeNull();
+    // The rest of the editor is unaffected: the prompt is still a template being written.
+    expect(screen.getByLabelText("Prompt template")).toBeVisible();
+  });
+
+  it("does not ask which shop for ever when the shops could not be read", async () => {
+    // The other way both reads come to rest with nothing offered. A read that failed is not a
+    // read still running, and only one of the two may be described as choosing.
+    server.use(
+      http.get("*/api/v1/agent-configurations/resources", () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "unavailable", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    expect(
+      await screen.findByText(/The shops this prompt would resolve against could not be read/),
+    ).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: "Preview context" })).toBeNull();
+    expect(screen.queryByText("Choosing a shop…")).toBeNull();
+    expect(screen.queryByText(/This lab has no shops/)).toBeNull();
+  });
+
   it("offers the providers and models the chosen framework is proven on", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);

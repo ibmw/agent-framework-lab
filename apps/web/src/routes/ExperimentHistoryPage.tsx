@@ -93,6 +93,15 @@ export function ExperimentHistoryPage() {
   // false at `?shop=…`, which is the state people actually share (ADR 0054).
   const lab = useLabWorkspace();
   const labShopMissing = !lab.loading && lab.currentShop === null;
+  // The switcher clause is true only where the switcher is drawn, and the top bar draws it
+  // from the same fact: a lab with shops (`AppShell`). A lab whose list is empty or whose list
+  // failed reaches this notice too, and pointing those readers at a control that is not on
+  // screen is the one thing the notice must never do. What stays true of every state is the
+  // second half — this filter follows the lab's shop in no state at all.
+  const aboutTheTopBar =
+    lab.shops.length > 0
+      ? "the shop switcher in the top bar names none, and this filter does not follow it"
+      : "the top bar has no shop to name, and this filter does not follow the lab's shop either";
 
   /**
    * Derive a new experiment from a row and open the evidence it produced.
@@ -296,7 +305,7 @@ export function ExperimentHistoryPage() {
         </label>
         {labShopMissing ? (
           <div className="basis-full">
-            <NoCurrentShop what="the shop switcher in the top bar names none, and this filter does not follow it" />
+            <NoCurrentShop what={aboutTheTopBar} />
           </div>
         ) : null}
         <label className={fieldLabelClasses}>

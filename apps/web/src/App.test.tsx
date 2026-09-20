@@ -2239,6 +2239,37 @@ describe("the lab is a mode", () => {
     expect(screen.queryByRole("button", { name: "Start experiment" })).toBeNull();
   });
 
+  it("tells a lab with no shops what is true of it, and where a shop comes from", async () => {
+    // The same condition — no current shop — with a different cause and a different way out.
+    // There is no switcher in the top bar to be sent to, and no shop to open: one is made.
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] })));
+    renderApp("/lab/bench");
+
+    const notice = await screen.findByText(/This lab has no shops yet/);
+    expect(notice).toHaveTextContent("there is no shop to compose an experiment for");
+    expect(screen.getByRole("link", { name: "Create a shop" })).toHaveAttribute("href", "/shops");
+    expect(screen.queryByText(/The lab has no current shop/)).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Shop" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start experiment" })).toBeNull();
+  });
+
+  it("says the shop list failed rather than asserting the lab has no shop", async () => {
+    // A listing that failed answered nothing, so the bench reports the read. It still refuses
+    // to compose: not knowing which shop is current is as good a reason as having none.
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json({}, { status: 500 })));
+    renderApp("/lab/bench");
+
+    const notice = await screen.findByText(/The lab's shops did not load/);
+    expect(notice).toHaveTextContent("there is no shop to compose an experiment for");
+    expect(screen.getByRole("link", { name: "Open the shops index" })).toHaveAttribute(
+      "href",
+      "/shops",
+    );
+    expect(screen.queryByText(/The lab has no current shop/)).toBeNull();
+    expect(screen.queryByText(/This lab has no shops yet/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start experiment" })).toBeNull();
+  });
+
   it("composes for the remembered shop, and says which one", async () => {
     window.localStorage.setItem("agent-lab.last-visited-shop", SHOP_ID);
     renderApp("/lab/bench");
