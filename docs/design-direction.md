@@ -102,6 +102,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | The create page's side column | 312px of notes beside the form — *What happens next*, *In a hurry?*, *Summary*, *Soundness* | the one 790px column; the notes that carry a rule are cards in it, the rest are not drawn | `form-decisions.md`'s layout 2b sizes the *form*, and a second column of prose beside a create form that asks four questions is a column that mostly repeats the hints under them; a note computed from a form nothing has written yet (*Summary*, *Soundness*) is a figure the page lacks |
 | An untitled product's heading | the bound title, empty | "Untitled product" | *New product* appends a product with no title, and an empty `<h1>` leaves the page — and the tour's first anchor — with nothing to read; *Principles*, every state is designed for |
 | *Attach existing* on Customers | a secondary header button that opens nothing | the same button, opening one inline row with the profile picker | the prototype's attach is a fixture with no panel behind it, and an attach in this workspace has to ask which profile; the row is not the side card the slice removed — it is the one control the question needs |
+| A judge's rubric at creation | the field, under "Can be left empty now, but the judge cannot be published until it is written" | required: Create is refused and the reason names the rubric | *A create form asks for what constrains the work that follows*, and a judge with no rubric constrains nothing. Not rule 5: the codebase did create a rubricless judge, so this changes what was there rather than keeping it. What licenses the change is that sentence together with the slice's own stated evidence, and the lab's `new_judge_configuration` is the corroboration rather than the licence — it defaults the model and the evidence because they have a proven right answer, and deliberately defaults no rubric |
+| Three cards on the lab's create pages | Tools on New configuration, Evidence on New judge, and an Architecture row beside a Provider select | none of the three; the Provider is the prototype's own read-only variant of that row | *A create form asks for what constrains the work that follows **and names where the rest lives*** — the *Created as a draft* card on each page is where the rest is named: a new draft reads through every tool and writes through none, and enabling a write is the act the editor exists for; the judge's evidence starts at what the lab has proven and is changed there. The Architecture row is the one of the three rule 5 reaches, because `AgentArchitecture` has a single member and *a choice of one is not a choice* — which is also why the Provider is drawn as a value rather than as a select |
 
 Two items the handoff names are not built and not refused: Georgia on the results' stat
 numerals, and the `open` button verb and `document` chip kind. Each lands with the surface that
@@ -215,9 +217,12 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   is refused keeps the operator on the page with the reason under the button. A half-typed
   create form is not unsaved work and is not asked about (ADR 0051); **a create that takes
   two writes holds unsaved work from the moment the first one lands**, declares it under
-  the same rule as any editor, and its running write stands down when the operator leaves. Built for the
-  shop, the order, the profile and the identity; *planned*, Slices 13 and 14 for the lab's four
-  and the scenario. **A product is the exception**: it is a row of the shop draft rather than a
+  the same rule as any editor, and its running write stands down when the operator leaves. **A
+  second write is sent only where the form asked for something the create request could not
+  carry**, so the same page is a one-write create when it did not, and registers nothing.
+  Built for the shop, the order, the profile, the identity, the agent configuration, the judge
+  and the two block libraries; *planned*, Slice 14 for the scenario. **A product is the
+  exception**: it is a row of the shop draft rather than a
   definition, so *New product* appends an empty one and opens its editor, and the handle it is
   addressed by is answered there. Ticket authoring stays inside the three-pane screen.
 - **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
@@ -233,8 +238,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   validation message under the control, in its accessible description. `blockedButtonClasses`
   in `lib/ui.ts` is that weight — deliberately outside the button table, because every row of
   it is swept for a hover and a focus ring that a permanently disabled control can never show.
-  The four create pages wear it; Publish, Start, Save connection and Compose adopt it in
-  Slice 22, which also puts the validation message on the `Field` row.
+  The eight create pages wear it and nothing else does; Publish, Start, Save connection and
+  Compose adopt it in Slice 22, which also puts the validation message on the `Field` row.
 
 ## Lists and counts
 
