@@ -96,6 +96,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Support identities in shop scope | drawn on both rails, filed under Shop scope | one lab address on both rails | there is one library; two routes rendering one list would make the mode depend on which door was used (ADR 0054) |
 | Mode tabs on Settings | drawn — the prototype's settings is an overlay on a mode | absent | `/settings` is a route in neither mode, and tabs there would be the one place the mode is not the branch of the tree you stand in (ADR 0054); rule 5 |
 | Shop badge | a per-shop ground and ink, or a logo | initials on `lab-ink` | the payload carries no logo and no colour pair to draw; Slice 28 is where a shop gets one |
+| Count on the bench entry | "1 live" | nothing | a tally of running arms in one shop, not the length of any listing the shell reads; a figure the payload lacks is not faked (ADR 0056) |
+| Count on *Policies & FAQ* | `DOCUMENTS.length` — policies, guidelines and FAQ entries on one screen | policies plus FAQ entries, the two lists that page draws | the support guidelines are a different route the rail does not name, and a figure counting rows the page does not show is the disagreement the count exists to prevent (ADR 0056). **Slice 16 merges the three into one table and moves the figure with them**, and this row ends there |
 | Focus ring on the bar | `2px solid #1d6241` offset outward, as everywhere else | the bar's paper, inset on the two controls that are the bar's full height | pine on `#16332d` is 1.86:1, under WCAG 2.2's 3:1 for a focus indicator, and an outward offset puts half the ring off the bar; *Principles* outrank a measurement (ADR 0055) |
 
 Two items the handoff names are not built and not refused: Georgia on the results' stat
@@ -119,7 +121,13 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   rails. It is hidden on the shops index and on Settings. `nav[aria-label="Shop workspace"]` is
   what every spec reaches it by and does not move; the lab's is
   `nav[aria-label="Experiment lab workspace"]`. The foot control's name, copy and tooltip are one
-  string. Counts per entry: *planned*, Slice 11.
+  string. **Each entry carries its listing's count** (ADR 0056), right-aligned and muted, under
+  the rule *Lists and counts* states: the whole list, absent while the listing is in flight or
+  failed, zero drawn, nothing faked. The workspace holds those listings — the shop's four and
+  the lab's five, plus history's total — reads each once and hands it to the rail and to the
+  index that renders it, and a surface that changes what one holds reads it again. An entry's
+  accessible name stays the label alone and the figure is its description; the collapsed strip
+  draws no figure and still says one.
 - **The top bar** (ADR 0055) sits on a token of its own and carries four things. The identity at
   the left is the shop switcher wherever there is a shop to name and the app title otherwise,
   never both; the title returns to the shops index. The **switcher is a button opening a
@@ -218,6 +226,10 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   chip is drawn and pressable, the count is of the whole list, the search narrows only rows, the
   row is absent while the listing is in flight or failed, and a figure the payload lacks is not
   faked.
+- **The rail counts the same way** and from the same listing the index renders, held once by the
+  workspace so the two cannot disagree (ADR 0056). Experiment history is the exception its
+  submitted, URL-backed form already makes it: its index reads one narrowed page and the rail
+  reads the lab's total beside it, because the count is of the whole list and the page never is.
 - **Every index can be searched** (`SearchField`), in the card's header opposite the title with
   the chips beneath; a miss reads "No X matches this view". Experiment history keeps its
   submitted, URL-backed form.
