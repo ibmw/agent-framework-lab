@@ -133,7 +133,7 @@ fixed for the same reason as the two above, one layer up: a layout slice that st
 behaviour stops being reviewable as a layout slice.
 
 - **The product editor's category offers no list of the draft's categories.**
-  `docs/PLAN-UX.md` Slice 6 records "Products: category offers a datalist of categories already in
+  `docs/history/PLAN-UX-2026-09-13.md` Slice 6 records "Products: category offers a datalist of categories already in
   the draft" as delivered, and half of it was: `ProductsPage.tsx:184` gives the create form
   `list="product-categories"` and a `<datalist>` built from `draftCategories`, while the editor's
   own category input at `apps/web/src/routes/ProductEditorPage.tsx` has neither. So the same field
@@ -190,133 +190,14 @@ input is no longer reviewable as a copy slice.
   refusal the surface does not make. The fix wants the editor to read the listing the create
   form already reads, which is a fetch this page does not make today.
 
-## Recommended next steps
+## Where the work stands
 
-1. Milestone 0.5 is complete. The design direction is selected and recorded in
-   `docs/design-direction.md` (Direction A merged with named strengths of B and C), and the 18
-   authoritative frames live on the design canvas page "Shop workspace — v2 IA", with a local
-   export in `tmp/design-frames/` (see `docs/design-direction.md`). No further design exploration
-   is required before implementation; UI slices cite those frames.
-2. Milestone 1 Slice 1 is complete: ADR 0012 records the target identifiers, draft/published
-   version lifecycle, `sandbox-v1` canonical boundary, and migration/reset policy, implemented as
-   pure domain/application code with tests and formalizing the `docs/design-direction.md` model
-   revisions in `docs/product-direction.md`.
-3. Milestone 1 Slice 2 is complete: ADR 0013 records the `shop-payload-v1` payload schema, the
-   split between structural invariants and the publish gate, the canonical-document persistence
-   for `definition_drafts`/`definition_versions`, the `/api/v1/shops` contract, and the Studio
-   application shell. The POC's persona-first frontend was removed with that shell; its HTTP
-   contracts remain published and tested without a UI consumer.
-4. Milestone 1 Slice 3 is complete: ADR 0014 records the `customer-profile-payload-v1` and
-   `support-identity-payload-v1` schemas, the field-sensitivity classification that keeps synthetic
-   personal data out of logs and traces, the per-shop attachment that scopes the Studio's customer
-   list without making the profile shop-scoped, and the extraction of the shared draft/published
-   authoring lifecycle that every shop-independent definition now uses. Tone of voice stays
-   shop-level under ADR 0012 rather than joining the support identity.
-5. Milestone 2 is complete. The order editor with frozen address copies (ADR 0015), versioned
-   tickets (ADR 0016), the objective and mutation block libraries (ADR 0017), the scenario recipe
-   and its composition editor (ADR 0018), the canonical sandbox snapshot a published version
-   materializes into (ADR 0019), the independently mutable clone each arm works in (ADR 0020), the
-   versioned read tools an arm interrogates that clone through (ADR 0021), the safe address change
-   it may actually make (ADR 0022), and the evidence that holds them together (ADR 0023) are
-   delivered.
-6. ADR 0023 adds two standing constraints rather than behavior. The canonical serializer and the
-   `sandbox-v2` and `sandbox-state-v1` envelopes now have recorded fingerprints, so changing any of
-   them means deliberately answering whether every starting state frozen before that change is a
-   different one — the answer is sometimes yes, and must never be silent. And the tool suites sweep
-   `SANDBOX_TOOL_CONTRACTS` through a sample-call table checked against it, so a tool published
-   without a call in `tool_call_factories.py` fails a test instead of quietly leaving every sweep.
-7. Milestone 3 Slice 1 is delivered: the agent configuration is a versioned definition (ADR 0024).
-   The framework, architecture, model, prompt template, tool bindings, memory, and support identity
-   an experiment runs on are published inputs rather than composition defaults, judged against a
-   declared catalog of what the lab has proven it can run. A prompt may name shop and
-   support-identity facts and may never name customer, order, or ticket facts, because discovering
-   those through tools is part of what an experiment compares. The permission a write tool needs is
-   now declared on its contract, so the runtime and the publish gate read one table.
-8. Milestone 3 Slice 2 is delivered, together with the Milestone 4 runner it was sequenced against
-   (ADR 0025). An experiment binds a published scenario version to one or two published agent
-   configurations, freezes one canonical snapshot, clones an arm per configuration, and opens both
-   threads on the ticket's triggering message; every later customer turn arrives through a
-   participant-driver port whose first implementation is the human operator. One delivery is one
-   composition however many arms it reaches, so a reply sent to a single arm is divergence the
-   record keeps rather than something a later comparison of the bodies would have to guess at. The
-   setup gate answers the tone-of-voice check ADR 0012 placed at experiment setup and warns when
-   the arms differ along more than one dimension.
-9. The runner that executes an arm is delivered (ADR 0026). Advancing an arm resolves its
-   published configuration against the versions the experiment pinned, renders the prompt, offers
-   exactly the tools that configuration enables, and runs the framework it names against that arm's
-   own sandbox — recording what it answered, every tool call it made, the confirmation and revision
-   each write carried, and the attempt in which it failed. It is a new `SupportAgentRuntime` port,
-   not a bent `AgentAdapter`: the POC's port hands an agent a pre-loaded support context, which is
-   the opposite of the tool-first rule an arm runs under. Two frameworks sit behind it — a declared
-   deterministic control policy that runs offline, and Pydantic AI deriving its tool schemas from
-   the published contract table. Evidence is a property of the call path: a runtime reaches the
-   world only through an invoker bound to one arm and one actor, and that invoker is what writes
-   the event.
-10. The normalized execution timeline is delivered (ADR 0027). One ordered, framework-neutral
-   stream reads an experiment's whole execution back — the compositions both arms share, each
-   arm's attempts, and every tool call with what it did to that arm — and every entry carries the
-   project-owned file and line of the code that ran it, resolved from the tool registry and the
-   runtime that produced the turn rather than from a map kept by hand. It is a projection, not a
-   record: nothing is stored, because a second stored shape is a second chance to disagree with
-   the first. It carries no message body, so the surface built to be filtered, counted, and later
-   handed to an evaluation never repeats what anyone said.
-11. The scenario's mutations now fire (ADR 0028). A published recipe's bound fault reaches the
-   arm it was authored for at the moment it named — between two of the agent's calls, because
-   that is where the world has to be able to move for the conflict ADR 0022 built to be
-   reachable at all. The lab declares what it can carry out rather than trying: one effect,
-   applied to a bound order, and two moments it can observe from the arm's own record, with an
-   experiment refused at setup when its recipe names anything else. A firing happens once per
-   arm and both arms carry the identical schedule, so the fault is not a comparison variable —
-   meeting it is.
-12. Resume is delivered (ADR 0029). An experiment is entirely in the record, so coming back to
-   one is an ordinary read — and each arm now says what it is waiting for, derived from its own
-   two streams rather than stored beside them, so the runner deciding what an advance does and
-   the bench drawing the button read one rule. A question an arm passed over, which ADR 0026
-   made deliberate, is reported rather than left looking like a gap.
-13. Deterministic evaluation is delivered (ADR 0030), which completes Milestone 4 and opens
-   Milestone 5. Each of a scenario's bound objectives is judged from one arm's own record — the
-   calls it obtained answers from, and how its sandbox differs from the one it was cloned from —
-   with "not yet" kept apart from "no", a judge's rows deferred rather than counted, and the
-   evidence this build cannot read saying so instead of failing the arm. The scenario's turn cap
-   now ends an arm and settles what it never did; the completion statement is still a judge's.
-14. The judge is delivered (ADR 0031). A judge is a published definition — a rubric, a model,
-   and a declared list of what it is shown — and it scores one anonymized brief per objective
-   per arm: what that arm did and said, and nothing about what ran it, with a rubric naming a
-   framework refused at the publish gate. Its three outcomes are the lab's, and "unclear" is
-   one of them, because a judge forced to choose would guess. Every execution is recorded with
-   the judge version, the model, and the fingerprint of the exact input it read; scoring again
-   writes the next attempt rather than replacing the last, and a judge the lab cannot reach
-   records nothing rather than counting against an arm.
-15. The quantitative record (ADR 0032), the objective-level comparison on frame 9's General tab
-   (ADR 0033), and experiment-first history (ADR 0034) are delivered. History is one cross-shop
-   listing whose every row — each arm's standing, what it met out of what was decided for it, and
-   the versions it pinned — is projected from the record the bench and the results screen read;
-   it replaces the persona-first listings, which were removed with it. An experiment's status is
-   read the same way and is still not a state anything sets: running while an arm can be acted
-   on, failed once every arm is finished and one missed a required objective.
-16. The per-arm state diff is delivered (ADR 0035). The business-state card now says what an
-   arm's world became and not only that it moved: the difference between the exact bytes the
-   arm's two fingerprints cover, walked over the whole canonical state document so a field
-   authored tomorrow appears without a change, grouped by the order the incident names and
-   paired by order identity. A field that was never there is kept apart from one that was
-   emptied, and what lies outside every order is reported rather than dropped — which is what
-   keeps "no other state changed" a claim that could fail.
-17. Experiment notes and tags are delivered (ADR 0036). What an operator concludes about a run is
-   stored beside the experiment rather than inside it, so annotating one cannot move the
-   fingerprints it pinned. A note is appended and never edited, because it is what a reviewer
-   thought when they read this evidence; a tag set is replaced whole, because how a run is filed
-   is a current classification. A tag is folded to one lowercase kebab-case spelling — and
-   refused rather than mangled when the fold cannot make a slug of it — so the shelf history
-   narrows by has one identity. The listing shows the tags, counts the notes, and searches both.
-18. Milestones 5, 6 and 7 are complete: traces, replay and fork provenance and the judge
-   evidence (ADRs 0037–0040); the second framework and the first controlled comparison
-   (ADRs 0041–0042); the settings surface, the tours and the retired guides (ADRs 0044–0049).
-   The 13 September UX plan's Slices 1–8 (ADRs 0050–0051) and the handoff's eight pattern slices
-   (`docs/implementation-plan.md`) are delivered, and ADR 0052 and ADR 0053 are accepted ahead of
-   their code.
-19. Next is `docs/PLAN.md` Milestone 8, planned in `docs/PLAN-UX.md`: the workspace becomes the
-   19 September prototype. Slice 9 — the lab as a mode, with its ADR — goes first and alone,
-   because every later slice, spec and tour anchor is written against the routes it leaves.
+Milestones 0 to 7 are delivered (ADR 0011 to ADR 0049), together with the 13 September UX plan's
+Slices 1–8 (ADR 0050, ADR 0051) and the workspace refresh's eight pattern slices. ADR 0052 and
+ADR 0053 are accepted ahead of their code. The open work is `docs/PLAN.md` Milestone 8, planned
+slice by slice in `docs/PLAN-UX.md`; its first slice, the lab as a mode, goes alone because every
+later slice is written against the routes it leaves. The narrative of how each milestone was
+reached is `docs/history/PLAN.md`.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

@@ -3,7 +3,7 @@
 Status: record — 2026-09-20. This document was the handoff's plan for landing
 `tmp/design-frames/Workspace.html`; its eight pattern slices (UI-1 to UI-8) have all landed, and
 each section below is that slice's as-built record — its census, its measurements and its
-departures — kept because `docs/design-direction-history.md` cites them. **It is no longer a plan.** What
+departures — kept because `docs/history/design-direction.md` cites them. **It is no longer a plan.** What
 remains of the refresh — the two-mode navigation, the top bar, creation as a page, the overview,
 Settings, the model connection, the new-scenario flow and the behaviour that crosses every
 screen — is planned in `docs/PLAN-UX.md` (Milestone 8), which superseded this document's

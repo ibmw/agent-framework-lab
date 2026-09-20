@@ -916,11 +916,11 @@ markup, `README.md` as its handoff, and `form-decisions.md` as the locked form l
 alternatives it was chosen over. It is a design reference and not production code; what it asks
 for is a recreation on the existing primitives — the Tailwind theme in `styles.css`, the class
 sets in `lib/ui.ts`, the chrome in `components/WorkspaceChrome.tsx` — with no new UI dependency.
-`docs/implementation-plan.md` breaks it into slices in this repository's own format, and the two
+`docs/history/workspace-refresh-pattern-slices.md` breaks it into slices in this repository's own format, and the two
 architecture decisions it carries are ADR 0052 and ADR 0053. This section records what changes in
 the **selected direction**; the handoff holds the measurements and is not restated here.
 
-> Re-planned (2026-09-20). `docs/implementation-plan.md`'s eight pattern slices have all landed
+> Re-planned (2026-09-20). `docs/history/workspace-refresh-pattern-slices.md`'s eight pattern slices have all landed
 > and that document is now their as-built record; the rest of the refresh — the two-mode
 > navigation, the top bar, creation as a page, the overview, Settings and the model connection,
 > the new-scenario flow, and the behaviour that crosses every screen — is `docs/PLAN-UX.md`
@@ -973,7 +973,7 @@ also the hover it gives every white secondary, and the prototype's inline style 
 > label (24px), which the README's "24–27px" summarises away, and it heads its side-panel note
 > cards in sans where its table and section cards are Georgia, which "card titles" summarises
 > away. Both are flattened by one `PageHeader` and one `Card`, and both are written up in
-> `docs/implementation-plan.md` UI-5.
+> `docs/history/workspace-refresh-pattern-slices.md` UI-5.
 >
 > Tightened as built (2026-09-20, `ui/search-field`). **A README value under a heading that
 > scopes itself is stated for that role only.** *The form pattern* says in its own title that
@@ -1034,7 +1034,7 @@ token no page uses is not a slice.
 > a second component, so that licence is simply absent and the clause hands the class to the
 > prototype. The lesson for a later slice is that "one component serves both" is a fact about
 > this codebase to be checked, not a phrase that carries a flattening. The counts and the line
-> references are in `docs/implementation-plan.md` UI-7. The eleven search boxes keep the metrics
+> references are in `docs/history/workspace-refresh-pattern-slices.md` UI-7. The eleven search boxes keep the metrics
 > UI-6 gave them and are untouched.
 
 **One form row, on every editor.** Label and hint share a left column of `1 1 210px` capped at
@@ -1095,7 +1095,7 @@ scenario*, *referenced by a ticket*, and *not composed yet* on both block librar
 > Three surfaces end with no chips, each because the prototype gives it none or gives it a
 > list this workspace does not have: Tickets, whose three-pane screen draws no filter control
 > at all, and the two block libraries and Policies & FAQ. The selected-chip trio found its
-> first consumer here. The reasoning is in `docs/implementation-plan.md` UI-4 and in
+> first consumer here. The reasoning is in `docs/history/workspace-refresh-pattern-slices.md` UI-4 and in
 > `apps/web/src/components/FilterChips.tsx`.
 
 **The navigation rail gains icons and a collapse.** One glyph per destination, a collapse control

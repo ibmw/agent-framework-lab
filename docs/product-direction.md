@@ -7,10 +7,10 @@ proof of concept, but its persona-first workflow and hard-coded scenario model a
 product. Read this document before extending the domain, public contracts, persistence, frontend,
 or agent adapters.
 
-The model revisions recorded in `docs/design-direction.md` (2026-08-23) — first-class shop-scoped
-tickets, shared versioned objective/mutation block templates, the customer address book with
-frozen source-labeled order copies, and shop-level tone-of-voice guidelines — are formalized by
-ADR 0012 and reflected throughout this document.
+The model revisions recorded in `docs/history/design-direction.md` (2026-08-23) — first-class
+shop-scoped tickets, shared versioned objective/mutation block templates, the customer address
+book with frozen source-labeled order copies, and shop-level tone-of-voice guidelines — are
+formalized by ADR 0012 and reflected throughout this document.
 
 ## Purpose
 

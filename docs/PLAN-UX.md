@@ -1,8 +1,8 @@
 # UX plan — the workspace becomes the prototype
 
-Status: proposed — 2026-09-20. Supersedes the 13 September plan's Slices 9–16 and the behaviour
-and provider sections of `docs/implementation-plan.md`, which is now the record of what the
-pattern slices built rather than a plan.
+Status: proposed — 2026-09-20. Open slices only: a slice that lands is removed from this file.
+Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
+`docs/history/PLAN-UX-2026-09-13.md`.
 
 ## Purpose and authority
 
@@ -11,100 +11,10 @@ the design it was handed on 19 September 2026: the whole-workspace prototype in
 `tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Read, in
 order, `AGENTS.md`, `docs/product-direction.md`, `docs/architecture.md`, `docs/PLAN.md`'s delivery
 rules, `docs/design-direction.md` (its *Authority* section settles which authority governs where the
-prototype, the README and the codebase disagree), then this plan and the ADRs a slice
+prototype, the README and the codebase disagree), then the slice's brief below and the ADRs it
 names. ADR 0052 and ADR 0053 are already accepted and precede the slices that implement them.
 
 The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
-
-## Where the work stands
-
-Two plans have shipped into the workspace since 13 September, and both are complete for what they
-set out to do. Neither made the application *look like* the prototype, and this section says why
-before the slices say what to do about it.
-
-**The 13 September plan, Slices 1–8 — forms that guide the operator.** Hints under every field,
-derived identifiers, enum labels, currencies on the create form, chip and country and number
-controls, closed sets from the proven table, edit-in-place on every saved row, and the unsaved-work
-guard with the router migration it needed (ADR 0051). All eight are ticked in Git history and
-recorded, rule by rule, in `docs/design-direction.md` and, with their reasoning, in
-`docs/design-direction-history.md`. The prototype assumes every one of them —
-its 107 form rows carry hints, its saved rows open where they stand, its headers say "All changes
-saved" — so nothing here was wasted, and none of it is redone below.
-
-**The 19 September handoff, UI-1 to UI-8 — the pattern layer.** Pine primary and the glyph
-vocabulary, the `Field` row, the rail's metrics and collapse, filter chips with counts, the
-display type, the search field, the shared control's metrics, and the rows' copy. Each is
-recorded in `docs/implementation-plan.md` with its census and its departures. Each is
-cross-cutting and real, and each is invisible at the level the operator navigates at: after all
-eight, the app opens on the same shell, the same routes, the same side-card create forms and the
-same settings page it had on 18 September, drawn in the prototype's colours and type.
-
-**What the prototype is, that the pattern layer is not.** Read screen by screen against the
-running app, the prototype's identity is structural. Ten things carry it, and no delivered slice
-touches any of them:
-
-1. **Two modes, two rails.** A *Shop fixture* tab and an *Experiment lab* tab in the top bar
-   (`Workspace.dc.html`:68–73), each with its own rail (`shopRail` :4753, `labRail` :4822). The
-   lab rail is Bench, History and a *Library* of agent configurations, judges, support identities
-   and the two block libraries. The app has one rail, inside a shop, with the lab filed under an
-   "Experiment lab · cross-shop" heading and the block libraries nested under Scenarios; every lab
-   route is `/shops/:shopId/…`. The API already draws the prototype's line — configurations,
-   judges, identities and blocks are shop-independent resources and history is one cross-shop
-   listing — so the app's routing is the only thing on the wrong side of it.
-2. **The top bar.** A shop switcher that opens a panel with logo badges (README, *Chrome*); the
-   mode tabs; *Show me around* and *Settings* as bar controls, Settings lit with a close glyph
-   while its page is open. The app has a native `<select>`, no tabs, a tour button on each page
-   header, and a pill link.
-3. **Creating is a page.** New shop (:212), New order (:1202), New customer (:1333), New identity
-   (:1643), New scenario (:2925), New configuration (:3293), New judge (:3468) and both New block
-   screens are focused pages under a sticky header — back arrow, "Orders · creating an order
-   fixture", the typed name as the title, a "nothing created yet" chip, Cancel and a Create button
-   that is dashed and disabled with the reason until the form can be submitted — in the 790px
-   column `form-decisions.md` chose (*layout 2b*). Every index's header carries the primary
-   "New …" button. The app creates from a 380px side card on each index, which is the layout
-   `form-decisions.md` says was *not* chosen.
-4. **The shop overview** (:722): a version timeline ending on the draft, a two-step "Review N
-   changes & publish" that lists what becomes the next version, jump cards for what the shop
-   holds, findings on the draft grouped by the entry that is wrong, and recent activity. The app's
-   Home is three count cards, an issue list and a versions table.
-5. **Settings** (:3854): a centred column with "← Back to workspace", three zones told apart by
-   surface — browser preferences, the lab-wide model provider with Save/Discard, a collapsed
-   read-only runtime disclosure — and the seed action below. The app's page is two columns of
-   read-only cards with a preferences card in the corner.
-6. **The model connection** and the provider note it enables in the editors — decided in ADR 0052
-   and ADR 0053, with no code behind either yet.
-7. **Documents.** Policies, FAQ and support guidelines are one table with kind chips and a
-   document editor page (:1518, :3163); the shop rail has no *Support guidelines* entry. The app
-   has two authored lists on one page and a third page, which is why UI-4 and UI-6 both left that
-   surface without the chips and the search the prototype draws.
-8. **New scenario** composes hidden facts, objectives and mutations at creation and refuses to
-   create until a name and one objective exist — the one behaviour slice of the handoff the app
-   does not already have.
-9. **Counts on the rail** — every entry carries its listing's count (:4753), which UI-3 deferred
-   to UI-4 and UI-4 did not own.
-10. **The Setup checklist** on Shop details (:2156, :6565) and the "Run a comparison — everything
-    this needs is ready" card on the overview, both derived readings of the record. See
-    *Decisions the prototype forces*.
-
-That is the gap the operator feels, and it is the whole of this plan's Groups A and B.
-
-**What the 13 September plan's unfinished slices were, against the prototype.** Slices 9–16 were
-written against the September 13 backlog, before the prototype existed. Each was reread against
-it, and the verdicts are these:
-
-| Old slice | Verdict | Where it went |
-| --- | --- | --- |
-| 9 — Removing is deliberate | The prototype draws two-step confirms and `form-decisions.md` 9.2 chose them. Kept. | Slice 21 |
-| 10 — After create, open what you created | Subsumed: a create page lands in the editor by construction, and the prototype's "New product" appends to the draft and opens the editor (:6931). | Slices 12, 13, 14 |
-| 11 — Long-running actions report themselves | The prototype's bench says where each arm stands (:2396); `form-decisions.md` 10.2 chose the queue. Kept, re-anchored. | Slice 24 |
-| 12 — The form says it before the gate does | The prototype's rule for every refusal (README, *Interactions*). Kept, with the dashed disabled variant and the under-control message it did not have. | Slice 22 |
-| 13 — Findings link to the fix, next step named | First bullet is the overview's "Findings on the draft" (11.2). The `SETUP_CHAIN` next-step sentence is drawn nowhere in the prototype and is cut. | Slice 15; cut |
-| 14 — Defaults, and setup as a sequence | The prototype's New experiment copy is exactly this ("the only published scenario in the shop, so it is already chosen", :2333). Kept, pruned. | Slice 23 |
-| 15 — Save stays in reach | The prototype's ten editor and create pages carry a sticky header (:207 …). Kept. | Slice 25 |
-| 16 — Consistency sweep | Items the prototype draws stay (History's *Clear filters* and trailing *Search*, :2673; naming). Items it does not — `GuideProse` footers, the matrix's per-cell sentence, a copy control on `Fingerprint` — are cut. | Slice 26; cut |
-
-Nothing ticked in Slices 1–8 is reopened, and the three defects `docs/decisions-and-next-step.md`
-lists under *Known application defects* are given a slice instead of a footnote.
 
 ## What every slice observes
 
@@ -134,42 +44,20 @@ lists under *Known application defects* are given a slice instead of a footnote.
   anchors and every button's name are what eleven Playwright specs reach the app by. A slice that
   renames one lists the specs it touched.
 
-## Decisions the prototype forces
+## Decisions already taken
 
-Three things in the prototype are not layout, and each is decided here so that no slice has to.
+Three things the prototype draws are decided outside this plan, so that no slice has to:
 
-**The lab is a mode, and the routes say so.** The prototype's two rails are the product
-direction's *Studio / Bench / History* navigation made concrete, and the API already scopes the
-resources the same way. Slice 9 writes the ADR and moves the routes: lab surfaces leave
-`/shops/:shopId/` for `/lab/…`, and the old paths redirect. Two consequences are decided with it.
-First, the lab keeps a *current shop*: experiments are shop-scoped in the API and the bench
-composes a scenario of one shop, so the switcher stays in the top bar in both modes as the
-prototype draws it (`inShop`, :5739), and the lab's current shop is the one the switcher shows —
-the remembered shop `lib/preferences.ts` already holds, chosen deliberately on the shops index
-when none is remembered. Second, an experiment's own pages carry their shop in the path
-(`/lab/bench/:shopId/:experimentId/…`), because a run must stay linkable after the switcher
-moves, while the listings and the library carry none.
+- **The lab is a mode, and the routes say so** — Slice 9 writes the ADR; the route scheme, the
+  current-shop rule and the redirects are in its bullets.
+- **The Setup checklist is not built**, and the overview's readiness card reads one listing —
+  `docs/design-direction.md`, *Navigation and chrome*.
+- **Two of the five proposed preferences earn a consumer**, and the logo is the optional last
+  slice — `docs/design-direction.md`, *Proposals, not decisions*.
 
-**The Setup checklist is not built, and the readiness card reads one listing.** The checklist
-the prototype draws on Shop details (:2156) — products, an identity, a tone default, an FAQ, no
-blocking findings, each ticked or not — is the derived progress reading ADR 0045 removed, drawn
-smaller. It is refused on the same grounds and is not a slice. The overview's "Run a comparison"
-card is kept in the narrower form the standing rules allow: it reads the shop's scenarios listing
-and says either that a published scenario exists, naming it with a link to New experiment, or
-that none does, with a link to Scenarios — which is the *empty state says why and links to the
-prerequisite* rule, not a reading of progress. Its findings card is the overview's, grouped by
-entry, and reads `preview.issues` exactly as the publish gate writes them.
-
-**Two of the five proposed preferences earn a consumer; the logo waits for its own.** *Where the
-app opens* has a consumer the moment `/` decides between the remembered shop, the shops index and
-the lab, so it lands with the lab mode. *Timestamps, relative or absolute* has one in
-`formatTimestamp`, which every listing already calls. *Confirm before anything is deleted* exists
-only once Slice 21's confirm exists, and lands there or not at all. *Offer a tour on a surface I
-have not opened before* needs a per-surface visited record the browser does not keep and would
-make a tour start unbidden, which ADR 0049 refused; cut. *Table density* decides nothing any
-list reads; cut. The shop logo — icon, background, mark colour, a contrast check — is three
-columns on the shop payload and a canonical-document change; it is the last slice and is dropped
-if the switcher panel and the shops index can be read without it.
+The assessment that produced this plan — the prototype read screen by screen against the
+application, and the verdict on each slice of the 13 September plan — is
+`docs/history/PLAN-UX-2026-09-13.md`.
 
 ## Sequencing
 
@@ -455,8 +343,8 @@ to open on the lab and the next visit does; and can tell at a glance which cards
 
 #### Slice 19 — The model connection
 
-The visible half of ADR 0052, in the order `docs/implementation-plan.md` set: contracts,
-migration, API, then the settings zone.
+The visible half of ADR 0052, in the order ADR 0052 sets: contracts, migration, API, then
+the settings zone.
 
 - [ ] Contract and migration: `model_connections` keyed by provider id, the encrypted key under
   `AGENT_LAB_CREDENTIAL_KEY`, `key_configured` and `key_added_at` served and nothing else about

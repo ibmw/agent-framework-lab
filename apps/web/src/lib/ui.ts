@@ -45,7 +45,7 @@ export const surfaceClasses =
  * workspace only about a dozen stand where the prototype draws its table card, and the rest
  * where it draws the 18px section card. Putting display type on the note-card class at all is
  * a departure from the prototype, recorded with the other two in
- * `docs/implementation-plan.md` UI-5.
+ * `docs/history/workspace-refresh-pattern-slices.md` UI-5.
  *
  * It lives here rather than inside `Card` because two surfaces draw a card header in open
  * code: the shops table, which needs a filter row between the title and the table, and the
@@ -115,7 +115,7 @@ export const cardTitleClasses = "font-display text-[17px] font-bold tracking-[-0
  * slice**: `ChipListField`, the results tag box and the variant table's cells all draw a
  * bordered standalone field where the prototype draws a borderless one inside a composite.
  * What this slice changes is their size, not their shape. It is written up in
- * `docs/implementation-plan.md` UI-7 rather than repaired, because giving a chip strip or a
+ * `docs/history/workspace-refresh-pattern-slices.md` UI-7 rather than repaired, because giving a chip strip or a
  * composite cell its own component is a component slice.
  *
  * One reading to save the next person a measurement: every `<select>` in the prototype has

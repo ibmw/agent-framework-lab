@@ -2,7 +2,7 @@
 
 Status: current — 2026-09-20. This document holds the design decisions that govern `apps/web`
 today, stated as rules a slice can be checked against. How each was reached — the census, the
-alternatives, the departures — is `docs/design-direction-history.md`, which is the earlier
+alternatives, the departures — is `docs/history/design-direction.md`, which is the earlier
 version of this document with every revision kept verbatim. A rule that changes is changed here
 and its reasoning goes there. ADR 0050 says the guidance conventions *are* the sections of this
 document rather than an ADR's restatement; that is still so, and the sections are below under

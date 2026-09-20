@@ -1,7 +1,9 @@
 # Repository instructions
 
 Read `docs/product-direction.md`, `docs/architecture.md`, and `docs/PLAN.md` before changing code,
-plus the relevant guideline/ADR for the task. The running application is a POC; do not extend its
+plus the relevant guideline/ADR for the task. The plans (`docs/PLAN.md`, `docs/PLAN-UX.md`) hold
+open work only, and `docs/design-direction.md` holds the design rules in force; how either was
+reached is under `docs/history/`, read on demand and never by default. The running application is a POC; do not extend its
 persona-first scenario model or treat the old Vercel milestone as current direction unless a new
 roadmap slice explicitly requires it.
 
@@ -25,6 +27,8 @@ roadmap slice explicitly requires it.
   adopt.
 - Before editing, confirm the work is on a short-lived branch created from an up-to-date `main`.
   Keep changes cohesive and do not mix future frameworks or phases into a task.
+- When a slice lands, remove it from the plan it came from; its commit, ADR and tests are the
+  record. Reasoning goes to an ADR or to `docs/history/`, never into a plan or a rules document.
 
 ## Git commits
 

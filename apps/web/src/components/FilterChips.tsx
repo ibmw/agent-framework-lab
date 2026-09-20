@@ -30,7 +30,7 @@ export interface FilterChip<Id extends string> {
  * that showed a number without narrowing the list when pressed would be that band again in a
  * smaller typeface — so the component takes no chip it cannot act on. Where this workspace
  * holds no figure for a subset the prototype draws, the chip is left off rather than rendered
- * inert; `docs/implementation-plan.md` UI-4 lists which, and why.
+ * inert; `docs/history/workspace-refresh-pattern-slices.md` UI-4 lists which, and why.
  *
  * **The count is part of the name.** A chip whose number were visual only would announce as
  * "Unfulfilled, toggle button" and leave a reader who cannot see the row unable to tell a

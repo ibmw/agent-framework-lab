@@ -63,7 +63,7 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
  * One `PageHeader` renders both classes and no slice has given it a variant, so it takes 24px
  * at `-0.015em`: the size of the fixed-label class, and the only one of the two the handoff's
  * range admits. That is a departure from the prototype for the fifteen bound names, written
- * down in `docs/implementation-plan.md` UI-5 so the variant can be added rather than the census
+ * down in `docs/history/workspace-refresh-pattern-slices.md` UI-5 so the variant can be added rather than the census
  * rediscovered — and what to watch when it is added is a long product or customer name wrapping
  * at 24px Georgia where 22px would have held it on one line.
  *
