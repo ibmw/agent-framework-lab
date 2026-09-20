@@ -169,6 +169,24 @@ design.
   are not, in which case they go. Both are layout changes across the editors, which is why a slice
   that only moves a metric reports this and leaves it.
 
+Found on 20 September 2026 while writing the editor rows' hints (`feat(web): give every editor
+row the rule its control obeys`). Reported rather than fixed because the fix is a refusal — a
+control that stops accepting a value it accepts today — and a copy slice that starts refusing
+input is no longer reviewable as a copy slice.
+
+- **Shop details will save a slug another shop already has.**
+  The create form refuses one: `ShopsPage.tsx` holds `takenSlugs` off the listing and
+  `DerivedIdField` reports the collision before submit. Shop details is a plain input over
+  `identity.slug`, and there is no check on the way out either — `require_slug` in
+  `domain/content.py` checks the shape and the length, and no repository or service compares a
+  draft's slug against the other shops'. So the one rule the create form enforces about a slug
+  is lost the moment the shop exists, and two shops can carry the same one; nothing downstream
+  reads the slug to resolve a shop (routes address it by UUID), so the damage is that the shops
+  index lists and searches two rows that answer to the same word.
+  The hint on that row deliberately says nothing about it, because a field may not describe a
+  refusal the surface does not make. The fix wants the editor to read the listing the create
+  form already reads, which is a fetch this page does not make today.
+
 ## Recommended next steps
 
 1. Milestone 0.5 is complete. The design direction is selected and recorded in

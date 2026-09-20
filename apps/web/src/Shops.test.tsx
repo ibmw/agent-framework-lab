@@ -4,8 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { SHOP_NAME_RULE } from "./lib/fieldRules";
 import { cardTitleClasses } from "./lib/ui";
-import { renderApp } from "./test/app";
+import { renderApp, wholeDescription } from "./test/app";
 
 const SHOP_ID = "9c8b7a6d-5e4f-4a3b-9c8d-7e6f5a4b3c2d";
 
@@ -362,8 +363,9 @@ describe("create-form guidance", () => {
     renderShops();
     const card = await createShopCard();
 
+    // Exact: Shop details' own Name row reads the same export, and the pair is the point.
     expect(card.getByLabelText("Name")).toHaveAccessibleDescription(
-      /the shop's public name.*publishing freezes/i,
+      wholeDescription(SHOP_NAME_RULE),
     );
     expect(card.getByLabelText("Slug")).toHaveAccessibleDescription(
       /lowercase with hyphens.*follows the name until you edit it/i,

@@ -13,7 +13,8 @@ import userEvent from "@testing-library/user-event";
 import { delay, HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { renderApp } from "./test/app";
+import { ORDER_METHOD_RULE } from "./lib/fieldRules";
+import { renderApp, wholeDescription } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const PROFILE_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -917,6 +918,38 @@ describe("the field pattern on the order editor", () => {
       expect(within(shipping).getByText(label).getAttribute("for")).toBe(
         within(shipping).getByLabelText(label).id,
       );
+    }
+  });
+
+  it("gives each status, method and timestamp row the rule the save enforces", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+
+    const payment = within(card("Line items & payment"));
+    // Both selects are built from `reachable_statuses`, so the row says what is missing
+    // from them rather than leaving the operator to notice.
+    expect(payment.getByLabelText("Payment status")).toHaveAccessibleDescription(
+      /only the statuses reachable from the one saved/i,
+    );
+    expect(payment.getByLabelText("Payment status")).toHaveAccessibleDescription(/never back/i);
+    expect(payment.getByLabelText("Paid at")).toHaveAccessibleDescription(
+      /a pending or authorized order cannot record a capture time/i,
+    );
+
+    const shipping = within(card("Fulfilment & shipping"));
+    expect(shipping.getByLabelText("Fulfilment status")).toHaveAccessibleDescription(
+      /once fulfilled, a run can no longer change the address/i,
+    );
+    expect(shipping.getByLabelText("Shipped at")).toHaveAccessibleDescription(
+      /an unfulfilled order cannot record a shipping time/i,
+    );
+
+    // One rule, both method selects: `_method_name` freezes the name for each the same way.
+    for (const method of [
+      payment.getByLabelText("Payment method"),
+      shipping.getByLabelText("Fulfilment method"),
+    ]) {
+      expect(method).toHaveAccessibleDescription(wholeDescription(ORDER_METHOD_RULE));
     }
   });
 

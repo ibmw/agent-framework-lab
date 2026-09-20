@@ -45,6 +45,9 @@ import {
   MONEY_PATTERN,
   MONEY_RULE,
   OPTION_VALUES_RULE,
+  PRODUCT_DESCRIPTION_RULE,
+  PRODUCT_STATUS_RULE,
+  PRODUCT_TITLE_RULE,
   REFERENCE_PATTERN,
   REVIEW_RATING_RULE,
   VARIANT_SKU_RENAME_RULE,
@@ -131,14 +134,14 @@ export function ProductEditorPage() {
                 the four its own full-width row, and the field pattern's own wrap already
                 stacks a row where there is no room, so the half-width pair went with it. */}
             <FieldRows>
-              <Field label="Title">
+              <Field label="Title" hint={PRODUCT_TITLE_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={product.title}
                   onChange={(event) => update({ ...product, title: event.target.value })}
                 />
               </Field>
-              <Field label="Status">
+              <Field label="Status" hint={PRODUCT_STATUS_RULE}>
                 <select
                   className={fieldControlClasses}
                   value={product.status}
@@ -156,12 +159,15 @@ export function ProductEditorPage() {
                   ))}
                 </select>
               </Field>
-              {/* No hint, deliberately. `PRODUCT_CATEGORY_RULE` is written and the create
-                  form shows it, but its second sentence — "Pick one the draft already uses"
-                  — is true there because that form renders a `<datalist>` of the draft's
-                  categories beside the input. This one does not, so the rule would promise a
-                  pick list that is not on the surface saying so. The missing list is recorded
-                  as follow-up work; a layout slice reports a gap rather than closing it. */}
+              {/* Still no hint, and now the only row in this card without one.
+                  `PRODUCT_CATEGORY_RULE`'s second sentence — "Pick one the draft already
+                  uses" — is true on the create form because that form renders a `<datalist>`
+                  of the draft's categories beside the input, and false here because this one
+                  does not. The copy slice re-read it and left it: the anti-fragmentation
+                  rule *is* the useful thing to say about a category, so any other sentence
+                  written here would satisfy the sweep, silence this reminder, and still not
+                  tell the reader the one thing they need. The datalist is behaviour and this
+                  row stays bare until it lands — see `docs/decisions-and-next-step.md`. */}
               <Field label="Category">
                 <input
                   className={fieldControlClasses}
@@ -169,7 +175,7 @@ export function ProductEditorPage() {
                   onChange={(event) => update({ ...product, category: event.target.value })}
                 />
               </Field>
-              <Field label="Description">
+              <Field label="Description" hint={PRODUCT_DESCRIPTION_RULE}>
                 <textarea
                   className={textAreaClasses}
                   value={product.description}

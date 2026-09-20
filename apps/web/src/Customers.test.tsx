@@ -14,8 +14,9 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { toProfilePayload } from "./api/customerProfiles";
+import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
-import { renderApp } from "./test/app";
+import { renderApp, wholeDescription } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const OTHER_SHOP_ID = "8c7b6a59-4d3e-42f1-a0b9-8c7d6e5f4a3b";
@@ -332,17 +333,19 @@ describe("customer workspace", () => {
     renderAt(`/shops/${SHOP_ID}/customers`);
 
     const card = within(await screen.findByRole("region", { name: "New customer" }));
+    // Exact, because the editor's four rows read the same three exports. A substring would
+    // pass while the two surfaces drifted apart, which is what put these rules in one module.
     expect(card.getByLabelText("Given name")).toHaveAccessibleDescription(
-      /display name on tickets and orders/i,
+      wholeDescription(CUSTOMER_NAME_RULE),
     );
     expect(card.getByLabelText("Family name")).toHaveAccessibleDescription(
-      /display name on tickets and orders/i,
+      wholeDescription(CUSTOMER_NAME_RULE),
     );
     expect(card.getByLabelText("Email")).toHaveAccessibleDescription(
-      /fictional address.*reusable across shops/i,
+      wholeDescription(CUSTOMER_EMAIL_RULE),
     );
     expect(card.getByLabelText("Customer since")).toHaveAccessibleDescription(
-      /the day this fictional customer first bought/i,
+      wholeDescription(CUSTOMER_SINCE_RULE),
     );
   });
 
@@ -832,6 +835,53 @@ describe("the field pattern on the customer editor", () => {
       /pick a locale from the list/i,
     );
     expect(identity.getByText("Locale").className).toBe(identity.getByText("Email").className);
+  });
+
+  it("gives every identity, account and persona row the rule its control obeys", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    const identity = within(screen.getByRole("region", { name: "Identity" }));
+    // The three the create form also asks for, read from the same export rather than retyped.
+    expect(identity.getByLabelText("Given name")).toHaveAccessibleDescription(
+      wholeDescription(CUSTOMER_NAME_RULE),
+    );
+    expect(identity.getByLabelText("Family name")).toHaveAccessibleDescription(
+      wholeDescription(CUSTOMER_NAME_RULE),
+    );
+    expect(identity.getByLabelText("Email")).toHaveAccessibleDescription(
+      wholeDescription(CUSTOMER_EMAIL_RULE),
+    );
+    // Phone is the one identity fact `CustomerIdentity` lets be `None`, and `type="tel"`
+    // refuses nothing, so the shape `require_phone` wants is only readable here.
+    expect(identity.getByLabelText("Phone")).toHaveAccessibleDescription(
+      /the only identity fact that may be left out/i,
+    );
+    expect(identity.getByLabelText("Phone")).toHaveAccessibleDescription(
+      /a leading \+ is allowed, then a digit/i,
+    );
+
+    const account = within(screen.getByRole("region", { name: "Account" }));
+    expect(account.getByLabelText("Customer since")).toHaveAccessibleDescription(
+      wholeDescription(CUSTOMER_SINCE_RULE),
+    );
+    // Neither select gates anything in the lab, and neither claims to.
+    expect(account.getByLabelText("Status")).toHaveAccessibleDescription(
+      /nothing here gates on it: an order or a ticket can be authored against a closed account/i,
+    );
+    expect(account.getByLabelText("Loyalty tier")).toHaveAccessibleDescription(
+      /read by the agent, enforced by nobody/i,
+    );
+    // Notes reach the agent; the card below is where a fact that must not reach it goes.
+    expect(account.getByLabelText("Account notes")).toHaveAccessibleDescription(
+      /returns these to the support agent.*hidden simulator facts/i,
+    );
+    expect(screen.getByRole("region", { name: "Hidden simulator facts" })).toBeVisible();
+
+    const persona = within(screen.getByRole("region", { name: "Behavioral persona" }));
+    expect(persona.getByLabelText("Summary")).toHaveAccessibleDescription(
+      /the publish gate refuses an empty summary/i,
+    );
   });
 
   it("keeps the persona's traits named by their own group, not by a row as well", async () => {

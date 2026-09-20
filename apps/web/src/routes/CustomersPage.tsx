@@ -13,6 +13,7 @@ import { type FilterChipDefinition, FilterChips, filterList } from "../component
 import { SearchField, SearchRow } from "../components/SearchField";
 import { TourLaunch } from "../components/TourLaunch";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -276,7 +277,7 @@ export function CustomersPage() {
         <div className="grid content-start gap-4">
           <Card title="New customer">
             <form className="grid gap-3" onSubmit={addProfile}>
-              <FieldHint label="Given name" hint="Part of the display name on tickets and orders.">
+              <FieldHint label="Given name" hint={CUSTOMER_NAME_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={givenName}
@@ -285,7 +286,7 @@ export function CustomersPage() {
                   onChange={(event) => setGivenName(event.target.value)}
                 />
               </FieldHint>
-              <FieldHint label="Family name" hint="Part of the display name on tickets and orders.">
+              <FieldHint label="Family name" hint={CUSTOMER_NAME_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={familyName}
@@ -294,10 +295,7 @@ export function CustomersPage() {
                   onChange={(event) => setFamilyName(event.target.value)}
                 />
               </FieldHint>
-              <FieldHint
-                label="Email"
-                hint="A fictional address used to identify the profile. The profile is reusable across shops."
-              >
+              <FieldHint label="Email" hint={CUSTOMER_EMAIL_RULE}>
                 <input
                   className={fieldControlClasses}
                   type="email"
@@ -307,10 +305,7 @@ export function CustomersPage() {
                   onChange={(event) => setEmail(event.target.value)}
                 />
               </FieldHint>
-              <FieldHint
-                label="Customer since"
-                hint="The day this fictional customer first bought."
-              >
+              <FieldHint label="Customer since" hint={CUSTOMER_SINCE_RULE}>
                 <input
                   className={fieldControlClasses}
                   type="date"

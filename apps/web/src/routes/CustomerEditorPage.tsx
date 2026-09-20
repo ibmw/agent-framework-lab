@@ -45,7 +45,18 @@ import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEdi
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
-import { CHIP_LABEL_MAX_LENGTH, PERSONA_TRAITS_RULE } from "../lib/fieldRules";
+import {
+  ACCOUNT_NOTES_RULE,
+  ACCOUNT_STATUS_RULE,
+  CHIP_LABEL_MAX_LENGTH,
+  CUSTOMER_EMAIL_RULE,
+  CUSTOMER_NAME_RULE,
+  CUSTOMER_PHONE_RULE,
+  CUSTOMER_SINCE_RULE,
+  LOYALTY_TIER_RULE,
+  PERSONA_SUMMARY_RULE,
+  PERSONA_TRAITS_RULE,
+} from "../lib/fieldRules";
 import { todayInput } from "../lib/orders";
 import {
   accentButtonClasses,
@@ -412,7 +423,7 @@ export function CustomerEditorPage() {
         <div className="grid content-start gap-4">
           <Card title="Identity">
             <FieldRows>
-              <Field label="Given name">
+              <Field label="Given name" hint={CUSTOMER_NAME_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={content.identity.given_name}
@@ -424,7 +435,7 @@ export function CustomerEditorPage() {
                   }
                 />
               </Field>
-              <Field label="Family name">
+              <Field label="Family name" hint={CUSTOMER_NAME_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={content.identity.family_name}
@@ -436,7 +447,7 @@ export function CustomerEditorPage() {
                   }
                 />
               </Field>
-              <Field label="Email">
+              <Field label="Email" hint={CUSTOMER_EMAIL_RULE}>
                 <input
                   className={fieldControlClasses}
                   type="email"
@@ -449,7 +460,7 @@ export function CustomerEditorPage() {
                   }
                 />
               </Field>
-              <Field label="Phone">
+              <Field label="Phone" hint={CUSTOMER_PHONE_RULE}>
                 <input
                   className={fieldControlClasses}
                   type="tel"
@@ -480,7 +491,7 @@ export function CustomerEditorPage() {
 
           <Card title="Account">
             <FieldRows>
-              <Field label="Customer since">
+              <Field label="Customer since" hint={CUSTOMER_SINCE_RULE}>
                 <input
                   className={fieldControlClasses}
                   type="date"
@@ -488,7 +499,7 @@ export function CustomerEditorPage() {
                   onChange={(event) => editAccount({ customer_since: event.target.value })}
                 />
               </Field>
-              <Field label="Status">
+              <Field label="Status" hint={ACCOUNT_STATUS_RULE}>
                 <select
                   className={fieldControlClasses}
                   value={content.account.status}
@@ -499,7 +510,7 @@ export function CustomerEditorPage() {
                   <option value="closed">Closed</option>
                 </select>
               </Field>
-              <Field label="Loyalty tier">
+              <Field label="Loyalty tier" hint={LOYALTY_TIER_RULE}>
                 <select
                   className={fieldControlClasses}
                   value={content.account.loyalty_tier}
@@ -525,7 +536,7 @@ export function CustomerEditorPage() {
               Opted in to marketing
             </label>
             <FieldRows>
-              <Field label="Account notes">
+              <Field label="Account notes" hint={ACCOUNT_NOTES_RULE}>
                 <textarea
                   className={textAreaClasses}
                   value={content.account.notes}
@@ -674,7 +685,7 @@ export function CustomerEditorPage() {
             }
           >
             <FieldRows>
-              <Field label="Summary">
+              <Field label="Summary" hint={PERSONA_SUMMARY_RULE}>
                 <textarea
                   className={textAreaClasses}
                   value={content.persona.summary}

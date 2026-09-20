@@ -13,7 +13,7 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
 import { uniqueSuggestion } from "../lib/entryIds";
-import { KEBAB_PATTERN, SHOP_SLUG_RULE } from "../lib/fieldRules";
+import { KEBAB_PATTERN, SHOP_NAME_RULE, SHOP_SLUG_RULE } from "../lib/fieldRules";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
 import { shopSlugFromName } from "../lib/shop";
 import {
@@ -234,10 +234,7 @@ export function ShopsPage() {
         <div id="create-shop">
           <Card title="Create a shop">
             <form className="grid gap-3" onSubmit={submit}>
-              <FieldHint
-                label="Name"
-                hint="The shop's public name. Publishing freezes it with the rest of the shop."
-              >
+              <FieldHint label="Name" hint={SHOP_NAME_RULE}>
                 <input
                   className={fieldControlClasses}
                   value={name}

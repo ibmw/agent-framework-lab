@@ -9,6 +9,7 @@ import {
   unprovenAgentProviderRule,
   unprovenJudgeProviderRule,
 } from "./fieldRules";
+import fieldRulesSource from "./fieldRules?raw";
 
 /**
  * The Studio's copy of three publish-gate sentences, pinned to the gate that writes them.
@@ -141,5 +142,111 @@ describe("the publish gate's sentences, as the Studio repeats them", () => {
     for (const sentence of sentences) {
       expect(sentence.endsWith(".")).toBe(false);
     }
+  });
+});
+
+/**
+ * Every rule in this module is shown somewhere.
+ *
+ * The module exists so that a create form and the editor row for the same field read one
+ * sentence; an export nothing renders is that promise without its second half, and it is the
+ * state five of this module's rules were in before UI-8 — written inline on a create
+ * form, unreachable from the editor row beside it. This sweep is the `enumLabels.test.ts` pattern
+ * applied to copy: it reads the sources rather than the values, because a rule's consumers
+ * are a fact about the repository and not about any one render.
+ *
+ * It counts an **import**, not an occurrence. `PRODUCT_CATEGORY_RULE` is named in a comment
+ * in `ProductEditorPage.tsx` explaining why that row does *not* show it, and a text search
+ * would read the explanation as the consumer.
+ *
+ * What it proves is exactly that: imported by a shipping module. It does not prove the value
+ * reaches a render, and an import nobody uses would satisfy it — that half is Biome's
+ * `noUnusedImports`, which `make check` runs over the same files. The two together are the
+ * claim; this file alone is not, and the name above says so.
+ */
+const sources = import.meta.glob("../**/*.{ts,tsx}", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+/** Every `export const` / `export function` name this module publishes. */
+function exportedNames(source: string): string[] {
+  return [...source.matchAll(/^export (?:const|function) ([A-Za-z0-9_]+)/gm)].map(
+    (match) => match[1],
+  );
+}
+
+/**
+ * What one module imports from `fieldRules` as a **value**, aliases resolved to the exported
+ * name.
+ *
+ * A type-only import does not count, in either spelling: `import type { X }` is not matched
+ * at all, and an inline `{ type X }` specifier is dropped. Nothing this module publishes is a
+ * type, so neither form compiles today and the distinction is dead weight in practice — it is
+ * here because the alternative is a rule that could be kept alive by an import that renders
+ * nothing, which is the state the sweep exists to detect.
+ */
+function importedFromFieldRules(source: string): string[] {
+  const clause = /import\s+(type\s+)?\{([^}]*)\}\s*from\s*"[^"]*\/fieldRules"/g;
+  return [...source.matchAll(clause)]
+    .filter((match) => match[1] === undefined)
+    .flatMap((match) =>
+      match[2]
+        .split(",")
+        .map((specifier) =>
+          specifier
+            .trim()
+            .split(/\s+as\s+/)[0]
+            .trim(),
+        )
+        .filter((name) => name.length > 0 && !/^type\s/.test(name)),
+    );
+}
+
+describe("every rule this module publishes is imported by a module that ships", () => {
+  const isConsumer = (path: string) => !path.includes("fieldRules") && !path.includes(".test.");
+  const consumers = Object.entries(sources).filter(([path]) => isConsumer(path));
+
+  it("found the workspace's modules to sweep", () => {
+    // Asserted first: a glob that matched nothing would make every case below pass.
+    expect(Object.keys(sources).length).toBeGreaterThan(50);
+    expect(consumers.length).toBeGreaterThan(40);
+    expect(consumers.some(([path]) => path.endsWith("routes/ProductEditorPage.tsx"))).toBe(true);
+  });
+
+  it("reads this module's own exports rather than a hand-kept list", () => {
+    const names = exportedNames(fieldRulesSource);
+    expect(names.length).toBeGreaterThan(30);
+    expect(names).toContain("PRODUCT_CATEGORY_RULE");
+    expect(names).toContain("ORDER_METHOD_RULE");
+  });
+
+  it("counts an import and not a mention in a comment", () => {
+    const editor = sources["../routes/ProductEditorPage.tsx"];
+    expect(editor).toBeDefined();
+    // The row that deliberately shows no category rule still explains itself in prose.
+    expect(editor).toContain("PRODUCT_CATEGORY_RULE");
+    expect(importedFromFieldRules(editor)).not.toContain("PRODUCT_CATEGORY_RULE");
+  });
+
+  it("counts a value import and neither spelling of a type-only one", () => {
+    // Synthetic, because nothing this module publishes is a type, so neither type form
+    // compiles anywhere in the workspace and the rule could not otherwise be exercised.
+    expect(
+      importedFromFieldRules('import { A_RULE, B_RULE as C } from "../lib/fieldRules";'),
+    ).toEqual(["A_RULE", "B_RULE"]);
+    expect(importedFromFieldRules('import type { A_RULE } from "../lib/fieldRules";')).toEqual([]);
+    expect(importedFromFieldRules('import { type A_RULE } from "../lib/fieldRules";')).toEqual([]);
+    // A mention outside an import clause is not a consumer, whatever it is inside.
+    expect(importedFromFieldRules("// A_RULE is deliberately not shown here.")).toEqual([]);
+  });
+
+  it("leaves no export unconsumed", () => {
+    const consumed = new Set(
+      consumers.flatMap(([, source]) => importedFromFieldRules(source as string)),
+    );
+    const orphans = exportedNames(fieldRulesSource).filter((name) => !consumed.has(name));
+    expect(orphans, "exported by lib/fieldRules.ts and imported by nothing").toEqual([]);
   });
 });

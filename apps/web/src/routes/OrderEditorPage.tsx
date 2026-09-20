@@ -21,7 +21,16 @@ import {
   StatusPill,
 } from "../components/WorkspaceChrome";
 import { slugify, uniqueId } from "../lib/entryIds";
-import { isMoneyAmount, MONEY_PATTERN, MONEY_RULE } from "../lib/fieldRules";
+import {
+  FULFILMENT_STATUS_RULE,
+  isMoneyAmount,
+  MONEY_PATTERN,
+  MONEY_RULE,
+  ORDER_METHOD_RULE,
+  PAID_AT_RULE,
+  PAYMENT_STATUS_RULE,
+  SHIPPED_AT_RULE,
+} from "../lib/fieldRules";
 import {
   clampQuantity,
   EVENT_KINDS,
@@ -504,7 +513,7 @@ export function OrderEditorPage() {
                 each of an order's questions its own row, and the row stacks itself where
                 there is no width for two columns. */}
             <FieldRows>
-              <Field label="Payment status">
+              <Field label="Payment status" hint={PAYMENT_STATUS_RULE}>
                 <select
                   className={fieldControlClasses}
                   value={content.payment.status}
@@ -525,7 +534,7 @@ export function OrderEditorPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Payment method">
+              <Field label="Payment method" hint={ORDER_METHOD_RULE}>
                 <select
                   className={fieldControlClasses}
                   value={content.payment.method_id ?? ""}
@@ -544,7 +553,7 @@ export function OrderEditorPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Paid at">
+              <Field label="Paid at" hint={PAID_AT_RULE}>
                 <input
                   className={fieldControlClasses}
                   type="datetime-local"
@@ -619,7 +628,7 @@ export function OrderEditorPage() {
 
           <Card title="Fulfilment & shipping">
             <FieldRows>
-              <Field label="Fulfilment status">
+              <Field label="Fulfilment status" hint={FULFILMENT_STATUS_RULE}>
                 <select
                   className={fieldControlClasses}
                   value={content.fulfilment.status}
@@ -640,7 +649,7 @@ export function OrderEditorPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Fulfilment method">
+              <Field label="Fulfilment method" hint={ORDER_METHOD_RULE}>
                 <select
                   className={fieldControlClasses}
                   value={content.fulfilment.method_id ?? ""}
@@ -662,7 +671,7 @@ export function OrderEditorPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Shipped at">
+              <Field label="Shipped at" hint={SHIPPED_AT_RULE}>
                 <input
                   className={fieldControlClasses}
                   type="datetime-local"

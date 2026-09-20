@@ -35,7 +35,12 @@ import {
   POLICY_KIND,
   SUPPORT_CHANNEL,
 } from "../lib/enumLabels";
-import { DERIVED_KEBAB_RULE, KEBAB_PATTERN } from "../lib/fieldRules";
+import {
+  DERIVED_KEBAB_RULE,
+  KEBAB_PATTERN,
+  SHOP_NAME_RULE,
+  SHOP_SLUG_DETAIL_RULE,
+} from "../lib/fieldRules";
 import type { TourId } from "../lib/tours";
 import {
   accentButtonClasses,
@@ -284,7 +289,7 @@ export function ShopIdentityPage() {
     <SetupPage title="Shop details" tour="shop-details">
       <Card title="Shop identity">
         <FieldRows>
-          <Field label="Name">
+          <Field label="Name" hint={SHOP_NAME_RULE}>
             <input
               className={fieldControlClasses}
               value={identity.name}
@@ -293,7 +298,7 @@ export function ShopIdentityPage() {
               }
             />
           </Field>
-          <Field label="Slug">
+          <Field label="Slug" hint={SHOP_SLUG_DETAIL_RULE}>
             <input
               className={fieldControlClasses}
               value={identity.slug}

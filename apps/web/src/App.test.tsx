@@ -14,9 +14,10 @@ import { isValidElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { routeTree } from "./App";
+import { PRODUCT_TITLE_RULE, SHOP_NAME_RULE } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
-import { renderApp } from "./test/app";
+import { renderApp, wholeDescription } from "./test/app";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -266,8 +267,10 @@ describe("adding a product", () => {
     renderAt(`/shops/${SHOP_ID}/products`);
 
     const card = within(await screen.findByRole("region", { name: "Add a product" }));
+    // Exact, not a substring: this sentence is also the product editor's Title row, and the
+    // pair only means anything if the two are the same string.
     expect(card.getByLabelText("Title")).toHaveAccessibleDescription(
-      /the name customers and the catalog see/i,
+      wholeDescription(PRODUCT_TITLE_RULE),
     );
     expect(card.getByLabelText("Category")).toHaveAccessibleDescription(
       /groups the product in the catalog/i,
@@ -1910,6 +1913,30 @@ describe("the field pattern on the shop editors", () => {
     expect(details.getByLabelText("Category")).not.toHaveAttribute("list");
   });
 
+  it("states the rest of the Details card's rules, Title in the create form's own words", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+    const details = within(screen.getByRole("region", { name: "Details" }));
+    // The whole point of moving the literal into `lib/fieldRules.ts`: the create row and the
+    // editor row are one sentence read twice, so this is an equality and not a match.
+    expect(details.getByLabelText("Title")).toHaveAccessibleDescription(
+      wholeDescription(PRODUCT_TITLE_RULE),
+    );
+    // Status says what this lab does, which is not what the handoff's radio pair says: a
+    // draft product here is returned by the catalog tools and is held to the same gate.
+    expect(details.getByLabelText("Status")).toHaveAccessibleDescription(
+      /a fact an agent reads, not a filter/i,
+    );
+    expect(details.getByLabelText("Status")).toHaveAccessibleDescription(
+      /publish gate holds all three to the same rules/i,
+    );
+    // The severity is the gate's own — `product_without_description` is a warning.
+    expect(details.getByLabelText("Description")).toHaveAccessibleDescription(
+      /publishes with a warning, not a refusal/i,
+    );
+  });
+
   it("names the channel boxes as one group, with the rule the disabled box cannot state", async () => {
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
@@ -1936,7 +1963,16 @@ describe("the field pattern on the shop editors", () => {
     expect(identity.getAllByRole("group", { name: "Currencies" })).toHaveLength(1);
     expect(identity.getByText("Locale").className).toBe(identity.getByText("Name").className);
     expect(identity.getByRole("group", { name: "Currencies" }).className).toContain("flex-wrap");
-    // And neither lost the rule it carries itself.
+    // The two rows of the card's own carry their rules, and Name is the create form's.
+    expect(identity.getByLabelText("Name")).toHaveAccessibleDescription(
+      wholeDescription(SHOP_NAME_RULE),
+    );
+    // Not `SHOP_SLUG_RULE`: this input follows nothing, so it may not say that it does.
+    expect(identity.getByLabelText("Slug")).toHaveAccessibleDescription(
+      /lowercase with hyphens\. the shops index searches it beside the name/i,
+    );
+    expect(identity.getByLabelText("Slug")).not.toHaveAccessibleDescription(/follows the name/i);
+    // And neither shared field lost the rule it carries itself.
     expect(identity.getByLabelText("Locale")).toHaveAccessibleDescription(/pick a locale/i);
     expect(identity.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
       /variants may only be priced in these; the first is the default/i,

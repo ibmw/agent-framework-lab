@@ -16,7 +16,12 @@ import {
 } from "../components/WorkspaceChrome";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
-import { KEBAB_PATTERN, PRODUCT_CATEGORY_RULE, PRODUCT_HANDLE_RULE } from "../lib/fieldRules";
+import {
+  KEBAB_PATTERN,
+  PRODUCT_CATEGORY_RULE,
+  PRODUCT_HANDLE_RULE,
+  PRODUCT_TITLE_RULE,
+} from "../lib/fieldRules";
 import { issuesForProduct, ratingLabel } from "../lib/shop";
 import {
   accentButtonClasses,
@@ -235,7 +240,7 @@ export function ProductsPage() {
 
         <Card title="Add a product">
           <form className="grid gap-3" onSubmit={addProduct}>
-            <FieldHint label="Title" hint="The name customers and the catalog see.">
+            <FieldHint label="Title" hint={PRODUCT_TITLE_RULE}>
               <input
                 className={fieldControlClasses}
                 value={title}

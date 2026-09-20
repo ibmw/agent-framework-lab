@@ -211,3 +211,167 @@ export const TONE_OVERRIDE_RULE =
 /** What the category field groups, with the draft's existing categories offered beside it. */
 export const PRODUCT_CATEGORY_RULE =
   "Groups the product in the catalog, for example Jackets. Pick one the draft already uses, or type a new one.";
+
+/*
+ * ---------------------------------------------------------------------------------------
+ * The editor rows' own rules (UI-8).
+ *
+ * Everything below is read against the surface it is shown on rather than taken from the
+ * handoff: `tmp/design-frames/Workspace.dc.html` writes a hint for each of its 107 rows, and
+ * several of them describe a lab that is not this one — its product Status row promises that
+ * a draft product is "never returned to an agent", and its Shop details Slug row says the
+ * slug is "set once, at creation". Neither is true here, so neither sentence is repeated.
+ *
+ * Each rule names the code that makes it true, because that is the only way a sentence with
+ * no pixel to measure it against can be reviewed at all.
+ * ---------------------------------------------------------------------------------------
+ */
+
+/**
+ * The five sentences the create forms used to spell inline.
+ *
+ * Six literals, five rules: the given-name and family-name hints were already the same
+ * sentence written twice, which is the drift this module exists to prevent, one step before
+ * it happens. Each is now read by its create form and by the editor row for the same field.
+ */
+
+/** Product title. It is the catalog's own column and what `search_products` matches on. */
+export const PRODUCT_TITLE_RULE = "The name customers and the catalog see.";
+
+/** Shop name. A published version freezes the whole identity, this included. */
+export const SHOP_NAME_RULE =
+  "The shop's public name. Publishing freezes it with the rest of the shop.";
+
+/**
+ * Given and family name, on the create form and in the editor.
+ *
+ * `CustomerIdentity.display_name` joins the two, and it is the `customer_display_name` a
+ * ticket (`application/tickets.py`) and an order (`application/order_fixtures.py`) are listed
+ * under — so the sentence is about both fields and says so.
+ */
+export const CUSTOMER_NAME_RULE = "Part of the display name on tickets and orders.";
+
+/** Customer email. `attached_shop_count` is the reuse the second sentence names. */
+export const CUSTOMER_EMAIL_RULE =
+  "A fictional address used to identify the profile. The profile is reusable across shops.";
+
+/** `AccountFacts.customer_since`, an ISO day. */
+export const CUSTOMER_SINCE_RULE = "The day this fictional customer first bought.";
+
+/**
+ * Product status, which is neither a catalog filter nor a publish-gate exemption.
+ *
+ * `_search_products` in `application/sandbox_tools.py` filters on the query alone, and
+ * `product_summary` carries `status` into the result, so a draft or archived product reaches
+ * an agent exactly as an active one does — with its status attached to be reasoned about.
+ * `validate_shop` in `domain/shop.py` calls `_validate_product` for every product whatever
+ * its status, so the same missing price refuses the shop either way. The handoff says the
+ * opposite ("Present in the catalog but never returned to an agent"); it is describing its
+ * own prototype.
+ */
+export const PRODUCT_STATUS_RULE =
+  "A fact an agent reads, not a filter. The catalog tools return a draft or archived product too, and the publish gate holds all three to the same rules.";
+
+/**
+ * Product description. `product_detail` in `application/sandbox_tool_views.py` returns it and
+ * `product_summary` does not, which is what "when it opens the product" is being careful
+ * about; `_validate_product` raises `product_without_description` as a **warning**, so the
+ * severity in the sentence is the gate's own.
+ */
+export const PRODUCT_DESCRIPTION_RULE =
+  "What a support agent reads when it opens the product. Leaving it empty publishes with a warning, not a refusal.";
+
+/**
+ * The shop slug where it is edited rather than derived.
+ *
+ * `SHOP_SLUG_RULE` above cannot serve this row: its second clause is `DerivedIdField`'s
+ * follow-until-edited behaviour, and Shop details renders a plain input. What is left that is
+ * true here is the shape `require_slug` enforces at save (the control enforces none) and the
+ * one place the value is read — `ShopsPage` searches `[shop.name, shop.slug]`.
+ */
+export const SHOP_SLUG_DETAIL_RULE =
+  "Lowercase with hyphens. The shops index searches it beside the name.";
+
+/**
+ * The one identity fact a customer profile may be missing, and the shape it takes when it is
+ * not: `require_phone`'s `\+?[0-9][0-9 ()./-]{4,30}` in `domain/content.py`. The control is
+ * `type="tel"`, which refuses nothing, so the save is the first thing that would.
+ */
+export const CUSTOMER_PHONE_RULE =
+  "The only identity fact that may be left out. A leading + is allowed, then a digit and at least four more of digits, spaces, or ( ) . / -.";
+
+/**
+ * Account status and loyalty tier, which the lab reports and does not act on.
+ *
+ * Both are read out to the agent by `customer_profile` in `sandbox_tool_views.py` and
+ * attached to a span by `telemetry_attributes`. Neither appears in a condition anywhere in
+ * `apps/api/src`: `validate_order_fixture` checks that the customer is attached to the shop
+ * and nothing about the account, so an order against a closed account is authored without a
+ * finding. The handoff gives the tier a rule the lab does not enforce ("what the goodwill
+ * guideline reads when deciding whether an exception is allowed"); that would be a field
+ * claiming a gate it has not got.
+ */
+export const ACCOUNT_STATUS_RULE =
+  "The customer lookup reports it to the agent. Nothing here gates on it: an order or a ticket can be authored against a closed account.";
+
+export const LOYALTY_TIER_RULE =
+  "Read by the agent, enforced by nobody. What a tier is worth is whatever the shop's policies and guidelines say.";
+
+/**
+ * Account notes, which are the sensitive facts the agent *is* allowed to find.
+ *
+ * `customer_profile` in `sandbox_tool_views.py` returns `account.notes` in full;
+ * `FIELD_SENSITIVITY` classifies it `SENSITIVE` (a log may not carry it, a tool result may)
+ * against `hidden_facts[].note`, which is `CUSTOMER_ONLY` and absent from that view by
+ * construction. So the two are one decision and the hint names the other half of it.
+ */
+export const ACCOUNT_NOTES_RULE =
+  "The customer lookup returns these to the support agent. A fact it must not find belongs in Hidden simulator facts instead.";
+
+/** `persona_without_summary`, an error in `validate_customer_profile`. */
+export const PERSONA_SUMMARY_RULE =
+  "A published profile must have one: the publish gate refuses an empty summary.";
+
+/**
+ * The two status selects, which offer a reachable future and never a past.
+ *
+ * `OrderFixtureDetailSchema.from_record` builds both option lists from `reachable_statuses`
+ * over `PAYMENT_TRANSITIONS` and `FULFILMENT_TRANSITIONS`, and `require_reachable_status`
+ * refuses anything else at save. An author may jump several steps at once, which is why the
+ * sentence says "forward" rather than "one step".
+ */
+export const PAYMENT_STATUS_RULE =
+  "Only the statuses reachable from the one saved. An authored order moves forward — several steps at once if you like — and never back.";
+
+/**
+ * The same rule, plus the consequence `ADDRESS_CHANGEABLE_STATUSES` attaches to this axis
+ * alone: `FulfilmentState.allows_address_change` is false once the order is fulfilled, which
+ * is what the line under this card already reports.
+ *
+ * Stated as a consequence of this axis and **not** as the only one there is. `refuse_reasons`
+ * in `domain/address_change.py` turns a run's address change away on four grounds, two of
+ * them about the order's state: `ORDER_ALREADY_SHIPPED` — this row — and `ORDER_REFUNDED`,
+ * which belongs to the payment axis. "Fulfilled is what stops it" would be true of this
+ * select and false of the order, which is the kind of sentence this slice exists to keep out.
+ */
+export const FULFILMENT_STATUS_RULE =
+  "Only the statuses reachable from the one saved, and never back. Once fulfilled, a run can no longer change the address.";
+
+/** `PaymentState.__post_init__`: a pending or authorized order may carry no capture time. */
+export const PAID_AT_RULE =
+  "Only once the money moved. A pending or authorized order cannot record a capture time, and saving one is refused.";
+
+/** `FulfilmentState.__post_init__`: an unfulfilled order may carry no shipping time. */
+export const SHIPPED_AT_RULE =
+  "Only once something shipped. An unfulfilled order cannot record a shipping time, and saving one is refused.";
+
+/**
+ * Both method selects, which is one sentence because it is one rule.
+ *
+ * `_method_name` in `application/order_fixtures.py` resolves the display name from the shop
+ * when the selection changes and keeps an already frozen one frozen otherwise, so the order
+ * carries its own copy of the name and a rename in Shop details never reaches it. Naming
+ * neither axis is deliberate: a second spelling of this is the drift the module refuses.
+ */
+export const ORDER_METHOD_RULE =
+  "One of the shop's own methods. Its name is frozen into the order when you pick it, so renaming it under Shop details never rewrites this one.";

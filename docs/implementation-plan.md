@@ -584,21 +584,106 @@ the pattern half-delivered: the handoff writes a hint for all 107 rows and the w
 of them. This slice writes the rest, and it is a content slice — each hint is read against what
 the surface actually renders, not transcribed.
 
-Two things it must fix on the way, both found while adopting UI-2:
+**As built. Twenty-three rows: twenty gained a hint, two already had one, and one is bare.** The
+census is of the rows UI-2 actually adopted — `Field` and `FieldGroup` on `ProductEditorPage`
+(4), `CustomerEditorPage` (9), `OrderEditorPage` (7) and Shop details' identity card (3) — and
+not of the prototype's 107, most of which describe surfaces this workspace has not got. Ship to
+and Support channels already carried a rule, Category is the one deliberate blank, and the other
+twenty are new: Product 3, Customer 9, Order 6, Shop identity 2. Eighteen exports serve those
+twenty, because `CUSTOMER_NAME_RULE` and `ORDER_METHOD_RULE` are each read twice. Two
+self-labelling fields sit in those cards drawn as rows and are *not* in the twenty-three —
+`LocaleField` and `CurrencyField` are not `Field`s and carry `LOCALE_RULE` and `CURRENCIES_RULE`
+themselves.
 
-- **Five create-form hints are inline string literals, not exports** — Title
-  (`ProductsPage.tsx:165`), Given name, Family name, Email, Customer since
-  (`CustomersPage.tsx:208,217,227,240`) and the shop's own at `ShopsPage.tsx:185`. They are
-  written, but not written once, so an editor row cannot reuse one without first pulling it into
-  `lib/fieldRules.ts`. That is what makes them drift.
-- **A rule is shown only where it is true.** `PRODUCT_CATEGORY_RULE` offers a pick list of the
-  draft's categories; the product editor renders no datalist, so UI-2 left the rule off that row
-  rather than promise what is not there. Either this slice's copy accounts for the difference or
-  the datalist lands first — see the defect recorded in `docs/decisions-and-next-step.md`.
+**Five exports for six literals.** Title (`ProductsPage`), Name (`ShopsPage`) and Given name,
+Family name, Email and Customer since (`CustomersPage`) were inline strings; the given-name and
+family-name hints were already the same sentence written twice, which is the drift the module
+prevents caught one step before it happened. Each is now `PRODUCT_TITLE_RULE`, `SHOP_NAME_RULE`,
+`CUSTOMER_NAME_RULE`, `CUSTOMER_EMAIL_RULE` and `CUSTOMER_SINCE_RULE` in `lib/fieldRules.ts`, read
+by the create form and by the editor row for the same field. Those pairs are asserted as an
+*equality* rather than a substring — `wholeDescription` in `src/test/app.tsx` anchors the match,
+because every `Field` keeps an empty second line mounted for a later polite announcement and that
+puts one space on the end of the computed description.
 
-*Checks:* a sweep asserting every rule in `lib/fieldRules.ts` is consumed somewhere, so an export
-nothing shows fails; per-page tests that the hint is in its control's accessible description, the
-pattern Slice 1 of `docs/PLAN-UX.md` established.
+**The handoff is a source, and three of its sentences are false here.** Its product Status
+row's *Draft option* says a draft product is "present in the catalog but never returned to an
+agent" (`Workspace.dc.html`:941 — the row's own hint there is a different claim again, that an
+active product needs a priced variant, which is true here of every product and not only an
+active one): `_search_products`
+in `application/sandbox_tools.py` filters on the query alone and `product_summary` carries the
+status into the result, so a draft *is* returned, with its status attached. Its Shop details Slug
+row says the slug is "set once, at creation": this workspace's is a plain editable input. Its
+Loyalty tier row says the tier is "what the goodwill guideline reads when deciding whether an
+exception is allowed": nothing in `apps/api/src` reads either the tier or the account status in a
+condition. None of the three was copied, and each row says what this lab does instead. The
+prototype also writes no hint at all for the product Description row, the customer Phone, Status
+and Account notes rows, or the order's per-axis method and timestamp rows, which are drawn there
+as two grouped rows rather than six — so seven of the twenty had nothing to check against and
+were written from the domain.
+
+**Every sentence names the code that makes it true**, in the doc comment beside it, because a
+content slice has no pixel to measure against and that is the only thing a reviewer can check.
+The gate's severity is the gate's own: Description says "a warning, not a refusal" because
+`product_without_description` is `_warning`, and Summary says "refuses" because
+`persona_without_summary` is `issue_error`.
+
+**Category stays bare, and the defect stands.** `PRODUCT_CATEGORY_RULE`'s second sentence —
+"pick one the draft already uses" — is true on the create form, which renders a `<datalist>` of
+the draft's categories, and false on the editor, which renders none. The datalist is behaviour
+and this is a copy slice, but that is not the whole reason: the anti-fragmentation rule *is* the
+useful thing to say about a category, so any other true sentence written on that row would
+satisfy the sweep, silence the reminder, and still not tell the reader the one thing they need.
+The row keeps its empty accessible description and the test that pins it, so whoever adds the
+list is still sent to the hint in the same change.
+
+**Three more rows are bare on purpose.** The lone marketing-opt-in checkbox is not a `Field` and
+says what it means beside itself; `LocaleField` and `CurrencyField` are drawn as rows but carry
+`LOCALE_RULE` and `CURRENCIES_RULE` themselves, and wrapping either would name it twice.
+
+**The `(optional)` marker was not applied**, although Phone, Account notes and Description are
+each the only optional row on their card. `FieldHint`'s own doc records why: the flag is "the
+primitive's encoding of that convention for later consumers, not a conversion of that editor",
+and UI-2 deliberately left the editors unconverted. Reversing that in a copy slice would change
+three accessible names for a convention `docs/design-direction.md` writes for create forms. What
+the copy does instead is carry the fact where it is load-bearing: Phone's hint opens "The only
+identity fact that may be left out."
+
+**One consequence, stated of its axis and not of the order.** Fulfilment status says "Once
+fulfilled, a run can no longer change the address" rather than "Fulfilled is what stops a run
+changing the address": `refuse_reasons` in `domain/address_change.py` turns a change away on
+four grounds, and two of them are about the order's state — `ORDER_ALREADY_SHIPPED`, which is
+this axis, and `ORDER_REFUNDED`, which is the other select on the page. The exclusive form
+would have been true of the select and false of the order.
+
+**One rule serves both method selects.** `_method_name` in `application/order_fixtures.py`
+freezes a payment method's and a fulfilment method's display name by the same code, so
+`ORDER_METHOD_RULE` names neither axis and is read twice.
+
+**Two literals stayed literals**, and the sweep does not ask otherwise: Support channels' rule is
+shown on exactly one surface, and the order's Ship to hint is JSX carrying a `<Link>`, not a
+string a module can hold.
+
+**No export was unconsumed before this slice** — the sweep's own logic was run over `main`'s
+thirty-eight rules before any were added, and every one of them already had an importer.
+
+**A defect found and not fixed**, in `docs/decisions-and-next-step.md`: Shop details will save a
+slug another shop already has, where the create form refuses one. The hint on that row says
+nothing about it, because a field may not describe a refusal the surface does not make.
+
+*Checks:* `lib/fieldRules.test.ts` gains the sweep — it globs every module under `src` as `?raw`,
+reads this module's `export const`/`export function` names out of its own source, and counts a
+**value import** rather than an occurrence, because `PRODUCT_CATEGORY_RULE` is named in a comment
+in `ProductEditorPage.tsx` explaining why that row does not show it and a text search would read
+the explanation as the consumer. What it proves is imported-by-a-shipping-module and not
+reaches-a-render: an import nobody uses would satisfy it, and that half is Biome's
+`noUnusedImports` over the same files. Both type-import spellings are excluded and pinned on
+synthetic sources, since nothing here is a type and neither form would compile. Then one per-page case each in `App.test.tsx` (the product editor's
+Details card and Shop details' identity card), `Customers.test.tsx` and `Orders.test.tsx`, on
+Slice 1's contract: the hint is in the control's accessible description. Every one was
+mutation-tested — dropping the Status hint, widening the Title hint by one clause, dropping one
+of the two method hints, swapping the loyalty rule for the account-status one, and giving Shop
+details' Slug the create form's `SHOP_SLUG_RULE` each fail exactly the case that should catch
+them, and adding an export nobody imports fails the sweep by name.
 
 ---
 
