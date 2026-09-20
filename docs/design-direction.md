@@ -104,6 +104,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | *Attach existing* on Customers | a secondary header button that opens nothing | the same button, opening one inline row with the profile picker | the prototype's attach is a fixture with no panel behind it, and an attach in this workspace has to ask which profile; the row is not the side card the slice removed — it is the one control the question needs |
 | A judge's rubric at creation | the field, under "Can be left empty now, but the judge cannot be published until it is written" | required: Create is refused and the reason names the rubric | *A create form asks for what constrains the work that follows*, and a judge with no rubric constrains nothing. Not rule 5: the codebase did create a rubricless judge, so this changes what was there rather than keeping it. What licenses the change is that sentence together with the slice's own stated evidence, and the lab's `new_judge_configuration` is the corroboration rather than the licence — it defaults the model and the evidence because they have a proven right answer, and deliberately defaults no rubric |
 | Three cards on the lab's create pages | Tools on New configuration, Evidence on New judge, and an Architecture row beside a Provider select | none of the three; the Provider is the prototype's own read-only variant of that row | *A create form asks for what constrains the work that follows **and names where the rest lives*** — the *Created as a draft* card on each page is where the rest is named: a new draft reads through every tool and writes through none, and enabling a write is the act the editor exists for; the judge's evidence starts at what the lab has proven and is changed there. The Architecture row is the one of the three rule 5 reaches, because `AgentArchitecture` has a single member and *a choice of one is not a choice* — which is also why the Provider is drawn as a value rather than as a select |
+| Two hints on New scenario | "It does not have to be unique, but two scenarios with one name are hard to tell apart"; "Creating the scenario freezes the ticket at its current version" | a shop answers to one scenario of each name, and Create is refused by a name it already holds; and the hint splits the freeze — the ticket and the documents it suggests are fixed by creating, the ticket *version* is pinned by publishing the scenario | both sentences describe a lab that is not this one: `_require_free_name` refuses a duplicate at create and at replace, and `ScenarioResolution.ticket_version` reads the ticket's latest published version, which `publish_scenario` is what pins. *Every hint names the code that makes it true* (*The form language*), which is the same reading `lib/fieldRules.ts` already applies to the prototype's product Status and Shop slug rows |
+| The composed objectives and mutations | the chips alone, under "Bindings are added in the editor once the scenario exists" | the chips, and an ordered list under them naming each composed template and the bindings to this shop it still owes | *A create form asks for what constrains the work that follows **and names where the rest lives*** — the same sentence that licensed the three cards above, and the list is where the rest is named. The plan asks for the templates *with a binding each*, and a binding cannot be made before the first write: every binding a scenario writes is to an object of its own shop, and the pickers that offer those read `ScenarioResourcesSchema`, which is addressed under a scenario that does not exist until Create is pressed. What composing *can* carry it does — the page reads each composed template's own draft, so the severity and the literal defaults its author chose ride in with the instance exactly as they do in the editor |
 
 Two items the handoff names are not built and not refused: Georgia on the results' stat
 numerals, and the `open` button verb and `document` chip kind. Each lands with the surface that
@@ -220,9 +222,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   the same rule as any editor, and its running write stands down when the operator leaves. **A
   second write is sent only where the form asked for something the create request could not
   carry**, so the same page is a one-write create when it did not, and registers nothing.
-  Built for the shop, the order, the profile, the identity, the agent configuration, the judge
-  and the two block libraries; *planned*, Slice 14 for the scenario. **A product is the
-  exception**: it is a row of the shop draft rather than a
+  Built for the shop, the order, the profile, the identity, the scenario, the agent
+  configuration, the judge and the two block libraries — every create the workspace has. **A
+  product is the exception**: it is a row of the shop draft rather than a
   definition, so *New product* appends an empty one and opens its editor, and the handle it is
   addressed by is answered there. Ticket authoring stays inside the three-pane screen.
 - **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
@@ -238,7 +240,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   validation message under the control, in its accessible description. `blockedButtonClasses`
   in `lib/ui.ts` is that weight — deliberately outside the button table, because every row of
   it is swept for a hover and a focus ring that a permanently disabled control can never show.
-  The eight create pages wear it and nothing else does; Publish, Start, Save connection and
+  The nine create pages wear it and nothing else does; Publish, Start, Save connection and
   Compose adopt it in Slice 22, which also puts the validation message on the `Field` row.
 
 ## Lists and counts
