@@ -5,9 +5,9 @@ Status: current — 2026-09-20
 ## Authoritative direction
 
 The approved product is the Simulation Studio and Experiment Lab in
-`docs/product-direction.md`, accepted by ADR 0011. The current application is a POC baseline. Future
-work follows the redesigned roadmap in `docs/PLAN.md`, not the former instruction to add Vercel AI
-SDK immediately.
+`docs/product-direction.md`, accepted by ADR 0011, and `docs/architecture.md` describes the
+application that implements it. Future work follows the roadmap in `docs/PLAN.md`, not the former
+instruction to add Vercel AI SDK immediately.
 
 ## Accepted product decisions
 

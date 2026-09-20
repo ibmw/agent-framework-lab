@@ -4,12 +4,12 @@ A controlled customer-support simulation lab for configuring synthetic e-commerc
 running one or two agent implementations against equivalent isolated state, and comparing their
 behavior with objective evidence.
 
-The backend still carries a proof of concept for deterministic fixtures, safe tool-mediated actions,
-durable conversations, traces, and framework-neutral adapters. The approved target product is the
-Simulation Studio and Experiment Lab described in
-[`docs/product-direction.md`](docs/product-direction.md); its first surfaces — the versioned shop
-and extensible catalog, and the Studio workspace shell — are implemented. The POC's persona-first
-workflow and hard-coded scenarios are not the target roadmap.
+The product is the Simulation Studio and Experiment Lab described in
+[`docs/product-direction.md`](docs/product-direction.md): versioned shops, customers, tickets and
+scenarios; agent configurations run behind a framework-neutral port; isolated two-arm experiments
+with deterministic evaluation, a versioned judge, traces, history, replay and fork.
+[`docs/architecture.md`](docs/architecture.md) describes the application as built and lists what
+remains of the original proof of concept, which is kept working but not extended.
 
 The web app opens on the shop workspace: create a shop, author its catalog and support knowledge,
 check the publish gate, and publish an immutable version.
