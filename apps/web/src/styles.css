@@ -36,6 +36,17 @@
   --color-admin-surface: #ffffff;
   --color-admin-sidebar: #f7f7f8;
   --color-admin-border: #e1e3e5;
+  /*
+   * The field border, the second of the handoff's token additions (design-direction, "the
+   * workspace refresh"). The README's token table gives it its own row — `#c9cccf`, "add, or
+   * use `admin-border` darkened" — because a control a reader may type into has to read as a
+   * control against the card it sits on, and `--color-admin-border` above draws the card. It
+   * is added rather than derived: `admin-border` darkened by any single ratio does not land on
+   * this value, and a role the handoff names deserves a name. Its first consumer is the shared
+   * field surface in `lib/ui.ts`. The search box is not one of them — the prototype borders its
+   * eleven search fields `#bdc7cf`, and `searchFieldClasses` keeps that literal.
+   */
+  --color-admin-field-border: #c9cccf;
   --color-admin-ink: #202223;
   --color-admin-ink-soft: #42474c;
   --color-admin-muted: #6d7175;

@@ -145,6 +145,30 @@ behaviour stops being reviewable as a layout slice.
   The fix is small — the editor already holds every product in `content` — and it is behaviour, so
   it wants the slice that also re-ticks the line in `docs/PLAN-UX.md` rather than a drive-by.
 
+Found on 20 September 2026 while giving the shared field control the handoff's metrics
+(`feat(web): give every field the handoff's own metrics and border`). Reported rather than fixed
+for a reason of its own: the slice that found it moves metrics on one shared string, and
+narrowing three fields that have drawn full width for as long as they have existed is a visual
+change to three editors that its brief does not cover and its reviewer could not check against a
+design.
+
+- **Three fields are full width and have never been anything else.**
+  `fieldSurfaceClasses` in `apps/web/src/lib/ui.ts` has carried `w-full` since before the field
+  slice, and three call sites compose a narrower width onto it: `OrderEditorPage.tsx:432` (`w-20`,
+  a line-item quantity), `OrderEditorPage.tsx:576` (`w-32`, a total) and
+  `ExperimentResultsPage.tsx:364` (`w-48`, the tag box). None of the three has any effect.
+  Tailwind emits its utilities in a fixed order rather than the order a caller writes them, and in
+  the built stylesheet `.w-20` (byte 13079), `.w-32` (13155) and `.w-48` (13193) all come *before*
+  `.w-full` (13326), so the shared width wins every time. The source reads as though three fields
+  are narrow and the screen has always drawn them full width, which is the worst of both: nobody
+  reviewing the call site sees a bug, and nobody looking at the screen sees the intent.
+  The `max-w-*` sites — five in `ProductEditorPage` and one in `CustomerEditorPage` — are
+  unaffected, because a maximum and a width do not compete.
+  The fix is a decision rather than a deletion: either the three widths are wanted, in which case
+  the shared string stops declaring `w-full` and every consumer that relies on it says so, or they
+  are not, in which case they go. Both are layout changes across the editors, which is why a slice
+  that only moves a metric reports this and leaves it.
+
 ## Recommended next steps
 
 1. Milestone 0.5 is complete. The design direction is selected and recorded in

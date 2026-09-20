@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import themeSource from "../styles.css?raw";
 import {
   type ButtonVerb,
   buttonIcon,
@@ -104,6 +105,101 @@ describe("field controls", () => {
       expect(classes).toContain("focus:border-lab-primary");
       expect(classes).toContain("focus:ring-lab-primary/20");
       expect(classes).not.toContain("lab-accent");
+    }
+  });
+
+  /**
+   * What the two class sets genuinely share: the box the handoff draws round both of them.
+   * Height, vertical padding and type size are *not* here, because the prototype gives the
+   * input and the text area different ones — see the two cases below.
+   */
+  it("draws both controls on one box: the field border, 9px, 14px of side padding", () => {
+    for (const classes of [fieldControlClasses, textAreaClasses]) {
+      expect(classes).toContain("border-admin-field-border");
+      expect(classes).toContain("rounded-[9px]");
+      expect(classes).toContain("px-3.5");
+    }
+  });
+
+  /**
+   * The handoff's `Inputs:` bullet, under *The form pattern*: `min-height:44px;
+   * padding:10px 14px; border:1px solid #c9cccf; border-radius:9px; font-size:14.5px`. The two
+   * values that belong to the single-line control alone are asserted on it and refused on the
+   * text area, so folding them back into the shared string fails here.
+   */
+  it("gives the single-line control the form pattern's own padding and size", () => {
+    // 10px of vertical padding, on Tailwind's 4px step.
+    expect(fieldControlClasses).toContain("py-2.5");
+    expect(fieldControlClasses).toContain("text-[14.5px]");
+    expect(textAreaClasses).not.toContain("py-2.5");
+    expect(textAreaClasses).not.toContain("text-[14.5px]");
+  });
+
+  /**
+   * And the text area takes the prototype's, which the `Inputs:` bullet summarises away: all
+   * seven of them are `11px 14px` at 14px on a 1.6 leading (`Workspace.dc.html`:530, 1677,
+   * 1724, 1807, 1954, 3205, 3515), identical in every value.
+   */
+  it("gives the text area the seven the prototype draws, not the input's", () => {
+    expect(textAreaClasses).toContain("py-[11px]");
+    expect(textAreaClasses).toContain("text-[14px]");
+    expect(textAreaClasses).toContain("leading-[1.6]");
+  });
+
+  /**
+   * The README writes `min-height`, and the distinction is the point: a `<select>`, a date
+   * input and a control whose value wraps all have to be able to grow. A fixed `h-…` on either
+   * string would clip them, so its absence is asserted rather than assumed — this is what
+   * `h-10` used to be.
+   */
+  it("gives the control a floor of 44px and no ceiling", () => {
+    expect(fieldControlClasses).toContain("min-h-[44px]");
+    expect(fieldControlClasses).not.toMatch(/(^|\s)h-\S/);
+    expect(fieldControlClasses).toContain("box-border");
+  });
+
+  /** A multi-line control keeps its own taller floor instead of the 44px one. */
+  it("floors the text area on its own height rather than the control's", () => {
+    expect(textAreaClasses).toContain("min-h-24");
+    expect(textAreaClasses).not.toContain("min-h-[44px]");
+    expect(textAreaClasses).not.toMatch(/(^|\s)h-\S/);
+  });
+
+  /**
+   * The border is the refresh's second token addition and it exists to be *distinct from the
+   * card's*. Asserted against `styles.css` because the class name alone cannot say that: a
+   * token defined as the card's grey would satisfy every check above and still make every
+   * field on the workspace vanish into the card behind it. The card's own value is read rather
+   * than written down — what this test owns is the field's value and the inequality, and
+   * pinning `admin-border` here would fail a field test for a card change.
+   */
+  it("defines the field border as its own value, not the card's", () => {
+    const read = (name: string) =>
+      new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`).exec(themeSource)?.[1];
+
+    expect(read("admin-field-border")).toBe("#c9cccf");
+    expect(read("admin-field-border")).not.toBe(read("admin-border"));
+    // …and the card border is a token at all, so the line above cannot pass on two undefineds.
+    expect(read("admin-border")).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  /**
+   * The regression this slice could cause. `searchFieldClasses` is the prototype's own 38px
+   * `#bdc7cf` box (UI-6) and is built separately on purpose; nothing above may reach it, and
+   * nothing here may fold it back in. Its own metrics are asserted further down — what is
+   * asserted here is the *disjointness*, which is the part a later reader will not expect.
+   */
+  it("leaves the search box out of the form pattern's metrics", () => {
+    expect(searchFieldClasses).not.toContain("min-h-[44px]");
+    expect(searchFieldClasses).not.toContain("text-[14.5px]");
+    expect(searchFieldClasses).not.toContain("admin-field-border");
+    expect(searchFieldClasses).not.toContain("rounded-[9px]");
+    // And the other way round: neither form control has any of the search box's five values.
+    for (const classes of [fieldControlClasses, textAreaClasses]) {
+      expect(classes).not.toContain("min-h-[38px]");
+      expect(classes).not.toContain("text-[13px]");
+      expect(classes).not.toContain("#bdc7cf");
+      expect(classes).not.toContain("pl-9");
     }
   });
 });

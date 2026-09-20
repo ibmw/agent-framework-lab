@@ -358,7 +358,10 @@ function NotesAndTags({
           </label>
           <input
             id="experiment-tag"
-            className={`${fieldControlClasses} h-8 w-48`}
+            // `h-8` used to shrink this to the small button beside it; the shared control is a
+            // 44px floor now (UI-7) and a fixed height under a floor is dead code, so it is
+            // gone rather than left to read as a metric this field still has.
+            className={`${fieldControlClasses} w-48`}
             placeholder="read-check-gap"
             value={tag}
             onChange={(event) => setTag(event.target.value)}

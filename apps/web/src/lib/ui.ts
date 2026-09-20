@@ -54,12 +54,95 @@ export const surfaceClasses =
  */
 export const cardTitleClasses = "font-display text-[17px] font-bold tracking-[-0.01em]";
 
+/**
+ * The ground every form control is drawn on: what the classes below share, and no more.
+ *
+ * Only the values that are one decision for every control live here — the box, the radius, the
+ * horizontal padding, the border and the focus pair. **Height, vertical padding and type size
+ * are per-export**, because the handoff gives the input and the text area different ones and a
+ * shared string that carried the input's would make every text area a caller's override away
+ * from being right.
+ *
+ * `tmp/design-frames/README.md`, *The form pattern*, `Inputs:` bullet:
+ *
+ * ```
+ * min-height: 44px; padding: 10px 14px; border: 1px solid #c9cccf;
+ * border-radius: 9px; font-size: 14.5px
+ *   focus: border-color:#1d6241; box-shadow:0 0 0 3px rgb(29 98 65 / 20%)
+ * ```
+ *
+ * The border is `--color-admin-field-border`, added in `styles.css` for this: the README's
+ * token table gives the role its own row, and a field that borrowed the card's `#e1e3e5`
+ * disappeared into the card. The radius is the README's *Radii* line ("9px fields"), which
+ * `rounded-lg` missed by a pixel. The focus pair is unchanged from UI-1.
+ *
+ * **The census: the prototype draws five classes of control, and this file builds three.**
+ * Counted over every one of the 107 native `input`/`select`/`textarea` elements in
+ * `Workspace.dc.html` — the four classes below account for 101, and the remaining six are
+ * listed after them, because a census that silently drops its remainder is not a census:
+ *
+ * - **67 at `min-height:44px`, `#c9cccf`, 9px, mostly 14.5px** — the form-row control, which
+ *   is `fieldControlClasses`.
+ * - **11 at 38px, `#bdc7cf`, 8px, 13px** — the index search box. A separate class set here
+ *   (`searchFieldClasses` below) and deliberately untouched by this constant: UI-6 settled its
+ *   metrics and `docs/design-direction.md` records why the `Inputs:` bullet, which scopes
+ *   itself to "107 rows", does not reach it.
+ * - **16 at 42px or 40px, `#c9cccf`, 13–13.5px** — thirteen compact controls in the list
+ *   sub-editors and the Settings provider card (`:2867`, `:2974`, `:3084`, `:3109`, `:3110`,
+ *   `:3135`, `:3672`, `:3673`, `:3816`, `:3817`, `:4018`, `:4038`, `:4053`) and the three on
+ *   the History filter bar (`:2677`, `:2678`, `:2679`).
+ * - **7 text areas, `#c9cccf`, 9px, 14px, `11px 14px`, `line-height:1.6`, no `min-height`**
+ *   (`:530`, `:1677`, `:1724`, `:1807`, `:1954`, `:3205`, `:3515`) — identical in all six
+ *   values, which is `textAreaClasses`.
+ *
+ * And the six the four classes leave over: `:940` and `:941` are status **radios**, which are
+ * not fields and take none of this; `:965` and `:2650` are borderless 28px inputs sitting
+ * *inside* a bordered chip strip; `:1003` and `:1004` are the variant table's currency select
+ * and price input, borderless inside a 38px composite cell.
+ *
+ * **What is flattened, and what is not.** The sixteen compact controls are flattened into
+ * `fieldControlClasses`, as a departure from the prototype: no compact component exists in this
+ * workspace to give a second size to — every sub-editor add-form row and all eight
+ * `ExperimentHistoryPage` filters already reach for this string — and minting one with no
+ * caller asking for it is the primitive-without-a-consumer the house rule refuses. The cost is
+ * 2–4px of height and half a point of type on those thirty-odd controls. The text area is
+ * **not** flattened: it is a distinct export with its own consumers, so the one-component
+ * argument does not reach it, and the prototype's seven are consistent enough to be a class the
+ * `Inputs:` bullet summarised away — the case `docs/design-direction.md`'s narrowed clause
+ * hands to the prototype. It keeps 14px, `11px 14px` and `line-height:1.6`.
+ *
+ * **The four borderless controls have no class here and are a departure that predates this
+ * slice**: `ChipListField`, the results tag box and the variant table's cells all draw a
+ * bordered standalone field where the prototype draws a borderless one inside a composite.
+ * What this slice changes is their size, not their shape. It is written up in
+ * `docs/implementation-plan.md` UI-7 rather than repaired, because giving a chip strip or a
+ * composite cell its own component is a component slice.
+ *
+ * One reading to save the next person a measurement: every `<select>` in the prototype has
+ * **zero** vertical padding (`0 12px` on twenty-nine of them, `0 11px`, `0 10px` and `0 7px`
+ * on the rest) where `fieldControlClasses` gives `py-2.5`. It changes nothing — `min-height`
+ * governs a select's height and the text centres in it either way — and one padding for every
+ * control is worth more than matching a value that has no effect.
+ */
 const fieldSurfaceClasses =
-  "w-full rounded-lg border border-admin-border bg-admin-surface px-3 text-sm text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65";
+  "w-full rounded-[9px] border border-admin-field-border bg-admin-surface px-3.5 text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65";
 
-export const fieldControlClasses = `box-border h-10 ${fieldSurfaceClasses}`;
+/**
+ * The single-line control: the handoff's `min-height:44px`, `10px 14px` and `14.5px`.
+ *
+ * A floor rather than the `h-10` this used to be, because the README writes `min-height` and
+ * the difference is not pedantic — the same string paints a `<select>`, an
+ * `<input type="date">` whose picker glyph is taller than the text beside it, and a control
+ * whose value wraps. A fixed height clips all three; a floor lets them grow and holds the
+ * target size for a pointer everywhere else.
+ */
+export const fieldControlClasses = `box-border min-h-[44px] py-2.5 text-[14.5px] ${fieldSurfaceClasses}`;
 
-export const textAreaClasses = `box-border min-h-24 py-2 ${fieldSurfaceClasses}`;
+/**
+ * The multi-line control, at the prototype's own metrics rather than the input's: 14px on a
+ * 1.6 leading, `11px 14px`, and a floor of its own in place of the 44px one.
+ */
+export const textAreaClasses = `box-border min-h-24 py-[11px] text-[14px] leading-[1.6] ${fieldSurfaceClasses}`;
 
 export const fieldLabelClasses = "grid gap-1 text-xs font-semibold text-admin-muted";
 

@@ -443,7 +443,14 @@ export function AgentConfigurationEditorPage() {
             <textarea
               ref={promptRef}
               aria-label="Prompt template"
-              className={`${textAreaClasses} min-h-56 font-mono text-[12.5px]`}
+              // The size is `!` because it has to beat the one it overrides: `textAreaClasses`
+              // sets `text-[14px]` (UI-7), and which of two `text-…` utilities wins is Tailwind's
+              // own emit order — lexical on the candidate text for arbitrary values — not the
+              // order a caller writes them. `12.5` sorts before `14`, so a plain `text-[12.5px]`
+              // here would lose to the shared string and silently enlarge the template editor.
+              // Lexical, not numeric: the built sheet emits `.text-[14.5px]` *before*
+              // `.text-[14px]`, so an override is not safe merely because its number is smaller.
+              className={`${textAreaClasses} min-h-56 font-mono text-[12.5px]!`}
               value={content.prompt}
               onChange={(event) => edit({ ...content, prompt: event.target.value })}
             />

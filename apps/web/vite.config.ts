@@ -43,6 +43,12 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // Vitest's CSS enabler matches `styles.css?raw` as a stylesheet and stubs every stylesheet
+    // to `export default ""`, so `?raw` would hand a test the empty string rather than the file.
+    // `lib/ui.test.ts` reads the `@theme` block as text to assert a token's written value, which
+    // is the one thing a compiled stylesheet no longer has. Only the `?raw` form is let through:
+    // a real stylesheet import stays stubbed, which is what keeps the unit suite off Tailwind.
+    css: { include: [/\.css\?raw$/] },
     include: ["src/**/*.test.{ts,tsx}", "tests/config/**/*.test.ts"],
     setupFiles: "./src/test/setup.ts",
   },

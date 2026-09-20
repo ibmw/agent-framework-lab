@@ -986,6 +986,26 @@ and `2px solid #1d6241` offset 2px on custom controls; the selected-chip trio (`
 `#b6d9c4` in `#1d6241`). None of them replaces an existing token, and the house rule holds: a
 token no page uses is not a slice.
 
+> Amended as built (2026-09-20, `ui/field-control`). The field border landed as
+> `--color-admin-field-border` `#c9cccf`, added rather than derived — no single darkening of
+> `admin-border` `#e1e3e5` reaches it — with the shared field surface in `lib/ui.ts` as its first
+> and only consumer. All three additions are now built, and the input rules the amendment on the
+> form row above deferred (`min-height:44px`, the border, `14.5px`) are applied, together with the
+> other two values of the same `Inputs:` bullet: `10px 14px` of padding and the 9px radius the
+> README's *Radii* line gives a field.
+>
+> **The narrowed clause decided two of the prototype's five classes of control, in opposite
+> directions**, which is worth recording because the same clause licenses both. The sixteen
+> compact 42/40px fields are **flattened** into the form control: the licence there is that no
+> compact component exists in this workspace to give a second size to, so the flattening is a
+> departure from the prototype and is written up with its counts. The seven text areas are
+> **kept apart** at the prototype's own 14px, `11px 14px` and 1.6 leading: `textAreaClasses` *is*
+> a second component, so that licence is simply absent and the clause hands the class to the
+> prototype. The lesson for a later slice is that "one component serves both" is a fact about
+> this codebase to be checked, not a phrase that carries a flattening. The counts and the line
+> references are in `docs/implementation-plan.md` UI-7. The eleven search boxes keep the metrics
+> UI-6 gave them and are untouched.
+
 **One form row, on every editor.** Label and hint share a left column of `1 1 210px` capped at
 36ch, the control takes the right, both top-aligned, and the row wraps to stacked at narrow
 widths. This **generalises the field-hint convention** recorded above rather than replacing it:

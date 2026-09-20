@@ -448,9 +448,133 @@ consumer is the whole workspace.
 
 The focus ring the handoff asks for on fields is already there from UI-1 and is not part of this.
 
-*Checks:* the existing page tests, which assert on controls rather than on their metrics, plus
-the whole Playwright suite — a 44px minimum changes where things sit on every surface a spec
-scrolls.
+**As built.** The shared strings in `lib/ui.ts` now carry the whole `Inputs:` bullet rather than
+the three values named above, because the bullet is one declaration and leaving two of its five
+behind would have left the field at the card's 8px radius and 12px padding with no reason
+recorded anywhere; the README's *Radii* line says "9px fields" outright, and a later slice to
+move one shared string by one pixel is the absurd outcome. What is shared is the box —
+`border-admin-field-border`, `rounded-[9px]`, `px-3.5` — and **height, vertical padding and type
+size are per-export**, because the prototype gives the input and the text area different ones and
+a shared string carrying the input's would leave every text area one caller override away from
+being right. Thirty-three files consume the two strings and none was edited for the metrics; two
+were edited for an override, below.
+
+**`min-height`, not a height.** `h-10` became `min-h-[44px]`, which is what the README writes and
+not a transcription nicety: the same string paints a `<select>`, an `<input type="date">` whose
+picker glyph is taller than the text beside it, and controls whose value can wrap. A fixed height
+clips all three. `box-border` stays, so the 44px is the bordered box.
+
+**The field border is a token.** `--color-admin-field-border: #c9cccf` in `styles.css`, the second
+of the refresh's three token additions, arriving with its first consumer as the house rule asks.
+Added rather than derived from `admin-border`: the README's table offers "add, or use
+`admin-border` darkened", and no single darkening ratio takes `#e1e3e5` to `#c9cccf`. The point of
+the token is that it is *not* the card's border, so `lib/ui.test.ts` reads both out of
+`styles.css` and asserts they differ — a class name alone cannot say that, and a token defined as
+the card's grey would satisfy every other check while making every field on the workspace vanish
+into the card behind it. The card's value is read rather than written down there, so a change to
+the card cannot fail a field test.
+
+**The census: the prototype draws five classes of control, and this file builds three.** Counted
+over every one of the 107 native `input`/`select`/`textarea` elements in `Workspace.dc.html`.
+Four classes account for 101; the remaining six are listed with them, because a census that drops
+its remainder is not a census.
+
+- **67 at `min-height:44px`, `#c9cccf`, 9px, mostly 14.5px** — the form-row control. This one.
+- **11 at 38px, `#bdc7cf`, 8px, 13px** — the index search box, which UI-6 settled and this slice
+  does not touch. It exists here as a class of its own (`searchFieldClasses`), built separately,
+  and the new test asserts the two sets share none of each other's values in either direction.
+- **16 at 42px or 40px, `#c9cccf`, 13–13.5px** — thirteen compact controls in the list
+  sub-editors and the Settings provider card (`:2867`, `:2974`, `:3084`, `:3109`, `:3110`,
+  `:3135`, `:3672`, `:3673`, `:3816`, `:3817`, `:4018`, `:4038`, `:4053`), and the three on the
+  History filter bar (`:2677`, `:2678`, `:2679`).
+- **7 text areas, `#c9cccf`, 9px, 14px, `11px 14px`, `line-height:1.6`, no `min-height`**
+  (`:530`, `:1677`, `:1724`, `:1807`, `:1954`, `:3205`, `:3515`) — identical in all six values.
+- **And the six left over.** `:940` and `:941` are the status **radios**, which are not fields and
+  take none of this. `:965` and `:2650` are borderless 28px inputs sitting *inside* a bordered
+  chip strip. `:1003` and `:1004` are the variant table's currency select and price input,
+  borderless inside a 38px composite cell.
+
+**One class flattened, one kept apart.** The sixteen compact controls are flattened into
+`fieldControlClasses`, as a departure from the prototype: no compact component exists here to
+give a second size to — every sub-editor add-form row and all eight `ExperimentHistoryPage`
+filters already reach for that string — and minting `compactFieldControlClasses` with no caller
+asking for it is the primitive-without-a-consumer the house rule refuses. The cost is 2–4px of
+height and half a point of type on those thirty-odd controls. The text area is **not** flattened,
+and the first draft of this slice was wrong to: `textAreaClasses` is a distinct export with its
+own consumers, so the one-component argument does not reach it, and the prototype's seven are
+consistent enough to be a class the `Inputs:` bullet summarised away. It keeps 14px, `11px 14px`
+and `line-height:1.6`. Both readings are `docs/design-direction.md`'s **narrowed** clause — a
+distinction the prototype draws consistently across a class — and neither is the README-wins
+clause, which settles one value against one value.
+
+**The four borderless controls are a departure that predates this slice, and it is now on the
+record.** The prototype's `:965`, `:2650`, `:1003` and `:1004` are borderless inputs inside a
+composite; their counterparts here — `ChipListField.tsx:172`, `ExperimentResultsPage.tsx:364` and
+the variant cells at `ProductEditorPage.tsx:609`, `:655`, `:695`, `:725`, `:749` — are bordered
+standalone fields and were before this slice too. What this slice changes is their size. It bites
+hardest on the results tag box: at 44px it now sits beside a 32px small button in an
+`items-center` row, where the prototype draws it 28px and borderless inside a tag strip. Giving a
+chip strip or a composite cell a component of its own is a component slice and not this one, so
+this is recorded rather than repaired.
+
+**One reading that saves a later measurement.** Every `<select>` in the prototype has **zero**
+vertical padding — `0 12px` on twenty-nine of them, `0 11px`, `0 10px` and `0 7px` on the rest —
+where `fieldControlClasses` gives `py-2.5`. It changes nothing: `min-height` governs a select's
+height and the text centres in it either way, and one padding for every control is worth more
+than matching a value with no effect.
+
+**The overrides the shared strings had to be checked against.** Fifteen call sites compose
+`fieldControlClasses` or `textAreaClasses` with something of their own. Eleven add only a width
+(`w-20`, `w-32`, `w-48`, two `min-w-40 flex-1`, and six `max-w-*` — five in `ProductEditorPage`
+and `CustomerEditorPage.tsx:558`); three add `font-mono`, one of them
+(`JudgeConfigurationEditorPage.tsx:237`) with `min-h-56` beside it, which works because
+`.min-h-24` is emitted at byte 12664 and `.min-h-56` at 12711. None of those fourteen touches a
+metric this slice moved. One does, and one more is a width site that also carried a height:
+
+- `AgentConfigurationEditorPage`'s prompt-template editor carries `text-[12.5px]`, which used to
+  override the base's `text-sm`. Which of two `text-…` utilities wins is **Tailwind's own emit
+  order — lexical on the candidate text for arbitrary values — not the order a caller writes
+  them**: `.text-[12.5px]` is emitted at byte 23060 of the built sheet and `.text-[14px]` at
+  23272, so against the new base the override would have lost and the template editor would have
+  silently grown, the "44px on ten pages and 40px on one" failure in reverse. It is now
+  `text-[12.5px]!`, with the reason in a comment at the site. The alternatives were tried and do
+  not work: a `@theme` size token is emitted *after* the arbitrary sizes, so it restores nothing.
+  **Lexical, not numeric**, and the difference is the trap for whoever comes next: the same sheet
+  emits `.text-[14.5px]` at 23237 and `.text-[14px]` at 23272, so a `text-[14.5px]` override on
+  the text area's new 14px base would lose — the opposite of what "by value" would predict. An
+  override is not safe merely because its number is the smaller one.
+- `ExperimentResultsPage`'s tag box — one of the eleven width sites, `w-48` — also carried `h-8`,
+  to match the small button beside it. A fixed height under a 44px floor is dead code, so it is
+  removed rather than left to read as a metric the field still has; the box is now the standard
+  control, and the paragraph above records what that leaves beside the button.
+
+**The unit test reads `styles.css` as text**, which needs `test.css: { include: [/\.css\?raw$/] }`
+in `vite.config.ts`: Vitest's CSS enabler matches `styles.css?raw` as a stylesheet and stubs every
+stylesheet to `export default ""`, so `?raw` would otherwise hand the test an empty string. Only
+the `?raw` form is let through, so a real stylesheet import stays stubbed and the unit suite stays
+off Tailwind. This is the same `?raw` route `lib/fieldRules.test.ts` and `lib/enumLabels.test.ts`
+already take to read a source file. `tsconfig.app.json`'s `types` allowlist is **not** widened:
+adding `node` to it would make `process`, `Buffer`, `require` and `NodeJS.Timeout` visible to every
+browser module and change what `setTimeout` returns, which one test does not buy.
+
+**A pre-existing defect found on the way and not fixed here**: `w-full` on the shared surface has
+always beaten the `w-20`, `w-32` and `w-48` overrides, so three fields that read as narrow in the
+source have never been. It is in `docs/decisions-and-next-step.md` under *Known application
+defects, found but not fixed*.
+
+**Nothing in the Playwright suite moved.** All 35 specs pass unchanged. They assert on controls by
+role and name and on tour anchors by visibility, and a control growing from 40px to 44px inside a
+wrapping flex row moves nothing out of a viewport or out of a scroll.
+
+*Checks:* `lib/ui.test.ts` gains seven cases — the box both controls share; the single-line
+control's own padding and size, refused on the text area so folding them back into the shared
+string fails here; the text area's `11px 14px`, 14px and 1.6; the 44px floor with no `h-…`
+ceiling; the text area's own floor and the absence of the control's; the token's value and its
+inequality with the card border; and the disjointness from the search box in both directions.
+Every one was mutation-tested: reverting `h-10`, `text-sm`, `border-admin-border`, `rounded-lg`,
+`px-3`, a fixed height on the control, the text area's metrics back to the input's, a card-grey
+token, and folding the search box into the form pattern each fail exactly the case that should
+catch them. Plus the existing web unit tests and the whole Playwright suite, green.
 
 ### UI-8 · The rules the rows are missing
 `branch: ui/field-hint-copy`
