@@ -1,301 +1,217 @@
 # Design direction
 
-Status: current — 2026-09-20. This document holds the design decisions that govern `apps/web`
-today, stated as rules a slice can be checked against. How each was reached — the census, the
-alternatives, the departures — is `docs/history/design-direction.md`, which is the earlier
-version of this document with every revision kept verbatim. A rule that changes is changed here
-and its reasoning goes there. ADR 0050 says the guidance conventions *are* the sections of this
-document rather than an ADR's restatement; that is still so, and the sections are below under
-shorter names.
+Status: current — 2026-09-20. The design rules that govern `apps/web`, stated once as rules a slice
+is checked against. Values are not restated here: a measurement or a colour that is built lives
+in the code that draws it (`styles.css` for tokens, `lib/ui.ts` for class sets and glyph tables,
+`shell/AppShell.tsx` for the chrome), and one that is not yet built lives in its slice in
+`docs/PLAN-UX.md`. How each rule was reached is `docs/history/design-direction.md`; the
+exploration the direction came from is `docs/history/design-brief.md`. ADR 0050 says the
+guidance conventions *are* sections of this document; they are, under *The form language*.
 
-The forward plan that applies these rules is `docs/PLAN-UX.md`; the model decisions the direction
-implied are ADRs 0012 to 0018 and are not restated.
+## Principles
+
+Carried forward from the brief; they outrank any measurement below.
+
+- **Evidence before opinion.** The conversation is shown beside tools, arguments, confirmations,
+  state changes, errors, traces and objective results. Comparison is never an unexplained score,
+  and no surface declares the fewest tokens or the shortest conversation the winner.
+- **Three evidence layers, kept distinct**: deterministic, LLM-judged, quantitative. Efficiency
+  is read only beside a successful outcome.
+- **Progressive technical depth.** Outcome, then timeline, then trace, then project-owned source,
+  without losing run context.
+- **Reproducibility is visible.** Published versions, fingerprints, configuration and judge
+  versions, replay and fork relationships are reachable without dominating every screen.
+- **Tool-first is legible.** What the agent was handed and what it discovered through tools are
+  told apart on screen.
+- **Honest comparison.** Two arms start from equivalent snapshots; where operator input diverged
+  is recorded and shown, never smoothed over.
+- **Extensible without feeling unbounded.** Editors grow by optional sections and typed
+  attributes, never into one mega-form or a JSON editor.
+- **Status is never colour alone**: a glyph or a word always accompanies it. WCAG 2.2 AA
+  contrast; every workflow keyboard-reachable.
+- **Desktop first, usable narrower.** Every row and card row wraps; nothing is fixed width except
+  the rail, the ticket side panels and the settings column cap. No narrow-width treatment of the
+  live comparison is drawn.
+- **Dense is fine, decorative is not.** No dashboard metrics for their own sake, no oversized
+  status cards, realistic content rather than placeholder text.
+- **Every state is designed for**: empty, draft with findings, published and immutable, tool in
+  flight or refused or in conflict, exact-action confirmation, linked and split input, one arm
+  waiting, objective passed or failed or pending, judge queued or failed or rerun, a historical
+  run with newer versions available, an unsupported capability.
 
 ## Direction
 
-**Direction A, the studio-first workbench**, merged with three strengths of the other two
-candidates: director's notes on the live bench (the scenario's hidden facts and persona guidance
-as an operator-only card), an objectives matrix (one row per objective, one column per arm, with a
-legend) on the bench and the results, and bench zoning (the split conversation takes the width
-and the library rails do not persist into it). The exploration is `docs/design-brief.md`.
-
-**Familiar admin ergonomics, no vendor's branding.** The Studio is a shop-scoped admin workspace
-— persistent resource navigation, index tables with status pills, resource detail pages — in a
-neutral light admin language, with the lab's pine and paper identity in the top bar, the accents
-and the display type. Tickets use the three-pane helpdesk anatomy (list, thread, context panel)
-and the thread authors *history*, never live replies. The scenario editor is a composition
-surface over shared block libraries. The prompt editor renders markdown with inline variable
-chips, a grouped insert menu whose customer, order and ticket facts are visibly non-injectable,
-and a selectable preview context. Desktop is the operating environment; no narrow-width
-treatment is drawn.
-
-**Status is never conveyed by colour alone.** A status pairs a glyph or a word with its colour,
-everywhere.
+**Direction A, the studio-first workbench**, with three strengths taken from the other candidates:
+director's notes on the live bench, an objectives matrix on the bench and the results, and bench
+zoning where the split conversation takes the width. The Studio is a **shop-scoped admin
+workspace** in a neutral light admin language — persistent resource navigation, index tables
+with status pills, resource detail pages — with the lab's pine and paper identity in the top bar,
+the accents and the display type. Tickets use the three-pane helpdesk anatomy and author
+*history*, never live replies. The scenario editor composes shared block libraries. The prompt
+editor renders markdown with inline variable chips and a grouped insert menu whose customer,
+order and ticket facts are visibly non-injectable.
 
 ## Authority — what a UI slice cites
 
-The **whole-workspace prototype** handed over on 19 September 2026 — `tmp/design-frames/
-Workspace.html`, `Workspace.dc.html` for the markup, `README.md` as the handoff, and
-`form-decisions.md` as the locked form language — is the authority for everything that crosses
-screens: chrome, the form row, buttons and colour, list density, search, the tours' placement. It
-is a design reference and not production code, recreated on the primitives the workspace has
-(`styles.css` tokens, `lib/ui.ts` class sets, `components/WorkspaceChrome.tsx`,
-`shell/AppShell.tsx`) with no new UI dependency. The eighteen per-screen frames under
-`tmp/design-frames/DEPRECADED/` still describe a surface's composition where the prototype does
-not contradict them, and a slice names them by number. `tmp/` is not under version control; if
-it is missing, re-export from the canvas named in the history document.
+The **whole-workspace prototype** handed over on 19 September 2026 is the authority for
+everything that crosses screens. It lives under `tmp/design-frames/`, which is not versioned on
+purpose: its values belong in the code, and this document does not copy them either.
 
-A `Frames:` line names the prototype's line for the surface and the numbered frame for its
-composition. Where authorities disagree, in this order:
+| File | Role |
+| --- | --- |
+| `Workspace.html`, `Workspace.dc.html` | The design, and its markup; a `Frames:` line cites a line number of the `.dc.html` |
+| `README.md` | The handoff: chrome, screens, the form pattern, interactions, tokens, type, radii, glyphs |
+| `form-decisions.md` | The locked form language, variant 2 of every component, and why |
+| `DEPRECADED/*.dc.html` | The eighteen per-screen frames of 23 August; still cite a surface's composition where the prototype is silent |
 
-1. **The prototype supersedes a frame** wherever the two disagree.
-2. **Where the README is silent and the prototype is specific, the prototype governs.** The
-   README summarises the prototype and is not a ceiling on it.
-3. **Where the two conflict outright, the README wins** — one stated value for a role against one
-   drawn value for the same role, as the chip hover was (`#f6f7f8` over `#f4f6f7`). The clause
-   settles a value, never a context: a distinction the prototype draws *consistently across a
-   class* of elements (a bound name at 22px against a fixed label at 24px; a sans note-card header
-   against Georgia table and section cards; the eleven 38px search boxes against the ninety 44px
-   form controls) is a rule the README summarised away, and rule 2 hands it to the prototype. A
-   slice may flatten such a class because one component serves both and has no variant yet, but
-   as a **departure**, with the prototype's rule written down so the variant can be added later.
-4. **A README value under a heading that scopes itself is stated for that role only.** The
-   `Inputs:` bullet under *The form pattern* decides a form row's control and nothing else; a
-   control outside that scope is silence, and rule 2 applies.
-5. **Three grounds license keeping what the codebase has**: an explicit release in the handoff
-   (the *Assets* section frees the drawing of a glyph); a repository rule that outranks a mockup
-   (an accessible name specs and tours click; a value that already is a token); or another slice
-   owning the decision. "The handoff is silent" is not one of them.
+Where they disagree, in this order:
+
+| Rule | Decides |
+| --- | --- |
+| 1. The prototype supersedes a frame | wherever the two disagree |
+| 2. README silent, prototype specific | the prototype governs; the README summarises and is not a ceiling |
+| 3. README states a value, prototype draws another, same role | the README wins — one value against one value, never a context; a distinction the prototype draws consistently across a class is a rule the README summarised away, and rule 2 hands it to the prototype. Flattening such a class because one component serves it is a **departure**, recorded with the prototype's rule |
+| 4. A README value under a heading that scopes itself | is stated for that role only; outside it, rule 2 |
+| 5. Keeping what the codebase has | is licensed by an explicit release in the handoff, a repository rule that outranks a mockup (accessible names specs click; a value that already is a token), or another slice owning the decision. "The handoff is silent" is not a licence |
 
 Every departure is written in one sentence in the slice's record. **The primitive ships with its
-first consumer**: a component, a token or a preference no page uses is not a slice.
+first consumer**: a component, token or preference no page uses is not a slice. **Lab-level
+surfaces** (`/settings`, `/glossary`) are frameless and built from the existing chrome.
 
-**Lab-level surfaces are frameless.** `/settings` and `/glossary` belong to the lab rather than
-to a shop and are built from the existing chrome, like the shops index, the four shop-setup pages
-and the identity and judge listings. A lab-level page that needed a layout language of its own is
-the signal that the set has to grow.
+## Departures from the handoff, in force
+
+Each is a deliberate difference between what the code draws and what the handoff states, with
+the rule that licensed it. A slice that touches one revisits it; none is an oversight.
+
+| What | Handoff | Built | Why |
+| --- | --- | --- | --- |
+| Primary token | redefine `lab-accent` to pine | new `lab-primary`; the clay stays on trace bars, the review star, a ticket's emphasis and the armed seed | those four are not the refresh's to repaint |
+| Forest hover | `#22544a` | `lab-ink-hover` `#215347` | pre-existing token, rule 5; revisit with the top bar (Slice 10) |
+| Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px | one component, no variant yet; rule 3 |
+| Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
+| Compact controls | 42/40px in sub-editors and filters | the one 44px control | no compact component exists to size |
+| Filter chips on Tickets, the block libraries, Policies & FAQ | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked; Slice 16 gives documents one |
+| Model on the connection, masked key | drawn | neither | ADR 0052 |
+| Setup checklist | drawn on Shop details | not built | ADR 0044, ADR 0045 |
+| Preferences | seven rows | two now, a third with the confirm slice | a preference no surface reads is not a slice |
+
+Two items the handoff names are not built and not refused: Georgia on the results' stat
+numerals, and the `open` button verb and `document` chip kind. Each lands with the surface that
+first draws it.
 
 ## Navigation and chrome
 
-**Two modes.** The product's *Studio / Bench / History* navigation is realised as two modes in
-the top bar — *Shop fixture* with the shop's rail (Overview, Products, Orders, Customers,
-Tickets, Scenarios; *Shop setup*: Policies & FAQ, Support identities, Tone of voice, Shop
-details) and *Experiment lab* with a rail of Bench, History and a *Library* (agent
-configurations, judges, support identities, objective blocks, mutation blocks). Lab routes live
-outside shop scope; experiment pages carry their shop in the path; the lab keeps a current shop
-through the switcher, which is present in both modes. *Planned*: `docs/PLAN-UX.md` Slice 9, under
-an ADR written before the code. Until it lands the lab is a section of the shop's rail.
+The values are in `shell/AppShell.tsx`; the rules are these.
 
-**The rail.** 216px expanded, a 52px strip collapsed; 17px glyphs expanded and 19px in 36px rows
-collapsed, one glyph per destination; section headings at 10.5px 700 `0.07em` uppercase
-`#8c9196`, which become divider lines when collapsed; active row `#e8f0ed` / `#14352e` 700,
-inactive ink `admin-ink-soft`, hover `#eceef0`; the foot control "Collapse menu" at 12.5px 650
-above a 1px rule, its name, copy and tooltip one string, `aria-expanded` on it. A collapsed row
-keeps its accessible name (`sr-only` label plus `title`). Hidden on the shops index and on
-Settings. The collapsed state is the browser preference the Settings switch also writes
-(`lib/preferences.ts`), never a database row (ADR 0044). `nav[aria-label="Shop workspace"]` is
-what every spec reaches the rail by and does not move. Each entry carries its listing's count
-(*planned*, Slice 11).
-
-**The top bar.** 56px, `#16332d`. App title in Georgia 15px 700 returning to All shops; the shop
-switcher as a button opening a 300px panel (current shop with a check, the others with their
-version, "All shops"); the mode tabs at 13px 600, inactive `#a8c1b8`, active white with a 2px
-underline; *Show me around* and *Settings* on the right, Settings lit with a close glyph while
-its page is open. *Planned*: Slice 10. Today the switcher is a native `<select>` and the tour
-control sits in each page header.
-
-**Settings is three zones**, told apart by surface: editable per-browser preferences on white,
-saved on change; the lab-wide model connection on white with explicit Save and Discard (the
-visible half of ADR 0052); a collapsed read-only runtime zone in grey with a padlock and a "To
-change it:" line naming the variable or file (ADR 0044's character, kept for what is still
-composition). The seed action is a zone of its own below, because it is an action (ADR 0047).
-*Planned*: Slices 18 and 19.
-
-**Tours** (ADR 0045, 0046, 0049). A control per surface, the same subtle button saying *Show me
-around*, whose accessible name says which screen it walks; an overlay (`driver.js`, skinned from
-the tokens below) that dims the surface in the lab's pine, cuts one element out and explains it
-in a paper popover with *Back*, *Next* and a step count. Nothing starts unbidden, nothing is
-remembered, no tour crosses a screen, a popover explains a control and never performs its work,
-and each tour ends where it started. Every step is declared in one table and a Playwright sweep
-holds each anchor to exactly one visible element. The tour adds no frame: it is above the page,
-not in it. The control moves from the page header to the top bar with Slice 10; the table does
-not change.
-
-**Nothing about progress is stored, and no surface reads it.** ADR 0044 refused a stored
-checklist and ADR 0045 removed the derived progress band. The prototype's *Setup checklist* on
-Shop details is the same reading drawn smaller and is refused; the overview's readiness card
-reads one listing and says one sentence (`docs/PLAN-UX.md`, *Decisions the prototype forces*).
+- **Two modes.** *Shop fixture* with the shop's rail and *Experiment lab* with a rail of Bench,
+  History and a Library. Lab routes live outside shop scope, experiment pages carry their shop
+  in the path, and the lab keeps a current shop through the switcher, present in both modes.
+  *Planned*, Slice 9, under an ADR written first; until then the lab is a section of the shop's
+  rail.
+- **The rail** collapses to a strip whose rows keep their accessible names; the collapsed state
+  is a browser preference and never a database row (ADR 0044). It is hidden on the shops index
+  and on Settings. `nav[aria-label="Shop workspace"]` is what every spec reaches it by and does
+  not move. The foot control's name, copy and tooltip are one string. Counts per entry:
+  *planned*, Slice 11.
+- **The top bar** carries the title, the shop switcher as a panel, the mode tabs, *Show me
+  around* and *Settings*, lit while its page is open. *Planned*, Slice 10; today the switcher is
+  a native select and the tour control sits in each page header.
+- **Settings is three zones** told apart by surface: per-browser preferences, saved on change;
+  the lab-wide model connection with explicit Save and Discard (ADR 0052); a collapsed read-only
+  runtime zone with a "To change it:" line (ADR 0044's character). The seed is its own zone
+  (ADR 0047). *Planned*, Slices 18 and 19.
+- **Tours** (ADR 0045, 0046, 0049): one control per surface, the same words everywhere; an
+  overlay above the page, never in it; nothing starts unbidden, nothing is remembered, no tour
+  crosses a screen, a popover explains and never performs; every step declared in one table and
+  swept by Playwright against its surface.
+- **Nothing about progress is stored and no surface reads it** (ADR 0044, ADR 0045). The
+  overview's readiness card reads one listing and says one sentence.
 
 ## Tokens, type and glyphs
 
-The tokens live in `apps/web/src/styles.css`. The refresh changed one and added three; every
-other value is the POC's.
+The tokens are `apps/web/src/styles.css`; the class sets, the button and chip vocabularies and
+their metrics are `apps/web/src/lib/ui.ts`. Rules:
 
-| Role | Value | Token |
-| --- | --- | --- |
-| Page canvas · card · rail | `#f6f6f7` · `#ffffff` · `#f7f7f8` | `admin-canvas`, `admin-surface`, `admin-sidebar` |
-| Card border · field border | `#e1e3e5` · `#c9cccf` | `admin-border`, `admin-field-border` (added; deliberately not a darkening of the card's) |
-| Ink · ink soft · muted | `#202223` · `#42474c` · `#6d7175` | `admin-ink`, `admin-ink-soft`, `admin-muted` |
-| **Primary action** | `#1d6241`, hover `#14452e` | `lab-primary`, `lab-primary-hover` (added) |
-| Forest action | `#173c34`, hover `#215347` | `lab-ink`, `lab-ink-hover` |
-| Destructive | `#9d3028`, hover `#86271f`; tint `#fbf1ee`, border `#d3a49b` | `lab-error`, `-hover`, `-tint`, `-border` |
-| Clay accent | `#c2532d` | `lab-accent` — trace bars, the review star, a ticket's emphasis, the armed seed; **no longer any button's primary** |
-| Selected chip | bg `#eaf5ed`, border `#b6d9c4`, ink `lab-primary`, hover `#ddeee3` | `admin-chip`, `-border`, `-hover` (added) |
-| Published · draft pills | `#dff0e7` / `#0f5132` · `#ffe9a3` / `#5c4813` | `admin-published(-ink)`, `admin-draft(-ink)` |
-| Focus | `0 0 0 3px rgb(29 98 65 / 20%)` on fields; `2px solid #1d6241` offset 2px on custom controls | in `focusRingClasses` |
-
-**Pine is the primary action and the warm red is reserved for destructive.** The clay read as a
-warning while sitting on *Save* and *Publish*, leaving no colour that meant "this one deletes".
-Every button variant — primary, forest, destructive, white secondary, red-bordered secondary —
-carries a hover and a `focus-visible` ring; the hovers are the README's *Interactions* table.
-A destructive control keeps its trash glyph and its verb; red is a second signal.
-
-**Type.** Georgia for display: page titles 24px 700 at `-0.015em` (`PageHeader`), card titles
-17px 700 (`cardTitleClasses`), the ticket thread's subject 19px; the top bar's title 15px. Sans
-for UI at 13–14.5px. `ui-monospace, Menlo` for slugs, ids, model names and env vars. Entry-row
-titles, the per-arm run label and dialog titles stay sans. The prototype's 22px bound-name
-title and its sans note-card header are flattened into one `PageHeader` and one `Card`, as a
-recorded departure under rule 3.
-
-**Radii and shadow.** 12px cards, 9px fields and primary buttons, 8px secondary buttons and
-chips, 7px small chips and filter chips, 999px pills. Cards `0 1px 2px rgb(22 51 45 / 6%)`;
-popovers `0 14px 34px rgb(12 30 25 / 22%)`.
-
-**Glyphs are lucide, on two closed vocabularies in `lib/ui.ts`.** A button names a verb and
-never an icon: `buttonIcon` maps create → plus, save → check, discard → counter-clockwise, edit,
-delete, make default → star, start → play, rerun, fork → branch, publish → upload, results →
-bars. A filter chip names a kind: `filterChipIcon` maps all → cube, published → check, draft →
-dashed circle, attention → warning triangle, referenced → chain, unfulfilled → clock. A chip's
-check means "the published ones" and a button's means "save", so the two tables stay apart.
-Every glyph is `aria-hidden`; the word carries the meaning.
+- **Pine is the primary action; the warm red is destructive and nothing else.** Every button
+  variant carries a hover and a `focus-visible` ring. A destructive control keeps its glyph and
+  its verb; red is a second signal.
+- **Georgia for display** (page and card titles, the thread subject, the bar's title); sans for
+  UI; monospace for slugs, ids, model names and env vars. Entry-row titles, the per-arm run
+  label and dialog titles stay sans.
+- **A button names a verb and a chip names a kind, never an icon.** `buttonIcon` and
+  `filterChipIcon` are two closed tables that stay apart: a chip's check means "the published
+  ones", a button's means "save". Every glyph is `aria-hidden`; the word carries the meaning.
+- **A colour one file uses is a literal, not a token.** A token is minted with its first
+  consumer and named for its role.
 
 ## The form language
 
-`form-decisions.md` chose variant 2 of every component; the rules below are those choices as
-built.
+`form-decisions.md` chose variant 2 of every component; these are the choices as built.
+Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textAreaClasses` and
+`searchFieldClasses`.
 
-**The row** (`Field`, `FieldGroup`, beside `FieldHint`). Label and hint share a left column of
-`1 1 210px` capped at 36ch; the control takes `2 1 330px`; both top-aligned; the row wraps to
-stacked at narrow widths and rows are separated by a `#f1f2f3` rule. A label is `for`/`id`-bound
-to a native control; a row that labels a chip group or a custom widget is a `<fieldset>` named
-by `aria-labelledby`, never a dangling `for`. The shared control is `min-height: 44px`,
-`10px 14px`, the field border, 9px, 14.5px; the text area keeps its own 14px, `11px 14px`, 1.6
-leading; the compact 42/40px controls the prototype draws are flattened into the one control (a
-recorded departure). The index search box is its own class — 38px, `#bdc7cf`, 8px, 13px, a
-magnifier in a 36px left padding, `type="search"` with the native decoration refused — and
-shares none of the form control's values.
-
-**Guidance lives under the field** (ADR 0050). The minority is marked: "(optional)", never a
-star, so a form of only required fields carries no marker. Each free-text field on a create form
-has a placeholder that is a realistic example. Guidance has one carrier per job — tours explain
-a surface, hints explain a field — and `title=` is never the only carrier of a rule: a format or
-a consequence is one muted line under the label, in the control's accessible description. A
-rule about a *set* is a `FieldGroupHint` named by the `<legend>`; where a rule names a value the
-form derives, a second line shows that value where the rule is read ("Default: CHF — Swiss
-franc"). A row carries no hint unless the rule is true on that surface, and every hint sentence
-names the code that makes it true. A field may not claim a severity its gate did not give; where
-a hint mirrors a gate finding it is the gate's sentence character for character, pinned from
-both ends in `lib/fieldRules.ts`. `LocaleField` and `CurrencyField` carry their own rule on every
-surface. A control shared by many rows shares one `sr-only` description rather than a copy per
-row.
-
-**Identifiers are derived, never asked first.** A `DerivedIdField` follows its source until
-edited, restores the suggestion when emptied or when the source changes, previews as "Saved as
-`…`", and refuses a value already taken with the second line in the error treatment, announced.
-An order continues the shop's `{prefix}-{n}` series and a ticket always takes `T`. A suggestion
-derived from a list still loading keeps the field closed (`pending`) until it knows, and closes
-it again when a create moves the list. A saved entry's identifier is displayed and never asked:
-edit mode hands it back untouched, because the draft diff keys on it and a changed key reads as
-a removal and an addition. A variant's SKU and a media reference *are* their keys; both are
-editable and their hint states that consequence.
-
-**No contract union reaches a reader in its wire spelling.** One label table per union in
-`lib/enumLabels.ts`, typed `Record<Union, EnumLabel>` over the generated contract and swept by a
-test that names any member without words; a free-string field is read through `describeValue`,
-which returns the value as the record carries it. An entry carries an explanation only where an
-operator could choose wrong ("Issue refund — refund an order in full or part"), and an
-explanation may only say what the lab enforces. Labels are capitalised except the tables read
-mid-sentence. A status column is a `StatusPill`: an `aria-hidden` glyph naming the axis beside
-the word. A provider's spelling is `MODEL_PROVIDER_LABELS` in `lib/agents.ts`, outside the
-registry because a provider is not a union, and a served label wins over it. The tables that
-have not yet moved into the registry are listed in the history document.
-
-**Where a set comes from decides the control.** A closed set the contract publishes is a select
-over its label table. A register too large or too open to be a vocabulary — a locale, a country —
-is a datalist that suggests, holds the code and echoes the name beneath the field. What the lab
-has *proven* it can run follows the gate's severity: a provider is a select because an unproven
-one is a publish error; a model is a datalist because an unexercised one is a warning; a tone
-override is a datalist of the preview shop's *published* guidelines because setup, not the
-editor, refuses one. A select still offers whatever the payload carries, so an off-list value
-is shown and told about rather than hidden. The provider resets when it leaves its proven set;
-the model resets only when the provider actually moved; everything else stands and is flagged.
-A choice of one is not a choice: a select with exactly one candidate opens on it.
-
-**A list entered one value at a time is one control.** `ChipListField`: each value a chip whose
-remove button is named after it, the rule on the input as a hint, the chips and the field in one
-named `<fieldset>`, duplicates refused and said, respelling through a `normalize` the caller
-passes and previewed as "Saved as `…`" reaching the shape the gate wants. A saved row renders the
-same chips read-only.
-
-**A number field says what it accepts and does not accept what it cannot carry.** The rule is
-the contract's, spelled once in `lib/fieldRules.ts` and used by both the `pattern` and the hint;
-`inputMode` shapes the keyboard. A pattern is not a refusal, so a value the form cannot carry is
-refused at the save and said. A closed set of five is five radios, each named, with the count in
-words beside the stars.
-
-**A create form asks for what constrains the work that follows and names where the rest lives.**
-Currencies are on the shop's create form because a variant cannot be priced outside them;
-channels are not, and the footnote says where they are. Creation is a **page**, not a side card
-— `form-decisions.md`'s layout 2b, 790px, under a sticky header with Cancel and a Create that is
-dashed and disabled with its reason until the form can submit — and lands in the editor of what
-it created. *Planned*: Slices 12 to 14; today the indexes create from a side card.
-
-**A saved row opens where it stands.** `EntryCard` edit mode keeps the header line and replaces
-the body with the row's fields under Save and Cancel. One payload builder per entry, called by
-the add form and the open row alike, and one fieldset component for both. One row open at a
-time per list, the siblings' Edit disabled with a line saying why, and that an open row's typing
-is not in the draft until Save. Cancel writes nothing. The open row is a named form ("Edit
-{entry}"), and Edit, Save, Cancel and Remove are named after the row. A refusal belongs to the
-builder's neighbours: what one path refuses the other refuses too. The variants table keeps
-price, availability and stock as live cells.
-
-**An editor says what is unsaved and asks before it is lost** (ADR 0051). The header shows
-*Discard changes* beside *Save draft* while there is something to save and "All changes saved"
-in a polite live region when there is not; a disabled button reading "Saved" is never drawn.
-Discard re-reads the draft and leaves an open row alone. A navigation that would strand unsaved
-work is asked about once, in one dialog naming what would be lost, with Save and leave, Discard
-and leave, and Stay; where the prompt cannot save something, Save is disabled with its reason as
-a description.
-
-**Removing is deliberate.** Every Remove that is not trivially re-added takes two presses, the
-confirm replacing the row and stating the whole consequence (`form-decisions.md` 9.2); the first
-press can be walked back. *Planned*: Slice 21; today the order editor's line removal is the
-model.
-
-**A blocked primary action says why.** Dashed, disabled, the reason in `title` and inline; a
-validation message sits under the control at 13px 600 `#9d3028` in its accessible description.
-*Planned*: Slice 22.
+- **The row.** Label and hint share the left column, the control takes the right, both
+  top-aligned, wrapping to stacked when narrow. A label is `for`/`id`-bound to a native control;
+  a row over a chip group or custom widget is a `<fieldset>` named by `aria-labelledby`, never a
+  dangling `for`. The index search box is its own class and shares no value with the form
+  control.
+- **Guidance lives under the field** (ADR 0050). The minority is marked: "(optional)", never a
+  star. Placeholders are realistic examples. One carrier per job — tours explain a surface, hints
+  explain a field — and `title=` is never the only carrier: a rule is one muted line in the
+  control's accessible description. A rule about a set is a `FieldGroupHint` on the `<legend>`;
+  where a rule names a derived value, a second line shows it. A row carries no hint unless the
+  rule is true on that surface; every hint names the code that makes it true; a field never
+  claims a severity its gate did not give; a mirrored gate sentence is the gate's, character for
+  character, pinned from both ends in `lib/fieldRules.ts`.
+- **Identifiers are derived, never asked first.** `DerivedIdField` follows its source until
+  edited, resumes when emptied, previews as "Saved as `…`", refuses a taken value audibly, and
+  stays closed while the list it derives from is loading. A saved entry's identifier is displayed
+  and never asked; a SKU and a media reference are their own keys and say so.
+- **No contract union reaches a reader in its wire spelling.** One table per union in
+  `lib/enumLabels.ts`, keyed to the generated type and swept; free strings through
+  `describeValue`. An explanation only where an operator could choose wrong, and only saying what
+  the lab enforces. A status column is a `StatusPill`: glyph for the axis, word for the meaning.
+- **Where a set comes from decides the control.** A contract union is a select. A register (a
+  locale, a country) is a datalist that suggests and echoes the name. What the lab has proven
+  follows the gate's severity: provider a select, model a datalist, tone override a datalist of
+  *published* guidelines. A select still offers whatever the payload carries. The provider resets
+  when it leaves its set; the model resets only when the provider moved; all else stands and is
+  flagged. A choice of one is not a choice.
+- **A list entered one value at a time is one control** (`ChipListField`): named remove
+  buttons, duplicates refused and said, respelling previewed to the shape the gate wants.
+- **A number field says what it accepts** and refuses at the save what a pattern cannot. A
+  closed set of five is five named radios.
+- **A create form asks for what constrains the work that follows** and names where the rest
+  lives. Creation is a **page**, not a side card — `form-decisions.md` layout 2b, sticky header,
+  Cancel, a Create that is dashed and disabled with its reason until the form can submit — and
+  lands in the editor. *Planned*, Slices 12 to 14.
+- **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
+  for the add form and the open row; one row open per list, siblings' Edit disabled with a line
+  saying why and that an open row is not in the draft until Save; Cancel writes nothing; the row
+  is a named form; a refusal one path makes the other makes too.
+- **An editor says what is unsaved and asks before it is lost** (ADR 0051): *Discard changes*
+  beside *Save draft* while dirty, "All changes saved" in a live region when not; one dialog
+  with Save and leave, Discard and leave, Stay.
+- **Removing is deliberate**: two presses, the confirm replacing the row and stating the whole
+  consequence, the first press walkable back. *Planned*, Slice 21.
+- **A blocked primary action says why**: dashed, disabled, the reason in `title` and inline; a
+  validation message under the control, in its accessible description. *Planned*, Slice 22.
 
 ## Lists and counts
 
-**Counts live on the filter that produces them.** An index draws one `FilterChips` row above
-its table, each chip carrying its count in its accessible name, on the six-kind vocabulary
-above; every chip filters, a zero chip is drawn and pressable, and the count is of the whole
-list — the search narrows rows and never moves a count (`filterList` decides both in one pass).
-The row waits for its listing: absent in flight and on failure. A chip whose figure the index
-payload does not carry is not faked. Tickets draw no chips; the two block libraries and Policies
-& FAQ draw none until a table exists to filter (Slice 16 gives documents one).
-
-**Every index can be searched.** `SearchField` sits in the card's header line opposite the
-title, chips beneath it, with the `Search <thing>` placeholder; a miss reads "No X matches this
-view". Experiment history keeps its own submitted, URL-backed form.
-
-**Every header spans the content width** and holds the page's actions in its slot; it becomes
-sticky on editor and create pages with Slice 25.
+- **Counts live on the filter that produces them** (`FilterChips`): every chip filters, a zero
+  chip is drawn and pressable, the count is of the whole list, the search narrows only rows, the
+  row is absent while the listing is in flight or failed, and a figure the payload lacks is not
+  faked.
+- **Every index can be searched** (`SearchField`), in the card's header opposite the title with
+  the chips beneath; a miss reads "No X matches this view". Experiment history keeps its
+  submitted, URL-backed form.
+- **Every header spans the content width** and holds the page's actions; sticky on editor and
+  create pages with Slice 25.
 
 ## Proposals, not decisions
 
-The prototype proposes five browser preferences and a shop logo. Two preferences earn a
-consumer — where the app opens, and relative or absolute timestamps — and land with the settings
-zones; confirm-before-delete lands with the confirm; auto-offered tours and table density are
-cut; the logo is the last, optional slice. The reasoning is in `docs/PLAN-UX.md`.
+The prototype proposes five browser preferences and a shop logo. Where the app opens and the
+timestamp format earn a consumer and land with the settings zones; confirm-before-delete lands
+with the confirm; auto-offered tours and table density are cut; the logo is the optional last
+slice. The reasoning is in `docs/PLAN-UX.md`.

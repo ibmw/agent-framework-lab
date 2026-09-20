@@ -1,3 +1,14 @@
+# Product design brief — the record of the exploration
+
+Status: history — closed 2026-09-20. This is the assignment given to the designer on 23 August
+2026 and the criteria the three directions were judged by. The direction it produced is
+`docs/design-direction.md`, whose *Principles* section carries forward the parts of this brief
+that still govern; everything else here — the hypotheses, the deliverables, the evaluation
+criteria, the reference scenario — describes a stage that is over. Nothing here is edited any
+more.
+
+---
+
 # Product design brief — Three concept directions
 
 Status: exploration complete — direction selected 2026-08-23; see `docs/design-direction.md`. This

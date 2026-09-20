@@ -54,9 +54,11 @@ and never merges with or overwrites what is there; see
 
 - [`docs/product-direction.md`](docs/product-direction.md): authoritative product scope, vocabulary,
   journeys, and comparison principles.
-- [`docs/design-brief.md`](docs/design-brief.md): brief for three distinct product-design directions.
+- [`docs/design-direction.md`](docs/design-direction.md): the design rules in force for the workspace.
 - [`docs/architecture.md`](docs/architecture.md): structure and allowed dependencies.
-- [`docs/PLAN.md`](docs/PLAN.md): current redesign roadmap and POC baseline.
+- [`docs/PLAN.md`](docs/PLAN.md): delivery rules, vocabulary, and the open roadmap.
+- [`docs/PLAN-UX.md`](docs/PLAN-UX.md): the open workspace slices, one brief each.
+- [`docs/history/`](docs/history/README.md): how the rules and plans were reached; read on demand.
 - [`docs/development.md`](docs/development.md): trunk-based workflow and local development loop.
 - [`docs/decisions-and-next-step.md`](docs/decisions-and-next-step.md): accepted direction,
   superseded assumptions, and next task.

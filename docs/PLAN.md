@@ -113,7 +113,7 @@ consistently.
 | Milestone | Outcome | Record |
 | --- | --- | --- |
 | 0 — Direction reset | POC assumptions stopped spreading; the target product written down. | ADR 0011, `docs/product-direction.md` |
-| 0.5 — Design direction | Direction A with three named strengths selected; the frames exported. | `docs/design-direction.md`, `docs/design-brief.md` |
+| 0.5 — Design direction | Direction A with three named strengths selected; the frames exported. | `docs/design-direction.md`, `docs/history/design-brief.md` |
 | 1 — Versioned simulation definitions | Draft/published lifecycle, the shop and catalog, customer profiles and support identities, the Studio shell. | ADR 0012–0014 |
 | 2 — Scenario Studio and wrong-address sandbox | Order fixtures, tickets, block libraries, the scenario recipe, canonical snapshots, isolated clones, read tools, the safe address change, conformance evidence. | ADR 0015–0023 |
 | 3 — Agent configurations and human participant driver | The agent configuration as a versioned input; the experiment binding a scenario to one or two of them through a participant-driver port. | ADR 0024–0025 |
