@@ -1,11 +1,12 @@
 # Product direction — Simulation Studio and Experiment Lab
 
-Status: approved product direction — 2026-08-23
+Status: approved product direction — 2026-08-23; revised 2026-09-20 for the navigation, the
+judge and the lab-level layer.
 
-This document is the product source of truth for future work. The running application is a useful
-proof of concept, but its persona-first workflow and hard-coded scenario model are not the target
-product. Read this document before extending the domain, public contracts, persistence, frontend,
-or agent adapters.
+This document is the product source of truth for future work. The application implements it
+through `docs/PLAN.md` Milestone 7: the versioned definitions, the sandbox, the runner, the
+evaluation, history, and the operator's settings and tours. Read this document before extending
+the domain, public contracts, persistence, frontend, or agent adapters.
 
 The model revisions recorded in `docs/history/design-direction.md` (2026-08-23) — first-class
 shop-scoped tickets, shared versioned objective/mutation block templates, the customer address
@@ -36,11 +37,19 @@ One person may perform all three roles in the initial local application:
 - **Reviewer:** compares evidence, adds notes, searches historical experiments, and replays or forks
   a previous setup.
 
-The primary navigation should eventually reflect these workflows:
+The primary navigation reflects these workflows as **two modes** in the top bar, each with its
+own rail:
 
-- **Studio:** shops, customers, support identities, scenarios, and agent configurations;
-- **Bench:** new experiment and live split-view execution; and
-- **History:** experiment search, comparison, evidence, replay, and fork.
+- **Shop fixture** — the Studio, scoped to one shop chosen from a switcher: its overview,
+  products, orders, customers, tickets and scenarios, and the shop's setup (documents, support
+  identities, tone of voice, shop details).
+- **Experiment lab** — cross-shop: the **Bench** (new experiment and live split-view execution),
+  **History** (search, comparison, evidence, replay and fork), and a **Library** of the
+  shop-independent definitions: agent configurations, judges, support identities, and the
+  objective and mutation block libraries. The lab keeps a current shop, because an experiment
+  composes one shop's scenario.
+
+Settings belongs to the lab and sits outside both modes.
 
 ## Core product model
 
@@ -66,6 +75,8 @@ The target model separates concepts that the POC currently combines:
   configurations and records the controlled comparison.
 - **Run:** one isolated experiment arm containing its conversation, tool events, state changes,
   traces, quantitative measurements, and evaluation results.
+- **Judge configuration:** the versioned rubric, model, and declared evidence scope that scores
+  the objectives a scenario leaves to a judge, from an anonymized record of one arm.
 - **Sandbox snapshot:** the complete starting state cloned for each run. Comparable arms must have
   the same canonical starting-state fingerprint while retaining independent mutable state.
 
@@ -74,8 +85,9 @@ domain design may replace POC entities when a cohesive migration slice proves th
 
 ## Drafts, published versions, and reproducibility
 
-Shops, customer profiles, support identities, scenarios, and agent configurations have editable
-drafts. Publishing creates an immutable version. An experiment references exact published versions
+Shops, customer profiles, support identities, tickets, scenarios, block templates, agent
+configurations, and judge configurations have editable drafts. Publishing creates an immutable
+version. An experiment references exact published versions
 and stores the resolved execution configuration needed to explain and replay the run.
 
 Every experiment must record at least:
@@ -277,6 +289,26 @@ objective outcome, failed capability, one/two-arm mode, tags, and notes.
 An experiment detail preserves both conversations, input divergence, configuration, fingerprints,
 state diffs, tool events, traces, evaluator executions, metrics, and replay/fork actions.
 
+## Operating the lab
+
+The lab has a layer that belongs to no shop and to no definition.
+
+- **Settings** sits outside shop scope, because the first thing a new operator does is create the
+  shop they do not have. It reports what this build has proven it can run, and it holds the
+  operator's few browser preferences — never in the database, whose every other row is evidence
+  an experiment pins.
+- **The model connection is a capability of the lab**, not a definition and not a preference: one
+  connection per provider, holding a base URL and an encrypted key and no model, editable from
+  Settings, with the environment as the bootstrap when none is saved. A run pins the endpoint it
+  reached and refuses to be advanced against another; a connection never enters a fingerprint.
+- **A configuration names its provider** as authored, frozen content. Whether the lab can reach
+  that provider now is a separate question answered when an arm is advanced: a configuration
+  naming an unreachable provider is valid, publishable, and unrunnable here, and the editor says
+  so as a note rather than as a publish finding.
+- **Guidance is per surface.** Every screen with vocabulary of its own offers a tour of itself,
+  started only when asked; nothing about the operator's progress is stored or derived into a
+  checklist, and the only readiness the workspace reports is what a listing says.
+
 ## V1 product boundary
 
 V1 proves one complete wrong-shipping-address journey:
@@ -296,13 +328,14 @@ action.
 
 ## Relationship to the POC
 
-The current application proves useful technical ideas: clean dependency boundaries, a common agent
-port, versioned contracts, deterministic fingerprints, durable conversations, safe modifying
-actions, and sanitized tracing. Preserve those principles unless a later ADR deliberately changes
-them.
+The original proof of concept established principles the target product keeps: clean dependency
+boundaries, a common agent port, versioned contracts, deterministic fingerprints, durable
+conversations, safe modifying actions, and sanitized tracing. Preserve them unless a later ADR
+deliberately changes them.
 
-The current hard-coded `ScenarioDefinition`, generated persona flow, and minimal catalog/order model
-are POC implementations, not target constraints; the persona-first navigation and conversation-level
-comparison view were removed with the Studio shell (ADR 0013). They may be replaced through cohesive, tested slices. Existing local POC data does not
-require backward compatibility; migrations must still behave safely and predictably for supported
-repository states.
+What survives of the POC itself is a set of published HTTP contracts with no UI consumer — the
+persona-first conversation routes, the generated scenario registry and the order-action protocol
+— which `docs/decisions-and-next-step.md` lists under *Superseded instructions*. They are kept
+working and tested, may be replaced through cohesive, tested slices, and are not to be extended.
+Existing local POC data does not require backward compatibility; migrations must still behave
+safely and predictably for supported repository states.
