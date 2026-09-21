@@ -20,6 +20,7 @@ import {
   TriangleAlert,
   Upload,
 } from "lucide-react";
+import { readTimestampFormat } from "./preferences";
 
 /** The lab note: the pine-on-cream band the synthetic-sandbox notices are drawn on. */
 export const labNoteClasses = "rounded-[10px] border border-[#b7d9cc] bg-[#eaf4f0]";
@@ -627,7 +628,13 @@ export const tableHeadClasses =
 
 export const tableCellClasses = "border-b border-admin-border/60 px-4 py-2.5 align-top";
 
-export function formatTimestamp(isoTimestamp: string): string {
+/**
+ * The date this workspace has always drawn: `19 Sept 2026, 14:07`, in the reader's own zone.
+ *
+ * Exported so the settings row that offers it can generate its own example from the formatter
+ * instead of spelling the shape a second time beside it.
+ */
+export function formatAbsoluteTimestamp(isoTimestamp: string): string {
   const date = new Date(isoTimestamp);
   if (Number.isNaN(date.getTime())) {
     return isoTimestamp;
@@ -639,4 +646,68 @@ export function formatTimestamp(isoTimestamp: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * The relative reading, largest unit first (ADR 0058).
+ *
+ * `numeric: "always"`, so a column reads "1 day ago" beside "2 days ago" rather than
+ * "yesterday" beside "2 days ago": the rows of a table have to be comparable down the column,
+ * which is the one thing the friendlier spelling costs.
+ */
+const RELATIVE_UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
+  ["year", 365 * 24 * 60 * 60],
+  ["month", 30 * 24 * 60 * 60],
+  ["day", 24 * 60 * 60],
+  ["hour", 60 * 60],
+  ["minute", 60],
+];
+
+function formatRelativeTimestamp(date: Date, now: number): string {
+  const seconds = Math.round((date.getTime() - now) / 1000);
+  const magnitude = Math.abs(seconds);
+  if (magnitude < 60) {
+    // Under a minute in either direction there is no unit worth naming, and "in 0 seconds" is
+    // what `Intl` would otherwise say about the instant a row was just written.
+    return "just now";
+  }
+  const formatter = new Intl.RelativeTimeFormat("en-GB", { numeric: "always" });
+  for (const [unit, size] of RELATIVE_UNITS) {
+    if (magnitude >= size) {
+      return formatter.format(Math.trunc(seconds / size), unit);
+    }
+  }
+  return formatter.format(Math.trunc(seconds / 60), "minute");
+}
+
+/**
+ * An instant the lab's own clock wrote — an `updated_at`, a `created_at`, a `published_at` —
+ * under the reader's timestamp preference (ADR 0058).
+ *
+ * The preference is read here rather than handed in, because it can only be changed on
+ * `/settings`, which draws no timestamp of its own: leaving that page is a mount, and every
+ * listing re-reads it on the way in.
+ */
+export function formatTimestamp(isoTimestamp: string): string {
+  if (readTimestampFormat() === "absolute") {
+    return formatAbsoluteTimestamp(isoTimestamp);
+  }
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) {
+    return isoTimestamp;
+  }
+  return formatRelativeTimestamp(date, Date.now());
+}
+
+/**
+ * An instant inside the fiction — an order's `placed_at`, a frozen address's `selected_at` —
+ * which is always a date and never an "ago" (ADR 0058).
+ *
+ * *Ago* is measured from the reader's wall clock, and a fixture has none: an author who typed
+ * 21 August 2026 into an order said when it was placed in the story, and "a month ago" would
+ * say this shop has been trading for a month — a claim about this workspace that nobody made
+ * and that changes every day the fixture is not touched.
+ */
+export function formatFixtureTimestamp(isoTimestamp: string): string {
+  return formatAbsoluteTimestamp(isoTimestamp);
 }

@@ -30,7 +30,7 @@ import {
   accentButtonClasses,
   fieldControlClasses,
   focusRingClasses,
-  formatTimestamp,
+  formatFixtureTimestamp,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -175,7 +175,7 @@ export function OrdersPage() {
                       {order.line_count} line{order.line_count === 1 ? "" : "s"}
                     </div>
                   </td>
-                  <td className={tableCellClasses}>{formatTimestamp(order.placed_at)}</td>
+                  <td className={tableCellClasses}>{formatFixtureTimestamp(order.placed_at)}</td>
                   <td className={tableCellClasses}>{order.customer_display_name}</td>
                   <td className={tableCellClasses}>
                     <StatusPill tone="payment" label={paymentLabel(order.payment_status)} />

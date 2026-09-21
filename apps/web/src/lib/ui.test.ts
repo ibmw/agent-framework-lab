@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import themeSource from "../styles.css?raw";
+import { writeTimestampFormat } from "./preferences";
 import {
   type ButtonVerb,
   blockedButtonClasses,
@@ -17,6 +18,9 @@ import {
   filterChipRowClasses,
   filterChipStateClasses,
   focusRingClasses,
+  formatAbsoluteTimestamp,
+  formatFixtureTimestamp,
+  formatTimestamp,
   iconLeadingClasses,
   readOnlyValueClasses,
   searchFieldClasses,
@@ -531,5 +535,85 @@ describe("the search field", () => {
     expect(searchFieldRowClasses).toContain("px-4");
     expect(searchFieldRowClasses).toContain("py-3");
     expect(searchFieldRowClasses).toContain("border-b");
+  });
+});
+
+/**
+ * How a timestamp is written is a browser preference with twenty consumers (ADR 0058), so
+ * these are asserted over the formatters rather than over one page: a reading that changed
+ * here would change every listing in the workspace at once.
+ *
+ * The clock is fixed, because a relative reading is a statement about the distance between two
+ * instants and one of them is `Date.now()`.
+ */
+const NOW = new Date("2026-09-21T12:00:00+00:00");
+
+describe("how a timestamp is written", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    window.localStorage.clear();
+  });
+
+  it("reads relative until an operator says otherwise", () => {
+    // The prototype's own default: a lab is read most often while something in it is running.
+    expect(formatTimestamp("2026-09-21T11:48:00+00:00")).toBe("12 minutes ago");
+  });
+
+  it("quotes a date once the preference says absolute", () => {
+    writeTimestampFormat("absolute");
+
+    expect(formatTimestamp("2026-09-19T14:07:00+00:00")).toBe(
+      formatAbsoluteTimestamp("2026-09-19T14:07:00+00:00"),
+    );
+    expect(formatTimestamp("2026-09-19T14:07:00+00:00")).toMatch(
+      /^\d{1,2} \w{3,4} 2026, \d{2}:\d{2}$/,
+    );
+  });
+
+  it("names the largest unit that fits, and nothing under a minute", () => {
+    expect(formatTimestamp("2026-09-21T11:59:31+00:00")).toBe("just now");
+    expect(formatTimestamp("2026-09-21T11:05:00+00:00")).toBe("55 minutes ago");
+    expect(formatTimestamp("2026-09-21T07:00:00+00:00")).toBe("5 hours ago");
+    expect(formatTimestamp("2026-09-18T12:00:00+00:00")).toBe("3 days ago");
+    expect(formatTimestamp("2026-07-21T12:00:00+00:00")).toBe("2 months ago");
+    expect(formatTimestamp("2024-09-21T12:00:00+00:00")).toBe("2 years ago");
+  });
+
+  it("counts a day as a day rather than as yesterday, so a column reads down", () => {
+    // `numeric: "auto"` would spell this "yesterday" and the row under it "2 days ago", which
+    // is friendlier to read alone and impossible to compare in a table.
+    expect(formatTimestamp("2026-09-20T12:00:00+00:00")).toBe("1 day ago");
+  });
+
+  it("says which side of now an instant is on", () => {
+    expect(formatTimestamp("2026-09-23T12:00:00+00:00")).toBe("in 2 days");
+  });
+
+  it("leaves an instant it cannot read exactly as it was given", () => {
+    writeTimestampFormat("absolute");
+    expect(formatTimestamp("not a date")).toBe("not a date");
+    writeTimestampFormat("relative");
+    expect(formatTimestamp("not a date")).toBe("not a date");
+  });
+
+  /**
+   * An order's `placed_at` and a frozen address's `selected_at` are fields of a canonical
+   * document that an author typed. *Ago* is measured from the reader's wall clock, and a
+   * fiction has none (ADR 0058).
+   */
+  it("keeps an authored instant a date whichever way the preference is set", () => {
+    const placed = "2026-08-21T09:30:00+00:00";
+    const quoted = formatAbsoluteTimestamp(placed);
+
+    expect(formatFixtureTimestamp(placed)).toBe(quoted);
+    writeTimestampFormat("relative");
+    expect(formatFixtureTimestamp(placed)).toBe(quoted);
+    // And the preference does still reach the instants the lab's own clock wrote.
+    expect(formatTimestamp(placed)).not.toBe(quoted);
   });
 });

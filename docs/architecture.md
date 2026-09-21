@@ -292,9 +292,12 @@ Some of the lab belongs to no shop and to no definition.
   state. The lab keeps a current shop as a browser preference, resolved against the shop list
   rather than trusted, and a surface that needs one and has none says so rather than guessing.
   Every former shop-scoped lab path redirects and carries its shop into that preference (ADR 0054).
-- **Settings** sits outside shop scope, reports what this build can run and how it is composed,
-  and runs the demo seed (ADR 0044, ADR 0047). The only stored operator state is a few browser
-  preferences; nothing about progress is stored or derived (ADR 0045, ADR 0046).
+- **Settings** sits outside shop scope in zones told apart by surface: the preferences this
+  browser holds, the lab-wide model connection, a collapsed read-only report of what this build
+  can run and how it is composed, and the demo seed (ADR 0044, ADR 0047). The only stored
+  operator state is a few browser preferences — three an operator chooses and two the shell
+  records, and a reset reaches only the three (ADR 0058); nothing about progress is stored or
+  derived (ADR 0045, ADR 0046).
 - **The model connection** is a capability of the lab: one per provider, holding a base URL and an
   encrypted key and no model, editable from Settings, with the environment as the bootstrap. A run
   pins the endpoint it reached and refuses an advance against another; the connection never enters

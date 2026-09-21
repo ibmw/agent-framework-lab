@@ -189,6 +189,13 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Lab settings" })).toBeVisible();
 
+  // The page's own "← Back to workspace" reads the same remembered location the bar's toggle
+  // does (PLAN-UX Slice 18), so the chrome and the page cannot disagree about what is under it.
+  await expect(page.getByRole("link", { name: "Back to workspace" })).toHaveAttribute(
+    "href",
+    new URL(editorUrl).pathname,
+  );
+
   // Lit, with a close glyph, and the second press returns to what was underneath — after a
   // reload, which is the case `history.back()` cannot answer.
   await page.reload();
@@ -198,4 +205,33 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
 
   await expect(page.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
   expect(page.url()).toBe(editorUrl);
+});
+
+/**
+ * PLAN-UX Slice 18's own evidence, in a browser: a preference is saved the moment it changes,
+ * and it reaches a listing the settings page does not draw (ADR 0058).
+ */
+test("a timestamp preference set in Settings reaches a listing Settings never draws", async ({
+  page,
+}) => {
+  const unique = Date.now().toString(36);
+
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
+
+  await page.getByRole("link", { name: "Settings" }).click();
+  const stamps = page.getByRole("group", { name: "Timestamps" });
+  await expect(stamps.getByRole("radio", { name: "Relative" })).toBeChecked();
+  // The label is what a reader presses; the radio underneath it carries the name and the
+  // keyboard behaviour.
+  await stamps.getByText("Absolute").click();
+  await expect(stamps.getByRole("radio", { name: "Absolute" })).toBeChecked();
+
+  // Nothing was submitted, and leaving is what carries the preference out.
+  await page.getByRole("link", { name: "Back to workspace" }).click();
+  await page.getByRole("button", { name: /^Switch shop/ }).click();
+  await page.getByRole("menuitem", { name: "All shops" }).click();
+
+  const row = page.getByRole("row", { name: new RegExp(`Northstar ${unique}`) });
+  await expect(row.getByText(/^\d{1,2} \w{3,4} \d{4}, \d{2}:\d{2}$/)).toBeVisible();
+  await expect(row.getByText(/ago$/)).toHaveCount(0);
 });

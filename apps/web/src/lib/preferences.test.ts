@@ -1,25 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  forgetLastVisitedShop,
   readAppLanding,
   readLastVisitedShop,
   readNavigationCollapsed,
   readSettingsReturn,
+  readTimestampFormat,
+  resetChosenPreferences,
   writeAppLanding,
   writeLastVisitedShop,
   writeNavigationCollapsed,
   writeSettingsReturn,
+  writeTimestampFormat,
 } from "./preferences";
 
 /**
  * These are the operator's browser, not the lab's database (ADR 0044), so what matters is what
  * is *not* written as much as what is.
  *
- * Two of them are left, both about where a viewer was and how their window starts. The third,
- * guide mode, is gone with the mode itself (ADR 0046).
+ * Five of them now, and they divide in two: three an operator chooses on the settings page —
+ * where the app opens, how the rail starts, how a timestamp is written — and two the shell
+ * writes as they move, the last-visited shop and the location Settings returns to. *Reset to
+ * defaults* reaches the first three and none of the last two (ADR 0058). Guide mode is gone
+ * with the mode itself (ADR 0046).
  */
 const NAVIGATION_COLLAPSED_KEY = "agent-lab.navigation-collapsed";
 const LAST_VISITED_SHOP_KEY = "agent-lab.last-visited-shop";
 const SETTINGS_RETURN_KEY = "agent-lab.settings-return";
+const APP_LANDING_KEY = "agent-lab.app-landing";
+const TIMESTAMP_FORMAT_KEY = "agent-lab.timestamp-format";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -28,7 +37,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("the two view preferences", () => {
+describe("the view preferences", () => {
   it("default to an expanded rail and no remembered shop, having written nothing", () => {
     expect(readNavigationCollapsed()).toBe(false);
     expect(readLastVisitedShop()).toBeNull();
@@ -105,5 +114,83 @@ describe("what Settings returns to", () => {
 
     expect(readSettingsReturn()).toBeNull();
     expect(() => writeSettingsReturn("/shops")).not.toThrow();
+  });
+});
+
+describe("how a timestamp is written", () => {
+  it("defaults to relative, round-trips, and refuses a value it did not write", () => {
+    expect(readTimestampFormat()).toBe("relative");
+    expect(window.localStorage.getItem(TIMESTAMP_FORMAT_KEY)).toBeNull();
+
+    writeTimestampFormat("absolute");
+    expect(readTimestampFormat()).toBe("absolute");
+
+    window.localStorage.setItem(TIMESTAMP_FORMAT_KEY, "iso-8601");
+    expect(readTimestampFormat()).toBe("relative");
+  });
+
+  it("answers with the default when the browser refuses storage", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+
+    expect(readTimestampFormat()).toBe("relative");
+    expect(() => writeTimestampFormat("absolute")).not.toThrow();
+  });
+});
+
+describe("what a reset puts back", () => {
+  it("returns the three an operator chose and leaves the two the shell wrote", () => {
+    writeAppLanding("lab");
+    writeNavigationCollapsed(true);
+    writeTimestampFormat("absolute");
+    writeLastVisitedShop(SHOP_ID);
+    writeSettingsReturn("/shops/shop-1/products");
+
+    resetChosenPreferences();
+
+    expect(readAppLanding()).toBe("last-shop");
+    expect(readNavigationCollapsed()).toBe(false);
+    expect(readTimestampFormat()).toBe("relative");
+    // Neither of these was chosen: the shell writes both as the operator moves, and a reset
+    // that emptied them would mean "forget where I was" as well as "undo what I picked".
+    expect(readLastVisitedShop()).toBe(SHOP_ID);
+    expect(readSettingsReturn()).toBe("/shops/shop-1/products");
+  });
+
+  it("survives a browser that refuses storage", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+
+    expect(() => resetChosenPreferences()).not.toThrow();
+  });
+});
+
+describe("forgetting the last-visited shop", () => {
+  it("drops the shop and touches no other preference", () => {
+    writeLastVisitedShop(SHOP_ID);
+    writeAppLanding("last-shop");
+    writeTimestampFormat("absolute");
+
+    forgetLastVisitedShop();
+
+    expect(readLastVisitedShop()).toBeNull();
+    expect(window.localStorage.getItem(LAST_VISITED_SHOP_KEY)).toBeNull();
+    // Where the app opens stays exactly as the operator set it: `/` already falls back to the
+    // shops index with nothing remembered (ADR 0054), so nothing here has to rewrite a choice.
+    expect(window.localStorage.getItem(APP_LANDING_KEY)).toBe("last-shop");
+    expect(readTimestampFormat()).toBe("absolute");
+  });
+
+  it("survives a browser that refuses storage", () => {
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+
+    expect(() => forgetLastVisitedShop()).not.toThrow();
   });
 });

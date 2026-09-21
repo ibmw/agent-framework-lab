@@ -92,7 +92,12 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Filter chips on Tickets and the block libraries | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked. Policies & FAQ left this row when its documents became a table with four chips (ADR 0057) |
 | Model on the connection, masked key | drawn | neither | ADR 0052 |
 | Setup checklist | drawn on Shop details | not built | ADR 0044, ADR 0045 |
-| Preferences | seven rows | two now, a third read by `/` and written in Slice 18, a fourth with the confirm slice | a preference no surface reads is not a slice |
+| Preferences | seven rows | four: where the app opens, the last-visited shop with *Forget*, the rail's collapsed default, the timestamp format | a preference no surface reads is not a slice. Confirm-before-delete lands with the confirm it governs (Slice 21); auto-offered tours and table density are cut (*Proposals, not decisions*, and ADR 0049 refused the first outright) |
+| The settings page's title | "Workspace settings" | "Lab settings" | two things called Settings, one of which silently means "this shop", is the ambiguity ADR 0044's first decision exists to remove — and *workspace* is already the word for a rail (`nav[aria-label="Shop workspace"]`). Rule 5: it is an accessible name a Playwright spec asserts on |
+| The rail preference's control | a 42×25 pill switch | the native checkbox already there | the prototype's switch is a `div` with `tabIndex` and no role and no name at all, and the README's own form pattern says every label is bound to a native control; the form language has no switch to reach for. Rule 5 |
+| The *Model provider* zone | provider chips, Base URL, API key, Default model, Test connection | one card on the same white surface, naming what is in force and what builds it | the connection is ADR 0052's and Slice 19's; the zone's place is drawn so the page's shape lands once. The white surface is deliberate — the zone is going to be the operator's, and a padlock would promise the opposite of what lands in it |
+| *Forget* on the last-visited shop | bare text turning warm red on hover; also moves *Where the app opens* from Last shop to All shops | the quiet `subtle` button, and it drops the shop and nothing else | `/` already falls back to the shops index with nothing remembered (ADR 0054), so the fallback needs no second copy in a preference — and a control that rewrote a choice the operator made would be the application editing a preference behind them. The red is not spent on it either: *the warm red is destructive and nothing else*, and a browser preference is not |
+| *Reset to defaults* | also re-points the remembered shop at the first shop in the list | leaves the remembered shop and the settings-return location alone | that is a fixture's way of saying *undo*; there is no shop a real reset could pick, and neither value was chosen by anybody (ADR 0058) |
 | Support identities in shop scope | drawn on both rails, filed under Shop scope | one lab address on both rails | there is one library; two routes rendering one list would make the mode depend on which door was used (ADR 0054) |
 | Mode tabs on Settings | drawn — the prototype's settings is an overlay on a mode | absent | `/settings` is a route in neither mode, and tabs there would be the one place the mode is not the branch of the tree you stand in (ADR 0054); rule 5 |
 | Shop badge | a per-shop ground and ink, or a logo | initials on `lab-ink` | the payload carries no logo and no colour pair to draw; Slice 28 is where a shop gets one |
@@ -161,10 +166,25 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   **Settings** is a toggle: lit with a close glyph while its page is open, returning to the last
   location that was not `/settings` — a browser preference, never a row (ADR 0044) — and to the
   shops index when a browser remembers none.
-- **Settings is three zones** told apart by surface: per-browser preferences, saved on change;
-  the lab-wide model connection with explicit Save and Discard (ADR 0052); a collapsed read-only
-  runtime zone with a "To change it:" line (ADR 0044's character). The seed is its own zone
-  (ADR 0047). *Planned*, Slices 18 and 19.
+- **Settings is its zones told apart by surface**, in a column capped at 1024px, under a
+  "← Back to workspace" link that reads the same remembered location the bar's toggle does
+  (ADR 0055). Each zone is a landmark named by its own heading, which is the same distinction
+  for a reader who sees no colour. *Your preferences* is white and saved on change, with
+  *Reset to defaults*; the lab-wide *Model provider* is white too, and its place is held by one
+  card that says what is in force until Slice 19 builds the connection with its explicit Save
+  and Discard (ADR 0052); *Runtime configuration · Read only* is a collapsed disclosure of grey
+  padlocked cards, each ending in a "To change it:" line naming the variable or the file
+  (ADR 0044's character), with the disclosure's own state ephemeral; and the seed is its own
+  zone, because it is an action rather than a setting (ADR 0047).
+- **A browser preference is either chosen or recorded** (ADR 0058). Three are chosen on
+  Settings — where the app opens, whether the rail starts collapsed, how a timestamp is
+  written — and *Reset to defaults* puts exactly those three back. Two are written by the shell
+  as the operator moves — the last-visited shop and the location Settings returns to — and a
+  reset touches neither, because neither was chosen; the first has its own *Forget*, which
+  drops the shop and rewrites no other preference. **The timestamp format reaches every
+  `formatTimestamp` call**, defaulting to relative. An instant inside the fiction — an order's
+  `placed_at`, a frozen address's `selected_at` — goes through `formatFixtureTimestamp` and is
+  always a date, because *ago* is measured from a clock a fixture does not have.
 - **Tours** (ADR 0045, 0046, 0049, 0055): one tour per surface, the same words everywhere,
   offered from one control in the bar that reads the surface's tour from the route; an overlay
   above the page, never in it; nothing starts unbidden, nothing is remembered, no tour crosses a
@@ -322,6 +342,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 ## Proposals, not decisions
 
 The prototype proposes five browser preferences and a shop logo. Where the app opens and the
-timestamp format earn a consumer and land with the settings zones; confirm-before-delete lands
-with the confirm; auto-offered tours and table density are cut; the logo is the optional last
-slice. The reasoning is in `docs/PLAN-UX.md`.
+timestamp format earned a consumer and landed with the settings zones (ADR 0058);
+confirm-before-delete lands with the confirm; auto-offered tours and table density are cut; the
+logo is the optional last slice. The reasoning for what is cut is in `docs/PLAN-UX.md`,
+*Deliberately not here*.

@@ -136,181 +136,158 @@ function renderAt(path: string) {
   return renderApp(path);
 }
 
-describe("lab settings", () => {
-  it("reports what this build has been proven able to run", async () => {
+/**
+ * The read-only zone is a collapsed disclosure, so every assertion about what it reports opens
+ * it first. That is the zone's own behaviour rather than a fixture: a lab's composition is the
+ * thing on this page an operator least often needs and can least often act on.
+ */
+async function openRuntime(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: /^Runtime configuration/ }));
+}
+
+describe("the settings zones", () => {
+  it("tells its zones apart by role and by heading", async () => {
     renderAt("/settings");
 
-    const build = await screen.findByRole("region", { name: "This build" });
-    expect(await within(build).findByText("Pydantic AI")).toBeVisible();
-    const [pydantic, control] = within(build).getAllByRole("listitem");
-
-    expect(within(pydantic).getByText("pydantic-ai", { selector: "code" })).toBeVisible();
-    expect(within(pydantic).getByText("Single agent")).toBeVisible();
-    // The provider under the workspace's one spelling of it, not the wire's word.
-    expect(within(pydantic).getByText("OpenAI · gpt-5-mini")).toBeVisible();
-    expect(within(pydantic).getByText("structured output")).toBeVisible();
-
-    // The envelope is per framework, so a reader learns what the control arm cannot do
-    // without first being refused by the publish gate.
-    expect(within(control).getByText("Deterministic fake")).toBeVisible();
-    expect(within(control).getByText("Deterministic control · deterministic")).toBeVisible();
-    expect(within(control).queryByText("structured output")).toBeNull();
+    expect(await screen.findByRole("heading", { level: 1, name: "Lab settings" })).toBeVisible();
+    for (const name of [/^Your preferences/, /^Model provider/, /^Runtime configuration/]) {
+      expect(screen.getByRole("region", { name })).toBeVisible();
+      expect(screen.getByRole("heading", { level: 2, name })).toBeVisible();
+    }
+    // The fast path is a zone of its own because it is an action, not a setting (ADR 0047).
+    expect(screen.getByRole("region", { name: "The fast path" })).toBeVisible();
+    expect(screen.getByRole("heading", { level: 2, name: "The fast path" })).toBeVisible();
   });
 
-  it("does not claim the gate blocks a model the way it blocks a provider", async () => {
+  it("puts what cannot be edited behind a disclosure, and says where each one is changed", async () => {
+    const user = userEvent.setup();
     renderAt("/settings");
 
-    // An unlisted model is `model_not_exercised`, a warning; only the framework, architecture
-    // and provider are errors. A page that said otherwise would be a second, stricter gate.
-    const build = await screen.findByRole("region", { name: "This build" });
-    expect(
-      within(build).getByText(/naming a model outside it is a warning that does not block/),
-    ).toBeVisible();
+    // Collapsed: the three read-outs are not on the page at all until they are asked for.
+    const disclosure = await screen.findByRole("button", { name: /^Runtime configuration/ });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("region", { name: "Run mode" })).toBeNull();
+
+    await user.click(disclosure);
+
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    for (const name of ["Run mode", "Trace export", "What this build can run"]) {
+      const card = within(screen.getByRole("region", { name }));
+      // A card that says it cannot be edited here without saying where it can be is a dead
+      // end, so each one ends in the variable or the file that does change it (ADR 0044).
+      expect(card.getByText(/^To change it:/)).toBeVisible();
+    }
   });
 
-  it("states the offline limit as what this build can actually advance", async () => {
+  it("holds the model provider's place without promising what is not built", async () => {
     renderAt("/settings");
 
-    const runMode = await screen.findByRole("region", { name: "Run mode" });
-    expect(await within(runMode).findByText("Offline")).toBeVisible();
-    expect(within(runMode).getByText("gpt-5-mini", { selector: "code" })).toBeVisible();
-    // Offline this process registers one experiment runtime, so a two-arm framework
-    // comparison is refused rather than run with identical decisions. The surface that sent
-    // an operator to author one would be describing `make seed`'s composition, not this one.
-    expect(
-      within(runMode).getByText(/only the deterministic control arm can be advanced here/),
-    ).toBeVisible();
-    expect(within(runMode).getByText(/refused the moment it is advanced/)).toBeVisible();
-    expect(within(runMode).getByText(/establishes is the evidence model/)).toBeVisible();
-    expect(
-      within(runMode).getByText(/Only a credentialed run answers how two frameworks actually/),
-    ).toBeVisible();
-    expect(
-      within(runMode).queryByText(/every framework runs against its own offline model/i),
-    ).toBeNull();
+    const zone = within(await screen.findByRole("region", { name: /^Model provider/ }));
+    expect(zone.getByText(/Not built yet/)).toBeVisible();
+    // What is in force meanwhile, and what stays in force afterwards (ADR 0052).
+    expect(zone.getByText("AGENT_LAB_OPENAI_API_KEY")).toBeVisible();
+    expect(zone.getByText(/the environment is the whole of it/)).toBeVisible();
+    expect(zone.getByText(/saved connection wins where there is one/)).toBeVisible();
+    // No control: the zone's place is drawn, and nothing on it can be pressed or typed into.
+    expect(zone.queryByRole("button")).toBeNull();
+    expect(zone.queryByRole("textbox")).toBeNull();
   });
 
-  it("drops the offline limit once a credential is configured", async () => {
-    currentStatus = {
-      run_mode: "credentialed",
-      model_id: "gpt-5-mini",
-      trace_export_configured: true,
-    };
-    renderAt("/settings");
-
-    const runMode = await screen.findByRole("region", { name: "Run mode" });
-    expect(await within(runMode).findByText("Credentialed")).toBeVisible();
-    expect(within(runMode).queryByText(/only the deterministic control arm/)).toBeNull();
-    expect(within(runMode).getByText(/a model-backed arm reaches the provider/)).toBeVisible();
-  });
-
-  it("names the Phoenix path while nothing exports traces", async () => {
-    renderAt("/settings");
-
-    const traces = await screen.findByRole("region", { name: "Trace export" });
-    expect(await within(traces).findByText(/No OTLP endpoint is configured/)).toBeVisible();
-    expect(within(traces).getByText("infra/phoenix/compose.yaml")).toBeVisible();
-    expect(within(traces).getByText("http://localhost:6006")).toBeVisible();
-  });
-
-  it("reports an exporter without naming the endpoint or over-promising the allowlist", async () => {
-    currentStatus = { ...OFFLINE, trace_export_configured: true };
-    renderAt("/settings");
-
-    const traces = await screen.findByRole("region", { name: "Trace export" });
-    expect(await within(traces).findByText(/An OTLP endpoint is configured/)).toBeVisible();
-    expect(within(traces).getByText(/The endpoint itself is not reported here/)).toBeVisible();
-    // The allowlist covers the spans the lab opens. An SDK exporting its own is a path this
-    // project does not write and cannot promise the sanitization of.
-    expect(within(traces).getByText(/No free-form string of the lab's own is/)).toBeVisible();
-  });
-
-  it("keeps run mode readable when the framework listing fails", async () => {
-    server.use(
-      http.get("*/api/v1/agent-configurations/resources", () =>
-        HttpResponse.json(BROKEN, { status: 500 }),
-      ),
-    );
-    renderAt("/settings");
-
-    // Run mode needs no database and must not fall with a listing that does.
-    const runMode = await screen.findByRole("region", { name: "Run mode" });
-    expect(await within(runMode).findByText("Offline")).toBeVisible();
-
-    const build = screen.getByRole("region", { name: "This build" });
-    expect(within(build).getByRole("alert")).toBeVisible();
-    expect(within(build).queryByText("Reading…")).toBeNull();
-    // One failure, one alert: the page does not repeat a message the card already carries.
-    expect(screen.getAllByRole("alert")).toHaveLength(1);
-  });
-
-  it("stops reading rather than reading forever when composition cannot be reported", async () => {
-    server.use(http.get("*/api/v1/lab-status", () => HttpResponse.json(BROKEN, { status: 500 })));
-    renderAt("/settings");
-
-    const runMode = await screen.findByRole("region", { name: "Run mode" });
-    expect(await within(runMode).findByRole("alert")).toBeVisible();
-    expect(within(runMode).queryByText("Reading…")).toBeNull();
-    expect(
-      within(screen.getByRole("region", { name: "Trace export" })).getByRole("alert"),
-    ).toBeVisible();
-    // The framework table answered, so it is still readable.
-    expect(
-      within(screen.getByRole("region", { name: "This build" })).getByText("Pydantic AI"),
-    ).toBeVisible();
-  });
-
-  it("offers a way back to the shop the operator was last standing in", async () => {
-    const workspace = renderAt(`/shops/${SHOP_ID}`);
-    expect(await screen.findByRole("heading", { name: "Overview" })).toBeVisible();
+  it("returns to what was underneath, and to the shops index when nothing was", async () => {
+    const workspace = renderAt(`/shops/${SHOP_ID}/products`);
+    expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
     workspace.unmount();
 
-    renderAt("/settings");
-    const back = await screen.findByRole("link", { name: /Back to Northstar Outfitters/ });
-    expect(back).toHaveAttribute("href", `/shops/${SHOP_ID}`);
-  });
-
-  it("does not remember a shop it could not open", async () => {
-    server.use(
-      http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
-        HttpResponse.json({ ...BROKEN, code: "shop_not_found" }, { status: 404 }),
-      ),
+    const remembered = renderAt("/settings");
+    // The same remembered location the bar's own toggle reads, not a second mechanism
+    // (ADR 0055) — so the page and the chrome cannot disagree about what was underneath.
+    expect(await screen.findByRole("link", { name: "Back to workspace" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/products`,
     );
-    const workspace = renderAt(`/shops/${SHOP_ID}`);
-    expect(await screen.findByRole("alert")).toBeVisible();
-    workspace.unmount();
+    remembered.unmount();
 
-    server.resetHandlers();
+    window.localStorage.clear();
     renderAt("/settings");
-    expect(await screen.findByRole("heading", { name: "Lab settings" })).toBeVisible();
-    expect(screen.queryByRole("link", { name: /Back to/ })).toBeNull();
+    expect(await screen.findByRole("link", { name: "Back to workspace" })).toHaveAttribute(
+      "href",
+      "/shops",
+    );
+  });
+});
+
+describe("your preferences", () => {
+  it("writes where the app opens, and reads it back after a reload", async () => {
+    const user = userEvent.setup();
+    const first = renderAt("/settings");
+
+    const opening = within(await screen.findByRole("group", { name: "Where the app opens" }));
+    expect(opening.getByRole("radio", { name: "Last shop" })).toBeChecked();
+    await user.click(opening.getByRole("radio", { name: "Experiment lab" }));
+    first.unmount();
+
+    renderAt("/settings");
+    const reloaded = within(await screen.findByRole("group", { name: "Where the app opens" }));
+    expect(reloaded.getByRole("radio", { name: "Experiment lab" })).toBeChecked();
   });
 
-  it("offers no way back before any shop has been opened", async () => {
-    renderAt("/settings");
+  it("opens the app where the preference says it should", async () => {
+    const user = userEvent.setup();
+    const settings = renderAt("/settings");
 
-    expect(await screen.findByRole("heading", { name: "Lab settings" })).toBeVisible();
-    expect(screen.queryByRole("link", { name: /Back to/ })).toBeNull();
-    expect(await screen.findByText(/None yet\. Open a shop/)).toBeVisible();
+    const opening = within(await screen.findByRole("group", { name: "Where the app opens" }));
+    await user.click(opening.getByRole("radio", { name: "Experiment lab" }));
+    settings.unmount();
+
+    // The slice's own evidence: choose to open on the lab, and the next visit does.
+    renderAt("/");
+    expect(await screen.findByRole("heading", { level: 1, name: "New experiment" })).toBeVisible();
   });
 
-  it("does not claim there is no remembered shop before the shop list answers", async () => {
-    server.use(http.get("*/api/v1/shops", () => new Promise<never>(() => {})));
-    renderAt("/settings");
+  it("writes the timestamp format, and reads it back after a reload", async () => {
+    const user = userEvent.setup();
+    const first = renderAt("/settings");
 
-    const workspace = await screen.findByRole("region", { name: "Workspace" });
-    expect(within(workspace).getByText("Reading…")).toBeVisible();
-    expect(within(workspace).queryByText(/None yet/)).toBeNull();
+    const stamps = within(await screen.findByRole("group", { name: "Timestamps" }));
+    expect(stamps.getByRole("radio", { name: "Relative" })).toBeChecked();
+    await user.click(stamps.getByRole("radio", { name: "Absolute" }));
+    first.unmount();
+
+    renderAt("/settings");
+    const reloaded = within(await screen.findByRole("group", { name: "Timestamps" }));
+    expect(reloaded.getByRole("radio", { name: "Absolute" })).toBeChecked();
+  });
+
+  it("carries the timestamp format out to a listing it does not draw", async () => {
+    const user = userEvent.setup();
+    const settings = renderAt("/settings");
+
+    const relative = renderAt("/shops");
+    expect(await screen.findAllByText(/ago$/)).not.toHaveLength(0);
+    relative.unmount();
+
+    const stamps = within(
+      await within(settings.container).findByRole("group", { name: "Timestamps" }),
+    );
+    await user.click(stamps.getByRole("radio", { name: "Absolute" }));
+    settings.unmount();
+
+    // The slice's own evidence: set timestamps to absolute and every listing quotes a date.
+    renderAt("/shops");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText(/^\d{1,2} \w{3,4} 2026, \d{2}:\d{2}$/)).toBeVisible();
+    expect(within(table).queryByText(/ago$/)).toBeNull();
   });
 
   it("remembers the rail preference across a reload and defaults to expanded", async () => {
+    const user = userEvent.setup();
     const first = renderAt("/settings");
 
     const preference = await screen.findByRole("checkbox", {
       name: /Start with the navigation rail collapsed/,
     });
     expect(preference).not.toBeChecked();
-    await userEvent.click(preference);
+    await user.click(preference);
     first.unmount();
 
     renderAt("/settings");
@@ -338,6 +315,242 @@ describe("lab settings", () => {
     expect(preference).toBeChecked();
   });
 
+  it("puts back the three an operator chose and leaves the shop they were in", async () => {
+    const user = userEvent.setup();
+    const workspace = renderAt(`/shops/${SHOP_ID}`);
+    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    workspace.unmount();
+
+    renderAt("/settings");
+    const opening = within(await screen.findByRole("group", { name: "Where the app opens" }));
+    await user.click(opening.getByRole("radio", { name: "All shops" }));
+    const stamps = within(screen.getByRole("group", { name: "Timestamps" }));
+    await user.click(stamps.getByRole("radio", { name: "Absolute" }));
+    await user.click(
+      screen.getByRole("checkbox", { name: /Start with the navigation rail collapsed/ }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Reset to defaults" }));
+
+    expect(opening.getByRole("radio", { name: "Last shop" })).toBeChecked();
+    expect(stamps.getByRole("radio", { name: "Relative" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: /Start with the navigation rail collapsed/ }),
+    ).not.toBeChecked();
+    // The shop the shell recorded is not a preference anybody set, and it has its own control.
+    expect(await screen.findByRole("link", { name: "Northstar Outfitters" })).toBeVisible();
+  });
+
+  it("offers the shop the operator was last in, and forgets it on request", async () => {
+    const user = userEvent.setup();
+    const workspace = renderAt(`/shops/${SHOP_ID}`);
+    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    workspace.unmount();
+
+    renderAt("/settings");
+    const row = within(await screen.findByRole("group", { name: "Last-visited shop" }));
+    expect(row.getByRole("link", { name: "Northstar Outfitters" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}`,
+    );
+
+    await user.click(row.getByRole("button", { name: "Forget Northstar Outfitters" }));
+
+    expect(row.queryByRole("link")).toBeNull();
+    expect(row.getByText(/None yet\. Open a shop/)).toBeVisible();
+    // Forgetting drops the shop and rewrites no choice: `/` already falls back to the shops
+    // index with nothing remembered (ADR 0054).
+    expect(
+      within(screen.getByRole("group", { name: "Where the app opens" })).getByRole("radio", {
+        name: "Last shop",
+      }),
+    ).toBeChecked();
+  });
+
+  it("does not remember a shop it could not open", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
+        HttpResponse.json({ ...BROKEN, code: "shop_not_found" }, { status: 404 }),
+      ),
+    );
+    const workspace = renderAt(`/shops/${SHOP_ID}`);
+    expect(await screen.findByRole("alert")).toBeVisible();
+    workspace.unmount();
+
+    server.resetHandlers();
+    renderAt("/settings");
+    const row = within(await screen.findByRole("group", { name: "Last-visited shop" }));
+    expect(await row.findByText(/None yet\. Open a shop/)).toBeVisible();
+  });
+
+  it("does not claim there is no remembered shop before the shop list answers", async () => {
+    server.use(http.get("*/api/v1/shops", () => new Promise<never>(() => {})));
+    renderAt("/settings");
+
+    const row = within(await screen.findByRole("group", { name: "Last-visited shop" }));
+    expect(row.getByText("Reading…")).toBeVisible();
+    expect(row.queryByText(/None yet/)).toBeNull();
+  });
+});
+
+describe("the runtime read-out", () => {
+  it("reports what this build has been proven able to run", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    await openRuntime(user);
+
+    const build = await screen.findByRole("region", { name: "What this build can run" });
+    expect(await within(build).findByText("Pydantic AI")).toBeVisible();
+    const [pydantic, control] = within(build).getAllByRole("listitem");
+
+    // The card is an `h3` under the zone's `h2`, so a framework row is an `h4`: a row that
+    // announced itself as the card's sibling would say the wrong thing about what holds what.
+    expect(
+      within(build).getByRole("heading", { level: 3, name: "What this build can run" }),
+    ).toBeVisible();
+    expect(within(pydantic).getByRole("heading", { level: 4, name: "Pydantic AI" })).toBeVisible();
+
+    expect(within(pydantic).getByText("pydantic-ai", { selector: "code" })).toBeVisible();
+    expect(within(pydantic).getByText("Single agent")).toBeVisible();
+    // The provider under the workspace's one spelling of it, not the wire's word.
+    expect(within(pydantic).getByText("OpenAI · gpt-5-mini")).toBeVisible();
+    expect(within(pydantic).getByText("structured output")).toBeVisible();
+
+    // The envelope is per framework, so a reader learns what the control arm cannot do
+    // without first being refused by the publish gate.
+    expect(within(control).getByText("Deterministic fake")).toBeVisible();
+    expect(within(control).getByText("Deterministic control · deterministic")).toBeVisible();
+    expect(within(control).queryByText("structured output")).toBeNull();
+  });
+
+  it("does not claim the gate blocks a model the way it blocks a provider", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    await openRuntime(user);
+
+    // An unlisted model is `model_not_exercised`, a warning; only the framework, architecture
+    // and provider are errors. A page that said otherwise would be a second, stricter gate.
+    const build = await screen.findByRole("region", { name: "What this build can run" });
+    expect(
+      within(build).getByText(/naming a model outside it is a warning that does not block/),
+    ).toBeVisible();
+  });
+
+  it("states the offline limit as what this build can actually advance", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    await openRuntime(user);
+
+    const runMode = await screen.findByRole("region", { name: "Run mode" });
+    expect(await within(runMode).findByText("Offline")).toBeVisible();
+    expect(within(runMode).getByText("gpt-5-mini", { selector: "code" })).toBeVisible();
+    // Offline this process registers one experiment runtime, so a two-arm framework
+    // comparison is refused rather than run with identical decisions. The surface that sent
+    // an operator to author one would be describing `make seed`'s composition, not this one.
+    expect(
+      within(runMode).getByText(/only the deterministic control arm can be advanced here/),
+    ).toBeVisible();
+    expect(within(runMode).getByText(/refused the moment it is advanced/)).toBeVisible();
+    expect(within(runMode).getByText(/establishes is the evidence model/)).toBeVisible();
+    expect(
+      within(runMode).getByText(/Only a credentialed run answers how two frameworks actually/),
+    ).toBeVisible();
+    expect(
+      within(runMode).queryByText(/every framework runs against its own offline model/i),
+    ).toBeNull();
+  });
+
+  it("drops the offline limit once a credential is configured", async () => {
+    const user = userEvent.setup();
+    currentStatus = {
+      run_mode: "credentialed",
+      model_id: "gpt-5-mini",
+      trace_export_configured: true,
+    };
+    renderAt("/settings");
+    await openRuntime(user);
+
+    const runMode = await screen.findByRole("region", { name: "Run mode" });
+    expect(await within(runMode).findByText("Credentialed")).toBeVisible();
+    expect(within(runMode).queryByText(/only the deterministic control arm/)).toBeNull();
+    expect(within(runMode).getByText(/a model-backed arm reaches the provider/)).toBeVisible();
+  });
+
+  it("names the Phoenix path while nothing exports traces", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    await openRuntime(user);
+
+    const traces = await screen.findByRole("region", { name: "Trace export" });
+    expect(await within(traces).findByText(/No OTLP endpoint is configured/)).toBeVisible();
+    expect(within(traces).getByText("infra/phoenix/compose.yaml")).toBeVisible();
+    expect(within(traces).getByText("http://localhost:6006")).toBeVisible();
+    // The whole variable, not a clipped one: it is the longest string on this page and the
+    // card it sits in hides its overflow.
+    expect(
+      within(traces).getByText(
+        "AGENT_LAB_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006/v1/traces",
+      ),
+    ).toBeVisible();
+  });
+
+  it("reports an exporter without naming the endpoint or over-promising the allowlist", async () => {
+    const user = userEvent.setup();
+    currentStatus = { ...OFFLINE, trace_export_configured: true };
+    renderAt("/settings");
+    await openRuntime(user);
+
+    const traces = await screen.findByRole("region", { name: "Trace export" });
+    expect(await within(traces).findByText(/An OTLP endpoint is configured/)).toBeVisible();
+    expect(within(traces).getByText(/The endpoint itself is not reported here/)).toBeVisible();
+    // The allowlist covers the spans the lab opens. An SDK exporting its own is a path this
+    // project does not write and cannot promise the sanitization of.
+    expect(within(traces).getByText(/No free-form string of the lab's own is/)).toBeVisible();
+  });
+
+  it("keeps run mode readable when the framework listing fails", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/agent-configurations/resources", () =>
+        HttpResponse.json(BROKEN, { status: 500 }),
+      ),
+    );
+    renderAt("/settings");
+    await openRuntime(user);
+
+    // Run mode needs no database and must not fall with a listing that does.
+    const runMode = await screen.findByRole("region", { name: "Run mode" });
+    expect(await within(runMode).findByText("Offline")).toBeVisible();
+
+    const build = screen.getByRole("region", { name: "What this build can run" });
+    expect(within(build).getByRole("alert")).toBeVisible();
+    expect(within(build).queryByText("Reading…")).toBeNull();
+    // One failure, one alert: the page does not repeat a message the card already carries.
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("stops reading rather than reading forever when composition cannot be reported", async () => {
+    const user = userEvent.setup();
+    server.use(http.get("*/api/v1/lab-status", () => HttpResponse.json(BROKEN, { status: 500 })));
+    renderAt("/settings");
+    await openRuntime(user);
+
+    const runMode = await screen.findByRole("region", { name: "Run mode" });
+    expect(await within(runMode).findByRole("alert")).toBeVisible();
+    expect(within(runMode).queryByText("Reading…")).toBeNull();
+    expect(
+      within(screen.getByRole("region", { name: "Trace export" })).getByRole("alert"),
+    ).toBeVisible();
+    // The framework table answered, so it is still readable.
+    expect(
+      within(screen.getByRole("region", { name: "What this build can run" })).getByText(
+        "Pydantic AI",
+      ),
+    ).toBeVisible();
+  });
+});
+
+describe("the lab's other frameless surfaces", () => {
   it("defines the words the application uses on screen", async () => {
     renderAt("/glossary");
 

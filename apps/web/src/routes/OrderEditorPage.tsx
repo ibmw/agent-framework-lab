@@ -51,7 +51,7 @@ import {
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  formatTimestamp,
+  formatFixtureTimestamp,
   outlineButtonClasses,
   surfaceClasses,
   tableCellClasses,
@@ -351,7 +351,7 @@ export function OrderEditorPage() {
             <StatusPill tone="payment" label={paymentLabel(content.payment.status)} />
             <StatusPill tone="fulfilment" label={fulfilmentLabel(content.fulfilment.status)} />
             <span className="text-[11.5px] text-admin-muted">
-              Placed {formatTimestamp(content.placed_at)}
+              Placed {formatFixtureTimestamp(content.placed_at)}
             </span>
           </div>
         }
@@ -751,8 +751,8 @@ export function OrderEditorPage() {
                   {address.region ? ` · ${address.region}` : ""} · {address.country}
                 </div>
                 <p className="mt-1 text-xs text-admin-muted">
-                  Selected {formatTimestamp(address.selected_at)} · address-book edits never change
-                  this order.
+                  Selected {formatFixtureTimestamp(address.selected_at)} · address-book edits never
+                  change this order.
                 </p>
                 {defaultAddress && defaultAddress.id !== address.source_address_id ? (
                   <p className="mt-1 text-xs text-admin-draft-ink">

@@ -262,6 +262,13 @@ becomes `#22544a` and the row leaves the table.
 - **Removing `/settings`' own *Back to <shop>* link.** It names one shop and the bar's toggle names
   the screen; they answer different questions and the settings surface keeps its own.
 
+  > Narrowed by PLAN-UX Slice 18 (2026-09-21). Both questions are still asked on that page and
+  > neither answer moved; where they are asked did. The header now carries
+  > *← Back to workspace*, which reads `agent-lab.settings-return` — this decision's own
+  > preference, not a second mechanism — so the page and the bar cannot disagree about what is
+  > underneath. The shop link is the *Last-visited shop* row of *Your preferences*, beside the
+  > *Forget* that drops it, which is where the prototype draws it.
+
 ## Consequences
 
 Sixteen route files lose an import and a mount, and four of them lose a `<>…</>` that existed only

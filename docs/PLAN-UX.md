@@ -61,7 +61,8 @@ Three things the prototype draws are decided outside this plan, so that no slice
 - **A rail entry's count comes from the listing its index renders**, held by the workspace —
   ADR 0056, which also measured and refused the additive counts read. Landed.
 - **Two of the five proposed preferences earn a consumer**, and the logo is the optional last
-  slice — `docs/design-direction.md`, *Proposals, not decisions*.
+  slice — `docs/design-direction.md`, *Proposals, not decisions*. Both landed with the settings
+  zones; how a timestamp is written, and what a reset puts back, are ADR 0058.
 
 The assessment that produced this plan — the prototype read screen by screen against the
 application, and the verdict on each slice of the 13 September plan — is
@@ -69,9 +70,12 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Group B has one slice left, 18, and nothing waits on it. Slice 19 is the backend milestone
-and runs beside it; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B.
-Slices 26 and 27 close the milestone, and 28 is optional.
+Every screen Group B recomposes is built. Its two remaining slices are the connection and the
+provider: Slice 19, the milestone's one backend slice, which drops its zone into the settings
+page whose shape already landed, and Slice 20, which needs it. Group C's slices 21–25 depend on
+nothing in Group B and can start now; Slice 21 also owns the fifth preference row, which the
+settings zones deliberately did not draw. Slices 26 and 27 close the milestone, and 28 is
+optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -85,33 +89,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
-
-#### Slice 18 — Settings, restructured
-
-- [ ] `LabSettingsPage` becomes the prototype's: a centred 1024px column, "← Back to workspace"
-  above the title returning to what was underneath, and three zones distinguished by surface.
-- [ ] *Your preferences* on white, saved on change, with Reset to defaults: where the app opens
-  (three options, written into the preference `/` already reads, ADR 0054), last-visited
-  shop with Forget, rail starts
-  collapsed, timestamps relative or absolute (consumed by `formatTimestamp` everywhere). The
-  other three rows are not drawn — see *Decisions the prototype forces*.
-- [ ] *Runtime configuration · Read only* as a collapsed disclosure: grey `#f6f7f8` cards with a
-  padlock, Run mode, Trace export (unclipped), What this build can run, each ending in a "To
-  change it:" line naming the variable or the file. It keeps ADR 0044's character for what is
-  still composition.
-- [ ] *The fast path* in its own zone below (ADR 0047).
-- [ ] The *Model provider* zone's place is drawn with a one-card placeholder that says the
-  connection arrives with Slice 19 and that the environment key is what is in force — so the
-  page's shape lands once.
-
-Frames: `Workspace.dc.html` :3854.
-
-Branch: `feat/settings-zones`. Checks: `LabSettings.test.tsx` for each preference's write and
-read-back, the disclosure, the back link, and the three surfaces told apart by role and heading;
-Playwright `workspace-shell` if it reads Settings.
-
-Slice evidence: an operator sets timestamps to absolute and every listing quotes a date; chooses
-to open on the lab and the next visit does; and can tell at a glance which cards they may edit.
 
 #### Slice 19 — The model connection
 
@@ -176,9 +153,9 @@ is told on the same row that nothing here can run it yet.
   them; Delete and Duplicate on the product editor header and as a row action, Delete naming any
   order line that references one of the product's variants.
 - [ ] Detaching a profile returns to Customers.
-- [ ] *Confirm before anything is deleted* lands as the third preference row, with the sentence
-  the prototype writes: a published version and a recorded run are never deletable whichever
-  way it is set.
+- [ ] *Confirm before anything is deleted* lands as a fifth row of *Your preferences*, with the
+  sentence the prototype writes: a published version and a recorded run are never deletable
+  whichever way it is set.
 
 Frames: DEPRECADED frame 2c; `Workspace.dc.html` :1969 for the guideline's delete.
 

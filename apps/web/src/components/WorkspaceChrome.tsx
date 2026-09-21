@@ -297,6 +297,7 @@ export function EntryEditNotice({ id, label }: { id: string; label: string | nul
 export function EntryCard({
   lead,
   title,
+  titleLevel = 3,
   chips,
   actions,
   edit,
@@ -305,11 +306,19 @@ export function EntryCard({
   /** A control that selects the entry, such as the default-tone radio. */
   lead?: ReactNode;
   title: ReactNode;
+  /**
+   * The row's place in the document outline. `3` is where every list of these sits — under a
+   * `Card`, whose own title is an `h2` — and is the default, so no existing caller says it.
+   * A list one level deeper passes `4` rather than flattening: a row that announces itself as
+   * a sibling of the card holding it tells a reader the wrong thing about what contains what.
+   */
+  titleLevel?: 3 | 4;
   chips?: ReactNode;
   actions?: ReactNode;
   edit?: EntryEdit;
   children?: ReactNode;
 }) {
+  const Title = titleLevel === 4 ? "h4" : "h3";
   const open = edit?.open ?? false;
   return (
     // A grid item defaults to min-width:auto, so an unbreakable token in the body would
@@ -318,7 +327,9 @@ export function EntryCard({
     <li className="grid min-w-0 gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
         {lead}
-        <h3 className="min-w-0 [overflow-wrap:anywhere] text-[13px] font-semibold">{title}</h3>
+        <Title className="min-w-0 [overflow-wrap:anywhere] text-[13px] font-semibold">
+          {title}
+        </Title>
         {chips}
         {/* While the row is open its Remove is gone: removing the entry being corrected is
             not one of the two answers the open row is asking for. */}

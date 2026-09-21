@@ -284,6 +284,17 @@ it.
 
 ### The settings surface reports composition and never edits it
 
+> Narrowed by PLAN-UX Slice 18 (2026-09-21). The decision stands whole — the surface reports
+> composition and edits none of it, and every refusal below is unchanged — but three of these
+> four are no longer four read-outs on one page. *Run mode*, *Trace export* and *This build*,
+> renamed *What this build can run*, are the three grey padlocked cards of a **collapsed**
+> *Runtime configuration · Read only* disclosure, and each now ends in a "To change it:" line
+> naming the variable or the file, which is where this decision's own argument ended anyway.
+> *Workspace* stopped being a read-out at the foot of the page and became *Your preferences*,
+> the page's first zone: the same two view preferences, beside where the app opens (ADR 0054)
+> and how a timestamp is written (ADR 0058), saved on change with a *Reset to defaults* that
+> reaches the three an operator chose and neither of the two the shell records.
+
 `/settings` carries four read-outs, and none of them is a control.
 
 - **This build.** The frameworks, architectures, providers, models and proven capabilities from
@@ -315,6 +326,13 @@ collector URL is a place a deployment can put a token, and a route that serves i
 serves that token the day somebody does.
 
 ### The standing offline qualification
+
+> Narrowed by PLAN-UX Slice 18 (2026-09-21). The sentence is unchanged, word for word, and is
+> still on this page. What changed is that it sits inside the collapsed runtime disclosure
+> above, so the first-time reader this paragraph was written for reaches it with one press
+> rather than none. That is the cost of telling the page's zones apart by surface, and it is
+> recorded rather than smoothed over: nothing else on the page says why a two-arm comparison
+> is refused offline.
 
 While run mode is offline, the settings page states the limit as a property of the build: every
 comparison produced here has both arms' decisions held identical by construction, so it establishes
