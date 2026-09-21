@@ -69,10 +69,9 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Group B's remaining slices — 17 and 18 — are independent and can proceed in parallel;
-creation is a page on every index now, so neither waits on the other. Slice 19 is the
-backend milestone and runs beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on
-nothing in Group B. Slices 26 and 27 close the milestone, and 28 is optional.
+Group B has one slice left, 18, and nothing waits on it. Slice 19 is the backend milestone
+and runs beside it; Slice 20 needs it. Group C's slices 21–25 depend on nothing in Group B.
+Slices 26 and 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -86,22 +85,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
-
-#### Slice 17 — Tone of voice, the remainder
-
-- [ ] A nameless guideline cannot be committed and cannot be made the default; the row says so.
-- [ ] Delete is refused on the shop default with the reason, and the two-step confirm of Slice
-  21 once it exists.
-- [ ] Each row shows its slug and version line and "used by" — the configurations that name it as
-  an override, read from the configurations listing.
-- [ ] New-then-cancel removes the appended row (the prototype's own bug, encoded as a test).
-
-Frames: `Workspace.dc.html` :1897.
-
-Branch: `feat/tone-guidelines`. Checks: `App.test.tsx`'s tone cases for the four rules.
-
-Slice evidence: an operator cannot leave a guideline called nothing, cannot delete the default
-without first choosing another, and can read which configuration would notice.
 
 #### Slice 18 — Settings, restructured
 

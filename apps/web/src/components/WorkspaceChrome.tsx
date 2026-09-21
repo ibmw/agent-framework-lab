@@ -201,6 +201,7 @@ export function EntryEditButtons({
   onSave,
   onCancel,
   saveable = true,
+  saveRefusal,
   submit = false,
 }: {
   label: string;
@@ -210,6 +211,14 @@ export function EntryEditButtons({
   onSave: () => void;
   onCancel: () => void;
   saveable?: boolean;
+  /**
+   * Why Save is refused, and the id of the line in the row that says so. The reason rides in
+   * `title` and the line carries it visibly, which is the blocked-action rule as
+   * `docs/design-direction.md` states it. The dashed weight is `blockedButtonClasses`, whose
+   * adopters Slice 22 settles in one pass together with whether a blocked control stays in
+   * the tab order at all — which is what a disabled button's description is waiting on.
+   */
+  saveRefusal?: { id: string; reason: string };
   /** True where the fields sit in a `<form>`, so Enter in a field saves the row. */
   submit?: boolean;
 }) {
@@ -235,6 +244,8 @@ export function EntryEditButtons({
         type={submit ? "submit" : "button"}
         aria-label={`Save ${label}`}
         disabled={!saveable}
+        title={saveable ? undefined : saveRefusal?.reason}
+        aria-describedby={saveable ? undefined : saveRefusal?.id}
         onClick={submit ? undefined : onSave}
       >
         <ButtonIcon verb="save" />

@@ -28,6 +28,15 @@ export interface EntryEdit {
   onCancel: () => void;
   /** False while the open fields hold something the lab would refuse. */
   saveable?: boolean;
+  /**
+   * Why Save is refused, and the id of the line in the row that says so.
+   *
+   * A greyed Save with nothing beside it is a refusal the operator has to guess at, which is
+   * what `docs/design-direction.md`'s blocked-action rule is written against: the reason goes
+   * in `title` and inline. The line is the row's, not the field's — a validation message under
+   * the control is Slice 22's, settled on every blocked primary at once.
+   */
+  saveRefusal?: { id: string; reason: string };
   fields: ReactNode;
 }
 
@@ -124,11 +133,20 @@ export function entryEdit<FieldsT>(
   fieldsOf: () => FieldsT,
   onSave: (fields: FieldsT) => void,
   fields: (value: FieldsT, onChange: (next: FieldsT) => void) => ReactNode,
-  /** Whether the open fields hold something the lab would take; saveable when omitted. */
-  saveable?: (value: FieldsT) => boolean,
+  /**
+   * Whether the open fields hold something the lab would take; saveable when omitted.
+   *
+   * `true` saves and `false` refuses with nothing said, which is where the callers that
+   * predate Slice 17 still are and what Slice 22 settles on every blocked primary at once.
+   * A `{ id, reason }` refuses *and* says why: the reason rides in the Save's `title`, and
+   * the id names the line in the row that carries it where an operator can read it.
+   */
+  saveable?: (value: FieldsT) => boolean | { id: string; reason: string },
 ): EntryEdit {
   const open = editor.isOpen(id);
   const openFields = open ? editor.open : null;
+  const verdict = openFields && saveable ? saveable(openFields.fields) : true;
+  const refusal = typeof verdict === "object" ? verdict : null;
   return {
     label,
     open,
@@ -141,7 +159,8 @@ export function entryEdit<FieldsT>(
       editor.close();
     },
     onCancel: () => editor.close(),
-    saveable: openFields && saveable ? saveable(openFields.fields) : true,
+    saveable: verdict === true,
+    saveRefusal: refusal ?? undefined,
     fields: openFields ? fields(openFields.fields, editor.change) : null,
   };
 }

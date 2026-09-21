@@ -400,3 +400,28 @@ export const SHIPPED_AT_RULE =
  */
 export const ORDER_METHOD_RULE =
   "One of the shop's own methods. Its name is frozen into the order when you pick it, so renaming it under Shop details never rewrites this one.";
+
+/**
+ * The two refusals a tone-of-voice guideline makes on its own row (PLAN-UX Slice 17).
+ *
+ * Both are the lab's own rules, read one step before the publish gate reads them.
+ *
+ * A guideline with no name is refused by `ToneOfVoiceSchema.name`'s `minLength: 1` and again
+ * by `_require_label(self.name, "tone-of-voice name")` in `domain/shop.py`, which also
+ * refuses a name that is only padding — `not value.strip()`. `required` on the input does
+ * not: it is satisfied by a space, which is the door this sentence closes. The second clause
+ * is why the name is the field that matters at all: the ID a configuration names as an
+ * override is `ToneOfVoiceSelectionSchema.guideline_id`, and `DerivedIdField` derived that ID
+ * from the name when the guideline was created, so a guideline called nothing has nothing for
+ * an override to reach for either.
+ *
+ * Deleting the shop default is refused because `tone_of_voice_without_default` — "one
+ * tone-of-voice guideline must be the shop default", raised in `validate_shop` — is what the
+ * draft would earn on the next preview. The sentence names the pointer rather than the row,
+ * because moving the default is the way out and deleting the guideline is not.
+ */
+export const TONE_NAME_RULE =
+  "A guideline must be named. The lab refuses a guideline whose name is empty, and the ID a configuration names it by was derived from that name.";
+
+export const TONE_DEFAULT_REMOVAL_RULE =
+  "The shop default cannot be deleted — point the default elsewhere first.";

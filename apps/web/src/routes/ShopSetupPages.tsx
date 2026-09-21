@@ -30,6 +30,8 @@ import {
   KEBAB_PATTERN,
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
+  TONE_DEFAULT_REMOVAL_RULE,
+  TONE_NAME_RULE,
 } from "../lib/fieldRules";
 import {
   accentButtonClasses,
@@ -663,6 +665,15 @@ function PaymentAndFulfilmentCards() {
   );
 }
 
+/**
+ * The muted line a refused control on this page is described by.
+ *
+ * Deliberately not the validation weight — 13px 600 `#9d3028` under the control it refuses is
+ * the rule `docs/design-direction.md` states as *planned*, and Slice 22 puts it on every
+ * `Field` row at once rather than on this one page first.
+ */
+const refusalLineClasses = "text-xs text-admin-muted";
+
 export function ToneOfVoicePage() {
   const { content, edit } = useShopWorkspace();
   const [tone, setTone] = useState<{ id: string } & ProseFields>({ id: "", name: "", text: "" });
@@ -670,6 +681,19 @@ export function ToneOfVoicePage() {
   const toneEditor = useEntryEdit<ProseFields>(takenToneIds);
   const toneNotice = useId();
   const toneSuggested = uniqueSuggestion(slugify(tone.name, ""), takenToneIds);
+
+  /**
+   * One cause, two refusals, one sentence each place it bites.
+   *
+   * A guideline with no name can neither be committed nor be made the shop default, and the
+   * open row is where both refusals meet: its Save and its default radio are described by the
+   * same line, because it is the same fact about the same row. The add form has a line of its
+   * own for the same reason it has a button of its own.
+   */
+  const openRefusalId = useId();
+  const addRefusalId = useId();
+  const addNameless = tone.name.trim() === "";
+  const openNameless = toneEditor.open !== null && toneEditor.open.fields.name.trim() === "";
 
   function setDefault(id: string) {
     edit({
@@ -686,71 +710,99 @@ export function ToneOfVoicePage() {
     <SetupPage title="Tone of voice">
       <Card title="Guidelines">
         <ul className="grid gap-2 text-[13px]">
-          {content.tone_of_voice_guidelines.map((entry) => (
-            <EntryCard
-              key={entry.id}
-              lead={
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="default-tone"
-                    checked={entry.is_default}
-                    onChange={() => setDefault(entry.id)}
-                  />
-                  <span className="sr-only">Make {entry.name} the shop default</span>
-                </label>
-              }
-              title={entry.name}
-              chips={
-                <>
-                  <EntryId value={entry.id} />
-                  {entry.is_default ? <DefaultToneChip /> : null}
-                </>
-              }
-              edit={entryEdit(
-                toneEditor,
-                toneNotice,
-                entry.id,
-                entry.name,
-                () => ({ name: entry.name, text: entry.guidance }),
-                (fields) =>
-                  edit({
-                    ...content,
-                    tone_of_voice_guidelines: content.tone_of_voice_guidelines.map((item) =>
-                      item.id === entry.id
-                        ? // `is_default` is the radio's answer on the row above, never the
-                          // form's: an edit to the wording must not move the shop default.
-                          toneEntry(entry.id, { ...fields, is_default: entry.is_default })
-                        : item,
-                    ),
-                  }),
-                (value, onChange) => (
-                  <ProseFieldset
-                    nameLabel="Name"
-                    textLabel="Guidance"
-                    columns="sm:grid-cols-1"
-                    value={value}
-                    onChange={onChange}
-                  />
-                ),
-              )}
-              actions={
-                <RemoveButton
-                  label={entry.name}
-                  onClick={() =>
+          {content.tone_of_voice_guidelines.map((entry) => {
+            // The radio answers for the row in front of the operator, so while that row is
+            // open it reads the *typed* name rather than the saved one: a guideline being
+            // renamed to nothing is a guideline that cannot be the default, and the radio
+            // that would make it one says so instead of writing it.
+            const namelessHere = toneEditor.isOpen(entry.id) && openNameless;
+            return (
+              <EntryCard
+                key={entry.id}
+                lead={
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="default-tone"
+                      checked={entry.is_default}
+                      disabled={namelessHere}
+                      title={namelessHere ? TONE_NAME_RULE : undefined}
+                      aria-describedby={namelessHere ? openRefusalId : undefined}
+                      onChange={() => setDefault(entry.id)}
+                    />
+                    <span className="sr-only">Make {entry.name} the shop default</span>
+                  </label>
+                }
+                title={entry.name}
+                chips={
+                  <>
+                    <EntryId value={entry.id} />
+                    {entry.is_default ? <DefaultToneChip /> : null}
+                  </>
+                }
+                edit={entryEdit(
+                  toneEditor,
+                  toneNotice,
+                  entry.id,
+                  entry.name,
+                  () => ({ name: entry.name, text: entry.guidance }),
+                  (fields) =>
                     edit({
                       ...content,
-                      tone_of_voice_guidelines: content.tone_of_voice_guidelines.filter(
-                        (item) => item.id !== entry.id,
+                      tone_of_voice_guidelines: content.tone_of_voice_guidelines.map((item) =>
+                        item.id === entry.id
+                          ? // `is_default` is the radio's answer on the row above, never the
+                            // form's: an edit to the wording must not move the shop default.
+                            toneEntry(entry.id, { ...fields, is_default: entry.is_default })
+                          : item,
                       ),
-                    })
-                  }
-                />
-              }
-            >
-              <EntryText label="Guidance" value={entry.guidance} />
-            </EntryCard>
-          ))}
+                    }),
+                  (value, onChange) => (
+                    <>
+                      <ProseFieldset
+                        nameLabel="Name"
+                        textLabel="Guidance"
+                        columns="sm:grid-cols-1"
+                        value={value}
+                        onChange={onChange}
+                      />
+                      {value.name.trim() === "" ? (
+                        <p id={openRefusalId} className={refusalLineClasses}>
+                          {TONE_NAME_RULE}
+                        </p>
+                      ) : null}
+                    </>
+                  ),
+                  (value) =>
+                    value.name.trim() === "" ? { id: openRefusalId, reason: TONE_NAME_RULE } : true,
+                )}
+                actions={
+                  // The shop default has no Remove at all: deleting it would leave the draft
+                  // owing `tone_of_voice_without_default` with no control on this page to pay
+                  // it, so where the button would stand the row says what to do instead. The
+                  // prototype writes the refusal in exactly that place (`Workspace.dc.html`
+                  // :1897) rather than as a Remove that argues with itself.
+                  entry.is_default ? (
+                    <p className={refusalLineClasses}>{TONE_DEFAULT_REMOVAL_RULE}</p>
+                  ) : (
+                    <RemoveButton
+                      label={entry.name}
+                      onClick={() =>
+                        edit({
+                          ...content,
+                          tone_of_voice_guidelines: content.tone_of_voice_guidelines.filter(
+                            (item) => item.id !== entry.id,
+                          ),
+                        })
+                      }
+                    />
+                  )
+                }
+              >
+                <EntryText label="Guidance" value={entry.guidance} />
+              </EntryCard>
+            );
+          })}
           {content.tone_of_voice_guidelines.length === 0 ? (
             <li className="text-admin-muted">No tone-of-voice guideline yet.</li>
           ) : null}
@@ -760,7 +812,13 @@ export function ToneOfVoicePage() {
           className={addFormClasses}
           onSubmit={(event) => {
             event.preventDefault();
-            if (!tone.id || takenToneIds.includes(tone.id)) {
+            // `required` on the Name input already refuses an empty one — the browser and
+            // jsdom both run `reportValidity()` before the submit fires — so the door this
+            // closes is a name of nothing but spaces, which `required` is satisfied by and
+            // `require_label` then refuses with a 422 (`not value.strip()`). The button
+            // reports the same rule, and the handler holds it for a submit reached any
+            // other way.
+            if (!tone.id || addNameless || takenToneIds.includes(tone.id)) {
               return;
             }
             edit({
@@ -797,14 +855,27 @@ export function ToneOfVoicePage() {
               />
             }
           />
-          <button className={`${accentButtonClasses} justify-self-start`} type="submit">
+          <button
+            className={`${accentButtonClasses} justify-self-start`}
+            type="submit"
+            disabled={addNameless}
+            title={addNameless ? TONE_NAME_RULE : undefined}
+            aria-describedby={addNameless ? addRefusalId : undefined}
+          >
             <ButtonIcon verb="create" />
             Add tone of voice
           </button>
+          {addNameless ? (
+            <p id={addRefusalId} className={refusalLineClasses}>
+              {TONE_NAME_RULE}
+            </p>
+          ) : null}
         </form>
         <p className="text-xs text-admin-muted">
           Agent configurations resolve the shop default through{" "}
-          <code>{"{{shop.tone_of_voice}}"}</code> or select a named override.
+          <code>{"{{shop.tone_of_voice}}"}</code> or select a named override. Renaming a guideline
+          never moves the shop default: it is a pointer, and the radio on the row is the only
+          control that moves it.
         </p>
       </Card>
     </SetupPage>

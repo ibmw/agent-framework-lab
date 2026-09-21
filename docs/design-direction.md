@@ -116,6 +116,10 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Remove on the document editor | not drawn | drawn, one press, in the Document card's footer | the three collections this table presents each carried a Remove per row before it, and a presentation is not where an author loses their only way to delete a policy; rule 5, another slice owning the decision — Slice 21 gives it the second press every Remove gets |
 | The document editor's side column | two note cards beside a 790px form — *Read by*, *Never in the prompt* | the one 790px column, with *Never in the prompt* as a card in it and *Read by* not drawn | the same reading as the create page's side column above; *Read by* is the figure the chip and the column beside it also lack |
 | The rows of *What this shop holds* | the whole row is a click target, with a link inside it | the row, with the link as its one control | a nested link inside a clickable row is two controls a keyboard reaches as one; *Principles*, every workflow keyboard-reachable |
+| A guideline's `slug · version` line | drawn | the slug alone, as the row's `EntryId` | `ToneOfVoiceSchema` carries no version: the shop carries the version, the page header's `VersionChips` is where it is read, and a per-row copy of it would be the same figure written once per guideline. A figure the payload lacks is not faked (*Lists and counts*) |
+| *Used by* under a guideline | "Resolved by 3 agent configurations" / "Named as an override by 1 configuration" | not drawn | `AgentConfigurationSummarySchema` carries no tone selection at all, and the configurations listing is the lab shell's rather than the shop's (ADR 0056), so the figure would cost one configuration draft read per row — and even then an override is a free-typed `guideline_id` on a shop-independent configuration, which may name a guideline of a shop this page is not. The one use this page does know is drawn: the *shop default* chip is which guideline a configuration with no override resolves to |
+| *New guideline* on the Guidelines card | a header button appending an empty row, opened for editing | the add form below the list, as on every other list in this workspace | the prototype's row is keyed by its position in an array; a guideline is keyed by its ID, which `DerivedIdField` derives from the name, so an appended row has no key until it has a name. The prototype pays for that by writing the row into the list and marking the draft unsaved on the press, then rolling both back on Cancel — restoring the save state wholesale over anything else done meanwhile. The add form holds the new guideline outside the draft instead, which is ADR 0051's *a half-typed create form is not unsaved work* |
+| The guideline editor's two validation messages | 13px 600 `#9d3028` under the Name and the Guideline field | one muted line in the row, named by the Save's and the radio's `aria-describedby` | the validation weight under the control is the half of the blocked-action rule Slice 22 settles on every `Field` row at once; rule 5, another slice owning the decision. The body-empty message goes with it — this slice's rule is the name, and the guidance the gate still refuses on its own |
 
 One item the handoff names is not built and not refused: Georgia on the results' stat
 numerals. It lands with the surface that first draws it, which is what the `open` button verb
@@ -281,6 +285,19 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   it is swept for a hover and a focus ring that a permanently disabled control can never show.
   The ten create pages wear it and nothing else does; Publish, Start, Save connection and
   Compose adopt it in Slice 22, which also puts the validation message on the `Field` row.
+  Until then a control blocked outside a create page carries the reason in `title` and in one
+  muted line the surface writes, which the control's `aria-describedby` names: `entryEdit`'s
+  refusal is `{ id, reason }` rather than a bare `false`, so a Save that will not save says so
+  in the row. **Two refusals with one cause are one sentence**: a tone-of-voice guideline with
+  no name can neither be saved nor be made the shop default, and its Save and its default
+  radio point at the row's single line.
+- **A refusal that has a way out names the way out, where the control would have stood.** The
+  shop's default tone-of-voice guideline carries no Remove at all — deleting it would leave
+  the draft owing `tone_of_voice_without_default` with no control on that page to pay it — and
+  the sentence naming the pointer stands in the Remove's place (`Workspace.dc.html` :1897).
+  That is a refusal rather than a blocked action: nothing on the row can be pressed to make it
+  proceed, so there is no control to dash, and Slice 21's second press is for the Removes that
+  are offered.
 
 ## Lists and counts
 

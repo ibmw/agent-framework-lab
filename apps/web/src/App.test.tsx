@@ -13,7 +13,12 @@ import { setupServer } from "msw/node";
 import { isValidElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { PRODUCT_TITLE_RULE, SHOP_NAME_RULE } from "./lib/fieldRules";
+import {
+  PRODUCT_TITLE_RULE,
+  SHOP_NAME_RULE,
+  TONE_DEFAULT_REMOVAL_RULE,
+  TONE_NAME_RULE,
+} from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { CREATE_ROUTES, tourAt } from "./lib/tours";
 import { routeTree } from "./routeTree";
@@ -1586,6 +1591,184 @@ describe("editing a saved entry in place", () => {
     await user.click(open.getByRole("button", { name: "Cancel editing Warm and precise" }));
 
     expect(tone.getByText("Warm and precise")).toBeVisible();
+    expect(savedDrafts).toEqual([]);
+  });
+});
+
+/**
+ * The four rules a tone-of-voice guideline answers to (PLAN-UX Slice 17,
+ * `Workspace.dc.html`:1897).
+ *
+ * They are all one page's, and three of the four are refusals: a guideline called nothing, a
+ * default deleted out from under the gate, and a create abandoned halfway. The fourth is what
+ * the row may honestly say about itself, which is less than the prototype draws.
+ */
+describe("a tone-of-voice guideline's own rules", () => {
+  /** A second guideline, so that "the default" and "a guideline" are two different rows. */
+  const BRIEF = {
+    id: "brief",
+    name: "Brief",
+    guidance: "One paragraph, under forty words. Lead with the outcome.",
+    is_default: false,
+  };
+
+  function twoGuidelines(): ShopDraftResponse["content"] {
+    return {
+      ...READY_CONTENT,
+      tone_of_voice_guidelines: [...READY_CONTENT.tone_of_voice_guidelines, BRIEF],
+    };
+  }
+
+  function guidelines() {
+    return screen.findByRole("region", { name: "Guidelines" });
+  }
+
+  function shopRail() {
+    return within(screen.getByLabelText("Shop workspace"));
+  }
+
+  it("refuses to add a guideline with no name, and says why beside the button", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    const blocked = tone.getByRole("button", { name: "Add tone of voice" });
+    expect(blocked).toBeDisabled();
+    expect(blocked).toHaveAttribute("title", TONE_NAME_RULE);
+    expect(blocked).toHaveAccessibleDescription(TONE_NAME_RULE);
+
+    // A whole form with no name is the case `required` on the Name input already refused.
+    await user.type(tone.getByLabelText("ID"), "brief");
+    await user.type(tone.getByLabelText("Guidance"), BRIEF.guidance);
+    expect(tone.getByRole("button", { name: "Add tone of voice" })).toBeDisabled();
+
+    // This is the door the rule actually closes. `required` is satisfied by a space, so a
+    // name of nothing but spaces used to reach the draft and come back a 422 from
+    // `require_label`; the button refuses it here, in the same words.
+    await user.type(tone.getByLabelText("Name"), " ");
+    const padded = tone.getByRole("button", { name: "Add tone of voice" });
+    expect(padded).toBeDisabled();
+    expect(padded).toHaveAccessibleDescription(TONE_NAME_RULE);
+
+    await user.clear(tone.getByLabelText("Name"));
+    await user.type(tone.getByLabelText("Name"), "Brief");
+    const allowed = tone.getByRole("button", { name: "Add tone of voice" });
+    expect(allowed).toBeEnabled();
+    expect(allowed).not.toHaveAccessibleDescription(TONE_NAME_RULE);
+
+    await user.click(allowed);
+    expect(tone.getByText("brief", { selector: "code" })).toBeVisible();
+  });
+
+  it("refuses to save or to default a guideline renamed to nothing, from one line", async () => {
+    const user = userEvent.setup();
+    currentContent = twoGuidelines();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    await user.click(tone.getByRole("button", { name: "Edit Brief" }));
+    const open = within(tone.getByRole("form", { name: "Edit Brief" }));
+    await user.clear(open.getByLabelText("Name"));
+
+    const save = tone.getByRole("button", { name: "Save Brief" });
+    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute("title", TONE_NAME_RULE);
+    expect(save).toHaveAccessibleDescription(TONE_NAME_RULE);
+
+    // The same fact refusing the other thing this row can do. The radio answers for the row
+    // in front of the operator, and that row is now called nothing — so it is refused here
+    // rather than moving the default onto the name still saved underneath the form.
+    const radio = tone.getByRole("radio", { name: "Make Brief the shop default" });
+    expect(radio).toBeDisabled();
+    expect(radio).toHaveAccessibleDescription(TONE_NAME_RULE);
+    // Two refusals, one cause, one sentence: both controls point at the row's single line.
+    expect(open.getAllByText(TONE_NAME_RULE)).toHaveLength(1);
+    // The other row is not the one being renamed, so its own default radio still works.
+    expect(
+      tone.getByRole("radio", { name: "Make Warm and precise the shop default" }),
+    ).toBeEnabled();
+
+    await user.type(open.getByLabelText("Name"), "Brief and plain");
+    expect(tone.getByRole("button", { name: "Save Brief" })).toBeEnabled();
+    expect(tone.getByRole("radio", { name: "Make Brief the shop default" })).toBeEnabled();
+    expect(open.queryByText(TONE_NAME_RULE)).toBeNull();
+  });
+
+  it("refuses to delete the shop default, and points at the way out", async () => {
+    const user = userEvent.setup();
+    currentContent = twoGuidelines();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    // Where the default's Remove would stand, the row says what to do instead. Slice 21 gives
+    // every surviving Remove its second press; this is about the one that is not offered.
+    const rows = tone.getAllByRole("listitem");
+    expect(within(rows[0]).queryByRole("button", { name: "Remove Warm and precise" })).toBeNull();
+    expect(within(rows[0]).getByText(TONE_DEFAULT_REMOVAL_RULE)).toBeVisible();
+    expect(within(rows[1]).getByRole("button", { name: "Remove Brief" })).toBeVisible();
+
+    // Pointing the default elsewhere is the whole of the way out, and the refusal moves with
+    // the pointer rather than with the row.
+    await user.click(tone.getByRole("radio", { name: "Make Brief the shop default" }));
+
+    const moved = tone.getAllByRole("listitem");
+    expect(within(moved[1]).queryByRole("button", { name: "Remove Brief" })).toBeNull();
+    expect(within(moved[1]).getByText(TONE_DEFAULT_REMOVAL_RULE)).toBeVisible();
+    await user.click(within(moved[0]).getByRole("button", { name: "Remove Warm and precise" }));
+
+    expect(tone.queryByText("Warm and precise")).toBeNull();
+    expect(tone.getByText("Brief")).toBeVisible();
+  });
+
+  it("names a guideline by its slug, and draws no version or used-by figure", async () => {
+    // The prototype's row reads `slug · v2` with "Resolved by 3 agent configurations" under
+    // it. `ToneOfVoiceSchema` carries no version of its own — the shop carries the version,
+    // and the page header's chips are where it is read — and `AgentConfigurationSummarySchema`
+    // carries no tone selection at all, so neither figure is drawn rather than faked
+    // (`docs/design-direction.md`, *Lists and counts*).
+    currentContent = twoGuidelines();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    const rows = tone.getAllByRole("listitem");
+    expect(within(rows[0]).getByText("warm", { selector: "code" })).toBeVisible();
+    expect(within(rows[1]).getByText("brief", { selector: "code" })).toBeVisible();
+    expect(within(rows[1]).queryByText(/\bv\d+\b/)).toBeNull();
+    expect(within(rows[1]).queryByText(/configuration/i)).toBeNull();
+    // The one thing about use this page does know is which guideline a configuration with no
+    // override resolves to, and the default row already carries it as a chip.
+    expect(within(rows[0]).getByText("shop default")).toBeVisible();
+  });
+
+  it("never appends the guideline being typed, so abandoning one leaves no row to remove", async () => {
+    // The prototype's *New guideline* appends an empty record to the list and marks the draft
+    // unsaved on the press, so its Cancel has to take the row out again and put the save
+    // state back — a rollback of a write that was never asked for, and one that restores the
+    // save state wholesale over anything else the operator did meanwhile. Here the add form
+    // holds the new guideline outside the draft until Add is pressed, so there is no appended
+    // row for a cancel to remove and no save state to restore (ADR 0051).
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await guidelines());
+
+    await user.type(tone.getByLabelText("Name"), "Brief");
+    await user.type(tone.getByLabelText("Guidance"), BRIEF.guidance);
+
+    expect(tone.queryByRole("button", { name: "Edit Brief" })).toBeNull();
+    expect(within(railEntry("Tone of voice")).getByText("1")).toBeVisible();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+
+    // Leaving is the whole of the cancel: a half-typed create form is not unsaved work, so
+    // nothing is asked and nothing is left behind.
+    await user.click(shopRail().getByRole("link", { name: "Orders" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await user.click(shopRail().getByRole("link", { name: "Tone of voice" }));
+    const again = within(await guidelines());
+    expect(again.getByLabelText("Name")).toHaveValue("");
+    expect(again.queryByRole("button", { name: "Edit Brief" })).toBeNull();
+    expect(within(railEntry("Tone of voice")).getByText("1")).toBeVisible();
     expect(savedDrafts).toEqual([]);
   });
 });
