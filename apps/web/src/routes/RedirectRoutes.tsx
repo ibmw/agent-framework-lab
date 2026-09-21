@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, type Params, useLocation, useNavigate, useParams } from "react-router-dom";
+import { documentsOfKindAt } from "../lib/documents";
 import { writeLastVisitedShop } from "../lib/preferences";
 
 /**
@@ -37,4 +38,21 @@ export function LabRedirect({ to }: { to: (params: Readonly<Params<string>>) => 
 export function RedirectRetiredGlossary() {
   const { hash } = useLocation();
   return <Navigate to={{ pathname: "/glossary", hash }} replace />;
+}
+
+/**
+ * The retired support-guidelines page, which is now three rows of the Documents table.
+ *
+ * ADR 0054 took *Support guidelines* off the rail and said its route would redirect once
+ * Slice 16 folded the guidelines into the table; this is that redirect. It carries the
+ * filter, because what the old address meant was "the shop's guidelines" and the new one
+ * says that with `?kind=guidelines` — the chip the table reads out of the address, so the
+ * reader lands on the list they asked for rather than on all three.
+ *
+ * A redirect rather than a 404: the address was reachable and linkable for the whole of the
+ * interval ADR 0054 opened, and a bookmark to it is a bookmark to work that still exists.
+ */
+export function RedirectRetiredGuidelines() {
+  const { shopId = "" } = useParams();
+  return <Navigate to={documentsOfKindAt(shopId, "support_guideline")} replace />;
 }

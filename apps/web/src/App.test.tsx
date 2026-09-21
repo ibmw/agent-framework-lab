@@ -609,69 +609,16 @@ describe("shop workspace", () => {
     expect(within(variants).getByLabelText("New variant SKU")).toHaveValue("NS-ASJ-CUSTOM");
   });
 
-  it("shows the body of every saved policy and FAQ entry, not only its title", async () => {
-    renderAt(`/shops/${SHOP_ID}/setup/policies`);
-
-    const policies = await screen.findByRole("region", { name: "Policies" });
-    expect(within(policies).getByText("Shipping and delivery")).toBeVisible();
-    expect(within(policies).getByText("Shipping", { selector: "span" })).toBeVisible();
-    expect(within(policies).getByText("shipping-policy", { selector: "code" })).toBeVisible();
-    const body = within(policies).getByText(/Standard delivery is 2 to 5 working days/);
-    expect(body).toBeVisible();
-    // The blank line the author typed reaches the DOM rather than being stripped, and the
-    // rule that renders it as a blank line is on the element. jsdom computes no layout, so
-    // the Tailwind class is the only part of that contract a unit test can see.
-    expect(body.textContent).toBe(
-      "Standard delivery is 2 to 5 working days.\n\nExpress is next working day.",
-    );
-    expect(body).toHaveClass("whitespace-pre-wrap");
-    // An unbreakable token — a pasted returns-portal URL — must break inside the card
-    // instead of widening the row until every entry's Remove is clipped away.
-    expect(body).toHaveClass("[overflow-wrap:anywhere]");
-
-    const faq = screen.getByRole("region", { name: "FAQ" });
-    expect(within(faq).getByText("When will my order arrive?")).toBeVisible();
-    expect(
-      within(faq).getByText("Standard delivery arrives in 2 to 5 working days."),
-    ).toBeVisible();
-    expect(within(faq).getByText("delivery-times", { selector: "code" })).toBeVisible();
-  });
-
-  it("shows the body of a saved support guideline and the text of a tone of voice", async () => {
-    renderAt(`/shops/${SHOP_ID}/setup/support`);
-
-    expect(
-      await screen.findByText("Escalate to tier 2 for any refund above 200 EUR."),
-    ).toBeVisible();
-    expect(screen.getByText("escalation", { selector: "code" })).toBeVisible();
-
-    await userEvent.click(screen.getByRole("link", { name: "Tone of voice" }));
+  it("shows the text of a saved tone of voice, not only its name", async () => {
+    // The shop's three document collections left this page for the Documents table and its
+    // editor (PLAN-UX Slice 16); tone of voice is the list that still reads on a card, and
+    // the entry-card rendering is `Documents.test.tsx`'s subject on the other three.
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
 
     expect(
       await screen.findByText("Lead with the fact, then the action, then what happens next."),
     ).toBeVisible();
     expect(screen.getByText("warm", { selector: "code" })).toBeVisible();
-  });
-
-  it("keeps adding and removing an entry working now that the body is on the row", async () => {
-    renderAt(`/shops/${SHOP_ID}/setup/policies`);
-
-    const faq = await screen.findByRole("region", { name: "FAQ" });
-    await userEvent.click(
-      within(faq).getByRole("button", { name: "Remove When will my order arrive?" }),
-    );
-
-    expect(within(faq).queryByText("When will my order arrive?")).toBeNull();
-    expect(within(faq).queryByText("Standard delivery arrives in 2 to 5 working days.")).toBeNull();
-
-    await userEvent.type(within(faq).getByLabelText("Question"), "Does it run small?");
-    await userEvent.type(within(faq).getByLabelText("Answer"), "It runs roomy over a mid-layer.");
-    expect(within(faq).getByLabelText("ID")).toHaveValue("does-it-run-small");
-    await userEvent.click(within(faq).getByRole("button", { name: "Add FAQ entry" }));
-
-    expect(within(faq).getByText("Does it run small?")).toBeVisible();
-    expect(within(faq).getByText("It runs roomy over a mid-layer.")).toBeVisible();
-    expect(within(faq).getByText("does-it-run-small", { selector: "code" })).toBeVisible();
   });
 
   it("derives a payment id from the name and refuses one already in the draft", async () => {
@@ -723,57 +670,6 @@ describe("shop workspace", () => {
     expect(fulfilment.getByLabelText("ID")).toBeInvalid();
     await user.click(fulfilment.getByRole("button", { name: "Add fulfilment method" }));
     expect(fulfilment.getAllByText("express-air-freight", { selector: "code" })).toHaveLength(1);
-  });
-
-  it("derives policy and FAQ ids from title and question", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/policies`);
-    const policies = within(await screen.findByRole("region", { name: "Policies" }));
-
-    await user.type(policies.getByLabelText("Title"), "Returns policy");
-    expect(policies.getByLabelText("ID")).toHaveValue("returns-policy");
-    await user.clear(policies.getByLabelText("ID"));
-    expect(policies.getByLabelText("ID")).toHaveValue("");
-    await user.type(policies.getByLabelText("Title"), " restated");
-    expect(policies.getByLabelText("ID")).toHaveValue("returns-policy-restated");
-
-    await user.clear(policies.getByLabelText("ID"));
-    await user.type(policies.getByLabelText("ID"), "shipping-policy");
-    expect(policies.getByLabelText("ID")).toBeInvalid();
-    await user.click(policies.getByRole("button", { name: "Add policy" }));
-    expect(policies.getAllByText("shipping-policy", { selector: "code" })).toHaveLength(1);
-
-    const faq = within(screen.getByRole("region", { name: "FAQ" }));
-    await user.type(faq.getByLabelText("Question"), "When will my order arrive?");
-    expect(faq.getByLabelText("ID")).toHaveValue("when-will-my-order-arrive");
-    await user.clear(faq.getByLabelText("ID"));
-    expect(faq.getByLabelText("ID")).toHaveValue("");
-    await user.type(faq.getByLabelText("Question"), " again");
-    expect(faq.getByLabelText("ID")).toHaveValue("when-will-my-order-arrive-again");
-
-    await user.clear(faq.getByLabelText("ID"));
-    await user.type(faq.getByLabelText("ID"), "delivery-times");
-    expect(faq.getByLabelText("ID")).toBeInvalid();
-    await user.type(faq.getByLabelText("Answer"), "Same as before.");
-    await user.click(faq.getByRole("button", { name: "Add FAQ entry" }));
-    expect(faq.getAllByText("delivery-times", { selector: "code" })).toHaveLength(1);
-  });
-
-  it("derives a support guideline id from the title", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/support`);
-    const guidelines = within(await screen.findByRole("region", { name: "Guidelines" }));
-
-    await user.type(guidelines.getByLabelText("Title"), "Escalation");
-    expect(guidelines.getByLabelText("ID")).toHaveValue("escalation-2");
-    await user.clear(guidelines.getByLabelText("ID"));
-    expect(guidelines.getByLabelText("ID")).toHaveValue("");
-    await user.type(guidelines.getByLabelText("Title"), " path");
-    expect(guidelines.getByLabelText("ID")).toHaveValue("escalation-path");
-
-    await user.clear(guidelines.getByLabelText("ID"));
-    await user.type(guidelines.getByLabelText("ID"), "escalation");
-    expect(guidelines.getByLabelText("ID")).toBeInvalid();
   });
 
   it("derives a tone-of-voice id from the name", async () => {
@@ -1229,17 +1125,15 @@ function unchangedPayload(): SavedShopPayload {
 describe("editing a saved entry in place", () => {
   it("changes one word of a policy body and leaves the rest of the draft alone", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+    // A policy opens on a page of its own now rather than in a row (PLAN-UX Slice 16). The
+    // assertion is unchanged and is the point: an editor that wrote the collection back any
+    // other way than in place would move the payload, and with it the fingerprint.
+    renderAt(`/shops/${SHOP_ID}/setup/documents/policies/shipping-policy`);
 
-    const policies = within(await screen.findByRole("region", { name: "Policies" }));
-    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
-
-    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
-    const body = open.getByLabelText("Body");
+    const body = await screen.findByLabelText("Content");
     expect(body).toHaveValue(READY_CONTENT.policies[0].body);
     await user.clear(body);
     await user.type(body, "Standard delivery is 2 to 5 working days.\n\nExpress is same day.");
-    await user.click(open.getByRole("button", { name: "Save Shipping and delivery" }));
 
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedDrafts).toHaveLength(1));
@@ -1248,7 +1142,7 @@ describe("editing a saved entry in place", () => {
       ...unchangedPayload(),
       policies: [
         {
-          // Derived once when the entry was created, and handed back: this is what makes the
+          // Set once when the document was created, and handed back: this is what makes the
           // draft report one updated policy rather than a removal and an addition.
           id: "shipping-policy",
           title: "Shipping and delivery",
@@ -1677,19 +1571,21 @@ describe("editing a saved entry in place", () => {
 
   it("says nothing in the open row reaches the draft, and Cancel proves it", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+    // Read on tone of voice since the three document collections left their rows for a page
+    // of their own (PLAN-UX Slice 16). Edit in place is the same component either way.
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
 
-    const policies = within(await screen.findByRole("region", { name: "Policies" }));
-    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
-    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
-    await user.clear(open.getByLabelText("Title"));
-    await user.type(open.getByLabelText("Title"), "Not this");
+    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
+    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
+    await user.clear(open.getByLabelText("Name"));
+    await user.type(open.getByLabelText("Name"), "Not this");
 
     // The draft is untouched, so the page still reports itself as saved.
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
-    await user.click(open.getByRole("button", { name: "Cancel editing Shipping and delivery" }));
+    await user.click(open.getByRole("button", { name: "Cancel editing Warm and precise" }));
 
-    expect(policies.getByText("Shipping and delivery")).toBeVisible();
+    expect(tone.getByText("Warm and precise")).toBeVisible();
     expect(savedDrafts).toEqual([]);
   });
 });
@@ -1737,7 +1633,9 @@ describe("the tree's create pages and the tour table", () => {
       .map(([path]) => path)
       .filter((path) => path.endsWith("/new"));
 
-    expect(declared).toHaveLength(9);
+    // Ten with the document's, which is a create page for a row of the shop draft: the kind
+    // it lands in is a question its editor cannot ask (ADR 0057).
+    expect(declared).toHaveLength(10);
     expect([...declared].sort()).toEqual([...CREATE_ROUTES].sort());
     for (const path of declared) {
       expect(tourAt(path.replaceAll(/:[A-Za-z]+/g, "x")), `${path} was offered a tour`).toBeNull();
@@ -1821,8 +1719,10 @@ describe("the route tree under the data router", () => {
       ["/shops/:shopId/scenarios/:scenarioId", "ScenarioEditorPage"],
       ["/shops/:shopId/scenarios/:scenarioId/snapshots", "SnapshotsPage"],
       ["/shops/:shopId/setup/identity", "ShopIdentityPage"],
-      ["/shops/:shopId/setup/policies", "PoliciesAndFaqPage"],
-      ["/shops/:shopId/setup/support", "SupportGuidelinesPage"],
+      ["/shops/:shopId/setup/policies", "DocumentsPage"],
+      ["/shops/:shopId/setup/documents/new", "NewDocumentPage"],
+      ["/shops/:shopId/setup/documents/:kind/:docId", "DocumentEditorPage"],
+      ["/shops/:shopId/setup/support", "RedirectRetiredGuidelines"],
       ["/shops/:shopId/setup/tone", "ToneOfVoicePage"],
       ["/shops/:shopId/versions/:version", "ShopVersionPage"],
       ["/*", "Navigate"],
@@ -1857,6 +1757,8 @@ describe("the shop draft's reach", () => {
       `/shops/${SHOP_ID}/products/x`,
       `/shops/${SHOP_ID}/setup/identity`,
       `/shops/${SHOP_ID}/setup/policies`,
+      `/shops/${SHOP_ID}/setup/documents/new`,
+      `/shops/${SHOP_ID}/setup/documents/x/x`,
       `/shops/${SHOP_ID}/setup/support`,
       `/shops/${SHOP_ID}/setup/tone`,
     ]);
@@ -1905,23 +1807,22 @@ describe("unsaved work is protected", () => {
 
   it("names both a dirty draft and an open row, and drops neither on Discard", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+    // Tone of voice is where an add form and an edit-in-place row now stand side by side:
+    // the three document collections moved to a table and a page (PLAN-UX Slice 16), and
+    // this case is about the two kinds of unsaved work rather than about any one list.
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
 
     // Two unsaved things at once, of the two different kinds: one the draft's flag can see,
     // one it cannot. The prompt has to list both and act on both.
-    const faq = within(await screen.findByRole("region", { name: "FAQ" }));
-    await user.type(faq.getByLabelText("Question"), "Where is my parcel?");
-    const policies = within(screen.getByRole("region", { name: "Policies" }));
-    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
-    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
-    await user.clear(open.getByLabelText("Body"));
-    await user.type(open.getByLabelText("Body"), "Every parcel leaves within a day.");
-    await user.click(screen.getByRole("button", { name: "Save Shipping and delivery" }));
-    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
+    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
+    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
+    await user.clear(open.getByLabelText("Guidance"));
+    await user.type(open.getByLabelText("Guidance"), "Lead with the fact.");
+    await user.click(screen.getByRole("button", { name: "Save Warm and precise" }));
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
     await user.type(
-      within(policies.getByRole("form", { name: "Edit Shipping and delivery" })).getByLabelText(
-        "Body",
-      ),
+      within(tone.getByRole("form", { name: "Edit Warm and precise" })).getByLabelText("Guidance"),
       " Twice.",
     );
 
@@ -1933,7 +1834,7 @@ describe("unsaved work is protected", () => {
       .map((item) => item.textContent);
     expect(listed).toStrictEqual([
       "The shop draft has unsaved changes.",
-      "Shipping and delivery is open for editing, and nothing typed in it has reached the draft.",
+      "Warm and precise is open for editing, and nothing typed in it has reached the draft.",
     ]);
     // One of the two cannot be saved from here, so neither is saved from here.
     expect(within(prompt).getByRole("button", { name: "Save and leave" })).toBeDisabled();
@@ -1946,13 +1847,13 @@ describe("unsaved work is protected", () => {
 
   it("counts a row that is open for editing, which the draft's own flag cannot see", async () => {
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/setup/policies`);
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
 
-    const policies = within(await screen.findByRole("region", { name: "Policies" }));
-    await user.click(policies.getByRole("button", { name: "Edit Shipping and delivery" }));
-    const open = within(policies.getByRole("form", { name: "Edit Shipping and delivery" }));
-    await user.clear(open.getByLabelText("Body"));
-    await user.type(open.getByLabelText("Body"), "Every parcel leaves within a day.");
+    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
+    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
+    await user.clear(open.getByLabelText("Guidance"));
+    await user.type(open.getByLabelText("Guidance"), "Lead with the fact.");
     // Nothing typed in the row has reached the draft, which is exactly why `dirty` is false.
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
@@ -1961,7 +1862,7 @@ describe("unsaved work is protected", () => {
 
     const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
     expect(prompt).toHaveTextContent(
-      "Shipping and delivery is open for editing, and nothing typed in it has reached the draft.",
+      "Warm and precise is open for editing, and nothing typed in it has reached the draft.",
     );
     // The prompt cannot save it, and says where it can be saved rather than offering to.
     const save = within(prompt).getByRole("button", { name: "Save and leave" });
@@ -2398,24 +2299,22 @@ describe("the rail's figures that come from the draft", () => {
     return within(region).getAllByRole("heading", { level: 3 }).length;
   }
 
-  it("counts a shop's documents as its policies and its FAQ entries together", async () => {
+  it("counts a shop's documents as the three lists the Documents table draws", async () => {
     renderAt(`/shops/${SHOP_ID}/setup/policies`);
 
-    const policies = await screen.findByRole("region", { name: "Policies" });
-    const faq = screen.getByRole("region", { name: "FAQ" });
-    const documents = entriesIn(policies) + entriesIn(faq);
-    expect(documents).toBe(READY_CONTENT.policies.length + READY_CONTENT.faq.length);
+    const table = within(await screen.findByRole("region", { name: "Documents" }));
+    const documents = table.getAllByRole("row").length - 1;
+    expect(documents).toBe(
+      READY_CONTENT.policies.length +
+        READY_CONTENT.support_guidelines.length +
+        READY_CONTENT.faq.length,
+    );
+    // The support guidelines are in the figure because they are on the page, which is what
+    // ended the departure `docs/design-direction.md` recorded (PLAN-UX Slice 16, ADR 0056).
+    expect(READY_CONTENT.support_guidelines.length).toBeGreaterThan(0);
     const entry = railEntry("Policies & FAQ");
     expect(within(entry).getByText(String(documents))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${documents} document${documents === 1 ? "" : "s"}`);
-    // The page draws no support guideline, so the figure counts none — the departure
-    // `docs/design-direction.md` records until Slice 16 merges the three lists into one table.
-    expect(READY_CONTENT.support_guidelines.length).toBeGreaterThan(0);
-    expect(documents).not.toBe(
-      READY_CONTENT.policies.length +
-        READY_CONTENT.faq.length +
-        READY_CONTENT.support_guidelines.length,
-    );
   });
 
   it("counts the tone guidelines the page lists", async () => {

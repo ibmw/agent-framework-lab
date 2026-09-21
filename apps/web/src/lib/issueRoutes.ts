@@ -77,15 +77,20 @@ export function groupFindings(
  * Two roots share a surface, because Shop details is one page holding both method lists. The
  * label is the entry's rather than the page's for exactly that reason — "Payment methods" is
  * what is wrong, and Shop details is only where it is fixed.
+ *
+ * The three document roots share a surface for the same reason and still keep three labels:
+ * the Documents table draws all three collections and the chip in the address opens it on the
+ * one the finding is about, which is *where the path names one, the entry in view* read at the
+ * granularity the gate writes (PLAN-UX Slice 16).
  */
 const SHOP_SECTIONS: Readonly<Record<string, { label: string; path: string }>> = {
   products: { label: "Catalog", path: "products" },
   tone_of_voice_guidelines: { label: "Tone of voice", path: "setup/tone" },
   payment_methods: { label: "Payment methods", path: "setup/identity" },
   fulfilment_methods: { label: "Fulfilment methods", path: "setup/identity" },
-  policies: { label: "Policies", path: "setup/policies" },
-  faq: { label: "FAQ", path: "setup/policies" },
-  support_guidelines: { label: "Support guidelines", path: "setup/support" },
+  policies: { label: "Policies", path: "setup/policies?kind=policies" },
+  faq: { label: "FAQ", path: "setup/policies?kind=faq" },
+  support_guidelines: { label: "Support guidelines", path: "setup/policies?kind=guidelines" },
 };
 
 /**

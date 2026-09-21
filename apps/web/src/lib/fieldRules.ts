@@ -293,6 +293,31 @@ export const SHOP_SLUG_DETAIL_RULE =
   "Lowercase with hyphens. The shops index searches it beside the name.";
 
 /**
+ * The six rules a shop document's create page and its editor carry (PLAN-UX Slice 16).
+ *
+ * Each names the code that makes it true. A document is a tool result and never prompt text —
+ * `sandbox_tool_views.py` builds `get_policies`, `get_support_guidelines` and `get_faq` out of
+ * the three collections and nothing else reads them — and it is named by its kind *and* its
+ * id: `ContextDocumentSchema` is `{kind, document_id}`, which is why the two rows that carry
+ * the address say they are fixed rather than pretending to be questions (ADR 0057).
+ */
+export const DOCUMENT_TITLE_RULE = "What the tool result is labelled with when an agent reads it.";
+
+export const DOCUMENT_KIND_RULE =
+  "Policies state rules, guidelines state judgement, FAQ answers state one thing plainly. It decides which tool returns the document, and it is answered here because a scenario names a document by its kind and its slug together.";
+
+export const DOCUMENT_SLUG_RULE =
+  "Lowercase with hyphens. How a scenario names this document when it requires the read. Follows the title until you edit it; empty it to follow again.";
+
+export const DOCUMENT_SLUG_FIXED_RULE =
+  "How a scenario names this document when it requires the read. Set when the document was created.";
+
+export const DOCUMENT_KIND_FIXED_RULE =
+  "Which collection this is in, and so which tool returns it. Set with the slug when the document was created.";
+
+export const DOCUMENT_BODY_RULE = "The text an agent gets back from the tool call, verbatim.";
+
+/**
  * The one identity fact a customer profile may be missing, and the shape it takes when it is
  * not: `require_phone`'s `\+?[0-9][0-9 ()./-]{4,30}` in `domain/content.py`. The control is
  * `type="tel"`, which refuses nothing, so the save is the first thing that would.

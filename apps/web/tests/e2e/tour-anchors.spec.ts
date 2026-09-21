@@ -98,6 +98,33 @@ test("mounts each chain step on the surface the chain sends a reader to", () => 
   }
 });
 
+test("offers the Documents table's tour at the retired guidelines address", async ({
+  page,
+  lab,
+}) => {
+  // The other half of what this sweep is for. A surface that retires takes its tour with it,
+  // and the address it left behind has to land somewhere that has one — the defect Slice 10
+  // shipped was a tour still naming a screen nobody could reach. `/setup/support` redirects
+  // to the Documents table filtered to Guidelines (ADR 0054, ADR 0057), so the reader arrives
+  // on a surface the table declares and is offered that surface's walk.
+  await page.goto(`/shops/${lab.shopId}/setup/support`);
+  await page.waitForLoadState("networkidle");
+
+  const landed = new URL(page.url());
+  expect(landed.pathname).toBe(`/shops/${lab.shopId}/setup/policies`);
+  expect(landed.searchParams.get("kind")).toBe("guidelines");
+  expect(tourAt(landed.pathname)).toBe("policies-and-faq");
+  await expect(page.getByRole("button", { name: "Guidelines 1" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    page.getByRole("button", {
+      name: `Show me around ${TOURS["policies-and-faq"].surface}`,
+    }),
+  ).toBeVisible();
+});
+
 for (const id of TOUR_IDS) {
   test(`every step of the ${id} tour points at exactly one visible thing on its surface`, async ({
     page,

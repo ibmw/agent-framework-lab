@@ -13,6 +13,8 @@ import {
 } from "./routes/BlockLibraryPage";
 import { CustomerEditorPage } from "./routes/CustomerEditorPage";
 import { CustomersPage, NewCustomerPage } from "./routes/CustomersPage";
+import { DocumentEditorPage } from "./routes/DocumentEditorPage";
+import { DocumentsPage, NewDocumentPage } from "./routes/DocumentsPage";
 import { ExperimentBenchPage } from "./routes/ExperimentBenchPage";
 import { ExperimentHistoryPage } from "./routes/ExperimentHistoryPage";
 import { ExperimentResultsLayout } from "./routes/ExperimentResultsLayout";
@@ -29,16 +31,15 @@ import { OrderEditorPage } from "./routes/OrderEditorPage";
 import { NewOrderPage, OrdersPage } from "./routes/OrdersPage";
 import { ProductEditorPage } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
-import { LabRedirect, RedirectRetiredGlossary } from "./routes/RedirectRoutes";
+import {
+  LabRedirect,
+  RedirectRetiredGlossary,
+  RedirectRetiredGuidelines,
+} from "./routes/RedirectRoutes";
 import { ScenarioEditorPage } from "./routes/ScenarioEditorPage";
 import { NewScenarioPage, ScenariosPage } from "./routes/ScenariosPage";
 import { ShopHomePage } from "./routes/ShopHomePage";
-import {
-  PoliciesAndFaqPage,
-  ShopIdentityPage,
-  SupportGuidelinesPage,
-  ToneOfVoicePage,
-} from "./routes/ShopSetupPages";
+import { ShopIdentityPage, ToneOfVoicePage } from "./routes/ShopSetupPages";
 import { NewShopPage, ShopsPage } from "./routes/ShopsPage";
 import { ShopVersionPage } from "./routes/ShopVersionPage";
 import { SnapshotsPage } from "./routes/SnapshotsPage";
@@ -183,8 +184,17 @@ export const routeTree = createRoutesFromElements(
       <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />
       <Route path="scenarios/:scenarioId/snapshots" element={<SnapshotsPage />} />
       <Route path="setup/identity" element={<ShopIdentityPage />} />
-      <Route path="setup/policies" element={<PoliciesAndFaqPage />} />
-      <Route path="setup/support" element={<SupportGuidelinesPage />} />
+      {/* The shop's three document collections, drawn as one table (PLAN-UX Slice 16). The
+          address is the rail's, which ADR 0054 fixed; what it draws is the Documents table. */}
+      <Route path="setup/policies" element={<DocumentsPage />} />
+      {/* Creating a document is a page, because its kind is a question its editor cannot ask
+          (ADR 0057). `new` is a static segment and cannot be reached by a kind slug. */}
+      <Route path="setup/documents/new" element={<NewDocumentPage />} />
+      <Route path="setup/documents/:kind/:docId" element={<DocumentEditorPage />} />
+      {/* Support guidelines left the rail with ADR 0054 and left the route table here: the
+          guidelines are rows of the Documents table now, and the old address opens it on
+          them rather than on nothing. */}
+      <Route path="setup/support" element={<RedirectRetiredGuidelines />} />
       <Route path="setup/tone" element={<ToneOfVoicePage />} />
       <Route path="versions/:version" element={<ShopVersionPage />} />
     </Route>

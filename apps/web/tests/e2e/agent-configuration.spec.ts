@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createConfiguration, createShop } from "./support/authoring";
+import { addDocument, createConfiguration, createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -44,15 +44,12 @@ async function publishShop(page: Page, unique: string) {
   await fulfilment.getByRole("button", { name: "Add fulfilment method" }).click();
   await saveDraft(page);
 
-  await openSection(page, "Policies & FAQ", "Policies & FAQ");
-  const policies = card(page, "Policies");
-  await policies.getByLabel("ID", { exact: true }).fill("address-change");
-  await policies.getByLabel("Title", { exact: true }).fill("Address-change policy");
-  await policies
-    .getByLabel("Body", { exact: true })
-    .fill("A shipping address can change before dispatch.");
-  await policies.getByRole("button", { name: "Add policy" }).click();
-  await saveDraft(page);
+  await addDocument(page, {
+    kind: "Policy",
+    title: "Address-change policy",
+    slug: "address-change",
+    body: "A shipping address can change before dispatch.",
+  });
 
   await openSection(page, "Products", "Products");
   // *New product* appends an empty product to the shop draft and opens its editor, where

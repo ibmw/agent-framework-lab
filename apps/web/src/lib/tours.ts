@@ -29,7 +29,6 @@ export type TourId =
   | "products"
   | "shop-details"
   | "policies-and-faq"
-  | "support-guidelines"
   | "tone-of-voice"
   | "customers"
   | "orders"
@@ -448,31 +447,22 @@ export const TOURS: Record<TourId, Tour> = {
     route: "/shops/:shopId/setup/policies",
     steps: [
       {
-        anchor: '[aria-label="Policies"]',
+        anchor: '[aria-label="Documents"]',
         title: "What the agent is allowed to tell a customer",
         body: [
-          "A policy is a document the support agent reaches through a tool rather than prose for a person to read. A [[scenario]] names the ones that matter for its incident, and what the agent did with a policy it was given is part of what an [[evaluation]] decides afterwards.",
+          "A document is something the support agent reaches through a tool rather than prose for a person to read. A [[scenario]] names the ones that matter for its incident, and what the agent did with a document it was given is part of what an [[evaluation]] decides afterwards.",
         ],
       },
       {
-        anchor: '[aria-label="FAQ"]',
-        title: "The same reach, shorter answers",
+        // The three collections in one place, which is what replaced the two cards this
+        // tour used to light and the separate guidelines page it used to sit beside
+        // (PLAN-UX Slice 16). The chip row carries the hook because a chip's own name
+        // carries its count, and a count moves as a shop is authored.
+        anchor: '[data-tour="document-kinds"]',
+        title: "Three collections, three tools",
         body: [
-          "FAQ entries are retrieved the same way and are worth keeping separate from policies for the same reason a real shop does: one is what the business commits to, the other is what it is usually asked.",
-        ],
-      },
-    ],
-  },
-
-  "support-guidelines": {
-    surface: "support guidelines",
-    route: "/shops/:shopId/setup/support",
-    steps: [
-      {
-        anchor: '[aria-label="Guidelines"]',
-        title: "How this shop wants an incident handled",
-        body: [
-          "Guidelines are instruction rather than reference: what to escalate, what to refuse, what to confirm first. A [[support-identity]] carries what the agent *is* across every shop, and these are what this one shop asks of it — so the same identity answers differently here than it would elsewhere.",
+          "Policies are what the business commits to and FAQ entries what it is usually asked; each is fetched by a tool of its own, which is why they stay apart rather than becoming one list.",
+          "Guidelines are the third, and they are instruction rather than reference: what to escalate, what to refuse, what to confirm first. A [[support-identity]] carries what the agent *is* across every shop, and these are what this one shop asks of it — so the same identity answers differently here than it would elsewhere.",
         ],
       },
     ],
@@ -539,6 +529,7 @@ function addressesOf(tour: Tour): string[] {
 export const CREATE_ROUTES = [
   "/shops/new",
   "/shops/:shopId/orders/new",
+  "/shops/:shopId/setup/documents/new",
   "/shops/:shopId/customers/new",
   "/shops/:shopId/scenarios/new",
   "/lab/support-identities/new",

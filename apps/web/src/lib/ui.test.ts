@@ -373,9 +373,9 @@ describe("filter chip states", () => {
  * The chip vocabulary, asserted exactly as the button verbs are: the table is the
  * specification, and a kind removed from it breaks here before it breaks a screen.
  *
- * The six are the handoff's *Assets* list less the page glyph, which nothing in this
- * workspace draws — see the type's own note in `ui.ts`. That omission is asserted rather
- * than merely absent, so a seventh kind cannot be added without saying which one it is.
+ * All seven of the handoff's *Assets* list. The page glyph was the one held back while
+ * nothing drew it and it arrived with the Documents table (PLAN-UX Slice 16) — see the
+ * type's own note in `ui.ts`.
  */
 const CHIP_VOCABULARY: Record<FilterChipKind, string> = {
   all: "Box",
@@ -384,6 +384,7 @@ const CHIP_VOCABULARY: Record<FilterChipKind, string> = {
   attention: "TriangleAlert",
   referenced: "Link",
   unfulfilled: "Clock",
+  document: "File",
 };
 
 describe("the filter chip glyph vocabulary", () => {

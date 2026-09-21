@@ -251,3 +251,36 @@ export async function createBlock(
 
   await expect(page.getByRole("heading", { level: 1, name: block.name })).toBeVisible();
 }
+
+/**
+ * A shop document, from the Documents table through its create page into its editor.
+ *
+ * Six journeys author a policy on the way to the thing they are actually about. They used to
+ * type it into an add form on Policies & FAQ; PLAN-UX Slice 16 made the three collections one
+ * table, creating one a page and editing one a page of its own, so the shape lives here and a
+ * spec reads as the journey it is about.
+ *
+ * The kind is the create page's own question and cannot be answered afterwards (ADR 0057), so
+ * it is named here rather than defaulted. The slug follows the title unless a journey needs a
+ * particular one — several bind a scenario's context document to it by name.
+ */
+export async function addDocument(
+  page: Page,
+  document: { kind: "Policy" | "Guideline" | "FAQ"; title: string; slug?: string; body: string },
+) {
+  await openSection(page, "Policies & FAQ", "Policies & FAQ");
+  await page.getByRole("link", { name: "New document" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "New document" })).toBeVisible();
+
+  await page.getByLabel("Kind", { exact: true }).selectOption({ label: document.kind });
+  await page.getByLabel("Title", { exact: true }).fill(document.title);
+  if (document.slug !== undefined) {
+    await page.getByLabel("Slug", { exact: true }).fill(document.slug);
+  }
+  await page.getByRole("button", { name: "Create document" }).click();
+
+  // The create page lands in the editor of what it made, which is where the body is written.
+  await expect(page.getByRole("heading", { level: 1, name: document.title })).toBeVisible();
+  await page.getByLabel("Content", { exact: true }).fill(document.body);
+  await saveDraft(page);
+}

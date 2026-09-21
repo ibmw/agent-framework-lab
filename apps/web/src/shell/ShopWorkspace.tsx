@@ -120,7 +120,10 @@ export function ShopWorkspace() {
   const draft = editor.content;
   const counts: RailCounts = {
     products: draft === null ? null : draft.products.length,
-    documents: draft === null ? null : draft.policies.length + draft.faq.length,
+    documents:
+      draft === null
+        ? null
+        : draft.policies.length + draft.support_guidelines.length + draft.faq.length,
     tone: draft === null ? null : draft.tone_of_voice_guidelines.length,
     orders: listings.orders.count,
     customers: listings.customers.count,

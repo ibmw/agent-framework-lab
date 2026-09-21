@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createShop } from "./support/authoring";
+import { addDocument, createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -42,15 +42,12 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
 
   // A ticket suggests the shop's own documents and pins the shop version it was authored
   // against, so the shop is completed and published first.
-  await openSection(page, "Policies & FAQ", "Policies & FAQ");
-  const policies = card(page, "Policies");
-  await policies.getByLabel("Title", { exact: true }).fill("Address-change policy");
-  await policies.getByLabel("ID", { exact: true }).fill("address-change");
-  await policies
-    .getByLabel("Body", { exact: true })
-    .fill("A shipping address can change before dispatch.");
-  await policies.getByRole("button", { name: "Add policy" }).click();
-  await saveDraft(page);
+  await addDocument(page, {
+    kind: "Policy",
+    title: "Address-change policy",
+    slug: "address-change",
+    body: "A shipping address can change before dispatch.",
+  });
 
   await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");

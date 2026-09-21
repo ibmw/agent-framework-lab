@@ -69,8 +69,8 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Group B's remaining slices — 16, 17 and 18 — are independent and can proceed in parallel;
-creation is a page on every index now, so none of them waits on another. Slice 19 is the
+Group B's remaining slices — 17 and 18 — are independent and can proceed in parallel;
+creation is a page on every index now, so neither waits on the other. Slice 19 is the
 backend milestone and runs beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on
 nothing in Group B. Slices 26 and 27 close the milestone, and 28 is optional.
 
@@ -86,31 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
-
-#### Slice 16 — Documents
-
-- [ ] Policies, FAQ entries and support guidelines become one *Documents* table on Policies &
-  FAQ: kind chips (Policies, Guidelines, FAQ, Required by a scenario — the last computed from the
-  scenarios listing's context documents), the search field, and "New document" opening a
-  document editor page (`/shops/:id/setup/documents/:kind/:docId`) with the kind as a select.
-- [ ] `/setup/support` redirects to the documents table filtered to Guidelines. Its rail entry
-  has already gone — the rail draws the prototype's four setup entries (ADR 0054) — so the page
-  is reachable by address alone until this lands.
-- [ ] The three payload lists stay as they are: this is a presentation of `content.policies`,
-  `content.faq` and `content.support_guidelines`, not a merge of them, so nothing in the shop's
-  canonical document or its fingerprint moves.
-- [ ] The rail's *Policies & FAQ* figure counts the three lists this table draws rather than the
-  two it draws today, and the departure `docs/design-direction.md` records for it is removed
-  (ADR 0056).
-
-Frames: `Workspace.dc.html` :1518, :3163.
-
-Branch: `feat/documents-table`. Checks: page tests for the chips' counts against the three
-lists, the required-by chip, and the editor's kind; `tours.test.ts` and `tour-anchors` for the
-retired surface; Playwright `shop-publication` if it authors a policy.
-
-Slice evidence: an operator searches "returns", finds the policy and the guideline that mention
-it in one list, and opens the guideline in a page rather than a row.
 
 #### Slice 17 — Tone of voice, the remainder
 
@@ -394,8 +369,9 @@ Branch: `feat/shop-logo`. Checks: contract and schema tests; `Shops.test.tsx`.
   ADR 0049 refused the first outright.
 - **A model on the connection, a masked key, a per-configuration endpoint.** Refused in ADR 0052
   and ADR 0053 with the reasons; the prototype's rows for them are departures already recorded.
-- **Merging the three document lists in the payload.** Slice 16 is a table over three lists, not
-  a new canonical shape.
+- **Merging the three document lists in the payload.** The Documents table is a presentation of
+  three lists and not a new canonical shape; `lib/documents.ts` writes every row back into the
+  collection it came from, and a document is named by its kind and its slug (ADR 0057).
 - **Ticket creation as a page.** The prototype draws none.
 - **The next-step sentence from `SETUP_CHAIN`**, `GuideProse` card footers, the matrix's per-cell
   evidence sentence and a copy control on `Fingerprint` — the parts of the old Slices 13 and 16

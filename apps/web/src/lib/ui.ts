@@ -6,6 +6,7 @@ import {
   CircleDashed,
   Clock,
   ExternalLink,
+  File,
   GitBranch,
   Link,
   type LucideIcon,
@@ -513,13 +514,11 @@ export const filterChipCountClasses = "tabular-nums opacity-75";
  * check = published/active · dashed circle = draft · warning triangle = needs attention ·
  * chain = shared/referenced · clock = unfulfilled · page = document".
  *
- * **Six of the seven.** The page — the document kind — is left out because nothing draws it.
- * The prototype spends it on one screen, a single Policies & FAQ table filtered by *Policies*,
- * *Guidelines* and *FAQ*; this workspace has no such table (policies and FAQ are two authored
- * lists on `PoliciesAndFaqPage` and guidelines are a third page), so the chips that would
- * carry it do not exist here. The house rule in `docs/design-direction.md` — a primitive no
- * page uses is not a slice — decides it, and the kind is added by whichever slice builds that
- * index.
+ * **All seven.** The page — the document kind — was the one left out while nothing drew it:
+ * the prototype spends it on a single Policies & FAQ table filtered by *Policies*,
+ * *Guidelines* and *FAQ*, and this workspace had no such table. PLAN-UX Slice 16 built it, so
+ * the kind lands with its first consumer, which is the house rule in `docs/design-direction.md`
+ * — a primitive no page uses is not a slice — read the other way round.
  */
 export type FilterChipKind =
   | "all"
@@ -527,7 +526,8 @@ export type FilterChipKind =
   | "draft"
   | "attention"
   | "referenced"
-  | "unfulfilled";
+  | "unfulfilled"
+  | "document";
 
 /**
  * Kind to glyph, written once so the pairing cannot drift across the ten chip rows.
@@ -550,6 +550,7 @@ export const filterChipIcon: Readonly<Record<FilterChipKind, LucideIcon>> = {
   attention: TriangleAlert,
   referenced: Link,
   unfulfilled: Clock,
+  document: File,
 };
 
 /**

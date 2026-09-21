@@ -277,6 +277,24 @@ describe("the tour a location is on", () => {
     expect(tourAt("/lab/judges/new")).toBeNull();
     expect(tourAt("/lab/objective-blocks/new")).toBeNull();
     expect(tourAt("/lab/mutation-blocks/new")).toBeNull();
+    // The document's create page and the document editor under it. Neither is the table,
+    // whose walk is at `/setup/policies` (PLAN-UX Slice 16).
+    expect(tourAt("/shops/shop-1/setup/documents/new")).toBeNull();
+    expect(tourAt("/shops/shop-1/setup/documents/policies/returns-policy")).toBeNull();
+  });
+
+  it("offers no tour of the retired support-guidelines address, and one of the table", () => {
+    // The defect Slice 10 shipped and Slice 13 hardened the sweep against: a surface retires
+    // and its tour goes on naming the address. `/setup/support` redirects to the Documents
+    // table now (ADR 0054), so the walk it used to have is the table's, merged into it.
+    expect(tourAt("/shops/shop-1/setup/support")).toBeNull();
+    expect(TOUR_IDS.map((id) => TOURS[id].route)).not.toContain("/shops/:shopId/setup/support");
+    expect(tourAt("/shops/shop-1/setup/policies")).toBe("policies-and-faq");
+    // What the retired tour said about guidelines is still said, on the surface that draws
+    // them: a sentence dropped with a route is a reader losing an explanation nothing else
+    // gives.
+    const merged = tourSteps("policies-and-faq").flatMap((step) => step.body);
+    expect(merged.some((paragraph) => paragraph.includes("[[support-identity]]"))).toBe(true);
   });
 
   it("takes no tour off the index a create page sits under", () => {

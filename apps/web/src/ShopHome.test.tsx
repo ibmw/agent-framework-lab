@@ -498,7 +498,7 @@ describe("findings on the draft", () => {
 
     expect(findings.getByRole("link", { name: "Open FAQ" })).toHaveAttribute(
       "href",
-      `/shops/${SHOP_ID}/setup/policies`,
+      `/shops/${SHOP_ID}/setup/policies?kind=faq`,
     );
     expect(findings.getByText("1 warning")).toBeVisible();
   });

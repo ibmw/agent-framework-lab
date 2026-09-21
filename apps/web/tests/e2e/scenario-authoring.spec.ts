@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createBlock, createScenario, createShop } from "./support/authoring";
+import { addDocument, createBlock, createScenario, createShop } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -36,15 +36,12 @@ async function saveDraft(page: Page) {
 async function buildIncident(page: Page, unique: string) {
   await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
 
-  await openSection(page, "Policies & FAQ", "Policies & FAQ");
-  const policies = card(page, "Policies");
-  await policies.getByLabel("ID", { exact: true }).fill("address-change");
-  await policies.getByLabel("Title", { exact: true }).fill("Address-change policy");
-  await policies
-    .getByLabel("Body", { exact: true })
-    .fill("A shipping address can change before dispatch.");
-  await policies.getByRole("button", { name: "Add policy" }).click();
-  await saveDraft(page);
+  await addDocument(page, {
+    kind: "Policy",
+    title: "Address-change policy",
+    slug: "address-change",
+    body: "A shipping address can change before dispatch.",
+  });
 
   await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");

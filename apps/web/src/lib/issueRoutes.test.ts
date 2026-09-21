@@ -255,20 +255,22 @@ const SHOP_GATE_MAP: Record<string, { path: string; entry: string; to: string }>
     entry: "Fulfilment methods",
     to: `/shops/${SHOP_ID}/setup/identity`,
   },
+  // The three collections are one Documents table now, and the chip in the address is what
+  // opens it on the one the finding is about (PLAN-UX Slice 16).
   shop_without_policy: {
     path: "policies",
     entry: "Policies",
-    to: `/shops/${SHOP_ID}/setup/policies`,
+    to: `/shops/${SHOP_ID}/setup/policies?kind=policies`,
   },
   shop_without_faq: {
     path: "faq",
     entry: "FAQ",
-    to: `/shops/${SHOP_ID}/setup/policies`,
+    to: `/shops/${SHOP_ID}/setup/policies?kind=faq`,
   },
   shop_without_support_guideline: {
     path: "support_guidelines",
     entry: "Support guidelines",
-    to: `/shops/${SHOP_ID}/setup/support`,
+    to: `/shops/${SHOP_ID}/setup/policies?kind=guidelines`,
   },
 };
 

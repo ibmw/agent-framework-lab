@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { addDocument } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -48,18 +49,14 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(page.getByRole("button", { name: "Review 1 change & publish" })).toBeDisabled();
 
   // Support knowledge and commerce configuration a published shop must carry.
-  await openSection(page, "Policies & FAQ", "Policies & FAQ");
-  const policies = card(page, "Policies");
-  await policies.getByLabel("Title", { exact: true }).fill("Shipping policy");
-  await policies
-    .getByLabel("Body", { exact: true })
-    .fill(
+  await addDocument(page, {
+    kind: "Policy",
+    title: "Shipping policy",
+    body:
       "A shipping address can change before dispatch.\n\n" +
-        "Once a parcel is with the carrier the address is fixed.\n\n" +
-        "Refused deliveries return to the warehouse within ten days.",
-    );
-  await policies.getByRole("button", { name: "Add policy" }).click();
-  await saveDraft(page);
+      "Once a parcel is with the carrier the address is fixed.\n\n" +
+      "Refused deliveries return to the warehouse within ten days.",
+  });
 
   await openSection(page, "Shop details", "Shop details");
   const payments = card(page, "Payment methods");
@@ -160,28 +157,24 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(frozen.getByText("249.00 CHF").first()).toBeVisible();
   await expect(frozen.getByText("249.00 EUR").first()).toBeVisible();
 
-  // PLAN-UX Slice 7. One word of a three-paragraph policy is wrong. The operator opens the
-  // saved row, fixes the word and presses Save — no removing and retyping the policy — and
-  // the draft reports one updated entry against v1, because the row was written back under
-  // the id it already had.
+  // PLAN-UX Slice 7, read on Slice 16's surface. One word of a three-paragraph policy is
+  // wrong. The operator opens the policy from the Documents table — a page now, not a row —
+  // fixes the word and presses Save, and the draft reports one updated entry against v1,
+  // because the document was written back into its own list under the slug it already had.
   await openSection(page, "Policies & FAQ", "Policies & FAQ");
-  const saved = card(page, "Policies");
-  await saved.getByRole("button", { name: "Edit Shipping policy" }).click();
-  const openRow = saved.getByRole("form", { name: "Edit Shipping policy" });
-  // The identifier stays on the header line, displayed and never asked for.
-  await expect(saved.getByText("shipping-policy")).toBeVisible();
-  // By role rather than by label: a wrapping `<label>`'s rendered text includes the value of
-  // the control it wraps, so a prefilled textarea has no exact label text to match on. The
-  // accessible name is still "Body".
-  await openRow
-    .getByRole("textbox", { name: "Body", exact: true })
+  const documents = page.getByRole("region", { name: "Documents" });
+  // The slug the title derived, on the row and again on the page it opens.
+  await expect(documents.getByText("shipping-policy")).toBeVisible();
+  await documents.getByRole("link", { name: "Shipping policy" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Shipping policy" })).toBeVisible();
+  await expect(page.getByText("shipping-policy")).toBeVisible();
+  await page
+    .getByLabel("Content", { exact: true })
     .fill(
       "A shipping address can change before despatch.\n\n" +
         "Once a parcel is with the carrier the address is fixed.\n\n" +
         "Refused deliveries return to the warehouse within ten days.",
     );
-  await openRow.getByRole("button", { name: "Save Shipping policy" }).click();
-  await expect(saved.getByText("despatch").first()).toBeVisible();
   await saveDraft(page);
 
   await openSection(page, "Overview", "Overview");
