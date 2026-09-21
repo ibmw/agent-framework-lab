@@ -15,7 +15,8 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { NoCurrentShop, useLabWorkspace } from "../shell/LabWorkspace";
+import { NoCurrentShop } from "../shell/LabWorkspace";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const UNAVAILABLE = "Experiment history is unavailable.";
 const PAGE_SIZE = 20;

@@ -10,10 +10,11 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
-import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
+import { filterList } from "../lib/filters";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -24,7 +25,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The customer service is unavailable.";
 

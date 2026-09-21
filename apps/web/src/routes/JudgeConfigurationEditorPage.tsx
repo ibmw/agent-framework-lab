@@ -19,7 +19,6 @@ import { FieldHint } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   Fingerprint,
   IssueList,
@@ -28,7 +27,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
-import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { JUDGE_EVIDENCE_SCOPE } from "../lib/enumLabels";
 import {
   PROVEN_PROVIDER_RULE,
@@ -42,7 +41,7 @@ import {
   fieldLabelClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useLabWorkspace } from "../shell/LabWorkspace";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const CLIENT: DefinitionClient<
   JudgeConfigurationPayloadSchema,

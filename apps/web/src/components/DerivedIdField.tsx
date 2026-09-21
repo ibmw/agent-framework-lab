@@ -1,15 +1,8 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage } from "../lib/fieldRules";
 import { fieldControlClasses } from "../lib/ui";
 import { type Arrangement, FieldHint } from "./FieldHint";
-
-export function savedAsPreview(id: string): ReactNode {
-  return (
-    <>
-      Saved as <code className="font-mono">{id}</code>.
-    </>
-  );
-}
 
 /**
  * An identifier that follows a source until edited, is handed back when emptied, previews

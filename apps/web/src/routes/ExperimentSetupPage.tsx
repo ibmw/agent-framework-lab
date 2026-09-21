@@ -30,7 +30,8 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { NoCurrentShop, useLabWorkspace } from "../shell/LabWorkspace";
+import { NoCurrentShop } from "../shell/LabWorkspace";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const UNAVAILABLE = "The experiment bench is unavailable.";
 const DEFAULT_SEED = 20260828;

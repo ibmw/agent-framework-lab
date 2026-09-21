@@ -7,7 +7,7 @@ import { CreatePage } from "../components/CreatePage";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldRows } from "../components/FieldHint";
-import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { LocaleField } from "../components/LocaleField";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -19,6 +19,7 @@ import {
   SHOP_NAME_RULE,
   SHOP_SLUG_RULE,
 } from "../lib/fieldRules";
+import { filterList } from "../lib/filters";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
 import { shopSlugFromName } from "../lib/shop";
 import {

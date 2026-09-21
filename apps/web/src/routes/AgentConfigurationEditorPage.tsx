@@ -24,7 +24,6 @@ import { FieldHint } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   Fingerprint,
   IssueList,
@@ -33,7 +32,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { ARCHITECTURE_LABELS, ARCHITECTURES, describeProvider } from "../lib/agents";
-import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { labelOf, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
   PROVEN_PROVIDER_RULE,
@@ -50,7 +49,7 @@ import {
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useLabWorkspace } from "../shell/LabWorkspace";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const UNAVAILABLE = "The agent-configuration service is unavailable.";
 

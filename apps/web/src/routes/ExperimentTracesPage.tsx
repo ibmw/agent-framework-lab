@@ -10,7 +10,7 @@ import { Card } from "../components/WorkspaceChrome";
 import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure } from "../lib/evidence";
 import { subtleButtonClasses } from "../lib/ui";
-import { useExperimentResults } from "./ExperimentResultsLayout";
+import { useExperimentResults } from "./useExperimentResults";
 
 const UNAVAILABLE = "This experiment's traces are unavailable.";
 

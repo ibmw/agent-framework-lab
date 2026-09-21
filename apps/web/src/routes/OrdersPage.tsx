@@ -11,11 +11,12 @@ import { createOrder, replaceOrder } from "../api/orders";
 import { CreatePage } from "../components/CreatePage";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
-import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
 import { alreadyTakenMessage, ORDER_REFERENCE_RULE, REFERENCE_PATTERN } from "../lib/fieldRules";
+import { filterList } from "../lib/filters";
 import {
   clampQuantity,
   fulfilmentLabel,
@@ -35,7 +36,7 @@ import {
   tableHeadClasses,
 } from "../lib/ui";
 import { useRegisterUnsavedWork } from "../lib/unsavedWork";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 /** Completes "{reference} is already {…}." wherever an order reference is refused. */
 const ORDER_REFERENCE_TAKEN_PLACE = "used by an order in this shop";

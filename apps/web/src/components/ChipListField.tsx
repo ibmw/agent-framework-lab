@@ -1,8 +1,8 @@
 import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage } from "../lib/fieldRules";
 import { fieldControlClasses, subtleButtonClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
-import { savedAsPreview } from "./DerivedIdField";
 import { FieldHint } from "./FieldHint";
 
 /**

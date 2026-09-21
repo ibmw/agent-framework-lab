@@ -150,11 +150,11 @@ draft beside it moves on. That is the correct reading rather than a concession: 
 would pin is the published version, and it is still there.
 
 Where a step is *not* complete, the reason is not invented either. The publish gate already computes
-it — `preview.issues`, `canPublish`, and the `IssueList` and `PublishReasons` components in
-`components/WorkspaceChrome.tsx` are a per-definition readiness engine that every authoring surface
-already renders. The guide is that engine read one level up, with its existing vocabulary. A second
-set of words for why a shop is not publishable would be a second gate to keep in agreement with the
-first.
+it — `preview.issues`, `canPublish` in `lib/definitionEditor.ts`, and the `IssueList` and
+`PublishReasons` components in `components/WorkspaceChrome.tsx` are a per-definition readiness
+engine that every authoring surface already renders. The guide is that engine read one level up,
+with its existing vocabulary. A second set of words for why a shop is not publishable would be a
+second gate to keep in agreement with the first.
 
 ### The toggle stores an override, not a state
 

@@ -21,7 +21,7 @@ import {
   scoreExperiment,
 } from "../api/experiments";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
+import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   COMPARISON_DIMENSION,
@@ -47,6 +47,7 @@ import {
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { usePublishedJudges } from "../lib/usePublishedJudges";
 
 const UNAVAILABLE = "This experiment is unavailable.";
 

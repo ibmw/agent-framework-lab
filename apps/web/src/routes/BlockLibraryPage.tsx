@@ -10,9 +10,7 @@ import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
-import { savedAsPreview } from "../components/DerivedIdField";
 import { Field, FieldRows } from "../components/FieldHint";
-import { searchRows } from "../components/FilterChips";
 import { ParameterForm } from "../components/ParameterForm";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
@@ -29,6 +27,8 @@ import {
   withoutParameter,
 } from "../lib/blocks";
 import { useCreateThenComplete } from "../lib/createDefinition";
+import { savedAsPreview } from "../lib/fieldPreviews";
+import { searchRows } from "../lib/filters";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
@@ -38,8 +38,8 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { useLabWorkspace } from "../shell/LabWorkspace";
 import type { Listing } from "../shell/listings";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 interface LibraryCopy {
   title: string;

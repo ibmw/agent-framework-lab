@@ -446,15 +446,6 @@ export interface PublishGate extends VersionProvenance {
   issues: DefinitionIssueSchema[];
 }
 
-/**
- * One definition of "may this draft be frozen", shared by every editor so the button and
- * the explanation below it can never disagree — and so a new resource cannot quietly ship
- * a weaker gate than the shop's.
- */
-export function canPublish(preview: PublishGate | null, dirty: boolean): boolean {
-  return preview?.publishable === true && !dirty && !preview.matches_latest_published;
-}
-
 /** Why the publish button is disabled, in the order an author can act on. */
 export function PublishReasons({
   preview,

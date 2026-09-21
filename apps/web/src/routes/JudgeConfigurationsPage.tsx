@@ -13,12 +13,13 @@ import {
 } from "../api/judgeConfigurations";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
-import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { ProvenModelField } from "../components/ProvenModelField";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
+import { filterList } from "../lib/filters";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -28,7 +29,7 @@ import {
   tableHeadClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useLabWorkspace } from "../shell/LabWorkspace";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const UNAVAILABLE = "The judge service is unavailable.";
 

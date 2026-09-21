@@ -39,11 +39,11 @@ table. None of them is reachable from the hook the plan puts the guard in.
 
 ### The route tree moves to a data router and stays the tree it was
 
-`main.tsx` builds `createBrowserRouter(routeTree)` and renders `RouterProvider`. `App.tsx` exports
-`routeTree`, still written as `<Route>` elements and translated by `createRoutesFromElements`, so
-the diff on the routes themselves is an indentation change and a wrapper. The forty-three URL
-patterns the application answered before are the forty-three it answers now, asserted as a list
-rather than assumed.
+`App.tsx` builds `createBrowserRouter(routeTree)` and renders `RouterProvider`; `main.tsx` mounts
+`<App />`. `routeTree.tsx` exports `routeTree`, still written as `<Route>` elements and translated
+by `createRoutesFromElements`, so the diff on the routes themselves is an indentation change and a
+wrapper. The forty-three URL patterns the application answered before are the forty-three it
+answers now, asserted as a list rather than assumed.
 
 The one structural addition is a **pathless root layout** holding `UnsavedChangesGuard`. It matches
 no URL, contributes no segment, and exists so there is a component above every route that is inside

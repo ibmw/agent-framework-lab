@@ -29,7 +29,6 @@ import { Field, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   EntryCard,
   EntryEditNotice,
@@ -41,7 +40,7 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
@@ -68,7 +67,7 @@ import {
   surfaceClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const CLIENT: DefinitionClient<
   CustomerProfileContentSchema,

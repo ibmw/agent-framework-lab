@@ -26,7 +26,6 @@ import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   Fingerprint,
   IssueList,
@@ -35,7 +34,7 @@ import {
   StatusPill,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { nextReference } from "../lib/entryIds";
 import { optionsOf, TICKET_ORIGIN_KIND, TICKET_STATUS } from "../lib/enumLabels";
 import {
@@ -74,7 +73,7 @@ import {
   surfaceClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The ticket service is unavailable.";
 

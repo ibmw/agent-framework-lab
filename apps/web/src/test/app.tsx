@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { routeTree } from "../App";
+import { routeTree } from "../routeTree";
 
 /**
  * The application at one path, on the data router it actually ships on.
@@ -8,6 +8,10 @@ import { routeTree } from "../App";
  * `useBlocker` — and so the whole unsaved-work guard — exists only on a data router, so a suite
  * that mounted the tree under `MemoryRouter` would be testing a router the application does not
  * use (ADR 0051). Written once here because every page suite renders the same way.
+ *
+ * It builds its own router rather than rendering `App`, which is the browser's entry: that one puts
+ * the same `routeTree` on `createBrowserRouter` and opens wherever the address bar points, and a
+ * suite has to open at a path of its choosing. The tree is what the two entries share.
  */
 export function renderApp(path: string) {
   const router = createMemoryRouter(routeTree, { initialEntries: [path] });

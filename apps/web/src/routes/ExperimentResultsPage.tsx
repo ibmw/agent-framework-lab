@@ -12,7 +12,7 @@ import { type FormEvent, useState } from "react";
 import { describeApiError } from "../api/client";
 import { addExperimentNote, scoreExperiment, setExperimentTags } from "../api/experiments";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { JudgePicker, ObjectiveMatrix, usePublishedJudges } from "../components/ObjectiveEvidence";
+import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
 import {
   changeValue,
@@ -34,7 +34,8 @@ import {
   tableHeadClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useExperimentResults } from "./ExperimentResultsLayout";
+import { usePublishedJudges } from "../lib/usePublishedJudges";
+import { useExperimentResults } from "./useExperimentResults";
 
 /**
  * The measures the quantitative table reads, in the order it reads them.

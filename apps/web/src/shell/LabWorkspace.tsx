@@ -1,11 +1,12 @@
 import type { ShopSummarySchema } from "@agent-lab/contracts";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, Outlet, useMatch } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { listShops } from "../api/shops";
 import { readLastVisitedShop, writeLastVisitedShop } from "../lib/preferences";
 import { AppShell, type RailCounts } from "./AppShell";
 import { type LabListings, useLabListings } from "./listings";
+import { LabContext, useLabWorkspace } from "./useLabWorkspace";
 
 export interface LabWorkspaceValue {
   /** Every shop the lab holds, for the switcher and for any surface that names one. */
@@ -29,16 +30,6 @@ export interface LabWorkspaceValue {
    */
   loading: boolean;
   error: string | null;
-}
-
-const LabContext = createContext<LabWorkspaceValue | null>(null);
-
-export function useLabWorkspace(): LabWorkspaceValue {
-  const value = useContext(LabContext);
-  if (!value) {
-    throw new Error("useLabWorkspace must be used inside the experiment lab");
-  }
-  return value;
 }
 
 /**

@@ -12,11 +12,12 @@ import { createScenario, replaceScenarioDraft } from "../api/scenarios";
 import { ChipListField } from "../components/ChipListField";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
-import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { CHIP_LABEL_MAX_LENGTH } from "../lib/fieldRules";
+import { filterList } from "../lib/filters";
 import {
   addMutation,
   addObjective,
@@ -36,7 +37,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 /**
  * The Studio's scenario index (the rail's "Scenarios").

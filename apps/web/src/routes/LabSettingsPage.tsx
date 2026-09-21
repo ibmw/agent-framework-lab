@@ -14,7 +14,8 @@ import { Card, EntryCard, EntryId, EntryKind } from "../components/WorkspaceChro
 import { describeArchitecture, describeProvider, readableTerm } from "../lib/agents";
 import { readNavigationCollapsed, writeNavigationCollapsed } from "../lib/preferences";
 import { outlineButtonClasses, warningButtonClasses } from "../lib/ui";
-import { LabSurface, useLabSurface } from "../shell/LabSurface";
+import { LabSurface } from "../shell/LabSurface";
+import { useLabSurface } from "../shell/useLabSurface";
 
 function FrameworkRow({ framework }: { framework: ProvenFrameworkSchema }) {
   return (

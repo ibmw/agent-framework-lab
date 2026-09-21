@@ -1,9 +1,9 @@
 import type { BlockParameterKind } from "@agent-lab/contracts";
 import { type FormEvent, useState } from "react";
 import { PARAMETER_KINDS, toIdentifier, uniqueParameterName } from "../lib/blocks";
+import { savedAsPreview } from "../lib/fieldPreviews";
 import { fieldControlClasses, fieldLabelClasses, inkButtonClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
-import { savedAsPreview } from "./DerivedIdField";
 import { FieldHint } from "./FieldHint";
 
 /**

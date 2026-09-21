@@ -22,7 +22,6 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   Fingerprint,
   IssueList,
@@ -30,7 +29,7 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import {
   addMutation,
@@ -74,7 +73,7 @@ import {
   surfaceClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The scenario workspace is unavailable.";
 

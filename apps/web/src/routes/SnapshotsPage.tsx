@@ -37,7 +37,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The starting states of this scenario are unavailable.";
 const ARMS_UNAVAILABLE = "The arms cloned from this snapshot are unavailable.";

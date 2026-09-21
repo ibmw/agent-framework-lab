@@ -2,13 +2,9 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import {
-  type FilterChipDefinition,
-  FilterChips,
-  filterList,
-  searchRows,
-} from "./components/FilterChips";
+import { type FilterChipDefinition, FilterChips } from "./components/FilterChips";
 import { SearchField } from "./components/SearchField";
+import { filterList, searchRows } from "./lib/filters";
 
 interface Row {
   readonly name: string;

@@ -1,7 +1,7 @@
 import type { DefinitionIssueSchema, ProductViewSchema } from "@agent-lab/contracts";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { type FilterChipDefinition, FilterChips, filterList } from "../components/FilterChips";
+import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import {
   EditorSaveActions,
@@ -11,9 +11,10 @@ import {
 } from "../components/WorkspaceChrome";
 import { uniqueId } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
+import { filterList } from "../lib/filters";
 import { issuesForProduct, productTitle, ratingLabel } from "../lib/shop";
 import { accentButtonClasses, surfaceClasses, tableCellClasses, tableHeadClasses } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 /**
  * The handle a brand-new product is addressed by, before it has a title to derive one from.

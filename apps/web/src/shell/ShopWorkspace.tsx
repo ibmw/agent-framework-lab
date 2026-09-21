@@ -4,7 +4,7 @@ import type {
   ShopPreviewResponse,
   ShopSummarySchema,
 } from "@agent-lab/contracts";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -19,6 +19,7 @@ import { writeLastVisitedShop } from "../lib/preferences";
 import { shopDraftIsSavableAt, toPayload } from "../lib/shop";
 import { AppShell, type RailCounts } from "./AppShell";
 import { type ShopListings, useShopListings } from "./listings";
+import { WorkspaceContext } from "./useShopWorkspace";
 
 const CLIENT: DefinitionClient<ShopContentSchema, ShopPayloadSchema, ShopPreviewResponse> = {
   getDraft: getShopDraft,
@@ -49,16 +50,6 @@ export interface ShopWorkspaceValue {
   save: () => Promise<string | null>;
   discard: () => Promise<void>;
   publish: () => Promise<number | null>;
-}
-
-const WorkspaceContext = createContext<ShopWorkspaceValue | null>(null);
-
-export function useShopWorkspace(): ShopWorkspaceValue {
-  const value = useContext(WorkspaceContext);
-  if (!value) {
-    throw new Error("useShopWorkspace must be used inside the shop workspace");
-  }
-  return value;
 }
 
 /**

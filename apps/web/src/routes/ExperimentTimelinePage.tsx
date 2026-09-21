@@ -13,7 +13,7 @@ import { Card } from "../components/WorkspaceChrome";
 import { labelOf as enumLabel, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure } from "../lib/evidence";
 import { outlineButtonClasses, subtleButtonClasses } from "../lib/ui";
-import { useExperimentResults } from "./ExperimentResultsLayout";
+import { useExperimentResults } from "./useExperimentResults";
 
 const UNAVAILABLE = "This experiment's timeline is unavailable.";
 

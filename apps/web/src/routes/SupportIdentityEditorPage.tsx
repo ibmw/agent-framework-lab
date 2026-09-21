@@ -16,7 +16,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   EntryCard,
   EntryEditNotice,
@@ -28,7 +27,7 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
@@ -41,7 +40,7 @@ import {
   inkButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useLabWorkspace } from "../shell/LabWorkspace";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const CLIENT: DefinitionClient<
   SupportIdentityPayloadSchema,

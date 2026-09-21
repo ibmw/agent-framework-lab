@@ -1,6 +1,7 @@
 import { Card } from "../components/WorkspaceChrome";
 import { GLOSSARY_TERMS } from "../lib/glossary";
-import { LabSurface, useLabSurface } from "../shell/LabSurface";
+import { LabSurface } from "../shell/LabSurface";
+import { useLabSurface } from "../shell/useLabSurface";
 
 /**
  * The lab's vocabulary, rendered from the one module that carries it.

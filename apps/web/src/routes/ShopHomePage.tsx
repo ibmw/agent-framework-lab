@@ -6,7 +6,6 @@ import { listShopVersions } from "../api/shops";
 import { ButtonIcon } from "../components/ButtonIcon";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   Fingerprint,
   IssueList,
@@ -14,6 +13,7 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
+import { canPublish } from "../lib/definitionEditor";
 import {
   formatTimestamp,
   inkButtonClasses,
@@ -21,7 +21,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 export function ShopHomePage() {
   const {

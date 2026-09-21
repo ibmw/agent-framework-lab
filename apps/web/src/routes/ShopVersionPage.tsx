@@ -25,7 +25,7 @@ import {
 } from "../lib/enumLabels";
 import { ratingLabel, variantOptionLabel, variantPriceLabel } from "../lib/shop";
 import { formatTimestamp, tableCellClasses, tableHeadClasses } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 export function ShopVersionPage() {
   const { version = "" } = useParams();

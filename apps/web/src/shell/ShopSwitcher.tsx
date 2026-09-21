@@ -19,7 +19,7 @@ import { focusRingClasses, topBarFocusRingClasses } from "../lib/ui";
  */
 
 /** The badge until Slice 28 gives a shop a logo: the first letters of its first two words. */
-export function shopInitials(name: string): string {
+function shopInitials(name: string): string {
   return name
     .split(" ")
     .slice(0, 2)

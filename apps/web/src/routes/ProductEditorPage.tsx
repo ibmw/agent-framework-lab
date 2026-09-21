@@ -73,7 +73,7 @@ import {
   tableHeadClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const AVAILABILITIES = optionsOf(VARIANT_AVAILABILITY);
 

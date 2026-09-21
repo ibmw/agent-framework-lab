@@ -59,7 +59,7 @@ import {
   textAreaClasses,
 } from "../lib/ui";
 import { useRegisterUnsavedWork } from "../lib/unsavedWork";
-import { useShopWorkspace } from "../shell/ShopWorkspace";
+import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The order service is unavailable.";
 

@@ -17,7 +17,6 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ParameterForm } from "../components/ParameterForm";
 import {
   Card,
-  canPublish,
   EditorSaveActions,
   Fingerprint,
   IssueList,
@@ -42,7 +41,7 @@ import {
   shopBoundCount,
   updateParameter,
 } from "../lib/blocks";
-import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import {
   accentButtonClasses,
@@ -52,8 +51,8 @@ import {
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
-import { useLabWorkspace } from "../shell/LabWorkspace";
 import type { Listing } from "../shell/listings";
+import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const OBJECTIVE_CLIENT: DefinitionClient<
   ObjectiveBlockPayloadSchema,

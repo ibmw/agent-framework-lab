@@ -9,7 +9,7 @@ import type {
   ExperimentRunSchema,
 } from "@agent-lab/contracts";
 import { useCallback, useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import {
   listAgentConfigurations,
   listAgentConfigurationVersions,
@@ -57,10 +57,6 @@ export interface ExperimentResults {
   onEvaluated: (evaluation: ExperimentEvaluationResponse) => void;
   /** Replace the annotation after a write answered with the whole of it. */
   onAnnotated: (annotations: ExperimentAnnotationsResponse) => void;
-}
-
-export function useExperimentResults(): ExperimentResults {
-  return useOutletContext<ExperimentResults>();
 }
 
 /**
