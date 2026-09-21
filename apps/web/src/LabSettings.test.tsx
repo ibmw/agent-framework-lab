@@ -114,6 +114,8 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () => HttpResponse.json(shopDraft)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () => HttpResponse.json(shopPreview)),
   http.get(`*/api/v1/shops/${SHOP_ID}/versions`, () => HttpResponse.json({ versions: [] })),
+  // The shop's overview reads its experiments for the activity card (PLAN-UX Slice 15).
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments`, () => HttpResponse.json({ experiments: [] })),
   http.get("*/api/v1/lab-status", () => HttpResponse.json(currentStatus)),
   http.get("*/api/v1/agent-configurations/resources", () => HttpResponse.json(resources)),
   // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
@@ -260,7 +262,7 @@ describe("lab settings", () => {
 
   it("offers a way back to the shop the operator was last standing in", async () => {
     const workspace = renderAt(`/shops/${SHOP_ID}`);
-    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeVisible();
     workspace.unmount();
 
     renderAt("/settings");

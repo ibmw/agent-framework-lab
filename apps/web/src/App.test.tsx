@@ -220,6 +220,9 @@ const server = setupServer(
   }),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () => HttpResponse.json(currentPreview)),
   http.get(`*/api/v1/shops/${SHOP_ID}/versions`, () => HttpResponse.json(versions)),
+  // The overview reads this shop's experiments for its activity card; every other surface in
+  // this suite renders inside the same shell and so pays for the handler rather than the read.
+  http.get(`*/api/v1/shops/${SHOP_ID}/experiments`, () => HttpResponse.json({ experiments: [] })),
   http.post(`*/api/v1/shops/${SHOP_ID}/versions`, () => {
     const published: ShopVersionResponse = {
       shop_id: SHOP_ID,
@@ -437,30 +440,6 @@ describe("shop workspace", () => {
     expect(within(screen.getByRole("table")).getByText("Never published")).toBeVisible();
   });
 
-  it("blocks publication while the draft has errors and names the failing variant", async () => {
-    renderAt(`/shops/${SHOP_ID}`);
-
-    expect(await screen.findByRole("heading", { name: "Home" })).toBeVisible();
-    expect(screen.getByText(/Draft v1 in progress/)).toBeVisible();
-    expect(screen.getByText(/variant NS-ASJ-OB-L is missing a price/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
-    expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
-    expect(screen.getByText("1 warning(s) do not block publication.")).toBeVisible();
-  });
-
-  it("publishes a clean draft and shows the frozen version", async () => {
-    currentPreview = preview({ publishable: true, issues: [] });
-    renderAt(`/shops/${SHOP_ID}`);
-
-    const publish = await screen.findByRole("button", { name: "Publish v1" });
-    expect(publish).toBeEnabled();
-    await userEvent.click(publish);
-
-    expect(await screen.findByText(/Published v1\. That version is immutable/)).toBeVisible();
-    expect(await screen.findByRole("link", { name: "v1" })).toBeVisible();
-    await waitFor(() => expect(screen.getByText(/Draft matches v1/)).toBeVisible());
-  });
-
   it("edits a variant price in the draft and saves without derived evidence", async () => {
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
 
@@ -519,18 +498,20 @@ describe("shop workspace", () => {
     await userEvent.type(await screen.findByLabelText("Price for NS-ASJ-OB-L"), "9");
     await userEvent.click(screen.getByRole("link", { name: "Overview" }));
 
-    const publish = await screen.findByRole("button", { name: "Publish v1" });
+    const publish = await screen.findByRole("button", { name: "Review 1 change & publish" });
     expect(publish).toBeDisabled();
     // Scoped to the card, which is the one place the publish gate's refusal is rendered.
     expect(
-      within(screen.getByRole("region", { name: "Publish" })).getByText(
+      within(screen.getByRole("region", { name: "Versions of this shop" })).getByText(
         /Save the draft first — publishing freezes the saved draft/,
       ),
     ).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Publish v1" })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Review 1 change & publish" })).toBeEnabled(),
+    );
   });
 
   it("does not offer to republish a draft identical to the latest version", async () => {

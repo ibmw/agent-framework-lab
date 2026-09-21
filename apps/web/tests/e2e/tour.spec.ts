@@ -72,7 +72,7 @@ test("a tour walks the screen it was launched from, and leaves when it is told t
   await expect(launch).toBeFocused();
 
   // The page underneath is the page it was, and the tour can be asked for again.
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await launch.click();
   await expect(popover).toBeVisible();
   await popover.getByRole("button", { name: "Close" }).click();

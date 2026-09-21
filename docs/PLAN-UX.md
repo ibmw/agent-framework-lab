@@ -57,7 +57,7 @@ Three things the prototype draws are decided outside this plan, so that no slice
   scheme, the current-shop rule, the redirects, and what the shop rail lost. Landed; every
   slice below is written against the routes it left behind.
 - **The Setup checklist is not built**, and the overview's readiness card reads one listing —
-  `docs/design-direction.md`, *Navigation and chrome*.
+  `docs/design-direction.md`, *Navigation and chrome*. Built with the overview.
 - **A rail entry's count comes from the listing its index renders**, held by the workspace —
   ADR 0056, which also measured and refused the additive counts read. Landed.
 - **Two of the five proposed preferences earn a consumer**, and the logo is the optional last
@@ -69,7 +69,7 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Group B's remaining slices — 15, 16, 17 and 18 — are independent and can proceed in parallel;
+Group B's remaining slices — 16, 17 and 18 — are independent and can proceed in parallel;
 creation is a page on every index now, so none of them waits on another. Slice 19 is the
 backend milestone and runs beside Group B; Slice 20 needs it. Group C's slices 21–25 depend on
 nothing in Group B. Slices 26 and 27 close the milestone, and 28 is optional.
@@ -86,35 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
-
-#### Slice 15 — The shop overview
-
-- [ ] `ShopHomePage` becomes *Overview*: the version timeline (published versions, then the
-  draft with its change count and "no experiment can see it"), a two-step publish — "Review N
-  changes & publish" opens the list of what becomes the next version with Publish and Keep
-  editing, and a published state that links to New experiment — replacing the Publish and
-  "What publishing would freeze" cards.
-- [ ] "What this shop holds": four jump cards with the count and a link, replacing the three
-  count cards.
-- [ ] "Findings on the draft": `preview.issues` grouped by the entry that is wrong, each group
-  with one Open that lands on the editor and, where the path names one, the entry in view
-  (`form-decisions.md` 11.2). `IssueList` gains the path-to-route map and every gate code the
-  domain raises is in its sweep test; the same list serves every editor's Publish gate card.
-- [ ] "Run a comparison" in the narrow form decided above, and "Recent activity" from the
-  experiments, scenarios and tickets listings the workspace already holds — three most recent,
-  no store.
-- [ ] The synthetic-shop note stays, as the page description.
-
-Frames: `Workspace.dc.html` :722; DEPRECADED frame 1.
-
-Branch: `feat/shop-overview`. Checks: `ShopHome` tests for the timeline, the two-step publish, the
-grouped findings and the two states of the readiness card; `IssueList` sweep; Playwright
-`shop-publication`, which publishes from this page; `tour-anchors` for the page's anchors.
-
-Slice evidence: an operator with three changes presses *Review 3 changes & publish*, reads that
-a variant and a description become v4, presses Publish, and is offered to point a scenario at
-v4. One of the findings names Alpine Shell Jacket with two errors and its Open lands on that
-product.
 
 #### Slice 16 — Documents
 

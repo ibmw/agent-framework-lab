@@ -46,7 +46,7 @@ export async function createShop(
     ).toBeChecked();
   }
   await page.getByRole("button", { name: "Create shop" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
 }
 
 /**

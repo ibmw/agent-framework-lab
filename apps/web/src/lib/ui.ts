@@ -5,6 +5,7 @@ import {
   CircleCheck,
   CircleDashed,
   Clock,
+  ExternalLink,
   GitBranch,
   Link,
   type LucideIcon,
@@ -386,7 +387,8 @@ export type ButtonVerb =
   | "rerun"
   | "fork"
   | "publish"
-  | "results";
+  | "results"
+  | "open";
 
 /**
  * Verb to glyph, written once so the pairing cannot drift across the seventy-odd buttons that
@@ -405,6 +407,12 @@ export type ButtonVerb =
  * `create` opens a creation or appends to a list. The prototype's own labels settle it:
  * *New shop* and *Add parameter* take the plus, *Create shop* and *Save draft* the check.
  *
+ * `open` is the handoff's eleventh verb, named in the README and drawn nowhere until the shop
+ * overview's grouped findings (`Workspace.dc.html`:794, PLAN-UX Slice 15): a control that
+ * leaves this surface for the entry it names. It is the arrow leaving a box the prototype
+ * draws, and it is not `edit` — what is on the other side is a whole editor rather than the
+ * row in front of the reader.
+ *
  * The drawings are `lucide-react`, which the navigation chrome and the tour control already
  * use — the handoff asks for the prototype's marks to be redrawn "with whatever icon set the
  * codebase prefers, provided the semantic pairing holds", and this is that set.
@@ -421,6 +429,7 @@ export const buttonIcon: Readonly<Record<ButtonVerb, LucideIcon>> = {
   fork: GitBranch,
   publish: Upload,
   results: ChartColumn,
+  open: ExternalLink,
 };
 
 /**

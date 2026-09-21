@@ -15,13 +15,13 @@ import { expect, test } from "./support/e2e";
 const VIEWPORT = { width: 1280, height: 620 };
 
 /**
- * Rail label, then the heading it lands on. The rail says *Overview* where the page still says
- * *Home*: ADR 0054 renamed the entry and left the page's composition to its own slice. Support
+ * Rail label, then the heading it lands on. The rail and the page now say the same word:
+ * ADR 0054 renamed the entry and PLAN-UX Slice 15 rebuilt the page as *Overview*. Support
  * guidelines is no longer on the rail at all — the prototype draws four setup entries, and
  * Slice 16 folds guidelines into the documents table.
  */
 const SECTIONS = [
-  ["Overview", "Home"],
+  ["Overview", "Overview"],
   ["Customers", "Customers"],
   ["Policies & FAQ", "Policies & FAQ"],
   ["Tone of voice", "Tone of voice"],
@@ -157,7 +157,7 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
   await switcher.click();
   await page.getByRole("menuitem", { name: `Alpenglow ${unique}` }).click();
 
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await expect(switcher).toHaveAccessibleName(`Switch shop, current: Alpenglow ${unique}`);
   // Still in shop mode: the switcher moves the shop, never the mode.
   await expect(

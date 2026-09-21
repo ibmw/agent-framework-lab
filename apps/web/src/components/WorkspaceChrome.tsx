@@ -1,6 +1,8 @@
 import type { DefinitionIssueSchema } from "@agent-lab/contracts";
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import type { EntryEdit } from "../lib/entryEdit";
+import { groupFindings, type IssueEntry, type IssueGroup } from "../lib/issueRoutes";
 import {
   accentButtonClasses,
   cardTitleClasses,
@@ -391,7 +393,59 @@ export function EntryText({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function IssueList({ issues }: { issues: DefinitionIssueSchema[] }) {
+/** One gate finding, in the gate's own words and with the path that located it. */
+function Finding({ issue }: { issue: DefinitionIssueSchema }) {
+  return (
+    <li className="flex items-start gap-2 text-[13px] leading-relaxed">
+      <span
+        className={
+          issue.severity === "error"
+            ? "font-semibold text-lab-error"
+            : "font-semibold text-admin-draft-ink"
+        }
+      >
+        {issue.severity === "error" ? "Error" : "Warning"}
+      </span>
+      <span className="text-admin-ink-soft">
+        {issue.message}
+        <code className="ml-1.5 rounded bg-admin-canvas px-1 py-0.5 font-mono text-[11px] text-admin-muted">
+          {issue.path}
+        </code>
+      </span>
+    </li>
+  );
+}
+
+/** How many of each severity a group holds, said in words beside the entry's name. */
+function groupTally(group: IssueGroup): string {
+  const parts: string[] = [];
+  if (group.errors > 0) {
+    parts.push(`${group.errors} error${group.errors === 1 ? "" : "s"}`);
+  }
+  if (group.warnings > 0) {
+    parts.push(`${group.warnings} warning${group.warnings === 1 ? "" : "s"}`);
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * The publish gate's findings, and — where the caller can say where each one is fixed — the
+ * entry that is wrong with one *Open* beside it (`form-decisions.md` 11.2).
+ *
+ * One list serves every surface that renders findings: the shop's overview, which groups and
+ * links, and every editor's Publish gate card, which does not, because there the entry that is
+ * wrong is a row of the page the reader is already standing on. The difference between the two
+ * is whether the caller hands over an `entryOf`, so a finding is never rendered two ways and a
+ * gate sentence is never restated.
+ */
+export function IssueList({
+  issues,
+  entryOf,
+}: {
+  issues: DefinitionIssueSchema[];
+  /** Turns a finding's path into the entry it is about (`lib/issueRoutes.ts`). */
+  entryOf?: (path: string) => IssueEntry | null;
+}) {
   if (issues.length === 0) {
     return (
       <p className="flex items-center gap-2 text-[13px] text-lab-success">
@@ -399,32 +453,52 @@ export function IssueList({ issues }: { issues: DefinitionIssueSchema[] }) {
       </p>
     );
   }
+  if (entryOf === undefined) {
+    return (
+      <ul className="grid gap-2">
+        {issues.map((issue) => (
+          // One path can raise the same code twice (a variant missing two option values),
+          // so the message is part of the identity.
+          <Finding key={`${issue.code}:${issue.path}:${issue.message}`} issue={issue} />
+        ))}
+      </ul>
+    );
+  }
+  const groups = groupFindings(issues, entryOf);
   return (
-    <ul className="grid gap-2">
-      {issues.map((issue) => (
-        // One path can raise the same code twice (a variant missing two option values),
-        // so the message is part of the identity.
-        <li
-          key={`${issue.code}:${issue.path}:${issue.message}`}
-          className="flex items-start gap-2 text-[13px] leading-relaxed"
-        >
-          <span
-            className={
-              issue.severity === "error"
-                ? "font-semibold text-lab-error"
-                : "font-semibold text-admin-draft-ink"
-            }
-          >
-            {issue.severity === "error" ? "Error" : "Warning"}
-          </span>
-          <span className="text-admin-ink-soft">
-            {issue.message}
-            <code className="ml-1.5 rounded bg-admin-canvas px-1 py-0.5 font-mono text-[11px] text-admin-muted">
-              {issue.path}
-            </code>
-          </span>
-        </li>
-      ))}
+    <ul className="grid gap-2.5">
+      {groups.map((group) =>
+        group.entry === null ? (
+          // A path the map does not recognise keeps its finding and loses only its Open.
+          <Finding key={group.key} issue={group.issues[0]} />
+        ) : (
+          <li key={group.key} className="overflow-hidden rounded-[9px] border border-admin-border">
+            <div className="flex flex-wrap items-center gap-2 border-b border-admin-border/60 bg-admin-canvas px-3 py-2">
+              <span className="text-[12.5px] font-bold">{group.entry.label}</span>
+              <span
+                className={`text-[11px] font-bold ${
+                  group.errors > 0 ? "text-lab-error" : "text-admin-draft-ink"
+                }`}
+              >
+                {groupTally(group)}
+              </span>
+              <Link
+                className={`ml-auto ${subtleButtonClasses}`}
+                to={group.entry.to}
+                aria-label={`Open ${group.entry.label}`}
+              >
+                <ButtonIcon verb="open" />
+                Open
+              </Link>
+            </div>
+            <ul className="grid gap-1.5 px-3 py-2">
+              {group.issues.map((issue) => (
+                <Finding key={`${issue.code}:${issue.path}:${issue.message}`} issue={issue} />
+              ))}
+            </ul>
+          </li>
+        ),
+      )}
     </ul>
   );
 }

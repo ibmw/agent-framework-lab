@@ -278,6 +278,7 @@ const VOCABULARY: Record<ButtonVerb, string> = {
   fork: "GitBranch",
   publish: "Upload",
   results: "ChartColumn",
+  open: "ExternalLink",
 };
 
 describe("the button glyph vocabulary", () => {

@@ -41,9 +41,11 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await currencies.getByRole("checkbox", { name: "EUR — Euro" }).check();
   await page.getByRole("button", { name: "Create shop" }).click();
 
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await expect(page.getByText("Never published")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+  // Publishing is two presses now (PLAN-UX Slice 15), and the first one is refused while the
+  // gate is: a shop with no product has nothing to review.
+  await expect(page.getByRole("button", { name: "Review 1 change & publish" })).toBeDisabled();
 
   // Support knowledge and commerce configuration a published shop must carry.
   await openSection(page, "Policies & FAQ", "Policies & FAQ");
@@ -131,16 +133,25 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await variants.getByRole("button", { name: "Add variant" }).click();
   await saveDraft(page);
 
-  // Publish the whole shop, then read the frozen version back.
-  await openSection(page, "Overview", "Home");
-  const publish = page.getByRole("button", { name: "Publish v1" });
-  await expect(publish).toBeEnabled();
-  await publish.click();
+  // Publish the whole shop, then read the frozen version back. The operator reads what
+  // becomes v1 before anything is frozen, and only the Publish inside that review writes.
+  await openSection(page, "Overview", "Overview");
+  const review = page.getByRole("button", { name: "Review 1 change & publish" });
+  await expect(review).toBeEnabled();
+  await review.click();
 
-  await expect(page.getByText(/Published v1\. That version is immutable/)).toBeVisible();
+  const versions = card(page, "Versions of this shop");
+  const becoming = versions.getByRole("list", { name: "This change becomes v1" });
+  await expect(becoming.getByRole("listitem")).toHaveCount(1);
+  await expect(becoming.getByText("First published version of")).toBeVisible();
+  await versions.getByRole("button", { name: "Publish v1" }).click();
+
+  await expect(page.getByText(/v1 is published\./)).toBeVisible();
   await expect(page.getByText(/Draft matches v1/)).toBeVisible();
+  // And the published state offers the next step the prototype offers.
+  await expect(page.getByRole("link", { name: /Point a scenario at v1/ })).toBeVisible();
 
-  await page.getByRole("link", { name: "v1", exact: true }).click();
+  await versions.getByRole("link", { name: "v1", exact: true }).click();
   await expect(page.getByText("published · read only")).toBeVisible();
   const frozen = page.getByRole("table");
   await expect(frozen.getByText("NS-ASJ-OB-M")).toBeVisible();
@@ -173,9 +184,13 @@ test("an author publishes a shop with size and colour variants and reads the fro
   await expect(saved.getByText("despatch").first()).toBeVisible();
   await saveDraft(page);
 
-  await openSection(page, "Overview", "Home");
-  await expect(card(page, "Draft changes").getByText("1", { exact: true })).toBeVisible();
-  const freeze = card(page, "What publishing would freeze");
-  await expect(freeze.getByRole("listitem")).toHaveCount(1);
-  await expect(freeze.getByText("Updated policy Shipping policy")).toBeVisible();
+  await openSection(page, "Overview", "Overview");
+  // The timeline's own draft stop says what stands on it, and the review says what it is.
+  const timeline = card(page, "Versions of this shop");
+  await expect(timeline.getByText("1 change · no experiment can see it")).toBeVisible();
+  await timeline.getByRole("button", { name: "Review 1 change & publish" }).click();
+  const becomingV2 = timeline.getByRole("list", { name: "This change becomes v2" });
+  await expect(becomingV2.getByRole("listitem")).toHaveCount(1);
+  await expect(becomingV2.getByText("Updated policy Shipping policy")).toBeVisible();
+  await expect(timeline.getByText("Scenarios stay on v1 until you repoint them.")).toBeVisible();
 });

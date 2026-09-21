@@ -166,14 +166,16 @@ export const TOURS: Record<TourId, Tour> = {
         ],
       },
       {
-        anchor: '[aria-label="Publish"]',
+        // The Publish card is gone: the overview's spine is the version timeline, and the
+        // two-step publish is that card's own footer (PLAN-UX Slice 15).
+        anchor: '[aria-label="Versions of this shop"]',
         title: "Publishing freezes a version",
         body: [
           "Every [[definition]] in this lab is a draft you keep editing with immutable published versions stacked beside it. Publishing freezes the draft exactly as it stands, and an [[experiment]] pins a version rather than a draft — so editing this draft afterwards never moves what something has already pinned.",
         ],
       },
       {
-        anchor: '[aria-label="Draft validation"]',
+        anchor: '[aria-label="Findings on the draft"]',
         title: "What the gate is still refusing",
         body: [
           "Whatever stands between this draft and a published version is listed here in the gate's own words, and the publish control refuses while an error is left. Nearly every step from an empty database to a two-arm comparison refuses the same way until the one before it is satisfied, which is why the setup guide is written in that order.",

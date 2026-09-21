@@ -1,6 +1,6 @@
 # Design direction
 
-Status: current — 2026-09-20. The design rules that govern `apps/web`, stated once as rules a slice
+Status: current — 2026-09-21. The design rules that govern `apps/web`, stated once as rules a slice
 is checked against. Values are not restated here: a measurement or a colour that is built lives
 in the code that draws it (`styles.css` for tokens, `lib/ui.ts` for class sets and glyph tables,
 `shell/AppShell.tsx` for the chrome), and one that is not yet built lives in its slice in
@@ -106,10 +106,17 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Three cards on the lab's create pages | Tools on New configuration, Evidence on New judge, and an Architecture row beside a Provider select | none of the three; the Provider is the prototype's own read-only variant of that row | *A create form asks for what constrains the work that follows **and names where the rest lives*** — the *Created as a draft* card on each page is where the rest is named: a new draft reads through every tool and writes through none, and enabling a write is the act the editor exists for; the judge's evidence starts at what the lab has proven and is changed there. The Architecture row is the one of the three rule 5 reaches, because `AgentArchitecture` has a single member and *a choice of one is not a choice* — which is also why the Provider is drawn as a value rather than as a select |
 | Two hints on New scenario | "It does not have to be unique, but two scenarios with one name are hard to tell apart"; "Creating the scenario freezes the ticket at its current version" | a shop answers to one scenario of each name, and Create is refused by a name it already holds; and the hint splits the freeze — the ticket and the documents it suggests are fixed by creating, the ticket *version* is pinned by publishing the scenario | both sentences describe a lab that is not this one: `_require_free_name` refuses a duplicate at create and at replace, and `ScenarioResolution.ticket_version` reads the ticket's latest published version, which `publish_scenario` is what pins. *Every hint names the code that makes it true* (*The form language*), which is the same reading `lib/fieldRules.ts` already applies to the prototype's product Status and Shop slug rows |
 | The composed objectives and mutations | the chips alone, under "Bindings are added in the editor once the scenario exists" | the chips, and an ordered list under them naming each composed template and the bindings to this shop it still owes | *A create form asks for what constrains the work that follows **and names where the rest lives*** — the same sentence that licensed the three cards above, and the list is where the rest is named. The plan asks for the templates *with a binding each*, and a binding cannot be made before the first write: every binding a scenario writes is to an object of its own shop, and the pickers that offer those read `ScenarioResourcesSchema`, which is addressed under a scenario that does not exist until Create is pressed. What composing *can* carry it does — the page reads each composed template's own draft, so the severity and the literal defaults its author chose ride in with the instance exactly as they do in the editor |
+| The overview's heading | the shop's name, 26px | "Overview" | the plan's own first bullet for this page — "`ShopHomePage` becomes *Overview*" — which is the licence; the rest is why it reads well: every other page in this workspace names the page rather than the shop, the rail entry that opens this one already said *Overview*, and the switcher names the shop on every screen anyway |
+| "4 scenarios and 18 experiments read this one" under the latest version | drawn on the timeline | "What a scenario resolves against today." | neither figure is in any payload this page holds — a scenario's listing row carries no pinned shop version and nothing counts experiments per version — and a figure the payload lacks is not faked (*Lists and counts*). What is drawn instead is the fact the lab does hold: `ScenarioResolution` pins whatever is published when it resolves |
+| "or open the live one →" under *Run a comparison* | drawn | not drawn | "the live one" is a running experiment, and `ExperimentSummarySchema` carries no status; the same rule, and the same reason the bench entry carries no "1 live" |
+| *Run a comparison*'s sentence | "Everything this needs is ready: <scenario> against shop <version>" | "A comparison runs **<scenario> v1** against shop **v3**.", or, where the listing holds no published scenario, "No scenario is published in this shop yet, and a comparison runs a published scenario." with a link to Scenarios | the prototype's four opening words are a verdict nothing reads: a comparison also needs two arms on published agent configurations, which `start_experiment` refuses without and which this page never lists, so a lab holding one and not the other would be told it was ready. That is the derived progress reading ADR 0044 and ADR 0045 removed, drawn smaller. What is built is the fact the one listing holds — which scenario, at which version, against which shop version — and it was decided before this slice (`docs/PLAN-UX.md`, *Decisions already taken*) |
+| *Recent activity*'s three sentences | "Scenario … v1 published", "Ticket T-204 opened by Maya Laurent" | "… updated", on each listing's own `updated_at`; an experiment reads "started", on its `created_at` | a scenario's listing row carries no published-at and a ticket's `opened_at` is an instant in the fiction rather than in this workspace, so neither sentence has a clock that means it; *every hint names the code that makes it true*, read here about a sentence rather than a field |
+| The rows of *What this shop holds* | the whole row is a click target, with a link inside it | the row, with the link as its one control | a nested link inside a clickable row is two controls a keyboard reaches as one; *Principles*, every workflow keyboard-reachable |
 
 Two items the handoff names are not built and not refused: Georgia on the results' stat
-numerals, and the `open` button verb and `document` chip kind. Each lands with the surface that
-first draws it.
+numerals, and the `document` chip kind. Each lands with the surface that first draws it, which
+is what the `open` button verb just did — it landed with the overview's grouped findings, the
+first control in this workspace that leaves a surface for the entry it names.
 
 ## Navigation and chrome
 
@@ -155,7 +162,14 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   screen, a popover explains and never performs; every step and every surface's route declared
   in one table and swept by Playwright against that surface.
 - **Nothing about progress is stored and no surface reads it** (ADR 0044, ADR 0045). The
-  overview's readiness card reads one listing and says one sentence.
+  overview's readiness card reads one listing and says one sentence: it names the shop's most
+  recently edited published scenario, and the shop version it would resolve against, with a
+  link to New experiment — or says none is published, with a link to Scenarios. **It names
+  what a comparison would run and never says that one can run**, because whether one can is a
+  verdict over gates this page does not read. That is *an empty state says why and links to
+  the prerequisite*, and it is the only readiness any surface reports. The overview's four jump cards are counts
+  under *Lists and counts* and judge nothing — a count is what a listing holds, and a
+  readiness reading is a verdict about what it does not.
 
 ## Tokens, type and glyphs
 
@@ -227,6 +241,21 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   product is the exception**: it is a row of the shop draft rather than a
   definition, so *New product* appends an empty one and opens its editor, and the handle it is
   addressed by is answered there. Ticket authoring stays inside the three-pane screen.
+- **A finding links to the fix** (`form-decisions.md` 11.2). `IssueList` groups the gate's
+  findings by the entry that is wrong, names that entry as its own surface names it, tallies
+  each severity and carries one *Open* that lands on the editor and, where the path names one,
+  the entry in view. One list serves the shop's overview and every editor's Publish gate card:
+  the caller hands over the path-to-route map, and an editor hands over none, because there the
+  entry that is wrong is a row of the page the reader is already standing on. A path the map
+  does not name keeps its finding in the gate's own words and loses only its *Open*, and every
+  gate code the domain raises is swept against the map (`lib/issueRoutes.test.ts`, reading
+  `apps/api/src/capability_lab` the way ADR 0023 sweeps the tool registry).
+- **Publishing the shop is read before it is done.** The overview's *Review N changes &
+  publish* opens what becomes the next version — the gate's own change list, Publish, Keep
+  editing, and what stays pinned until it is repointed — and only the Publish inside it writes.
+  The published state says the version is immutable and links to New experiment. Every other
+  definition still publishes on one press; a review is worth its second press where a draft
+  spans a whole workspace rather than one form.
 - **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
   for the add form and the open row; one row open per list, siblings' Edit disabled with a line
   saying why and that an open row is not in the draft until Save; Cancel writes nothing; the row

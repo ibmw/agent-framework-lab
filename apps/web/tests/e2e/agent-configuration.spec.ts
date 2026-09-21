@@ -75,9 +75,12 @@ async function publishShop(page: Page, unique: string) {
   await variants.getByRole("button", { name: "Add variant" }).click();
   await saveDraft(page);
 
-  await openSection(page, "Overview", "Home");
+  await openSection(page, "Overview", "Overview");
+  // Publishing the shop takes two presses now: the review of what becomes v1, and the
+  // Publish inside it (PLAN-UX Slice 15).
+  await page.getByRole("button", { name: /^Review .+ & publish$/ }).click();
   await page.getByRole("button", { name: "Publish v1" }).click();
-  await expect(page.getByText(/Published v1\. That version is immutable/)).toBeVisible();
+  await expect(page.getByText(/v1 is published\./)).toBeVisible();
 }
 
 /** A read-only published identity: it may look an order up, and may not move it. */
