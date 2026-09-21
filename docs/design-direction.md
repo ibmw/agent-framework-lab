@@ -89,7 +89,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px, and `CreatePage`'s own header at the same size | one size for the workspace, no variant yet; rule 3 |
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
 | Compact controls | 42/40px in sub-editors and filters | the one 44px control | no compact component exists to size |
-| Filter chips on Tickets, the block libraries, Policies & FAQ | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked; Slice 16 gives documents one |
+| Filter chips on Tickets and the block libraries | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked. Policies & FAQ left this row when its documents became a table with four chips (ADR 0057) |
 | Model on the connection, masked key | drawn | neither | ADR 0052 |
 | Setup checklist | drawn on Shop details | not built | ADR 0044, ADR 0045 |
 | Preferences | seven rows | two now, a third read by `/` and written in Slice 18, a fourth with the confirm slice | a preference no surface reads is not a slice |
@@ -97,7 +97,6 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Mode tabs on Settings | drawn — the prototype's settings is an overlay on a mode | absent | `/settings` is a route in neither mode, and tabs there would be the one place the mode is not the branch of the tree you stand in (ADR 0054); rule 5 |
 | Shop badge | a per-shop ground and ink, or a logo | initials on `lab-ink` | the payload carries no logo and no colour pair to draw; Slice 28 is where a shop gets one |
 | Count on the bench entry | "1 live" | nothing | a tally of running arms in one shop, not the length of any listing the shell reads; a figure the payload lacks is not faked (ADR 0056) |
-| Count on *Policies & FAQ* | `DOCUMENTS.length` — policies, guidelines and FAQ entries on one screen | policies plus FAQ entries, the two lists that page draws | the support guidelines are a different route the rail does not name, and a figure counting rows the page does not show is the disagreement the count exists to prevent (ADR 0056). **Slice 16 merges the three into one table and moves the figure with them**, and this row ends there |
 | Focus ring on the bar | `2px solid #1d6241` offset outward, as everywhere else | the bar's paper, inset on the two controls that are the bar's full height | pine on `#16332d` is 1.86:1, under WCAG 2.2's 3:1 for a focus indicator, and an outward offset puts half the ring off the bar; *Principles* outrank a measurement (ADR 0055) |
 | The create page's side column | 312px of notes beside the form — *What happens next*, *In a hurry?*, *Summary*, *Soundness* | the one 790px column; the notes that carry a rule are cards in it, the rest are not drawn | `form-decisions.md`'s layout 2b sizes the *form*, and a second column of prose beside a create form that asks four questions is a column that mostly repeats the hints under them; a note computed from a form nothing has written yet (*Summary*, *Soundness*) is a figure the page lacks |
 | An untitled product's heading | the bound title, empty | "Untitled product" | *New product* appends a product with no title, and an empty `<h1>` leaves the page — and the tour's first anchor — with nothing to read; *Principles*, every state is designed for |
@@ -111,12 +110,18 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | "or open the live one →" under *Run a comparison* | drawn | not drawn | "the live one" is a running experiment, and `ExperimentSummarySchema` carries no status; the same rule, and the same reason the bench entry carries no "1 live" |
 | *Run a comparison*'s sentence | "Everything this needs is ready: <scenario> against shop <version>" | "A comparison runs **<scenario> v1** against shop **v3**.", or, where the listing holds no published scenario, "No scenario is published in this shop yet, and a comparison runs a published scenario." with a link to Scenarios | the prototype's four opening words are a verdict nothing reads: a comparison also needs two arms on published agent configurations, which `start_experiment` refuses without and which this page never lists, so a lab holding one and not the other would be told it was ready. That is the derived progress reading ADR 0044 and ADR 0045 removed, drawn smaller. What is built is the fact the one listing holds — which scenario, at which version, against which shop version — and it was decided before this slice (`docs/PLAN-UX.md`, *Decisions already taken*) |
 | *Recent activity*'s three sentences | "Scenario … v1 published", "Ticket T-204 opened by Maya Laurent" | "… updated", on each listing's own `updated_at`; an experiment reads "started", on its `created_at` | a scenario's listing row carries no published-at and a ticket's `opened_at` is an instant in the fiction rather than in this workspace, so neither sentence has a clock that means it; *every hint names the code that makes it true*, read here about a sentence rather than a field |
+| *Required by a scenario* chip on Documents | drawn, over `DOCUMENTS.filter(d => d.required)` | not drawn; the other four are | the scenarios listing carries `context_document_count` and no document, so the subset cannot be named without one draft read per scenario — the additive read ADR 0056 measured and refused — and a figure the payload lacks is not faked (*Lists and counts*) |
+| *Version* and *Read by* columns on Documents | two of the table's four columns | neither; the table is Document and Kind, with a policy's own subject under it | a shop document has no version of its own — the shop has the version — and which scenarios read one is the same figure the chip above lacks; the same rule (ADR 0056) |
+| Kind on the document editor | a read-only value, beside a slug "set at creation" | the same read-only value, and the create page that sets it | the prototype draws no surface that could set either, and the plan's own bullet asks for the kind as a select. It is a select on the create page instead of a control in the editor, because a document is named by its kind and its slug together and moving either would make it a different document to every scenario that had named it (ADR 0057) |
+| Remove on the document editor | not drawn | drawn, one press, in the Document card's footer | the three collections this table presents each carried a Remove per row before it, and a presentation is not where an author loses their only way to delete a policy; rule 5, another slice owning the decision — Slice 21 gives it the second press every Remove gets |
+| The document editor's side column | two note cards beside a 790px form — *Read by*, *Never in the prompt* | the one 790px column, with *Never in the prompt* as a card in it and *Read by* not drawn | the same reading as the create page's side column above; *Read by* is the figure the chip and the column beside it also lack |
 | The rows of *What this shop holds* | the whole row is a click target, with a link inside it | the row, with the link as its one control | a nested link inside a clickable row is two controls a keyboard reaches as one; *Principles*, every workflow keyboard-reachable |
 
-Two items the handoff names are not built and not refused: Georgia on the results' stat
-numerals, and the `document` chip kind. Each lands with the surface that first draws it, which
-is what the `open` button verb just did — it landed with the overview's grouped findings, the
-first control in this workspace that leaves a surface for the entry it names.
+One item the handoff names is not built and not refused: Georgia on the results' stat
+numerals. It lands with the surface that first draws it, which is what the `open` button verb
+did — it landed with the overview's grouped findings, the first control in this workspace that
+leaves a surface for the entry it names — and what the `document` chip kind did with the
+Documents table.
 
 ## Navigation and chrome
 
@@ -237,10 +242,15 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   second write is sent only where the form asked for something the create request could not
   carry**, so the same page is a one-write create when it did not, and registers nothing.
   Built for the shop, the order, the profile, the identity, the scenario, the agent
-  configuration, the judge and the two block libraries — every create the workspace has. **A
-  product is the exception**: it is a row of the shop draft rather than a
+  configuration, the judge, the two block libraries and the shop document — every create the
+  workspace has. **A product is the exception**: it is a row of the shop draft rather than a
   definition, so *New product* appends an empty one and opens its editor, and the handle it is
-  addressed by is answered there. Ticket authoring stays inside the three-pane screen.
+  addressed by is answered there. **A document is a row of the draft too and is still a page**,
+  because it is named by its kind and its slug together and the kind is a question its editor
+  cannot ask (ADR 0057); it writes by appending to the draft rather than through
+  `useCreateThenComplete`, for the same three reasons the product needs no page — nothing to
+  post, nothing to be refused, nothing to wait for. Ticket authoring stays inside the
+  three-pane screen.
 - **A finding links to the fix** (`form-decisions.md` 11.2). `IssueList` groups the gate's
   findings by the entry that is wrong, names that entry as its own surface names it, tallies
   each severity and carries one *Open* that lands on the editor and, where the path names one,
@@ -269,7 +279,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   validation message under the control, in its accessible description. `blockedButtonClasses`
   in `lib/ui.ts` is that weight — deliberately outside the button table, because every row of
   it is swept for a hover and a focus ring that a permanently disabled control can never show.
-  The nine create pages wear it and nothing else does; Publish, Start, Save connection and
+  The ten create pages wear it and nothing else does; Publish, Start, Save connection and
   Compose adopt it in Slice 22, which also puts the validation message on the `Field` row.
 
 ## Lists and counts
@@ -285,6 +295,10 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **Every index can be searched** (`SearchField`), in the card's header opposite the title with
   the chips beneath; a miss reads "No X matches this view". Experiment history keeps its
   submitted, URL-backed form.
+- **A chip lives in the component unless an address has to name it.** The one exception is the
+  shop's *Documents* table, whose chip is `?kind=`: the retired `/setup/support` redirects to it
+  filtered to Guidelines (ADR 0054, ADR 0057), and a filter an address names has to be the
+  filter that is pressed. Pressing one replaces the history entry rather than pushing one.
 - **Every header spans the content width** and holds the page's actions; sticky on a create
   page, and on the editors with Slice 25.
 
