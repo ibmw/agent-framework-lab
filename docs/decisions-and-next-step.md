@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-09-20
+Status: current — 2026-09-21
 
 ## Authoritative direction
 
@@ -98,8 +98,9 @@ instruction to add Vercel AI SDK immediately.
 
 ## Known application defects, found but not fixed
 
-Five entries. The first two are backend defects, unscheduled, and each wants an ADR as its entry
+Nine entries. The first two are backend defects, unscheduled, and each wants an ADR as its entry
 says. The three workspace defects after them are scheduled: `docs/PLAN-UX.md` Slice 27 owns them.
+The last four are one create-page fix, found after that slice was written and owned by no plan.
 
 The first two were found on 15 September 2026 while making the Playwright suite trustworthy in parallel
 (`fix(test): give every Playwright worker its own stack`). Neither is a test defect and neither was
@@ -193,6 +194,130 @@ input is no longer reviewable as a copy slice.
   The hint on that row deliberately says nothing about it, because a field may not describe a
   refusal the surface does not make. The fix wants the editor to read the listing the create
   form already reads, which is a fetch this page does not make today.
+
+Found on 21 September 2026 across the three review passes of the slice that made creation a page
+in the shop (`feat(web): create on a page that lands in the editor of what it made`), and
+confirmed again in the lab's (`feat(web): create on a page in the lab, and finish what the create
+request could not carry`). The four below are one defect told four ways rather than four defects:
+the same two writes, the same guard and the same listing. They are one slice's worth of work —
+*the run and the prompt share one write, and a stale refresh never lands* — and no plan owns them
+yet. Reported rather than fixed because a create slice that also rewrites the guard it declares
+into stops being reviewable as a create slice, and because none of the four loses an operator's
+work.
+
+- **Save and leave races the create page's own second write.**
+  `NewOrderPage` in `apps/web/src/routes/OrdersPage.tsx` writes `POST` then `PUT`, and
+  `useCreateThenComplete` in `apps/web/src/lib/createDefinition.ts` holds the same shape for the
+  five create pages that use it. Both register the second write as unsaved work with themselves
+  as its `save`, and both stand the run down by setting `stopped` once that save lands. That
+  setter covers one ordering only: the save's `PUT` landing before the run's. In the reverse —
+  the likelier one, because the run's `PUT` started first — the run resumes, sets `landed`,
+  re-reads the listing and navigates into the editor; `UnsavedChangesGuard` lets it through
+  because the work's `reaches()` now answers true; the router resets every blocker to idle as it
+  completes that navigation; and the prompt's `saveAndLeave`, still awaiting its own write, then
+  calls the `proceed()` it captured. `react-router` permits `blocked -> proceeding` and not
+  `unblocked -> proceeding`, so its invariant throws that transition by name out of a promise the
+  click handler voided. What an operator gets: two idempotent `PUT`s, one unhandled rejection,
+  and the editor of what they made when they asked for the index. No data is lost and the
+  destination is not a wrong one, which is why this was never blocking. The fix, as reviewed:
+  hold the in-flight second write in a ref so `save` joins it rather than writing again; stand
+  the run down at the moment of joining; on a refused joined save restore the page's busy and
+  error state and clear `stopped`, or the retry navigates with no line; and have
+  `UnsavedChangesGuard` read the blocker through a ref and call `proceed()` only while its
+  `state` is still `"blocked"`.
+
+- **The stand-down inside `save` is pinned by no test.**
+  Removing `stopped.current = true` from the registered `save` in
+  `apps/web/src/lib/createDefinition.ts`, or from its twin in `OrdersPage.tsx`, fails nothing.
+  Every Save-and-leave test on a create page — in `JudgeConfigurations.test.tsx`,
+  `Scenarios.test.tsx` and `Orders.test.tsx` — presses the prompt's Save after the run has
+  already finished on a refused second write, so no run is in flight for the setter to stop and
+  the unmount setter covers what is left. The line is right: it closes the window between the
+  save's write landing and the unmount, which is the window the entry above is about. It simply
+  has no guard. Pinning it needs an ordering stated exactly, because the obvious case does not
+  bite: if the save's own post-write refresh has already resolved, `saveAndLeave` proceeds, the
+  page unmounts, and the unmount setter stands the run down whether or not the line is there.
+  The window this setter closes is the interval while the save's refresh is still pending. So:
+  hold every listing read after the `POST`; leave the page and press Save and leave; let the
+  save's write land; release the *run's* held read while the *save's* is still held; only then
+  release the save's. With the setter the run stands down, and without it it sends a second
+  `PUT` and navigates.
+
+- **A run that has stood down cannot re-read its listing, so a shell can stay one row short.**
+  Abandoning a create while the first write is in flight leaves the rail's count and the index
+  one row short until the shop, or the lab, is entered again — the listing re-reads when its
+  `load` changes or the shell mounts, so walking to the index inside the same shop does not
+  re-read it. The run may not call `refresh` from there: the closure belongs to the shell the
+  page was opened in, which may be showing another shop by now, and both create paths say so in
+  their own comments. It was accepted deliberately
+  when creation became a page in the shop and again when it became one in the lab, and named in
+  both commit messages. The cure is not on a create page. `useReading.read` in
+  `apps/web/src/shell/listings.ts` orders reads against each other with a counter on which the
+  read that started last wins — so a refresh captured from a listing nobody is standing in wins
+  exactly when it should lose, which is why it may not be called at all. A guard that also drops
+  a read whose `load` is no longer the hook's current one would make any captured `refresh` safe
+  to call, and would remove the residue at its source for every surface rather than for one.
+  That is a shell change and belongs with the shell. The visible tail of the same residue: after
+  an abandon mid-`POST` the next create can suggest a reference the lab already holds, because
+  `suggestedReference` reads the short listing, and `_require_free_reference` in
+  `apps/api/src/capability_lab/application/order_fixtures.py` then refuses it by name rather than
+  the field refusing it first.
+
+- **`NewOrderPage` keeps its own copy of the two-write create.**
+  `useCreateThenComplete` now holds that shape for five create pages — the agent configuration,
+  the judge, the scenario and the two block libraries. The order page does not use it, for the
+  three reasons `useCreateThenComplete`'s own docstring gives: it re-reads its listing *between*
+  the two writes to feed a reference suggestion, it freezes the Customer select once the `POST`
+  has landed, and it reads the created order's reference back into the page title. All three are
+  the order fixture's behaviours rather than the pattern's, so folding them in is a real tidy
+  rather than a defect — and the moment for it is when the three entries above are fixed, because
+  they are that same code written twice. That docstring is itself stale, and whoever does the
+  work corrects it: it still counts "four of the lab's definitions" and "three more consumers",
+  written before the scenario page became the fifth surface on the pattern.
+
+## Figures the prototype draws that no payload carries
+
+`docs/design-direction.md`'s *Departures from the handoff, in force* records each of these as
+refused, under the rule *Lists and counts* states: a figure the payload lacks is not faked. That
+table says what was decided and why; this says what the product would have to buy to decide
+otherwise, because two of the three are questions it may one day reopen and the third is a
+question worth not reopening in the form it was asked. None of this is `docs/PLAN-UX.md` Slice
+27's work and nothing here is added to it: that slice's last bullet settles the same question for
+the six chips UI-4 could not compute — they stay uncomputed unless a listing gains the figure for
+a reason of its own — and these three are the same kind of figure, held to the same rule.
+
+- **The chip *Required by a scenario* on the Documents table, and the column *Read by* beside it**
+  — which is also the note card the document editor's side column would have carried.
+  `ScenarioSummarySchema` carries `context_document_count` and no document, so which documents a
+  shop's scenarios read is in no single read: naming the subset today costs one scenario draft
+  read per row, which is the additive read ADR 0056 measured and refused. One contract field —
+  the context documents a scenario names, on its summary row — would settle the chip, the column
+  and the card together, and it is the only one of the three that is a plain purchase.
+
+- **A tone guideline's *version* line.** `ToneOfVoiceSchema` is `{id, name, guidance, is_default}`
+  and carries no version, because the shop carries it: the page header's version chips are where
+  it is read, and a per-row copy would be the same figure written once per guideline. The
+  Documents table's *Version* column is that same figure refused a slice earlier, for the same
+  reason: a shop document has no version of its own either. This is the one that arguably
+  should stay unbuilt: the price is a contract field and the gain is a repetition.
+
+- **The line *Used by* on a tone guideline** — misconceived as the plan phrased it, not merely
+  unbuildable. An agent configuration is shop-independent, its override is a free-typed
+  `guideline_id` whose datalist is read off the *preview* shop's published version, and the
+  shop a run resolves against is the one the scenario pinned (`ScenarioResolution.shop_version`).
+  So "configurations that name it as an override" is not a fact about this shop's draft at all,
+  and drawing it here would state one. A *string-match* figure keyed on the id — *N
+  configurations carry an override reading `warm`* — is computable and would be a legitimate
+  warning, because an override the target shop stops publishing fails at experiment setup,
+  which the configuration editor already says on the field itself. That is a different feature
+  from the one drawn, and it wants a contract field of its own:
+  `AgentConfigurationSummarySchema` carries no tone selection.
+
+The readiness verdict refused on the shop overview is **not** in this category and no payload
+would license it. ADR 0044 refused a stored setup checklist and ADR 0045 removed the derived
+progress reading, both on principle, and what they leave is the rule in *Navigation and chrome*:
+the overview names what a comparison would run and never says that one can run, because whether
+one can is a verdict over gates that page does not read. It should not be built.
 
 ## Where the work stands
 
