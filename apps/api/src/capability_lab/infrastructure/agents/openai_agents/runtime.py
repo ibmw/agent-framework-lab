@@ -123,12 +123,16 @@ _AGENT_NAME = "support"
 class OpenAiAgentsSupportAgentRuntime(SupportAgentRuntime):
     """Answer one arm's turn with the OpenAI Agents SDK, without an SDK type leaving here."""
 
-    def __init__(self, model: Callable[[str], Model]) -> None:
+    def __init__(self, model: Callable[[str], Model], *, model_base_url: str | None = None) -> None:
         # Process-wide, and deliberately at construction rather than at import: composition
         # decides that this framework runs here, and that is the moment the lab takes
-        # responsibility for what the SDK would otherwise export.
+        # responsibility for what the SDK would otherwise export. Composition now happens per
+        # request rather than once at start-up (ADR 0052), so this runs again on every
+        # request that builds a registry — it sets one process-wide flag to the same value it
+        # already holds, which is why repeating it is housekeeping rather than a cost.
         set_tracing_disabled(True)
         self._model = model
+        self._model_base_url = model_base_url
 
     @classmethod
     def for_test(cls) -> OpenAiAgentsSupportAgentRuntime:
@@ -149,6 +153,11 @@ class OpenAiAgentsSupportAgentRuntime(SupportAgentRuntime):
     @property
     def framework_id(self) -> str:
         return OPENAI_AGENTS_RUNTIME_FRAMEWORK_ID
+
+    @property
+    def model_base_url(self) -> str | None:
+        """The endpoint composition built this runtime against, and `None` for the double."""
+        return self._model_base_url
 
     async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         agent = Agent(
@@ -383,7 +392,7 @@ def _sample_value(declared: Mapping[str, Any]) -> str:
     return choices[0] if choices else "sample"
 
 
-def create_openai_agents_model(model_id: str, api_key: str) -> Model:
+def create_openai_agents_model(model_id: str, api_key: str, base_url: str) -> Model:
     """Build the credentialed provider model inside this adapter's boundary.
 
     The Responses API, as the Pydantic AI adapter uses, so the two arms of a framework
@@ -393,4 +402,6 @@ def create_openai_agents_model(model_id: str, api_key: str) -> Model:
     from agents import OpenAIResponsesModel
     from openai import AsyncOpenAI
 
-    return OpenAIResponsesModel(model=model_id, openai_client=AsyncOpenAI(api_key=api_key))
+    return OpenAIResponsesModel(
+        model=model_id, openai_client=AsyncOpenAI(api_key=api_key, base_url=base_url)
+    )

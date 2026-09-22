@@ -199,6 +199,22 @@ class SupportAgentRuntime(Protocol):
     @property
     def framework_id(self) -> str: ...
 
+    @property
+    def model_base_url(self) -> str | None:
+        """The endpoint this runtime reaches, or `None` when it reaches no provider.
+
+        Answered by the runtime rather than derived from the proven-capability catalog or
+        from the resolved connection, because those two say what *could* be reached and this
+        has to say what *was*. The control arm reaches nothing, and so does an SDK double —
+        a test-environment run that pinned the lab's endpoint would be recording a call
+        nobody made.
+
+        The default is `None`, which is the safe answer: a runtime that has not been told
+        where it points claims no endpoint, and the run it advances stays unpinned rather
+        than being pinned to a guess (ADR 0052).
+        """
+        return None
+
     async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         """The agent's reply, and what the framework metered producing it.
 

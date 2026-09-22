@@ -99,7 +99,7 @@ the settings zone.
   `AGENT_LAB_CREDENTIAL_KEY`, `key_configured` and `key_added_at` served and nothing else about
   the key, `base_url` validated and normalised at the door; `model_base_url` on runs and
   judgements.
-- [ ] Composition moves to the request: the three factories take a resolved connection, run
+- [x] Composition moves to the request: the three factories take a resolved connection, run
   mode becomes a per-request answer, and an advance that would reach a different endpoint than
   the run pinned is refused with 422 naming both.
 - [x] `POST …/test` makes one cheap call under a short timeout and answers `reachable`,

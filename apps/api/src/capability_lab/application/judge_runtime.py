@@ -108,6 +108,17 @@ class JudgeRuntime(Protocol):
     @property
     def provider(self) -> str: ...
 
+    @property
+    def model_base_url(self) -> str | None:
+        """The endpoint this judge reaches, or `None` when it reaches no provider.
+
+        The same rule an arm's runtime answers by, because a judge reaches a provider too
+        (ADR 0031) and an execution that cannot say where it went is as unexplainable as an
+        arm that cannot. The declared control judge reaches nothing, and its recorded
+        endpoint is `None` (ADR 0052).
+        """
+        return None
+
     async def score(self, request: JudgeRequest) -> JudgeVerdict:
         """The verdict, or a classified `JudgeRuntimeError` if none was produced."""
         ...

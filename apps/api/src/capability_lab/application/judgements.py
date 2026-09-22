@@ -43,6 +43,16 @@ class JudgementRecord:
     experiment_id: UUID
     judgement: Judgement
     created_at: datetime
+    model_base_url: str | None = None
+    """The endpoint the judge that produced this reached, or `None` when it reached none.
+
+    Beside the record rather than inside `Judgement`, because it is the same kind of fact as
+    `created_at`: where and when this execution happened, not what the judge was asked. The
+    provider and the model *are* inside, because those are what the published judge named.
+
+    Null is the honest record for the declared control judge, which reaches nothing at all,
+    and for every row written before the lab knew where it was pointed (ADR 0052).
+    """
 
 
 class JudgementRepository(Protocol):

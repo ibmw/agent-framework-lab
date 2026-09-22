@@ -46,6 +46,7 @@ from capability_lab.application.experiment_traces import (
 from capability_lab.application.experiments import (
     ExperimentDerivation,
     ExperimentRecord,
+    ExperimentRunNotFoundError,
     ParticipantTurnRecord,
     RunRecord,
 )
@@ -2019,11 +2020,41 @@ class SqlAlchemyExperimentRunRepository:
                 agent_configuration_id=str(record.agent_configuration_id),
                 agent_configuration_version=record.agent_configuration_version,
                 sandbox_id=str(record.sandbox_id),
+                model_base_url=record.model_base_url,
                 created_at=record.created_at,
             )
         )
         self._session.flush()
         return record
+
+    def pin_endpoint(self, run_id: UUID, base_url: str) -> str:
+        """Write the endpoint where none stands, then read back the one that does.
+
+        `WHERE model_base_url IS NULL` is what makes the write both idempotent and safe to
+        race: a second advance against the same endpoint changes no row and reads the same
+        value, and two advances that reached different endpoints cannot both land — the row
+        keeps the first and the read below hands the loser what it has to refuse against.
+        """
+        self._session.execute(
+            update(ExperimentRunModel)
+            .where(
+                ExperimentRunModel.run_id == str(run_id),
+                ExperimentRunModel.model_base_url.is_(None),
+            )
+            .values(model_base_url=base_url)
+        )
+        self._session.flush()
+        pinned = self._session.scalar(
+            select(ExperimentRunModel.model_base_url).where(
+                ExperimentRunModel.run_id == str(run_id)
+            )
+        )
+        # Unreachable through the runner, which has already resolved the arm from this run.
+        # Answering with what was asked for rather than raising would pin nothing and refuse
+        # nothing, which is the one outcome this method must not have.
+        if pinned is None:  # pragma: no cover - the caller holds the run it is pinning
+            raise ExperimentRunNotFoundError(f"run {run_id} is not stored in this lab")
+        return pinned
 
     @staticmethod
     def _record(model: ExperimentRunModel) -> RunRecord:
@@ -2037,6 +2068,7 @@ class SqlAlchemyExperimentRunRepository:
             agent_configuration_version=model.agent_configuration_version,
             sandbox_id=UUID(model.sandbox_id),
             created_at=model.created_at,
+            model_base_url=model.model_base_url,
         )
 
 
@@ -2401,6 +2433,7 @@ class SqlAlchemyJudgementRepository:
                     outcome=None if judgement.outcome is None else judgement.outcome.value,
                     failure=None if judgement.failure is None else judgement.failure.value,
                     rationale=judgement.rationale,
+                    model_base_url=record.model_base_url,
                     created_at=record.created_at,
                 )
             )
@@ -2432,6 +2465,7 @@ class SqlAlchemyJudgementRepository:
                 rationale=model.rationale,
                 failure=None if model.failure is None else JudgeFailure(model.failure),
             ),
+            model_base_url=model.model_base_url,
             created_at=model.created_at,
         )
 

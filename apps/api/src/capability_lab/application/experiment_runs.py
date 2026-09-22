@@ -42,6 +42,15 @@ comes back with the answer because only the framework can read it (`model_cost`)
 derived: an unmeasured attempt records no duration and an unmetered one no usage, and the
 estimate built on them says so rather than reading as free.
 
+**An arm is pinned to the endpoint it reached, and refuses to be advanced against
+another.** The connection a lab runs on is resolved per advance rather than at start-up
+(ADR 0052), so it can move between two advances of one arm. The first advance that reaches a
+provider writes the endpoint onto the run; a later one that would reach a different endpoint
+is refused with both named and records no turn, because half an arm produced against one and
+half against another is a record nobody can read. An arm that reaches no provider at all —
+the deterministic control — stays unpinned, and that null is the honest record rather than a
+gap.
+
 **The scenario's faults ride on that same path.** A mutation's moment can arrive between two
 of an agent's calls — that is the case ADR 0022 built the concurrency refusal for — so the
 schedule is asked before the runtime is started and again after every call the invoker makes
@@ -141,7 +150,12 @@ from capability_lab.domain.scenario import ScenarioPayload
 from capability_lab.domain.shop import ShopPayload
 from capability_lab.domain.support_identity import SupportIdentityPayload
 
-__all__ = ["ExperimentRunner", "RunTurn", "RunUnansweredError"]
+__all__ = [
+    "ExperimentRunner",
+    "ModelEndpointMismatchError",
+    "RunTurn",
+    "RunUnansweredError",
+]
 
 _logger = logging.getLogger(__name__)
 
@@ -152,6 +166,21 @@ class RunUnansweredError(ExperimentRunNotFoundError):
     Unreachable while starting an experiment writes the trigger into every arm (ADR 0025),
     which is why it names the arm rather than the experiment: an arm with an empty thread is
     an arm that was never opened.
+    """
+
+
+class ModelEndpointMismatchError(RuntimeError):
+    """This arm was produced against one endpoint and would now reach another.
+
+    Deliberately **not** a `SupportAgentRuntimeError`, for the reason
+    `SupportAgentUnavailableError` is not one: it can never be recorded as a turn. Where the
+    lab is pointed is a fact about the installation, and half an arm produced against one
+    endpoint and half against another is a record nobody can read (ADR 0052).
+
+    Both endpoints are named in the message, because the operator's next move depends on
+    knowing which one they repointed away from. Their path is the one the lab already has —
+    fork the experiment (ADR 0039) or start a new one — and the fork's derivation record then
+    says why there are two.
     """
 
 
@@ -351,6 +380,10 @@ class ExperimentRunner:
         opened = self._clock.now()
         resolved = self._resolve(record, run)
         runtime = self._runtimes.get(resolved.configuration.framework_id)
+        # Before anything is written, and before the model is called: an advance that would
+        # reach an endpoint this arm was not produced against is refused whole, and a
+        # refusal that had already recorded a turn would be the split it exists to prevent.
+        self._pin_endpoint(run, runtime)
         thread = tuple(
             entry.turn
             for entry in self._participant_turns.list_for_experiment(record.experiment_id)
@@ -444,6 +477,37 @@ class ExperimentRunner:
             ended=now,
         )
         return RunTurn(turn=written, tool_events=events, mutation_events=fired)
+
+    def _pin_endpoint(self, run: RunRecord, runtime: SupportAgentRuntime) -> None:
+        """Pin the endpoint this advance reaches, or refuse to run against another.
+
+        Three cases, enumerated rather than reasoned about, because the null means two
+        different things and only one of them is a mismatch:
+
+        - the runtime reaches no provider — the control arm, and an SDK double — so nothing
+          is pinned and the arm's endpoint stays null, which is the truthful record that it
+          reached none;
+        - the run carries no endpoint yet, so this advance writes the one it reached, whether
+          or not the attempt about to run succeeds: what the arm was produced against is true
+          of a failed attempt too, and a failure is the part of the record most worth being
+          able to attribute to an endpoint;
+        - the run carries one already, and this advance would reach a different one, which is
+          refused with both named and no turn recorded.
+
+        The write and the comparison are one repository call for a reason: the endpoint in
+        force has to be read *after* the attempt to claim it, or two advances racing on a
+        fresh arm could each believe they pinned it.
+        """
+        reached = runtime.model_base_url
+        if reached is None:
+            return
+        pinned = self._runs.pin_endpoint(run.run_id, reached)
+        if pinned == reached:
+            return
+        raise ModelEndpointMismatchError(
+            f"arm {run.label} was produced against {pinned} and this lab now reaches "
+            f"{reached}; fork the experiment or start a new one to run against it"
+        )
 
     def _trace(
         self,

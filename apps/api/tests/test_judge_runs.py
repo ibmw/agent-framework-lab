@@ -62,6 +62,7 @@ from workspace_factories import (
 )
 
 JUDGED_OBJECTIVE = "resolve-the-incident"
+OLLAMA = "http://localhost:11434/v1"
 
 
 @pytest.fixture
@@ -444,6 +445,68 @@ async def test_an_unclassified_runtime_error_is_still_recorded_as_a_failure(
     judgement = row(evaluate(session, detail)[0]).judgement
     assert judgement is not None
     assert judgement.failure is JudgeFailure.INVALID_RESPONSE
+
+
+# -- the endpoint a judge reached (ADR 0052) -----------------------------------
+
+
+class ReachingJudge(StubJudge):
+    """A judge reporting the endpoint composition built it against, as a real one does."""
+
+    def __init__(self, model_base_url: str, error: Exception | None = None) -> None:
+        super().__init__(error=error)
+        self._model_base_url = model_base_url
+
+    @property
+    def model_base_url(self) -> str | None:
+        return self._model_base_url
+
+
+@pytest.mark.asyncio
+async def test_a_verdict_records_the_endpoint_the_judge_reached(
+    session: Session, workspace: Workspace
+) -> None:
+    """A judge reaches a provider too, so an execution that cannot say where it went is as
+    unexplainable as an arm that cannot (ADR 0031, ADR 0052)."""
+    detail = start(session, workspace, control_arm(session))
+    await advance(session, detail)
+
+    await score(session, detail, published_judge(session), ReachingJudge(OLLAMA))
+
+    stored = SqlAlchemyJudgementRepository(session).list_for_experiment(detail.record.experiment_id)
+    assert stored
+    assert {entry.model_base_url for entry in stored} == {OLLAMA}
+
+
+@pytest.mark.asyncio
+async def test_the_control_judge_records_no_endpoint_because_it_reached_none(
+    session: Session, workspace: Workspace
+) -> None:
+    """Null is the honest record for a judge that calls nothing, not an unknown."""
+    detail = start(session, workspace, control_arm(session))
+    await advance(session, detail)
+
+    await score(session, detail, published_judge(session), ControlJudgeRuntime())
+
+    stored = SqlAlchemyJudgementRepository(session).list_for_experiment(detail.record.experiment_id)
+    assert stored
+    assert {entry.model_base_url for entry in stored} == {None}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_execution_still_records_where_it_was_asked(
+    session: Session, workspace: Workspace
+) -> None:
+    """A provider that refused is the row most worth being able to attribute to an endpoint."""
+    detail = start(session, workspace, control_arm(session))
+    await advance(session, detail)
+    refusing = ReachingJudge(OLLAMA, JudgeRuntimeError("an adapter that classified nothing"))
+
+    await score(session, detail, published_judge(session), refusing)
+
+    stored = SqlAlchemyJudgementRepository(session).list_for_experiment(detail.record.experiment_id)
+    assert [entry.judgement.failure for entry in stored] == [JudgeFailure.INVALID_RESPONSE]
+    assert {entry.model_base_url for entry in stored} == {OLLAMA}
 
 
 @pytest.mark.asyncio

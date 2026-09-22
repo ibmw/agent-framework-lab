@@ -170,9 +170,17 @@ def _message_history(request: AgentRequest) -> list[ModelRequest | ModelResponse
     return history
 
 
-def create_openai_model(model_id: str, api_key: str) -> Model:
-    """Build the credentialed provider model inside the Pydantic AI adapter boundary."""
+def create_openai_model(model_id: str, api_key: str, base_url: str) -> Model:
+    """Build the credentialed provider model inside the Pydantic AI adapter boundary.
+
+    The base URL is required rather than defaulted, because the lab now always knows one: a
+    resolved connection names the endpoint it reached, whether that came from the saved
+    connection or from the environment bootstrap's own default (ADR 0052). A default here
+    would be a second place the endpoint is decided, and the run pins only one of them.
+    """
     from pydantic_ai.models.openai import OpenAIResponsesModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
-    return OpenAIResponsesModel(model_id, provider=OpenAIProvider(api_key=api_key))
+    return OpenAIResponsesModel(
+        model_id, provider=OpenAIProvider(api_key=api_key, base_url=base_url)
+    )

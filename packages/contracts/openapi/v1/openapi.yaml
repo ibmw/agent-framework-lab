@@ -4029,7 +4029,10 @@ paths:
         returns that answer and calls no model, while one whose last attempt failed
         makes a new attempt beside it. A framework failure is a recorded turn and
         a 201, because it is evidence about the run; a framework this lab cannot run
-        at all is a 422, because it is not.'
+        at all is a 422, because it is not. The first advance that reaches a provider
+        records the endpoint on the run, and a later advance that would reach a different
+        one is refused with 422 naming both rather than producing half an arm against
+        each.'
       operationId: advanceExperimentRun
       parameters:
       - name: shop_id
@@ -4073,7 +4076,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: No runtime for this arm's framework is available here
+          description: No runtime for this arm's framework is available here, or this
+            lab now reaches a different endpoint than the one the arm is pinned to
           content:
             application/json:
               schema:
@@ -4381,10 +4385,15 @@ paths:
                 $ref: '#/components/schemas/LabSeedResponse'
   /api/v1/lab-status:
     get:
-      summary: Report how this process is composed to run
-      description: Whether a provider credential is configured, the model name this
-        process would reach for, and whether traces are exported anywhere. Reports
-        no fact about the credential beyond the run mode, and never the exporter endpoint.
+      summary: Report what this lab can reach and what it exports
+      description: Whether this lab can reach a model provider right now, which of
+        four answers is in force for the model connection — a saved connection, a
+        saved connection whose key cannot be decrypted, the environment bootstrap,
+        or neither — the model name the POC's conversation routes would reach for,
+        and whether traces are exported anywhere. Answered per request, so a connection
+        saved from the settings page changes it without a restart. Reports no fact
+        about any credential beyond the run mode and the source, and never the exporter
+        endpoint.
       operationId: getLabStatus
       responses:
         '200':
@@ -8713,7 +8722,7 @@ components:
       - offline
       - credentialed
       title: LabRunMode
-      description: Whether this build can reach a model provider at all.
+      description: Whether this lab can reach a model provider at all, right now.
     LabSeedResponse:
       properties:
         shop_id:
@@ -8798,6 +8807,8 @@ components:
       properties:
         run_mode:
           $ref: '#/components/schemas/LabRunMode'
+        connection_source:
+          $ref: '#/components/schemas/ModelConnectionSource'
         model_id:
           type: string
           title: Model Id
@@ -8808,10 +8819,11 @@ components:
       type: object
       required:
       - run_mode
+      - connection_source
       - model_id
       - trace_export_configured
       title: LabStatusResponse
-      description: Three facts about composition, and deliberately no fourth.
+      description: Four facts about what this lab can reach, and deliberately no fifth.
     LoyaltyTier:
       type: string
       enum:
@@ -8897,6 +8909,38 @@ components:
       title: ModelConnectionSchema
       description: 'One saved connection: where the lab points, and *that* a key is
         installed.'
+    ModelConnectionSource:
+      type: string
+      enum:
+      - saved
+      - saved_unreadable
+      - environment
+      - none
+      title: ModelConnectionSource
+      description: 'Which answer to *where is this lab pointed* is in force, for one
+        provider.
+
+
+        Enumerated rather than inferred from a pair of booleans at each reader, because
+        the states
+
+        do not decompose. A lab holding both a saved connection and an environment
+        key "otherwise
+
+        answers in a way neither one explains" (ADR 0052), and a saved connection
+        whose key will
+
+        not decrypt is a third fact again — not an absent connection, and not a working
+        one.
+
+
+        This is what `getLabStatus` serves beside the run mode, and it is a fact about
+        *which
+
+        configuration won*, never a fact about the key: no value, prefix, suffix,
+        length or hash
+
+        of a secret is derivable from any member here.'
     ModelConnectionTestRequest:
       properties:
         base_url:

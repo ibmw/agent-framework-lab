@@ -86,8 +86,9 @@ class _Verdict(BaseModel):
 class PydanticAiJudgeRuntime(JudgeRuntime):
     """Score one objective with Pydantic AI, without an SDK type leaving this module."""
 
-    def __init__(self, model: Callable[[str], Model]) -> None:
+    def __init__(self, model: Callable[[str], Model], *, model_base_url: str | None = None) -> None:
         self._model = model
+        self._model_base_url = model_base_url
 
     @classmethod
     def for_test(cls) -> PydanticAiJudgeRuntime:
@@ -104,6 +105,11 @@ class PydanticAiJudgeRuntime(JudgeRuntime):
     @property
     def provider(self) -> str:
         return OPENAI_JUDGE_PROVIDER
+
+    @property
+    def model_base_url(self) -> str | None:
+        """The endpoint composition built this judge against, and `None` for the double."""
+        return self._model_base_url
 
     async def score(self, request: JudgeRequest) -> JudgeVerdict:
         agent = Agent(

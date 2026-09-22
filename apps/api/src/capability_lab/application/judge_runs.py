@@ -158,6 +158,11 @@ class ExperimentJudgeService:
                             attempts.get((run.run_id, objective.id), 0) + 1,
                         ),
                         created_at=self._clock.now(),
+                        # Read off the runtime composition chose, resolved once for the
+                        # whole pass with the judge itself: every row of one pass was
+                        # produced against one endpoint, and the control judge's stays null
+                        # because it reached none (ADR 0052).
+                        model_base_url=runtime.model_base_url,
                     )
                 )
         self._judgements.append_all(tuple(written))

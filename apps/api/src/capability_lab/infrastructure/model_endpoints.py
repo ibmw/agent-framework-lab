@@ -21,10 +21,12 @@ a gateway that leaves `/models` open while gating completions answers `reachable
 cannot run an arm. That gap is the same one a stored green tick would have, which is why the
 result is not stored either.
 
-The credential is always passed explicitly, including as an empty string when there is none.
-The SDK falls back to `OPENAI_API_KEY` from the process environment when it is handed `None`,
-and a test of an arbitrary endpoint that quietly sent the environment's own key to it would be
-this lab leaking a credential to a host the operator typed.
+The credential is always passed explicitly, including when there is none. The SDK falls back
+to `OPENAI_API_KEY` from the process environment when it is handed `None`, and a test of an
+arbitrary endpoint that quietly sent the environment's own key to it would be this lab leaking
+a credential to a host the operator typed. It will not take an empty string either — the
+client refuses to construct without credentials — so `UNCREDENTIALED_API_KEY` below is what a
+keyless endpoint is reached with, and it is the same constant the runtime factories use.
 """
 
 from __future__ import annotations
@@ -39,7 +41,22 @@ from capability_lab.application.model_connections import (
     ModelEndpointProbeResult,
 )
 
-__all__ = ["PROBE_TIMEOUT_SECONDS", "OpenAiProtocolEndpointProbe"]
+__all__ = ["PROBE_TIMEOUT_SECONDS", "UNCREDENTIALED_API_KEY", "OpenAiProtocolEndpointProbe"]
+
+UNCREDENTIALED_API_KEY = "not-required"
+"""What the OpenAI client is handed for an endpoint that needs no credential.
+
+A local Ollama, vLLM or LM Studio ignores the header entirely, and "an arm against a local
+model with no credential leaving the machine" is the case ADR 0052 exists for — but the SDK
+refuses to construct a client with no key and refuses an empty one too, raising before any
+request is made. So a placeholder is unavoidable, and this is it: a constant written in this
+source file, carrying nothing about the operator, nothing from the environment, and nothing
+that could be mistaken for a secret if it ever appeared in a request log.
+
+Named once and shared with `infrastructure/agents/registry.py`, so the endpoint a connection
+is *tested* against and the endpoint an arm *runs* against are reached the same way. Two
+placeholders would be two chances for a gateway to accept one and refuse the other.
+"""
 
 PROBE_TIMEOUT_SECONDS = 5.0
 """Short, because the operator is watching a button. An endpoint slower than this is one a
@@ -61,7 +78,7 @@ class OpenAiProtocolEndpointProbe:
     async def probe(self, *, base_url: str, api_key: str | None) -> ModelEndpointProbeResult:
         client = AsyncOpenAI(
             base_url=base_url,
-            api_key=api_key if api_key is not None else "",
+            api_key=api_key if api_key else UNCREDENTIALED_API_KEY,
             timeout=PROBE_TIMEOUT_SECONDS,
             max_retries=0,
         )

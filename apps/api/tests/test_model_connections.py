@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
+from openai import OpenAIError
 
 from capability_lab.application.agent_capabilities import PROVEN_FRAMEWORKS
 from capability_lab.application.judge_capabilities import PROVEN_JUDGES
@@ -33,15 +34,22 @@ from capability_lab.domain.model_connection import (
     ModelConnectionConfigurationError,
     normalize_base_url,
 )
+from capability_lab.infrastructure.agents.openai_agents import create_openai_agents_model
+from capability_lab.infrastructure.agents.pydantic_ai.adapter import create_openai_model
 from capability_lab.infrastructure.credentials import (
     CREDENTIAL_KEY_VARIABLE,
     AesGcmCredentialCipher,
     UnconfiguredCredentialCipher,
     create_credential_cipher,
 )
-from capability_lab.infrastructure.model_endpoints import OpenAiProtocolEndpointProbe
+from capability_lab.infrastructure.model_endpoints import (
+    UNCREDENTIALED_API_KEY,
+    OpenAiProtocolEndpointProbe,
+)
 
 API_KEY = "sk-lab-9d41c0e7b6a24f8fae3c15d2708b6c93"
+OLLAMA_ENDPOINT = "http://localhost:11434/v1"
+"""A keyless local endpoint, which is the case the placeholder above exists for."""
 UPSTREAM_BODY = "invalid_api_key: the key sk-lab-9d41 was rejected by upstream"
 """What a provider might answer with, written to look like what providers actually answer
 with: a message quoting a fragment of the credential that was sent. It is the string the probe
@@ -572,6 +580,39 @@ async def test_an_endpoint_that_answers_is_reachable(stub_provider: str) -> None
     assert result.outcome is ModelEndpointOutcome.REACHABLE
     assert result.status_class is HttpStatusClass.SUCCESS
     assert result.latency_ms >= 0
+
+
+async def test_an_endpoint_that_needs_no_credential_is_probed_with_the_placeholder(
+    stub_provider: str,
+) -> None:
+    """Testing a keyless local endpoint is the scenario ADR 0052 exists for, and it is one
+    line away from a 500.
+
+    `AsyncOpenAI` refuses to construct with no credential *and* refuses an empty string,
+    raising before any request is made — so a probe that passed `""` for an absent key would
+    answer this route with an unhandled error rather than a reachability result. Every other
+    probe test hands a key, so this is the only one that holds `UNCREDENTIALED_API_KEY` in
+    place.
+    """
+    result = await OpenAiProtocolEndpointProbe().probe(base_url=f"{stub_provider}/ok", api_key=None)
+
+    assert result.outcome is ModelEndpointOutcome.REACHABLE
+    assert result.status_class is HttpStatusClass.SUCCESS
+
+
+def test_the_placeholder_is_what_every_client_this_lab_builds_will_accept() -> None:
+    """The other half of the same constant: what an *arm* and a *judge* are built with.
+
+    The registry's Pydantic AI path constructs its client eagerly, so the composition sweep
+    already holds it. Both other paths sit behind a lambda nothing in the suite calls, which
+    left the constant free to be tidied back to `""` for them. Asserted as a pair — the empty
+    string refused, the placeholder accepted — so it is the placeholder that is pinned rather
+    than merely the absence of a crash.
+    """
+    for build in (create_openai_model, create_openai_agents_model):
+        with pytest.raises(OpenAIError):
+            build("gpt-5-mini", "", OLLAMA_ENDPOINT)
+        assert build("gpt-5-mini", UNCREDENTIALED_API_KEY, OLLAMA_ENDPOINT) is not None
 
 
 async def test_an_endpoint_that_rejects_the_credential_is_refused(stub_provider: str) -> None:

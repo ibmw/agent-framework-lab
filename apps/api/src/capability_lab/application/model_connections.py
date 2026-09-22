@@ -28,19 +28,30 @@ length, not a hash, not a mask. `key_configured` and `key_added_at`, and nothing
 cost is named rather than hidden: an operator who has forgotten which key is installed cannot
 tell from this lab, and their path is to save the one they mean.
 
+**The environment stays the bootstrap, and the chain says which won.** Per provider, in
+order: the saved connection; else `AGENT_LAB_OPENAI_API_KEY` with that provider's own
+endpoint; else offline. `ModelConnectionResolver` is that chain and `ResolvedConnection` is
+its answer, resolved per request because a connection can change while the process runs.
+
 Testing a connection is a question about a moment, so its answer is not stored. A stored
 green tick would be read as a promise the lab cannot keep.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol
 
 from capability_lab.application.agent_capabilities import PROVEN_FRAMEWORKS
-from capability_lab.application.judge_capabilities import CONTROL_JUDGE_PROVIDER, PROVEN_JUDGES
+from capability_lab.application.judge_capabilities import (
+    CONTROL_JUDGE_PROVIDER,
+    OPENAI_JUDGE_PROVIDER,
+    PROVEN_JUDGES,
+)
 from capability_lab.application.ports import Clock
 from capability_lab.domain.model_connection import (
     ModelConnectionConfigurationError,
@@ -49,7 +60,9 @@ from capability_lab.domain.model_connection import (
 
 __all__ = [
     "CONNECTABLE_PROVIDERS",
+    "ENVIRONMENT_BOOTSTRAP_ENDPOINTS",
     "KNOWN_PROVIDERS",
+    "OPENAI_PROVIDER",
     "CredentialCipher",
     "CredentialDecryptionError",
     "CredentialEncryptionUnavailableError",
@@ -58,11 +71,14 @@ __all__ = [
     "ModelConnectionNotConnectableError",
     "ModelConnectionRecord",
     "ModelConnectionRepository",
+    "ModelConnectionResolver",
     "ModelConnectionService",
+    "ModelConnectionSource",
     "ModelEndpointOutcome",
     "ModelEndpointProbe",
     "ModelEndpointProbeResult",
     "ProviderConnection",
+    "ResolvedConnection",
 ]
 
 KNOWN_PROVIDERS: frozenset[str] = frozenset(
@@ -182,6 +198,206 @@ class ProviderConnection:
 
     provider_id: str
     connection: ModelConnection | None
+
+
+OPENAI_PROVIDER: str = OPENAI_JUDGE_PROVIDER
+"""The one connectable provider today, named once so the chain and the tables cannot drift.
+
+`openai` is the protocol the lab has proven it can speak rather than the company (ADR 0052),
+which is why Ollama, vLLM, OpenRouter and Together are base URLs under this same id.
+"""
+
+ENVIRONMENT_BOOTSTRAP_ENDPOINTS: Mapping[str, str] = MappingProxyType(
+    {OPENAI_PROVIDER: "https://api.openai.com/v1"}
+)
+"""The providers `AGENT_LAB_OPENAI_API_KEY` can bootstrap, and the endpoint that reaches.
+
+A mapping rather than a single default, because the bootstrap is a claim about **one**
+variable: the environment supplies an OpenAI key, so it can only stand in for the provider
+whose own endpoint that key is for. A second connectable provider would need its own variable
+before it could appear here, and until it does the honest answer for it is offline rather than
+"the environment's key, pointed somewhere it was never issued for".
+
+The value is the endpoint the SDK reaches when it is handed no base URL, written out because a
+run pins what it reached and `None` would be the record for *no provider was reached*.
+"""
+
+
+class ModelConnectionSource(StrEnum):
+    """Which answer to *where is this lab pointed* is in force, for one provider.
+
+    Enumerated rather than inferred from a pair of booleans at each reader, because the states
+    do not decompose. A lab holding both a saved connection and an environment key "otherwise
+    answers in a way neither one explains" (ADR 0052), and a saved connection whose key will
+    not decrypt is a third fact again — not an absent connection, and not a working one.
+
+    This is what `getLabStatus` serves beside the run mode, and it is a fact about *which
+    configuration won*, never a fact about the key: no value, prefix, suffix, length or hash
+    of a secret is derivable from any member here.
+    """
+
+    SAVED = "saved"
+    """A connection saved in this lab is in force, and the lab can reach its endpoint.
+
+    Including one saved with no key at all. That is not an oversight: a local endpoint needs
+    no credential, and "an arm against a local model with no credential leaving the machine"
+    is the case ADR 0052 exists for.
+    """
+
+    SAVED_UNREADABLE = "saved_unreadable"
+    """A connection is saved and its key cannot be read back, so the lab reaches nothing.
+
+    In practice `AGENT_LAB_CREDENTIAL_KEY` has changed or been unset since the key was saved.
+    The saved connection still wins — falling through to the environment would send the
+    environment's key to the endpoint the operator pointed at, which is the split ADR 0052
+    refuses — so it wins as an *offline* lab, and the remedy is to save the key again.
+
+    This member is why `key_configured` could not be left to carry the whole answer. That flag
+    reports presence and not readability (ADR 0052 accepts that the page cannot distinguish
+    two keys), and a run mode computed from presence alone would promise a lab that is ready
+    while every advance refuses.
+    """
+
+    ENVIRONMENT = "environment"
+    """No connection is saved and `AGENT_LAB_OPENAI_API_KEY` is set: the bootstrap is in force.
+
+    Which is what keeps a fresh checkout and CI working unattended, and what a lab that never
+    opens `/settings` runs on.
+    """
+
+    NONE = "none"
+    """Neither is configured. Only the deterministic control arm can be advanced."""
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedConnection:
+    """Where one provider is reached, resolved for one request.
+
+    Resolved per request rather than at start-up, and read **once per advance**: an advance
+    runs to completion against what it resolved, so a save landing halfway through cannot move
+    the endpoint underneath a model call (ADR 0052).
+
+    `base_url` is the whole of "does this lab reach a provider": it is set exactly for `SAVED`
+    and `ENVIRONMENT`, and `None` for the two states that reach nothing. The invariant is
+    checked rather than documented, because run mode, the composed runtimes and the endpoint a
+    run is pinned to are all read off it and three readers agreeing by convention is three
+    chances to disagree.
+    """
+
+    provider_id: str
+    source: ModelConnectionSource
+    base_url: str | None = None
+    api_key: str | None = field(default=None, repr=False)
+    """The credential this resolution reaches under, and the one field that never prints.
+
+    Kept out of the generated `repr` and replaced below by a word, because this is the only
+    structure in the lab that holds a *decrypted* key: `Settings` keeps both of its secrets in
+    `SecretStr` for exactly this reason, and resolving one into a plain dataclass field would
+    have undone that the first time anything formatted a `ResolvedConnection` — a dependency in
+    a traceback, a log record, an error payload. Nothing does today. The rule ADR 0052 states
+    is absolute rather than conditional on nobody doing it, so it is enforced by the type
+    rather than by the absence of a caller.
+
+    A plain `str` rather than `SecretStr`: the application layer takes no pydantic dependency,
+    and `repr=False` with the `__repr__` below buys the same protection without one.
+    """
+
+    def __post_init__(self) -> None:
+        reaches = self.source in _REACHING_SOURCES
+        if reaches != (self.base_url is not None):
+            raise ValueError(
+                f"a {self.source.value} connection must {'name' if reaches else 'name no'} endpoint"
+            )
+        if not reaches and self.api_key is not None:
+            raise ValueError("a connection that reaches no endpoint carries no key")
+
+    def __repr__(self) -> str:
+        """Everything about this resolution except the credential, which is named not shown.
+
+        Written out rather than left to `repr=False` alone, because a silently shorter repr
+        makes a reader wonder whether a key is held. Whether one is held is the same fact
+        `key_configured` already serves publicly; what it *is* appears nowhere.
+        """
+        held = "None" if self.api_key is None else "<redacted>"
+        return (
+            f"ResolvedConnection(provider_id={self.provider_id!r}, source={self.source!r}, "
+            f"base_url={self.base_url!r}, api_key={held})"
+        )
+
+    @property
+    def reaches_provider(self) -> bool:
+        """Whether an arm or a judge can actually be run against this resolution."""
+        return self.base_url is not None
+
+
+_REACHING_SOURCES = frozenset({ModelConnectionSource.SAVED, ModelConnectionSource.ENVIRONMENT})
+
+
+class ModelConnectionResolver:
+    """The chain ADR 0052 writes: the saved connection; else the environment; else offline.
+
+    A saved connection wins **whole**. It wins when it carries no key, because a local
+    endpoint needs none; and it wins when its key cannot be decrypted, as an offline lab,
+    because the alternative is quietly sending the environment's key to an endpoint the
+    operator pointed somewhere else.
+
+    Deliberately not the test environment's short-circuit. Selecting the SDK doubles happens
+    before this chain is consulted at all (`infrastructure/agents/registry.py`), which is what
+    keeps a suite from depending on a resolution and keeps this class a statement about the
+    operator's configuration rather than about the process's.
+    """
+
+    def __init__(
+        self,
+        connections: ModelConnectionRepository,
+        cipher: CredentialCipher,
+        *,
+        environment_key: str | None,
+    ) -> None:
+        self._connections = connections
+        self._cipher = cipher
+        self._environment_key = environment_key
+
+    def resolve(self, provider_id: str) -> ResolvedConnection:
+        record = self._connections.get(provider_id)
+        if record is not None:
+            return self._saved(record)
+        bootstrap = ENVIRONMENT_BOOTSTRAP_ENDPOINTS.get(provider_id)
+        if bootstrap is not None and self._environment_key is not None:
+            return ResolvedConnection(
+                provider_id=provider_id,
+                source=ModelConnectionSource.ENVIRONMENT,
+                base_url=bootstrap,
+                api_key=self._environment_key,
+            )
+        return ResolvedConnection(provider_id=provider_id, source=ModelConnectionSource.NONE)
+
+    def _saved(self, record: ModelConnectionRecord) -> ResolvedConnection:
+        if record.encrypted_key is None:
+            return ResolvedConnection(
+                provider_id=record.provider_id,
+                source=ModelConnectionSource.SAVED,
+                base_url=record.base_url,
+            )
+        try:
+            api_key = self._cipher.decrypt(record.encrypted_key)
+        except (CredentialDecryptionError, CredentialEncryptionUnavailableError):
+            # Swallowed rather than raised, and this is the one place in the lab that does it:
+            # every *other* path to the cipher is an operator asking for something, where the
+            # refusal naming `AGENT_LAB_CREDENTIAL_KEY` is the answer. This path is composition
+            # answering "what can this process run", and a lab that refused to serve its own
+            # settings page because a stored key will not open could not show the operator the
+            # control that fixes it.
+            return ResolvedConnection(
+                provider_id=record.provider_id,
+                source=ModelConnectionSource.SAVED_UNREADABLE,
+            )
+        return ResolvedConnection(
+            provider_id=record.provider_id,
+            source=ModelConnectionSource.SAVED,
+            base_url=record.base_url,
+            api_key=api_key,
+        )
 
 
 class ModelEndpointOutcome(StrEnum):

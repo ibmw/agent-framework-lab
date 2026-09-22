@@ -268,6 +268,17 @@ class RunRecord:
     agent_configuration_version: int
     sandbox_id: UUID
     created_at: datetime
+    model_base_url: str | None = None
+    """The endpoint this arm reached, written on the first advance that reached one.
+
+    `None` means no provider was reached, which is the honest record for the deterministic
+    control and for every row written before the lab knew where it was pointed — a results
+    surface renders it as *endpoint not recorded* and deliberately not as *offline*, because
+    the two are different facts and only one of them is known (ADR 0052).
+
+    Last and defaulted, because an arm is created without one: it is the only field of this
+    record a run acquires after it is written.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +316,22 @@ class ExperimentRunRepository(Protocol):
     def list_for_experiment(self, experiment_id: UUID) -> tuple[RunRecord, ...]: ...
 
     def save(self, record: RunRecord) -> RunRecord: ...
+
+    def pin_endpoint(self, run_id: UUID, base_url: str) -> str:
+        """Record the endpoint this arm reached if it has none, and answer with the one in force.
+
+        The one update this otherwise append-only table takes, and it is written to be safe to
+        repeat and safe to race. Idempotent: an arm advanced ten times against one endpoint
+        pins it once and reads the same value back every time. Concurrency-safe: the write
+        applies only where nothing is pinned yet, so two advances that reached different
+        endpoints cannot both win — the loser reads the winner's value and the caller refuses
+        the advance rather than writing half an arm against each (ADR 0052).
+
+        Answering with the pinned value rather than with a boolean is what makes that refusal
+        possible to write correctly: the caller compares what it reached with what stands,
+        and there is no window between the two where the answer could change.
+        """
+        ...
 
 
 class ParticipantTurnRepository(Protocol):

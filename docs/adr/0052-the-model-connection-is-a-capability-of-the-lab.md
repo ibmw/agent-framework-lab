@@ -2,7 +2,7 @@
 
 Status: accepted — 2026-09-19
 
-Amendment: 2026-09-22 — two sentences below are narrowed by what implementing them showed.
+Amendment: 2026-09-22 — three sentences below are narrowed by what implementing them showed.
 
 **The qualification is conditional on the variable holding key material.** "None of them carries
 a usable credential" is true of a copied database only while `AGENT_LAB_CREDENTIAL_KEY` cannot be
@@ -22,6 +22,25 @@ all: the environment delivers `AGENT_LAB_CREDENTIAL_KEY=` as an empty string rat
 absence, and a cipher built on it would key every installation alike on a value anybody can
 derive — while writing ciphertext that persuades the operator otherwise, which is the precise
 shape of the theatre this decision refuses a default for.
+
+**"`/settings` states which of the two is in force" is served as four answers rather than
+two**, because the chain has four and two of them are the same run mode. `getLabStatus` gains
+`connection_source`, whose members are the saved connection, the environment bootstrap,
+neither — and `saved_unreadable`, a saved connection whose key will not decrypt. That fourth
+member exists because the decision above accepts that `key_configured` reports a key's
+*presence* and never its readability, which is right for a page that must say nothing about a
+secret and becomes a lie the moment run mode is computed from the resolution: a credentialed
+lab over a key that cannot be opened is one where every advance refuses. So the saved
+connection still wins — falling through to the environment would send the environment's key to
+the endpoint the operator pointed somewhere else, which is the split this decision refuses —
+and it wins as an **offline** lab, with a source that names the remedy, which is to save the
+key again. The two run modes stay exactly the two ADR 0044 published. Two smaller consequences
+of the same chain: a saved connection carrying **no key at all** is in force and credentialed,
+because a local endpoint needs none and that is the case this decision exists for; and such an
+endpoint is still reached with a placeholder string, `UNCREDENTIALED_API_KEY`, because the
+OpenAI client refuses to construct without a credential and refuses an empty one — it is a
+constant in this repository's source, carries nothing about the operator or the environment,
+and is the same value the connection test sends.
 
 **"`http` only for loopback and private hosts" is implemented narrower than it reads**, in three
 ways, all deliberate. The root of the first two is that a standard library's "private" means *in

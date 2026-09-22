@@ -1268,7 +1268,7 @@ export interface paths {
     put?: never;
     /**
      * Run this arm's agent against the customer turn it has not answered
-     * @description Resolves the arm's pinned configuration, renders its prompt against the shop and support-identity versions the experiment froze, and runs the framework against this arm's own sandbox with exactly the tools the configuration enables. Answers with the attempt, every tool call it made, and every scenario fault that fired into this arm while it worked. Idempotent over an answer and not over an attempt: an arm whose latest customer turn is already answered returns that answer and calls no model, while one whose last attempt failed makes a new attempt beside it. A framework failure is a recorded turn and a 201, because it is evidence about the run; a framework this lab cannot run at all is a 422, because it is not.
+     * @description Resolves the arm's pinned configuration, renders its prompt against the shop and support-identity versions the experiment froze, and runs the framework against this arm's own sandbox with exactly the tools the configuration enables. Answers with the attempt, every tool call it made, and every scenario fault that fired into this arm while it worked. Idempotent over an answer and not over an attempt: an arm whose latest customer turn is already answered returns that answer and calls no model, while one whose last attempt failed makes a new attempt beside it. A framework failure is a recorded turn and a 201, because it is evidence about the run; a framework this lab cannot run at all is a 422, because it is not. The first advance that reaches a provider records the endpoint on the run, and a later advance that would reach a different one is refused with 422 naming both rather than producing half an arm against each.
      */
     post: operations["advanceExperimentRun"];
     delete?: never;
@@ -1419,8 +1419,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Report how this process is composed to run
-     * @description Whether a provider credential is configured, the model name this process would reach for, and whether traces are exported anywhere. Reports no fact about the credential beyond the run mode, and never the exporter endpoint.
+     * Report what this lab can reach and what it exports
+     * @description Whether this lab can reach a model provider right now, which of four answers is in force for the model connection — a saved connection, a saved connection whose key cannot be decrypted, the environment bootstrap, or neither — the model name the POC's conversation routes would reach for, and whether traces are exported anywhere. Answered per request, so a connection saved from the settings page changes it without a restart. Reports no fact about any credential beyond the run mode and the source, and never the exporter endpoint.
      */
     get: operations["getLabStatus"];
     put?: never;
@@ -3617,7 +3617,7 @@ export interface components {
     };
     /**
      * LabRunMode
-     * @description Whether this build can reach a model provider at all.
+     * @description Whether this lab can reach a model provider at all, right now.
      * @enum {string}
      */
     LabRunMode: "offline" | "credentialed";
@@ -3684,10 +3684,11 @@ export interface components {
     };
     /**
      * LabStatusResponse
-     * @description Three facts about composition, and deliberately no fourth.
+     * @description Four facts about what this lab can reach, and deliberately no fifth.
      */
     LabStatusResponse: {
       run_mode: components["schemas"]["LabRunMode"];
+      connection_source: components["schemas"]["ModelConnectionSource"];
       /** Model Id */
       model_id: string;
       /** Trace Export Configured */
@@ -3746,6 +3747,21 @@ export interface components {
        */
       updated_at: string;
     };
+    /**
+     * ModelConnectionSource
+     * @description Which answer to *where is this lab pointed* is in force, for one provider.
+     *
+     *     Enumerated rather than inferred from a pair of booleans at each reader, because the states
+     *     do not decompose. A lab holding both a saved connection and an environment key "otherwise
+     *     answers in a way neither one explains" (ADR 0052), and a saved connection whose key will
+     *     not decrypt is a third fact again — not an absent connection, and not a working one.
+     *
+     *     This is what `getLabStatus` serves beside the run mode, and it is a fact about *which
+     *     configuration won*, never a fact about the key: no value, prefix, suffix, length or hash
+     *     of a secret is derivable from any member here.
+     * @enum {string}
+     */
+    ModelConnectionSource: "saved" | "saved_unreadable" | "environment" | "none";
     /**
      * ModelConnectionTestRequest
      * @description The connection to test, which need not be the one that is saved.
@@ -10969,7 +10985,7 @@ export interface operations {
           "application/json": components["schemas"]["ErrorResponse"];
         };
       };
-      /** @description No runtime for this arm's framework is available here */
+      /** @description No runtime for this arm's framework is available here, or this lab now reaches a different endpoint than the one the arm is pinned to */
       422: {
         headers: {
           [name: string]: unknown;

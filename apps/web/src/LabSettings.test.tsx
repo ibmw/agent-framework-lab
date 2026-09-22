@@ -97,6 +97,9 @@ const resources: AgentConfigurationResourcesResponse = {
 
 const OFFLINE: LabStatusResponse = {
   run_mode: "offline",
+  // Which of the saved connection and the environment bootstrap is in force. Served by
+  // `getLabStatus` and not yet drawn; the fixture carries it because the contract requires it.
+  connection_source: "none",
   model_id: "gpt-5-mini",
   trace_export_configured: false,
 };
@@ -464,6 +467,7 @@ describe("the runtime read-out", () => {
     const user = userEvent.setup();
     currentStatus = {
       run_mode: "credentialed",
+      connection_source: "environment",
       model_id: "gpt-5-mini",
       trace_export_configured: true,
     };

@@ -1800,7 +1800,10 @@ class ExperimentRoutes:
                 "already answered returns that answer and calls no model, while one whose last "
                 "attempt failed makes a new attempt beside it. A framework failure is a "
                 "recorded turn and a 201, because it is evidence about the run; a framework "
-                "this lab cannot run at all is a 422, because it is not."
+                "this lab cannot run at all is a 422, because it is not. The first advance "
+                "that reaches a provider records the endpoint on the run, and a later "
+                "advance that would reach a different one is refused with 422 naming both "
+                "rather than producing half an arm against each."
             ),
             responses={
                 404: {
@@ -1809,7 +1812,10 @@ class ExperimentRoutes:
                 },
                 422: {
                     "model": ErrorResponse,
-                    "description": "No runtime for this arm's framework is available here",
+                    "description": (
+                        "No runtime for this arm's framework is available here, or this lab "
+                        "now reaches a different endpoint than the one the arm is pinned to"
+                    ),
                 },
             },
         )

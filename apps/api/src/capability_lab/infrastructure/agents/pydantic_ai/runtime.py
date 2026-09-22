@@ -86,8 +86,9 @@ _NAMESPACE_SEPARATOR = "__"
 class PydanticAiSupportAgentRuntime(SupportAgentRuntime):
     """Answer one arm's turn with Pydantic AI, without an SDK type leaving this module."""
 
-    def __init__(self, model: Callable[[str], Model]) -> None:
+    def __init__(self, model: Callable[[str], Model], *, model_base_url: str | None = None) -> None:
         self._model = model
+        self._model_base_url = model_base_url
 
     @classmethod
     def for_test(cls) -> PydanticAiSupportAgentRuntime:
@@ -105,6 +106,16 @@ class PydanticAiSupportAgentRuntime(SupportAgentRuntime):
     @property
     def framework_id(self) -> str:
         return PYDANTIC_AI_RUNTIME_FRAMEWORK_ID
+
+    @property
+    def model_base_url(self) -> str | None:
+        """The endpoint composition built this runtime against, and `None` for the double.
+
+        Carried rather than derived, because the model factory above is a closure this class
+        cannot read an endpoint back out of — and because `for_test` reaches no provider at
+        all, so a run it advances is pinned to nothing (ADR 0052).
+        """
+        return self._model_base_url
 
     async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
         agent = Agent(

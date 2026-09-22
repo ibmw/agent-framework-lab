@@ -65,7 +65,10 @@ from capability_lab.application.experiment_annotations import (
 )
 from capability_lab.application.experiment_derivations import ExperimentDerivationService
 from capability_lab.application.experiment_history import ExperimentHistoryService
-from capability_lab.application.experiment_runs import ExperimentRunner
+from capability_lab.application.experiment_runs import (
+    ExperimentRunner,
+    ModelEndpointMismatchError,
+)
 from capability_lab.application.experiment_timeline import ExperimentTimelineService
 from capability_lab.application.experiment_traces import ExperimentTraceService
 from capability_lab.application.experiments import (
@@ -88,10 +91,13 @@ from capability_lab.application.judge_runs import ExperimentJudgeService, JudgeU
 from capability_lab.application.judge_runtime import JudgeRuntimeRegistry, JudgeUnavailableError
 from capability_lab.application.judgements import JudgementConflictError
 from capability_lab.application.model_connections import (
+    OPENAI_PROVIDER,
     CredentialDecryptionError,
     CredentialEncryptionUnavailableError,
+    ModelConnectionResolver,
     ModelConnectionService,
     ModelEndpointProbe,
+    ResolvedConnection,
 )
 from capability_lab.application.order_actions import (
     ActionConfirmationError,
@@ -194,6 +200,7 @@ from capability_lab.domain.shop import ShopConfigurationError
 from capability_lab.domain.support_identity import SupportIdentityConfigurationError
 from capability_lab.domain.ticket import TicketConfigurationError
 from capability_lab.infrastructure.agents.registry import (
+    ComposedPerConnection,
     create_agent_registry,
     create_judge_runtimes,
     create_support_agent_runtimes,
@@ -1092,6 +1099,20 @@ async def _agent_runtime_unavailable_handler(request: Request, error: Exception)
     )
 
 
+async def _model_endpoint_mismatch_handler(request: Request, error: Exception) -> JSONResponse:
+    """This arm was produced against one endpoint and this lab now reaches another.
+
+    422 and never a recorded turn, exactly as `agent_runtime_unavailable` beside it: where
+    the lab is pointed is a fact about the installation, and half an arm produced against one
+    endpoint and half against another is a record nobody can read. The message names both, so
+    the operator can tell which one they repointed away from, and their path is the one the
+    lab already has — fork the experiment or start a new one (ADR 0039, ADR 0052).
+    """
+    return _error_response(
+        request, status_code=422, code="model_endpoint_mismatch", message=str(error)
+    )
+
+
 async def _experiment_not_startable_handler(request: Request, error: Exception) -> JSONResponse:
     """Refuse the start with the findings that explain it, as a publish refusal does.
 
@@ -1544,21 +1565,84 @@ def create_app(
     # rather than an optional decoration of one adapter. Whether anything is exported is
     # still the provider's business and nobody else's (ADR 0004).
     configured_telemetry = telemetry or create_telemetry(settings)
-    agents = agent_registry or create_agent_registry(settings, configured_telemetry)
     run_tracer = create_run_tracer(configured_telemetry)
-    # Composition selects which frameworks can run an arm, the way it selects which can serve
-    # a conversation (`docs/architecture.md`). A test that wants one arm to fail supplies its
-    # own registry here rather than reaching into the runner.
-    runtimes = agent_runtimes or create_support_agent_runtimes(settings)
-    # The same choice, one port over: a test that wants a judge to fail supplies its own
-    # registry here rather than reaching into the scoring service.
-    judges = judge_runtimes or create_judge_runtimes(settings)
     # Composition's two choices about the lab's own connection. The cipher is built from the
     # environment because there is deliberately no default encryption key, and the probe is
-    # injectable for the same reason the registries above are: a suite that wants an endpoint
+    # injectable for the same reason the registries below are: a suite that wants an endpoint
     # to refuse supplies one here rather than reaching into the service.
     credential_cipher = create_credential_cipher(settings)
     endpoint_probe = model_endpoint_probe or OpenAiProtocolEndpointProbe()
+    # The test environment's short-circuit, read once here and passed down rather than
+    # re-derived in three factories: it selects each SDK's own offline double *before* the
+    # resolution chain is consulted at all, which is what keeps every suite in this
+    # repository independent of whatever an operator has saved (ADR 0052).
+    sdk_doubles = settings.environment == "test"
+    environment_key = (
+        None if settings.openai_api_key is None else settings.openai_api_key.get_secret_value()
+    )
+
+    def resolve_connection(session: Session) -> ResolvedConnection:
+        """Where this lab is pointed, resolved once for the request being served.
+
+        Once per request and never per turn inside one: an advance runs to completion against
+        what it resolved, so a connection saved halfway through cannot move the endpoint
+        underneath a model call. Resolved on the caller's own session, so the reading and the
+        writing an advance does are one transaction.
+        """
+        return ModelConnectionResolver(
+            SqlAlchemyModelConnectionRepository(session),
+            credential_cipher,
+            environment_key=environment_key,
+        ).resolve(OPENAI_PROVIDER)
+
+    # Each of the three registries becomes a factory over the resolved connection, because a
+    # connection that can change while the process runs cannot be read at start-up. All three
+    # move together, including the POC's `AgentRegistry`: a lab pointed at Ollama that still
+    # sent the POC's conversations to OpenAI would be a split nobody would predict from the
+    # settings page (ADR 0052).
+    #
+    # Held per resolution rather than rebuilt per request. What moved to the request is the
+    # *reading* of the connection; the POC's adapter builds a provider client eagerly, so
+    # composing it on every conversation turn and every framework listing would open a
+    # connection pool per request and drop it unclosed. `ComposedPerConnection` rebuilds only
+    # when the resolution changes.
+    #
+    # The injection points are unchanged and keep taking a registry, which is then a *fixed*
+    # factory — a suite that supplies a failing runtime is describing this whole process, not
+    # one request of it, and none of those suites had to change. One widening of that contract
+    # is worth naming: the connection is resolved before the injected registry is chosen, so an
+    # app built with one still reads `model_connections` and therefore still needs the schema.
+    # Resolving only when nothing was injected would make composition depend on what a suite
+    # supplied, which is the coupling the injection points exist to avoid.
+    held_agents = ComposedPerConnection(
+        lambda connection: create_agent_registry(
+            connection,
+            configured_telemetry,
+            model_id=settings.openai_model,
+            sdk_doubles=sdk_doubles,
+        )
+    )
+    held_runtimes = ComposedPerConnection(
+        lambda connection: create_support_agent_runtimes(connection, sdk_doubles=sdk_doubles)
+    )
+    held_judges = ComposedPerConnection(
+        lambda connection: create_judge_runtimes(connection, sdk_doubles=sdk_doubles)
+    )
+
+    def compose_agents(connection: ResolvedConnection) -> AgentRegistry:
+        if agent_registry is not None:
+            return agent_registry
+        return held_agents(connection)
+
+    def compose_runtimes(connection: ResolvedConnection) -> SupportAgentRuntimeRegistry:
+        if agent_runtimes is not None:
+            return agent_runtimes
+        return held_runtimes(connection)
+
+    def compose_judges(connection: ResolvedConnection) -> JudgeRuntimeRegistry:
+        if judge_runtimes is not None:
+            return judge_runtimes
+        return held_judges(connection)
 
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
@@ -1714,6 +1798,7 @@ def create_app(
     application.add_exception_handler(
         SupportAgentUnavailableError, _agent_runtime_unavailable_handler
     )
+    application.add_exception_handler(ModelEndpointMismatchError, _model_endpoint_mismatch_handler)
     application.add_exception_handler(
         ExperimentConfigurationError, _experiment_configuration_handler
     )
@@ -1755,10 +1840,18 @@ def create_app(
                 SqlAlchemySessionRepository(session),
                 SqlAlchemyConversationTurnRepository(session),
                 SqlAlchemyGeneratedScenarioRepository(session),
-                agents,
+                compose_agents(resolve_connection(session)),
                 clock,
                 SqlAlchemyOrderRepository(session, clock),
             )
+
+    def lab_connection() -> Generator[ResolvedConnection, None, None]:
+        with session_scope(factory) as session:
+            yield resolve_connection(session)
+
+    def conversation_frameworks() -> Generator[AgentRegistry, None, None]:
+        with session_scope(factory) as session:
+            yield compose_agents(resolve_connection(session))
 
     def model_connection_service() -> Generator[ModelConnectionService, None, None]:
         with session_scope(factory) as session:
@@ -1928,7 +2021,9 @@ def create_app(
         with session_scope(factory) as session:
             # The same runtime registry the runner is given: an attempt's source location is
             # the adapter that produced it, and only this process knows which are here.
-            yield ExperimentTimelineService(build_experiment_service(session), runtimes)
+            yield ExperimentTimelineService(
+                build_experiment_service(session), compose_runtimes(resolve_connection(session))
+            )
 
     def experiment_trace_service() -> Generator[ExperimentTraceService, None, None]:
         with session_scope(factory) as session:
@@ -1991,7 +2086,7 @@ def create_app(
                 objective_block_repository(session),
                 judge_configuration_repository(session),
                 SqlAlchemyJudgementRepository(session),
-                judges,
+                compose_judges(resolve_connection(session)),
                 clock,
             )
 
@@ -2038,7 +2133,7 @@ def create_app(
                 ),
             ),
             build_scenario_mutations(session),
-            runtimes,
+            compose_runtimes(resolve_connection(session)),
             run_tracer,
             clock,
         )
@@ -2091,7 +2186,7 @@ def create_app(
                 SqlAlchemyOrderRepository(session, clock),
                 SqlAlchemyActionProposalRepository(session),
                 SqlAlchemyActionDecisionIdempotencyRepository(session),
-                agents,
+                compose_agents(resolve_connection(session)),
                 clock,
             )
 
@@ -2137,10 +2232,12 @@ def create_app(
         service.delete(scenario_id, scenario_version, seed)
         return Response(status_code=204)
 
-    def list_agent_frameworks() -> AgentFrameworkListResponse:
+    def list_agent_frameworks(
+        registry: Annotated[AgentRegistry, Depends(conversation_frameworks)],
+    ) -> AgentFrameworkListResponse:
         return AgentFrameworkListResponse(
             frameworks=[
-                AgentFrameworkResponse.from_declaration(value) for value in agents.declarations()
+                AgentFrameworkResponse.from_declaration(value) for value in registry.declarations()
             ]
         )
 
@@ -2471,7 +2568,7 @@ def create_app(
     ).register(router)
     JudgeConfigurationRoutes(judge_configuration_service).register(router)
     LabSeedRoutes(settings).register(router)
-    LabStatusRoutes(settings).register(router)
+    LabStatusRoutes(settings, lab_connection).register(router)
     ModelConnectionRoutes(model_connection_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)

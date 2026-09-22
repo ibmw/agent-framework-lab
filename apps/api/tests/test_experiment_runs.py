@@ -28,7 +28,7 @@ from capability_lab.application.agent_runtime import (
     SupportAgentUnavailableError,
 )
 from capability_lab.application.canonical_json import CanonicalValue, canonical_json_bytes
-from capability_lab.application.experiment_runs import RunTurn
+from capability_lab.application.experiment_runs import ModelEndpointMismatchError, RunTurn
 from capability_lab.application.experiments import (
     ArmSelection,
     ExperimentDetail,
@@ -63,6 +63,7 @@ from capability_lab.infrastructure.database import (
     session_scope,
 )
 from capability_lab.infrastructure.participants.human import HumanParticipantDriver
+from capability_lab.infrastructure.repositories import SqlAlchemyExperimentRunRepository
 from workspace_factories import (
     SEED,
     Workspace,
@@ -77,6 +78,10 @@ from workspace_factories import (
 )
 
 WRITE_TOOL_NAMES = (ADDRESS_CHANGE_APPLY, ADDRESS_CHANGE_PROPOSE)
+
+OLLAMA = "http://localhost:11434/v1"
+VLLM = "http://localhost:8000/v1"
+"""Two endpoints one lab could be pointed at in turn, which is what a pin has to survive."""
 
 
 def mutation(
@@ -1158,7 +1163,161 @@ async def test_each_arm_is_counted_on_its_own_record(
     assert metrics(session, detail, 1).duration_ms is None
 
 
+# -- the endpoint an arm is pinned to (ADR 0052) -------------------------------
+
+
+def pinned(session: Session, detail: ExperimentDetail, position: int = 0) -> str | None:
+    """The endpoint the stored run carries, read back rather than remembered."""
+    run = detail.runs[position]
+    stored = SqlAlchemyExperimentRunRepository(session).list_for_experiment(run.experiment_id)
+    return next(entry for entry in stored if entry.run_id == run.run_id).model_base_url
+
+
+@pytest.mark.asyncio
+async def test_a_first_advance_records_the_endpoint_the_arm_reached(
+    session: Session, workspace: Workspace
+) -> None:
+    detail = start(session, workspace, control_arm(session))
+
+    assert pinned(session, detail) is None
+    await advance(session, detail, runtimes=_registry(_ReachingRuntime(OLLAMA)))
+
+    assert pinned(session, detail) == OLLAMA
+
+
+@pytest.mark.asyncio
+async def test_a_control_arm_records_no_endpoint_because_it_reached_none(
+    session: Session, workspace: Workspace
+) -> None:
+    """Null is the honest record rather than a gap: the control calls no provider at all."""
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail)
+
+    assert produced.turn.turn.outcome is AgentTurnOutcome.ANSWERED
+    assert pinned(session, detail) is None
+
+
+@pytest.mark.asyncio
+async def test_a_control_arm_beside_a_model_backed_one_still_records_nothing(
+    session: Session, workspace: Workspace
+) -> None:
+    """One credentialed lab, one registry, two arms — and only one of them reached anything.
+
+    The assertion is that the endpoint is recorded from what the *arm* ran rather than from
+    what the lab holds. A control arm of a credentialed lab that carried the lab's endpoint
+    would be claiming a provider call that was never made.
+    """
+    detail = start(
+        session,
+        workspace,
+        modelled_arm(session, PYDANTIC_AI_FRAMEWORK_ID),
+        control_arm(session),
+    )
+    control = _StubAnsweringRuntime()
+    lab = SupportAgentRuntimeRegistry(
+        {
+            PYDANTIC_AI_FRAMEWORK_ID: _ReachingRuntime(OLLAMA, PYDANTIC_AI_FRAMEWORK_ID),
+            control.framework_id: control,
+        }
+    )
+
+    await advance(session, detail, 0, runtimes=lab)
+    await advance(session, detail, 1, runtimes=lab)
+
+    assert pinned(session, detail, 0) == OLLAMA
+    assert pinned(session, detail, 1) is None
+
+
+@pytest.mark.asyncio
+async def test_advancing_again_against_the_same_endpoint_pins_it_once_and_runs(
+    session: Session, workspace: Workspace
+) -> None:
+    """Idempotent over the endpoint: a second advance writes the same value and answers."""
+    detail = start(session, workspace, control_arm(session))
+    runtimes = _registry(_ReachingRuntime(OLLAMA))
+
+    await advance(session, detail, runtimes=runtimes)
+    _say(session, detail, "Any update?")
+    produced = await advance(session, detail, runtimes=runtimes)
+
+    assert produced.turn.turn.ordinal == 1
+    assert produced.turn.turn.outcome is AgentTurnOutcome.ANSWERED
+    assert pinned(session, detail) == OLLAMA
+
+
+@pytest.mark.asyncio
+async def test_an_advance_that_would_reach_another_endpoint_is_refused_naming_both(
+    session: Session, workspace: Workspace
+) -> None:
+    """Half an arm against one endpoint and half against another is unreadable.
+
+    The refusal names both, because the operator's next move depends on knowing which one
+    they repointed away from — and it records nothing, which is the assertion that would fail
+    if the check ran after the attempt rather than before it.
+    """
+    detail = start(session, workspace, control_arm(session))
+    await advance(session, detail, runtimes=_registry(_ReachingRuntime(OLLAMA)))
+    _say(session, detail, "Any update?")
+    before = _attempts(session, detail)
+
+    with pytest.raises(ModelEndpointMismatchError) as refusal:
+        await advance(session, detail, runtimes=_registry(_ReachingRuntime(VLLM)))
+
+    assert OLLAMA in str(refusal.value)
+    assert VLLM in str(refusal.value)
+    assert _attempts(session, detail) == before
+    assert pinned(session, detail) == OLLAMA
+
+
+@pytest.mark.asyncio
+async def test_a_refused_advance_leaves_the_arm_exactly_where_it_stood(
+    session: Session, workspace: Workspace
+) -> None:
+    """Which is the point of refusing before the attempt: the arm is still runnable.
+
+    Advancing it again against the endpoint it was produced on answers the turn the refusal
+    did not, so the operator loses nothing but the attempt they should not have made.
+    """
+    detail = start(session, workspace, control_arm(session))
+    await advance(session, detail, runtimes=_registry(_ReachingRuntime(OLLAMA)))
+    _say(session, detail, "Any update?")
+
+    with pytest.raises(ModelEndpointMismatchError):
+        await advance(session, detail, runtimes=_registry(_ReachingRuntime(VLLM)))
+    produced = await advance(session, detail, runtimes=_registry(_ReachingRuntime(OLLAMA)))
+
+    assert produced.turn.turn.ordinal == 1
+    assert produced.turn.turn.attempt == 1
+    assert produced.turn.turn.outcome is AgentTurnOutcome.ANSWERED
+
+
+@pytest.mark.asyncio
+async def test_an_endpoint_is_recorded_even_when_the_attempt_failed(
+    session: Session, workspace: Workspace
+) -> None:
+    """A failure is the part of the record most worth being able to attribute to a provider."""
+    detail = start(session, workspace, control_arm(session))
+
+    produced = await advance(session, detail, runtimes=_registry(_FailingReachingRuntime(OLLAMA)))
+
+    assert produced.turn.turn.outcome is AgentTurnOutcome.FAILED
+    assert pinned(session, detail) == OLLAMA
+
+
 # -- helpers -------------------------------------------------------------------
+
+
+def _attempts(session: Session, detail: ExperimentDetail, position: int = 0) -> int:
+    """Every attempt recorded against one arm, however it ended."""
+    run = detail.runs[position]
+    return len(
+        [
+            entry
+            for entry in build_runner(session).list_agent_turns(run.experiment_id)
+            if entry.run_id == run.run_id
+        ]
+    )
 
 
 def _document(produced: RunTurn, tool: str) -> Mapping[str, CanonicalValue]:
@@ -1190,6 +1349,34 @@ class _StubRuntime(SupportAgentRuntime):
     @property
     def framework_id(self) -> str:
         return FAKE_FRAMEWORK_ID
+
+
+class _StubAnsweringRuntime(_StubRuntime):
+    """Answers, reaches nothing, and is the control arm's stand-in where one is needed."""
+
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
+        return AgentAnswer(body="Noted.", usage=self.usage)
+
+
+class _ReachingRuntime(_StubAnsweringRuntime):
+    """A runtime that reports the endpoint composition built it against (ADR 0052)."""
+
+    def __init__(self, model_base_url: str, framework_id: str = FAKE_FRAMEWORK_ID) -> None:
+        self._model_base_url = model_base_url
+        self._framework_id = framework_id
+
+    @property
+    def framework_id(self) -> str:
+        return self._framework_id
+
+    @property
+    def model_base_url(self) -> str | None:
+        return self._model_base_url
+
+
+class _FailingReachingRuntime(_ReachingRuntime):
+    async def answer(self, request: AgentTurnRequest, tools: SandboxToolInvoker) -> AgentAnswer:
+        raise SupportAgentProviderError("the provider rejected the request")
 
 
 class _RecordingRuntime(_StubRuntime):

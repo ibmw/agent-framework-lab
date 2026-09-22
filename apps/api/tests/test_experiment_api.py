@@ -1,5 +1,6 @@
 """Public contract for starting an experiment, reading it, and driving its arms."""
 
+import logging
 from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -8,7 +9,11 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,15 +29,49 @@ from api_factories import (
 from capability_lab.application.agent_runtime import SupportAgentRuntimeRegistry
 from capability_lab.application.judge_runs import ExperimentJudgeService
 from capability_lab.application.judge_runtime import JudgeRuntimeRegistry
+from capability_lab.application.model_connections import OPENAI_PROVIDER
 from capability_lab.infrastructure.agents.fake import FakeSupportAgentRuntime
+from capability_lab.infrastructure.config import get_settings
+from capability_lab.infrastructure.credentials import CREDENTIAL_KEY_VARIABLE
+from capability_lab.infrastructure.database import (
+    Base,
+    create_database_engine,
+    create_session_factory,
+)
+from capability_lab.infrastructure.telemetry import Telemetry
 from capability_lab.presentation import api as api_module
+from capability_lab.presentation.api import create_app
 
 SEED = 20260825
 CONFIGURATIONS = "/api/v1/agent-configurations"
+OLLAMA = "http://localhost:11434/v1"
+VLLM = "http://localhost:8000/v1"
+SWEPT_KEY = "sk-swept-4a7e1c93b06d45f2ae8c27d150936bf4"
+"""A key saved, resolved and composed against while the sweep below watches everything."""
 PROMPT = (
     "You are {{support_identity.role}} for {{shop.name}}.\n\n"
     "Write in the shop's tone of voice: {{shop.tone_of_voice}}."
 )
+
+
+class _ReachingRuntime(FakeSupportAgentRuntime):
+    """The control runtime, reporting an endpoint the way a model-backed one would.
+
+    A subclass of the real control rather than a stub, so what this suite drives through the
+    HTTP boundary is the runner's own path with one fact changed: where the arm reached.
+    """
+
+    def __init__(self, model_base_url: str) -> None:
+        self._model_base_url = model_base_url
+
+    @property
+    def model_base_url(self) -> str | None:
+        return self._model_base_url
+
+
+def _reaching(model_base_url: str) -> SupportAgentRuntimeRegistry:
+    runtime = _ReachingRuntime(model_base_url)
+    return SupportAgentRuntimeRegistry({runtime.framework_id: runtime})
 
 
 @pytest.fixture
@@ -611,6 +650,146 @@ async def test_a_framework_this_lab_cannot_run_is_refused_before_anything_is_rec
             f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
         )
         assert read.json()["agent_turns"] == []
+
+
+async def test_an_advance_that_would_reach_another_endpoint_is_refused_naming_both(
+    tmp_path: Path,
+) -> None:
+    """Two processes over one database, pointed at two endpoints, one after the other.
+
+    Two `create_app` calls rather than one, because that is the shape of what happens: a lab
+    is repointed, and the arm it produced yesterday is advanced today. The refusal names both
+    endpoints, records no turn, and leaves the arm advanceable against the one it was
+    produced on (ADR 0052).
+    """
+    database = "repointed-lab.db"
+    async with api_client(tmp_path, database, agent_runtimes=_reaching(OLLAMA)) as first:
+        lab = await seed_lab(first)
+        scenario = await published_scenario(first, lab)
+        identity = await make_identity(first)
+        experiment = await start(
+            first, lab, start_body(scenario, await control_arm(first, identity))
+        )
+        opened = await advance(first, lab, experiment)
+        assert opened.status_code == 201, opened.text
+        delivered = await first.post(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+            "/participant-turns",
+            json={
+                "run_ids": [experiment["runs"][0]["run_id"]],
+                "message": "Any update on the address?",
+            },
+        )
+        assert delivered.status_code == 201, delivered.text
+
+    async with api_client(tmp_path, database, agent_runtimes=_reaching(VLLM)) as repointed:
+        refused = await advance(repointed, lab, experiment)
+        read = await repointed.get(
+            f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+        )
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "model_endpoint_mismatch"
+    assert OLLAMA in refused.json()["message"]
+    assert VLLM in refused.json()["message"]
+    # One attempt, from before the lab was repointed: the refusal recorded nothing.
+    assert len(read.json()["agent_turns"]) == 1
+
+
+async def test_no_log_line_span_or_error_payload_carries_the_key_an_advance_resolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """ADR 0052's sweep, extended to the two paths this slice added (`test_model_connection_api`
+    holds the original).
+
+    That sweep walks the four `model-connections` routes, where a key travels *inwards* and
+    the lab decides what to say back. It could not reach these two, because neither existed:
+    `GET /lab-status` now resolves the connection to answer, and every advance decrypts the
+    stored key into a `ResolvedConnection` before it composes anything. That object is the
+    only structure in the lab holding a **decrypted** key — `Settings` keeps both of its
+    secrets in `SecretStr` precisely so a repr cannot print one — so the rule has to be held
+    where the plaintext now lives rather than only where it arrived.
+
+    The haystack is asserted to be real before it is asserted to be clean: the endpoint, which
+    this lab *may* say, has to be findable in it.
+    """
+    monkeypatch.setenv(CREDENTIAL_KEY_VARIABLE, "qO8yb2Xr7TgPzKw1LmN4vC6sDhF0jEuAiRlYpZ3aBtQ=")
+    get_settings.cache_clear()
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'swept-advance.db'}")
+    Base.metadata.create_all(engine)
+    application = create_app(
+        session_factory=create_session_factory(engine),
+        telemetry=Telemetry(provider.get_tracer("sweep"), b"sweep-salt"),
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        async with AsyncClient(
+            transport=ASGITransport(app=application), base_url="http://lab.test"
+        ) as client:
+            lab = await seed_lab(client)
+            scenario = await published_scenario(client, lab)
+            experiment = await start(client, lab, start_body(scenario, await control_arm(client)))
+            bodies = [
+                (
+                    await client.put(
+                        f"/api/v1/model-connections/{OPENAI_PROVIDER}",
+                        json={"base_url": OLLAMA, "api_key": SWEPT_KEY},
+                    )
+                ).text,
+                (await client.get("/api/v1/lab-status")).text,
+                (await client.get("/api/v1/agent-frameworks")).text,
+                (await advance(client, lab, experiment)).text,
+                # Advanced twice: the second one resolves the saved connection again and
+                # takes the already-answered path, so both branches of the advance are swept.
+                (await advance(client, lab, experiment)).text,
+                (
+                    await client.get(
+                        f"/api/v1/shops/{lab['shop_id']}/experiments/{experiment['experiment_id']}"
+                    )
+                ).text,
+            ]
+
+    with engine.connect() as connection:
+        ciphertext = str(
+            connection.execute(text("SELECT encrypted_key FROM model_connections")).scalar()
+        )
+
+    swept = "\n".join(
+        [
+            *bodies,
+            # `format` rather than `getMessage`: a record carrying `exc_info` renders its
+            # traceback only through a formatter, and a credential reaching a log by way of a
+            # repr in an exception is exactly the path a message-only sweep would walk past.
+            *(
+                logging.Formatter("%(name)s %(levelname)s %(message)s").format(record)
+                for record in caplog.records
+            ),
+            repr(
+                [
+                    (span.name, span.attributes, span.events)
+                    for span in exporter.get_finished_spans()
+                ]
+            ),
+        ]
+    )
+
+    # One guard per haystack. The endpoint is echoed by the save, so finding it proves the
+    # *bodies* were read and nothing at all about the other two — a change that silenced
+    # logging or dropped the span processor would hollow out two-thirds of this sweep while
+    # it went on passing.
+    assert OLLAMA in swept, "no response body was read, so the bodies prove nothing"
+    assert caplog.records, "no log record was captured, so the log dimension proves nothing"
+    assert exporter.get_finished_spans(), "no span was exported, so the spans prove nothing"
+    assert ciphertext and ciphertext != "None"
+    assert SWEPT_KEY not in swept
+    assert ciphertext not in swept
+    for length in (6, 8, 12, 16):
+        assert SWEPT_KEY[:length] not in swept
+        assert SWEPT_KEY[-length:] not in swept
 
 
 async def test_an_arm_of_another_experiment_cannot_be_advanced(

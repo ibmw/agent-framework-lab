@@ -26,6 +26,10 @@ from capability_lab.application.agent_capabilities import (
     PYDANTIC_AI_FRAMEWORK_ID,
 )
 from capability_lab.application.agent_runtime import SupportAgentRuntime
+from capability_lab.application.model_connections import (
+    ENVIRONMENT_BOOTSTRAP_ENDPOINTS,
+    OPENAI_PROVIDER,
+)
 from capability_lab.application.sandbox_tool_contracts import (
     INTERACTION_CONTEXT,
     ORDER_DETAIL,
@@ -50,17 +54,26 @@ CONTRACTS = {contract.name: contract for contract in SANDBOX_TOOL_CONTRACTS}
 
 LiveRuntime = Callable[[str], SupportAgentRuntime]
 
+LIVE_ENDPOINT = ENVIRONMENT_BOOTSTRAP_ENDPOINTS[OPENAI_PROVIDER]
+"""OpenAI's own endpoint, which is where `AGENT_LAB_OPENAI_API_KEY` reaches (ADR 0052).
+
+Named from the resolution chain rather than typed here, so a live smoke test goes exactly
+where a lab running on the environment bootstrap goes.
+"""
+
 LIVE_RUNTIMES: tuple[tuple[str, LiveRuntime], ...] = (
     (
         PYDANTIC_AI_FRAMEWORK_ID,
         lambda api_key: PydanticAiSupportAgentRuntime(
-            lambda model_id: create_openai_model(model_id, api_key)
+            lambda model_id: create_openai_model(model_id, api_key, LIVE_ENDPOINT),
+            model_base_url=LIVE_ENDPOINT,
         ),
     ),
     (
         OPENAI_AGENTS_FRAMEWORK_ID,
         lambda api_key: OpenAiAgentsSupportAgentRuntime(
-            lambda model_id: create_openai_agents_model(model_id, api_key)
+            lambda model_id: create_openai_agents_model(model_id, api_key, LIVE_ENDPOINT),
+            model_base_url=LIVE_ENDPOINT,
         ),
     ),
 )
