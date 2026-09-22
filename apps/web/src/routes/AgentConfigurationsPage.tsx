@@ -263,7 +263,7 @@ export function NewAgentConfigurationPage() {
       replace: replaceAgentConfigurationDraft,
       refresh: listings.agentConfigurations.refresh,
       editorAt: (id) => `/lab/agent-configurations/${id}`,
-      owes: `Agent configuration ${name} was created without the runtime chosen for it.`,
+      owes: () => `Agent configuration ${name} was created without the runtime chosen for it.`,
       standing: "created · its runtime is not saved yet",
       whenCreateFails: "The agent configuration could not be created.",
       whenCompleteFails: "The configuration was created, but its runtime could not be saved.",
@@ -360,7 +360,7 @@ export function NewAgentConfigurationPage() {
             <Field
               label="Adopted identity"
               hint={
-                creating.created
+                creating.made !== null
                   ? `The configuration adopts this identity now: it is what the create request carried, and the write that follows cannot move one. ${SUPPORT_IDENTITY_PIN_RULE}`
                   : identities.length === 0
                     ? `No identity is adoptable yet, and a configuration adopts exactly one. ${SUPPORT_IDENTITY_PIN_RULE}`
@@ -370,7 +370,7 @@ export function NewAgentConfigurationPage() {
               <select
                 className={fieldControlClasses}
                 value={identityId}
-                disabled={creating.created}
+                disabled={creating.made !== null}
                 onChange={(event) => setIdentityId(event.target.value)}
               >
                 {identities.map((identity) => (

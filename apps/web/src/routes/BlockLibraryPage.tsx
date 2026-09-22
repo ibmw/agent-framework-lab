@@ -269,7 +269,7 @@ function NewBlockPage<PayloadT extends BlockPayload>({
       replace: replaceDraft,
       refresh: listing.refresh,
       editorAt: (id) => `${copy.editorBase}/${id}`,
-      owes: copy.owes(name),
+      owes: () => copy.owes(name),
       standing: "created · its template is not saved yet",
       whenCreateFails: "The block could not be created.",
       whenCompleteFails: "The block was created, but its template could not be saved.",
@@ -277,14 +277,14 @@ function NewBlockPage<PayloadT extends BlockPayload>({
     // The listing is re-read the moment the template exists, so once it does it holds this
     // page's own block — and counting that against the operator would refuse the retry of
     // the create that made it.
-    (created) =>
+    (made) =>
       listing.loading
         ? "Reading what this library already holds…"
         : label.trim() === ""
           ? "The template needs a name before it can be created."
           : name === ""
             ? "A name is saved as a lowercase slug, and this one leaves none — use letters or digits."
-            : !created && taken.includes(name)
+            : made === null && taken.includes(name)
               ? `${name} is the name of a template this library already holds.`
               : undefined,
   );
@@ -310,7 +310,7 @@ function NewBlockPage<PayloadT extends BlockPayload>({
             <Field
               label="Name"
               hint={
-                creating.created
+                creating.made !== null
                   ? "The template answers to this name now. A name is what the create request carried, so the write that follows cannot move one — renaming it means opening its editor."
                   : "Saved as a lowercase slug. A scenario binds this template to its own shop's objects, and the name is how the library and every binding refer to it."
               }
@@ -320,7 +320,7 @@ function NewBlockPage<PayloadT extends BlockPayload>({
                 className={`${fieldControlClasses} font-mono`}
                 value={label}
                 required
-                disabled={creating.created}
+                disabled={creating.made !== null}
                 placeholder={copy.namePlaceholder}
                 onChange={(event) => setLabel(event.target.value)}
               />

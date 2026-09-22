@@ -233,7 +233,7 @@ export function NewJudgePage() {
       replace: replaceJudgeConfigurationDraft,
       refresh: listings.judges.refresh,
       editorAt: (id) => `/lab/judges/${id}`,
-      owes: `Judge ${name} was created without the rubric written for it.`,
+      owes: () => `Judge ${name} was created without the rubric written for it.`,
       standing: "created · its rubric is not saved yet",
       whenCreateFails: "The judge could not be created.",
       whenCompleteFails: "The judge was created, but its rubric could not be saved.",

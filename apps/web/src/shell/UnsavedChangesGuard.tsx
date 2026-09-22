@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
@@ -63,6 +64,22 @@ export function UnsavedChangesGuard() {
     ),
   );
 
+  /**
+   * The blocker as it stands *now*, rather than as it stood when the prompt was drawn.
+   *
+   * *Save and leave* awaits the saves before it proceeds, and a navigation can complete in
+   * that interval — the work being saved may reach its destination, in which case the router
+   * lets it through and resets every blocker to idle. The prompt's `proceed` then belongs to
+   * a blocker that is no longer blocked, and `@remix-run/router` permits `blocked ->
+   * proceeding` and not `unblocked -> proceeding`: calling it throws that transition by name
+   * out of a promise nobody is holding. So the answer is taken from here and only while this
+   * navigation is still the one being asked about (ADR 0051).
+   */
+  const live = useRef(blocker);
+  useLayoutEffect(() => {
+    live.current = blocker;
+  });
+
   // A reload or a tab close is the one navigation the lab cannot draw a prompt over, and the
   // browser's own is the only ask available. It is armed for anything in the register — an open
   // row dies in a reload exactly as a dirty draft does — and for nothing else: a half-typed
@@ -90,7 +107,11 @@ export function UnsavedChangesGuard() {
           // register that changes under an open prompt does not throw away what it is showing.
           key={blocker.location.key}
           stranded={strandedBy(blocker.location.pathname)}
-          onLeave={() => blocker.proceed?.()}
+          onLeave={() => {
+            if (live.current.state === "blocked") {
+              live.current.proceed?.();
+            }
+          }}
           onStay={() => blocker.reset?.()}
         />
       ) : null}

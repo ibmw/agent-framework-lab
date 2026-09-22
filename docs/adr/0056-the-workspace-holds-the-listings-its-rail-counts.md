@@ -2,6 +2,17 @@
 
 Status: accepted — 2026-09-20
 
+Amendment: 2026-09-22 — "a surface which changes what a listing holds refreshes that listing" is
+extended to *a surface that changed what a listing holds refreshes it, whether or not it is still
+on screen when it can*. The rule below was written about surfaces that are still standing, and the
+ordering that implements it was written to match: the counter in `useReading` — `listings.ts`'s
+own, which this decision does not describe — ranks reads by when they started, and a `refresh`
+captured by a continuation that outlived its page starts last while being the one read nobody
+wants. That was an unconsidered case, and it is why both create paths forbade the call outright
+rather than making it. Such a read is now dropped, before it is counted, when its `load` is no
+longer the one this holder reads, which lets the rule above hold for a surface that has gone.
+ADR 0059 records the finding and the change.
+
 Puts a figure beside every rail entry that has a listing behind it, and decides where that figure
 comes from. The two shells — `ShopWorkspace` and `LabWorkspace` — read each listing once and hand
 the same answer to the rail and to the index that renders it, so a count and a table are one
@@ -11,7 +22,8 @@ Records four decisions. That the listings are **held at the shell** rather than 
 `GET /shops/{id}/counts` read, which is a measurement and is reported below. That a count reaches
 a screen reader as the entry's **description** and never as part of its name, which is what lets
 the figure sit inside the link at all. That the **collapsed strip draws no figure and still says
-one**. And that a surface which changes what a listing holds **refreshes that listing**, which is
+one**. And that a surface which changes what a listing holds **refreshes that listing** —
+including a surface that is no longer on screen (amended 2026-09-22; see ADR 0059) — which is
 the whole of the cache's invalidation rule.
 
 ## Context

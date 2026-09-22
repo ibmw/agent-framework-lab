@@ -507,7 +507,7 @@ export function NewScenarioPage() {
       replace: (id, payload) => replaceScenarioDraft(shopId, id, toScenarioRequest(payload)),
       refresh: listings.scenarios.refresh,
       editorAt: (id) => `/shops/${shopId}/scenarios/${id}`,
-      owes: `Scenario ${name.trim()} was created without the objectives composed for it.`,
+      owes: () => `Scenario ${name.trim()} was created without the objectives composed for it.`,
       standing: "created · what it composes is not saved yet",
       whenCreateFails: "The scenario could not be created.",
       whenCompleteFails: "The scenario was created, but what it composes could not be saved.",
@@ -518,7 +518,7 @@ export function NewScenarioPage() {
     // A failed read is answered before a read in flight, because a listing that failed stays
     // empty and unsettled for ever: asked the other way round, the reason on the button would
     // say the page was still reading while the alert above it said the request failed.
-    (created) =>
+    (made) =>
       libraryError !== null
         ? "The block libraries could not be read, so there is nothing to compose from yet."
         : listings.tickets.error !== null
@@ -531,7 +531,7 @@ export function NewScenarioPage() {
                 ? "A scenario is built on a ticket, and this shop has none yet."
                 : name.trim() === ""
                   ? "Give the scenario a name first."
-                  : !created && taken.includes(name.trim())
+                  : made === null && taken.includes(name.trim())
                     ? `${name.trim()} is the name of a scenario this shop already holds.`
                     : // A press while a template's draft is still coming would compose the
                       // payload without it: `run` reads `compose` from the render the press
@@ -624,7 +624,7 @@ export function NewScenarioPage() {
                 className={fieldControlClasses}
                 value={ticketId}
                 required
-                disabled={creating.created}
+                disabled={creating.made !== null}
                 onChange={(event) => setTicketId(event.target.value)}
               >
                 {tickets.map((entry) => (

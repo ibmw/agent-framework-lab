@@ -1217,6 +1217,437 @@ describe("the new-order page", () => {
     expect(router.state.location.pathname).toBe(`/shops/${OTHER_SHOP_ID}/orders`);
   });
 
+  /**
+   * The prompt's Save and the run owe the same second write, and the run's is the one already
+   * on its way: it started first.
+   *
+   * Two writes are two continuations each deciding what happens when one lands. The run's
+   * `PUT` resumes first, marks itself landed, re-reads and navigates into the editor; the
+   * guard lets it through because the work now reaches its destination; the router resets
+   * every blocker as it completes that navigation; and the `proceed()` the prompt captured
+   * then throws `unblocked -> proceeding` out of a promise the click handler voided. What the
+   * operator gets is two idempotent `PUT`s, one unhandled rejection, and the editor of what
+   * they made after asking for the index.
+   *
+   * Fails against a `save` that writes again rather than joining: two `PUT`s.
+   */
+  it("joins the second write already in flight rather than sending another", async () => {
+    const user = userEvent.setup();
+    let puts = 0;
+    let release = () => {};
+    let reached = () => {};
+    const putting = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        puts += 1;
+        const body = (await request.json()) as ReplaceOrderRequest;
+        // Only the run's is held. A second one is let through, so that a page sending two
+        // deadlocks nothing and is caught by the count instead.
+        if (puts === 1) {
+          reached();
+          await held;
+        }
+        savedRequests.push(body);
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await putting;
+    await screen.findByText("created · its line is not saved yet");
+
+    const leaving = router.navigate(`/shops/${SHOP_ID}/orders`);
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+
+    release();
+    await act(async () => {
+      await leaving;
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    // One write, one order, and the operator is on the index they asked for rather than in
+    // the editor of what they just made.
+    expect(puts).toBe(1);
+    expect(savedRequests).toHaveLength(1);
+    expect(savedRequests[0].lines).toEqual([{ sku: "NS-ASJ-OB-M", quantity: 1 }]);
+    expect(createdOrders).toHaveLength(1);
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`);
+  });
+
+  /**
+   * The window the stand-down inside the registered `save` closes, which is an ordering rather
+   * than a case.
+   *
+   * The obvious one does not bite: with the save's own post-write re-read already settled the
+   * page has unmounted and the unmount setter covers whatever is left. What the setter is for
+   * is the interval while that re-read is still pending. So every listing read after the
+   * `POST` is held — the run's, and then the save's — and the run's is released while the
+   * save's is still held, which is the only moment the two are distinguishable.
+   *
+   * Fails against a `save` that does not stand the run down: the run resumes into the write
+   * it was going to make, sends a second `PUT`, and takes the operator into the editor.
+   */
+  it("stands the run down from the prompt's Save, before the save's own re-read lands", async () => {
+    const user = userEvent.setup();
+    let puts = 0;
+    let reads = 0;
+    const holding: (() => void)[] = [];
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
+        reads += 1;
+        if (reads > 1) {
+          await new Promise<void>((resolve) => {
+            holding.push(resolve);
+          });
+        }
+        return HttpResponse.json(ORDERS);
+      }),
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        puts += 1;
+        savedRequests.push((await request.json()) as ReplaceOrderRequest);
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    // The `POST` has landed and the run is inside the re-read that follows it, which is
+    // where it will be waiting when the answer to the prompt arrives.
+    await screen.findByText("created · its line is not saved yet");
+    await waitFor(() => expect(reads).toBe(2));
+
+    const leaving = router.navigate(`/shops/${SHOP_ID}/orders`);
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+
+    // The save's write has landed and it is now inside a re-read of its own.
+    await waitFor(() => expect(reads).toBe(3));
+    expect(puts).toBe(1);
+
+    // The run's read, while the save's is still held: the run resumes here or nowhere.
+    holding[0]();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(puts).toBe(1);
+
+    holding[1]();
+    await act(async () => {
+      await leaving;
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(puts).toBe(1);
+    expect(createdOrders).toHaveLength(1);
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`);
+  });
+
+  /**
+   * Where the number has to be burnt: before this hand's own write, not after it.
+   *
+   * The run that needs standing down here is not the one with a write in the air. That one is
+   * joined, and `save` resumes before it either way round — the run awaits the promise
+   * `complete` returns, `save` awaits the write itself — so the joined case proves nothing
+   * about placement. It is the run parked in the listing read that follows its `POST`. That
+   * read is a *macrotask*: it can answer while this Save's own `PUT` is still on its way, and
+   * a run that found its number intact there would resume into the write it was about to make
+   * and navigate on top of the hand that is leaving.
+   *
+   * So this case holds the save's write open and answers the run's read underneath it, which
+   * is an ordering every other case here avoids by letting the write settle first.
+   *
+   * Fails against a `save` that burns the number after its await: a second `PUT`.
+   */
+  it("burns the run's number before its own write, not after it", async () => {
+    const user = userEvent.setup();
+    let puts = 0;
+    let reads = 0;
+    let releaseWrite = () => {};
+    const writeHeld = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    const holding: (() => void)[] = [];
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
+        reads += 1;
+        if (reads > 1) {
+          await new Promise<void>((resolve) => {
+            holding.push(resolve);
+          });
+        }
+        return HttpResponse.json(ORDERS);
+      }),
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        puts += 1;
+        const body = (await request.json()) as ReplaceOrderRequest;
+        await writeHeld;
+        savedRequests.push(body);
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    // The run is parked in the re-read that follows its `POST`, which is before its own
+    // write: there is nothing in flight for the Save below to join.
+    await screen.findByText("created · its line is not saved yet");
+    await waitFor(() => expect(reads).toBe(2));
+
+    const leaving = router.navigate(`/shops/${SHOP_ID}/orders`);
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+
+    // The Save's own write has reached the lab and is held there, unanswered.
+    await waitFor(() => expect(puts).toBe(1));
+
+    // And now the read the run is parked in answers, underneath that write. This is the
+    // window, and the run has to find its number already gone.
+    holding[0]();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(puts).toBe(1);
+
+    // The rest runs out as it would: the write lands, the Save re-reads, the operator leaves.
+    releaseWrite();
+    await waitFor(() => expect(reads).toBe(3));
+    holding[1]();
+    await act(async () => {
+      await leaving;
+    });
+    expect(puts).toBe(1);
+    expect(savedRequests).toHaveLength(1);
+    expect(createdOrders).toHaveLength(1);
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`);
+  });
+
+  /**
+   * A refused Save and leave hands the page back. It must not hand the run back with it.
+   *
+   * The Save that was refused stood a run down to make its own write — a run suspended in the
+   * re-read that follows the `POST`, which had not reached its write yet — and it then has to
+   * restore the page, because the operator is still here with a Create to press again. A
+   * single flag cannot do both: *stood down* and *free to run* are one value in it, so the
+   * suspended run resumes into the write it was going to make, sends a second `PUT`, and
+   * navigates somebody reading *that did not save* into the editor of what they were leaving.
+   * A number can: the run holds the one it took, and a retry press takes a fresh one rather
+   * than reviving anybody.
+   *
+   * Fails against a `save` that restores the run's licence on a refusal: two `PUT`s, and the
+   * page the operator is reading goes out from under them.
+   */
+  it("leaves the run it stood down standing down when its own save is refused", async () => {
+    const user = userEvent.setup();
+    let puts = 0;
+    let reads = 0;
+    const holding: (() => void)[] = [];
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, async () => {
+        reads += 1;
+        if (reads > 1) {
+          await new Promise<void>((resolve) => {
+            holding.push(resolve);
+          });
+        }
+        return HttpResponse.json(ORDERS);
+      }),
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, () => {
+        puts += 1;
+        return HttpResponse.json(
+          { code: "invalid", message: "That line is not in the catalog.", request_id: "r" },
+          { status: 422 },
+        );
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+
+    // The `POST` has landed and the run is suspended in the re-read that follows it, which
+    // is before its own write: there is nothing in flight for the Save below to join.
+    await screen.findByText("created · its line is not saved yet");
+    await waitFor(() => expect(reads).toBe(2));
+
+    const leaving = router.navigate(`/shops/${SHOP_ID}/orders`);
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+
+    // The Save wrote for itself and was refused. The navigation stays pending and the prompt
+    // says so, which is the state the operator is left reading.
+    await waitFor(() => expect(puts).toBe(1));
+    expect(await within(prompt).findByText(/did not save/i)).toBeVisible();
+
+    // And now the read the run is waiting on answers.
+    holding[0]();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    // It writes nothing and takes nobody anywhere: the operator is still on the create page,
+    // still reading the refusal, with one order and one `PUT` behind them.
+    expect(puts).toBe(1);
+    expect(createdOrders).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Unsaved changes" })).toBeVisible();
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders/new`);
+
+    // And the retry the refusal invites is a run of its own, so the page is not left inert.
+    expect(screen.getByRole("button", { name: "Create order" })).toBeEnabled();
+
+    // Settle the navigation this case left pending rather than leaving it to the teardown.
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    await act(async () => {
+      await leaving;
+    });
+  });
+
+  /**
+   * The residue an abandoned create used to leave, and the reason it no longer does.
+   *
+   * Leaving while the `POST` is in flight registers nothing — there is no order yet to hold
+   * an edit to — so the page simply goes, and the order the lab then makes is a row no
+   * listing has been told about. The run may now say so: `useReading` drops a read whose
+   * subject the shell has moved off, so the `refresh` a stood-down run captured is safe to
+   * call and this is the one thing it still does (ADR 0056, ADR 0059).
+   *
+   * Fails against a run that stands down without re-reading: the index and the rail stay
+   * three until the shop is entered again.
+   */
+  it("re-reads the listing its own create changed, after the operator has walked away", async () => {
+    const user = userEvent.setup();
+    let listed = ORDERS.orders;
+    let release = () => {};
+    let reached = () => {};
+    const posting = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () => HttpResponse.json({ orders: listed })),
+      http.post(`*/api/v1/shops/${SHOP_ID}/orders`, async ({ request }) => {
+        createdOrders.push((await request.json()) as Record<string, unknown>);
+        reached();
+        await held;
+        listed = [
+          ...listed,
+          { ...ORDERS.orders[0], order_id: MADE_ORDER_ID, reference: "NS-10483" },
+        ];
+        return HttpResponse.json(
+          {
+            ...currentOrder,
+            order_id: MADE_ORDER_ID,
+            content: { ...currentOrder.content, reference: "NS-10483", lines: [] },
+          } satisfies ShopOrderResponse,
+          { status: 201 },
+        );
+      }),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await posting;
+
+    // Nothing exists yet, so nothing is unsaved and Cancel asks nothing (ADR 0051).
+    await user.click(screen.getByRole("link", { name: "Cancel" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders`));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    release();
+
+    // The order the lab made is a row of this shop's listing, and the index the operator is
+    // standing on says so without being entered again.
+    await waitFor(() => expect(bodyRows(screen.getByRole("table"))).toBe(4));
+    expect(within(railEntry("Orders")).getByText("4")).toBeVisible();
+  });
+
+  /**
+   * The same read, where it must not land.
+   *
+   * `useReading` orders reads with a counter on which the last-started wins, and a stood-down
+   * run starts its read *after* the shell has already started the new shop's — so the counter
+   * alone would make the shop that was left the answer. What drops it is that its `load` is
+   * no longer the one this holder reads (ADR 0059).
+   *
+   * Fails against a holder that orders reads by when they started and nothing else: the rail
+   * of the shop on screen answers with the rows of the shop that was left.
+   */
+  it("never lands that read on the shop the operator moved to", async () => {
+    const user = userEvent.setup();
+    let release = () => {};
+    let reached = () => {};
+    const posting = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/orders`, async ({ request }) => {
+        createdOrders.push((await request.json()) as Record<string, unknown>);
+        reached();
+        await held;
+        return HttpResponse.json(currentOrder, { status: 201 });
+      }),
+      http.get(`*/api/v1/shops/${OTHER_SHOP_ID}/draft`, () =>
+        HttpResponse.json({
+          shop_id: OTHER_SHOP_ID,
+          lifecycle_state: "draft",
+          content: SHOP_CONTENT,
+          created_at: "2026-08-23T12:00:00+00:00",
+          updated_at: "2026-08-23T12:05:00+00:00",
+        } satisfies ShopDraftResponse),
+      ),
+      http.get(`*/api/v1/shops/${OTHER_SHOP_ID}/draft/preview`, () =>
+        HttpResponse.json({
+          shop_id: OTHER_SHOP_ID,
+          publishable: false,
+          issues: [],
+          changes: [],
+          content_fingerprint: "d".repeat(64),
+          latest_published_version: null,
+          next_version: 1,
+          matches_latest_published: false,
+          content: SHOP_CONTENT,
+        } satisfies ShopPreviewResponse),
+      ),
+    );
+    const { router } = await newOrder();
+    await fillOrder(user);
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await posting;
+
+    // The same shell, another shop — and nothing to ask about, because the `POST` has not
+    // answered and this page holds no edit to anything that exists.
+    await act(async () => {
+      await router.navigate(`/shops/${OTHER_SHOP_ID}/orders`);
+    });
+    await waitFor(() => expect(within(railEntry("Orders")).getByText("0")).toBeVisible());
+
+    release();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    // The shop that was left holds three orders and one more now. Neither figure is this
+    // shop's, and neither reaches its rail.
+    expect(within(railEntry("Orders")).getByText("0")).toBeVisible();
+    expect(within(railEntry("Orders")).queryByText("3")).toBeNull();
+    expect(within(railEntry("Orders")).queryByText("4")).toBeNull();
+  });
+
   it("keeps the reference and the retry when the listing it re-reads fails", async () => {
     const user = userEvent.setup();
     let reads = 0;

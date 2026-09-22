@@ -714,9 +714,10 @@ describe("the new-judge page", () => {
 
   it("stands the running write down when the operator discards it and leaves", async () => {
     // `submit` is a plain async continuation and outlives this page, so every await in it is
-    // a place to leave from. A run that kept going would re-read a listing through a closure
-    // belonging to a shell nobody is standing in and navigate somebody who has gone
-    // elsewhere into an editor (ADR 0051's "Discard throws each piece away").
+    // a place to leave from. A run that kept going would write again and navigate somebody
+    // who has gone elsewhere into an editor (ADR 0051's "Discard throws each piece away").
+    // What it may still do is re-read the listing its own write changed: a captured `refresh`
+    // is dropped rather than landed where the shell has moved on (ADR 0059).
     const user = userEvent.setup();
     const { held, release } = heldOpen();
     server.use(
@@ -753,10 +754,11 @@ describe("the new-judge page", () => {
     await waitFor(() => expect(completed).toHaveLength(1));
     await everyRemainingTurn();
 
-    // The write that was already in the air lands, and the run that sent it does nothing
-    // else: no third read of the listing, and no navigation into the editor of the judge
-    // the operator walked away from.
-    expect(listingReads).toBe(2);
+    // The write that was already in the air lands, and the run that sent it reads the row it
+    // changed back — the rubric is on the judge now, whether or not anybody stayed to watch
+    // it land (ADR 0056: the rule is about what the surface did). What it does not do is take
+    // an operator who has gone into the editor of the judge they walked away from.
+    expect(listingReads).toBe(3);
     expect(screen.getByRole("heading", { level: 1, name: "Judges" })).toBeVisible();
     expect(screen.queryByRole("heading", { level: 1, name: "Tone" })).toBeNull();
   });

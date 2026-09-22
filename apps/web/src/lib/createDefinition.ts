@@ -6,22 +6,25 @@ import { useRegisterUnsavedWork } from "./unsavedWork";
 /**
  * A create whose page asks for more than the create request can carry (PLAN-UX Slice 13).
  *
- * Four of the lab's definitions are created by a `POST` that takes a name and, for a
- * configuration, the identity it adopts. Everything else about the first draft — the
- * framework and the model, the rubric, a block's assessment and its parameters — lives in
- * the payload a `PUT` replaces, because the contract says so: *"A block is created with its
- * name only; everything else is decided in the editor."* The plan puts some of those answers
- * on the create page anyway, because they are what constrains the work that follows, so the
- * page makes the definition and then completes it.
+ * Six of the lab's authored objects are created by a `POST` that takes little more than a
+ * name — for a configuration the identity it adopts, for a scenario the ticket it is built
+ * on, for an order the customer and the day it was placed. Everything else about the first
+ * draft — the framework and the model, the rubric, a block's assessment and its parameters,
+ * an order's line and its shipping address — lives in the payload a `PUT` replaces, because
+ * the contract says so: *"A block is created with its name only; everything else is decided
+ * in the editor."* The plan puts some of those answers on the create page anyway, because
+ * they are what constrains the work that follows, so the page makes the object and then
+ * completes it.
  *
- * `NewOrderPage` proved the shape in Slice 12 and states the reasoning; this is that shape
- * with three more consumers, so the rules below are written once rather than four times.
- * The order page keeps its own copy: it refreshes its listing between the two writes to feed
- * a reference suggestion, freezes its Customer select once the `POST` lands, and reads the
- * created order's own reference back into its title — three behaviours that are the order
- * fixture's rather than this pattern's.
+ * `NewOrderPage` proved the shape in Slice 12 and stated the reasoning; the four definition
+ * pages took it in Slice 13, the scenario page became the fifth, and the order page has now
+ * folded its own copy onto this one. Its three particulars are accommodated here rather than
+ * kept apart: the listing is re-read *between* the two writes, which every consumer wants and
+ * the order page needs for its reference suggestion; `made` is handed back, so a page can
+ * freeze what the create froze and read what the lab called it; and `owes` is asked of the
+ * draft that was made rather than of the form.
  *
- * Four rules, each of them load-bearing:
+ * Five rules, each of them load-bearing:
  *
  * - **The second write is sent only where it is owed.** `compose` answers with the whole
  *   draft the form is asking for, built over what the lab actually made; where those are the
@@ -36,8 +39,16 @@ import { useRegisterUnsavedWork } from "./unsavedWork";
  *   keeping a write idempotent.
  * - **The run stands down when the operator leaves.** `run` is a plain async continuation
  *   that outlives the component, so every await in it is a place to leave from; a run that
- *   kept going would write again, re-read a listing through a closure belonging to a shell
- *   nobody is standing in, and navigate somebody who has gone elsewhere into an editor.
+ *   kept going would write again and navigate somebody who has gone elsewhere into an
+ *   editor. What it still does on the way down is re-read the listing wherever it has already
+ *   changed what that listing answers — its `POST`, and a `PUT` that landed — because
+ *   ADR 0056's rule is about what the surface *did* rather than about whether it finished. A
+ *   captured `refresh` is safe to call from anywhere: `useReading` drops a read whose subject
+ *   the shell has moved off (ADR 0059).
+ * - **There is one second write, whoever is waiting for it.** The run holds its `PUT` where
+ *   the registered `save` can find it, so *Save and leave* joins the write already on its
+ *   way instead of sending a second one — and stands the run down as it joins, so the two
+ *   cannot both decide what happens when it lands (ADR 0051).
  */
 export interface Created<PayloadT> {
   /** The identifier the lab gave it, which its editor is addressed by. */
@@ -62,8 +73,22 @@ export interface CreateSpec<PayloadT> {
   refresh: () => Promise<void>;
   /** Where the editor of what was made lives. */
   editorAt: (id: string) => string;
-  /** What the unsaved-work register calls the answers the second write still owes. */
-  owes: string;
+  /**
+   * What the unsaved-work register calls the answers the second write still owes.
+   *
+   * Asked with the draft the lab made, for the one consumer that reads it. An order is named
+   * by a reference the `POST` answers with, and that page's own field can be retyped after a
+   * refusal, so a label built from the field would name an order the lab does not hold.
+   *
+   * The others build their label from their form and ignore the argument. Only the two block
+   * libraries make that watertight, by freezing their Name once the create lands; the agent
+   * configuration, the judge and the scenario leave theirs open — what those three freeze is
+   * what the create request froze and the second write cannot move, the adopted identity and
+   * the ticket — so a name retyped after a refusal does label their prompt with a name the lab
+   * was never told. That is those pages' residue rather than this hook's, and the argument is
+   * here for whoever closes it.
+   */
+  owes: (made: PayloadT) => string;
   /**
    * What the chip beside the create page's title says while that is true.
    *
@@ -77,7 +102,7 @@ export interface CreateSpec<PayloadT> {
   whenCompleteFails: string;
 }
 
-export interface Creating {
+export interface Creating<PayloadT> {
   /** The create page's `<form>` submit handler, refusal included. */
   submit: (event: FormEvent<HTMLFormElement>) => void;
   busy: boolean;
@@ -87,14 +112,16 @@ export interface Creating {
   /** Why Create cannot be pressed, resolved against whether the definition exists yet. */
   blockedBy?: string;
   /**
-   * True once the first write has landed.
+   * What the first write made, or `null` while it has made nothing.
    *
-   * A page reads it to freeze the answers that write froze — what the create request carried
-   * and the page's second write cannot move — for the reason the order page fixes its
-   * Customer select: a control that still looks like a question is a control lying about
-   * what the lab holds.
+   * A page reads it for two things. That it is there at all is what freezes the answers the
+   * create froze — what the request carried and the second write cannot move — for the
+   * reason the order page fixes its Customer select: a control that still looks like a
+   * question is a control lying about what the lab holds. And what is in it is what the lab
+   * decided: the order page reads the reference back out of it, so a field emptied after a
+   * refusal is handed the name the order actually has rather than a fresh guess.
    */
-  created: boolean;
+  made: Created<PayloadT> | null;
 }
 
 /**
@@ -115,13 +142,14 @@ export function useCreateThenComplete<PayloadT>(
   /**
    * Why Create cannot be pressed, which is also why a submitted form does nothing.
    *
-   * Asked with whether the definition already exists, because a refusal read off a listing
-   * has to stop counting what this page has just written: the listing is re-read the moment
-   * the first write lands, so a create page refusing "that name is taken" would refuse the
-   * retry of its own create, by itself.
+   * Asked with what the first write made, because a refusal read off a listing has to stop
+   * counting what this page has just written: the listing is re-read the moment that write
+   * lands, so a create page refusing "that name is taken" would refuse the retry of its own
+   * create, by itself. Most pages only need to know whether it exists; the order page reads
+   * its id, to take its own row back out of the references it calls taken.
    */
-  blocked: (created: boolean) => string | undefined,
-): Creating {
+  blocked: (made: Created<PayloadT> | null) => string | undefined,
+): Creating<PayloadT> {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,19 +165,71 @@ export function useCreateThenComplete<PayloadT>(
    * prompt would ask about the definition the operator is being taken to (ADR 0051).
    */
   const landed = useRef(false);
-  /** Set when this run must stand down: the operator left, or somebody else finished it. */
-  const stopped = useRef(false);
+  /**
+   * Which run may still act.
+   *
+   * `run` is a plain async continuation that outlives the component, so every await in it is a
+   * place the operator can leave from, and something has to tell a run that resumes there that
+   * it is no longer the one. A boolean cannot: *stood down* and *free to run* are the same
+   * value in it, so a `save` that stands a run down and is then refused — which leaves the
+   * operator here with a retry to press, and so has to hand the page back — would hand the
+   * licence back to the run it stood down as well. That run would resume into the write it was
+   * going to make, send a second `PUT`, and navigate an operator who is reading *that did not
+   * save* into the editor of what they were leaving: the defect this pattern exists to remove,
+   * in a narrower window.
+   *
+   * A number separates the two. Each run takes the next one as it starts and holds it against
+   * this ref before acting on anything it awaited; leaving the page, discarding, and the
+   * prompt's own Save each burn the current number, so whoever held it never acts again; and a
+   * retry press takes a fresh one rather than reviving anybody.
+   */
+  const generation = useRef(0);
+  /**
+   * The second write while it is on its way, so there is only ever one of it.
+   *
+   * The registered `save` and the run both owe the same `PUT`, and the run's is usually the
+   * one already in flight — it started first. A `save` that wrote again would send a second
+   * idempotent `PUT` and, worse, leave two continuations each deciding what happens when a
+   * write lands: the run resuming first navigates into the editor, the router resets every
+   * blocker as it goes, and the prompt's `proceed()` then throws out of a promise nobody is
+   * holding (ADR 0051). So the write is put here and joined rather than repeated.
+   */
+  const writing = useRef<Promise<string | null> | null>(null);
   useEffect(() => {
-    // Reset on mount as well as set on unmount, because `StrictMode` runs the pair twice.
-    stopped.current = false;
+    // Leaving burns whatever number is current, which stands down a run in flight. Nothing is
+    // reset on mount: a run started after one takes a number higher than every number burnt
+    // before it, which is also what makes `StrictMode`'s double mount a non-event.
     return () => {
-      stopped.current = true;
+      generation.current += 1;
     };
   }, []);
 
-  const blockedBy = blocked(made !== null);
+  const blockedBy = blocked(made);
+
+  /**
+   * The second write, held where a joiner can find it. Answers the refusal, or `null`.
+   *
+   * It never rejects, because both of the things waiting for it want the same answer and
+   * neither of them wants a rejection: the refusal is the value.
+   */
+  async function complete(id: string, payload: PayloadT): Promise<string | null> {
+    const write = spec
+      .replace(id, payload)
+      .then(() => null)
+      .catch((cause: unknown) => describeApiError(cause, spec.whenCompleteFails));
+    writing.current = write;
+    const refused = await write;
+    if (writing.current === write) {
+      writing.current = null;
+    }
+    return refused;
+  }
 
   async function run() {
+    generation.current += 1;
+    const mine = generation.current;
+    /** Whether this run is still the one the page is waiting for. */
+    const standing = () => generation.current === mine;
     setBusy(true);
     setError(null);
     let created = made;
@@ -161,16 +241,20 @@ export function useCreateThenComplete<PayloadT>(
         setBusy(false);
         return;
       }
-      // The definition exists but the operator has gone: this run writes, reads and
-      // navigates nothing further. Calling `refresh` from here is the one thing that must
-      // not happen — the shell that closure belongs to may be showing something else by now.
-      if (stopped.current) {
+      // The definition exists but the operator has gone: this run writes and navigates
+      // nothing further. It does re-read the listing, because the row is there whether or
+      // not anybody is standing in front of it — and this is the read that was missing, the
+      // one whose absence left the rail and the index a row short until the shop was
+      // entered again. The closure is safe wherever it was captured: `useReading` drops a
+      // read whose subject the shell has moved off (ADR 0056, ADR 0059).
+      if (!standing()) {
+        await spec.refresh();
         return;
       }
       setMade(created);
       setOwed(!sameDraft(spec.compose(created.draft), created.draft));
       await spec.refresh();
-      if (stopped.current) {
+      if (!standing()) {
         return;
       }
     }
@@ -178,17 +262,23 @@ export function useCreateThenComplete<PayloadT>(
     // lands.
     const payload = spec.compose(created.draft);
     if (!sameDraft(payload, created.draft)) {
-      try {
-        await spec.replace(created.id, payload);
-      } catch (cause: unknown) {
-        if (stopped.current) {
-          return;
+      const refused = await complete(created.id, payload);
+      // Either the operator has gone, or the prompt's Save burnt this run's number as it
+      // joined this very write and owns what happens now, refusal included. Two hands on one
+      // answer is the whole defect, so this one lets go — and re-reads on the way down if its
+      // write landed, because a landed `PUT` changed the row the index prints whether or not
+      // anybody stayed to see it (ADR 0056). In the joined case the Save re-reads too; the
+      // two are reads of the same listing and the later one wins, which costs one request and
+      // can answer nothing different (ADR 0059).
+      if (!standing()) {
+        if (refused === null) {
+          await spec.refresh();
         }
-        setError(describeApiError(cause, spec.whenCompleteFails));
-        setBusy(false);
         return;
       }
-      if (stopped.current) {
+      if (refused !== null) {
+        setError(refused);
+        setBusy(false);
         return;
       }
       // Nothing is unsaved from here: the page must not stand in the way of any navigation,
@@ -197,7 +287,7 @@ export function useCreateThenComplete<PayloadT>(
       setOwed(false);
       // The row the index prints carries what that write changed.
       await spec.refresh();
-      if (stopped.current) {
+      if (!standing()) {
         return;
       }
     }
@@ -219,18 +309,38 @@ export function useCreateThenComplete<PayloadT>(
     made === null || !owed
       ? null
       : {
-          label: spec.owes,
+          label: spec.owes(made.draft),
           reaches: () => landed.current,
           save: async () => {
-            try {
-              await spec.replace(made.id, spec.compose(made.draft));
-            } catch (cause: unknown) {
-              return describeApiError(cause, spec.whenCompleteFails);
+            // The run's own `PUT` may already be on its way; this joins it rather than
+            // sending a second.
+            //
+            // The number is burnt *here*, before the await, for the case where there is
+            // nothing to join. The run is then parked in the listing read that follows its
+            // `POST` — a macrotask, which can answer while this hand's own write is still in
+            // flight — and a run that found its number intact would resume into the write it
+            // was about to make and navigate on top of this one. Burning it once the answer
+            // arrived would be too late for exactly that run, which is the ordering
+            // `burns the run's number before its own write, not after it` stages.
+            //
+            // The joined case is safe either way, so it is not the reason: `save` resumes
+            // before the run does, because the run awaits the promise `complete` returns and
+            // this awaits the write itself.
+            const joined = writing.current;
+            generation.current += 1;
+            const refused = await (joined ?? complete(made.id, spec.compose(made.draft)));
+            if (refused !== null) {
+              // Nothing was finished, so the page is handed back as a refused press leaves
+              // it: the reason under the button and a Create that can be pressed again. The
+              // run stays down — a retry takes a number of its own, so nothing here has to
+              // hand a licence back to a continuation that was told to let go.
+              setError(refused);
+              setBusy(false);
+              return refused;
             }
-            // Done, by this hand rather than by the run that started it: that run stands
-            // down so it cannot write a second time or navigate somebody who is leaving.
+            // Done, by this hand rather than by the run that started it: that run stays
+            // stood down so it cannot navigate somebody who is leaving.
             landed.current = true;
-            stopped.current = true;
             setOwed(false);
             await spec.refresh();
             return null;
@@ -238,7 +348,7 @@ export function useCreateThenComplete<PayloadT>(
           // Thrown away, as ADR 0051 says Discard throws every piece away. What the lab
           // already holds stays as it is, and the run that was completing it writes no more.
           discard: () => {
-            stopped.current = true;
+            generation.current += 1;
           },
         },
   );
@@ -258,6 +368,6 @@ export function useCreateThenComplete<PayloadT>(
     // navigation is still in flight when it does.
     standing: made === null ? undefined : owed ? spec.standing : "created",
     blockedBy,
-    created: made !== null,
+    made,
   };
 }

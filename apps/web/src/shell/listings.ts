@@ -32,7 +32,13 @@ export interface Reading<Value> {
   /** True until a read settles. A refresh does not raise it; a superseding read can. */
   loading: boolean;
   error: string | null;
-  /** Read it again. For a surface that has just changed what the read answers. */
+  /**
+   * Read it again. For a surface that has just changed what the read answers.
+   *
+   * Safe to hold on to and safe to call late: a continuation that outlived the surface it
+   * was started on can call the `refresh` it captured, and the read is dropped rather than
+   * landed if this holder has moved on to another subject since (ADR 0059).
+   */
   refresh: () => Promise<void>;
 }
 
@@ -80,12 +86,31 @@ function useReading<Value>(
    * last wins, whichever kind started it.
    */
   const started = useRef(0);
+  /**
+   * The subject this holder is reading now, so a read can say whether it is still reading it.
+   *
+   * The counter above orders reads *against each other* and says nothing about what they are
+   * reads of. That is the half a `refresh` captured by a continuation falls through: a create
+   * page's run outlives its page, and the `refresh` it holds belongs to the listing the page
+   * was opened in, which may not be the one this holder reads by the time the run gets to it.
+   * Starting last, such a read would win exactly where it should lose — which is why both
+   * create paths used to forbid calling a captured `refresh` at all (ADR 0059).
+   *
+   * So a read is dropped when `load` is no longer this holder's, and it is dropped **before**
+   * it takes a number: a stale read that counted would make the current read no longer the
+   * last-started and strand the listing on the subject it is actually showing.
+   */
+  const subject = useRef(load);
 
   const read = useCallback(
     async (signal?: AbortSignal) => {
+      if (subject.current !== load) {
+        return;
+      }
       started.current += 1;
       const at = started.current;
-      const current = () => started.current === at && signal?.aborted !== true;
+      const current = () =>
+        started.current === at && signal?.aborted !== true && subject.current === load;
       try {
         const next = await load(signal);
         if (!current()) {
@@ -110,13 +135,16 @@ function useReading<Value>(
   // `load` changes when the thing being read changes — a different shop, in practice — so the
   // held answer is dropped rather than shown against the new subject for a frame.
   useEffect(() => {
+    // Before the read below and before anything else can start one: from here, this is what
+    // this holder is a reading of, and every read of anything else answers to nobody.
+    subject.current = load;
     const controller = new AbortController();
     setValue(null);
     setSettled(false);
     setError(null);
     void read(controller.signal);
     return () => controller.abort();
-  }, [read]);
+  }, [read, load]);
 
   const refresh = useCallback(() => read(), [read]);
 

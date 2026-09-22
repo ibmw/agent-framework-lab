@@ -114,6 +114,17 @@ export function clampQuantity(value: string, current: number): number {
   return Math.min(Math.max(parsed, MIN_LINE_QUANTITY), MAX_LINE_QUANTITY);
 }
 
+/**
+ * The instant a `date` input's calendar day names, at midday in the author's own zone.
+ *
+ * The contract wants an explicit offset and the control answers with a bare day, so the
+ * browser resolves it once — at midday, so that neither end of the day crosses into another
+ * one wherever the author is reading from.
+ */
+export function placedAt(day: string): string {
+  return new Date(`${day}T12:00`).toISOString();
+}
+
 /** Today as a `date` input value, in the author's own zone rather than UTC. */
 export function todayInput(): string {
   return toLocalInput(new Date().toISOString()).slice(0, 10);

@@ -6,7 +6,7 @@ import type {
   ShopVersionListResponse,
   ShopVersionResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -2054,6 +2054,77 @@ describe("unsaved work is protected", () => {
 
     await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Lab settings" })).toBeVisible();
+  });
+
+  /**
+   * *Save and leave* awaits the write, and the question it was asked can stop being the
+   * pending one in that interval.
+   *
+   * A navigation that strands nothing is let through while the prompt is still saving — a
+   * surface that can save the same draft, or a continuation of the page's own that reaches
+   * its destination — and `@remix-run/router` resets every blocker to idle as it completes
+   * that navigation. The `proceed` the prompt was drawn with then belongs to a blocker that
+   * is no longer blocked: the router permits `blocked -> proceeding` and not
+   * `unblocked -> proceeding`, and calling it throws that transition by name out of a promise
+   * the click handler voided.
+   *
+   * Fails against a prompt that proceeds through the blocker it captured: an unhandled
+   * `Invalid blocker state transition: unblocked -> proceeding`.
+   */
+  it("proceeds through no blocker the router has already reset", async () => {
+    const user = userEvent.setup();
+    const unhandled: unknown[] = [];
+    const note = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", note);
+    try {
+      let release = () => {};
+      let reached = () => {};
+      const writing = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      server.use(
+        http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+          reached();
+          await held;
+          const body = (await request.json()) as { payload: SavedShopPayload };
+          savedDrafts.push(body.payload);
+          return HttpResponse.json(draft(currentContent));
+        }),
+      );
+      const { router } = renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+      await user.type(await screen.findByLabelText("Description"), " Taped seams.");
+
+      // Orders cannot save this draft, so the guard asks on the way out.
+      await user.click(rail().getByRole("link", { name: "Orders" }));
+      const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+      await writing;
+
+      // Products *can* save it, so going there strands nothing and the router completes the
+      // navigation — resetting the blocker this prompt is still holding a `proceed` for.
+      await act(async () => {
+        await router.navigate(`/shops/${SHOP_ID}/products`);
+      });
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products`);
+
+      release();
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      // The draft was saved, the operator is where the second navigation took them, and the
+      // prompt's continuation threw nothing on its way out.
+      expect(unhandled).toEqual([]);
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products`);
+    } finally {
+      process.off("unhandledRejection", note);
+    }
   });
 });
 
