@@ -270,8 +270,9 @@ that produced it.
 
 #### Slice 27 — Debts the pattern slices reported
 
-The three defects `docs/decisions-and-next-step.md` lists, each behaviour a layout or copy slice
-was right to leave and a plan is wrong to leave longer.
+The three workspace defects `docs/decisions-and-next-step.md` lists — the product editor's
+category, the shop slug, and the three widths — each behaviour a layout or copy slice was right to
+leave and a plan is wrong to leave longer.
 
 - [ ] The product editor's category offers the draft's categories, and `PRODUCT_CATEGORY_RULE`
   lands on the row (the test that pins the row bare is inverted, and the rule leaves

@@ -241,11 +241,14 @@ one can is a verdict over gates that page does not read. It should not be built.
 ## Where the work stands
 
 Milestones 0 to 7 are delivered (ADR 0011 to ADR 0049), together with the 13 September UX plan's
-Slices 1–8 (ADR 0050, ADR 0051) and the workspace refresh's eight pattern slices. ADR 0052 and
-ADR 0053 are accepted ahead of their code. The open work is `docs/PLAN.md` Milestone 8, planned
-slice by slice in `docs/PLAN-UX.md`; its first slice, the lab as a mode, goes alone because every
-later slice is written against the routes it leaves. The narrative of how each milestone was
-reached is `docs/history/PLAN.md`.
+Slices 1–8 (ADR 0050, ADR 0051) and the workspace refresh's eight pattern slices. The open work is
+`docs/PLAN.md` Milestone 8, planned slice by slice in `docs/PLAN-UX.md`. Its first slice went alone
+because every later slice is written against the routes it leaves, and it has landed with them
+(ADR 0054); so have the screens its Group B recomposes (ADR 0055 to ADR 0058), all but the model
+connection and the provider that needs it — Slices 19 and 20, which ADR 0052 and ADR 0053 are
+accepted ahead of. Group C, the behaviour the prototype specifies on every screen at once, depends
+on nothing in Group B and can start now. The narrative of how each milestone was reached is
+`docs/history/PLAN.md`.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.
