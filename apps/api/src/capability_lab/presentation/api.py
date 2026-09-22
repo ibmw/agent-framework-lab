@@ -87,6 +87,12 @@ from capability_lab.application.judge_configurations import (
 from capability_lab.application.judge_runs import ExperimentJudgeService, JudgeUnpublishedError
 from capability_lab.application.judge_runtime import JudgeRuntimeRegistry, JudgeUnavailableError
 from capability_lab.application.judgements import JudgementConflictError
+from capability_lab.application.model_connections import (
+    CredentialDecryptionError,
+    CredentialEncryptionUnavailableError,
+    ModelConnectionService,
+    ModelEndpointProbe,
+)
 from capability_lab.application.order_actions import (
     ActionConfirmationError,
     ActionConflictError,
@@ -178,6 +184,7 @@ from capability_lab.domain.definitions import DefinitionLifecycleError
 from capability_lab.domain.entities import MAX_SCENARIO_SEED, ConversationSession
 from capability_lab.domain.experiment import ExperimentConfigurationError
 from capability_lab.domain.judge import JudgeConfigurationError
+from capability_lab.domain.model_connection import ModelConnectionConfigurationError
 from capability_lab.domain.order_fixture import (
     OrderFixtureConfigurationError,
     OrderTransitionError,
@@ -193,11 +200,13 @@ from capability_lab.infrastructure.agents.registry import (
 )
 from capability_lab.infrastructure.clock import SystemClock
 from capability_lab.infrastructure.config import Settings, get_settings
+from capability_lab.infrastructure.credentials import create_credential_cipher
 from capability_lab.infrastructure.database import (
     create_database_engine,
     create_session_factory,
     session_scope,
 )
+from capability_lab.infrastructure.model_endpoints import OpenAiProtocolEndpointProbe
 from capability_lab.infrastructure.participants.human import HumanParticipantDriver
 from capability_lab.infrastructure.participants.scripted import ScriptedParticipantDriver
 from capability_lab.infrastructure.repositories import (
@@ -216,6 +225,7 @@ from capability_lab.infrastructure.repositories import (
     SqlAlchemyExperimentRunRepository,
     SqlAlchemyGeneratedScenarioRepository,
     SqlAlchemyJudgementRepository,
+    SqlAlchemyModelConnectionRepository,
     SqlAlchemyMutationEventRepository,
     SqlAlchemyOrderFixtureRepository,
     SqlAlchemyOrderRepository,
@@ -254,6 +264,7 @@ from capability_lab.presentation.history import ExperimentHistoryRoutes
 from capability_lab.presentation.judge_configurations import JudgeConfigurationRoutes
 from capability_lab.presentation.lab_seed import LabSeedRoutes
 from capability_lab.presentation.lab_status import LabStatusRoutes
+from capability_lab.presentation.model_connections import ModelConnectionRoutes
 from capability_lab.presentation.orders import OrderRoutes
 from capability_lab.presentation.sandboxes import SandboxRoutes
 from capability_lab.presentation.scenarios import ScenarioRoutes
@@ -1258,6 +1269,83 @@ async def _judge_runtime_unavailable_handler(request: Request, error: Exception)
     )
 
 
+_MODEL_CONNECTION_LOCATIONS = {"provider_id": "path.provider_id"}
+"""Where HTTP carried each field a connection refusal can name.
+
+Only the exceptions are listed; everything else a connection refuses is a field of the request
+body. `provider_id` is the one that is not — it is a path segment, and `SaveModelConnectionRequest`
+has no such field, so `body.provider_id` would send a client looking for a control that does not
+exist.
+"""
+
+
+async def _model_connection_configuration_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    """Refuse a connection the lab will not store, naming the field that stopped it.
+
+    The refusal carries the field rather than only a sentence, because an operator typing a
+    base URL into a form needs to know which control to correct. It deliberately never quotes
+    the value: a URL carrying userinfo carries a password, and an error that echoed it would
+    put a credential into a payload, a log line and a browser's history — which is exactly
+    what refusing userinfo exists to prevent (ADR 0052).
+
+    The location is written the way `_validation_error_handler` writes one, which joins
+    FastAPI's own `loc` and therefore says `path.…` for a path parameter and `body.…` for a
+    field of the request body. The domain error knows which field it is about and has no
+    business knowing where HTTP carried it, so the mapping from one to the other lives here —
+    and it matters beyond tidiness, because a client binding a refusal to the control that
+    caused it needs the string to name a control that exists.
+    """
+    field = getattr(error, "field", "base_url")
+    return _error_response(
+        request,
+        status_code=422,
+        code="model_connection_configuration_error",
+        message=str(error),
+        details=[
+            ValidationIssue(
+                location=_MODEL_CONNECTION_LOCATIONS.get(field, f"body.{field}"),
+                message=str(error),
+                type="model_connection_invalid",
+            )
+        ],
+    )
+
+
+async def _credential_encryption_unavailable_handler(
+    request: Request, error: Exception
+) -> JSONResponse:
+    """This lab was asked to store a key it has no way to protect.
+
+    422 and never a silent plaintext write. There is deliberately no default encryption key:
+    a shipped default would be encryption theatre, and theatre is worse than the plain refusal
+    because somebody would believe it. The message names the variable, because the operator's
+    next move is to set it (ADR 0052).
+    """
+    return _error_response(
+        request,
+        status_code=422,
+        code="credential_key_unconfigured",
+        message=str(error),
+    )
+
+
+async def _credential_decryption_handler(request: Request, error: Exception) -> JSONResponse:
+    """The stored key cannot be read back under the encryption key this process holds.
+
+    422 rather than 500: nothing is broken, the environment has changed, and the operator's
+    move is to save the key again — which is also the rotation path, because a lab holding one
+    credential does not need a second mechanism to replace it.
+    """
+    return _error_response(
+        request,
+        status_code=422,
+        code="credential_key_mismatch",
+        message=str(error),
+    )
+
+
 async def _order_not_found_handler(request: Request, error: Exception) -> JSONResponse:
     return _error_response(request, status_code=404, code="order_not_found", message=str(error))
 
@@ -1441,6 +1529,7 @@ def create_app(
     agent_registry: AgentRegistry | None = None,
     agent_runtimes: SupportAgentRuntimeRegistry | None = None,
     judge_runtimes: JudgeRuntimeRegistry | None = None,
+    model_endpoint_probe: ModelEndpointProbe | None = None,
     telemetry: Telemetry | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
@@ -1464,6 +1553,12 @@ def create_app(
     # The same choice, one port over: a test that wants a judge to fail supplies its own
     # registry here rather than reaching into the scoring service.
     judges = judge_runtimes or create_judge_runtimes(settings)
+    # Composition's two choices about the lab's own connection. The cipher is built from the
+    # environment because there is deliberately no default encryption key, and the probe is
+    # injectable for the same reason the registries above are: a suite that wants an endpoint
+    # to refuse supplies one here rather than reaching into the service.
+    credential_cipher = create_credential_cipher(settings)
+    endpoint_probe = model_endpoint_probe or OpenAiProtocolEndpointProbe()
 
     @asynccontextmanager
     async def lifespan(_application: FastAPI) -> AsyncGenerator[None]:
@@ -1557,6 +1652,13 @@ def create_app(
     application.add_exception_handler(JudgeConfigurationError, _judge_configuration_handler)
     application.add_exception_handler(JudgeUnavailableError, _judge_runtime_unavailable_handler)
     application.add_exception_handler(JudgementConflictError, _judgement_conflict_handler)
+    application.add_exception_handler(
+        ModelConnectionConfigurationError, _model_connection_configuration_handler
+    )
+    application.add_exception_handler(
+        CredentialEncryptionUnavailableError, _credential_encryption_unavailable_handler
+    )
+    application.add_exception_handler(CredentialDecryptionError, _credential_decryption_handler)
     application.add_exception_handler(ExperimentTagConflictError, _experiment_tag_conflict_handler)
     application.add_exception_handler(
         PublishedVersionExistsError, _published_version_exists_handler
@@ -1656,6 +1758,15 @@ def create_app(
                 agents,
                 clock,
                 SqlAlchemyOrderRepository(session, clock),
+            )
+
+    def model_connection_service() -> Generator[ModelConnectionService, None, None]:
+        with session_scope(factory) as session:
+            yield ModelConnectionService(
+                SqlAlchemyModelConnectionRepository(session),
+                credential_cipher,
+                endpoint_probe,
+                clock,
             )
 
     def shop_service() -> Generator[ShopService, None, None]:
@@ -2361,6 +2472,7 @@ def create_app(
     JudgeConfigurationRoutes(judge_configuration_service).register(router)
     LabSeedRoutes(settings).register(router)
     LabStatusRoutes(settings).register(router)
+    ModelConnectionRoutes(model_connection_service).register(router)
     ObjectiveBlockRoutes(objective_block_service).register(router)
     MutationBlockRoutes(mutation_block_service).register(router)
     application.include_router(router)

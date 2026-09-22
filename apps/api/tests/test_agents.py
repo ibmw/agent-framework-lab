@@ -226,6 +226,12 @@ SDK_MODULES = (
     "infrastructure/agents/openai_agents/",
     "infrastructure/agents/scripted/runtimes.py",
     "infrastructure/judges/pydantic_ai.py",
+    # And the one module that speaks the provider protocol without running anything: the
+    # connection probe behind `ModelEndpointProbe`, which asks one endpoint whether it is
+    # there and classifies the answer into the lab's own closed table (ADR 0052). Added
+    # deliberately, as this list requires, because it is the same kind of module as the four
+    # above — infrastructure with a port in front of it — reached for a different question.
+    "infrastructure/model_endpoints.py",
 )
 
 

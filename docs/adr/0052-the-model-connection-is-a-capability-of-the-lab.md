@@ -2,6 +2,49 @@
 
 Status: accepted — 2026-09-19
 
+Amendment: 2026-09-22 — two sentences below are narrowed by what implementing them showed.
+
+**The qualification is conditional on the variable holding key material.** "None of them carries
+a usable credential" is true of a copied database only while `AGENT_LAB_CREDENTIAL_KEY` cannot be
+guessed. The key is derived with HKDF-SHA256, which is the right construction over high-entropy
+input and is not a password KDF: one hash per candidate, no work factor, and — with no salt — a
+derived key that is the same function of the same input on every installation. An operator who
+sets a memorable phrase therefore keeps the *process* protection this decision describes and
+loses the *file* protection, which is the half this ADR uses to justify storing a secret at all.
+Nothing in the lab enforces it, and a length check was considered and refused for saying more
+than it can check: it would admit thirty-two identical characters and refuse a 22-character
+base64 of 16 random bytes. So the condition is documented where an operator meets it —
+`.env.example` mints one with `openssl rand -base64 32` — and stated here. Accepting a phrase an
+operator can remember means `Scrypt` or `PBKDF2HMAC` and a per-installation salt inside the
+stored envelope, which is a change to the stored format and so a slice of its own. **An empty
+or blank value is treated as unset**, because the alternative is not a weak key but no key at
+all: the environment delivers `AGENT_LAB_CREDENTIAL_KEY=` as an empty string rather than as an
+absence, and a cipher built on it would key every installation alike on a value anybody can
+derive — while writing ciphertext that persuades the operator otherwise, which is the precise
+shape of the theatre this decision refuses a default for.
+
+**"`http` only for loopback and private hosts" is implemented narrower than it reads**, in three
+ways, all deliberate. The root of the first two is that a standard library's "private" means *in
+IANA's special-purpose registry*, which is not the same set as *on the operator's own network*:
+classifying all 24 entries of CPython's table, all but two are either genuinely local, already
+rewritten as IPv4 before the rule sees them, or not globally reachable at all, and the two that
+are special-purpose **and** carry a packet off the machine in the clear are subtracted here.
+Link-local is one: `169.254.169.254` is the cloud instance-metadata address, `POST …/test`
+makes a server-side call to what it is handed from an unauthenticated route, and nothing is
+hosted on a link-local address on purpose. The IETF protocol assignments `2001::/23` are the
+other, subtracted whole rather than by the teredo `/32` inside them: IANA marks seven blocks in
+that range Globally Reachable — PCP, TURN and DNS-SD SRP anycast, AMT, AS112-v6, ORCHIDv2 and
+DET — and teredo's own packets tunnel over UDP to an ordinarily public IPv4 relay, so any of
+them would carry a typed key off the machine in plaintext, which is the single outcome this
+rule exists to prevent. The block's two non-reachable members, IPv6 benchmarking and deprecated
+ORCHID, are refused with them at no cost to anybody. And a *name* is
+admitted only for `localhost` and `*.localhost`, because a name's privacy is knowable only by
+resolving it and resolving would make a stored, run-pinned value depend on the DNS of the moment
+it was saved — so `http://ollama.internal/v1`, a Compose service name and `http://gpu-box.lan`
+are all refused, which is the commonest self-hosted spelling after `localhost` and is the real
+cost of the rule. Every path out is unchanged in all three cases: https to any host, or an
+address on the network the lab is actually on.
+
 Moves the provider connection — which provider, at which base URL, under which key — out of the
 process environment and into the lab's own database, editable from `/settings`, resolved at the
 moment an arm is advanced rather than at start-up, and pinned onto the run that reached it.
@@ -125,6 +168,11 @@ and to pin:
 - `http` or `https` only; no userinfo, no query string, no fragment;
 - `http` only for loopback and private hosts, so `http://localhost:11434/v1` is accepted and a
   plaintext key crossing the internet is not;
+
+  > Narrowed by the amendment of 2026-09-22. Link-local is refused although the standard
+  > library counts it as private, and among *names* only `localhost` is admitted. The
+  > amendment says why, and what it costs.
+
 - stored normalized, so two spellings of one endpoint compare equal when a run is pinned to it.
 
 ADR 0044 refused to serve the OTLP endpoint because "a collector URL is a place a deployment can
@@ -141,6 +189,11 @@ from `AGENT_LAB_CREDENTIAL_KEY`. **With no such variable set, saving a key is re
 and the environment bootstrap below keeps working. Deliberately unlike `telemetry_hash_salt`, which
 carries a local development default, there is no default here: a shipped default encryption key is
 encryption theatre, and theatre is worse than the plain refusal because somebody would believe it.
+
+> Narrowed by the amendment of 2026-09-22. The first sentence below holds only while
+> `AGENT_LAB_CREDENTIAL_KEY` carries key material rather than a memorable phrase, because HKDF
+> is not a password KDF. The amendment says what a phrase costs and what accepting one would
+> take.
 
 What this buys, said plainly so that nobody has to infer it: a copy of `var/agent-lab.db`, a
 backup, a file dropped into a bug report, a checkout shared between machines — none of them carries

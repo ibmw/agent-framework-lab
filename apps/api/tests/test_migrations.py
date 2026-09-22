@@ -60,6 +60,9 @@ DEFINITION_TABLES = {
     # nor a reading of it.
     "experiment_derivations",
 }
+# The lab's own capability rather than a definition or a POC table: where this installation
+# can be pointed, which is the same kind of fact as the database URL (ADR 0052).
+LAB_TABLES = {"model_connections"}
 POC_TABLES = {
     "action_proposals",
     "customers",
@@ -74,7 +77,7 @@ POC_TABLES = {
     "memory_records",
     "idempotency_records",
 }
-APPLICATION_TABLES = POC_TABLES | DEFINITION_TABLES
+APPLICATION_TABLES = POC_TABLES | DEFINITION_TABLES | LAB_TABLES
 
 # One experiment row, for the suites that need two ends of a foreign key rather than a run.
 EXPERIMENT_ROW = """
@@ -985,3 +988,178 @@ def test_a_run_is_filed_under_one_shelf_only_once(
 
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(tag, {"id": experiment_id, "tag": "read-check-gap"})
+
+
+@pytest.mark.migration
+def test_a_run_recorded_before_the_lab_knew_where_it_pointed_keeps_a_null_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The endpoint column arrives empty on existing evidence, and leaves without damaging it.
+
+    A null here is the truthful record rather than a gap: those rows were produced before the
+    lab knew where it was pointed, and a backfilled value would put an endpoint nobody reached
+    into a run somebody reads. The same null is what a deterministic control arm leaves, which
+    is why the surface renders it as *endpoint not recorded* and never as *offline* (ADR 0052).
+
+    The revision is additive in both directions, so the downgrade is asserted to leave the
+    evidence it found and the upgrade after it to be a second no-op on the same rows.
+    """
+    database_url = f"sqlite:///{tmp_path / 'endpoints.db'}"
+    config = alembic_config(database_url, monkeypatch)
+    command.upgrade(config, "20260907_0020")
+    engine = create_engine(database_url)
+    run_id = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac041"
+    experiment_id = "0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac042"
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO experiment_runs (
+                    run_id, experiment_id, shop_id, position, label,
+                    agent_configuration_id, agent_configuration_version, sandbox_id, created_at
+                ) VALUES (
+                    :run_id, :experiment_id, '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac043', 0, 'Arm A',
+                    '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac044', 1,
+                    '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac045', '2026-09-07 12:00:00.000000'
+                )
+                """
+            ),
+            {"run_id": run_id, "experiment_id": experiment_id},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO experiment_judgements (
+                    run_id, objective_id, attempt, experiment_id, judge_id, judge_version,
+                    provider, model_id, brief_fingerprint, outcome, failure, rationale, created_at
+                ) VALUES (
+                    :run_id, 'read-policy', 1, :experiment_id,
+                    '0a1a1e1c-6f4c-4a1b-9a5d-6f5b4f2ac046', 1, 'fake', 'deterministic',
+                    :fingerprint, 'met', NULL, 'The arm read it.', '2026-09-07 12:00:00.000000'
+                )
+                """
+            ),
+            {"run_id": run_id, "experiment_id": experiment_id, "fingerprint": "a" * 64},
+        )
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT model_base_url FROM experiment_runs WHERE run_id = :run_id"),
+                {"run_id": run_id},
+            )
+            is None
+        )
+        assert (
+            connection.scalar(
+                text("SELECT model_base_url FROM experiment_judgements WHERE run_id = :run_id"),
+                {"run_id": run_id},
+            )
+            is None
+        )
+    # And a run started afterwards can say where it went.
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE experiment_runs SET model_base_url = :endpoint WHERE run_id = :run_id"),
+            {"endpoint": "http://localhost:11434/v1", "run_id": run_id},
+        )
+
+    command.downgrade(config, "20260907_0020")
+
+    inspector = inspect(engine)
+    assert "model_connections" not in inspector.get_table_names()
+    assert "model_base_url" not in {
+        column["name"] for column in inspector.get_columns("experiment_runs")
+    }
+    assert "model_base_url" not in {
+        column["name"] for column in inspector.get_columns("experiment_judgements")
+    }
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM experiment_runs")) == 1
+        assert connection.scalar(text("SELECT count(*) FROM experiment_judgements")) == 1
+
+    command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT model_base_url FROM experiment_runs WHERE run_id = :run_id"),
+                {"run_id": run_id},
+            )
+            is None
+        )
+
+
+@pytest.mark.migration
+def test_a_stored_connection_holds_a_key_and_its_date_together(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one fact about the key the lab may serve travels in the row that holds the key.
+
+    A date without a key would tell the settings page a credential is installed when none is,
+    which is the one thing this pair exists to answer. A connection with neither is ordinary:
+    a local endpoint that needs no credential is a connection worth saving.
+    """
+    database_url = f"sqlite:///{tmp_path / 'connections.db'}"
+    command.upgrade(alembic_config(database_url, monkeypatch), "head")
+    engine = create_engine(database_url)
+    insert = text(
+        """
+        INSERT INTO model_connections (
+            provider_id, base_url, encrypted_key, key_added_at, created_at, updated_at
+        ) VALUES (
+            :provider_id, :base_url, :encrypted_key, :key_added_at,
+            '2026-09-21 12:00:00.000000', '2026-09-21 12:00:00.000000'
+        )
+        """
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                "provider_id": "openai",
+                "base_url": "http://localhost:11434/v1",
+                "encrypted_key": None,
+                "key_added_at": None,
+            },
+        )
+
+    # The constraint is symmetric, so both directions are exercised: a date claiming a key
+    # that is not there, and a key with no date to serve beside it.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                "provider_id": "dated",
+                "base_url": "https://api.example.com/v1",
+                "encrypted_key": None,
+                "key_added_at": "2026-09-21 12:00:00.000000",
+            },
+        )
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                "provider_id": "undated",
+                "base_url": "https://api.example.com/v1",
+                "encrypted_key": "an-opaque-envelope",
+                "key_added_at": None,
+            },
+        )
+
+    # One row per provider: re-saving replaces, and never files a second endpoint beside it.
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            insert,
+            {
+                "provider_id": "openai",
+                "base_url": "https://api.example.com/v1",
+                "encrypted_key": None,
+                "key_added_at": None,
+            },
+        )

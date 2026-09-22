@@ -5,6 +5,8 @@ description = "Backend foundations for the Agent Framework Capability Lab"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16.4,<2",
+  # The lab stores exactly one secret, and stores it encrypted (ADR 0052).
+  "cryptography>=45,<51",
   "fastapi>=0.116.1,<1",
   "openai-agents>=0.22,<1",
   "opentelemetry-api>=1.37,<2",

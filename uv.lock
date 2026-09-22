@@ -57,6 +57,7 @@ version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
     { name = "alembic" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "openai-agents" },
     { name = "opentelemetry-api" },
@@ -71,6 +72,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.16.4,<2" },
+    { name = "cryptography", specifier = ">=45,<51" },
     { name = "fastapi", specifier = ">=0.116.1,<1" },
     { name = "openai-agents", specifier = ">=0.22,<1" },
     { name = "opentelemetry-api", specifier = ">=1.37,<2" },

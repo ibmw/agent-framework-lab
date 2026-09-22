@@ -95,15 +95,16 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
 The visible half of ADR 0052, in the order ADR 0052 sets: contracts, migration, API, then
 the settings zone.
 
-- [ ] Contract and migration: `model_connections` keyed by provider id, the encrypted key under
+- [x] Contract and migration: `model_connections` keyed by provider id, the encrypted key under
   `AGENT_LAB_CREDENTIAL_KEY`, `key_configured` and `key_added_at` served and nothing else about
   the key, `base_url` validated and normalised at the door; `model_base_url` on runs and
   judgements.
 - [ ] Composition moves to the request: the three factories take a resolved connection, run
   mode becomes a per-request answer, and an advance that would reach a different endpoint than
   the run pinned is refused with 422 naming both.
-- [ ] `POST …/test` sends one throwaway completion and answers with latency and the model, or the
-  refusal; nothing is stored.
+- [x] `POST …/test` makes one cheap call under a short timeout and answers `reachable`,
+  `refused` or `unreachable` with the round trip in milliseconds; nothing is stored. No model:
+  the connection holds none, so there is none to name (ADR 0052).
 - [ ] The *Model provider* zone: provider chips from `lib/modelConnections.ts` (OpenAI, Ollama,
   vLLM, OpenRouter, Together, Custom — presets for a base URL, not providers), Base URL, API key
   (typed to save, "configured on <date>" once saved, Replace; never a mask), Test connection

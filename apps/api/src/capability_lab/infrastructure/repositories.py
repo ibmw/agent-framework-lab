@@ -51,6 +51,7 @@ from capability_lab.application.experiments import (
 )
 from capability_lab.application.judge_configurations import JUDGE_CONFIGURATION_CODEC
 from capability_lab.application.judgements import JudgementConflictError, JudgementRecord
+from capability_lab.application.model_connections import ModelConnectionRecord
 from capability_lab.application.model_cost import ModelUsage
 from capability_lab.application.mutation_events import MutationEvent, MutationEventRecord
 from capability_lab.application.order_actions import ActionProposal, ActionStatus, OrderActionType
@@ -146,6 +147,7 @@ from capability_lab.infrastructure.models import (
     IdempotencyRecordModel,
     JudgementModel,
     MemoryRecordModel,
+    ModelConnectionModel,
     MutationEventModel,
     OrderFixtureModel,
     OrderModel,
@@ -2561,4 +2563,67 @@ class SqlAlchemyExperimentAnnotationRepository:
             experiment_id=UUID(model.experiment_id),
             body=model.body,
             created_at=model.created_at,
+        )
+
+
+class SqlAlchemyModelConnectionRepository:
+    """The lab's connections, one row per provider (ADR 0052).
+
+    Read and written as whole rows rather than field by field: a connection is one statement
+    about where this installation points and under which key, and a partial update would let
+    a base URL and the key that reaches it disagree for the length of a request.
+
+    The stored key never leaves this class as anything but the opaque envelope the cipher
+    produced. Nothing here decrypts, and nothing here decides whether a key may be stored.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, provider_id: str) -> ModelConnectionRecord | None:
+        model = self._session.get(ModelConnectionModel, provider_id)
+        return None if model is None else self._record(model)
+
+    def list_all(self) -> tuple[ModelConnectionRecord, ...]:
+        return tuple(
+            self._record(model)
+            for model in self._session.scalars(
+                select(ModelConnectionModel).order_by(ModelConnectionModel.provider_id)
+            ).all()
+        )
+
+    def upsert(self, record: ModelConnectionRecord) -> None:
+        """Write this provider's connection, whether or not it already held one.
+
+        Idempotent over the provider, which is what makes saving twice safe: the primary key
+        is the provider, so there is exactly one row to find and exactly one to write.
+        """
+        model = self._session.get(ModelConnectionModel, record.provider_id)
+        if model is None:
+            self._session.add(
+                ModelConnectionModel(
+                    provider_id=record.provider_id,
+                    base_url=record.base_url,
+                    encrypted_key=record.encrypted_key,
+                    key_added_at=record.key_added_at,
+                    created_at=record.created_at,
+                    updated_at=record.updated_at,
+                )
+            )
+        else:
+            model.base_url = record.base_url
+            model.encrypted_key = record.encrypted_key
+            model.key_added_at = record.key_added_at
+            model.updated_at = record.updated_at
+        self._session.flush()
+
+    @staticmethod
+    def _record(model: ModelConnectionModel) -> ModelConnectionRecord:
+        return ModelConnectionRecord(
+            provider_id=model.provider_id,
+            base_url=model.base_url,
+            encrypted_key=model.encrypted_key,
+            key_added_at=model.key_added_at,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
         )

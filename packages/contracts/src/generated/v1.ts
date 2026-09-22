@@ -1431,6 +1431,70 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/model-connections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List the providers this lab can be pointed at
+     * @description Every provider the lab has proven it can reach, with the connection it holds or `null`. Reports no fact about a stored key beyond whether one is installed and when it was saved.
+     */
+    get: operations["listModelConnections"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/model-connections/{provider_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read the connection this lab holds for one provider
+     * @description Answers with `connection: null` when nothing is saved, because a lab running on the environment bootstrap alone is a supported state rather than a missing resource. Reports no fact about the stored key.
+     */
+    get: operations["getModelConnection"];
+    /**
+     * Point this lab at one endpoint for one provider
+     * @description Replaces this provider's connection whole, so saving the same values twice leaves one row saying the same thing. The base URL is validated and normalized before it is stored: http or https only, no userinfo, query or fragment, and http only for a loopback or private host. Leaving `api_key` out keeps the stored key; supplying one replaces it, and the key is stored encrypted under AGENT_LAB_CREDENTIAL_KEY. With that variable unset the save is refused with 422 rather than storing a key this lab cannot protect. The connection holds no model: what an experiment runs is its published configuration's model, never this process's.
+     */
+    put: operations["saveModelConnection"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/model-connections/{provider_id}/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Ask one endpoint whether it is reachable, right now
+     * @description Makes one cheap call under a short timeout to the connection in the body — falling back to the saved key when none is supplied — and answers `reachable`, `refused` or `unreachable` with the round trip in milliseconds. Stores nothing: a reachability result is true of a moment, and a stored green tick would be read as a promise the lab cannot keep. Never includes the upstream response body, only the class of the status it answered with.
+     */
+    post: operations["testModelConnection"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/objective-blocks": {
     parameters: {
       query?: never;
@@ -3323,6 +3387,16 @@ export interface components {
       /** Label */
       label: string;
     };
+    /**
+     * HttpStatusClass
+     * @description The class of the status an endpoint answered with, when one answered.
+     *
+     *     A class rather than a code, and never the body. A provider's error text is a string this
+     *     lab did not write and cannot promise the contents of, which is the same rule a tool result
+     *     follows when it refuses to describe a failure in the provider's words.
+     * @enum {string}
+     */
+    HttpStatusClass: "1xx" | "2xx" | "3xx" | "4xx" | "5xx";
     /** InitialStateResponse */
     InitialStateResponse: {
       /** Canonical Schema Version */
@@ -3648,6 +3722,56 @@ export interface components {
      * @enum {string}
      */
     MemoryMode: "none" | "conversation" | "durable";
+    /**
+     * ModelConnectionSchema
+     * @description One saved connection: where the lab points, and *that* a key is installed.
+     */
+    ModelConnectionSchema: {
+      /** Provider Id */
+      provider_id: string;
+      /** Base Url */
+      base_url: string;
+      /** Key Configured */
+      key_configured: boolean;
+      /** Key Added At */
+      key_added_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /**
+     * ModelConnectionTestRequest
+     * @description The connection to test, which need not be the one that is saved.
+     */
+    ModelConnectionTestRequest: {
+      /** Base Url */
+      base_url: string;
+      /** Api Key */
+      api_key?: string | null;
+    };
+    /**
+     * ModelConnectionTestResponse
+     * @description What one throwaway call established, and the whole of what it may report.
+     */
+    ModelConnectionTestResponse: {
+      outcome: components["schemas"]["ModelEndpointOutcome"];
+      /** Latency Ms */
+      latency_ms: number;
+      status_class: components["schemas"]["HttpStatusClass"] | null;
+    };
+    /**
+     * ModelEndpointOutcome
+     * @description What one probe of an endpoint established, and the whole of what it may say.
+     * @enum {string}
+     */
+    ModelEndpointOutcome: "reachable" | "refused" | "unreachable";
     /** ModelSettingsSchema */
     ModelSettingsSchema: {
       /** Provider */
@@ -4475,6 +4599,23 @@ export interface components {
       /** Summary */
       summary: string;
     };
+    /**
+     * ProviderConnectionListResponse
+     * @description Every provider this lab can be pointed at, whether or not one is saved.
+     */
+    ProviderConnectionListResponse: {
+      /** Providers */
+      providers: components["schemas"]["ProviderConnectionSchema"][];
+    };
+    /**
+     * ProviderConnectionSchema
+     * @description A provider that can hold a connection, and the one it holds.
+     */
+    ProviderConnectionSchema: {
+      /** Provider Id */
+      provider_id: string;
+      connection: components["schemas"]["ModelConnectionSchema"] | null;
+    };
     /** RatingSummarySchema */
     RatingSummarySchema: {
       /** Review Count */
@@ -4958,6 +5099,16 @@ export interface components {
       created_at: string;
       /** Updated At */
       updated_at: string;
+    };
+    /**
+     * SaveModelConnectionRequest
+     * @description Where to point the lab, and optionally the key to reach it under.
+     */
+    SaveModelConnectionRequest: {
+      /** Base Url */
+      base_url: string;
+      /** Api Key */
+      api_key?: string | null;
     };
     /**
      * ScenarioBindingSchema
@@ -11217,6 +11368,130 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["LabStatusResponse"];
+        };
+      };
+    };
+  };
+  listModelConnections: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderConnectionListResponse"];
+        };
+      };
+    };
+  };
+  getModelConnection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The provider id the proven-capability tables use, such as `openai`. */
+        provider_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderConnectionSchema"];
+        };
+      };
+      /** @description The provider holds no connection in this lab */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  saveModelConnection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The provider id the proven-capability tables use, such as `openai`. */
+        provider_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SaveModelConnectionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderConnectionSchema"];
+        };
+      };
+      /** @description The provider holds no connection here, the base URL breaks a storage rule, or a key was supplied with no AGENT_LAB_CREDENTIAL_KEY set */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  testModelConnection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description The provider id the proven-capability tables use, such as `openai`. */
+        provider_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelConnectionTestRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelConnectionTestResponse"];
+        };
+      };
+      /** @description The provider holds no connection here, the base URL breaks a storage rule, or the stored key cannot be read back under the current AGENT_LAB_CREDENTIAL_KEY */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
         };
       };
     };

@@ -18,6 +18,21 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./var/agent-lab.db"
     frontend_origin: str = "http://localhost:5173"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    credential_key: SecretStr | None = None
+    """What the lab encrypts a saved provider key with, and deliberately has no default.
+
+    Unlike `telemetry_hash_salt` below, which carries a local development default, there is
+    none here: a shipped default encryption key is encryption theatre, and theatre is worse
+    than the plain refusal because somebody would believe it. With this unset, saving a key is
+    refused with 422 naming the variable and the environment bootstrap keeps working
+    (ADR 0052).
+
+    It holds **key material**, such as `openssl rand -base64 32`, and not a phrase somebody
+    chose. Nothing validates that — see `infrastructure/credentials.py` for why a length check
+    would promise more than it can check — and ADR 0052's qualification states what the
+    difference costs.
+    """
+
     openai_api_key: SecretStr | None = None
     openai_model: Literal["gpt-5-mini"] = "gpt-5-mini"
     otel_exporter_otlp_endpoint: str | None = None

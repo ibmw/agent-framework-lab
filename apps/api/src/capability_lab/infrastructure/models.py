@@ -472,6 +472,22 @@ class ExperimentRunModel(Base):
     agent_configuration_id: Mapped[str] = mapped_column(String(36))
     agent_configuration_version: Mapped[int] = mapped_column(Integer)
     sandbox_id: Mapped[str] = mapped_column(String(36))
+    model_base_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    """The endpoint this arm reached, written on the first advance that reached one.
+
+    Nullable, and a null is the truthful record rather than a gap: the deterministic control
+    reaches no provider at all, and every row written before the lab knew where it was pointed
+    was produced before there was an endpoint to record. A results surface renders that as
+    *endpoint not recorded* and deliberately not as *offline*, because the two are different
+    facts and only one of them is known (ADR 0052).
+
+    Two-thirds of "a recorded run keeps provider, base URL and model" was already true before
+    this column: the run names `agent_configuration_id` and `agent_configuration_version`, and
+    an immutable published version carries the provider and the model. The endpoint is the new
+    third, and duplicating either of the other two here would give a run a second answer that
+    can disagree with its pinned version.
+    """
+
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
 
 
@@ -810,6 +826,14 @@ class JudgementModel(Base):
     outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
     failure: Mapped[str | None] = mapped_column(String(32), nullable=True)
     rationale: Mapped[str] = mapped_column(String(2000))
+    model_base_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    """The endpoint this judge reached, on the same rule as the arm's own column.
+
+    A judge reaches a provider too (ADR 0031), so an execution that cannot say where it went
+    is as unexplainable as an arm that cannot. Null means no provider was reached, which is
+    the honest record for the declared control judge (ADR 0052).
+    """
+
     created_at: Mapped[datetime] = mapped_column(UtcDateTime())
 
 
@@ -901,3 +925,45 @@ class ExperimentTagModel(Base):
         ForeignKey("experiments.experiment_id"), primary_key=True
     )
     tag: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class ModelConnectionModel(Base):
+    """Where this lab is pointed for one provider, and the key it reaches under (ADR 0052).
+
+    One row per provider id, which is the id the proven-framework and proven-judge tables
+    already use: `openai` names the protocol this lab has proven it can speak rather than the
+    company, so Ollama, vLLM, OpenRouter and a gateway are base URLs in this column rather
+    than rows of their own.
+
+    **There is no model column.** The model is authored content resolved from each arm's
+    published configuration (ADR 0024); a model here would be the process substituting for an
+    authored input, which is the one thing that would make two arms unexplainable.
+
+    This is not the `lab_settings` table ADR 0044 refused, and it stops being distinguishable
+    from it the moment a second unrelated column is added: what is stored here is what the
+    installation can reach, the same kind of fact as the database URL, and never how an
+    operator likes their rail.
+
+    `encrypted_key` holds the AES-GCM envelope and never the key. It is nullable because a
+    connection may be saved before a credential is — an endpoint needing none, such as a local
+    Ollama, is the ordinary case — and `key_added_at` is written with it so that the one fact
+    about the key this lab may serve travels in the same row as the key itself. The constraint
+    holds them together: a date without a key would say a credential is installed when none
+    is, and the settings page reads exactly that pair.
+    """
+
+    __tablename__ = "model_connections"
+    __table_args__ = (
+        CheckConstraint(
+            "(encrypted_key IS NULL) = (key_added_at IS NULL)",
+            name="ck_model_connections_key_date_matches_key",
+        ),
+        CheckConstraint("length(base_url) > 0", name="ck_model_connections_base_url_present"),
+    )
+
+    provider_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    base_url: Mapped[str] = mapped_column(String(2048))
+    encrypted_key: Mapped[str | None] = mapped_column(String(4096), nullable=True)
+    key_added_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime())
