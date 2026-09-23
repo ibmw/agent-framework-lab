@@ -699,8 +699,9 @@ _SPELLINGS = json.loads(
 
 The page lights a preset chip from its own fold of the typed endpoint, and that fold must agree
 with this module about which spellings are one endpoint, or a chip is lit for a URL the lab
-stores as something else. The web suite asserts the fold against `preset`; this asserts
-`stored` and `preset` against `normalize_base_url` itself, so neither column can drift."""
+stores as something else. The web suite asserts the chip against `preset` and the fold against
+`stored`; this asserts `stored` and `preset` against `normalize_base_url` itself, so neither
+column can drift."""
 
 
 def test_the_shared_spelling_table_is_there_to_be_held_to() -> None:
@@ -725,3 +726,33 @@ def test_every_spelling_the_page_folds_is_what_the_lab_stores(row: dict[str, Any
         return
     assert normalize_base_url(row["input"]) == row["stored"]
     assert presets.get(row["stored"], "custom") == row["preset"]
+
+
+_CUT_EXPOSES_WHITESPACE = [
+    "http://localhost:11434/v1 /",
+    "https://api.openai.com/v1\xa0/",
+    "https://api.openai.com /",
+    "https://api.openai.com. /",
+    "https://api.openai.com/v1/ / /",
+]
+"""Spellings whose trailing-slash cut leaves whitespace, or a dot, at the end of the value.
+
+One pass of strip-then-cut stored `…/v1 ` for `…/v1 /`, which a second pass reads as `…/v1`:
+the stored value was not its own spelling, so the page folding it lit a preset, called the form
+clean, and sent a value the lab would store differently."""
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    # Once each: every row of the list but one is also a row of the fixture.
+    list(
+        dict.fromkeys(
+            [row["input"] for row in _SPELLINGS["spellings"] if row["stored"] is not None]
+            + _CUT_EXPOSES_WHITESPACE
+        )
+    ),
+    ids=repr,
+)
+def test_the_stored_spelling_is_its_own_spelling(spelling: str) -> None:
+    stored = normalize_base_url(spelling)
+    assert normalize_base_url(stored) == stored

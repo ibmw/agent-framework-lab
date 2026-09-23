@@ -133,19 +133,22 @@ const PYTHON_STRIP = new RegExp(`^[${PYTHON_WHITESPACE}]+|[${PYTHON_WHITESPACE}]
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching these controls is the point.
 const URLSPLIT_LSTRIP = /^[\x00-\x20]+/;
 
-function pythonStrip(value: string): string {
+/** `value` with what Python's `str.strip()` removes taken off both ends, as the server strips it. */
+export function pythonStrip(value: string): string {
   return value.replace(PYTHON_STRIP, "");
 }
 
 /**
- * Whether the endpoint in the field is the one the lab holds, as the server would compare them:
- * a trailing slash, a shouted host or `:443` is the same endpoint and nothing to save. Where
- * either side is not something the fold can read, the two are compared as written.
+ * Whether saving the endpoint in the field would leave the lab holding what it holds: a trailing
+ * slash, a shouted host or `:443` is the same endpoint and nothing to save. Only the typed side
+ * is folded. The stored side is the lab's own spelling, and folding it too would call a value
+ * the server would now store differently — one saved before its fold reached a fixed point —
+ * the same as itself. Where the fold cannot read the typed side, it is compared as written once the server's strip
+ * has taken whitespace off its ends.
  */
 export function sameEndpoint(typed: string, stored: string): boolean {
-  const left = foldEndpoint(typed);
-  const right = foldEndpoint(stored);
-  return left === null || right === null ? typed.trim() === stored.trim() : left === right;
+  const folded = foldEndpoint(typed);
+  return folded === null ? pythonStrip(typed) === stored : folded === stored;
 }
 
 /** Scheme, authority, path, query, fragment — the five parts `urlsplit` reads, in its order. */
@@ -169,6 +172,21 @@ const URL_PARTS = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(\?[^#]*)?(#.
  * `null` for the same reason, which also covers the `[localhost]` the server refuses.
  */
 export function foldEndpoint(baseUrl: string): string | null {
+  // Repeated to a fixed point, as `normalize_base_url` is: cutting trailing slashes can expose
+  // whitespace the strip would have removed, so `…/v1 /` is stored as `…/v1`.
+  let current = foldOnce(baseUrl);
+  while (current !== null) {
+    const again = foldOnce(current);
+    if (again === current) {
+      return current;
+    }
+    current = again;
+  }
+  return null;
+}
+
+/** One pass of the fold; `foldEndpoint` repeats it until it changes nothing. */
+function foldOnce(baseUrl: string): string | null {
   const candidate = pythonStrip(baseUrl);
   // Counted in code points, as Python's `len` counts them, rather than in UTF-16 units.
   if (candidate === "" || [...candidate].length > MAX_BASE_URL_LENGTH) {
@@ -194,8 +212,15 @@ export function foldEndpoint(baseUrl: string): string | null {
     .toLowerCase()
     .replace(/\.+$/, "");
   const rawPort = colon === -1 ? "" : authority.slice(colon + 1);
-  // A host outside ASCII is never a preset's, whatever case folding makes of it.
-  if (host === "" || !/^[\x21-\x7e]+$/.test(host) || !/^[0-9]*$/.test(rawPort)) {
+  // A host outside ASCII is never a preset's, whatever case folding makes of it. A colon left
+  // in the host is a second port, which the server refuses; a bracketed IPv6 host, the one place
+  // a colon belongs, has already been answered above.
+  if (
+    host === "" ||
+    host.includes(":") ||
+    !/^[\x21-\x7e]+$/.test(host) ||
+    !/^[0-9]*$/.test(rawPort)
+  ) {
     return null;
   }
   const port = rawPort === "" ? null : Number.parseInt(rawPort, 10);

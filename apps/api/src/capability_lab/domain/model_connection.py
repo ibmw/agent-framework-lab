@@ -81,7 +81,24 @@ def normalize_base_url(value: str) -> str:
 
     Raises `ModelConnectionConfigurationError` without quoting `value`, for the reason in this
     module's docstring.
+
+    The answer is its own spelling: normalizing a stored value gives that value back. One pass
+    does not promise that, because the trailing-slash cut runs after the strip and can expose
+    what the strip would have removed — `…/v1 /` cuts to `…/v1 `, and `https://api.example.com. /`
+    to a host with a trailing dot. So the pass is repeated until it changes nothing. It ends:
+    every pass after the first only removes characters from the end of a value the first
+    already wrote in one spelling, so each one that changes it makes it shorter. A value that a
+    later pass refuses — `https:// /` stored a host of one space — is refused, because a value
+    this function would not accept is not one it may return.
     """
+    current = _normalize_once(value)
+    while (again := _normalize_once(current)) != current:
+        current = again
+    return current
+
+
+def _normalize_once(value: str) -> str:
+    """One pass of strip, parse, fold and cut; `normalize_base_url` repeats it to a fixed point."""
     candidate = value.strip()
     if not candidate:
         raise ModelConnectionConfigurationError("base_url must not be empty")

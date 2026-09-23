@@ -14,8 +14,10 @@ import {
   describeSource,
   describeZoneSource,
   ENDPOINT_PRESETS,
+  foldEndpoint,
   PROBE_OUTCOMES,
   presetForBaseUrl,
+  pythonStrip,
   sameEndpoint,
 } from "./modelConnections";
 
@@ -226,6 +228,29 @@ describe("the endpoint presets", () => {
     expect(presetForBaseUrl(row.input).id).toBe(row.preset);
   });
 
+  it.each(SPELLINGS)("%s: %s folds to what the server stores, or to nothing", (_, __, row) => {
+    // The fold may decline a spelling — an IP literal, a host outside ASCII — and the page then
+    // compares it as written. What it may never do is name an endpoint the lab would store as
+    // another, which is what holds the `stored` column on this side too.
+    const folded = foldEndpoint(row.input);
+    if (folded !== null) {
+      expect(folded).toBe(row.stored);
+    }
+  });
+
+  it("counts a value's length in code points, as the server does", () => {
+    // Every row of the case is over 2048 UTF-16 units; the shorter is 2048 code points and
+    // stored, so a fold counting units would decline an endpoint the lab accepts as written.
+    const rows = FIXTURE.spellings.filter(
+      (row) => row.case === "length in code points, not UTF-16 units",
+    );
+    expect(rows.map((row) => row.stored === null)).toEqual([false, true]);
+    for (const row of rows) {
+      expect(row.input.length).toBeGreaterThan(2048);
+      expect(foldEndpoint(row.input)).toBe(row.stored);
+    }
+  });
+
   it.each(SPELLINGS.filter(([, , row]) => row.preset !== "custom"))(
     "%s: %s is no change from the preset the server stores it as",
     (_, __, row) => {
@@ -240,6 +265,24 @@ describe("the endpoint presets", () => {
     expect(sameEndpoint("http://[::1]:11434/v1", "http://[::1]:11434/v1")).toBe(true);
     expect(sameEndpoint("http://[::1]:11434/v1", "http://localhost:11434/v1")).toBe(false);
     expect(sameEndpoint("", "https://api.openai.com/v1")).toBe(false);
+  });
+
+  it("strips what Python's strip removes, and nothing JavaScript's trim adds", () => {
+    expect(pythonStrip("\x85\x1c\x1f \u00a0")).toBe("");
+    expect(pythonStrip("\ufeffx\ufeff")).toBe("\ufeffx\ufeff");
+  });
+
+  it("compares against the endpoint as the lab stored it, never a fold of that", () => {
+    // A value stored before the server's fold was its own fixed point: saving it again would
+    // store another spelling, so it is a change even retyped exactly as held.
+    expect(sameEndpoint("http://localhost:11434/v1 ", "http://localhost:11434/v1 ")).toBe(false);
+    expect(sameEndpoint("http://localhost:11434/v1 ", "http://localhost:11434/v1")).toBe(true);
+    // What the fold cannot read is compared as written once the server's strip has run: a
+    // no-break space after it is stored away, and a byte-order mark, which Python keeps, is not.
+    expect(sameEndpoint("http://[::1]/a%2F\u00a0", "http://[::1]/a%2F")).toBe(true);
+    expect(sameEndpoint("\u3000http://[::1]:11434/v1", "http://[::1]:11434/v1")).toBe(true);
+    expect(sameEndpoint("http://[::1]/a%2F\ufeff", "http://[::1]/a%2F")).toBe(false);
+    expect(sameEndpoint("http://[::1]/a%2F", "http://[::1]/a%2F\u00a0")).toBe(false);
   });
 
   it("falls back to Custom for an endpoint no preset names, and for none at all", () => {

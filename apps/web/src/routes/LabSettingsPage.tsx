@@ -32,6 +32,7 @@ import {
   describeZoneSource,
   ENDPOINT_PRESETS,
   presetForBaseUrl,
+  pythonStrip,
   sameEndpoint,
 } from "../lib/modelConnections";
 import {
@@ -496,30 +497,42 @@ function ConnectionCard({
   const presets = useId();
 
   const preset = presetForBaseUrl(baseUrl);
-  const endpoint = baseUrl.trim();
+  // Sent exactly as typed. The server is the authority on what an endpoint is, and a page that
+  // trimmed first would send something other than what its chip was lit for: `trim()` removes a
+  // byte-order mark the server keeps.
+  const endpoint = baseUrl;
   const key = typed === null || typed.trim() === "" ? null : typed.trim();
-  // Compared as the server would store them, so a trailing slash, a shouted host or `:443`
-  // on the saved endpoint is nothing to save.
+  // The typed endpoint as the server would store it, against what the lab holds as stored, so
+  // a trailing slash, a shouted host or `:443` on the saved endpoint is nothing to save.
   const moves = !sameEndpoint(endpoint, saved?.base_url ?? "");
   const dirty = moves || key !== null;
   /**
-   * Where a key is about to go, when that is somewhere the lab does not already send one. A key
-   * left unsent is the saved one (ADR 0052: "falling back to the saved one"), so moving the
-   * endpoint with the read-out showing sends the installed key to the new endpoint on Test and
-   * keeps it for that endpoint on Save; a typed key goes wherever the field points. Said on the
-   * key's own row rather than prevented, because pointing a key at a new endpoint is often
-   * exactly what the operator means.
+   * Where a key is about to go, when a saved connection points somewhere else. A key left
+   * unsent is the saved one (ADR 0052: "falling back to the saved one"), so moving the endpoint
+   * with the read-out showing sends the installed key to the new endpoint on Test and keeps it
+   * for that endpoint on Save; a typed key goes wherever the field points. With nothing saved
+   * there is one endpoint on the page and no other a key could be read as going to, so nothing
+   * is said. Said on the key's own row rather than prevented, because pointing a key at a new
+   * endpoint is often exactly what the operator means.
+   *
+   * A key the lab cannot read is sent nowhere on Test, but Save still keeps it for the new
+   * endpoint, and it goes there the day `AGENT_LAB_CREDENTIAL_KEY` can open it again — so that
+   * is said too, rather than letting the move look as though it left the key behind.
    */
   const keyDestination =
     saved === null || !moves
       ? null
       : key !== null
         ? "The key typed here will be sent to this endpoint on Test, and saved for it on Save."
-        : saved.key_configured && !unreadable
-          ? "The installed key will be sent to this endpoint on Test, and kept for it on Save."
-          : null;
+        : !saved.key_configured
+          ? null
+          : unreadable
+            ? "The stored key cannot be read now, but Save keeps it for this endpoint; it will be sent here once it can be."
+            : "The installed key will be sent to this endpoint on Test, and kept for it on Save.";
   const blockedBy =
-    endpoint === "" ? "No base URL to reach, so there is nothing to test or save." : null;
+    pythonStrip(endpoint) === ""
+      ? "No base URL to reach, so there is nothing to test or save."
+      : null;
 
   /** The key field's state that the saved connection implies: the read-out, or an empty field. */
   const keptKey = saved?.key_configured === true ? null : "";

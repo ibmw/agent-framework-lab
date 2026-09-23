@@ -553,6 +553,30 @@ describe("the model provider zone", () => {
     expect(card.getByRole("button", { name: "Test connection" })).toBeDisabled();
   });
 
+  it.each([
+    ["a no-break and an ideographic space", "\u00a0\u3000"],
+    ["a next-line control", "\x85"],
+    ["the information separators", "\x1c\x1d\x1e\x1f"],
+  ])("refuses a field of only whitespace as having nothing to reach: %s", async (_, blank) => {
+    // The endpoint is sent as typed, so the refusal cannot rest on a trimmed copy of it, and
+    // it strips what the server's "must not be empty" strips — which JavaScript's `trim()`
+    // does not, for NEL and the four separators. A url field already drops ASCII whitespace
+    // from its ends, so each of these is what it would keep.
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.clear(card.getByLabelText("Base URL"));
+    await user.type(card.getByLabelText("Base URL"), blank);
+    expect(card.getByLabelText("Base URL")).toHaveValue(blank);
+
+    const save = card.getByRole("button", { name: "Save connection" });
+    expect(save).toBeDisabled();
+    expect(save).toHaveAccessibleDescription(/No base URL to reach/);
+    expect(card.getByRole("button", { name: "Test connection" })).toBeDisabled();
+  });
+
   it("saves what was typed, and reads back the endpoint the lab stored", async () => {
     const user = userEvent.setup();
     const sent: SaveModelConnectionRequest[] = [];
@@ -960,6 +984,49 @@ describe("the model provider zone", () => {
     expect(card.queryByText(stored)).toBeNull();
   });
 
+  it("does not say an unreadable key will be sent anywhere when the endpoint moves", async () => {
+    // Test is refused with credential_key_mismatch, so no key is sent: a line promising the
+    // installed key goes to the new endpoint would describe a call that is not made.
+    const user = userEvent.setup();
+    currentStatus = { ...OFFLINE, connection_source: "saved_unreadable" };
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+    await card.findByText("Stored, but this lab cannot read it");
+
+    await user.click(card.getByRole("radio", { name: "OpenRouter" }));
+
+    expect(card.getByRole("radio", { name: "OpenRouter" })).toBeChecked();
+    expect(card.queryByText(/will be sent to this endpoint/)).toBeNull();
+  });
+
+  it("says a save keeps an unreadable key for the endpoint it moves to, and stops saying so", async () => {
+    // Save with no key typed re-points the stored ciphertext at the new endpoint, and once the
+    // right AGENT_LAB_CREDENTIAL_KEY is back that key is sent there. The row says so rather than
+    // letting the move read as though it left the key behind.
+    const user = userEvent.setup();
+    currentStatus = { ...OFFLINE, connection_source: "saved_unreadable" };
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+    await card.findByText("Stored, but this lab cannot read it");
+    const kept =
+      /stored key cannot be read now, but Save keeps it for this endpoint; it will be sent here once it can be/;
+    expect(card.queryByText(kept)).toBeNull();
+
+    await user.click(card.getByRole("radio", { name: "OpenRouter" }));
+    expect(within(card.getByRole("group", { name: "API key" })).getByText(kept)).toBeVisible();
+
+    await user.click(card.getByRole("radio", { name: "OpenAI" }));
+    expect(card.queryByText(kept)).toBeNull();
+  });
+
   it("says a typed key goes to the endpoint in the field, once that is not the saved one", async () => {
     const user = userEvent.setup();
     currentConnections = pointedAt("http://localhost:11434/v1");
@@ -990,6 +1057,63 @@ describe("the model provider zone", () => {
     }
     await user.type(card.getByLabelText("Base URL"), "/chat");
     expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+  });
+
+  it.each([
+    ["a leading", "﻿https://api.openai.com/v1"],
+    ["a trailing", "https://api.openai.com/v1﻿"],
+  ])("sends the endpoint whose chip is lit, with %s byte-order mark", async (_, typed) => {
+    // The server keeps a byte-order mark that JavaScript's `trim()` removes, so a page that
+    // trimmed before sending lit Custom and then saved the OpenAI preset. The value goes as
+    // typed, and the server alone decides what it is.
+    const user = userEvent.setup();
+    const probes = captureProbes();
+    const saves: SaveModelConnectionRequest[] = [];
+    server.use(
+      http.put("*/api/v1/model-connections/openai", async ({ request }) => {
+        saves.push((await request.json()) as SaveModelConnectionRequest);
+        return HttpResponse.json(
+          {
+            code: "invalid_model_connection",
+            message: "base_url must use the http or https scheme",
+            request_id: "r",
+          },
+          { status: 422 },
+        );
+      }),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.type(card.getByLabelText("Base URL"), typed);
+    expect(card.getByRole("radio", { name: "Custom" })).toBeChecked();
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    await card.findByText(/312 ms/);
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+
+    await waitFor(() => expect(saves).toHaveLength(1));
+    expect(probes.map((probe) => probe.base_url)).toEqual([typed]);
+    expect(saves.map((save) => save.base_url)).toEqual([typed]);
+    expect(card.getByRole("radio", { name: "Custom" })).toBeChecked();
+  });
+
+  it("offers to save a stored endpoint the lab would now spell another way", async () => {
+    // Stored before the server's fold reached a fixed point: the chip is Ollama, but saving it
+    // again stores `…/v1`, so the form is not clean. Test sends what is stored, and the server
+    // probes the spelling it would now store.
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1 ");
+    const sent = captureProbes();
+    renderAt("/settings");
+    const card = await openZone();
+
+    expect(card.getByRole("radio", { name: "Ollama" })).toBeChecked();
+    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+
+    await waitFor(() =>
+      expect(sent).toEqual([{ base_url: "http://localhost:11434/v1 ", api_key: null }]),
+    );
   });
 
   it("says a readable stored key is configured, and nothing about readability", async () => {

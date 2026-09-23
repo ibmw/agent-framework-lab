@@ -193,6 +193,10 @@ and to pin:
   > amendment says why, and what it costs.
 
 - stored normalized, so two spellings of one endpoint compare equal when a run is pinned to it.
+  The normal form is its own: normalizing a stored value gives it back, so `…/v1 /` is stored
+  as `…/v1` rather than keeping the space the slash cut exposed. A value stored before that
+  change is served, run and pinned as stored until it is saved again; the save stores the new
+  spelling, and a run pinned to the old one is refused with both endpoints named.
 
 ADR 0044 refused to serve the OTLP endpoint because "a collector URL is a place a deployment can
 put a token, and a route that serves it is a route that serves that token the day somebody does."
