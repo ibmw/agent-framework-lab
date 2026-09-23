@@ -172,6 +172,22 @@ REFUSED = [
     ("http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/v1", "loopback or private"),
     ("http://[2001:3::1]/v1", "loopback or private"),
     ("", "empty"),
+    # No working endpoint has whitespace or a control character in its host, and `urlsplit`
+    # hands both through: these were stored, the first with a host of one space.
+    ("https:// /v1", "whitespace, control or format characters in its host"),
+    ("https://a b.com/v1", "whitespace, control or format characters in its host"),
+    ("https://api.example\xa0.com/v1", "whitespace, control or format characters in its host"),
+    ("https://api.example\x1c.com/v1", "whitespace, control or format characters in its host"),
+    ("https://api.example\x85.com/v1", "whitespace, control or format characters in its host"),
+    ("https://api.example\x9b.com/v1", "whitespace, control or format characters in its host"),
+    ("https://api.example\x7f.com/v1", "whitespace, control or format characters in its host"),
+    # Inside brackets too: `urlsplit` checks an IPv6 literal, but a zone ID is any text.
+    ("https://[fe80::1%\x01]/v1", "whitespace, control or format characters in its host"),
+    # A format character is as invisible as a control one, and a bidi override reorders the
+    # stored endpoint where /settings displays it.
+    ("https://api.example\u200b.com/v1", "whitespace, control or format characters in its host"),
+    ("https://api.example\u202e.com/v1", "whitespace, control or format characters in its host"),
+    ("https://[fe80::1%\u200b]/v1", "whitespace, control or format characters in its host"),
 ]
 
 

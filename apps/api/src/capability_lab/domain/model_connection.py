@@ -17,6 +17,10 @@ The validation table is ADR 0052's, and each line of it is load-bearing rather t
   serve back and to write onto a run.
 - **No query and no fragment.** Same argument, one step further: both are places a key can be
   parked, and neither means anything to a base URL an SDK appends a path to.
+- **No whitespace, control or format character in the stored host.** No working endpoint has
+  one, an HTTP client refuses the URL, and a bidi control reorders the value an operator reads
+  back. Read on the stored host, after the fold, so that padding a slash cut exposes is
+  forgiven at the end of a host as it is at the end of a path.
 - **`http` only for a loopback or private host.** `http://localhost:11434/v1` is the whole
   point of this feature — a local model with no credential leaving the machine — and a
   plaintext key crossing the internet is not. "Private" here is narrower than the standard
@@ -40,6 +44,7 @@ a browser's history — which is exactly what the rule above exists to prevent.
 from __future__ import annotations
 
 from ipaddress import IPv6Address, IPv6Network, ip_address
+from unicodedata import category
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from capability_lab.domain.entities import DomainError
@@ -90,10 +95,27 @@ def normalize_base_url(value: str) -> str:
     already wrote in one spelling, so each one that changes it makes it shorter. A value that a
     later pass refuses — `https:// /` stored a host of one space — is refused, because a value
     this function would not accept is not one it may return.
+
+    The host of that fixed point is then held to one more rule: it carries no whitespace, no
+    control character and no format character (Unicode category Cf: a soft hyphen, a zero-width
+    space, a byte-order mark, a bidi control). No working endpoint has any of them, and
+    `urlsplit` passes all three through — `https:// /v1` parsed to a host of one space,
+    `https://a b.com` to a name no resolver answers, and a right-to-left override to a host
+    that reads on /settings in an order it is not stored in. The rule reads the *stored* host
+    rather than each pass's, so that padding a slash cut exposes is forgiven at the end of a
+    host as it is at the end of a path: `https://api.example.com /` is stored as
+    `https://api.example.com`. Tab, CR and LF never reach a host at all, because `urlsplit`
+    removes them from the whole value first, as it removes leading C0 controls and spaces. A
+    percent-escape in a host — `%20`, `%00` — is not covered: the rule reads characters, and
+    an escape is three printable ones.
     """
     current = _normalize_once(value)
     while (again := _normalize_once(current)) != current:
         current = again
+    if any(_is_unprintable(character) for character in urlsplit(current).hostname or ""):
+        raise ModelConnectionConfigurationError(
+            "base_url must not carry whitespace, control or format characters in its host"
+        )
     return current
 
 
@@ -187,6 +209,12 @@ def _require_host(hostname: str | None) -> str:
     if not host:
         raise ModelConnectionConfigurationError("base_url must name a host")
     return _canonical_address(host)
+
+
+def _is_unprintable(character: str) -> bool:
+    """Python's whitespace, a C0 control, DEL, a C1 control, or a Unicode format character."""
+    code = ord(character)
+    return character.isspace() or code < 0x20 or 0x7F <= code <= 0x9F or category(character) == "Cf"
 
 
 def _canonical_address(host: str) -> str:

@@ -451,6 +451,60 @@
       "input": "http://[localhost]:11434/v1",
       "stored": null,
       "preset": "custom"
+    },
+    {
+      "case": "whitespace or a control character in the host",
+      "input": "https:// /v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "whitespace or a control character in the host",
+      "input": "https://a b.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "whitespace or a control character in the host",
+      "input": "https://api.openai\u00a0.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "whitespace or a control character in the host",
+      "input": "https://api.openai\u001c.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "whitespace or a control character in the host",
+      "input": "https://api.openai\u009b.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "whitespace or a control character in the host",
+      "input": "https://[fe80::1%\u0001]/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a format character in the host",
+      "input": "https://api.openai\u200b.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a format character in the host",
+      "input": "https://api.openai\u202e.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a format character in the host",
+      "input": "https://[fe80::1%\u200b]/v1",
+      "stored": null,
+      "preset": "custom"
     }
   ]
 }

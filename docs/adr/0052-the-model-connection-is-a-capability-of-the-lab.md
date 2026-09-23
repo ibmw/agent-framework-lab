@@ -184,7 +184,9 @@ for, so it cannot be read as the model an experiment runs.
 `base_url` is validated at the door, and that validation is what makes the value safe to display
 and to pin:
 
-- `http` or `https` only; no userinfo, no query string, no fragment;
+- `http` or `https` only; no userinfo, no query string, no fragment; no whitespace, control or
+  format character in the host as stored. A value stored before that last rule is served, run
+  and pinned as stored, and saving it again is refused;
 - `http` only for loopback and private hosts, so `http://localhost:11434/v1` is accepted and a
   plaintext key crossing the internet is not;
 
