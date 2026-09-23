@@ -12,8 +12,8 @@ the design it was handed on 19 September 2026: the whole-workspace prototype in
 order, `AGENTS.md`, `docs/product-direction.md`, `docs/architecture.md`, `docs/PLAN.md`'s delivery
 rules, `docs/design-direction.md` (its *Authority* section settles which authority governs where the
 prototype, the README and the codebase disagree), then the slice's brief below and the ADRs it
-names. ADR 0052 and ADR 0053 are already accepted and precede the slices that implement them;
-ADR 0054 is the route scheme every slice below is written against.
+names. ADR 0052 and ADR 0053 decide the model connection and the provider, and both are
+implemented; ADR 0054 is the route scheme every slice below is written against.
 
 The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
 
@@ -33,9 +33,7 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
   `pnpm build` pass before handoff, and `pnpm test:e2e` when the *Checks* line names a spec.
 - **No new UI dependency.** The primitives are the class sets in `lib/ui.ts` and the chrome in
   `components/WorkspaceChrome.tsx` and `shell/AppShell.tsx`.
-- **No backend change unless the slice says so.** One slice still carries one: the
-  reachable-provider read the model connection enables (ADR 0053). It ships the OpenAPI update,
-  the backend and the consumer together, as the connection itself did (ADR 0052).
+- **No backend change unless the slice says so.** None of the slices below says so.
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
@@ -70,9 +68,9 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Every screen Group B recomposes is built, and the connection it runs through is saved from the
-settings page. Group B has one slice left, Slice 20, which reads the providers the connection
-resource now publishes. Group C's slices 21–25 depend on nothing in Group B and can start now;
+Group B is delivered: every screen it recomposes is built, the connection it runs through is
+saved from the settings page, and the editors and experiment setup say which providers that
+connection leaves unreachable (ADR 0053). Group C's slices 21–25 can start now;
 Slice 21 also owns the fifth preference row, which the settings zones deliberately did not
 draw. Slices 26 and 27 close the milestone, and 28 is optional.
 
@@ -86,25 +84,6 @@ that lands in the editor, an overview built around the version timeline and the 
 settings page whose three zones say what may be touched, and a lab-wide model connection that a
 run pins. Everything the September plans delivered — hints, derived identifiers, labels, chips,
 edit-in-place, the guard, pine, the field row — is still there underneath.
-
-### Group B — Screens the prototype recomposes
-
-#### Slice 20 — The provider the lab can reach
-
-- [ ] The agent editor and the judge editor read the reachable provider ids from the connection
-  resource and, beside the provider field, say that published configurations naming an
-  unreachable one cannot be advanced here — as a note, never in `preview.issues`, and never in
-  the pinned gate sentences of `lib/fieldRules.ts` (ADR 0053).
-- [ ] Experiment setup says the same beside a disabled Start on the `PublishReasons` model.
-- [ ] A test asserts the sentence is absent from the mirrored gate set.
-
-Frames: `Workspace.dc.html` :392, :488, :2327.
-
-Branch: `feat/reachable-provider`. Checks: `AgentConfigurations`, `JudgeConfigurations` and
-`ExperimentSetup` tests with MSW for both states; `fieldRules.test.ts` for the absence.
-
-Slice evidence: an operator authoring for a provider the lab is not pointed at can publish, and
-is told on the same row that nothing here can run it yet.
 
 ### Group C — Behaviour the prototype specifies everywhere
 

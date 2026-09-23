@@ -265,11 +265,10 @@ Slices 1–8 (ADR 0050, ADR 0051) and the workspace refresh's eight pattern slic
 `docs/PLAN.md` Milestone 8, planned slice by slice in `docs/PLAN-UX.md`. Its first slice went alone
 because every later slice is written against the routes it leaves, and it has landed with them
 (ADR 0054); so have the screens its Group B recomposes (ADR 0055 to ADR 0058) and the model
-connection the lab now holds and edits from `/settings` (ADR 0052). Group B has one slice left,
-the provider that connection makes reachable — Slice 20, which ADR 0053 is accepted ahead of.
-Group C, the behaviour the prototype specifies on every screen at once, depends
-on nothing in Group B and can start now. The narrative of how each milestone was reached is
-`docs/history/PLAN.md`.
+connection the lab now holds and edits from `/settings` (ADR 0052), and the note the editors and
+experiment setup write about a provider that connection leaves unreachable (ADR 0053), which
+closes Group B. Group C, the behaviour the prototype specifies on every screen at once, is next.
+The narrative of how each milestone was reached is `docs/history/PLAN.md`.
 
 Do not add another agent framework or grow the POC scenario registry before the roadmap reaches
 them.

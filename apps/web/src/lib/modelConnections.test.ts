@@ -5,8 +5,12 @@ import { describe, expect, it } from "vitest";
 // `lib/enumLabels.test.ts` makes, for the same reason — a table this workspace keeps is only
 // held to the contract if something reads the contract.
 import generated from "../../../../packages/contracts/src/generated/v1.ts?raw";
+// The resolution chain's own answer to "does this reach a provider", as text.
+import modelConnectionsPython from "../../../api/src/capability_lab/application/model_connections.py?raw";
 // Written from, and held to, the backend's `normalize_base_url` by its own suite.
 import spellingsFixture from "../../../api/tests/fixtures/base_url_spellings.json?raw";
+// Which provider `getLabStatus` resolves, held to the API by `test_gate_and_connection.py`.
+import labStatusProviderFixture from "../../../api/tests/fixtures/lab_status_provider.json?raw";
 import {
   CONNECTION_SOURCES,
   CUSTOM_PRESET_ID,
@@ -15,10 +19,13 @@ import {
   describeZoneSource,
   ENDPOINT_PRESETS,
   foldEndpoint,
+  LAB_STATUS_PROVIDER,
   PROBE_OUTCOMES,
   presetForBaseUrl,
   pythonStrip,
   sameEndpoint,
+  unreachableProviderNote,
+  unreachableProviders,
 } from "./modelConnections";
 
 /** The members `openapi.yaml` publishes for one string enum, read out of the generated file. */
@@ -288,5 +295,77 @@ describe("the endpoint presets", () => {
   it("falls back to Custom for an endpoint no preset names, and for none at all", () => {
     expect(presetForBaseUrl("https://gateway.internal/openai/v1").id).toBe(CUSTOM_PRESET_ID);
     expect(presetForBaseUrl("").id).toBe(CUSTOM_PRESET_ID);
+  });
+});
+
+/**
+ * Which providers the lab cannot reach, read from the connection list and the source in force
+ * (ADR 0053). Held to the Python that decides it, because a source this table called reachable
+ * while the registry refused it would put a note on the page the advance contradicts.
+ */
+describe("the providers this lab cannot reach", () => {
+  const ONE = { providers: [{ provider_id: "openai", connection: null }] };
+
+  /** `_REACHING_SOURCES` in `application/model_connections.py`, read out of the module. */
+  function reachingSources(): string[] {
+    const match = /_REACHING_SOURCES = frozenset\(\{([^}]*)\}\)/.exec(modelConnectionsPython);
+    if (match === null) {
+      throw new Error("_REACHING_SOURCES is not declared where this test reads it");
+    }
+    return [...match[1].matchAll(/ModelConnectionSource\.([A-Z_]+)/g)].map(([, member]) =>
+      member.toLowerCase(),
+    );
+  }
+
+  it("reads the API's own reaching sources, or nothing below proves anything", () => {
+    expect(reachingSources().sort()).toEqual(["environment", "saved"]);
+  });
+
+  it("calls a provider reachable exactly where the API's resolution reaches it", () => {
+    const reaching = reachingSources();
+    for (const source of CONNECTION_SOURCES) {
+      const unreachable = unreachableProviders(ONE, source);
+      expect(unreachable, source).not.toBeNull();
+      expect(unreachable?.has("openai"), source).toBe(!reaching.includes(source));
+    }
+  });
+
+  it("treats a saved key the lab cannot decrypt as reaching nothing", () => {
+    expect(unreachableProviders(ONE, "saved_unreadable")).toEqual(new Set(["openai"]));
+  });
+
+  it("never names a provider the lab cannot hold a connection for", () => {
+    // The control reaches nothing by design and always runs; it is not in the list at all.
+    expect(unreachableProviders(ONE, "none")?.has("fake")).toBe(false);
+    expect(unreachableProviders({ providers: [] }, "none")).toEqual(new Set());
+  });
+
+  it("says nothing where the source cannot be attributed to one provider", () => {
+    const two = {
+      providers: [
+        { provider_id: "openai", connection: null },
+        { provider_id: "another", connection: null },
+      ],
+    };
+    expect(unreachableProviders(two, "none")).toBeNull();
+  });
+
+  it("applies the source to the provider the API resolves it for", () => {
+    const fixture = JSON.parse(labStatusProviderFixture) as { provider_id: string };
+    expect(LAB_STATUS_PROVIDER).toBe(fixture.provider_id);
+  });
+
+  it("says nothing where the one connectable provider is not the one the source is about", () => {
+    // `getLabStatus` resolves `openai` (`presentation/api.py`), so its source says nothing
+    // about any other provider, whatever the list names.
+    const other = { providers: [{ provider_id: "anthropic", connection: null }] };
+    expect(unreachableProviders(other, "none")).toBeNull();
+    expect(unreachableProviders(other, "saved")).toBeNull();
+  });
+
+  it("names the provider it is about, so it reads the same beside a field and beside Start", () => {
+    expect(unreachableProviderNote("OpenAI")).toBe(
+      "Published configurations naming OpenAI cannot be advanced here until the lab has a connection for it.",
+    );
   });
 });

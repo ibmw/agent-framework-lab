@@ -4,6 +4,7 @@ import type {
   JudgeConfigurationPreviewResponse,
   JudgeConfigurationResourcesResponse,
   JudgeConfigurationVersionResponse,
+  ModelConnectionSource,
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
@@ -14,6 +15,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { labConnection } from "./test/connection";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -123,6 +125,9 @@ let listed: JudgeConfigurationListResponse = LIST;
  * way out, and that a run which has been stood down reads nothing further (ADR 0056).
  */
 let listingReads = 0;
+/** Which answer of ADR 0052's chain the lab gives; a lab that reaches its provider by default. */
+let connectionSource: ModelConnectionSource = "environment";
+const connectionServed = { statuses: 0, listings: 0 };
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json({ shops: [] } satisfies ShopListResponse)),
@@ -255,6 +260,7 @@ const server = setupServer(
       { status: 201 },
     );
   }),
+  ...labConnection(() => connectionSource, connectionServed),
   // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
   // handler this suite declares for one of these routes still wins.
   ...shellListings(),
@@ -270,6 +276,9 @@ afterEach(() => {
   completed = [];
   listed = LIST;
   listingReads = 0;
+  connectionSource = "environment";
+  connectionServed.statuses = 0;
+  connectionServed.listings = 0;
 });
 afterAll(() => server.close());
 
@@ -508,6 +517,143 @@ describe("judge workspace", () => {
     expect(
       await screen.findByText(/Published version 1\. Every verdict records the version/),
     ).toBeVisible();
+  });
+});
+
+/** Both connection reads answered, and a turn for the page to draw what they said. */
+async function connectionRead() {
+  await waitFor(() => {
+    expect(connectionServed.statuses).toBeGreaterThanOrEqual(1);
+    expect(connectionServed.listings).toBeGreaterThanOrEqual(1);
+  });
+  await everyRemainingTurn();
+}
+
+/**
+ * The judge inherits ADR 0053 unchanged: the same note, from the same connection resource,
+ * beside the same field, and never in the gate.
+ */
+describe("the provider the lab can reach", () => {
+  const NOTE =
+    "Published configurations naming OpenAI cannot be advanced here until the lab has a connection for it.";
+
+  for (const source of ["none", "saved_unreadable"] as const) {
+    it(`says beside the provider, and only there, that a lab on ${source} cannot score with it`, async () => {
+      connectionSource = source;
+      renderAt(`/lab/judges/${JUDGE_ID}`);
+
+      const model = within(await screen.findByRole("region", { name: "Model" }));
+      const provider = model.getByLabelText("Provider");
+      await waitFor(() => expect(provider).toHaveAccessibleDescription(new RegExp(NOTE)));
+
+      expect(screen.getAllByText(NOTE)).toHaveLength(1);
+      expect(
+        within(screen.getByRole("region", { name: "Publish gate" })).queryByText(NOTE),
+      ).toBeNull();
+      expect(screen.queryByText(/to publish\./)).toBeNull();
+      expect(screen.getByRole("button", { name: "Publish v1" })).toBeEnabled();
+    });
+  }
+
+  it("keeps the note out of the gate's findings and PublishReasons while those have something to say", async () => {
+    connectionSource = "none";
+    currentPreview = preview({
+      publishable: false,
+      issues: [
+        {
+          severity: "error",
+          code: "rubric_empty",
+          message: "a published judge must carry the rubric it scores by",
+          path: "rubric",
+        },
+      ],
+    });
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const gate = within(await screen.findByRole("region", { name: "Publish gate" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Provider")).toHaveAccessibleDescription(new RegExp(NOTE)),
+    );
+    expect(gate.getByText(/a published judge must carry the rubric/)).toBeVisible();
+    expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
+    expect(gate.queryByText(NOTE)).toBeNull();
+    expect(screen.getAllByText(NOTE)).toHaveLength(1);
+  });
+
+  for (const source of ["saved", "environment"] as const) {
+    it(`says nothing about reaching a provider the lab reaches through ${source}`, async () => {
+      connectionSource = source;
+      renderAt(`/lab/judges/${JUDGE_ID}`);
+
+      const provider = await screen.findByLabelText("Provider");
+      await connectionRead();
+      expect(provider).not.toHaveAccessibleDescription(/cannot be advanced here/);
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    });
+  }
+
+  for (const route of ["lab-status", "model-connections"] as const) {
+    it(`says nothing when ${route} cannot be read, even on a lab that reaches nothing`, async () => {
+      connectionSource = "none";
+      server.use(
+        http.get(`*/api/v1/${route}`, () => {
+          // Counted as served, so the wait below still knows when the page has been answered.
+          if (route === "lab-status") {
+            connectionServed.statuses += 1;
+          } else {
+            connectionServed.listings += 1;
+          }
+          return HttpResponse.json(
+            {
+              code: "internal_error",
+              message: "The lab could not complete the request.",
+              request_id: "r",
+            },
+            { status: 500 },
+          );
+        }),
+      );
+      renderAt(`/lab/judges/${JUDGE_ID}`);
+
+      const provider = await screen.findByLabelText("Provider");
+      await connectionRead();
+      expect(provider).not.toHaveAccessibleDescription(/cannot be advanced here/);
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    });
+  }
+
+  it("says nothing about the control judge, which reaches no provider to begin with", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const provider = await screen.findByLabelText("Provider");
+    await waitFor(() => expect(provider).toHaveAccessibleDescription(new RegExp(NOTE)));
+    await user.selectOptions(provider, "fake");
+
+    expect(provider).toHaveValue("fake");
+    expect(provider).not.toHaveAccessibleDescription(/cannot be advanced here/);
+  });
+
+  it("stops saying it once a connection is saved", async () => {
+    connectionSource = "none";
+    const { router } = renderAt(`/lab/judges/${JUDGE_ID}`);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Provider")).toHaveAccessibleDescription(new RegExp(NOTE)),
+    );
+
+    // The operator saves a connection from the settings page and comes back.
+    connectionSource = "saved";
+    await act(() => router.navigate("/settings"));
+    await screen.findByRole("heading", { name: "Lab settings" });
+    connectionServed.statuses = 0;
+    connectionServed.listings = 0;
+    await act(() => router.navigate(`/lab/judges/${JUDGE_ID}`));
+
+    const provider = await screen.findByLabelText("Provider");
+    await connectionRead();
+    expect(provider).not.toHaveAccessibleDescription(/cannot be advanced here/);
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 });
 

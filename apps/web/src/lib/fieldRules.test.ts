@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 // declares it, so the file is what they have to read.
 import agentCapabilities from "../../../../apps/api/src/capability_lab/application/agent_capabilities.py?raw";
 import judgeCapabilities from "../../../../apps/api/src/capability_lab/application/judge_capabilities.py?raw";
+import * as fieldRules from "./fieldRules";
 import {
   unexercisedModelRule,
   unprovenAgentProviderRule,
   unprovenJudgeProviderRule,
 } from "./fieldRules";
 import fieldRulesSource from "./fieldRules?raw";
+import { unreachableProviderNote } from "./modelConnections";
 
 /**
  * The Studio's copy of three publish-gate sentences, pinned to the gate that writes them.
@@ -141,6 +143,75 @@ describe("the publish gate's sentences, as the Studio repeats them", () => {
     ];
     for (const sentence of sentences) {
       expect(sentence.endsWith(".")).toBe(false);
+    }
+  });
+});
+
+/**
+ * The one provider sentence that must never join this set (ADR 0053).
+ *
+ * *Published configurations naming this provider cannot be advanced here* is a fact about the
+ * machine reading a draft, not about the draft, so the gate does not say it and must not: a
+ * machine fact inside `preview` would make two labs disagree about the same draft. It therefore
+ * has no Python original to be pinned to, and lives with the connection vocabulary in
+ * `lib/modelConnections.ts`. These cases exist because the next reader to notice a provider
+ * sentence with no original will otherwise "fix" it by adding one to the gate.
+ */
+describe("the unreachable-provider note, which is not a gate sentence", () => {
+  const note = unreachableProviderNote("OpenAI");
+  // The part of the note that does not move with the provider it names.
+  const fragments = ["cannot be advanced here", "until the lab has a connection for it"];
+
+  it("is not one of the mirrored gate sentences, for any provider they could name", () => {
+    const mirrored = [
+      unprovenAgentProviderRule("openai", "Pydantic AI"),
+      unprovenAgentProviderRule("OpenAI", "Pydantic AI"),
+      unprovenJudgeProviderRule("openai"),
+      unprovenJudgeProviderRule("OpenAI"),
+      unexercisedModelRule("gpt-5-mini", "OpenAI", ["gpt-5-mini"]),
+    ];
+    for (const sentence of mirrored) {
+      expect(sentence).not.toBe(note);
+      for (const fragment of fragments) {
+        expect(sentence).not.toContain(fragment);
+      }
+    }
+  });
+
+  it("is spelled nowhere in `lib/fieldRules.ts`, as a value or in its source", () => {
+    // Every export, called where it is a function, so a rule that composes the note at runtime
+    // is caught as surely as one that spells it.
+    const values = Object.values(fieldRules).map((exported) =>
+      typeof exported === "function"
+        ? String((exported as (...args: unknown[]) => unknown)("openai", "OpenAI", ["gpt-5-mini"]))
+        : String(exported),
+    );
+    expect(values.length).toBeGreaterThan(30);
+    for (const fragment of fragments) {
+      expect(values.filter((value) => value.includes(fragment))).toEqual([]);
+      expect(fieldRulesSource).not.toContain(fragment);
+    }
+  });
+
+  const python = import.meta.glob("../../../api/src/capability_lab/**/*.py", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
+
+  it("found the API's modules to sweep", () => {
+    // Asserted first: a glob that matched nothing would make the case below pass.
+    expect(Object.keys(python).length).toBeGreaterThan(100);
+    expect(Object.values(python)).toContain(agentCapabilities);
+    expect(Object.values(python)).toContain(judgeCapabilities);
+  });
+
+  it("is emitted by no Python module", () => {
+    for (const fragment of fragments) {
+      const emitters = Object.entries(python)
+        .filter(([, source]) => source.includes(fragment))
+        .map(([path]) => path);
+      expect(emitters, `a Python module spells "${fragment}"`).toEqual([]);
     }
   });
 });

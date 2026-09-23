@@ -1,0 +1,4 @@
+{
+  "_comment": "The provider whose resolution GET /lab-status reports as connection_source: the source is not keyed by provider in the contract, so the Studio applies it to this id alone. test_gate_and_connection.py holds it to the API (saving a connection for it moves the source, and it is the only connectable provider); apps/web/src/lib/modelConnections.test.ts holds LAB_STATUS_PROVIDER to it.",
+  "provider_id": "openai"
+}

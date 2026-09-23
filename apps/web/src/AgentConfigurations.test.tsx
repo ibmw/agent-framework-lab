@@ -4,16 +4,18 @@ import type {
   AgentConfigurationPreviewResponse,
   AgentConfigurationResourcesResponse,
   AgentConfigurationVersionResponse,
+  ModelConnectionSource,
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { labConnection } from "./test/connection";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -271,6 +273,18 @@ let createdDrafts: Array<Record<string, unknown>> = [];
 let completedDrafts: Array<Record<string, unknown>> = [];
 let listed: AgentConfigurationListResponse = configurations;
 let previewShopIds: Array<string | null> = [];
+/** Which answer of ADR 0052's chain the lab gives; a lab that reaches its provider by default. */
+let connectionSource: ModelConnectionSource = "environment";
+const connectionServed = { statuses: 0, listings: 0 };
+
+/** Both connection reads answered, and a turn for the page to draw what they said. */
+async function connectionRead(times = 1) {
+  await waitFor(() => {
+    expect(connectionServed.statuses).toBeGreaterThanOrEqual(times);
+    expect(connectionServed.listings).toBeGreaterThanOrEqual(times);
+  });
+  await act(async () => {});
+}
 
 const SHOP_LISTING: ShopListResponse = {
   shops: [
@@ -446,6 +460,7 @@ const server = setupServer(
       { status: 201 },
     );
   }),
+  ...labConnection(() => connectionSource, connectionServed),
   // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
   // handler this suite declares for one of these routes still wins.
   ...shellListings(),
@@ -462,6 +477,9 @@ afterEach(() => {
   completedDrafts = [];
   listed = configurations;
   previewShopIds = [];
+  connectionSource = "environment";
+  connectionServed.statuses = 0;
+  connectionServed.listings = 0;
 });
 afterAll(() => server.close());
 
@@ -926,6 +944,131 @@ describe("agent configuration workspace", () => {
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
 
     expect(await screen.findByText(/Published version 1/)).toBeVisible();
+  });
+});
+
+/**
+ * Whether this lab can run what is being authored is a second question, answered beside the
+ * field and nowhere the gate answers (ADR 0053).
+ */
+describe("the provider the lab can reach", () => {
+  const NOTE =
+    "Published configurations naming OpenAI cannot be advanced here until the lab has a connection for it.";
+
+  for (const source of ["none", "saved_unreadable"] as const) {
+    it(`says beside the provider, and only there, that a lab on ${source} cannot advance it`, async () => {
+      connectionSource = source;
+      // A draft the gate would publish: the note must not make it look otherwise.
+      currentPreview = preview({ publishable: true, issues: [] });
+      renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+      const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
+      const provider = runtime.getByLabelText("Provider");
+      await waitFor(() => expect(provider).toHaveAccessibleDescription(new RegExp(NOTE)));
+
+      // Written once on the page, and that once is the provider row's.
+      expect(screen.getAllByText(NOTE)).toHaveLength(1);
+      // Not a gate finding, not a reason not to publish: Publish stays pressable.
+      expect(
+        within(screen.getByRole("region", { name: "Publish gate" })).queryByText(NOTE),
+      ).toBeNull();
+      expect(screen.queryByText(/to publish\./)).toBeNull();
+      expect(screen.getByRole("button", { name: "Publish v1" })).toBeEnabled();
+    });
+  }
+
+  it("keeps the note out of the gate's findings and PublishReasons while those have something to say", async () => {
+    connectionSource = "none";
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    const gate = within(await screen.findByRole("region", { name: "Publish gate" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Provider")).toHaveAccessibleDescription(new RegExp(NOTE)),
+    );
+    expect(gate.getByText(/the prompt injects customer.name/)).toBeVisible();
+    // PublishReasons counts the gate's one error and nothing the lab's machine added to it.
+    expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
+    expect(gate.queryByText(NOTE)).toBeNull();
+    expect(screen.getAllByText(NOTE)).toHaveLength(1);
+  });
+
+  for (const source of ["saved", "environment"] as const) {
+    it(`says nothing about reaching a provider the lab reaches through ${source}`, async () => {
+      connectionSource = source;
+      renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+      const runtime = within(await screen.findByRole("region", { name: "LLM and runtime" }));
+      await connectionRead();
+      expect(runtime.getByLabelText("Provider")).not.toHaveAccessibleDescription(
+        /cannot be advanced here/,
+      );
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    });
+  }
+
+  for (const route of ["lab-status", "model-connections"] as const) {
+    it(`says nothing when ${route} cannot be read, even on a lab that reaches nothing`, async () => {
+      connectionSource = "none";
+      server.use(
+        http.get(`*/api/v1/${route}`, () => {
+          // Counted as served, so the wait below still knows when the page has been answered.
+          if (route === "lab-status") {
+            connectionServed.statuses += 1;
+          } else {
+            connectionServed.listings += 1;
+          }
+          return HttpResponse.json(
+            {
+              code: "internal_error",
+              message: "The lab could not complete the request.",
+              request_id: "r",
+            },
+            { status: 500 },
+          );
+        }),
+      );
+      renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+      const provider = await screen.findByLabelText("Provider");
+      await connectionRead();
+      expect(provider).not.toHaveAccessibleDescription(/cannot be advanced here/);
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    });
+  }
+
+  it("says nothing about the declared control, which reaches no provider to begin with", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    const provider = await screen.findByLabelText("Provider");
+    await waitFor(() => expect(provider).toHaveAccessibleDescription(new RegExp(NOTE)));
+    await user.selectOptions(screen.getByLabelText("Framework"), "fake");
+
+    expect(provider).toHaveValue("fake");
+    expect(provider).not.toHaveAccessibleDescription(/cannot be advanced here/);
+  });
+
+  it("stops saying it once a connection is saved", async () => {
+    connectionSource = "none";
+    const { router } = renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Provider")).toHaveAccessibleDescription(new RegExp(NOTE)),
+    );
+
+    // The operator saves a connection from the settings page and comes back.
+    connectionSource = "saved";
+    await act(() => router.navigate("/settings"));
+    await screen.findByRole("heading", { name: "Lab settings" });
+    connectionServed.statuses = 0;
+    connectionServed.listings = 0;
+    await act(() => router.navigate(`/lab/agent-configurations/${CONFIGURATION_ID}`));
+
+    const provider = await screen.findByLabelText("Provider");
+    // Read again on the way back, and that answer is the one the page is drawing.
+    await connectionRead();
+    expect(provider).not.toHaveAccessibleDescription(/cannot be advanced here/);
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 });
 

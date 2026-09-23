@@ -42,6 +42,7 @@ import {
   TONE_OVERRIDE_RULE,
   unprovenAgentProviderRule,
 } from "../lib/fieldRules";
+import { unreachableProviderNote } from "../lib/modelConnections";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -49,6 +50,7 @@ import {
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const UNAVAILABLE = "The agent-configuration service is unavailable.";
@@ -127,6 +129,7 @@ export function AgentConfigurationEditorPage() {
   // otherwise let A's late answer overwrite B's, leaving the chips describing a shop the
   // picker no longer shows.
   const inFlight = useRef<AbortController | null>(null);
+  const unreachable = useUnreachableProviders();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -277,6 +280,11 @@ export function AgentConfigurationEditorPage() {
     : [...provenProviders, content.model.provider];
   const provenModels = framework?.models ?? [];
   const unprovenProvider = framework !== null && !provenProviders.includes(content.model.provider);
+  // A note about this lab, beside the field and nowhere else: not in the gate, whose answer is
+  // the same on every machine, and not in `PublishReasons`, because it blocks nothing (ADR 0053).
+  const providerNote = unreachable?.has(content.model.provider)
+    ? unreachableProviderNote(describeProvider(content.model.provider))
+    : null;
   const previewShop = resources?.preview_shops.find((shop) => shop.shop_id === previewShopId);
   const guidelines = previewShop?.tone_of_voice_guidelines ?? [];
 
@@ -663,9 +671,9 @@ export function AgentConfigurationEditorPage() {
                 extra={
                   unprovenProvider && framework
                     ? unprovenAgentProviderRule(content.model.provider, framework.label)
-                    : null
+                    : providerNote
                 }
-                extraTone="error"
+                extraTone={unprovenProvider ? "error" : "muted"}
               >
                 <select
                   className={fieldControlClasses}

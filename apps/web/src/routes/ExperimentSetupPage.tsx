@@ -8,9 +8,10 @@ import type {
   ScenarioSummarySchema,
   StartExperimentRequest,
 } from "@agent-lab/contracts";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  getAgentConfigurationVersion,
   listAgentConfigurations,
   listAgentConfigurationVersions,
 } from "../api/agentConfigurations";
@@ -20,8 +21,10 @@ import { listScenarios, listScenarioVersions } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
+import { describeProvider } from "../lib/agents";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
+import { unreachableProviderNote } from "../lib/modelConnections";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -30,6 +33,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
+import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { NoCurrentShop } from "../shell/LabWorkspace";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
@@ -161,6 +165,11 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  // The provider each arm's pinned version names, by arm, as the arm reads it. Held here
+  // rather than in the picker because Start is what it blocks.
+  const [armProviders, setArmProviders] = useState<Record<string, string | null>>({});
+  const unreachable = useUnreachableProviders();
+  const startNoteId = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -275,6 +284,22 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     }
   };
 
+  // Why Start will not start: a chosen arm pins a version naming a provider this lab cannot
+  // reach, which the advance would refuse with 422 and no recorded turn (ADR 0053). One
+  // sentence per provider, so two arms on one unreachable provider are one reason, not two.
+  // A note on this machine, never an issue: the preview's issues are the gate's, and the gate
+  // answers identically wherever it is asked.
+  const startBlocked = [
+    ...new Set(
+      arms
+        .map((arm) => armProviders[arm.id] ?? null)
+        .filter((provider): provider is string => provider !== null)
+        .filter((provider) => unreachable?.has(provider) ?? false),
+    ),
+  ]
+    .map((provider) => unreachableProviderNote(describeProvider(provider)))
+    .join(" ");
+
   const editArm = (index: number, next: ArmDraft) => {
     setArms((current) => current.map((arm, position) => (position === index ? next : arm)));
   };
@@ -378,6 +403,9 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
                 arm={arm}
                 configurations={configurations}
                 onChange={(next) => editArm(index, next)}
+                onProvider={(provider) =>
+                  setArmProviders((current) => ({ ...current, [arm.id]: provider }))
+                }
               />
             ))}
             {arms.length < 2 ? (
@@ -460,10 +488,25 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
             <p className="text-xs text-admin-muted">
               Participant: human operator — you play the customer in both arms.
             </p>
-            <button className={accentButtonClasses} type="submit" disabled={working}>
+            {/*
+             * The blocked-control rule until Slice 22 gives Start the dashed weight: the reason
+             * in `title`, and in one muted line the button's `aria-describedby` names.
+             */}
+            <button
+              className={accentButtonClasses}
+              type="submit"
+              disabled={working || startBlocked !== ""}
+              title={startBlocked === "" ? undefined : startBlocked}
+              aria-describedby={startBlocked === "" ? undefined : startNoteId}
+            >
               <ButtonIcon verb="start" />
               {working ? "Starting…" : "Start experiment"}
             </button>
+            {startBlocked === "" ? null : (
+              <p id={startNoteId} className="text-xs text-admin-muted">
+                {startBlocked}
+              </p>
+            )}
           </Card>
 
           <Card title="Recent experiments">
@@ -502,11 +545,14 @@ function ArmPicker({
   arm,
   configurations,
   onChange,
+  onProvider,
 }: {
   position: number;
   arm: ArmDraft;
   configurations: AgentConfigurationSummarySchema[];
   onChange: (next: ArmDraft) => void;
+  /** The provider the pinned version names, or null while no version is chosen or read. */
+  onProvider: (provider: string | null) => void;
 }) {
   const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
   const name = String.fromCharCode(65 + position);
@@ -525,6 +571,23 @@ function ArmPicker({
       .catch(() => setVersions([]));
     return () => controller.abort();
   }, [arm.configurationId]);
+
+  // The version is what the arm runs, so the provider is read off the version rather than the
+  // draft, which may since have moved on. A failed read says nothing rather than something.
+  // Held in a ref so a parent re-rendering with a new callback does not read the version again.
+  const reportProvider = useRef(onProvider);
+  reportProvider.current = onProvider;
+  useEffect(() => {
+    reportProvider.current(null);
+    if (arm.configurationId === "" || arm.version === "") {
+      return;
+    }
+    const controller = new AbortController();
+    getAgentConfigurationVersion(arm.configurationId, Number(arm.version), controller.signal)
+      .then((published) => reportProvider.current(published.content.model.provider))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [arm.configurationId, arm.version]);
 
   return (
     <fieldset className="grid gap-2 rounded-lg border border-admin-border p-3">

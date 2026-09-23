@@ -2,6 +2,7 @@ import type {
   ModelConnectionSource,
   ModelConnectionTestResponse,
   ModelEndpointOutcome,
+  ProviderConnectionListResponse,
 } from "@agent-lab/contracts";
 
 /**
@@ -350,4 +351,80 @@ const ZONE_SENTENCES: Readonly<Record<ModelConnectionSource, string | null>> = {
 /** The zone's own line about what is in force, or `null` where its form already says it. */
 export function describeZoneSource(source: ModelConnectionSource): string | null {
   return ZONE_SENTENCES[source];
+}
+
+/**
+ * Whether each answer of the resolution chain reaches a provider: `ResolvedConnection
+ * .reaches_provider` in `application/model_connections.py`, which is set exactly for `saved`
+ * and `environment`. A saved key the lab cannot decrypt reaches nothing — ADR 0052 has it win
+ * "as an offline lab" — so it is unreachable here as it is at the advance.
+ *
+ * A `Record` over the contract union, so a fifth source fails the typecheck rather than
+ * falling through to an answer nobody chose.
+ */
+const SOURCE_REACHES: Readonly<Record<ModelConnectionSource, boolean>> = {
+  saved: true,
+  saved_unreadable: false,
+  environment: true,
+  none: false,
+};
+
+/**
+ * The provider `getLabStatus`'s `connection_source` is about.
+ *
+ * The contract does not say, so it is named here from the code that decides it: the route's
+ * resolution is `ModelConnectionResolver(…).resolve(OPENAI_PROVIDER)` in `presentation/api.py`
+ * (`resolve_connection`). The source is only applied to a provider carrying this id, so a lab
+ * whose one connectable provider were anything else would get silence rather than another
+ * provider's answer. Held to the API through `apps/api/tests/fixtures/lab_status_provider.json`,
+ * which `test_gate_and_connection.py` asserts behaviourally.
+ */
+export const LAB_STATUS_PROVIDER = "openai";
+
+/**
+ * The providers this lab holds no usable connection for, right now — or `null` where the two
+ * reads cannot say.
+ *
+ * Read from the two resources that already exist rather than from a new one (ADR 0053 changes
+ * no contract). `listModelConnections` names every provider that *can* hold a connection; a
+ * provider it does not name is either the declared control, which reaches nothing and so
+ * always runs, or one the publish gate already refuses, and neither is this note's business.
+ * `getLabStatus` says which answer of the chain is in force, and that answer is the one the
+ * API resolves for the one connectable provider — the same resolution the registry composes a
+ * runtime from, so a note drawn from it cannot disagree with the 422 an advance would give.
+ *
+ * The source is not keyed by provider, so it can only be attributed while exactly one provider
+ * is connectable and it is the one the route resolves, `LAB_STATUS_PROVIDER` — which is true
+ * today and true for the reason ADR 0052 gives. Otherwise the answer is `null`, and every
+ * surface says nothing rather than guess which provider the source was about.
+ */
+export function unreachableProviders(
+  connections: ProviderConnectionListResponse,
+  source: ModelConnectionSource,
+): ReadonlySet<string> | null {
+  if (connections.providers.length === 0) {
+    return new Set();
+  }
+  const [only, ...others] = connections.providers;
+  if (others.length > 0 || only.provider_id !== LAB_STATUS_PROVIDER) {
+    return null;
+  }
+  return SOURCE_REACHES[source] ? new Set() : new Set([only.provider_id]);
+}
+
+/**
+ * What the workspace says beside a provider this lab cannot reach (ADR 0053).
+ *
+ * **A note, never a finding.** It is not a publish-gate sentence and must never be written
+ * into `preview.issues` or into `lib/fieldRules.ts`: the gate is machine-independent by
+ * construction and has no such sentence, and `fieldRules.test.ts` asserts that neither the
+ * mirrored set nor any Python module carries this one. A configuration naming a provider the
+ * lab is not pointed at is valid and publishable; it is only unrunnable *here*, and the
+ * authority for that is the advance, which refuses with 422 `agent_runtime_unavailable`.
+ *
+ * The provider is named rather than written as "this provider", so that the same sentence
+ * reads beside the Provider field and beside experiment setup's Start, where no field is near.
+ */
+export function unreachableProviderNote(providerLabel: string): string {
+  return `Published configurations naming ${providerLabel} cannot be advanced here until the lab has a connection for it.`;
 }

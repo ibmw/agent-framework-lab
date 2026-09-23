@@ -1,6 +1,7 @@
 import type {
   AgentConfigurationListResponse,
   AgentConfigurationVersionListResponse,
+  AgentConfigurationVersionResponse,
   AgentTurnSchema,
   ArmMetricsSchema,
   ArmStandingSchema,
@@ -14,6 +15,7 @@ import type {
   ExperimentTimelineResponse,
   ExperimentTracesResponse,
   JudgeConfigurationListResponse,
+  ModelConnectionSource,
   MutationEventSchema,
   ObjectiveResultSchema,
   ParticipantTurnSchema,
@@ -26,13 +28,14 @@ import type {
   TimelineEntrySchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { labConnection } from "./test/connection";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -793,6 +796,62 @@ let replayed: string[] = [];
 let replayFails = false;
 /** Every fork request the screen made, as the backend received it. */
 let forked: { configuration_id: string; version: number }[][] = [];
+/** Which answer of ADR 0052's chain the lab gives; a lab that reaches its provider by default. */
+let connectionSource: ModelConnectionSource = "environment";
+const connectionServed = { statuses: 0, listings: 0 };
+let versionReads = 0;
+
+/**
+ * Every read setup needs to decide whether an arm is reachable has answered, and the page has
+ * had its turn to draw it: an enabled Start asserted before then proves nothing.
+ */
+async function reachabilityRead() {
+  await waitFor(() => {
+    expect(connectionServed.statuses).toBeGreaterThanOrEqual(1);
+    expect(connectionServed.listings).toBeGreaterThanOrEqual(1);
+    expect(versionReads).toBeGreaterThanOrEqual(1);
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+/**
+ * One frozen version of a configuration, naming the provider its framework is proven on: the
+ * deterministic control for cfg-beacon, OpenAI for the rest. What the arm runs is the version,
+ * so the provider setup reads is the version's.
+ */
+function publishedVersion(
+  configurationId: string,
+  version: number,
+): AgentConfigurationVersionResponse {
+  const control = configurationId === BEACON_ID;
+  return {
+    configuration_id: configurationId,
+    lifecycle_state: "published",
+    version,
+    content_fingerprint: "e".repeat(64),
+    published_at: "2026-08-28T08:00:00+00:00",
+    support_identity_version: 1,
+    content: {
+      name: control ? "cfg-beacon" : "cfg-atlas",
+      description: "",
+      framework_id: control ? "fake" : "pydantic-ai",
+      architecture: "single_agent",
+      support_identity_id: "8e9f0a1b-2c3d-4e5f-8a6b-7c8d9e0f1a2b",
+      prompt: "You are a support agent.",
+      tone_of_voice: { source: "shop_default", guideline_id: "" },
+      tools: [],
+      memory: "conversation",
+      model: {
+        provider: control ? "fake" : "openai",
+        model_id: control ? "deterministic" : "gpt-5-mini",
+        temperature: "0.20",
+        max_tool_rounds: 8,
+      },
+    },
+  };
+}
 
 const server = setupServer(
   // The lab resolves its current shop against this list rather than trusting the remembered
@@ -841,6 +900,13 @@ const server = setupServer(
   http.get("*/api/v1/agent-configurations/:configurationId/versions", () =>
     HttpResponse.json(CONFIGURATION_VERSIONS),
   ),
+  http.get("*/api/v1/agent-configurations/:configurationId/versions/:version", ({ params }) => {
+    versionReads += 1;
+    return HttpResponse.json(
+      publishedVersion(String(params.configurationId), Number(params.version)),
+    );
+  }),
+  ...labConnection(() => connectionSource, connectionServed),
   http.get(`*/api/v1/shops/${SHOP_ID}/experiments`, () =>
     HttpResponse.json({ experiments: [] } satisfies ExperimentListResponse),
   ),
@@ -1033,6 +1099,10 @@ afterEach(() => {
   replayed = [];
   replayFails = false;
   forked = [];
+  connectionSource = "environment";
+  connectionServed.statuses = 0;
+  connectionServed.listings = 0;
+  versionReads = 0;
 });
 afterAll(() => server.close());
 
@@ -1162,6 +1232,194 @@ describe("experiment setup", () => {
     // The setup is still on screen: a refusal must not discard what the operator chose.
     expect(screen.getByRole("button", { name: "Start experiment" })).toBeVisible();
   });
+});
+
+/**
+ * An operator meets the lab's reach before composing a run rather than at the first advance
+ * (ADR 0053): the same sentence the editors write, beside a Start it disables.
+ */
+describe("experiment setup and the provider the lab can reach", () => {
+  const NOTE =
+    "Published configurations naming OpenAI cannot be advanced here until the lab has a connection for it.";
+
+  for (const source of ["none", "saved_unreadable"] as const) {
+    it(`disables Start and says why when an arm's version names a provider a lab on ${source} cannot reach`, async () => {
+      const user = userEvent.setup();
+      connectionSource = source;
+      renderSetup();
+
+      await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      await chooseArm(user, 0, "cfg-atlas");
+
+      const start = screen.getByRole("button", { name: "Start experiment" });
+      await waitFor(() => expect(start).toBeDisabled());
+      // The blocked-control rule until Slice 22: the reason in `title`, and in one muted line
+      // the button's description names.
+      expect(start).toHaveAttribute("title", NOTE);
+      expect(start).toHaveAccessibleDescription(NOTE);
+      expect(screen.getByText(NOTE)).toBeVisible();
+      // A note on this machine, not a finding of the setup gate.
+      const before = within(screen.getByRole("region", { name: "Before starting" }));
+      expect(before.getByText(/differ in 2 dimensions/)).toBeVisible();
+      expect(screen.getAllByText(NOTE)).toHaveLength(1);
+
+      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+      await user.click(start);
+      expect(started).toHaveLength(0);
+    });
+  }
+
+  it("writes one sentence for two arms that name the same unreachable provider", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await chooseArm(user, 0, "cfg-atlas");
+    await user.click(screen.getByRole("button", { name: "Add a second arm" }));
+    await chooseArm(user, 1, "cfg-atlas");
+
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(start).toBeDisabled());
+    expect(start).toHaveAccessibleDescription(NOTE);
+  });
+
+  it("starts an arm on the declared control whatever the lab can reach", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await chooseArm(user, 0, "cfg-beacon");
+    await reachabilityRead();
+    expect(screen.getByRole("button", { name: "Start experiment" })).toBeEnabled();
+    await user.type(screen.getByLabelText("Experiment name"), "Control only");
+    await user.click(screen.getByRole("button", { name: "Start experiment" }));
+
+    await waitFor(() => expect(started).toHaveLength(1));
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  it("releases Start when the second arm moves off the unreachable provider", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await chooseArm(user, 0, "cfg-beacon");
+    await user.click(screen.getByRole("button", { name: "Add a second arm" }));
+    await chooseArm(user, 1, "cfg-atlas");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(start).toBeDisabled());
+
+    await chooseArm(user, 1, "cfg-beacon");
+
+    await waitFor(() => expect(start).toBeEnabled());
+    expect(start).not.toHaveAttribute("title");
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  const BROKEN_READ = {
+    code: "internal_error",
+    message: "The lab could not complete the request.",
+    request_id: "r",
+  };
+
+  for (const route of ["lab-status", "model-connections"] as const) {
+    it(`leaves Start alone when ${route} cannot be read, even on a lab that reaches nothing`, async () => {
+      const user = userEvent.setup();
+      connectionSource = "none";
+      server.use(
+        http.get(`*/api/v1/${route}`, () => {
+          // Counted as served, so the wait below still knows when the page has been answered.
+          if (route === "lab-status") {
+            connectionServed.statuses += 1;
+          } else {
+            connectionServed.listings += 1;
+          }
+          return HttpResponse.json(BROKEN_READ, { status: 500 });
+        }),
+      );
+      renderSetup();
+
+      await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      await chooseArm(user, 0, "cfg-atlas");
+      await reachabilityRead();
+
+      const start = screen.getByRole("button", { name: "Start experiment" });
+      expect(start).toBeEnabled();
+      expect(start).not.toHaveAttribute("title");
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    });
+  }
+
+  it("leaves Start alone when the arm's version cannot be read", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    server.use(
+      http.get("*/api/v1/agent-configurations/:configurationId/versions/:version", () => {
+        versionReads += 1;
+        return HttpResponse.json(BROKEN_READ, { status: 500 });
+      }),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await chooseArm(user, 0, "cfg-atlas");
+    await reachabilityRead();
+
+    expect(screen.getByRole("button", { name: "Start experiment" })).toBeEnabled();
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  it("releases Start when a blocked arm moves to a version that cannot be read", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    server.use(
+      http.get("*/api/v1/agent-configurations/:configurationId/versions/:version", ({ params }) => {
+        versionReads += 1;
+        return params.version === "2"
+          ? HttpResponse.json(BROKEN_READ, { status: 500 })
+          : HttpResponse.json(publishedVersion(String(params.configurationId), 1));
+      }),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await chooseArm(user, 0, "cfg-atlas");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(start).toBeDisabled());
+
+    const reads = versionReads;
+    const arm = screen.getByRole("group", { name: "Arm A" });
+    await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
+    await waitFor(() => expect(versionReads).toBeGreaterThan(reads));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // What the lab knows about version 2 is nothing, so it says nothing about it.
+    expect(start).toBeEnabled();
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  for (const source of ["saved", "environment"] as const) {
+    it(`starts an OpenAI arm on a lab that reaches it through ${source}`, async () => {
+      const user = userEvent.setup();
+      connectionSource = source;
+      renderSetup();
+
+      await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      await chooseArm(user, 0, "cfg-atlas");
+      await reachabilityRead();
+      expect(screen.getByRole("button", { name: "Start experiment" })).toBeEnabled();
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+      await user.click(screen.getByRole("button", { name: "Start experiment" }));
+
+      await waitFor(() => expect(started).toHaveLength(1));
+    });
+  }
 });
 
 describe("live bench", () => {

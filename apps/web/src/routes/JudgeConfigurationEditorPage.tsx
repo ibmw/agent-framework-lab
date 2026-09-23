@@ -35,12 +35,14 @@ import {
   TEMPERATURE_RULE,
   unprovenJudgeProviderRule,
 } from "../lib/fieldRules";
+import { unreachableProviderNote } from "../lib/modelConnections";
 import {
   accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const CLIENT: DefinitionClient<
@@ -81,6 +83,7 @@ export function JudgeConfigurationEditorPage() {
   const [resources, setResources] = useState<JudgeConfigurationResourcesResponse | null>(null);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
+  const unreachable = useUnreachableProviders();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -132,6 +135,11 @@ export function JudgeConfigurationEditorPage() {
   const providers = unprovenProvider
     ? [...provenProviders, content.model.provider]
     : provenProviders;
+  // A note about this lab, beside the field and nowhere else: not in the gate, whose answer is
+  // the same on every machine, and not in `PublishReasons`, because it blocks nothing (ADR 0053).
+  const providerNote = unreachable?.has(content.model.provider)
+    ? unreachableProviderNote(provider?.label ?? describeProvider(content.model.provider))
+    : null;
 
   /**
    * A provider change takes the model with it.
@@ -294,8 +302,10 @@ export function JudgeConfigurationEditorPage() {
             <FieldHint
               label="Provider"
               hint={PROVEN_PROVIDER_RULE}
-              extra={unprovenProvider ? unprovenJudgeProviderRule(content.model.provider) : null}
-              extraTone="error"
+              extra={
+                unprovenProvider ? unprovenJudgeProviderRule(content.model.provider) : providerNote
+              }
+              extraTone={unprovenProvider ? "error" : "muted"}
             >
               <select
                 className={fieldControlClasses}

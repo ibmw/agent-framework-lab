@@ -100,3 +100,19 @@ export async function listAgentConfigurationVersions(
     await fetch(configurationPath(configurationId, "/versions"), { signal }),
   );
 }
+
+/**
+ * One frozen version, whole: what an arm pinned to it will run.
+ *
+ * Read by experiment setup for the provider the version names, which the listing's summary
+ * row does not carry and the draft may no longer agree with (ADR 0053).
+ */
+export async function getAgentConfigurationVersion(
+  configurationId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<AgentConfigurationVersionResponse> {
+  return read<AgentConfigurationVersionResponse>(
+    await fetch(configurationPath(configurationId, `/versions/${version}`), { signal }),
+  );
+}

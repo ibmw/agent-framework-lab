@@ -35,7 +35,7 @@ URL; `playwright.config.ts` declares that many servers; `apps/web/tests/e2e/supp
 the `test` that hands a worker the base URL of its own frontend. Workers cannot contend, and no
 worker can see another's rows.
 
-Two rules follow for anyone writing a spec:
+Three rules follow for anyone writing a spec:
 
 - Take `test` and `expect` from `./support/e2e`, never from `@playwright/test`. The config names no
   `baseURL`, so a spec that imports the wrong one has none and fails on its first navigation.
@@ -45,6 +45,15 @@ Two rules follow for anyone writing a spec:
   names, the names a dropdown is selected by — still carries a per-spec suffix. Anything scoped to
   a shop (a ticket reference, an order reference, a customer) needs nothing, because each spec
   builds its own shop.
+- A worker's API runs with `AGENT_LAB_ENVIRONMENT=test`, so it advances an `openai` arm through
+  the SDK doubles whatever its connection source says — and experiment setup disables Start for an
+  arm naming a provider the lab reports it cannot reach (ADR 0053). What the source is depends on
+  the run: a fresh worker started from a shell without `AGENT_LAB_OPENAI_API_KEY` reports `none`,
+  one started from a shell that exports it reports `environment`, and `workspace-shell.spec.ts`
+  leaves a keyless connection saved, so specs after it on that worker see `saved`. Today's
+  journeys start the control, which is unaffected either way. A journey that needs an `openai`
+  arm must not rely on the lab's source, and must not save a connection unless
+  `workspace-shell.spec.ts`'s fresh-lab precondition is reworked first.
 
 Two shapes of test carry more weight than their size suggests, and both are load-bearing (ADR 0023).
 **Recorded fingerprints** pin the canonical serializer's bytes and the `sandbox-v2` and
