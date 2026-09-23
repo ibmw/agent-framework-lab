@@ -301,8 +301,9 @@ Some of the lab belongs to no shop and to no definition.
 - **The model connection** is a capability of the lab: one per provider, holding a base URL and an
   encrypted key and no model, editable from Settings, with the environment as the bootstrap. A run
   pins the endpoint it reached and refuses an advance against another; the connection never enters
-  a fingerprint. ADR 0052 is accepted and its slice is open in `docs/PLAN-UX.md`; until it lands
-  the environment is the only source.
+  a fingerprint. Composition is per request, so run mode moves without a restart, and `/settings`
+  states which of four sources is in force — the saved connection, a saved connection whose key
+  will not decrypt, the environment, or neither (ADR 0052).
 - **Guidance is per surface**: a tour started only when asked, and a glossary reached by term links
   (ADR 0049, ADR 0050). Unsaved work is asked about once (ADR 0051).
 

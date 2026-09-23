@@ -2,6 +2,36 @@
 
 Status: accepted, partially superseded by ADR 0045, ADR 0046 and ADR 0049 — 2026-09-11
 
+Amendment: 2026-09-23 — "the settings surface reports composition and never edits it" is
+narrowed to *the three runtime read-outs*, and the refusal of a credential form is reversed.
+
+ADR 0052 argued both, and this is that ADR's own consequence recorded where a reader of this
+one will find it. What is reversed is the refusal of a field for `AGENT_LAB_OPENAI_API_KEY`,
+which stood on the reading that `docs/observability.md` forbids this application from
+recording a provider secret at all: that document forbids **recording a secret in spans and
+logs**, which is a rule about what leaves the process as telemetry rather than about what the
+lab may hold. What *survives* from the refusal is the rule it was reaching for, kept without
+softening — the key is never logged, never traced, never served, never echoed in an error and
+never written to a canonical document — and this ADR's own narrow payload rule for
+`getLabStatus`, no prefix, suffix, length or hash of a secret, is inherited rather than
+relaxed and applied to a key the operator typed themselves. The refusal of a `lab_settings`
+table for per-viewer view state is untouched: that refusal was about *how far the operator had
+got and how they like their rail*, and a connection is *what the lab can reach*, which is a
+property of the installation.
+
+So `/settings` gains its first *setting* that is not a browser preference — not its first
+write, because *The fast path* zone ADR 0047 put there already writes the demo into the lab, but
+that is an action run once rather than a setting — and it is a new zone rather than a change to
+any of the four read-outs this ADR listed. The sentence
+below is now true of *Run mode*, *Trace export* and *What this build can run* rather than of
+the page. Two further consequences reach sentences in this ADR: run mode is no longer
+process configuration read once at start-up but a per-request answer that a saved connection
+moves without a restart, and the "configured model name" read-out is relabelled to what it
+actually is — the model the POC's conversation routes reach for — so that it cannot be read as
+the model an experiment runs. The refusal of an editable OTLP endpoint stands whole, and
+ADR 0052 says why the argument that makes a provider base URL safe to serve does not transfer
+to it.
+
 Opens Milestone 7. Every milestone before it was about what the lab records; this one is the first
 about the person operating it. It adds a lab-level settings surface outside shop scope, a guide
 mode, and a guided path from an empty database to a two-arm comparison.
@@ -284,33 +314,57 @@ it.
 
 ### The settings surface reports composition and never edits it
 
-> Narrowed by PLAN-UX Slice 18 (2026-09-21). The decision stands whole — the surface reports
-> composition and edits none of it, and every refusal below is unchanged — but three of these
-> four are no longer four read-outs on one page. *Run mode*, *Trace export* and *This build*,
-> renamed *What this build can run*, are the three grey padlocked cards of a **collapsed**
-> *Runtime configuration · Read only* disclosure, and each now ends in a "To change it:" line
-> naming the variable or the file, which is where this decision's own argument ended anyway.
-> *Workspace* stopped being a read-out at the foot of the page and became *Your preferences*,
-> the page's first zone: the same two view preferences, beside where the app opens (ADR 0054)
-> and how a timestamp is written (ADR 0058), saved on change with a *Reset to defaults* that
-> reaches the three an operator chose and neither of the two the shell records.
+> Narrowed by PLAN-UX Slice 18 (2026-09-21). The decision stood whole then — the surface
+> reported composition and edited none of it, and every refusal below was unchanged — but
+> three of these four were no longer four read-outs on one page. *Run mode*, *Trace export*
+> and *This build*, renamed *What this build can run*, are the three grey padlocked cards of a
+> **collapsed** *Runtime configuration · Read only* disclosure, and each now ends in a "To
+> change it:" line naming the variable or the file, which is where this decision's own
+> argument ended anyway. *Workspace* stopped being a read-out at the foot of the page and
+> became *Your preferences*, the page's first zone: the same two view preferences, beside
+> where the app opens (ADR 0054) and how a timestamp is written (ADR 0058), saved on change
+> with a *Reset to defaults* that reaches the three an operator chose and neither of the two
+> the shell records.
 
-`/settings` carries four read-outs, and none of them is a control.
+> Narrowed again by ADR 0052 (2026-09-23), and this time in substance: the sentence is true of
+> *the three runtime read-outs* rather than of the page. Beside the four below and *The fast
+> path* (ADR 0047), `/settings` gains a **Model provider** zone that saves where the lab is
+> pointed and the key it reaches under — its first setting that is not a browser preference,
+> which none of the four ever was — so the
+> refusal of a credential form below is reversed — on the reading corrected in the amendment
+> at the head of this file, which also says what survives from it unchanged. Run mode below is
+> no longer read once at start-up either: composition moved to the request, so the card
+> reports a reading a save can move, and it states which of the chain's four answers won. The
+> other three refusals in this section stand, the OTLP one included.
+
+`/settings` carries four read-outs, and none of them is a control (amended 2026-09-23: the
+three runtime read-outs below still are; *Workspace* became the *Your preferences* zone in
+Slice 18; and the page now also holds two zones none of the four was — *The fast path*, which
+writes the demo once (ADR 0047), and *Model provider*, which edits where the lab is pointed
+(ADR 0052)).
 
 - **This build.** The frameworks, architectures, providers, models and proven capabilities from
   `PROVEN_FRAMEWORKS`, served already by `readAgentConfigurationResources`. It answers "what can
   this actually run" without opening the agent-configuration editor to find out from a validation
   error.
-- **Run mode.** Offline or credentialed, and the configured model name.
+- **Run mode.** Offline or credentialed, and the configured model name (amended 2026-09-23: a
+  per-request answer rather than process configuration, stating which of four sources won, and
+  the model read-out relabelled to the one the POC's conversation routes reach for; ADR 0052).
 - **Trace export.** Whether an OTLP endpoint is configured, with the `infra/phoenix/compose.yaml`
   and `http://localhost:6006` path from `docs/observability.md` shown when it is not.
-- **Workspace.** The two view preferences above, which are the only writable things on the page.
+- **Workspace.** The two view preferences above, which are the only writable things on the page
+  (amended 2026-09-23: no longer the only ones — *The fast path* writes the demo once
+  (ADR 0047), and the *Model provider* zone saves the lab's connection, the page's one setting
+  that is not a browser preference; ADR 0052).
 
 Run mode and trace export are process configuration: they are read from the environment at
 composition and cannot change while the process runs. The page therefore reports them, and a
 settings UI that offered a field for `AGENT_LAB_OPENAI_API_KEY` was rejected outright — it would
 mean this application storing a provider secret in its own database, which `docs/observability.md`
-forbids it from so much as recording.
+forbids it from so much as recording. (Both sentences amended 2026-09-23: run mode is a
+per-request answer, the credential form is built, and the observability reading that refused it
+was too wide. The amendment at the head of this file says what survives from the refusal, which
+is every rule it was reaching for; ADR 0052.)
 
 `GET /api/v1/agent-frameworks`'s published summary is corrected in the same change, from "List
 agent frameworks and proven capabilities" to what it serves — the adapters this *process* has

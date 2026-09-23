@@ -1,11 +1,16 @@
 import type {
   AgentConfigurationResourcesResponse,
   LabStatusResponse,
+  ModelConnectionSource,
+  ModelConnectionTestRequest,
+  ModelConnectionTestResponse,
+  ProviderConnectionListResponse,
+  SaveModelConnectionRequest,
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -97,8 +102,8 @@ const resources: AgentConfigurationResourcesResponse = {
 
 const OFFLINE: LabStatusResponse = {
   run_mode: "offline",
-  // Which of the saved connection and the environment bootstrap is in force. Served by
-  // `getLabStatus` and not yet drawn; the fixture carries it because the contract requires it.
+  // Which answer of ADR 0052's resolution chain is in force. Four members, and the read-only
+  // zone draws a sentence for each.
   connection_source: "none",
   model_id: "gpt-5-mini",
   trace_export_configured: false,
@@ -112,7 +117,36 @@ const BROKEN = {
 
 let currentStatus: LabStatusResponse = OFFLINE;
 
+/** A lab that has been pointed nowhere: the one provider that can hold a connection, holding none. */
+const UNCONFIGURED: ProviderConnectionListResponse = {
+  providers: [{ provider_id: "openai", connection: null }],
+};
+
+function pointedAt(
+  base_url: string,
+  over: { key_configured?: boolean; key_added_at?: string | null } = {},
+): ProviderConnectionListResponse {
+  return {
+    providers: [
+      {
+        provider_id: "openai",
+        connection: {
+          provider_id: "openai",
+          base_url,
+          key_configured: over.key_configured ?? false,
+          key_added_at: over.key_added_at ?? null,
+          created_at: "2026-09-19T14:07:00+00:00",
+          updated_at: "2026-09-19T14:07:00+00:00",
+        },
+      },
+    ],
+  };
+}
+
+let currentConnections: ProviderConnectionListResponse = UNCONFIGURED;
+
 const server = setupServer(
+  http.get("*/api/v1/model-connections", () => HttpResponse.json(currentConnections)),
   http.get("*/api/v1/shops", () => HttpResponse.json(shops)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () => HttpResponse.json(shopDraft)),
   http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () => HttpResponse.json(shopPreview)),
@@ -130,6 +164,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   server.resetHandlers();
   currentStatus = OFFLINE;
+  currentConnections = UNCONFIGURED;
   window.localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -180,20 +215,6 @@ describe("the settings zones", () => {
       // end, so each one ends in the variable or the file that does change it (ADR 0044).
       expect(card.getByText(/^To change it:/)).toBeVisible();
     }
-  });
-
-  it("holds the model provider's place without promising what is not built", async () => {
-    renderAt("/settings");
-
-    const zone = within(await screen.findByRole("region", { name: /^Model provider/ }));
-    expect(zone.getByText(/Not built yet/)).toBeVisible();
-    // What is in force meanwhile, and what stays in force afterwards (ADR 0052).
-    expect(zone.getByText("AGENT_LAB_OPENAI_API_KEY")).toBeVisible();
-    expect(zone.getByText(/the environment is the whole of it/)).toBeVisible();
-    expect(zone.getByText(/saved connection wins where there is one/)).toBeVisible();
-    // No control: the zone's place is drawn, and nothing on it can be pressed or typed into.
-    expect(zone.queryByRole("button")).toBeNull();
-    expect(zone.queryByRole("textbox")).toBeNull();
   });
 
   it("returns to what was underneath, and to the shops index when nothing was", async () => {
@@ -396,6 +417,756 @@ describe("your preferences", () => {
   });
 });
 
+describe("the model provider zone", () => {
+  function zone() {
+    return within(screen.getByRole("region", { name: "Model provider" }));
+  }
+
+  async function openZone() {
+    // The zone reads the provider listing, so nothing in it is assertable until that lands.
+    expect(await screen.findByRole("group", { name: "Endpoint preset" })).toBeVisible();
+    return zone();
+  }
+
+  it("offers the six presets and lights the one the saved endpoint belongs to", async () => {
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    renderAt("/settings");
+
+    const presets = within(await screen.findByRole("group", { name: "Endpoint preset" }));
+    for (const label of ["OpenAI", "Ollama", "vLLM", "OpenRouter", "Together AI", "Custom"]) {
+      expect(presets.getByRole("radio", { name: label })).toBeVisible();
+    }
+    // Derived from the endpoint in the field rather than remembered beside it, so the page
+    // cannot hold two answers to where the lab is pointed.
+    expect(presets.getByRole("radio", { name: "Ollama" })).toBeChecked();
+    expect(zone().getByLabelText("Base URL")).toHaveValue("http://localhost:11434/v1");
+  });
+
+  it("falls back to Custom for an endpoint no preset names", async () => {
+    currentConnections = pointedAt("https://gateway.internal/openai/v1");
+    renderAt("/settings");
+
+    const presets = within(await screen.findByRole("group", { name: "Endpoint preset" }));
+    expect(presets.getByRole("radio", { name: "Custom" })).toBeChecked();
+  });
+
+  it("draws no model field, because the connection holds none", async () => {
+    currentConnections = pointedAt("https://api.openai.com/v1");
+    renderAt("/settings");
+    const card = await openZone();
+
+    // ADR 0052 refuses a model on the connection at length: the model is authored content
+    // resolved from each arm's published configuration (ADR 0024). The prototype's *Default
+    // model* row is a recorded departure, not an omission.
+    expect(card.queryByLabelText(/model/i)).toBeNull();
+    expect(card.queryByText(/Default model/i)).toBeNull();
+    expect(card.queryByText(/gpt-5-mini/)).toBeNull();
+  });
+
+  it("says a key is configured and when, and never anything else about it", async () => {
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+
+    const row = within(card.getByRole("group", { name: "API key" }));
+    expect(row.getByText(/^Configured /)).toBeVisible();
+    expect(row.getByRole("button", { name: "Replace" })).toBeVisible();
+
+    // Never a mask. The response carries `key_configured` and `key_added_at` and no other
+    // fact about the key — not a prefix, a suffix, a length or a hash — so there is nothing
+    // on this page a mask could have been drawn from, and nothing that resembles one.
+    const written = card.getByRole("group", { name: "API key" }).textContent ?? "";
+    expect(written).not.toMatch(/[•*]{2,}|·{3,}|…[A-Za-z0-9]{4}|sk-[A-Za-z0-9]/);
+    expect(written).not.toMatch(/\bmask(ed)?\b|\bending\b|\blast four\b|\bcharacters long\b/i);
+    // And no control that would reveal one: there is no read route for the key at all.
+    expect(card.queryByRole("button", { name: /reveal|show/i })).toBeNull();
+    // The configured key is a read-out, not a field: nothing here is typed into until
+    // *Replace* is pressed.
+    expect(row.queryByLabelText(/API key/)).toBeNull();
+  });
+
+  it("asks for a key rather than showing one when none is installed", async () => {
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    renderAt("/settings");
+    const card = await openZone();
+
+    const typed = card.getByLabelText(/^API key/);
+    expect(typed).toHaveValue("");
+    expect(typed).toHaveAttribute("type", "password");
+    // `off` is ignored on a password field, and a password manager would fill a login
+    // password in here for the form to send to the endpoint.
+    expect(typed).toHaveAttribute("autocomplete", "new-password");
+    expect(card.queryByText(/^Configured /)).toBeNull();
+  });
+
+  it("opens a field when Replace is pressed, and puts the read-out back on Discard", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Replace" }));
+    await user.type(card.getByLabelText("New API key"), "sk-typed");
+
+    await user.click(card.getByRole("button", { name: "Discard" }));
+    expect(card.getByText(/^Configured /)).toBeVisible();
+    // The field is gone rather than emptied: Discard puts back what the lab holds, which is
+    // a key it will not show and a row that says only that one is installed.
+    expect(card.queryByPlaceholderText("sk-…")).toBeNull();
+  });
+
+  it("offers Save and Discard only once there is something to save", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    renderAt("/settings");
+    const card = await openZone();
+
+    expect(card.queryByRole("button", { name: "Save connection" })).toBeNull();
+    expect(card.queryByRole("button", { name: "Discard" })).toBeNull();
+
+    await user.click(card.getByRole("radio", { name: "vLLM" }));
+
+    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+    await user.click(card.getByRole("button", { name: "Discard" }));
+
+    expect(card.getByLabelText("Base URL")).toHaveValue("http://localhost:11434/v1");
+    expect(card.queryByRole("button", { name: "Save connection" })).toBeNull();
+  });
+
+  it("refuses to save with nothing to reach, and says so where the press was refused", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.clear(card.getByLabelText("Base URL"));
+
+    const save = card.getByRole("button", { name: "Save connection" });
+    expect(save).toBeDisabled();
+    expect(save).toHaveAccessibleDescription(/No base URL to reach/);
+    expect(card.getByRole("button", { name: "Test connection" })).toBeDisabled();
+  });
+
+  it("saves what was typed, and reads back the endpoint the lab stored", async () => {
+    const user = userEvent.setup();
+    const sent: SaveModelConnectionRequest[] = [];
+    server.use(
+      http.put("*/api/v1/model-connections/openai", async ({ request }) => {
+        sent.push((await request.json()) as SaveModelConnectionRequest);
+        currentConnections = pointedAt("http://localhost:11434/v1", {
+          key_configured: true,
+          key_added_at: "2026-09-23T09:00:00+00:00",
+        });
+        return HttpResponse.json(currentConnections.providers[0]);
+      }),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("radio", { name: "Ollama" }));
+    // The trailing slash is the operator's paste; the lab stores one spelling of an endpoint
+    // because a run is pinned to it, and the field shows what was stored rather than what
+    // was typed.
+    await user.type(card.getByLabelText("Base URL"), "/");
+    await user.type(card.getByLabelText(/^API key/), "sk-typed");
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+
+    await screen.findByText(/^Configured /);
+    expect(sent).toEqual([{ base_url: "http://localhost:11434/v1/", api_key: "sk-typed" }]);
+    expect(card.getByLabelText("Base URL")).toHaveValue("http://localhost:11434/v1");
+    expect(card.queryByRole("button", { name: "Save connection" })).toBeNull();
+  });
+
+  it("leaves the key out of a save that only moved the endpoint", async () => {
+    const user = userEvent.setup();
+    const sent: SaveModelConnectionRequest[] = [];
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    server.use(
+      http.put("*/api/v1/model-connections/openai", async ({ request }) => {
+        sent.push((await request.json()) as SaveModelConnectionRequest);
+        return HttpResponse.json(
+          pointedAt("https://openrouter.ai/api/v1", {
+            key_configured: true,
+            key_added_at: "2026-09-19T14:07:00+00:00",
+          }).providers[0],
+        );
+      }),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("radio", { name: "OpenRouter" }));
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+
+    // An absent key keeps the stored one, which is what lets an operator move an endpoint
+    // without retyping a credential the lab will never show them.
+    await waitFor(() =>
+      expect(sent).toEqual([{ base_url: "https://openrouter.ai/api/v1", api_key: null }]),
+    );
+  });
+
+  it("reads back the lab's own refusal rather than refusing on its own account", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put("*/api/v1/model-connections/openai", () =>
+        HttpResponse.json(
+          {
+            code: "invalid_model_connection",
+            message:
+              "base_url may only use http for a loopback or private host, so that a key is " +
+              "never sent to a public endpoint in plaintext; use https instead",
+            request_id: "r",
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    // The page has no opinion about base URLs: `domain/model_connection.py` decides what may
+    // be stored, and a second gate here would stop matching the one that decides.
+    await user.type(card.getByLabelText("Base URL"), "http://api.example.com/v1");
+    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+
+    expect(await card.findByRole("alert")).toHaveTextContent(/only use http for a loopback/);
+  });
+
+  const PROBES: readonly (readonly [ModelConnectionTestResponse, RegExp])[] = [
+    [
+      { outcome: "reachable", latency_ms: 312, status_class: "2xx" },
+      /Answered and accepted the key · 312 ms · 2xx/,
+    ],
+    [
+      { outcome: "refused", latency_ms: 180, status_class: "4xx" },
+      /Answered and rejected the key · 180 ms · 4xx/,
+    ],
+    [
+      { outcome: "unreachable", latency_ms: 5001, status_class: null },
+      /Nothing usable answered · 5001 ms/,
+    ],
+  ];
+
+  it.each(PROBES)("reports what one probe established (%o)", async (answer, written) => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    server.use(
+      http.post("*/api/v1/model-connections/openai/test", () => HttpResponse.json(answer)),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+
+    expect(await card.findByText(written)).toBeVisible();
+  });
+
+  it("says it is reaching the endpoint while it waits", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    let answer: (value: ModelConnectionTestResponse) => void = () => {};
+    server.use(
+      http.post("*/api/v1/model-connections/openai/test", async () => {
+        return HttpResponse.json(
+          await new Promise<ModelConnectionTestResponse>((resolve) => {
+            answer = resolve;
+          }),
+        );
+      }),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    expect(await card.findByRole("button", { name: "Reaching the endpoint…" })).toBeDisabled();
+
+    answer({ outcome: "reachable", latency_ms: 900, status_class: "2xx" });
+    expect(await card.findByText(/900 ms/)).toBeVisible();
+  });
+
+  it("drops an answer about an endpoint that is no longer the one on the page", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    server.use(
+      http.post("*/api/v1/model-connections/openai/test", () =>
+        HttpResponse.json({ outcome: "reachable", latency_ms: 312, status_class: "2xx" }),
+      ),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    expect(await card.findByText(/312 ms/)).toBeVisible();
+
+    // A reachability answer is true of one endpoint at one moment (ADR 0052). Pointing the
+    // zone somewhere else makes it an answer about a connection that is no longer the one in
+    // front of the operator, and a green tick left standing would be read as a promise about
+    // the new one.
+    await user.click(card.getByRole("radio", { name: "vLLM" }));
+    expect(card.queryByText(/312 ms/)).toBeNull();
+  });
+
+  it("drops an answer that lands after the endpoint moved under it", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    let answer: (value: ModelConnectionTestResponse) => void = () => {};
+    server.use(
+      http.post("*/api/v1/model-connections/openai/test", async () => {
+        return HttpResponse.json(
+          await new Promise<ModelConnectionTestResponse>((resolve) => {
+            answer = resolve;
+          }),
+        );
+      }),
+    );
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    await card.findByRole("button", { name: "Reaching the endpoint…" });
+
+    // The case clearing the result on edit does not cover: the reply lands *after* the move,
+    // so without a token the verdict about Ollama would be painted onto vLLM.
+    await user.click(card.getByRole("radio", { name: "vLLM" }));
+    answer({ outcome: "reachable", latency_ms: 312, status_class: "2xx" });
+
+    await waitFor(() =>
+      expect(card.getByRole("button", { name: "Test connection" })).toBeEnabled(),
+    );
+    expect(card.queryByText(/312 ms/)).toBeNull();
+    expect(card.queryByText(/Answered/)).toBeNull();
+  });
+
+  /** Every body `POST …/test` was sent, in order, answering each as reachable. */
+  function captureProbes(): ModelConnectionTestRequest[] {
+    const sent: ModelConnectionTestRequest[] = [];
+    server.use(
+      http.post("*/api/v1/model-connections/openai/test", async ({ request }) => {
+        sent.push((await request.json()) as ModelConnectionTestRequest);
+        return HttpResponse.json({ outcome: "reachable", latency_ms: 312, status_class: "2xx" });
+      }),
+    );
+    return sent;
+  }
+
+  it("tests under the stored key by sending none, rather than anything of its own", async () => {
+    // The route falls back to the stored key when `api_key` is null (ADR 0052). Anything
+    // else here would be a credential the page made up, sent to the endpoint by the server.
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    const sent = captureProbes();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+
+    await card.findByText(/312 ms/);
+    expect(sent).toEqual([{ base_url: "https://api.openai.com/v1", api_key: null }]);
+  });
+
+  it("tests under the key being typed, trimmed, and under no key once it is cleared", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    const sent = captureProbes();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.type(card.getByLabelText(/^API key/), "  sk-typed  ");
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    await card.findByText(/312 ms/);
+
+    await user.clear(card.getByLabelText(/^API key/));
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+
+    expect(sent).toEqual([
+      { base_url: "http://localhost:11434/v1", api_key: "sk-typed" },
+      { base_url: "http://localhost:11434/v1", api_key: null },
+    ]);
+  });
+
+  it("does not carry a key typed for one endpoint to the next preset picked", async () => {
+    // A preset pick drops a key *typed* for the last endpoint, which would otherwise be sent
+    // to the new one. It does no more than that: where a key is stored, the server falls back
+    // to it (ADR 0052), and the row says so — "says the installed key goes wherever…" below.
+    const user = userEvent.setup();
+    const sent = captureProbes();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("radio", { name: "OpenAI" }));
+    await user.type(card.getByLabelText(/^API key/), "sk-for-openai");
+    await user.click(card.getByRole("radio", { name: "OpenRouter" }));
+
+    expect(card.getByLabelText(/^API key/)).toHaveValue("");
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    await waitFor(() =>
+      expect(sent).toEqual([{ base_url: "https://openrouter.ai/api/v1", api_key: null }]),
+    );
+  });
+
+  it("keeps the key while the endpoint is only being retyped", async () => {
+    // Only a preset pick drops a typed key. Typing in Base URL leaves it, and the key row says
+    // where it will go once the endpoint is not the saved one.
+    const user = userEvent.setup();
+    const sent = captureProbes();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("radio", { name: "OpenAI" }));
+    await user.type(card.getByLabelText(/^API key/), "sk-for-openai");
+    await user.type(card.getByLabelText("Base URL"), "/");
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+
+    await waitFor(() =>
+      expect(sent).toEqual([{ base_url: "https://api.openai.com/v1/", api_key: "sk-for-openai" }]),
+    );
+  });
+
+  it("puts the stored key's read-out back when a preset is picked mid-replacement", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Replace" }));
+    await user.type(card.getByLabelText("New API key"), "sk-for-openai");
+    await user.click(card.getByRole("radio", { name: "OpenRouter" }));
+
+    expect(card.getByText(/^Configured /)).toBeVisible();
+    expect(card.queryByPlaceholderText("sk-…")).toBeNull();
+  });
+
+  it("offers the way back to the stored key once Replace is pressed", async () => {
+    // Replace with nothing typed changes nothing that would be saved, so the pair is not
+    // drawn — and without a way back the row would be an empty optional field reading as
+    // though no key were stored, while one is, and is used.
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Replace" }));
+    const row = within(card.getByRole("group", { name: "API key" }));
+    expect(row.getByText(/installed key is kept, and used/)).toBeVisible();
+
+    await user.click(row.getByRole("button", { name: "Keep the current key" }));
+
+    expect(card.getByText(/^Configured /)).toBeVisible();
+    expect(card.queryByPlaceholderText("sk-…")).toBeNull();
+    expect(card.queryByRole("button", { name: "Discard" })).toBeNull();
+  });
+
+  it("keeps an endpoint being typed when the operator keeps the stored key", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.type(card.getByLabelText("Base URL"), "/");
+    await user.click(card.getByRole("button", { name: "Replace" }));
+    await user.click(card.getByRole("button", { name: "Keep the current key" }));
+
+    expect(card.getByLabelText("Base URL")).toHaveValue("https://api.openai.com/v1/");
+  });
+
+  it("says in the key's own row that a stored key cannot be read, and what to do", async () => {
+    // `key_configured` reports presence and never readability, so the row alone would say
+    // *Configured* beside a key that reaches nothing. ADR 0052's amendment: the lab "wins as
+    // an offline lab, with a source that names the remedy" — named here, where it is acted on,
+    // and not only inside the collapsed read-out below.
+    currentStatus = { ...OFFLINE, connection_source: "saved_unreadable" };
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+
+    const row = within(card.getByRole("group", { name: "API key" }));
+    expect(await row.findByText("Stored, but this lab cannot read it")).toBeVisible();
+    // Both causes, because they have different remedies: an unset variable refuses the save
+    // outright with 422, and a moved one needs the key saved again under the new one.
+    expect(row.getByText(/AGENT_LAB_CREDENTIAL_KEY is unset, or is not the one/)).toBeVisible();
+    expect(row.queryByText(/^Configured/)).toBeNull();
+    expect(row.getByRole("button", { name: "Replace" })).toBeEnabled();
+  });
+
+  it("does not promise that an unreadable key is used once Replace is pressed", async () => {
+    // The server resolves an undecryptable key to nothing at all, so leaving the field empty
+    // keeps the lab offline rather than keeping a key in use.
+    const user = userEvent.setup();
+    currentStatus = { ...OFFLINE, connection_source: "saved_unreadable" };
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+    const row = within(card.getByRole("group", { name: "API key" }));
+    await row.findByText("Stored, but this lab cannot read it");
+
+    await user.click(row.getByRole("button", { name: "Replace" }));
+
+    const replacing = within(card.getByRole("group", { name: "API key" }));
+    expect(
+      replacing.getByText(/leaving this empty keeps it and the lab stays offline/),
+    ).toBeVisible();
+    expect(replacing.queryByText(/kept, and used/)).toBeNull();
+  });
+
+  it("says the installed key goes wherever the endpoint has moved, and stops saying so", async () => {
+    // ADR 0052: a save or a test with no key falls back to the saved one. So moving the
+    // endpoint with the read-out showing sends the installed key somewhere new, and the row
+    // says so rather than letting a preset pick look as though it left the key behind.
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+    const stored = /installed key will be sent to this endpoint on Test, and kept for it on Save/;
+    expect(card.queryByText(stored)).toBeNull();
+
+    await user.click(card.getByRole("radio", { name: "OpenRouter" }));
+    expect(card.getByText(stored)).toBeVisible();
+
+    await user.clear(card.getByLabelText("Base URL"));
+    await user.type(card.getByLabelText("Base URL"), "https://api.openai.com/v1/");
+    // The same endpoint in another spelling is not a move.
+    expect(card.queryByText(stored)).toBeNull();
+  });
+
+  it("says a typed key goes to the endpoint in the field, once that is not the saved one", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    renderAt("/settings");
+    const card = await openZone();
+    const typed = /key typed here will be sent to this endpoint on Test, and saved for it on Save/;
+
+    await user.type(card.getByLabelText(/^API key/), "sk-typed");
+    expect(card.queryByText(typed)).toBeNull();
+
+    await user.type(card.getByLabelText("Base URL"), "/chat");
+    expect(card.getByText(typed)).toBeVisible();
+
+    await user.click(card.getByRole("button", { name: "Discard" }));
+    expect(card.queryByText(typed)).toBeNull();
+  });
+
+  it("offers nothing to save for another spelling of the saved endpoint", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1");
+    renderAt("/settings");
+    const card = await openZone();
+
+    for (const spelling of ["https://api.openai.com/v1/", "HTTPS://API.OPENAI.COM:443/v1"]) {
+      await user.clear(card.getByLabelText("Base URL"));
+      await user.type(card.getByLabelText("Base URL"), spelling);
+      expect(card.queryByRole("button", { name: "Save connection" }), spelling).toBeNull();
+    }
+    await user.type(card.getByLabelText("Base URL"), "/chat");
+    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+  });
+
+  it("says a readable stored key is configured, and nothing about readability", async () => {
+    currentStatus = { ...OFFLINE, run_mode: "credentialed", connection_source: "saved" };
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    renderAt("/settings");
+    const card = await openZone();
+
+    // The status arrives on its own request, so wait for the page to have read it.
+    await screen.findByRole("button", { name: /^Runtime configuration/ });
+    const row = within(card.getByRole("group", { name: "API key" }));
+    expect(row.getByText(/^Configured /)).toBeVisible();
+    expect(row.queryByText(/cannot read/)).toBeNull();
+  });
+
+  it.each([
+    ["environment", /runs on AGENT_LAB_OPENAI_API_KEY from the API's environment/],
+    ["none", /environment holds no key, so this lab reaches no provider/],
+  ] as const)("says what is in force on a lab running on %s", async (source, written) => {
+    // The form opens on Custom and an empty Base URL, which reads as *pointed nowhere*
+    // whether or not the environment is pointing the lab somewhere.
+    currentStatus = {
+      ...OFFLINE,
+      run_mode: source === "environment" ? "credentialed" : "offline",
+      connection_source: source,
+    };
+    renderAt("/settings");
+    await openZone();
+
+    expect(await zone().findByText(written)).toBeVisible();
+  });
+
+  it("says nothing above the form once a readable connection is saved", async () => {
+    currentStatus = { ...OFFLINE, run_mode: "credentialed", connection_source: "saved" };
+    currentConnections = pointedAt("http://localhost:11434/v1");
+    renderAt("/settings");
+    await openZone();
+
+    await screen.findByRole("button", { name: /^Runtime configuration/ });
+    await waitFor(() => expect(zone().queryByText(/Nothing is saved here yet/)).toBeNull());
+  });
+
+  it("writes why Test is refused from the start, where a keyboard reader can find it", async () => {
+    // *A blocked primary action says why*: in `title` and inline. A disabled button takes no
+    // focus, so its `title` reaches no keyboard or touch reader, and the line is the reason.
+    renderAt("/settings");
+    const card = await openZone();
+
+    const test = card.getByRole("button", { name: "Test connection" });
+    expect(test).toBeDisabled();
+    expect(test).toHaveAttribute("title", expect.stringMatching(/No base URL to reach/));
+    expect(test).toHaveAccessibleDescription(/No base URL to reach/);
+    expect(card.getByText(/No base URL to reach/)).not.toHaveClass("sr-only");
+  });
+
+  /** A save that waits for the test to answer it, and every body it was sent. */
+  function holdSave() {
+    const sent: SaveModelConnectionRequest[] = [];
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.put("*/api/v1/model-connections/openai", async ({ request }) => {
+        sent.push((await request.json()) as SaveModelConnectionRequest);
+        await released;
+        return HttpResponse.json(pointedAt("http://localhost:11434/v1").providers[0]);
+      }),
+    );
+    return { sent, release };
+  }
+
+  it("sends one save for a press, however often Save is pressed while it is in flight", async () => {
+    const user = userEvent.setup();
+    const { sent, release } = holdSave();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("radio", { name: "Ollama" }));
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+    const saving = await card.findByRole("button", { name: "Saving…" });
+    await user.click(saving);
+    await user.click(saving);
+
+    release();
+    await waitFor(() => expect(card.queryByRole("button", { name: "Save connection" })).toBeNull());
+    expect(sent).toHaveLength(1);
+  });
+
+  it("neither tests nor opens the key while a save is in flight", async () => {
+    // Replace mid-save would open a field the read-back then closes over whatever was typed,
+    // and a probe mid-save asks about a connection that is being replaced.
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    const probes = captureProbes();
+    const { release } = holdSave();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("radio", { name: "OpenRouter" }));
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+    await card.findByRole("button", { name: "Saving…" });
+
+    await user.click(card.getByRole("button", { name: "Replace" }));
+    await user.click(card.getByRole("button", { name: "Test connection" }));
+    expect(card.queryByPlaceholderText("sk-…")).toBeNull();
+    expect(probes).toEqual([]);
+
+    release();
+    await waitFor(() => expect(card.queryByRole("button", { name: "Save connection" })).toBeNull());
+  });
+
+  it("does not put the key back while a save of a new one is in flight", async () => {
+    const user = userEvent.setup();
+    currentConnections = pointedAt("https://api.openai.com/v1", {
+      key_configured: true,
+      key_added_at: "2026-09-19T14:07:00+00:00",
+    });
+    const { sent, release } = holdSave();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("button", { name: "Replace" }));
+    await user.type(card.getByLabelText("New API key"), "sk-new");
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+    await card.findByRole("button", { name: "Saving…" });
+
+    await user.click(card.getByRole("button", { name: "Keep the current key" }));
+    expect(card.getByLabelText("New API key")).toHaveValue("sk-new");
+    expect(sent).toEqual([{ base_url: "https://api.openai.com/v1", api_key: "sk-new" }]);
+
+    release();
+    await waitFor(() => expect(card.queryByRole("button", { name: "Save connection" })).toBeNull());
+  });
+
+  it("takes no edit while a save is in flight, so the read-back cannot overwrite one", async () => {
+    // The save reads back the stored endpoint and writes it into the form. An edit made
+    // while it was in flight would be silently replaced by that read-back.
+    const user = userEvent.setup();
+    const { release } = holdSave();
+    renderAt("/settings");
+    const card = await openZone();
+
+    await user.click(card.getByRole("radio", { name: "Ollama" }));
+    await user.type(card.getByLabelText(/^API key/), "sk-typed");
+    await user.click(card.getByRole("button", { name: "Save connection" }));
+    await card.findByRole("button", { name: "Saving…" });
+
+    await user.type(card.getByLabelText("Base URL"), "/chat");
+    await user.type(card.getByLabelText(/^API key/), "-more");
+    await user.click(card.getByRole("radio", { name: "vLLM" }));
+    expect(card.getByLabelText("Base URL")).toHaveValue("http://localhost:11434/v1");
+    expect(card.getByLabelText(/^API key/)).toHaveValue("sk-typed");
+    expect(card.getByRole("button", { name: "Discard" })).toBeDisabled();
+
+    release();
+    await waitFor(() => expect(card.queryByRole("button", { name: "Save connection" })).toBeNull());
+  });
+
+  it("stops reading rather than reading forever when the listing fails", async () => {
+    server.use(
+      http.get("*/api/v1/model-connections", () => HttpResponse.json(BROKEN, { status: 500 })),
+    );
+    renderAt("/settings");
+
+    const provider = within(await screen.findByRole("region", { name: "Model provider" }));
+    expect(await provider.findByRole("alert")).toBeVisible();
+    expect(provider.queryByText("Reading…")).toBeNull();
+  });
+});
+
 describe("the runtime read-out", () => {
   it("reports what this build has been proven able to run", async () => {
     const user = userEvent.setup();
@@ -463,7 +1234,7 @@ describe("the runtime read-out", () => {
     ).toBeNull();
   });
 
-  it("drops the offline limit once a credential is configured", async () => {
+  it("drops the offline limit once the lab reaches an endpoint", async () => {
     const user = userEvent.setup();
     currentStatus = {
       run_mode: "credentialed",
@@ -478,6 +1249,109 @@ describe("the runtime read-out", () => {
     expect(await within(runMode).findByText("Credentialed")).toBeVisible();
     expect(within(runMode).queryByText(/only the deterministic control arm/)).toBeNull();
     expect(within(runMode).getByText(/a model-backed arm reaches the provider/)).toBeVisible();
+  });
+
+  it("relabels the model read-out as the one the POC's conversations reach for", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    await openRuntime(user);
+
+    // ADR 0052 requires the relabelling: a row called *Configured model* beside a connection
+    // an operator can edit reads as the model an experiment runs, and what an experiment ran
+    // is the model its published agent configuration named (ADR 0024).
+    const runMode = within(await screen.findByRole("region", { name: "Run mode" }));
+    expect(await runMode.findByText(/Conversation model/)).toBeVisible();
+    expect(runMode.queryByText(/Configured model/)).toBeNull();
+    expect(runMode.getByText(/a connection holds none at all/)).toBeVisible();
+  });
+
+  /**
+   * Four answers, not the two ADR 0052's *Decision* names: its amendment of 2026-09-22
+   * narrows that sentence, because the chain has four states and two of them are the same
+   * run mode. The table is written out rather than derived, so a fifth member arrives with a
+   * row here or not at all; `lib/modelConnections.test.ts` holds the sentences to the
+   * contract's own enum.
+   */
+  const SOURCES: readonly (readonly [
+    ModelConnectionSource,
+    LabStatusResponse["run_mode"],
+    RegExp,
+  ])[] = [
+    ["saved", "credentialed", /The connection saved in Model provider above is in force/],
+    ["saved_unreadable", "offline", /cannot read its key back/],
+    [
+      "environment",
+      "credentialed",
+      /AGENT_LAB_OPENAI_API_KEY from the API's environment is in force/,
+    ],
+    ["none", "offline", /No connection is saved and AGENT_LAB_OPENAI_API_KEY is not set/],
+  ];
+
+  it.each(SOURCES)("says that %s is what is in force", async (source, run_mode, written) => {
+    const user = userEvent.setup();
+    currentStatus = { ...OFFLINE, run_mode, connection_source: source };
+    renderAt("/settings");
+    await openRuntime(user);
+
+    const runMode = within(await screen.findByRole("region", { name: "Run mode" }));
+    expect(await runMode.findByText(written)).toBeVisible();
+  });
+
+  it("tells a key it cannot read from a lab that was never pointed anywhere", async () => {
+    const user = userEvent.setup();
+    currentStatus = { ...OFFLINE, connection_source: "saved_unreadable" };
+    renderAt("/settings");
+    await openRuntime(user);
+
+    // Both are offline, and only one of them has a remedy. `key_configured` reports a key's
+    // presence and never its readability, so an operator whose AGENT_LAB_CREDENTIAL_KEY has
+    // moved would otherwise read *Offline* beside a key the page says is installed.
+    const runMode = within(await screen.findByRole("region", { name: "Run mode" }));
+    expect(await runMode.findByText("Offline")).toBeVisible();
+    expect(runMode.getByText(/Save the key again in Model provider above/)).toBeVisible();
+    expect(runMode.getByText(/AGENT_LAB_CREDENTIAL_KEY this API is running with/)).toBeVisible();
+  });
+
+  it("says where run mode is changed now that a connection outranks the environment", async () => {
+    const user = userEvent.setup();
+    renderAt("/settings");
+    await openRuntime(user);
+
+    // Composition moved from start-up to the request (ADR 0052), so the card that used to say
+    // "read once at start-up; nothing on this page moves it" would now be describing a
+    // different lab. The zone above moves it, and the environment is the bootstrap behind it.
+    const runMode = within(await screen.findByRole("region", { name: "Run mode" }));
+    const change = runMode.getByText(/^To change it:/);
+    expect(change).toHaveTextContent(/save a connection in Model provider above/);
+    expect(change).toHaveTextContent(/with none saved, set/);
+    expect(change).not.toHaveTextContent(/Read once at start-up/);
+  });
+
+  it("re-reads run mode when a connection is saved, rather than leaving an answer behind", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put("*/api/v1/model-connections/openai", () => {
+        currentStatus = { ...OFFLINE, run_mode: "credentialed", connection_source: "saved" };
+        currentConnections = pointedAt("http://localhost:11434/v1");
+        return HttpResponse.json(currentConnections.providers[0]);
+      }),
+    );
+    renderAt("/settings");
+    await openRuntime(user);
+    expect(await within(screen.getByRole("region", { name: "Run mode" })).findByText("Offline"));
+
+    const zone = within(await screen.findByRole("region", { name: "Model provider" }));
+    await user.click(zone.getByRole("radio", { name: "Ollama" }));
+    await user.click(zone.getByRole("button", { name: "Save connection" }));
+
+    // Run mode is a per-request answer now: a lab can go from offline to credentialed while
+    // an operator is looking at it, and the reading the page took at mount is stale the
+    // moment they press Save.
+    const runMode = within(screen.getByRole("region", { name: "Run mode" }));
+    expect(await runMode.findByText("Credentialed")).toBeVisible();
+    expect(
+      runMode.getByText(/The connection saved in Model provider above is in force/),
+    ).toBeVisible();
   });
 
   it("names the Phoenix path while nothing exports traces", async () => {

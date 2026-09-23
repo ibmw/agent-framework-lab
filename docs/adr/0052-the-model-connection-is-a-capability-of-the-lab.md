@@ -320,7 +320,8 @@ describe a failure in the provider's words.
 
 ## Consequences
 
-`/settings` gains its first writable control that is not a browser preference, and the page's
+`/settings` gains its first setting that is not a browser preference (*The fast path* already
+writes to the lab, as an action rather than a setting; ADR 0047), and the page's
 character changes with it: ADR 0044 called it a surface that "reports composition and never edits
 it", and that sentence is now true of three of its four cards instead of four. The qualification
 belongs in that ADR's record when this lands.

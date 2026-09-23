@@ -9,6 +9,7 @@ import logging
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address
+from pathlib import Path
 from threading import Thread
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -689,3 +690,38 @@ async def test_a_probe_never_carries_the_upstream_body_back(
         ModelEndpointOutcome.UNREACHABLE,
         ModelEndpointOutcome.UNREACHABLE,
     ]
+
+
+_SPELLINGS = json.loads(
+    (Path(__file__).parent / "fixtures" / "base_url_spellings.json").read_text(encoding="utf-8")
+)
+"""The table `apps/web/src/lib/modelConnections.test.ts` holds the settings page's preset fold to.
+
+The page lights a preset chip from its own fold of the typed endpoint, and that fold must agree
+with this module about which spellings are one endpoint, or a chip is lit for a URL the lab
+stores as something else. The web suite asserts the fold against `preset`; this asserts
+`stored` and `preset` against `normalize_base_url` itself, so neither column can drift."""
+
+
+def test_the_shared_spelling_table_is_there_to_be_held_to() -> None:
+    # A sweep over a set that silently became empty reports as passing (ADR 0023).
+    assert len(_SPELLINGS["spellings"]) > 40
+    assert {normalize_base_url(url) for url in _SPELLINGS["presets"].values()} == set(
+        _SPELLINGS["presets"].values()
+    )
+
+
+@pytest.mark.parametrize(
+    "row",
+    _SPELLINGS["spellings"],
+    ids=lambda row: f"{row['case']}: {row['input'][:40]!r}",
+)
+def test_every_spelling_the_page_folds_is_what_the_lab_stores(row: dict[str, Any]) -> None:
+    presets = {url: preset for preset, url in _SPELLINGS["presets"].items()}
+    if row["stored"] is None:
+        with pytest.raises(ModelConnectionConfigurationError):
+            normalize_base_url(row["input"])
+        assert row["preset"] == "custom"
+        return
+    assert normalize_base_url(row["input"]) == row["stored"]
+    assert presets.get(row["stored"], "custom") == row["preset"]

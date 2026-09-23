@@ -208,6 +208,86 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
 });
 
 /**
+ * ADR 0052's own check, in a browser: `workspace-shell` "covers saving a connection and
+ * reading the page back".
+ *
+ * The connection is saved with **no key**, and that is the case rather than a shortcut around
+ * one. A saved connection carrying no key at all is in force and credentialed, because a local
+ * endpoint needs none and that is the case ADR 0052 exists for — and this stack runs with no
+ * `AGENT_LAB_CREDENTIAL_KEY`, so a key typed here would be refused with 422 by design.
+ *
+ * What it reads back is the whole chain: the endpoint the lab *stored*, which is normalized
+ * and so need not be the spelling that was typed; the chip that endpoint belongs to; and the
+ * run mode underneath, which is a per-request answer now and moves without a restart.
+ *
+ * **It leaves the connection saved**, in a database every later test on this worker shares,
+ * and that is deliberate rather than an oversight: the resource has no route that removes a
+ * connection (ADR 0052 gives it list, read, save and test), and a save cannot put back *no
+ * connection*, so there is nothing to restore with. The coupling is safe for what the rest of
+ * the suite does, and each reason is checkable:
+ *
+ * - No other spec reads run mode, the connection source or the lab status at all — this is the
+ *   only one that opens *Runtime configuration*.
+ * - Every other spec that advances a run or scores one does it on the deterministic control
+ *   framework and the deterministic judge. Both are registered whatever the connection is, and
+ *   both reach no endpoint, so neither pins one: a run they advance records no
+ *   `model_base_url` and the pin refusal cannot fire on it.
+ * - What a keyless loopback connection *adds* is the two model-backed frameworks and the
+ *   model-backed judge, pointed at a port where nothing listens. No other spec runs either:
+ *   `agent-configuration` authors a draft on the OpenAI Agents SDK and never advances it, and
+ *   what that editor offers is decided by `PROVEN_FRAMEWORKS`, not by the connection.
+ *
+ * What the coupling does cost is a retry of this test on the same worker, whose database
+ * already holds the connection. The precondition below is asserted so that such a run fails
+ * on the fact that is actually wrong — the lab was not fresh — rather than passing vacuously
+ * or failing three steps later on a Save that was never offered.
+ */
+test("a connection saved in Settings is in force, and the page reads it back", async ({ page }) => {
+  const unique = Date.now().toString(36);
+
+  await createShop(page, { name: `Northstar ${unique}`, slug: `northstar-${unique}` });
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Lab settings" })).toBeVisible();
+
+  const zone = page.getByRole("region", { name: "Model provider" });
+  // The precondition: nothing is saved yet. It is the zone's own sentence rather than *Offline*,
+  // because a stack started from a shell that exports AGENT_LAB_OPENAI_API_KEY is credentialed
+  // on the environment, and what this test proves is that a *saved* connection takes over.
+  await expect(
+    zone.getByText(/^Nothing is saved here yet/),
+    "this worker's lab already holds a saved connection, so the test cannot show one taking over",
+  ).toBeVisible();
+  // Nothing to save until something is changed, so the pair is absent on arrival.
+  await expect(zone.getByRole("button", { name: "Save connection" })).toHaveCount(0);
+
+  // The label is what a reader presses; the radio underneath carries the name.
+  await zone.getByText("Ollama", { exact: true }).click();
+  await expect(zone.getByLabel("Base URL")).toHaveValue("http://localhost:11434/v1");
+  // A paste's trailing slash: one endpoint has one spelling, because a run is pinned to it.
+  await zone.getByLabel("Base URL").fill("http://localhost:11434/v1/");
+  await zone.getByRole("button", { name: "Save connection" }).click();
+
+  await expect(zone.getByRole("button", { name: "Save connection" })).toHaveCount(0);
+  await expect(zone.getByLabel("Base URL")).toHaveValue("http://localhost:11434/v1");
+
+  // Read back after a reload, which is what "the lab holds it" means rather than "the form
+  // still shows it".
+  await page.reload();
+  await expect(zone.getByRole("radio", { name: "Ollama" })).toBeChecked();
+  await expect(zone.getByLabel("Base URL")).toHaveValue("http://localhost:11434/v1");
+
+  // And the read-only zone says which of the chain's four answers is in force. Nothing was
+  // saved a moment ago, as asserted above, and nothing restarted.
+  await page.getByRole("button", { name: /^Runtime configuration/ }).click();
+  const runMode = page.getByRole("region", { name: "Run mode" });
+  await expect(runMode.getByText("Credentialed")).toBeVisible();
+  await expect(
+    runMode.getByText(/The connection saved in Model provider above is in force/),
+  ).toBeVisible();
+  await expect(zone.getByText(/^Nothing is saved here yet/)).toHaveCount(0);
+});
+
+/**
  * PLAN-UX Slice 18's own evidence, in a browser: a preference is saved the moment it changes,
  * and it reaches a listing the settings page does not draw (ADR 0058).
  */

@@ -308,3 +308,13 @@ export type ReplaceJudgeConfigurationDraftRequest =
 export type LabSeedResponse = components["schemas"]["LabSeedResponse"];
 export type LabStatusResponse = components["schemas"]["LabStatusResponse"];
 export type LabRunMode = components["schemas"]["LabRunMode"];
+export type ModelConnectionSchema = components["schemas"]["ModelConnectionSchema"];
+export type ModelConnectionSource = components["schemas"]["ModelConnectionSource"];
+export type ModelConnectionTestRequest = components["schemas"]["ModelConnectionTestRequest"];
+export type ModelConnectionTestResponse = components["schemas"]["ModelConnectionTestResponse"];
+export type ModelEndpointOutcome = components["schemas"]["ModelEndpointOutcome"];
+export type HttpStatusClass = components["schemas"]["HttpStatusClass"];
+export type ProviderConnectionSchema = components["schemas"]["ProviderConnectionSchema"];
+export type ProviderConnectionListResponse =
+  components["schemas"]["ProviderConnectionListResponse"];
+export type SaveModelConnectionRequest = components["schemas"]["SaveModelConnectionRequest"];

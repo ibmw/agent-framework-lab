@@ -1,0 +1,354 @@
+{
+  "_comment": "Endpoint spellings and what the lab does with each. `stored` is normalize_base_url's answer (null: refused with 422) and `preset` the chip it lights. test_model_connections.py holds `stored` and `preset` to the backend; apps/web/src/lib/modelConnections.test.ts holds presetForBaseUrl to `preset`. Regenerate from the backend, never by hand.",
+  "presets": {
+    "openai": "https://api.openai.com/v1",
+    "ollama": "http://localhost:11434/v1",
+    "vllm": "http://localhost:8000/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "together": "https://api.together.xyz/v1"
+  },
+  "spellings": [
+    {
+      "case": "each preset",
+      "input": "https://api.openai.com/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "each preset",
+      "input": "http://localhost:11434/v1",
+      "stored": "http://localhost:11434/v1",
+      "preset": "ollama"
+    },
+    {
+      "case": "each preset",
+      "input": "http://localhost:8000/v1",
+      "stored": "http://localhost:8000/v1",
+      "preset": "vllm"
+    },
+    {
+      "case": "each preset",
+      "input": "https://openrouter.ai/api/v1",
+      "stored": "https://openrouter.ai/api/v1",
+      "preset": "openrouter"
+    },
+    {
+      "case": "each preset",
+      "input": "https://api.together.xyz/v1",
+      "stored": "https://api.together.xyz/v1",
+      "preset": "together"
+    },
+    {
+      "case": "trailing slashes",
+      "input": "http://localhost:11434/v1/",
+      "stored": "http://localhost:11434/v1",
+      "preset": "ollama"
+    },
+    {
+      "case": "trailing slashes",
+      "input": "http://localhost:11434/v1//",
+      "stored": "http://localhost:11434/v1",
+      "preset": "ollama"
+    },
+    {
+      "case": "trailing slashes",
+      "input": "https://openrouter.ai/api/v1///",
+      "stored": "https://openrouter.ai/api/v1",
+      "preset": "openrouter"
+    },
+    {
+      "case": "surrounding whitespace",
+      "input": "  http://localhost:11434/v1  ",
+      "stored": "http://localhost:11434/v1",
+      "preset": "ollama"
+    },
+    {
+      "case": "surrounding whitespace",
+      "input": "\thttps://api.openai.com/v1\n",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "surrounding whitespace",
+      "input": "\u3000https://api.openai.com/v1\u00a0",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "surrounding whitespace",
+      "input": "\u001chttps://api.openai.com/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "surrounding whitespace",
+      "input": "https://api.openai.com/v1\u001f",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "surrounding whitespace",
+      "input": "https://api.openai.com/v1\u0085",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "control characters",
+      "input": "\u0001https://api.openai.com/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "control characters",
+      "input": "\u0000 https://api.openai.com/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "control characters",
+      "input": "https://api.openai.com/v1\u0001",
+      "stored": "https://api.openai.com/v1\u0001",
+      "preset": "custom"
+    },
+    {
+      "case": "control characters",
+      "input": "https://api.open\tai.com/v\n1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "a byte-order mark, which is not whitespace to the server",
+      "input": "\ufeffhttps://api.openai.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a byte-order mark, which is not whitespace to the server",
+      "input": "https://api.openai.com/v1\ufeff",
+      "stored": "https://api.openai.com/v1\ufeff",
+      "preset": "custom"
+    },
+    {
+      "case": "length",
+      "input": "https://api.openai.com/v1///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "length",
+      "input": "https://api.openai.com/v1////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "length",
+      "input": "  https://api.openai.com/v1///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  ",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "uppercase scheme or host",
+      "input": "HTTP://localhost:11434/v1",
+      "stored": "http://localhost:11434/v1",
+      "preset": "ollama"
+    },
+    {
+      "case": "uppercase scheme or host",
+      "input": "https://API.OpenAI.com/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "uppercase scheme or host",
+      "input": "HTTPS://OPENROUTER.AI/api/v1",
+      "stored": "https://openrouter.ai/api/v1",
+      "preset": "openrouter"
+    },
+    {
+      "case": "uppercase scheme or host",
+      "input": "http://LOCALHOST:8000/v1",
+      "stored": "http://localhost:8000/v1",
+      "preset": "vllm"
+    },
+    {
+      "case": "uppercase path",
+      "input": "https://api.openai.com/V1",
+      "stored": "https://api.openai.com/V1",
+      "preset": "custom"
+    },
+    {
+      "case": "uppercase path",
+      "input": "https://openrouter.ai/API/v1",
+      "stored": "https://openrouter.ai/API/v1",
+      "preset": "custom"
+    },
+    {
+      "case": "uppercase path",
+      "input": "http://localhost:11434/V1",
+      "stored": "http://localhost:11434/V1",
+      "preset": "custom"
+    },
+    {
+      "case": "default and padded ports",
+      "input": "https://api.openai.com:443/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "default and padded ports",
+      "input": "https://api.openai.com:0443/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "default and padded ports",
+      "input": "http://localhost:80/v1",
+      "stored": "http://localhost/v1",
+      "preset": "custom"
+    },
+    {
+      "case": "default and padded ports",
+      "input": "http://localhost:011434/v1",
+      "stored": "http://localhost:11434/v1",
+      "preset": "ollama"
+    },
+    {
+      "case": "default and padded ports",
+      "input": "https://api.openai.com:/v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "default and padded ports",
+      "input": "http://localhost:8001/v1",
+      "stored": "http://localhost:8001/v1",
+      "preset": "custom"
+    },
+    {
+      "case": "a host's trailing dot",
+      "input": "https://api.openai.com./v1",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "a host's trailing dot",
+      "input": "http://localhost.:11434/v1",
+      "stored": "http://localhost:11434/v1",
+      "preset": "ollama"
+    },
+    {
+      "case": "an empty query or fragment",
+      "input": "https://api.openai.com/v1?",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "an empty query or fragment",
+      "input": "https://api.openai.com/v1#",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "an empty query or fragment",
+      "input": "https://api.openai.com/v1/?#",
+      "stored": "https://api.openai.com/v1",
+      "preset": "openai"
+    },
+    {
+      "case": "an IP literal, which no preset names",
+      "input": "http://[::1]:11434/v1",
+      "stored": "http://[::1]:11434/v1",
+      "preset": "custom"
+    },
+    {
+      "case": "an IP literal, which no preset names",
+      "input": "http://127.0.0.1:11434/v1",
+      "stored": "http://127.0.0.1:11434/v1",
+      "preset": "custom"
+    },
+    {
+      "case": "an IP literal, which no preset names",
+      "input": "http://[::ffff:127.0.0.1]:8000/v1",
+      "stored": "http://127.0.0.1:8000/v1",
+      "preset": "custom"
+    },
+    {
+      "case": "a path the server would not rewrite",
+      "input": "http://localhost:11434/v1/chat/completions",
+      "stored": "http://localhost:11434/v1/chat/completions",
+      "preset": "custom"
+    },
+    {
+      "case": "a path the server would not rewrite",
+      "input": "https://api.openai.com//v1",
+      "stored": "https://api.openai.com//v1",
+      "preset": "custom"
+    },
+    {
+      "case": "a path the server would not rewrite",
+      "input": "https://api.openai.com/v1/.",
+      "stored": "https://api.openai.com/v1/.",
+      "preset": "custom"
+    },
+    {
+      "case": "a path the server would not rewrite",
+      "input": "https://api.openai.com/%76%31",
+      "stored": "https://api.openai.com/%76%31",
+      "preset": "custom"
+    },
+    {
+      "case": "a path the server would not rewrite",
+      "input": "http://localhost:11434",
+      "stored": "http://localhost:11434",
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "   ",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "https://api.openai.com/v1?x=1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "https://u:p@api.openai.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "ftp://api.openai.com/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "https://api.openai.com:99999/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "https://api.openai.com:44a/v1",
+      "stored": null,
+      "preset": "custom"
+    },
+    {
+      "case": "a value the route refuses",
+      "input": "http://[localhost]:11434/v1",
+      "stored": null,
+      "preset": "custom"
+    }
+  ]
+}

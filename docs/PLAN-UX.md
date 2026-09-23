@@ -33,9 +33,9 @@ The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
   `pnpm build` pass before handoff, and `pnpm test:e2e` when the *Checks* line names a spec.
 - **No new UI dependency.** The primitives are the class sets in `lib/ui.ts` and the chrome in
   `components/WorkspaceChrome.tsx` and `shell/AppShell.tsx`.
-- **No backend change unless the slice says so.** Two slices carry one: the model connection
-  (ADR 0052) and the reachable-provider read it enables (ADR 0053). Each ships the OpenAPI
-  update, the backend and the consumer together.
+- **No backend change unless the slice says so.** One slice still carries one: the
+  reachable-provider read the model connection enables (ADR 0053). It ships the OpenAPI update,
+  the backend and the consumer together, as the connection itself did (ADR 0052).
 - **Standing decisions hold.** ADR 0044 refused a stored checklist and ADR 0045 removed the
   derived progress strip; ADR 0049 keeps the tours per surface; ADR 0051 asks about unsaved work
   once; ADR 0052 and ADR 0053 decide the connection and the provider; ADR 0054 decides the two
@@ -70,12 +70,11 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Every screen Group B recomposes is built. Its two remaining slices are the connection and the
-provider: Slice 19, the milestone's one backend slice, which drops its zone into the settings
-page whose shape already landed, and Slice 20, which needs it. Group C's slices 21–25 depend on
-nothing in Group B and can start now; Slice 21 also owns the fifth preference row, which the
-settings zones deliberately did not draw. Slices 26 and 27 close the milestone, and 28 is
-optional.
+Every screen Group B recomposes is built, and the connection it runs through is saved from the
+settings page. Group B has one slice left, Slice 20, which reads the providers the connection
+resource now publishes. Group C's slices 21–25 depend on nothing in Group B and can start now;
+Slice 21 also owns the fifth preference row, which the settings zones deliberately did not
+draw. Slices 26 and 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -89,41 +88,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group B — Screens the prototype recomposes
-
-#### Slice 19 — The model connection
-
-The visible half of ADR 0052, in the order ADR 0052 sets: contracts, migration, API, then
-the settings zone.
-
-- [x] Contract and migration: `model_connections` keyed by provider id, the encrypted key under
-  `AGENT_LAB_CREDENTIAL_KEY`, `key_configured` and `key_added_at` served and nothing else about
-  the key, `base_url` validated and normalised at the door; `model_base_url` on runs and
-  judgements.
-- [x] Composition moves to the request: the three factories take a resolved connection, run
-  mode becomes a per-request answer, and an advance that would reach a different endpoint than
-  the run pinned is refused with 422 naming both.
-- [x] `POST …/test` makes one cheap call under a short timeout and answers `reachable`,
-  `refused` or `unreachable` with the round trip in milliseconds; nothing is stored. No model:
-  the connection holds none, so there is none to name (ADR 0052).
-- [ ] The *Model provider* zone: provider chips from `lib/modelConnections.ts` (OpenAI, Ollama,
-  vLLM, OpenRouter, Together, Custom — presets for a base URL, not providers), Base URL, API key
-  (typed to save, "configured on <date>" once saved, Replace; never a mask), Test connection
-  with the 900ms-round-trip states and a stale result discarded on a provider change, Save
-  connection and Discard shown only when dirty. No model field: ADR 0052 refuses one, and the
-  "Default model" row the prototype draws is the departure recorded there.
-- [ ] Run mode in the read-only zone states which of the saved connection and the environment is
-  in force.
-
-Frames: `Workspace.dc.html` :3997–:4100.
-
-Branch: `feat/model-connection`, split into `contracts → api → web` branches if the review wants
-them apart. Checks: contract tests for the resource and the refusals; migration test; runtime
-tests for the pin and the refusal; `LabSettings.test.tsx` with MSW for the zone's states;
-Playwright `experiment-start` if the offline qualification's copy moves.
-
-Slice evidence: an operator points the lab at `http://localhost:11434/v1`, tests it, saves it,
-and a run started afterwards records that endpoint; a run already recorded refuses to be
-advanced against it.
 
 #### Slice 20 — The provider the lab can reach
 

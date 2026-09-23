@@ -2,20 +2,38 @@ import type {
   AgentConfigurationResourcesResponse,
   LabSeedResponse,
   LabStatusResponse,
+  ModelConnectionSchema,
+  ModelConnectionSource,
+  ModelConnectionTestResponse,
   ProvenFrameworkSchema,
+  ProviderConnectionListResponse,
+  ProviderConnectionSchema,
   ShopSummarySchema,
 } from "@agent-lab/contracts";
 import { ArrowLeft, ChevronDown, ChevronRight, Lock } from "lucide-react";
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { readAgentConfigurationResources } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
 import { seedLab } from "../api/labSeed";
 import { getLabStatus } from "../api/labStatus";
+import {
+  listModelConnections,
+  saveModelConnection,
+  testModelConnection,
+} from "../api/modelConnections";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { Card, EntryCard, EntryId, EntryKind, PageHeader } from "../components/WorkspaceChrome";
 import { describeArchitecture, describeProvider, readableTerm } from "../lib/agents";
+import {
+  describeProbe,
+  describeSource,
+  describeZoneSource,
+  ENDPOINT_PRESETS,
+  presetForBaseUrl,
+  sameEndpoint,
+} from "../lib/modelConnections";
 import {
   type AppLanding,
   forgetLastVisitedShop,
@@ -31,10 +49,14 @@ import {
   writeTimestampFormat,
 } from "../lib/preferences";
 import {
+  accentButtonClasses,
   cardTitleClasses,
+  fieldControlClasses,
   focusRingClasses,
   formatAbsoluteTimestamp,
+  formatTimestamp,
   outlineButtonClasses,
+  readOnlyValueClasses,
   subtleButtonClasses,
   warningButtonClasses,
 } from "../lib/ui";
@@ -340,38 +362,480 @@ function PreferencesZone({ surface }: { surface: LabSurfaceValue }) {
   );
 }
 
+/** The endpoint chip, in the prototype's two weights (`Workspace.dc.html` :4004). */
+const presetChipClasses =
+  "flex min-h-[38px] cursor-pointer items-center gap-[7px] rounded-lg border px-[13px] text-[13px] transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-lab-primary";
+
+const chosenPresetChipClasses = `${presetChipClasses} border-[#b6d9c4] bg-[#eaf5ed] font-bold text-lab-primary hover:bg-[#ddeee3]`;
+
+const offeredPresetChipClasses = `${presetChipClasses} border-admin-field-border bg-admin-surface font-semibold text-admin-ink-soft hover:bg-admin-canvas`;
+
+/** The answer one probe came back with. Green where it worked, warm red where it did not. */
+const probeChipClasses =
+  "inline-flex items-center gap-[7px] rounded-full px-[11px] py-[5px] text-xs font-bold";
+
 /**
- * The *Model provider* zone's place, held by one card until the connection is built.
+ * *Model provider*: the one setting on this page that is not a browser preference (the fast
+ * path below writes to the lab too, but it is an action run once, not a setting).
  *
- * It is drawn on the white surface rather than the read-only grey, because the surface says
- * whose the zone is and this one is going to be the operator's: a padlock here would promise
- * the opposite of what lands in it. What the card says instead is that there is nothing to
- * edit yet, and which of the two sources ADR 0052 names is in force meanwhile — the
- * environment, which stays the bootstrap after the connection exists and is the whole of the
- * answer before it does.
+ * White rather than the read-only grey, for the reason the placeholder that stood here was
+ * white — the surface says whose the zone is, and this one is the operator's.
+ *
+ * **It draws no model field.** ADR 0052 refuses one at length: the model is authored content
+ * resolved from each arm's published configuration (ADR 0024), and a model on the connection
+ * would be the environment substituting for an authored input in a friendlier hat. The
+ * prototype's *Default model* row is a recorded departure, not an omission.
+ *
+ * **It never draws a mask.** The response carries `key_configured` and `key_added_at` and no
+ * other fact about the key — not a prefix, a suffix, a length or a hash — so what a
+ * configured key can be told by is when it was saved, and the way to change it is to save the
+ * one you mean. That is the whole cost, and ADR 0052 names it rather than hiding it.
+ *
+ * The one thing this page refuses locally is an empty base URL, and that is a refusal about
+ * *this form* rather than a second copy of the storage rule: every judgement about what an
+ * endpoint may be belongs to `domain/model_connection.py`, which answers 422 with a sentence
+ * this zone reads back. A page with its own opinion about base URLs would be a second,
+ * stricter gate that stops matching the one that decides.
  */
-function ModelProviderZone() {
+function ModelProviderZone({
+  source,
+  onSaved,
+}: {
+  /** Which answer of the resolution chain is in force, once the lab has said; `null` until then. */
+  source: ModelConnectionSource | null;
+  onSaved: () => void;
+}) {
+  const reading = useReading(loadConnections, "The lab could not report where it is pointed.");
+  const providers = reading.value?.providers ?? null;
+  const inForce = source === null ? null : describeZoneSource(source);
+
   return (
     <Zone
       title="Model provider"
       description="Any OpenAI-compatible endpoint — hosted or one you run yourself. Saved for the whole lab, not just this browser."
     >
-      <Card>
-        <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-          Not built yet. The lab will hold one connection per provider — a base URL and an encrypted
-          key, and no model — saved here and resolved when an arm is advanced, so a run records the
-          endpoint it reached (ADR 0052). Slice 19 of <ConfigValue>docs/PLAN-UX.md</ConfigValue>{" "}
-          builds it.
+      {/* The form opens on Custom and an empty Base URL whenever nothing is saved, which reads
+          as *pointed nowhere* whether or not the environment is pointing the lab somewhere. */}
+      {inForce === null ? null : (
+        <p className="text-[13px] leading-[1.55] text-admin-ink-soft [text-wrap:pretty]">
+          {inForce}
         </p>
-        <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-          Until then the environment is the whole of it:{" "}
-          <ConfigValue>AGENT_LAB_OPENAI_API_KEY</ConfigValue>, read when the API started, is what is
-          in force, and <em>Run mode</em> below reports what that leaves this build able to advance.
-          The environment stays the bootstrap afterwards — a saved connection wins where there is
-          one, and the environment answers where there is not.
-        </p>
-      </Card>
+      )}
+      {providers === null ? (
+        <Card>
+          <Unavailable reading={reading} />
+        </Card>
+      ) : (
+        // One card per provider that can hold a connection. Today that is exactly one, and it
+        // is one for a reason that generalizes rather than as a limit somebody imposed: a
+        // connection is keyed by the provider id the proven tables use, and `openai` names
+        // the protocol this lab speaks rather than the company (ADR 0052). Rendering the
+        // listing rather than one hard-coded id is what keeps that true of a second.
+        providers.map((provider) => (
+          <ConnectionCard
+            key={provider.provider_id}
+            provider={provider}
+            unreadable={source === "saved_unreadable"}
+            onSaved={onSaved}
+          />
+        ))
+      )}
+      <p className="text-[12.5px] leading-[1.55] text-admin-muted [text-wrap:pretty]">
+        A connection saved here takes effect for runs started afterwards, with no restart. A run
+        already recorded keeps the endpoint it reached and refuses to be advanced against another,
+        naming both; forking the experiment is the way on.
+      </p>
     </Zone>
+  );
+}
+
+/**
+ * The lab's connection to one provider, as a form.
+ *
+ * The form's state is the endpoint in the field and, where the operator is typing one, a key.
+ * Which chip is lit is **derived** from the endpoint rather than remembered beside it, so the
+ * page cannot hold two answers to *where is this pointed*; and `typed` is `null` for "keep
+ * the stored key", which is what lets a base URL be changed without retyping a credential the
+ * lab will not show anybody.
+ */
+function ConnectionCard({
+  provider,
+  unreadable,
+  onSaved,
+}: {
+  provider: ProviderConnectionSchema;
+  /**
+   * The lab reports a saved key it cannot decrypt (`saved_unreadable`). `key_configured` reports
+   * a key's presence and never its readability, so without this the row would say *Configured*
+   * beside a key that reaches nothing (ADR 0052, amendment of 2026-09-22).
+   */
+  unreadable: boolean;
+  onSaved: () => void;
+}) {
+  const [saved, setSaved] = useState<ModelConnectionSchema | null>(provider.connection);
+  const [baseUrl, setBaseUrl] = useState(provider.connection?.base_url ?? "");
+  const [typed, setTyped] = useState<string | null>(
+    provider.connection?.key_configured === true ? null : "",
+  );
+  const [probe, setProbe] = useState<ModelConnectionTestResponse | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  /**
+   * Which probe the zone is still willing to hear from.
+   *
+   * A reachability answer is true of one endpoint at one moment (ADR 0052), so the moment the
+   * connection under it moves, the answer in flight is about a connection that is no longer
+   * the one in front of the operator. Every edit bumps this counter, and a reply that comes
+   * back on a stale number is dropped rather than drawn — which is the case a `setProbe(null)`
+   * on edit alone does not cover, because the reply lands *after* the edit and would paint a
+   * verdict about the old endpoint onto the new one.
+   */
+  const probeToken = useRef(0);
+  const reasonId = useId();
+  const presets = useId();
+
+  const preset = presetForBaseUrl(baseUrl);
+  const endpoint = baseUrl.trim();
+  const key = typed === null || typed.trim() === "" ? null : typed.trim();
+  // Compared as the server would store them, so a trailing slash, a shouted host or `:443`
+  // on the saved endpoint is nothing to save.
+  const moves = !sameEndpoint(endpoint, saved?.base_url ?? "");
+  const dirty = moves || key !== null;
+  /**
+   * Where a key is about to go, when that is somewhere the lab does not already send one. A key
+   * left unsent is the saved one (ADR 0052: "falling back to the saved one"), so moving the
+   * endpoint with the read-out showing sends the installed key to the new endpoint on Test and
+   * keeps it for that endpoint on Save; a typed key goes wherever the field points. Said on the
+   * key's own row rather than prevented, because pointing a key at a new endpoint is often
+   * exactly what the operator means.
+   */
+  const keyDestination =
+    saved === null || !moves
+      ? null
+      : key !== null
+        ? "The key typed here will be sent to this endpoint on Test, and saved for it on Save."
+        : saved.key_configured && !unreadable
+          ? "The installed key will be sent to this endpoint on Test, and kept for it on Save."
+          : null;
+  const blockedBy =
+    endpoint === "" ? "No base URL to reach, so there is nothing to test or save." : null;
+
+  /** The key field's state that the saved connection implies: the read-out, or an empty field. */
+  const keptKey = saved?.key_configured === true ? null : "";
+
+  function moved() {
+    probeToken.current += 1;
+    setProbe(null);
+    setTesting(false);
+    setRefusal(null);
+  }
+
+  /**
+   * Picking a preset drops a key *typed* for the last endpoint, putting the field back to what
+   * the lab holds. That is all it does. Where a key is stored, the field then sends none, and
+   * the server falls back to the stored key (ADR 0052) — so the installed key still goes to the
+   * new endpoint on Test and is kept for it on Save, as it does when an endpoint is typed or
+   * pasted into Base URL, which leaves a typed key alone. The key row says where a key is about
+   * to go whenever the endpoint has moved (`keyDestination`).
+   */
+  function choosePreset(next: string) {
+    setBaseUrl(next);
+    setTyped(keptKey);
+    moved();
+  }
+
+  function typeEndpoint(next: string) {
+    setBaseUrl(next);
+    moved();
+  }
+
+  function typeKey(next: string | null) {
+    setTyped(next);
+    moved();
+  }
+
+  async function test() {
+    probeToken.current += 1;
+    const token = probeToken.current;
+    setTesting(true);
+    setProbe(null);
+    setRefusal(null);
+    try {
+      const result = await testModelConnection(provider.provider_id, {
+        base_url: endpoint,
+        api_key: key,
+      });
+      if (probeToken.current === token) {
+        setProbe(result);
+      }
+    } catch (cause: unknown) {
+      if (probeToken.current === token) {
+        setRefusal(describeApiError(cause, "The endpoint could not be tested."));
+      }
+    } finally {
+      if (probeToken.current === token) {
+        setTesting(false);
+      }
+    }
+  }
+
+  async function save() {
+    // The inputs are disabled while this is in flight, so the read-back below cannot overwrite
+    // an edit made after the press: there is none to overwrite.
+    setSaving(true);
+    setRefusal(null);
+    try {
+      const written = await saveModelConnection(provider.provider_id, {
+        base_url: endpoint,
+        api_key: key,
+      });
+      // Read back rather than kept: the endpoint is stored normalized, so what the lab holds
+      // can be a different spelling from what was typed — and it is the stored one a run is
+      // pinned to.
+      setSaved(written.connection);
+      setBaseUrl(written.connection?.base_url ?? "");
+      setTyped(written.connection?.key_configured === true ? null : "");
+      onSaved();
+    } catch (cause: unknown) {
+      setRefusal(describeApiError(cause, "The connection could not be saved."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function discard() {
+    setBaseUrl(saved?.base_url ?? "");
+    setTyped(keptKey);
+    moved();
+  }
+
+  const answered = probe === null ? null : describeProbe(probe);
+
+  /**
+   * The key field, in either row that draws one. `new-password` rather than `off`, which
+   * browsers ignore on a password field: a password manager would otherwise fill a login
+   * password in here, and the form would send it to the endpoint.
+   */
+  function keyInput(width = "") {
+    return (
+      <input
+        type="password"
+        autoComplete="new-password"
+        aria-label={saved?.key_configured === true ? "New API key" : undefined}
+        className={`${fieldControlClasses} font-mono text-[13px] ${width}`}
+        placeholder="sk-…"
+        value={typed ?? ""}
+        disabled={saving}
+        onChange={(event) => typeKey(event.target.value)}
+      />
+    );
+  }
+
+  return (
+    <>
+      {/* Only while there is something to save or put back, which is the prototype's own
+          rule: a Discard that undoes nothing teaches a reader the form is dirty when it is
+          not. The pair sits above the card rather than in the zone's heading row — the
+          prototype draws it there, but the dirty state belongs to the connection rather than
+          to the zone, and a zone holding a second connection would have two of them. */}
+      {dirty ? (
+        <div className="-mt-1 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            className={outlineButtonClasses}
+            disabled={saving}
+            onClick={discard}
+          >
+            <ButtonIcon verb="discard" />
+            Discard
+          </button>
+          <button
+            type="button"
+            className={accentButtonClasses}
+            disabled={blockedBy !== null || saving}
+            title={blockedBy ?? undefined}
+            aria-describedby={blockedBy === null ? undefined : reasonId}
+            onClick={save}
+          >
+            <ButtonIcon verb="save" />
+            {saving ? "Saving…" : "Save connection"}
+          </button>
+        </div>
+      ) : null}
+
+      {/* No title and no label: the zone's own `h2` is the landmark, and a second named
+          region inside it would give one place two names. */}
+      <Card>
+        <FieldRows>
+          <FieldGroup label="Endpoint preset" hint={preset.note}>
+            {/* Native radios under the prototype's chips, because *a closed set is named
+                radios* and the prototype's own chips are `div`s with no role and no name.
+                They choose an endpoint rather than a provider: every one of them is saved
+                under the same provider id, which is the protocol this lab has proven it can
+                speak rather than the company (ADR 0052). */}
+            <div className="flex flex-wrap gap-[7px]">
+              {ENDPOINT_PRESETS.map((option) => (
+                <label
+                  key={option.id}
+                  className={
+                    option.id === preset.id ? chosenPresetChipClasses : offeredPresetChipClasses
+                  }
+                >
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name={`${presets}-endpoint`}
+                    checked={option.id === preset.id}
+                    disabled={saving}
+                    onChange={() => choosePreset(option.baseUrl)}
+                  />
+                  {option.id === preset.id ? <span aria-hidden>✓</span> : null}
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </FieldGroup>
+
+          <Field
+            label="Base URL"
+            hint="Must speak the OpenAI chat-completions API. A native Anthropic or Bedrock endpoint will not work here — those arms run through the frameworks the build already proves. Plain http reaches a loopback or private host only, so a key is never sent across the internet in the clear."
+          >
+            <input
+              type="url"
+              className={`${fieldControlClasses} font-mono text-[13px]`}
+              placeholder="http://localhost:11434/v1"
+              value={baseUrl}
+              disabled={saving}
+              onChange={(event) => typeEndpoint(event.target.value)}
+            />
+          </Field>
+
+          {saved?.key_configured === true && typed === null ? (
+            <FieldGroup
+              label="API key"
+              hint={
+                unreadable
+                  ? "This API cannot open the stored key: AGENT_LAB_CREDENTIAL_KEY is unset, or is not the one the key was saved under. The lab reaches nothing and does not fall back to the environment. Set that variable if it is unset — a key cannot be saved without it — then replace the key with the one you mean and save the connection again."
+                  : "Stored encrypted and never served back — not the value, not a prefix or a suffix, not a length, not a hash. What this lab can say about it is that one is installed and when it was saved; to change it, save the one you mean."
+              }
+              extra={keyDestination}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Weighted rather than red, as the read-out's own remedy line is: *the warm
+                    red is destructive and nothing else*, and this is an instruction. */}
+                <p
+                  className={`${readOnlyValueClasses} flex-1 ${unreadable ? "font-semibold" : ""}`}
+                >
+                  {unreadable
+                    ? "Stored, but this lab cannot read it"
+                    : saved.key_added_at === null
+                      ? "Configured"
+                      : `Configured ${formatTimestamp(saved.key_added_at)}`}
+                </p>
+                <button
+                  type="button"
+                  className={subtleButtonClasses}
+                  disabled={saving}
+                  onClick={() => typeKey("")}
+                >
+                  Replace
+                </button>
+              </div>
+            </FieldGroup>
+          ) : saved?.key_configured === true ? (
+            // Replace was pressed. A key is still installed and is still what a run uses, so
+            // the row says so and offers the way back to the read-out — without which an
+            // operator who changed their mind would be left with an empty optional field
+            // reading as though no key were stored, and nothing to press but Discard, which
+            // would also put back any endpoint they had typed.
+            <FieldGroup
+              label="API key"
+              hint={
+                unreadable
+                  ? "The stored key cannot be read, so leaving this empty keeps it and the lab stays offline. Type the key you mean and save the connection."
+                  : "The installed key is kept, and used, until you save another; leaving this empty keeps it too. Stored encrypted under AGENT_LAB_CREDENTIAL_KEY and never shown again."
+              }
+              extra={keyDestination}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                {keyInput("min-w-0 flex-1")}
+                <button
+                  type="button"
+                  className={subtleButtonClasses}
+                  disabled={saving}
+                  onClick={() => typeKey(null)}
+                >
+                  Keep the current key
+                </button>
+              </div>
+            </FieldGroup>
+          ) : (
+            <Field
+              label="API key"
+              optional
+              hint="Only if your endpoint asks for one: a local Ollama or vLLM does not, and an arm against one is the case this zone exists for. Stored encrypted under AGENT_LAB_CREDENTIAL_KEY and never shown again."
+              extra={keyDestination}
+            >
+              {keyInput()}
+            </Field>
+          )}
+
+          <FieldGroup
+            label="Connection"
+            hint="Asks the endpoint above for its model list, once, under a short timeout. Nothing is recorded and no experiment is touched, and the answer is true of the moment it was asked rather than a promise about the next run."
+          >
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* No glyph: the prototype's bolt is one of the two marks outside this
+                  workspace's verb vocabulary (`lib/ui.ts`, `buttonIcon`). */}
+              <button
+                type="button"
+                className={outlineButtonClasses}
+                disabled={blockedBy !== null || testing || saving}
+                title={blockedBy ?? undefined}
+                aria-describedby={blockedBy === null ? undefined : reasonId}
+                onClick={test}
+              >
+                {testing ? "Reaching the endpoint…" : "Test connection"}
+              </button>
+              {/* Mounted whether or not it has anything to say, so an answer is announced
+                  rather than appearing as a new element. */}
+              <p role="status" className="text-[13px]">
+                {answered === null ? (
+                  ""
+                ) : (
+                  <span
+                    className={`${probeChipClasses} ${
+                      answered.tone === "good"
+                        ? "bg-[#eaf5ed] text-lab-primary"
+                        : "bg-lab-error-tint text-lab-error"
+                    }`}
+                  >
+                    <span aria-hidden>{answered.tone === "good" ? "●" : "○"}</span>
+                    {answered.sentence}
+                  </span>
+                )}
+              </p>
+            </div>
+          </FieldGroup>
+        </FieldRows>
+      </Card>
+
+      {/* One muted line the controls' `aria-describedby` names, as *A blocked primary action
+          says why* asks of a control outside a create page until Slice 22 — written from the
+          start, because a disabled button takes no focus and its `title` reaches no keyboard
+          or touch reader. */}
+      {blockedBy === null ? null : (
+        <p id={reasonId} className="text-xs text-admin-muted">
+          {blockedBy}
+        </p>
+      )}
+      {refusal === null ? null : (
+        <p role="alert" className="text-[13px] leading-relaxed text-lab-error">
+          {refusal}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -546,15 +1010,33 @@ function Unavailable({ reading }: { reading: Reading<unknown> }) {
 const runModeChipClasses =
   "inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft";
 
+/**
+ * Run mode, and which of the chain's four answers put it there.
+ *
+ * Read only, and still one of the three cards ADR 0044 built — but no longer for the reason
+ * that ADR gave. Composition moved from start-up to the request (ADR 0052), so run mode is a
+ * per-request answer that a save in *Model provider* above moves without a restart; what is
+ * read only here is the *reading*, not the fact. The card's "To change it:" line therefore
+ * points at the zone above it before it points at the environment, because that is the order
+ * the resolution chain reads them in.
+ *
+ * The source is drawn as four answers and not two. ADR 0052's *Decision* writes "which of the
+ * two is in force"; its amendment of 2026-09-22 narrows that, because two of the chain's four
+ * states are the same run mode and one of them — a saved connection whose key will not
+ * decrypt — is an offline lab whose remedy nothing else on this page could tell an operator.
+ */
 function RunModeCard({ reading }: { reading: Reading<LabStatusResponse> }) {
   const status = reading.value;
+  const source = status === null ? null : describeSource(status.connection_source);
   return (
     <ReadOnlyCard
       title="Run mode"
       change={
         <>
-          set <ConfigValue>AGENT_LAB_OPENAI_API_KEY</ConfigValue> in the API's environment and
-          restart it. Read once at start-up; nothing on this page moves it.
+          save a connection in <em>Model provider</em> above, which takes effect on the next run
+          with no restart; with none saved, set <ConfigValue>AGENT_LAB_OPENAI_API_KEY</ConfigValue>{" "}
+          in the API's environment and restart it. The reading is per request, so it moves while
+          this page is open.
         </>
       }
     >
@@ -568,9 +1050,25 @@ function RunModeCard({ reading }: { reading: Reading<LabStatusResponse> }) {
               {status.run_mode === "credentialed" ? "Credentialed" : "Offline"}
             </span>
             <span className="text-admin-ink-soft">
-              Configured model <EntryId value={status.model_id} />
+              Conversation model <EntryId value={status.model_id} />
             </span>
           </p>
+          {/* Relabelled from "Configured model", as ADR 0052 requires: this names the model
+              the POC's `/conversations` routes reach for — the one surface where the
+              environment still decides — and never the model an experiment runs, which is
+              the one its published agent configuration named (ADR 0024). */}
+          <p className="text-xs text-admin-muted">
+            The model the POC's conversation routes reach for. An experiment runs the model its
+            published agent configuration named, and a connection holds none at all.
+          </p>
+          {source === null ? null : (
+            <>
+              <p className="leading-relaxed">{source.sentence}</p>
+              {source.remedy === null ? null : (
+                <p className="leading-relaxed font-semibold">{source.remedy}</p>
+              )}
+            </>
+          )}
           {status.run_mode === "offline" ? (
             // The standing version of the qualification ADR 0042 established and ADR 0043
             // could only write onto one seeded run. It belongs here because it is a property
@@ -586,11 +1084,13 @@ function RunModeCard({ reading }: { reading: Reading<LabStatusResponse> }) {
               Only a credentialed run answers how two frameworks actually choose.
             </p>
           ) : (
+            // Not "a provider credential is configured", which was true while the environment
+            // was the only source and is false of a saved connection with no key at all — a
+            // local endpoint needs none, and that lab is credentialed (ADR 0052).
             <p className="leading-relaxed">
-              A provider credential is configured, so a model-backed arm reaches the provider and a
-              two-arm comparison can be about how the frameworks actually choose. What an experiment
-              ran is still the model its published agent configuration named; the model above is
-              only what this process would reach for.
+              This lab reaches an endpoint, so a model-backed arm reaches the provider and a two-arm
+              comparison can be about how the frameworks actually choose. Each run records the
+              endpoint it reached and refuses to be advanced against another.
             </p>
           )}
         </>
@@ -681,9 +1181,10 @@ function ProvenBuildCard({ reading }: { reading: Reading<AgentConfigurationResou
  * with the tour index and the switcher panel as ephemeral, and a lab's composition is the thing
  * on this page an operator least often needs and can least often act on.
  *
- * The three cards keep ADR 0044's character whole — the surface reports composition and never
- * edits it — and each one now ends where that ADR's argument ends, in the environment variable
- * or the file that does change it.
+ * The three cards keep ADR 0044's character — the surface reports composition and never edits
+ * it — and each one ends where that ADR's argument ends, in the variable, the file or the zone
+ * that does change it. What ADR 0052 narrowed is the *always*: run mode is now a per-request
+ * answer that the zone above moves, so this zone reports a reading rather than a constant.
  */
 function RuntimeZone({
   status,
@@ -718,8 +1219,9 @@ function RuntimeZone({
       {open ? (
         <div className="grid gap-3 border-t border-[#eceef0] px-[18px] pt-4 pb-5">
           <p className="text-[12.5px] leading-[1.5] text-admin-muted [text-wrap:pretty]">
-            Read from the environment when the API started. Nothing below can be edited from the
-            app; each card names what to change instead.
+            Read from the environment when the API started — except run mode, which is answered
+            afresh on every request and moves the moment a connection is saved above. Nothing below
+            can be edited from the app; each card names what to change instead.
           </p>
           <RunModeCard reading={status} />
           <TraceExportCard reading={status} />
@@ -730,31 +1232,60 @@ function RuntimeZone({
   );
 }
 
-function useReading<T>(load: (signal: AbortSignal) => Promise<T>, unavailable: string): Reading<T> {
+/**
+ * One read, and a way to ask for it again.
+ *
+ * The second is what ADR 0052 made necessary: run mode used to be a property of the process
+ * and could not move while it ran, so a reading taken at mount stayed true for as long as the
+ * page was open. It is a per-request answer now, and saving a connection is the act on this
+ * page that changes it — so the zone that saves one asks for the reading again rather than
+ * leaving a stale *Offline* under a connection the operator has just made.
+ */
+function useReading<T>(
+  load: (signal: AbortSignal) => Promise<T>,
+  unavailable: string,
+): Reading<T> & { refresh: () => void } {
   const [reading, setReading] = useState<Reading<T>>({
     value: null,
     loading: true,
     error: null,
   });
+  const inFlight = useRef<AbortController | null>(null);
 
-  useEffect(() => {
+  // The read itself, so that the mount and a refresh are one path rather than two. The
+  // previous answer is left standing while a refresh is in flight: a reading that blanked
+  // itself would flicker *Reading…* through a card nobody asked to reload.
+  const read = useCallback(() => {
+    inFlight.current?.abort();
     const controller = new AbortController();
+    inFlight.current = controller;
     load(controller.signal)
-      .then((value) => setReading({ value, loading: false, error: null }))
+      .then((value) => {
+        if (!controller.signal.aborted) {
+          setReading({ value, loading: false, error: null });
+        }
+      })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setReading({ value: null, loading: false, error: describeApiError(cause, unavailable) });
         }
       });
-    return () => controller.abort();
-    // The two loaders below are module-level functions, so this runs once per mount.
   }, [load, unavailable]);
 
-  return reading;
+  useEffect(() => {
+    read();
+    return () => inFlight.current?.abort();
+    // The loaders below are module-level functions, so `read` is stable and this runs once
+    // per mount.
+  }, [read]);
+
+  return { ...reading, refresh: read };
 }
 
 const loadStatus = (signal: AbortSignal) => getLabStatus(signal);
 const loadResources = (signal: AbortSignal) => readAgentConfigurationResources(signal);
+const loadConnections = (signal: AbortSignal): Promise<ProviderConnectionListResponse> =>
+  listModelConnections(signal);
 
 /**
  * The lab's settings, in the prototype's three zones with its action under them
@@ -801,7 +1332,13 @@ export function LabSettingsPage() {
         </div>
 
         <PreferencesZone surface={surface} />
-        <ModelProviderZone />
+        {/* Saving a connection moves run mode, which the read-only zone below reports: the
+            reading is per request now, so the page asks for it again rather than leaving an
+            answer that was true a moment ago (ADR 0052). */}
+        <ModelProviderZone
+          source={status.value?.connection_source ?? null}
+          onSaved={status.refresh}
+        />
         <RuntimeZone status={status} resources={resources} />
         <FastPathZone shops={surface.shops} onSeeded={surface.refresh} />
       </div>

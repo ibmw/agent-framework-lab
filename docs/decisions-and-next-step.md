@@ -98,8 +98,9 @@ instruction to add Vercel AI SDK immediately.
 
 ## Known application defects, found but not fixed
 
-Five entries. The first two are backend defects, unscheduled, and each wants an ADR as its entry
+Six entries. The first two are backend defects, unscheduled, and each wants an ADR as its entry
 says. The three workspace defects after them are scheduled: `docs/PLAN-UX.md` Slice 27 owns them.
+The last is an accepted ADR's obligation that no slice carries, unscheduled.
 
 The first two were found on 15 September 2026 while making the Playwright suite trustworthy in parallel
 (`fix(test): give every Playwright worker its own stack`). Neither is a test defect and neither was
@@ -194,6 +195,25 @@ input is no longer reviewable as a copy slice.
   refusal the surface does not make. The fix wants the editor to read the listing the create
   form already reads, which is a fetch this page does not make today.
 
+Found on 23 September 2026 while landing the *Model provider* zone (PLAN-UX Slice 19, unit C).
+Recorded rather than built because it is a contract change and a results-surface change, and
+the unit that found it is a settings zone. Slice 26 was considered and rejected: its *Results:
+the arm summary cards … each version linked* item is where *endpoint not recorded* would
+render, but the slice already carries its one additive contract change, the ticket context
+payload, on a branch of its own, and serving `model_base_url` would be a second.
+
+- **A run's endpoint is recorded and never shown.** ADR 0052 put `model_base_url` on
+  `experiment_runs` and `experiment_judgements`, and unit B writes it: a run pins the endpoint it
+  reached, and an advance against another is refused naming both. Its *Migration* section also
+  says what a reader sees — "the results surface renders that as *endpoint not recorded* and
+  deliberately not as *offline*, because the two are different facts and only one of them is
+  known" — and nothing does. `model_base_url` is in no response schema in
+  `packages/contracts/openapi/v1/openapi.yaml` and nowhere in `apps/web`, so the fact a run was
+  pinned to is visible only in the refusal that fires when it is contradicted. The fix is
+  additive: serve the field on the run and judgement read models, and have the results surface
+  render a null as *endpoint not recorded*. It is a public contract change, so it ships with its
+  backend, its consumer and its tests together.
+
 ## Figures the prototype draws that no payload carries
 
 `docs/design-direction.md`'s *Departures from the handoff, in force* records each of these as
@@ -244,9 +264,10 @@ Milestones 0 to 7 are delivered (ADR 0011 to ADR 0049), together with the 13 Sep
 Slices 1–8 (ADR 0050, ADR 0051) and the workspace refresh's eight pattern slices. The open work is
 `docs/PLAN.md` Milestone 8, planned slice by slice in `docs/PLAN-UX.md`. Its first slice went alone
 because every later slice is written against the routes it leaves, and it has landed with them
-(ADR 0054); so have the screens its Group B recomposes (ADR 0055 to ADR 0058), all but the model
-connection and the provider that needs it — Slices 19 and 20, which ADR 0052 and ADR 0053 are
-accepted ahead of. Group C, the behaviour the prototype specifies on every screen at once, depends
+(ADR 0054); so have the screens its Group B recomposes (ADR 0055 to ADR 0058) and the model
+connection the lab now holds and edits from `/settings` (ADR 0052). Group B has one slice left,
+the provider that connection makes reachable — Slice 20, which ADR 0053 is accepted ahead of.
+Group C, the behaviour the prototype specifies on every screen at once, depends
 on nothing in Group B and can start now. The narrative of how each milestone was reached is
 `docs/history/PLAN.md`.
 
