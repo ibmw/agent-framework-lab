@@ -10,8 +10,9 @@ every answer of ADR 0052's resolution chain, and each preview must be equal.
 Every state is reached the way a real lab reaches it — the settings route, and the process
 environment the API composes itself from (`AGENT_LAB_OPENAI_API_KEY`, `AGENT_LAB_CREDENTIAL_KEY`)
 through `get_settings()` — rather than by stubbing the resolver or handing the app a `Settings`,
-so a gate that read the key from the process, from `get_settings()` or from its own composition
-would all answer differently here. `getLabStatus` is asserted to report each state, so the
+so a gate that read the key when the app is composed or at request time — through `os.environ`,
+`get_settings()` or the app's composition — would answer differently here; one that captured
+settings once at import would not. `getLabStatus` is asserted to report each state, so the
 comparison is between states that really differ.
 
 **One departure from ADR 0053's list.** It asks for the same preview "with one for a different

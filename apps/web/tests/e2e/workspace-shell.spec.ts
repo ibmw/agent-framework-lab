@@ -226,8 +226,9 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
  * connection*, so there is nothing to restore with. The coupling is safe for what the rest of
  * the suite does, and each reason is checkable:
  *
- * - No other spec reads run mode, the connection source or the lab status at all — this is the
- *   only one that opens *Runtime configuration*.
+ * - No other spec asserts on run mode, the connection source or the lab status — this is the
+ *   only one that opens *Runtime configuration*. The agent and judge editors and experiment
+ *   setup do read the lab status, and no spec asserts on the note they show from it.
  * - Every other spec that advances a run or scores one does it on the deterministic control
  *   framework and the deterministic judge. Both are registered whatever the connection is, and
  *   both reach no endpoint, so neither pins one: a run they advance records no
