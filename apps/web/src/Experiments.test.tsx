@@ -523,7 +523,7 @@ function experiment(
         agent_configuration_version: 1,
         agent_configuration_name: "Atlas",
         framework_id: "fake",
-        provider: "fake",
+        provider: runProviders[0],
         model_id: "deterministic",
         sandbox_id: "aaaaaaaa-1111-4222-8333-444444444444",
         revision: 0,
@@ -541,7 +541,7 @@ function experiment(
         agent_configuration_version: 1,
         agent_configuration_name: "Beacon",
         framework_id: "fake",
-        provider: "fake",
+        provider: runProviders[1],
         model_id: "deterministic",
         sandbox_id: "bbbbbbbb-1111-4222-8333-444444444444",
         revision: 0,
@@ -798,6 +798,11 @@ let replayFails = false;
 let forked: { configuration_id: string; version: number }[][] = [];
 /** Which answer of ADR 0052's chain the lab gives; a lab that reaches its provider by default. */
 let connectionSource: ModelConnectionSource = "environment";
+/**
+ * The provider each arm of the run under test pinned, as the record names it. The declared
+ * control by default; a case about reach moves an arm onto OpenAI.
+ */
+let runProviders: [string, string] = ["fake", "fake"];
 const connectionServed = { statuses: 0, listings: 0 };
 let versionReads = 0;
 
@@ -1100,6 +1105,7 @@ afterEach(() => {
   replayFails = false;
   forked = [];
   connectionSource = "environment";
+  runProviders = ["fake", "fake"];
   connectionServed.statuses = 0;
   connectionServed.listings = 0;
   versionReads = 0;
@@ -2477,5 +2483,252 @@ describe("replay", () => {
     expect(composer).toHaveTextContent(
       /driven by the run it was derived from, Wrong address — framework comparison/,
     );
+  });
+});
+
+/**
+ * Replay and Fork run their arms before they answer, so an arm naming a provider this lab
+ * cannot reach is refused there with 422 and nothing written. The results screen says so first,
+ * with the sentence setup's Start carries (ADR 0053 and its amendment).
+ */
+describe("replay, fork and the provider the lab can reach", () => {
+  const NOTE =
+    "Published configurations naming OpenAI cannot be advanced here until the lab has a connection for it.";
+  const BROKEN_READ = {
+    code: "internal_error",
+    message: "The lab could not complete the request.",
+    request_id: "r",
+  };
+
+  /**
+   * Both reads that say what the lab reaches have answered, and the page has had its turn to
+   * draw what they said: a control asserted enabled before then proves nothing.
+   */
+  async function connectionRead() {
+    // Once each, which is all the results screen asks.
+    await waitFor(() => {
+      expect(connectionServed.statuses).toBe(1);
+      expect(connectionServed.listings).toBe(1);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  /** The same, once exactly `distinct` versions the moved fork arms name have answered. */
+  async function versionRead(distinct: number) {
+    await connectionRead();
+    await waitFor(() => expect(versionReads).toBe(distinct));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(versionReads).toBe(distinct);
+  }
+
+  function failing(route: "lab-status" | "model-connections") {
+    return http.get(`*/api/v1/${route}`, () => {
+      // Counted as served, so the wait still knows when the page has been answered.
+      if (route === "lab-status") {
+        connectionServed.statuses += 1;
+      } else {
+        connectionServed.listings += 1;
+      }
+      return HttpResponse.json(BROKEN_READ, { status: 500 });
+    });
+  }
+
+  async function openFork(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    return screen.findByRole("region", { name: "Fork this experiment" });
+  }
+
+  /** Move one fork arm onto a configuration, at the newest version the panel offers for it. */
+  async function forkArmOnto(
+    user: ReturnType<typeof userEvent.setup>,
+    panel: HTMLElement,
+    position: number,
+    name: string,
+  ) {
+    const select = within(panel).getAllByLabelText("Agent configuration")[position];
+    await waitFor(() => expect(within(select).getByRole("option", { name })).toBeEnabled());
+    await user.selectOptions(select, name);
+  }
+
+  it("leaves Replay alone on a lab that reaches the provider its arms pinned", async () => {
+    runProviders = ["openai", "openai"];
+    renderResults();
+
+    const replay = await screen.findByRole("button", { name: "Replay" });
+    await connectionRead();
+
+    expect(replay).toBeEnabled();
+    expect(replay).not.toHaveAttribute("title");
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  for (const source of ["none", "saved_unreadable"] as const) {
+    it(`disables Replay and says why once, when a lab on ${source} cannot reach what both arms pinned`, async () => {
+      const user = userEvent.setup();
+      connectionSource = source;
+      runProviders = ["openai", "openai"];
+      renderResults();
+
+      const replay = await screen.findByRole("button", { name: "Replay" });
+      await waitFor(() => expect(replay).toBeDisabled());
+      // The blocked-control rule until Slice 22: the reason in `title`, and in one muted
+      // line the button's description names. Two arms on one provider are one reason.
+      expect(replay).toHaveAttribute("title", NOTE);
+      expect(replay).toHaveAccessibleDescription(NOTE);
+      expect(screen.getAllByText(NOTE)).toHaveLength(1);
+      expect(screen.getByText(NOTE)).toBeVisible();
+
+      await user.click(replay);
+      expect(replayed).toEqual([]);
+    });
+  }
+
+  it("replays a run on the declared control whatever the lab can reach", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderResults();
+
+    const replay = await screen.findByRole("button", { name: "Replay" });
+    await connectionRead();
+    expect(replay).toBeEnabled();
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+
+    await user.click(replay);
+    expect(replayed).toEqual([EXPERIMENT_ID]);
+  });
+
+  for (const route of ["lab-status", "model-connections"] as const) {
+    it(`leaves Replay and Fork alone when ${route} cannot be read, even on a lab that reaches nothing`, async () => {
+      const user = userEvent.setup();
+      connectionSource = "none";
+      runProviders = ["openai", "openai"];
+      server.use(failing(route));
+      renderResults();
+
+      const replay = await screen.findByRole("button", { name: "Replay" });
+      const panel = await openFork(user);
+      await forkArmOnto(user, panel, 1, "cfg-atlas");
+      await connectionRead();
+
+      expect(replay).toBeEnabled();
+      expect(replay).not.toHaveAttribute("title");
+      expect(within(panel).getByRole("button", { name: "Fork this run" })).toBeEnabled();
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    });
+  }
+
+  it("leaves Fork alone on a lab that reaches the provider the chosen arms name", async () => {
+    const user = userEvent.setup();
+    renderResults();
+
+    const panel = await openFork(user);
+    await forkArmOnto(user, panel, 1, "cfg-atlas");
+    await connectionRead();
+
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    expect(fork).toBeEnabled();
+    expect(fork).not.toHaveAttribute("title");
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  for (const source of ["none", "saved_unreadable"] as const) {
+    it(`disables Fork and says why once, when a lab on ${source} cannot reach the arms chosen`, async () => {
+      const user = userEvent.setup();
+      connectionSource = source;
+      // Arm A stays on the version it pinned, which names OpenAI; arm B moves onto a
+      // configuration whose version names it too. Two arms, one provider, one reason.
+      runProviders = ["openai", "fake"];
+      renderResults();
+
+      const panel = await openFork(user);
+      await forkArmOnto(user, panel, 1, "cfg-atlas");
+      const fork = within(panel).getByRole("button", { name: "Fork this run" });
+
+      await waitFor(() => expect(fork).toBeDisabled());
+      expect(fork).toHaveAttribute("title", NOTE);
+      expect(fork).toHaveAccessibleDescription(NOTE);
+      expect(within(panel).getAllByText(NOTE)).toHaveLength(1);
+      expect(within(panel).getByText(NOTE)).toBeVisible();
+
+      await user.click(fork);
+      expect(forked).toEqual([]);
+    });
+  }
+
+  it("follows the arms chosen: an unreachable choice blocks Fork, a reachable one releases it", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderResults();
+
+    const panel = await openFork(user);
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+
+    // Arm B onto a configuration whose newest version names OpenAI: blocked.
+    await forkArmOnto(user, panel, 1, "cfg-atlas");
+    await waitFor(() => expect(fork).toBeDisabled());
+    expect(fork).toHaveAccessibleDescription(NOTE);
+
+    // Arm B onto the declared control's newest version instead: released.
+    await forkArmOnto(user, panel, 1, "cfg-beacon");
+    await waitFor(() => expect(fork).toBeEnabled());
+    expect(fork).not.toHaveAttribute("title");
+    expect(within(panel).queryByText(/cannot be advanced here/)).toBeNull();
+
+    // And blocked again when the choice moves back, from the version already read.
+    await forkArmOnto(user, panel, 1, "cfg-atlas");
+    await waitFor(() => expect(fork).toBeDisabled());
+
+    await forkArmOnto(user, panel, 1, "cfg-beacon");
+    await waitFor(() => expect(fork).toBeEnabled());
+    await user.click(fork);
+    expect(forked).toEqual([
+      [
+        { configuration_id: ATLAS_ID, version: 1 },
+        { configuration_id: BEACON_ID, version: 2 },
+      ],
+    ]);
+  });
+
+  it("keeps Fork blocked by an arm left on the version it pinned, whatever the moved arm names", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    // Arm A stays where it was, on a version naming OpenAI; arm B moves onto the control.
+    runProviders = ["openai", "fake"];
+    renderResults();
+
+    const panel = await openFork(user);
+    await forkArmOnto(user, panel, 1, "cfg-beacon");
+    // The moved arm's version is read — the one version this fork moves onto.
+    await versionRead(1);
+
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    expect(fork).toBeDisabled();
+    expect(fork).toHaveAttribute("title", NOTE);
+    expect(fork).toHaveAccessibleDescription(NOTE);
+    await user.click(fork);
+    expect(forked).toEqual([]);
+  });
+
+  it("leaves Fork alone when the version a chosen arm moves to cannot be read", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    server.use(
+      http.get("*/api/v1/agent-configurations/:configurationId/versions/:version", () => {
+        versionReads += 1;
+        return HttpResponse.json(BROKEN_READ, { status: 500 });
+      }),
+    );
+    renderResults();
+
+    const panel = await openFork(user);
+    await forkArmOnto(user, panel, 1, "cfg-atlas");
+    await versionRead(1);
+
+    expect(within(panel).getByRole("button", { name: "Fork this run" })).toBeEnabled();
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 });

@@ -1,18 +1,21 @@
 import type {
+  AgentConfigurationVersionResponse,
   ExperimentHistoryEntrySchema,
   ExperimentHistoryResponse,
   HistoryArmSchema,
+  ModelConnectionSource,
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { HISTORY_TOTAL_PAGE_SIZE } from "./shell/listings";
 import { renderApp } from "./test/app";
+import { labConnection } from "./test/connection";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -204,6 +207,45 @@ let replayed: string[] = [];
 /** Every fork the listing asked for, as the backend received it. */
 let forked: { configuration_id: string; version: number }[][] = [];
 let rows: ExperimentHistoryEntrySchema[] = EVERY_ROW;
+/** Which answer of ADR 0052's chain the lab gives; a lab that reaches its provider by default. */
+let connectionSource: ModelConnectionSource = "environment";
+const connectionServed = { statuses: 0, listings: 0 };
+let versionReads = 0;
+/** The provider a published version names. OpenAI unless a case says otherwise. */
+let providerOf: (configurationId: string, version: number) => string = () => "openai";
+
+/** One frozen version of a configuration, naming the provider `providerOf` gives it. */
+function publishedVersion(
+  configurationId: string,
+  version: number,
+): AgentConfigurationVersionResponse {
+  const provider = providerOf(configurationId, version);
+  return {
+    configuration_id: configurationId,
+    lifecycle_state: "published",
+    version,
+    content_fingerprint: "e".repeat(64),
+    published_at: "2026-08-28T08:00:00+00:00",
+    support_identity_version: 1,
+    content: {
+      name: "cfg-atlas",
+      description: "",
+      framework_id: provider === "fake" ? "fake" : "pydantic-ai",
+      architecture: "single_agent",
+      support_identity_id: "8e9f0a1b-2c3d-4e5f-8a6b-7c8d9e0f1a2b",
+      prompt: "You are a support agent.",
+      tone_of_voice: { source: "shop_default", guideline_id: "" },
+      tools: [],
+      memory: "conversation",
+      model: {
+        provider,
+        model_id: provider === "fake" ? "deterministic" : "gpt-5-mini",
+        temperature: "0.20",
+        max_tool_rounds: 8,
+      },
+    },
+  };
+}
 
 const server = setupServer(
   http.get("*/api/v1/shops", () => HttpResponse.json(SHOP_LISTING)),
@@ -273,6 +315,13 @@ const server = setupServer(
       { status: 500 },
     ),
   ),
+  http.get("*/api/v1/agent-configurations/:configurationId/versions/:version", ({ params }) => {
+    versionReads += 1;
+    return HttpResponse.json(
+      publishedVersion(String(params.configurationId), Number(params.version)),
+    );
+  }),
+  ...labConnection(() => connectionSource, connectionServed),
   // The shop and lab shells read every listing their rail counts (ADR 0056). Last, so a
   // handler this suite declares for one of these routes still wins.
   ...shellListings(),
@@ -291,6 +340,11 @@ beforeEach(() => {
   replayed = [];
   forked = [];
   rows = EVERY_ROW;
+  connectionSource = "environment";
+  connectionServed.statuses = 0;
+  connectionServed.listings = 0;
+  versionReads = 0;
+  providerOf = () => "openai";
 });
 afterAll(() => server.close());
 
@@ -744,5 +798,245 @@ describe("the rail's figure and this index", () => {
     const table = await screen.findByRole("table");
     await waitFor(() => expect(bodyRows(table)).toBe(1));
     expect(within(railEntry("History", LAB)).getByText("2")).toBeVisible();
+  });
+});
+
+/**
+ * A row's Replay and Fork run their arms before they answer, so an arm naming a provider this
+ * lab cannot reach is refused there with 422 and nothing written. The row says so first, with
+ * the sentence setup's Start carries (ADR 0053 and its amendment).
+ */
+describe("a row's replay, fork and the provider the lab can reach", () => {
+  const NOTE =
+    "Published configurations naming OpenAI cannot be advanced here until the lab has a connection for it.";
+  const BROKEN_READ = {
+    code: "internal_error",
+    message: "The lab could not complete the request.",
+    request_id: "r",
+  };
+  /** Arm A's configuration has a newer publication, v7, which is what the row forks onto. */
+  const FORKABLE: ExperimentHistoryEntrySchema = {
+    ...FINISHED,
+    arms: FINISHED.arms.map((entry, position) =>
+      position === 0 ? { ...entry, agent_configuration_latest_version: 7 } : entry,
+    ),
+  };
+
+  /**
+   * Both reads that say what the lab reaches have answered — once each, which is all the page
+   * asks — and the page has drawn them.
+   */
+  async function connectionRead() {
+    await waitFor(() => {
+      expect(connectionServed.statuses).toBe(1);
+      expect(connectionServed.listings).toBe(1);
+    });
+    await settle();
+  }
+
+  /**
+   * The same, once the page has read exactly `distinct` versions: one per version the row's
+   * replay and fork would pin, however many arms pin it.
+   */
+  async function versionRead(distinct: number) {
+    await connectionRead();
+    await waitFor(() => expect(versionReads).toBe(distinct));
+    await settle();
+    expect(versionReads).toBe(distinct);
+  }
+
+  async function settle() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  async function forkableRow(): Promise<HTMLElement> {
+    const table = await screen.findByRole("table");
+    return within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+  }
+
+  function failing(route: "lab-status" | "model-connections") {
+    return http.get(`*/api/v1/${route}`, () => {
+      if (route === "lab-status") {
+        connectionServed.statuses += 1;
+      } else {
+        connectionServed.listings += 1;
+      }
+      return HttpResponse.json(BROKEN_READ, { status: 500 });
+    });
+  }
+
+  it("leaves a row's Replay and Fork alone on a lab that reaches their provider", async () => {
+    rows = [FORKABLE];
+    renderHistory();
+    const row = await forkableRow();
+    await connectionRead();
+    // A lab that reaches its provider has nothing to ask of a version.
+    expect(versionReads).toBe(0);
+
+    const replay = within(row).getByRole("button", { name: "Replay recorded versions" });
+    const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
+    expect(replay).toBeEnabled();
+    expect(fork).toBeEnabled();
+    expect(replay).not.toHaveAttribute("title");
+    expect(fork).not.toHaveAttribute("title");
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  for (const source of ["none", "saved_unreadable"] as const) {
+    it(`disables a row's Replay and Fork with one line when a lab on ${source} cannot reach their arms`, async () => {
+      const user = userEvent.setup();
+      connectionSource = source;
+      rows = [FORKABLE];
+      renderHistory();
+      const row = await forkableRow();
+
+      const replay = within(row).getByRole("button", { name: "Replay recorded versions" });
+      const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
+      await waitFor(() => expect(replay).toBeDisabled());
+      await waitFor(() => expect(fork).toBeDisabled());
+      // Four pins — two arms ran v4, the fork moves one onto v7 and keeps the other on v4 —
+      // and two versions, each read once.
+      await versionRead(2);
+      for (const control of [replay, fork]) {
+        expect(control).toHaveAttribute("title", NOTE);
+        expect(control).toHaveAccessibleDescription(NOTE);
+      }
+      // Two arms on one provider, and two refusals with one cause: one sentence.
+      expect(within(row).getAllByText(NOTE)).toHaveLength(1);
+      expect(within(row).getByText(NOTE)).toBeVisible();
+
+      await user.click(replay);
+      await user.click(fork);
+      expect(replayed).toEqual([]);
+      expect(forked).toEqual([]);
+    });
+  }
+
+  it("releases the fork when the versions it moves onto are reachable, and blocks the replay alone", async () => {
+    connectionSource = "none";
+    // Both arms ran v4 of one configuration, which names OpenAI; its newer publication, v7,
+    // names the control. The replay runs v4 again, and the fork runs v7.
+    rows = [
+      {
+        ...FINISHED,
+        arms: FINISHED.arms.map((entry) => ({ ...entry, agent_configuration_latest_version: 7 })),
+      },
+    ];
+    providerOf = (_, version) => (version === 7 ? "fake" : "openai");
+    renderHistory();
+    const row = await forkableRow();
+
+    const replay = within(row).getByRole("button", { name: "Replay recorded versions" });
+    const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
+    await waitFor(() => expect(replay).toBeDisabled());
+    await versionRead(2);
+    expect(fork).toBeEnabled();
+    expect(fork).not.toHaveAttribute("title");
+    expect(replay).toHaveAccessibleDescription(NOTE);
+    expect(within(row).getAllByText(NOTE)).toHaveLength(1);
+  });
+
+  it("blocks the fork alone when only the versions it moves onto are unreachable", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    rows = [
+      {
+        ...FINISHED,
+        arms: FINISHED.arms.map((entry) => ({ ...entry, agent_configuration_latest_version: 7 })),
+      },
+    ];
+    providerOf = (_, version) => (version === 7 ? "openai" : "fake");
+    renderHistory();
+    const row = await forkableRow();
+
+    const replay = within(row).getByRole("button", { name: "Replay recorded versions" });
+    const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
+    await waitFor(() => expect(fork).toBeDisabled());
+    expect(fork).toHaveAttribute("title", NOTE);
+    expect(fork).toHaveAccessibleDescription(NOTE);
+    expect(replay).toBeEnabled();
+    expect(replay).not.toHaveAttribute("title");
+    expect(within(row).getAllByText(NOTE)).toHaveLength(1);
+
+    await user.click(replay);
+    expect(replayed).toEqual([FINISHED_ID]);
+    // The replay lands on the derived run's results, which reads the lab's reach for itself.
+    // Waited for here, so none of its reads is counted against the case after this one.
+    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+    await waitFor(() => {
+      expect(connectionServed.statuses).toBe(2);
+      expect(connectionServed.listings).toBe(2);
+    });
+  });
+
+  it("replays a row on the declared control whatever the lab can reach", async () => {
+    connectionSource = "none";
+    rows = [FORKABLE];
+    providerOf = () => "fake";
+    renderHistory();
+    const row = await forkableRow();
+    await versionRead(2);
+
+    expect(within(row).getByRole("button", { name: "Replay recorded versions" })).toBeEnabled();
+    expect(within(row).getByRole("button", { name: "Fork with newer versions" })).toBeEnabled();
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  for (const route of ["lab-status", "model-connections"] as const) {
+    it(`leaves a row's Replay and Fork alone when ${route} cannot be read`, async () => {
+      connectionSource = "none";
+      rows = [FORKABLE];
+      server.use(failing(route));
+      renderHistory();
+      const row = await forkableRow();
+      await connectionRead();
+      // A lab whose reach is unknown asks nothing of a version either.
+      expect(versionReads).toBe(0);
+
+      expect(within(row).getByRole("button", { name: "Replay recorded versions" })).toBeEnabled();
+      expect(within(row).getByRole("button", { name: "Fork with newer versions" })).toBeEnabled();
+      expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+    });
+  }
+
+  it("leaves a row's Replay and Fork alone when the versions they would run cannot be read", async () => {
+    connectionSource = "none";
+    rows = [FORKABLE];
+    server.use(
+      http.get("*/api/v1/agent-configurations/:configurationId/versions/:version", () => {
+        versionReads += 1;
+        return HttpResponse.json(BROKEN_READ, { status: 500 });
+      }),
+    );
+    renderHistory();
+    const row = await forkableRow();
+    await versionRead(2);
+
+    expect(within(row).getByRole("button", { name: "Replay recorded versions" })).toBeEnabled();
+    expect(within(row).getByRole("button", { name: "Fork with newer versions" })).toBeEnabled();
+    expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
+  });
+
+  it("keeps a fork with nothing newer on its own reason, while the replay beside it carries the reach line", async () => {
+    connectionSource = "none";
+    // Every arm already runs the newest publication, v4, which names OpenAI.
+    rows = [FINISHED];
+    renderHistory();
+    const row = await forkableRow();
+
+    const replay = within(row).getByRole("button", { name: "Replay recorded versions" });
+    const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
+    await waitFor(() => expect(replay).toBeDisabled());
+    await versionRead(1);
+    expect(replay).toHaveAccessibleDescription(NOTE);
+    // The fork cannot move anything, which is its reason; the lab's reach is not a second one.
+    expect(fork).toBeDisabled();
+    expect(fork).toHaveAccessibleDescription(
+      "Every arm already runs the newest published version of its configuration, and a derivation that changes nothing is a replay.",
+    );
+    expect(fork).not.toHaveAttribute("title");
+    expect(within(row).getAllByText(NOTE)).toHaveLength(1);
   });
 });

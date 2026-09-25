@@ -24,6 +24,7 @@ import {
   presetForBaseUrl,
   pythonStrip,
   sameEndpoint,
+  unreachableArmsNote,
   unreachableProviderNote,
   unreachableProviders,
 } from "./modelConnections";
@@ -367,5 +368,15 @@ describe("the providers this lab cannot reach", () => {
     expect(unreachableProviderNote("OpenAI")).toBe(
       "Published configurations naming OpenAI cannot be advanced here until the lab has a connection for it.",
     );
+  });
+  it("gives the arms a control would run one sentence per unreachable provider, and nothing it cannot know", () => {
+    const openai = new Set(["openai"]);
+    const note = unreachableProviderNote("OpenAI");
+    expect(unreachableArmsNote(["openai", "openai"], openai)).toBe(note);
+    expect(unreachableArmsNote(["fake", "openai"], openai)).toBe(note);
+    // The declared control, an arm not yet read, and a lab whose reach is unknown say nothing.
+    expect(unreachableArmsNote(["fake", null], openai)).toBe("");
+    expect(unreachableArmsNote(["openai"], null)).toBe("");
+    expect(unreachableArmsNote(["openai"], new Set())).toBe("");
   });
 });

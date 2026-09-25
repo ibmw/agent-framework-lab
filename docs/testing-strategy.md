@@ -45,16 +45,17 @@ Three rules follow for anyone writing a spec:
   the lab makes globally unique — block names, support-identity and configuration names, the names
   a dropdown is selected by — still carries a per-spec suffix. Anything scoped to a shop (a ticket
   reference, an order reference, a customer) needs nothing, because each spec builds its own shop.
-- A stack's API runs with `AGENT_LAB_ENVIRONMENT=test`, so it advances an `openai` arm through
-  the SDK doubles whatever its connection source says — and experiment setup disables Start for an
-  arm naming a provider the lab reports it cannot reach (ADR 0053). What the source is depends on
-  the run: a fresh stack whose API resolves no non-blank `AGENT_LAB_OPENAI_API_KEY` reports
-  `none`, one that resolves a non-blank key reports `environment` — the shell outranking the
-  repo's `.env`, and a blank value reading as unset — and `workspace-shell.spec.ts` leaves a
-  keyless connection saved in its stack's database, so every spec after it on that stack sees
-  `saved`, a restarted worker's included. Today's journeys start the control, which is unaffected
-  either way. A journey that needs an `openai` arm must not rely on the lab's source, and must not
-  save a connection unless `workspace-shell.spec.ts`'s fresh-lab precondition is reworked first.
+- A stack's API runs with `AGENT_LAB_ENVIRONMENT=test`, so it advances an `openai` arm through the
+  SDK doubles whatever its connection source says — and experiment setup's Start, and Replay and
+  Fork on the results screen and in history, are disabled for an arm naming a provider the lab
+  reports it cannot reach (ADR 0053). What the source is depends on the run: a fresh stack whose API
+  resolves no non-blank `AGENT_LAB_OPENAI_API_KEY` reports `none`, one that resolves a non-blank key
+  reports `environment` — the shell outranking the repo's `.env`, and a blank value reading as unset
+  — and `workspace-shell.spec.ts` leaves a keyless connection saved in its stack's database, so
+  every spec after it on that stack sees `saved`, a restarted worker's included. Today's journeys
+  start, replay and fork the control, which is unaffected either way. A journey that needs an
+  `openai` arm must not rely on the lab's source, and must not save a connection unless
+  `workspace-shell.spec.ts`'s fresh-lab precondition is reworked first.
 
 Two shapes of test carry more weight than their size suggests, and both are load-bearing (ADR 0023).
 **Recorded fingerprints** pin the canonical serializer's bytes and the `sandbox-v2` and

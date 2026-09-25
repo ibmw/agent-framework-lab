@@ -2,6 +2,27 @@
 
 Status: accepted — 2026-09-19
 
+Amendment: 2026-09-26 — "the same sentence belongs on experiment setup beside a disabled Start" is
+extended to *every control that starts or derives an experiment*: setup's Start, and Replay and
+Fork, on the results screen and on each history row. A replay or a fork runs its arms before it
+answers — the derivation advances each arm as often as its source was advanced, in the one
+transaction that starts it — so an arm naming a provider this lab cannot reach makes the whole
+derivation answer 422 `agent_runtime_unavailable`, and nothing is stored — a control arm ahead of
+the refusing one is still advanced first, and its spans are still exported. Each control is disabled
+with the same sentence in `title` and in one muted line its `aria-describedby` names, drawn from the
+same reachability read, which says nothing while it loads or when any read fails. The arms checked
+are the ones the derivation would pin: the versions the source ran for a replay; for a fork, the
+versions the operator has chosen in the results panel as the choice stands, or the newest
+publications a history row's fork moves onto. The results screen reads a pinned arm's provider off
+the experiment, which carries it; a history row, whose arms do not, and a fork arm moved onto
+another version read the version itself. Two deliberate readings: an arm its source never advanced
+is not advanced by the derivation either, so a derivation whose only unreachable arm is such an arm
+succeeds here — and it is blocked anyway, because the run it produces holds an arm this lab cannot
+advance, which is the state Start is blocked for. And no judge enters the check: a derivation starts
+and drives its arms and scores nothing, so `judge_runtime_unavailable` is met only when somebody
+scores the derived run, as for any other. It remains a note and never a finding: no gate sentence
+and no `preview.issues` entry carries it.
+
 Decides what `provider` on an agent configuration means once the lab's own connection becomes
 editable (ADR 0052): that it stays authored rather than inherited, that publication and
 reachability are two questions answered at two times by two authorities, and that an OpenAI-protocol
@@ -148,7 +169,8 @@ agent side, and writing the rule twice in two ADRs is how the two surfaces drift
 
 Publishing gets no stricter and no looser. What changes is that an author can now be in a state the
 lab could not previously produce — holding a valid configuration this installation cannot advance —
-and the workspace names that state in two places instead of leaving it to the first 422.
+and the workspace names that state beside the provider field and beside every control that starts or
+derives an experiment (the amendment above) instead of leaving it to the first 422.
 
 The proven table keeps its meaning under a feature that could have eroded it: "proven" continues to
 mean *there is an implementation here and a suite that exercises it*, not *somebody saved a URL*.

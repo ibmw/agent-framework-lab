@@ -21,10 +21,9 @@ import { listScenarios, listScenarioVersions } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
-import { describeProvider } from "../lib/agents";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
-import { unreachableProviderNote } from "../lib/modelConnections";
+import { unreachableArmsNote } from "../lib/modelConnections";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -289,16 +288,10 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   // sentence per provider, so two arms on one unreachable provider are one reason, not two.
   // A note on this machine, never an issue: the preview's issues are the gate's, and the gate
   // answers identically wherever it is asked.
-  const startBlocked = [
-    ...new Set(
-      arms
-        .map((arm) => armProviders[arm.id] ?? null)
-        .filter((provider): provider is string => provider !== null)
-        .filter((provider) => unreachable?.has(provider) ?? false),
-    ),
-  ]
-    .map((provider) => unreachableProviderNote(describeProvider(provider)))
-    .join(" ");
+  const startBlocked = unreachableArmsNote(
+    arms.map((arm) => armProviders[arm.id] ?? null),
+    unreachable,
+  );
 
   const editArm = (index: number, next: ArmDraft) => {
     setArms((current) => current.map((arm, position) => (position === index ? next : arm)));

@@ -6,6 +6,7 @@ import { forkExperiment, listExperimentHistory, replayExperiment } from "../api/
 import { ButtonIcon } from "../components/ButtonIcon";
 import { PageHeader } from "../components/WorkspaceChrome";
 import { OUTCOMES } from "../lib/evidence";
+import { unreachableArmsNote } from "../lib/modelConnections";
 import {
   fieldControlClasses,
   fieldLabelClasses,
@@ -15,6 +16,8 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
+import { type Pin, pinKey, usePinnedProviders } from "../lib/usePinnedProviders";
+import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { NoCurrentShop } from "../shell/LabWorkspace";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
@@ -56,6 +59,23 @@ function keysOf<Key extends string>(table: Record<Key, unknown>): Key[] {
 function pageIn(value: string | null): number {
   const asked = Number(value);
   return Number.isSafeInteger(asked) && asked >= 1 ? asked : 1;
+}
+
+/**
+ * The version a row's *Fork with newer versions* moves an arm to: the newest publication of
+ * its configuration, or the one it ran where nothing is newer. One place, because the fork
+ * sends it and the reach check reads it, and the two must name the same version.
+ */
+function forkTarget(arm: ExperimentHistoryEntrySchema["arms"][number]): Pin {
+  return {
+    configurationId: arm.agent_configuration_id,
+    version: arm.agent_configuration_latest_version ?? arm.agent_configuration_version,
+  };
+}
+
+/** The version a row's arm ran, which is what its replay runs again. */
+function recordedPin(arm: ExperimentHistoryEntrySchema["arms"][number]): Pin {
+  return { configurationId: arm.agent_configuration_id, version: arm.agent_configuration_version };
 }
 
 function startedAfter(span: string): string | undefined {
@@ -148,10 +168,10 @@ export function ExperimentHistoryPage() {
       setError(null);
       try {
         const derived = await forkExperiment(experiment.shop_id, experiment.experiment_id, {
-          arms: experiment.arms.map((arm) => ({
-            configuration_id: arm.agent_configuration_id,
-            version: arm.agent_configuration_latest_version ?? arm.agent_configuration_version,
-          })),
+          arms: experiment.arms.map((arm) => {
+            const target = forkTarget(arm);
+            return { configuration_id: target.configurationId, version: target.version };
+          }),
         });
         void refreshTotal();
         navigate(`/lab/bench/${experiment.shop_id}/${derived.experiment_id}/results`);
@@ -258,6 +278,18 @@ export function ExperimentHistoryPage() {
   const first = total === 0 ? 0 : (shown - 1) * size + 1;
   const last = Math.min(shown * size, total);
   const pages = Math.max(1, Math.ceil(total / size));
+
+  // A row's Replay and Fork run their arms before they answer, so an arm naming a provider
+  // this lab cannot reach is refused there with 422 — said on the row first, as setup's Start
+  // says it (ADR 0053). A history arm does not carry its provider, so the versions the two
+  // would run are read, once each across the page, and only on a lab known to miss one.
+  const unreachable = useUnreachableProviders();
+  const providers = usePinnedProviders(
+    (listing?.experiments ?? []).flatMap((experiment) =>
+      experiment.arms.flatMap((arm) => [recordedPin(arm), forkTarget(arm)]),
+    ),
+    unreachable !== null && unreachable.size > 0,
+  );
 
   return (
     <>
@@ -447,6 +479,14 @@ export function ExperimentHistoryPage() {
                     onReplay={replay}
                     onFork={fork}
                     deriving={deriving === experiment.experiment_id}
+                    replayBlocked={unreachableArmsNote(
+                      experiment.arms.map((arm) => providers.get(pinKey(recordedPin(arm))) ?? null),
+                      unreachable,
+                    )}
+                    forkBlocked={unreachableArmsNote(
+                      experiment.arms.map((arm) => providers.get(pinKey(forkTarget(arm))) ?? null),
+                      unreachable,
+                    )}
                   />
                 ))}
               </tbody>
@@ -491,11 +531,17 @@ function HistoryRow({
   onReplay,
   onFork,
   deriving,
+  replayBlocked,
+  forkBlocked,
 }: {
   experiment: ExperimentHistoryEntrySchema;
   onReplay: (experiment: ExperimentHistoryEntrySchema) => void;
   onFork: (experiment: ExperimentHistoryEntrySchema) => void;
   deriving: boolean;
+  /** Why this row's replay would be refused here, or `""` (ADR 0053). */
+  replayBlocked: string;
+  /** Why this row's fork would be refused here, or `""` (ADR 0053). */
+  forkBlocked: string;
 }) {
   const bench = `/lab/bench/${experiment.shop_id}/${experiment.experiment_id}`;
   const meaning = STATUSES[experiment.status];
@@ -505,6 +551,19 @@ function HistoryRow({
       arm.agent_configuration_latest_version !== null &&
       arm.agent_configuration_latest_version > arm.agent_configuration_version,
   );
+  // The reach line, in the blocked-control shape until Slice 22: the reason in `title`, and
+  // in one muted line the button's `aria-describedby` names. Two refusals with one cause are
+  // one sentence, so a replay and a fork refused for the same provider share one line.
+  const replayNoteId = `${experiment.experiment_id}-replay-reach`;
+  const forkReach = newer ? forkBlocked : "";
+  const forkNoteId =
+    forkReach === replayBlocked ? replayNoteId : `${experiment.experiment_id}-fork-reach`;
+  const forkDescribedBy = [
+    newer ? null : `${experiment.experiment_id}-fork-reason`,
+    forkReach === "" ? null : forkNoteId,
+  ]
+    .filter((id): id is string => id !== null)
+    .join(" ");
   return (
     <tr>
       <td className={tableCellClasses}>
@@ -612,7 +671,9 @@ function HistoryRow({
           <button
             className="flex items-start gap-1.5 text-left text-lab-ink underline-offset-2 hover:underline"
             type="button"
-            disabled={deriving}
+            disabled={deriving || replayBlocked !== ""}
+            title={replayBlocked === "" ? undefined : replayBlocked}
+            aria-describedby={replayBlocked === "" ? undefined : replayNoteId}
             onClick={() => onReplay(experiment)}
           >
             <ButtonIcon verb="rerun" />
@@ -621,11 +682,12 @@ function HistoryRow({
           <button
             className="flex items-start gap-1.5 text-left text-lab-ink underline-offset-2 hover:underline disabled:text-admin-muted disabled:no-underline"
             type="button"
-            disabled={deriving || !newer}
+            disabled={deriving || !newer || forkReach !== ""}
             // Described rather than titled: a browser does not reliably show a `title` on a
             // disabled control, so the reason a row cannot be forked is real text that a
-            // screen reader announces with the button.
-            aria-describedby={newer ? undefined : `${experiment.experiment_id}-fork-reason`}
+            // screen reader announces with the button. The reach line is both, as Start's is.
+            title={forkReach === "" ? undefined : forkReach}
+            aria-describedby={forkDescribedBy === "" ? undefined : forkDescribedBy}
             onClick={() => onFork(experiment)}
           >
             <ButtonIcon verb="fork" />
@@ -635,6 +697,16 @@ function HistoryRow({
             <span id={`${experiment.experiment_id}-fork-reason`} className="sr-only">
               Every arm already runs the newest published version of its configuration, and a
               derivation that changes nothing is a replay.
+            </span>
+          )}
+          {replayBlocked === "" ? null : (
+            <span id={replayNoteId} className="text-xs text-admin-muted">
+              {replayBlocked}
+            </span>
+          )}
+          {forkReach === "" || forkNoteId === replayNoteId ? null : (
+            <span id={forkNoteId} className="text-xs text-admin-muted">
+              {forkReach}
             </span>
           )}
         </div>

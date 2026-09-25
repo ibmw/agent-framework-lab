@@ -4,6 +4,7 @@ import type {
   ModelEndpointOutcome,
   ProviderConnectionListResponse,
 } from "@agent-lab/contracts";
+import { describeProvider } from "./agents";
 
 /**
  * The words and the prefilled endpoints the *Model provider* zone is drawn from (ADR 0052).
@@ -427,4 +428,31 @@ export function unreachableProviders(
  */
 export function unreachableProviderNote(providerLabel: string): string {
   return `Published configurations naming ${providerLabel} cannot be advanced here until the lab has a connection for it.`;
+}
+
+/**
+ * Why a control that starts or derives an experiment will not, or `""` when nothing stops it
+ * (ADR 0053 and its amendment): setup's Start, Replay, and Fork.
+ *
+ * `providers` are the ones the arms it would run name, one per arm, with `null` for an arm
+ * whose provider is not known — not yet read, or unreadable — which says nothing rather than
+ * something. One sentence per provider, so two arms on one unreachable provider are one
+ * reason rather than two. A lab whose reach is not known (`null`) blocks nothing.
+ */
+export function unreachableArmsNote(
+  providers: readonly (string | null)[],
+  unreachable: ReadonlySet<string> | null,
+): string {
+  if (unreachable === null) {
+    return "";
+  }
+  return [
+    ...new Set(
+      providers.filter(
+        (provider): provider is string => provider !== null && unreachable.has(provider),
+      ),
+    ),
+  ]
+    .map((provider) => unreachableProviderNote(describeProvider(provider)))
+    .join(" ");
 }

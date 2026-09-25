@@ -8,7 +8,7 @@ import type {
   ExperimentResponse,
   ExperimentRunSchema,
 } from "@agent-lab/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import {
   listAgentConfigurations,
@@ -25,6 +25,7 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
+import { unreachableArmsNote } from "../lib/modelConnections";
 import {
   fieldControlClasses,
   fieldLabelClasses,
@@ -32,6 +33,8 @@ import {
   inkButtonClasses,
   subtleButtonClasses,
 } from "../lib/ui";
+import { pinKey, usePinnedProviders } from "../lib/usePinnedProviders";
+import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
 
@@ -81,6 +84,11 @@ export function ExperimentResultsLayout() {
   const [deriving, setDeriving] = useState(false);
   const [forking, setForking] = useState(false);
   const navigate = useNavigate();
+  // Replay and Fork both run their arms before they answer, so an arm naming a provider this
+  // lab cannot reach is refused there with 422 — said here first, as setup's Start says it
+  // (ADR 0053). Read before the early return below, so the hooks keep their order.
+  const unreachable = useUnreachableProviders();
+  const replayNoteId = useId();
 
   /**
    * Derive a new experiment from this one and open its results.
@@ -178,6 +186,13 @@ export function ExperimentResultsLayout() {
     );
   }
 
+  // A replay runs exactly what this run pinned, and each arm already says which provider its
+  // pinned version names, so nothing has to be read to know.
+  const replayBlocked = unreachableArmsNote(
+    experiment.runs.map((run) => run.provider),
+    unreachable,
+  );
+
   const context: ExperimentResults = {
     shopId,
     experimentId,
@@ -198,7 +213,11 @@ export function ExperimentResultsLayout() {
               className={subtleButtonClasses}
               type="button"
               onClick={replay}
-              disabled={deriving}
+              // The blocked-control rule until Slice 22: the reason in `title`, and in one
+              // muted line the button's `aria-describedby` names.
+              disabled={deriving || replayBlocked !== ""}
+              title={replayBlocked === "" ? undefined : replayBlocked}
+              aria-describedby={replayBlocked === "" ? undefined : replayNoteId}
             >
               <ButtonIcon verb="rerun" />
               {deriving ? "Deriving…" : "Replay"}
@@ -245,13 +264,26 @@ export function ExperimentResultsLayout() {
         }
       />
 
+      {replayBlocked === "" ? null : (
+        <p id={replayNoteId} className="mb-3 text-xs text-admin-muted">
+          {replayBlocked}
+        </p>
+      )}
+
       {error ? (
         <p role="alert" className="mb-3 text-[13px] text-lab-error">
           {error}
         </p>
       ) : null}
 
-      {forking ? <ForkPanel experiment={experiment} deriving={deriving} onFork={fork} /> : null}
+      {forking ? (
+        <ForkPanel
+          experiment={experiment}
+          deriving={deriving}
+          unreachable={unreachable}
+          onFork={fork}
+        />
+      ) : null}
 
       <div className="mb-4 grid gap-3">
         <div data-tour="results-arms" className="grid gap-3 lg:grid-cols-2">
@@ -315,10 +347,13 @@ function describeChange(changed: ComparisonDimension[]) {
 function ForkPanel({
   experiment,
   deriving,
+  unreachable,
   onFork,
 }: {
   experiment: ExperimentResponse;
   deriving: boolean;
+  /** The providers this lab cannot reach, or null while that is not known. */
+  unreachable: ReadonlySet<string> | null;
   onFork: (arms: { configuration_id: string; version: number }[]) => void;
 }) {
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
@@ -348,10 +383,26 @@ function ForkPanel({
     return () => controller.abort();
   }, []);
 
-  const moved = chosen.some(
-    (arm, position) =>
-      arm.configurationId !== experiment.runs[position].agent_configuration_id ||
-      arm.version !== experiment.runs[position].agent_configuration_version,
+  const moves = (arm: ForkDraft, position: number) =>
+    arm.configurationId !== experiment.runs[position].agent_configuration_id ||
+    arm.version !== experiment.runs[position].agent_configuration_version;
+  const moved = chosen.some(moves);
+  const forkNoteId = useId();
+
+  // The provider each chosen arm would run, as the choice stands. An arm left where it was
+  // runs the version this run pinned, whose provider the run already names; an arm moved is
+  // read off the version it moves to, and only once the lab is known to miss a provider.
+  const providers = usePinnedProviders(
+    chosen.filter(moves),
+    unreachable !== null && unreachable.size > 0,
+  );
+  const forkBlocked = unreachableArmsNote(
+    chosen.map((arm, position) =>
+      moves(arm, position)
+        ? (providers.get(pinKey(arm)) ?? null)
+        : experiment.runs[position].provider,
+    ),
+    unreachable,
   );
 
   return (
@@ -388,7 +439,9 @@ function ForkPanel({
         <button
           className={inkButtonClasses}
           type="button"
-          disabled={deriving || !moved}
+          disabled={deriving || !moved || forkBlocked !== ""}
+          title={forkBlocked === "" ? undefined : forkBlocked}
+          aria-describedby={forkBlocked === "" ? undefined : forkNoteId}
           onClick={() =>
             onFork(
               chosen.map((arm) => ({
@@ -401,6 +454,11 @@ function ForkPanel({
           <ButtonIcon verb="fork" />
           {deriving ? "Deriving…" : "Fork this run"}
         </button>
+        {forkBlocked === "" ? null : (
+          <p id={forkNoteId} className="mt-1 text-xs text-admin-muted">
+            {forkBlocked}
+          </p>
+        )}
       </div>
     </section>
   );
