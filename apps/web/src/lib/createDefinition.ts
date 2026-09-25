@@ -70,7 +70,7 @@ export interface CreateSpec<PayloadT> {
   /** The second write. */
   replace: (id: string, payload: PayloadT) => Promise<unknown>;
   /** The listing the rail counts and the index renders (ADR 0056). */
-  refresh: () => Promise<void>;
+  refresh: () => Promise<unknown>;
   /** Where the editor of what was made lives. */
   editorAt: (id: string) => string;
   /**

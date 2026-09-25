@@ -38,8 +38,12 @@ export interface Reading<Value> {
    * Safe to hold on to and safe to call late: a continuation that outlived the surface it
    * was started on can call the `refresh` it captured, and the read is dropped rather than
    * landed if this holder has moved on to another subject since (ADR 0059).
+   *
+   * Answers whether this read landed an answer: `false` where it failed or was dropped, so a
+   * caller that is about to rely on the listing — Customers after a detach (ADR 0060) — can
+   * tell a fresh listing from a stale one it would contradict.
    */
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
 }
 
 /**
@@ -54,7 +58,8 @@ export interface Listing<Row> {
   loading: boolean;
   error: string | null;
   count: number | null;
-  refresh: () => Promise<void>;
+  /** As `Reading.refresh`: whether the read landed. */
+  refresh: () => Promise<boolean>;
 }
 
 /** A figure that is not the length of anything this shell holds — history's total. */
@@ -62,7 +67,8 @@ export interface Total {
   count: number | null;
   loading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  /** As `Reading.refresh`: whether the read landed. */
+  refresh: () => Promise<boolean>;
 }
 
 function useReading<Value>(
@@ -103,9 +109,9 @@ function useReading<Value>(
   const subject = useRef(load);
 
   const read = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal): Promise<boolean> => {
       if (subject.current !== load) {
-        return;
+        return false;
       }
       started.current += 1;
       const at = started.current;
@@ -114,15 +120,17 @@ function useReading<Value>(
       try {
         const next = await load(signal);
         if (!current()) {
-          return;
+          return false;
         }
         setValue(next);
         setError(null);
+        return true;
       } catch (cause: unknown) {
         if (!current()) {
-          return;
+          return false;
         }
         setError(describeApiError(cause, unavailable));
+        return false;
       } finally {
         if (current()) {
           setSettled(true);

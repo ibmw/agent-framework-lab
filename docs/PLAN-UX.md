@@ -58,9 +58,10 @@ Three things the prototype draws are decided outside this plan, so that no slice
   `docs/design-direction.md`, *Navigation and chrome*. Built with the overview.
 - **A rail entry's count comes from the listing its index renders**, held by the workspace —
   ADR 0056, which also measured and refused the additive counts read. Landed.
-- **Two of the five proposed preferences earn a consumer**, and the logo is the optional last
-  slice — `docs/design-direction.md`, *Proposals, not decisions*. Both landed with the settings
-  zones; how a timestamp is written, and what a reset puts back, are ADR 0058.
+- **Three of the five proposed preferences earn a consumer**, and the logo is the optional last
+  slice — `docs/design-direction.md`, *Proposals, not decisions*. Two landed with the settings
+  zones, and how a timestamp is written and what a reset puts back are ADR 0058;
+  confirm-before-delete landed with the confirm it governs (ADR 0060).
 
 The assessment that produced this plan — the prototype read screen by screen against the
 application, and the verdict on each slice of the 13 September plan — is
@@ -70,9 +71,9 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). Group C's slices 21–25 can start now;
-Slice 21 also owns the fifth preference row, which the settings zones deliberately did not
-draw. Slices 26 and 27 close the milestone, and 28 is optional.
+connection leaves unreachable (ADR 0053). In Group C, slices 21 (remainder) and 22–25 can start
+now; the remainder of Slice 21 settles a product's identity in the editor before anything else is
+built on it. Slices 26 and 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -87,25 +88,23 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
 
-#### Slice 21 — Removing is deliberate
+#### Slice 21 (remainder) — Deleting and duplicating a product
 
-- [ ] `ConfirmRemove`: the confirm takes the row's place and states the whole consequence
-  (`form-decisions.md` 9.2), on every Remove that is not trivially re-added — addresses,
-  background entries, hidden facts, guidance rows, escalation conditions, documents and the
-  other setup entries, the ticket's trigger message, detaching a profile, a guideline.
-- [ ] Removing a product option that variants still choose says how many and what happens to
-  them; Delete and Duplicate on the product editor header and as a row action, Delete naming any
+- [ ] Settle, in an ADR, how the product editor tracks a product across renames, deletes and
+  discards — today its handle is both its address and its identity and moves with its title —
+  before building Delete and Duplicate on it.
+- [ ] Delete and Duplicate on the product editor header and as a row action, Delete naming any
   order line that references one of the product's variants.
-- [ ] Detaching a profile returns to Customers.
-- [ ] *Confirm before anything is deleted* lands as a fifth row of *Your preferences*, with the
-  sentence the prototype writes: a published version and a recorded run are never deletable
-  whichever way it is set.
+- [ ] The two identity defects already on `main` that the note records — a discard following a
+  renamed product back loses the typing in an open row (S10, S3), and opening a product whose
+  handle is not its title's slug renames it (S8) — are fixed, not worked around.
 
-Frames: DEPRECADED frame 2c; `Workspace.dc.html` :1969 for the guideline's delete.
+Frames: DEPRECADED frame 2c.
 
-Branch: `feat/deliberate-removal`. Checks: page tests that a Remove needs two presses and the
-first can be walked back, and that the preference removes the second press; product delete and
-duplicate on the draft payload; Playwright `shop-publication` if it removes an entry.
+Branch: `feat/product-delete-duplicate`. Checks: the acceptance list is
+`docs/history/2026-09-25-product-identity-reproductions.md` — every sequence the reviews of the
+first attempt found, and what its Delete and Duplicate asserted; product delete and duplicate
+on the draft payload; Playwright `shop-publication` if it removes an entry.
 
 Slice evidence: an operator deleting a product is told that order NS-10482 names one of its
 variants before the second press, and can walk the first back.

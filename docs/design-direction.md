@@ -1,7 +1,7 @@
 # Design direction
 
-Status: current — 2026-09-21. The design rules that govern `apps/web`, stated once as rules a slice
-is checked against. Values are not restated here: a measurement or a colour that is built lives
+Status: current — 2026-09-24. The design rules that govern `apps/web`, stated once as rules a
+slice is checked against. Values are not restated here: a measurement or a colour that is built lives
 in the code that draws it (`styles.css` for tokens, `lib/ui.ts` for class sets and glyph tables,
 `shell/AppShell.tsx` for the chrome), and one that is not yet built lives in its slice in
 `docs/PLAN-UX.md`. How each rule was reached is `docs/history/design-direction.md`; the
@@ -92,7 +92,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Filter chips on Tickets and the block libraries | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked. Policies & FAQ left this row when its documents became a table with four chips (ADR 0057) |
 | Model on the connection, masked key | drawn | neither | ADR 0052 |
 | Setup checklist | drawn on Shop details | not built | ADR 0044, ADR 0045 |
-| Preferences | seven rows | four: where the app opens, the last-visited shop with *Forget*, the rail's collapsed default, the timestamp format | a preference no surface reads is not a slice. Confirm-before-delete lands with the confirm it governs (Slice 21); auto-offered tours and table density are cut (*Proposals, not decisions*, and ADR 0049 refused the first outright) |
+| Preferences | seven rows | five: where the app opens, the last-visited shop with *Forget*, the rail's collapsed default, confirm-before-delete, the timestamp format | a preference no surface reads is not a slice. Confirm-before-delete landed with the confirm it governs (ADR 0060), as a native checkbox for the reason the rail's row is one; auto-offered tours and table density are cut (*Proposals, not decisions*, and ADR 0049 refused the first outright) |
 | The settings page's title | "Workspace settings" | "Lab settings" | two things called Settings, one of which silently means "this shop", is the ambiguity ADR 0044's first decision exists to remove — and *workspace* is already the word for a rail (`nav[aria-label="Shop workspace"]`). Rule 5: it is an accessible name a Playwright spec asserts on |
 | The rail preference's control | a 42×25 pill switch | the native checkbox already there | the prototype's switch is a `div` with `tabIndex` and no role and no name at all, and the README's own form pattern says every label is bound to a native control; the form language has no switch to reach for. Rule 5 |
 | The *Model provider* zone's rows | Provider, Base URL, API key, Default model, Connection | *Endpoint preset*, Base URL, API key, Connection — four rows on the same white surface, with Save and Discard above the card while it is dirty | the prototype's five rows minus *Default model*, which is the row above; and *Provider* is relabelled because in this lab the word names a member of `PROVEN_FRAMEWORKS.providers` that an agent configuration may be published against, and a row offering "Ollama" under it would claim what ADR 0053 keeps the door on. All six are one provider id — `openai`, which names the protocol rather than the company — so what the row actually picks is a prefilled endpoint (ADR 0052). The prototype draws Save and Discard in the zone's heading row; they sit above the card because the dirty state belongs to the connection rather than to the zone, and a zone holding a second connection would have two pairs |
@@ -125,13 +125,18 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | *Required by a scenario* chip on Documents | drawn, over `DOCUMENTS.filter(d => d.required)` | not drawn; the other four are | the scenarios listing carries `context_document_count` and no document, so the subset cannot be named without one draft read per scenario — the additive read ADR 0056 measured and refused — and a figure the payload lacks is not faked (*Lists and counts*) |
 | *Version* and *Read by* columns on Documents | two of the table's four columns | neither; the table is Document and Kind, with a policy's own subject under it | a shop document has no version of its own — the shop has the version — and which scenarios read one is the same figure the chip above lacks; the same rule (ADR 0056) |
 | Kind on the document editor | a read-only value, beside a slug "set at creation" | the same read-only value, and the create page that sets it | the prototype draws no surface that could set either, and the plan's own bullet asks for the kind as a select. It is a select on the create page instead of a control in the editor, because a document is named by its kind and its slug together and moving either would make it a different document to every scenario that had named it (ADR 0057) |
-| Remove on the document editor | not drawn | drawn, one press, in the Document card's footer | the three collections this table presents each carried a Remove per row before it, and a presentation is not where an author loses their only way to delete a policy; rule 5, another slice owning the decision — Slice 21 gives it the second press every Remove gets |
+| Remove on the document editor | not drawn | drawn in the Document card's footer, with the second press every Remove gets standing in the footer's place (ADR 0060) | the three collections this table presents each carried a Remove per row before it, and a presentation is not where an author loses their only way to delete a policy |
 | The document editor's side column | two note cards beside a 790px form — *Read by*, *Never in the prompt* | the one 790px column, with *Never in the prompt* as a card in it and *Read by* not drawn | the same reading as the create page's side column above; *Read by* is the figure the chip and the column beside it also lack |
 | The rows of *What this shop holds* | the whole row is a click target, with a link inside it | the row, with the link as its one control | a nested link inside a clickable row is two controls a keyboard reaches as one; *Principles*, every workflow keyboard-reachable |
 | A guideline's `slug · version` line | drawn | the slug alone, as the row's `EntryId` | `ToneOfVoiceSchema` carries no version: the shop carries the version, the page header's `VersionChips` is where it is read, and a per-row copy of it would be the same figure written once per guideline. A figure the payload lacks is not faked (*Lists and counts*) |
 | *Used by* under a guideline | "Resolved by 3 agent configurations" / "Named as an override by 1 configuration" | not drawn | `AgentConfigurationSummarySchema` carries no tone selection at all, and the configurations listing is the lab shell's rather than the shop's (ADR 0056), so the figure would cost one configuration draft read per row — and even then an override is a free-typed `guideline_id` on a shop-independent configuration, which may name a guideline of a shop this page is not. The one use this page does know is drawn: the *shop default* chip is which guideline a configuration with no override resolves to |
 | *New guideline* on the Guidelines card | a header button appending an empty row, opened for editing | the add form below the list, as on every other list in this workspace | the prototype's row is keyed by its position in an array; a guideline is keyed by its ID, which `DerivedIdField` derives from the name, so an appended row has no key until it has a name. The prototype pays for that by writing the row into the list and marking the draft unsaved on the press, then rolling both back on Cancel — restoring the save state wholesale over anything else done meanwhile. The add form holds the new guideline outside the draft instead, which is ADR 0051's *a half-typed create form is not unsaved work* |
 | The guideline editor's two validation messages | 13px 600 `#9d3028` under the Name and the Guideline field | one muted line in the row, named by the Save's and the radio's `aria-describedby` | the validation weight under the control is the half of the blocked-action rule Slice 22 settles on every `Field` row at once; rule 5, another slice owning the decision. The body-empty message goes with it — this slice's rule is the name, and the guidance the gate still refuses on its own |
+| The option's confirm | drawn under the option's chips in place of its *Remove this option* button, the rest of the option still on screen (:971) | the whole option row replaced by the confirm | `form-decisions.md` 9.2, "the confirm takes the row's place", which this document's rule states and every other removal follows; the prototype's option is the one row it draws a confirm on, and one list whose confirm left the row standing would be the exception every other list had to be read against |
+| "Removed Colour from the draft. Undo" after the second press | drawn (:982) | the notice without its Undo, a line that takes focus once the row has gone | a draft removal is already reverted by *Discard changes*, the order's delete is the one removal that cannot be, and an Undo per removal would be a second history to keep in agreement with the draft's (ADR 0060) |
+| A header's Delete | a confirm in place of the row | on the order editor, the confirm under the header, full width, while the Delete is withdrawn | a header has no row for the confirm to take the place of, and a panel stating a whole consequence does not fit between the header's other actions |
+| Delete and Duplicate on the product editor | frame 2c draws both on the header | neither, on the header or as a catalog row action | a product has no identity steadier than its handle, which moves with its title, so a confirm could not be held to the product it was asked about across a rename and a discard; deferred to its own slice (ADR 0060) |
+| A guideline's delete | *Delete guideline* (:1969) | *Remove*, named "Remove {name}", and a confirm asking to remove it | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
 
 One item the handoff names is not built and not refused: Georgia on the results' stat
 numerals. It lands with the surface that first draws it, which is what the `open` button verb
@@ -189,9 +194,10 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   because `saved_unreadable` is an offline lab whose remedy nothing else on the page could
   give), with the disclosure's own state ephemeral; and the seed is its own zone, because it
   is an action rather than a setting (ADR 0047).
-- **A browser preference is either chosen or recorded** (ADR 0058). Three are chosen on
+- **A browser preference is either chosen or recorded** (ADR 0058). Four are chosen on
   Settings — where the app opens, whether the rail starts collapsed, how a timestamp is
-  written — and *Reset to defaults* puts exactly those three back. Two are written by the shell
+  written, whether a removal asks twice (ADR 0060) — and *Reset to defaults* puts exactly those
+  four back. Two are written by the shell
   as the operator moves — the last-visited shop and the location Settings returns to — and a
   reset touches neither, because neither was chosen; the first has its own *Forget*, which
   drops the shop and rewrites no other preference. **The timestamp format reaches every
@@ -310,8 +316,19 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **An editor says what is unsaved and asks before it is lost** (ADR 0051): *Discard changes*
   beside *Save draft* while dirty, "All changes saved" in a live region when not; one dialog
   with Save and leave, Discard and leave, Stay.
-- **Removing is deliberate**: two presses, the confirm replacing the row and stating the whole
-  consequence, the first press walkable back. *Planned*, Slice 21.
+- **Removing is deliberate** (ADR 0060): two presses on every removal that is not one value
+  re-typed in the field beside it. `ConfirmRemove` replaces the row with the question, the whole
+  consequence — the finding the removal will raise, that nothing is written until the draft is
+  saved, what a published version keeps — *Remove it* and *Keep it*; it takes focus as a group
+  named by the question and described by the consequence, and Escape or *Keep it* returns focus
+  to the control that asked. After the removal focus is on the list's notice line, which says
+  "Removed … from the draft." — on the list the page navigates to, where the removal leaves the
+  page — and is not also a live region; it clears once the entry is back. A confirm belongs to
+  one subject and is dropped when the page moves to another. The order editor's Delete has no
+  row, so its confirm stands under the header. *Confirm before anything is deleted* on Settings
+  removes the second press, and the order editor's Delete obeys it too. A product's own Delete
+  and Duplicate are not built: they wait on a product identity the editor does not yet have
+  (ADR 0060, `docs/PLAN-UX.md`).
 - **A blocked primary action says why**: dashed, disabled, the reason in `title` and inline; a
   validation message under the control, in its accessible description. `blockedButtonClasses`
   in `lib/ui.ts` is that weight — deliberately outside the button table, because every row of
@@ -329,8 +346,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   the draft owing `tone_of_voice_without_default` with no control on that page to pay it — and
   the sentence naming the pointer stands in the Remove's place (`Workspace.dc.html` :1897).
   That is a refusal rather than a blocked action: nothing on the row can be pressed to make it
-  proceed, so there is no control to dash, and Slice 21's second press is for the Removes that
-  are offered.
+  proceed, so there is no control to dash, and the second press is for the Removes that are
+  offered (ADR 0060).
 
 ## Lists and counts
 
@@ -356,6 +373,6 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 
 The prototype proposes five browser preferences and a shop logo. Where the app opens and the
 timestamp format earned a consumer and landed with the settings zones (ADR 0058);
-confirm-before-delete lands with the confirm; auto-offered tours and table density are cut; the
-logo is the optional last slice. The reasoning for what is cut is in `docs/PLAN-UX.md`,
+confirm-before-delete landed with the confirm (ADR 0060); auto-offered tours and table density
+are cut; the logo is the optional last slice. The reasoning for what is cut is in `docs/PLAN-UX.md`,
 *Deliberately not here*.

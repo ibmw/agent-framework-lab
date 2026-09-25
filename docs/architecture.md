@@ -295,9 +295,9 @@ Some of the lab belongs to no shop and to no definition.
 - **Settings** sits outside shop scope in zones told apart by surface: the preferences this
   browser holds, the lab-wide model connection, a collapsed read-only report of what this build
   can run and how it is composed, and the demo seed (ADR 0044, ADR 0047). The only stored
-  operator state is a few browser preferences — three an operator chooses and two the shell
-  records, and a reset reaches only the three (ADR 0058); nothing about progress is stored or
-  derived (ADR 0045, ADR 0046).
+  operator state is a few browser preferences — four an operator chooses and two the shell
+  records, and a reset reaches only the four (ADR 0058, ADR 0060); nothing about progress is
+  stored or derived (ADR 0045, ADR 0046).
 - **The model connection** is a capability of the lab: one per provider, holding a base URL and an
   encrypted key and no model, editable from Settings, with the environment as the bootstrap. A run
   pins the endpoint it reached and refuses an advance against another; the connection never enters
@@ -305,7 +305,8 @@ Some of the lab belongs to no shop and to no definition.
   states which of four sources is in force — the saved connection, a saved connection whose key
   will not decrypt, the environment, or neither (ADR 0052).
 - **Guidance is per surface**: a tour started only when asked, and a glossary reached by term links
-  (ADR 0049, ADR 0050). Unsaved work is asked about once (ADR 0051).
+  (ADR 0049, ADR 0050). Unsaved work is asked about once (ADR 0051), and a removal asks twice
+  unless the browser's preference says not to (ADR 0060).
 
 ## Safety and observability
 

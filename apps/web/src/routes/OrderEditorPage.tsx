@@ -11,6 +11,7 @@ import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
 import { deleteOrder, getOrder, replaceOrder } from "../api/orders";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { Field, FieldRows } from "../components/FieldHint";
 import {
   Card,
@@ -46,7 +47,13 @@ import {
   toOrderRequest,
 } from "../lib/orders";
 import {
-  destructiveButtonClasses,
+  consequenceOf,
+  findingClauses,
+  type RemovalFinding,
+  removedState,
+  useRemoval,
+} from "../lib/removal";
+import {
   destructiveOutlineButtonClasses,
   destructiveSubtleButtonClasses,
   fieldControlClasses,
@@ -97,7 +104,10 @@ export function OrderEditorPage() {
   const edits = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [newSku, setNewSku] = useState("");
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // The order's own Delete, and the two lists whose rows it holds (ADR 0060).
+  const orderRemoval = useRemoval(orderId);
+  const lineRemoval = useRemoval(orderId);
+  const eventRemoval = useRemoval(orderId);
   // What the author is currently typing into one quantity field. The order itself only ever
   // holds a quantity the contract accepts, so a half-typed or cleared field can neither skew
   // the totals on screen nor reach a save; the field still shows exactly what was typed.
@@ -244,10 +254,13 @@ export function OrderEditorPage() {
       await deleteOrder(shopId, orderId);
       deleted.current = true;
       void listings.orders.refresh();
-      navigate(`/shops/${shopId}/orders`);
+      // This page is about to unmount, so the index it returns to says what was deleted.
+      navigate(`/shops/${shopId}/orders`, {
+        state: removedState(`Deleted order ${content?.reference ?? ""}.`, orderId),
+      });
     } catch (cause: unknown) {
       setError(describeApiError(cause, "The order could not be deleted."));
-      setConfirmingDelete(false);
+      orderRemoval.keep();
       setSaving(false);
     }
   }
@@ -357,33 +370,18 @@ export function OrderEditorPage() {
         }
         actions={
           <>
-            {confirmingDelete ? (
-              <>
-                {/* Deleting a fixture is irreversible and the workflow invites it ("delete
-                    and recreate"), so the destructive click is never the first one. */}
-                <span className="text-xs text-lab-error">Delete this order permanently?</span>
-                <button
-                  className={outlineButtonClasses}
-                  type="button"
-                  onClick={() => setConfirmingDelete(false)}
-                >
-                  Keep it
-                </button>
-                <button
-                  className={destructiveButtonClasses}
-                  type="button"
-                  onClick={() => void remove()}
-                  disabled={saving}
-                >
-                  <ButtonIcon verb="delete" />
-                  Delete permanently
-                </button>
-              </>
-            ) : (
+            {/* Deleting a fixture is irreversible and the workflow invites it ("delete and
+                recreate"), so unless the operator has turned the second press off, the
+                destructive click is never the first one. The confirm stands under the header,
+                because a header has no row for it to take the place of. */}
+            {orderRemoval.isArmed("order") ? null : (
               <button
                 className={destructiveOutlineButtonClasses}
                 type="button"
-                onClick={() => setConfirmingDelete(true)}
+                ref={orderRemoval.trigger("order")}
+                // No notice of its own: this page unmounts, and the orders index it lands on
+                // says what was deleted (`removedState` in `remove`).
+                onClick={orderRemoval.ask("order", () => void remove(), null)}
                 disabled={saving}
               >
                 <ButtonIcon verb="delete" />
@@ -402,6 +400,23 @@ export function OrderEditorPage() {
           </>
         }
       />
+
+      {orderRemoval.isArmed("order") ? (
+        <div className="mb-4">
+          <ConfirmRemove
+            title={`Delete order ${content.reference} permanently?`}
+            consequence={consequenceOf(
+              "The lab deletes it at once: an order is not part of a draft, so Discard cannot bring it back.",
+              findingClauses(["linked_order_missing_from_shop"]),
+              "A published scenario version keeps the frozen copy it took.",
+            )}
+            confirmLabel="Delete permanently"
+            confirmRefusal={saving ? "Deleting…" : undefined}
+            onConfirm={() => void remove()}
+            onKeep={orderRemoval.keep}
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
@@ -433,60 +448,88 @@ export function OrderEditorPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {content.lines.map((line) => (
-                    <tr key={line.id}>
-                      <td className={tableCellClasses}>
-                        <div className="font-semibold">{line.title}</div>
-                        <div className="text-admin-muted">{line.variant_summary}</div>
-                      </td>
-                      <td className={tableCellClasses}>{line.sku}</td>
-                      <td className={tableCellClasses}>
-                        <input
-                          className={`${fieldControlClasses} w-20`}
-                          type="number"
-                          min={MIN_LINE_QUANTITY}
-                          max={MAX_LINE_QUANTITY}
-                          step={1}
-                          aria-label={`Quantity for ${line.sku}`}
-                          value={
-                            quantityDraft?.id === line.id
-                              ? quantityDraft.text
-                              : String(line.quantity)
-                          }
-                          onChange={(event) =>
-                            changeQuantity(line.id, line.quantity, event.target.value)
-                          }
-                          onBlur={() => setQuantityDraft(null)}
-                        />
-                      </td>
-                      <td className={tableCellClasses}>
-                        {line.unit_price.amount} {line.unit_price.currency}
-                      </td>
-                      <td className={tableCellClasses}>
-                        {lineTotal(line.unit_price.amount, line.quantity)} {content.currency}
-                      </td>
-                      <td className={tableCellClasses}>
-                        <button
-                          className={destructiveSubtleButtonClasses}
-                          type="button"
-                          aria-label={`Remove ${line.sku}`}
-                          onClick={() =>
+                  {content.lines.map((line) =>
+                    lineRemoval.isArmed(line.id) ? (
+                      <ConfirmRemove
+                        key={line.id}
+                        as="tr"
+                        columns={6}
+                        title={`Remove the line ${line.sku} — ${line.title}?`}
+                        consequence={consequenceOf(
+                          `Its frozen price of ${line.unit_price.amount} ${line.unit_price.currency} goes with it: adding the variant again prices it at the catalog's current amount, and the totals are derived again from what is left.`,
+                          findingClauses([content.lines.length === 1 && "order_without_line"]),
+                          "Nothing is written until you save the order.",
+                        )}
+                        onConfirm={lineRemoval.confirm(
+                          () =>
                             edit({
                               ...content,
                               lines: content.lines.filter((entry) => entry.id !== line.id),
-                            })
-                          }
-                        >
-                          <ButtonIcon verb="delete" />
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                            }),
+                          `Removed the line ${line.sku} from the order.`,
+                        )}
+                        onKeep={lineRemoval.keep}
+                      />
+                    ) : (
+                      <tr key={line.id}>
+                        <td className={tableCellClasses}>
+                          <div className="font-semibold">{line.title}</div>
+                          <div className="text-admin-muted">{line.variant_summary}</div>
+                        </td>
+                        <td className={tableCellClasses}>{line.sku}</td>
+                        <td className={tableCellClasses}>
+                          <input
+                            className={`${fieldControlClasses} w-20`}
+                            type="number"
+                            min={MIN_LINE_QUANTITY}
+                            max={MAX_LINE_QUANTITY}
+                            step={1}
+                            aria-label={`Quantity for ${line.sku}`}
+                            value={
+                              quantityDraft?.id === line.id
+                                ? quantityDraft.text
+                                : String(line.quantity)
+                            }
+                            onChange={(event) =>
+                              changeQuantity(line.id, line.quantity, event.target.value)
+                            }
+                            onBlur={() => setQuantityDraft(null)}
+                          />
+                        </td>
+                        <td className={tableCellClasses}>
+                          {line.unit_price.amount} {line.unit_price.currency}
+                        </td>
+                        <td className={tableCellClasses}>
+                          {lineTotal(line.unit_price.amount, line.quantity)} {content.currency}
+                        </td>
+                        <td className={tableCellClasses}>
+                          <button
+                            className={destructiveSubtleButtonClasses}
+                            type="button"
+                            aria-label={`Remove ${line.sku}`}
+                            ref={lineRemoval.trigger(line.id)}
+                            onClick={lineRemoval.ask(
+                              line.id,
+                              () =>
+                                edit({
+                                  ...content,
+                                  lines: content.lines.filter((entry) => entry.id !== line.id),
+                                }),
+                              `Removed the line ${line.sku} from the order.`,
+                            )}
+                          >
+                            <ButtonIcon verb="delete" />
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ),
+                  )}
                 </tbody>
               </table>
             )}
 
+            <RemovalNotice removal={lineRemoval} />
             <form className="flex flex-wrap items-end gap-2" onSubmit={addLine}>
               <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
                 Add product
@@ -786,91 +829,117 @@ export function OrderEditorPage() {
             {content.events.length === 0 ? (
               <p className="text-[13px] text-admin-muted">No authored history yet.</p>
             ) : (
-              content.events.map((entry) => (
-                <div key={entry.id} className={`${surfaceClasses} grid gap-2 p-3`}>
-                  <div className="grid gap-2 sm:grid-cols-2">
+              content.events.map((entry) =>
+                eventRemoval.isArmed(entry.id) ? (
+                  <ConfirmRemove
+                    key={entry.id}
+                    title={`Remove the ${eventKindLabel(entry.kind).toLowerCase()} event?`}
+                    consequence={consequenceOf(
+                      "It leaves the order's authored history, which the order tools hand an agent.",
+                      findingClauses(eventRemovalFindings(content, entry.id)),
+                      "Nothing is written until you save the order.",
+                    )}
+                    onConfirm={eventRemoval.confirm(
+                      () =>
+                        edit({
+                          ...content,
+                          events: content.events.filter((candidate) => candidate.id !== entry.id),
+                        }),
+                      `Removed the ${eventKindLabel(entry.kind).toLowerCase()} event from the order.`,
+                    )}
+                    onKeep={eventRemoval.keep}
+                  />
+                ) : (
+                  <div key={entry.id} className={`${surfaceClasses} grid gap-2 p-3`}>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className={fieldLabelClasses}>
+                        Kind
+                        <select
+                          className={fieldControlClasses}
+                          value={entry.kind}
+                          aria-label={`Kind for ${entry.id}`}
+                          onChange={(event) =>
+                            edit({
+                              ...content,
+                              events: content.events.map((candidate) =>
+                                candidate.id === entry.id
+                                  ? { ...candidate, kind: event.target.value as OrderEventKind }
+                                  : candidate,
+                              ),
+                            })
+                          }
+                        >
+                          {EVENT_KINDS.map((kind) => (
+                            <option key={kind} value={kind}>
+                              {eventKindLabel(kind)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className={fieldLabelClasses}>
+                        Occurred at
+                        <input
+                          className={fieldControlClasses}
+                          type="datetime-local"
+                          aria-label={`Time for ${entry.id}`}
+                          value={toLocalInput(entry.occurred_at)}
+                          onChange={(event) =>
+                            edit({
+                              ...content,
+                              events: content.events.map((candidate) =>
+                                candidate.id === entry.id
+                                  ? {
+                                      ...candidate,
+                                      occurred_at:
+                                        fromLocalInput(event.target.value) ?? candidate.occurred_at,
+                                    }
+                                  : candidate,
+                              ),
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
                     <label className={fieldLabelClasses}>
-                      Kind
-                      <select
-                        className={fieldControlClasses}
-                        value={entry.kind}
-                        aria-label={`Kind for ${entry.id}`}
+                      Summary
+                      <textarea
+                        className={textAreaClasses}
+                        aria-label={`Summary for ${entry.id}`}
+                        value={entry.summary}
                         onChange={(event) =>
                           edit({
                             ...content,
                             events: content.events.map((candidate) =>
                               candidate.id === entry.id
-                                ? { ...candidate, kind: event.target.value as OrderEventKind }
-                                : candidate,
-                            ),
-                          })
-                        }
-                      >
-                        {EVENT_KINDS.map((kind) => (
-                          <option key={kind} value={kind}>
-                            {eventKindLabel(kind)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className={fieldLabelClasses}>
-                      Occurred at
-                      <input
-                        className={fieldControlClasses}
-                        type="datetime-local"
-                        aria-label={`Time for ${entry.id}`}
-                        value={toLocalInput(entry.occurred_at)}
-                        onChange={(event) =>
-                          edit({
-                            ...content,
-                            events: content.events.map((candidate) =>
-                              candidate.id === entry.id
-                                ? {
-                                    ...candidate,
-                                    occurred_at:
-                                      fromLocalInput(event.target.value) ?? candidate.occurred_at,
-                                  }
+                                ? { ...candidate, summary: event.target.value }
                                 : candidate,
                             ),
                           })
                         }
                       />
                     </label>
+                    <button
+                      className={destructiveSubtleButtonClasses}
+                      type="button"
+                      ref={eventRemoval.trigger(entry.id)}
+                      onClick={eventRemoval.ask(
+                        entry.id,
+                        () =>
+                          edit({
+                            ...content,
+                            events: content.events.filter((candidate) => candidate.id !== entry.id),
+                          }),
+                        `Removed the ${eventKindLabel(entry.kind).toLowerCase()} event from the order.`,
+                      )}
+                    >
+                      <ButtonIcon verb="delete" />
+                      Remove event
+                    </button>
                   </div>
-                  <label className={fieldLabelClasses}>
-                    Summary
-                    <textarea
-                      className={textAreaClasses}
-                      aria-label={`Summary for ${entry.id}`}
-                      value={entry.summary}
-                      onChange={(event) =>
-                        edit({
-                          ...content,
-                          events: content.events.map((candidate) =>
-                            candidate.id === entry.id
-                              ? { ...candidate, summary: event.target.value }
-                              : candidate,
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                  <button
-                    className={destructiveSubtleButtonClasses}
-                    type="button"
-                    onClick={() =>
-                      edit({
-                        ...content,
-                        events: content.events.filter((candidate) => candidate.id !== entry.id),
-                      })
-                    }
-                  >
-                    <ButtonIcon verb="delete" />
-                    Remove event
-                  </button>
-                </div>
-              ))
+                ),
+              )
             )}
+            <RemovalNotice removal={eventRemoval} />
           </Card>
         </div>
 
@@ -917,4 +986,39 @@ export function OrderEditorPage() {
       </div>
     </>
   );
+}
+
+/**
+ * The event each payment and fulfilment state expects its history to hold, as
+ * `PAYMENT_EVIDENCE` and `FULFILMENT_EVIDENCE` in `domain/order_fixture.py` declare it.
+ */
+const PAYMENT_EVIDENCE: Partial<Record<OrderContentSchema["payment"]["status"], string>> = {
+  authorized: "payment_authorized",
+  paid: "payment_captured",
+  refunded: "payment_refunded",
+};
+
+const FULFILMENT_EVIDENCE: Partial<Record<OrderContentSchema["fulfilment"]["status"], string>> = {
+  partially_fulfilled: "shipped",
+  fulfilled: "shipped",
+};
+
+/** The findings removing one event would raise on the order, as `validate_order_fixture` does. */
+function eventRemovalFindings(content: OrderContentSchema, eventId: string): RemovalFinding[] {
+  const left = content.events.filter((event) => event.id !== eventId);
+  if (left.length === 0) {
+    return ["order_without_event"];
+  }
+  const findings: RemovalFinding[] = [];
+  const holds = (kind: string | undefined) =>
+    kind === undefined || left.some((event) => event.kind === kind);
+  const paying = PAYMENT_EVIDENCE[content.payment.status];
+  if (!holds(paying) && content.events.some((event) => event.kind === paying)) {
+    findings.push("payment_status_without_event");
+  }
+  const fulfilling = FULFILMENT_EVIDENCE[content.fulfilment.status];
+  if (!holds(fulfilling) && content.events.some((event) => event.kind === fulfilling)) {
+    findings.push("fulfilment_status_without_event");
+  }
+  return findings;
 }

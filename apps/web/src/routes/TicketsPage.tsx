@@ -22,6 +22,7 @@ import {
 } from "../api/tickets";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
 import {
@@ -45,6 +46,7 @@ import {
   TICKET_TAGS_RULE,
 } from "../lib/fieldRules";
 import { fromLocalInput, fulfilmentLabel, paymentLabel, toLocalInput } from "../lib/orders";
+import { consequenceOf, REMOVAL_FINDINGS, type Removal, useRemoval } from "../lib/removal";
 import {
   appendMessage,
   authorLabel,
@@ -573,6 +575,7 @@ function TicketWorkspace({
         ) : null}
 
         <Thread
+          scope={ticketId}
           content={content}
           customerName={context?.customer.display_name ?? "Customer"}
           onEdit={edit}
@@ -589,10 +592,13 @@ function TicketWorkspace({
 }
 
 function Thread({
+  scope,
   content,
   customerName,
   onEdit,
 }: {
+  /** The ticket, so a confirm never follows the operator to another one. */
+  scope: string;
   content: TicketContentSchema;
   customerName: string;
   onEdit: (next: TicketContentSchema) => void;
@@ -601,6 +607,7 @@ function Thread({
   const [body, setBody] = useState("");
   const [sentAt, setSentAt] = useState(() => toLocalInput(new Date().toISOString()));
   const [refused, setRefused] = useState<string | null>(null);
+  const removal = useRemoval(scope);
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -624,25 +631,55 @@ function Thread({
         {content.history.length > 0 ? (
           <Divider label={`${messageDay(content.history[0].sent_at)} · prior support history`} />
         ) : null}
-        {content.history.map((entry) => (
-          <Bubble
-            key={entry.id}
-            author={entry.author}
-            customerName={customerName}
-            body={entry.body}
-            sentAt={entry.sent_at}
-            onRemove={() => onEdit(removeMessage(content, entry.id))}
-          />
-        ))}
+        {content.history.map((entry) =>
+          removal.isArmed(entry.id) ? (
+            <ConfirmRemove
+              key={entry.id}
+              title={`Remove the message from ${messageAuthor(entry.author, customerName)} at ${messageTime(entry.sent_at)}?`}
+              consequence="It leaves the prior support history every arm is handed with this ticket. Nothing is written until you save the ticket, and a published version keeps it."
+              onConfirm={removal.confirm(
+                () => onEdit(removeMessage(content, entry.id)),
+                removedMessage(entry.author, customerName, entry.sent_at),
+              )}
+              onKeep={removal.keep}
+            />
+          ) : (
+            <Bubble
+              key={entry.id}
+              id={entry.id}
+              author={entry.author}
+              customerName={customerName}
+              body={entry.body}
+              sentAt={entry.sent_at}
+              removal={removal}
+              onRemove={() => onEdit(removeMessage(content, entry.id))}
+            />
+          ),
+        )}
 
         <Divider label="Trigger — sent to every arm at experiment start" strong />
-        {content.trigger ? (
+        {content.trigger && removal.isArmed(content.trigger.id) ? (
+          <ConfirmRemove
+            title={`Remove the first message, from ${messageAuthor(content.trigger.author, customerName)} at ${messageTime(content.trigger.sent_at)}?`}
+            consequence={consequenceOf(
+              REMOVAL_FINDINGS.ticket_without_trigger,
+              "Nothing is written until you save the ticket, and a published version keeps it.",
+            )}
+            onConfirm={removal.confirm(
+              () => onEdit(removeMessage(content, content.trigger?.id ?? "")),
+              removedMessage(content.trigger.author, customerName, content.trigger.sent_at),
+            )}
+            onKeep={removal.keep}
+          />
+        ) : content.trigger ? (
           <Bubble
+            id={content.trigger.id}
             author={content.trigger.author}
             customerName={customerName}
             body={content.trigger.body}
             sentAt={content.trigger.sent_at}
             badge="first message"
+            removal={removal}
             onRemove={() => onEdit(removeMessage(content, content.trigger?.id ?? ""))}
           />
         ) : (
@@ -650,6 +687,7 @@ function Thread({
             No first message yet. A published ticket must carry the message every arm receives.
           </p>
         )}
+        <RemovalNotice removal={removal} />
         <p className="text-xs text-admin-muted">
           Replies happen on the Bench, per run — each arm answers this message independently.
         </p>
@@ -725,22 +763,37 @@ function Divider({ label, strong = false }: { label: string; strong?: boolean })
   );
 }
 
+/** What the thread's notice line says once a message has gone. */
+function removedMessage(author: TicketAuthor, customerName: string, sentAt: string): string {
+  return `Removed ${messageAuthor(author, customerName)}'s message of ${messageTime(sentAt)} from the draft.`;
+}
+
+/** Who a message is from, as the bubble names them. */
+function messageAuthor(author: TicketAuthor, customerName: string): string {
+  return author === "customer" ? customerName : authorLabel(author);
+}
+
 function Bubble({
+  id,
   author,
   customerName,
   body,
   sentAt,
   badge,
+  removal,
   onRemove,
 }: {
+  id: string;
   author: TicketAuthor;
   customerName: string;
   body: string;
   sentAt: string;
   badge?: string;
+  /** The thread's second press (ADR 0060), which this message is armed under by its ID. */
+  removal: Removal;
   onRemove: () => void;
 }) {
-  const name = author === "customer" ? customerName : authorLabel(author);
+  const name = messageAuthor(author, customerName);
   return (
     <article className="flex items-start gap-2.5">
       <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-admin-border text-[10px] font-bold text-admin-ink-soft">
@@ -763,7 +816,8 @@ function Bubble({
             className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-lab-error"
             type="button"
             aria-label={`Remove message from ${name} at ${messageTime(sentAt)}`}
-            onClick={onRemove}
+            ref={removal.trigger(id)}
+            onClick={removal.ask(id, onRemove, removedMessage(author, customerName, sentAt))}
           >
             <ButtonIcon verb="delete" />
             Remove

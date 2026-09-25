@@ -17,7 +17,7 @@ import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./shell/AppShell";
-import { renderApp } from "./test/app";
+import { renderApp, wholeDescription } from "./test/app";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -320,6 +320,29 @@ describe("your preferences", () => {
     ).toBeChecked();
   });
 
+  it("asks before anything is deleted until told not to, and says what it never allows", async () => {
+    const user = userEvent.setup();
+    const first = renderAt("/settings");
+
+    const preference = await screen.findByRole("checkbox", {
+      name: "Confirm before anything is deleted",
+    });
+    expect(preference).toBeChecked();
+    // The prototype's sentence, in the control's accessible description rather than beside it.
+    expect(preference).toHaveAccessibleDescription(
+      wholeDescription(
+        "Turning this off removes the second press on deletes. A published shop version and a recorded run are never deletable, whichever way this is set.",
+      ),
+    );
+    await user.click(preference);
+    first.unmount();
+
+    renderAt("/settings");
+    expect(
+      await screen.findByRole("checkbox", { name: "Confirm before anything is deleted" }),
+    ).not.toBeChecked();
+  });
+
   it("falls back to the default when the browser refuses stored preferences", async () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("storage is blocked");
@@ -339,7 +362,7 @@ describe("your preferences", () => {
     expect(preference).toBeChecked();
   });
 
-  it("puts back the three an operator chose and leaves the shop they were in", async () => {
+  it("puts back the four an operator chose and leaves the shop they were in", async () => {
     const user = userEvent.setup();
     const workspace = renderAt(`/shops/${SHOP_ID}`);
     expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
@@ -353,8 +376,13 @@ describe("your preferences", () => {
     await user.click(
       screen.getByRole("checkbox", { name: /Start with the navigation rail collapsed/ }),
     );
+    await user.click(screen.getByRole("checkbox", { name: /Confirm before anything is deleted/ }));
 
     await user.click(screen.getByRole("button", { name: "Reset to defaults" }));
+
+    expect(
+      screen.getByRole("checkbox", { name: /Confirm before anything is deleted/ }),
+    ).toBeChecked();
 
     expect(opening.getByRole("radio", { name: "Last shop" })).toBeChecked();
     expect(stamps.getByRole("radio", { name: "Relative" })).toBeChecked();

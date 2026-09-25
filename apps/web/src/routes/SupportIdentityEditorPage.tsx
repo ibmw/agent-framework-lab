@@ -14,6 +14,7 @@ import {
 } from "../api/supportIdentities";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import {
   Card,
   EditorSaveActions,
@@ -32,6 +33,7 @@ import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import { CHIP_LABEL_MAX_LENGTH, ESCALATION_CONDITIONS_RULE } from "../lib/fieldRules";
+import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
@@ -87,6 +89,7 @@ export function SupportIdentityEditorPage() {
     (content?.guidance ?? []).map((note) => note.id),
   );
   const guidanceNotice = useId();
+  const guidanceRemoval = useRemoval(identityId);
 
   if (editor.loading) {
     return <p className="text-sm text-admin-muted">Loading support identity…</p>;
@@ -111,6 +114,13 @@ export function SupportIdentityEditorPage() {
         ? content.permissions.filter((entry) => entry !== permission)
         : [...content.permissions, permission],
     });
+  }
+
+  function dropGuidance(id: string) {
+    if (!content) {
+      return;
+    }
+    edit({ ...content, guidance: content.guidance.filter((entry) => entry.id !== id) });
   }
 
   function saveGuidance(id: string, fields: GuidanceFields) {
@@ -267,47 +277,68 @@ export function SupportIdentityEditorPage() {
               <p className="text-[13px] text-admin-muted">No guidance authored yet.</p>
             ) : (
               <ul className="grid gap-2 text-[13px]">
-                {content.guidance.map((note) => (
-                  <EntryCard
-                    key={note.id}
-                    title={note.title}
-                    chips={<EntryId value={note.id} />}
-                    edit={entryEdit(
-                      guidanceEditor,
-                      guidanceNotice,
-                      note.id,
-                      note.title,
-                      () => ({ title: note.title, body: note.body }),
-                      (fields) => saveGuidance(note.id, fields),
-                      (value, onChange) => (
-                        <div className="flex flex-wrap items-end gap-2">
-                          <GuidanceFieldset value={value} onChange={onChange} />
-                        </div>
-                      ),
-                    )}
-                    actions={
-                      <button
-                        className={destructiveSubtleButtonClasses}
-                        type="button"
-                        aria-label={`Remove ${note.title}`}
-                        onClick={() =>
-                          edit({
-                            ...content,
-                            guidance: content.guidance.filter((entry) => entry.id !== note.id),
-                          })
-                        }
-                      >
-                        <ButtonIcon verb="delete" />
-                        Remove
-                      </button>
-                    }
-                  >
-                    <EntryText label="Guidance" value={note.body} />
-                  </EntryCard>
-                ))}
+                {content.guidance.map((note) =>
+                  guidanceRemoval.isArmed(note.id) ? (
+                    <ConfirmRemove
+                      key={note.id}
+                      as="li"
+                      title={`Remove the guidance “${note.title}”?`}
+                      consequence={consequenceOf(
+                        "An agent running as this identity is no longer given it.",
+                        findingClauses([
+                          content.guidance.length === 1 && "identity_without_guidance",
+                        ]),
+                        "Nothing is written until you save the draft, and a published version keeps it.",
+                      )}
+                      onConfirm={guidanceRemoval.confirm(
+                        () => dropGuidance(note.id),
+                        `Removed the guidance “${note.title}” from the draft.`,
+                      )}
+                      onKeep={guidanceRemoval.keep}
+                    />
+                  ) : (
+                    <EntryCard
+                      key={note.id}
+                      title={note.title}
+                      chips={<EntryId value={note.id} />}
+                      edit={entryEdit(
+                        guidanceEditor,
+                        guidanceNotice,
+                        note.id,
+                        note.title,
+                        () => ({ title: note.title, body: note.body }),
+                        (fields) => saveGuidance(note.id, fields),
+                        (value, onChange) => (
+                          <div className="flex flex-wrap items-end gap-2">
+                            <GuidanceFieldset value={value} onChange={onChange} />
+                          </div>
+                        ),
+                      )}
+                      actions={
+                        <button
+                          className={destructiveSubtleButtonClasses}
+                          type="button"
+                          aria-label={`Remove ${note.title}`}
+                          ref={guidanceRemoval.trigger(note.id)}
+                          onClick={guidanceRemoval.ask(
+                            note.id,
+                            () => dropGuidance(note.id),
+                            `Removed the guidance “${note.title}” from the draft.`,
+                          )}
+                        >
+                          <ButtonIcon verb="delete" />
+                          Remove
+                        </button>
+                      }
+                    >
+                      <EntryText label="Guidance" value={note.body} />
+                    </EntryCard>
+                  ),
+                )}
               </ul>
             )}
             <EntryEditNotice id={guidanceNotice} label={guidanceEditor.open?.label ?? null} />
+            <RemovalNotice removal={guidanceRemoval} />
             <GuidanceForm
               onAdd={(fields) =>
                 edit({
@@ -351,6 +382,20 @@ export function SupportIdentityEditorPage() {
               empty="No condition yet; this identity never escalates."
               values={content.escalation.conditions}
               takenPlace="an escalation condition"
+              confirmRemoval={{
+                scope: identityId,
+                title: (condition) => `Remove the escalation condition “${condition}”?`,
+                consequence: (_condition, conditions) =>
+                  consequenceOf(
+                    "An agent running as this identity no longer escalates when it holds.",
+                    findingClauses([
+                      conditions.length === 1 && "identity_without_escalation_condition",
+                    ]),
+                    "Nothing is written until you save the draft, and a published version keeps it.",
+                  ),
+                notice: (condition) =>
+                  `Removed the escalation condition “${condition}” from the draft.`,
+              }}
               onChange={(conditions) =>
                 edit({ ...content, escalation: { ...content.escalation, conditions } })
               }

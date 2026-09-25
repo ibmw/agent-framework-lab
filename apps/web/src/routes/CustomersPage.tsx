@@ -8,6 +8,7 @@ import {
   listCustomerProfiles,
 } from "../api/customerProfiles";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
@@ -15,6 +16,7 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -81,6 +83,13 @@ export function CustomersPage() {
   // attach control offers and nothing else reads it — so it stays here.
   const { shopId, listings } = useShopWorkspace();
   const attached = listings.customers.rows;
+  // A profile detached from its editor lands here, and this is where it says so. Attaching it
+  // again puts the row back, which is what silences the notice.
+  const removal = useRemoval(shopId);
+  useArrivedRemoval(removal);
+  for (const profile of attached) {
+    removal.present(profile.profile_id);
+  }
   const [everything, setEverything] = useState<CustomerProfileSummarySchema[]>([]);
   const [loadingEverything, setLoadingEverything] = useState(true);
   const [everythingError, setEverythingError] = useState<string | null>(null);
@@ -296,6 +305,7 @@ export function CustomersPage() {
             </tbody>
           </table>
         )}
+        <RemovalNotice removal={removal} />
       </section>
     </>
   );

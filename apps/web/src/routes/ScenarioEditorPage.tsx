@@ -20,6 +20,7 @@ import {
   replaceScenarioDraft,
 } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import {
   Card,
   EditorSaveActions,
@@ -31,6 +32,7 @@ import {
 } from "../components/WorkspaceChrome";
 import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
   addMutation,
   addObjective,
@@ -127,6 +129,8 @@ export function ScenarioEditorPage() {
     afterSave: listings.scenarios.refresh,
   });
   const { content, preview, edit: editDraft } = editor;
+  const objectiveRemoval = useRemoval(scenarioId);
+  const mutationRemoval = useRemoval(scenarioId);
   const [state, setState] = useState<ResourceState>({ status: "loading" });
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
@@ -407,6 +411,14 @@ export function ScenarioEditorPage() {
                       )
                     }
                     onMove={(direction) => edit(moveObjective(content, objective.id, direction))}
+                    removal={objectiveRemoval}
+                    consequence={consequenceOf(
+                      "A run no longer asserts it, and the bindings it carries are lost with it — composing the template again starts them empty.",
+                      findingClauses([
+                        content.objectives.length === 1 && "scenario_without_objective",
+                      ]),
+                      "Nothing is written until you save the draft, and a published version keeps it.",
+                    )}
                     onRemove={() => edit(removeObjective(content, objective.id))}
                   >
                     <label className={fieldLabelClasses}>
@@ -435,6 +447,7 @@ export function ScenarioEditorPage() {
                 ))}
               </ol>
             )}
+            <RemovalNotice removal={objectiveRemoval} />
             <TemplatePicker
               label="Add objective block"
               options={objectiveOptions}
@@ -481,11 +494,14 @@ export function ScenarioEditorPage() {
                       )
                     }
                     onMove={(direction) => edit(moveMutation(content, mutation.id, direction))}
+                    removal={mutationRemoval}
+                    consequence="The sandbox no longer changes at that point of a run, and the bindings it carries are lost with it — composing the template again starts them empty. Nothing is written until you save the draft, and a published version keeps it."
                     onRemove={() => edit(removeMutation(content, mutation.id))}
                   />
                 ))}
               </ol>
             )}
+            <RemovalNotice removal={mutationRemoval} />
             <TemplatePicker
               label="Add mutation block"
               options={mutationOptions}
@@ -690,6 +706,8 @@ function BoundBlockRow({
   isLast,
   onBind,
   onMove,
+  removal,
+  consequence,
   onRemove,
   children,
 }: {
@@ -703,9 +721,25 @@ function BoundBlockRow({
   isLast: boolean;
   onBind: (parameter: string, value: string) => void;
   onMove: (direction: -1 | 1) => void;
+  /** The list's second press (ADR 0060), and what it says the removal costs. */
+  removal: Removal;
+  consequence: string;
   onRemove: () => void;
   children?: ReactNode;
 }) {
+  const named = option?.statement || instance.id;
+  const notice = `Removed “${named}” from the draft.`;
+  if (removal.isArmed(instance.id)) {
+    return (
+      <ConfirmRemove
+        as="li"
+        title={`Remove ${named}?`}
+        consequence={consequence}
+        onConfirm={removal.confirm(onRemove, notice)}
+        onKeep={removal.keep}
+      />
+    );
+  }
   return (
     <li className="grid gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -753,7 +787,8 @@ function BoundBlockRow({
             className={destructiveSubtleButtonClasses}
             type="button"
             aria-label={`Remove ${instance.id}`}
-            onClick={onRemove}
+            ref={removal.trigger(instance.id)}
+            onClick={removal.ask(instance.id, onRemove, notice)}
           >
             <ButtonIcon verb="delete" />
             Remove

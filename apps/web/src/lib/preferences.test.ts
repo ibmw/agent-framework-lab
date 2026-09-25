@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   forgetLastVisitedShop,
   readAppLanding,
+  readConfirmBeforeDelete,
   readLastVisitedShop,
   readNavigationCollapsed,
   readSettingsReturn,
   readTimestampFormat,
   resetChosenPreferences,
   writeAppLanding,
+  writeConfirmBeforeDelete,
   writeLastVisitedShop,
   writeNavigationCollapsed,
   writeSettingsReturn,
@@ -18,10 +20,11 @@ import {
  * These are the operator's browser, not the lab's database (ADR 0044), so what matters is what
  * is *not* written as much as what is.
  *
- * Five of them now, and they divide in two: three an operator chooses on the settings page —
- * where the app opens, how the rail starts, how a timestamp is written — and two the shell
- * writes as they move, the last-visited shop and the location Settings returns to. *Reset to
- * defaults* reaches the first three and none of the last two (ADR 0058). Guide mode is gone
+ * Six of them now, and they divide in two: four an operator chooses on the settings page —
+ * where the app opens, how the rail starts, how a timestamp is written, whether a removal asks
+ * twice — and two the shell writes as they move, the last-visited shop and the location
+ * Settings returns to. *Reset to defaults* reaches the first four and none of the last two
+ * (ADR 0058, ADR 0060). Guide mode is gone
  * with the mode itself (ADR 0046).
  */
 const NAVIGATION_COLLAPSED_KEY = "agent-lab.navigation-collapsed";
@@ -29,6 +32,7 @@ const LAST_VISITED_SHOP_KEY = "agent-lab.last-visited-shop";
 const SETTINGS_RETURN_KEY = "agent-lab.settings-return";
 const APP_LANDING_KEY = "agent-lab.app-landing";
 const TIMESTAMP_FORMAT_KEY = "agent-lab.timestamp-format";
+const CONFIRM_BEFORE_DELETE_KEY = "agent-lab.confirm-before-delete";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 
@@ -142,11 +146,40 @@ describe("how a timestamp is written", () => {
   });
 });
 
+describe("whether a removal asks twice", () => {
+  it("defaults to asking, round-trips, and reads anything but off as on", () => {
+    expect(readConfirmBeforeDelete()).toBe(true);
+    expect(window.localStorage.getItem(CONFIRM_BEFORE_DELETE_KEY)).toBeNull();
+
+    writeConfirmBeforeDelete(false);
+    expect(readConfirmBeforeDelete()).toBe(false);
+    writeConfirmBeforeDelete(true);
+    expect(readConfirmBeforeDelete()).toBe(true);
+
+    // A hand-edited value can only ever put the second press back, never take it away.
+    window.localStorage.setItem(CONFIRM_BEFORE_DELETE_KEY, "no");
+    expect(readConfirmBeforeDelete()).toBe(true);
+  });
+
+  it("asks when the browser refuses storage", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage is blocked");
+    });
+
+    expect(readConfirmBeforeDelete()).toBe(true);
+    expect(() => writeConfirmBeforeDelete(false)).not.toThrow();
+  });
+});
+
 describe("what a reset puts back", () => {
-  it("returns the three an operator chose and leaves the two the shell wrote", () => {
+  it("returns the four an operator chose and leaves the two the shell wrote", () => {
     writeAppLanding("lab");
     writeNavigationCollapsed(true);
     writeTimestampFormat("absolute");
+    writeConfirmBeforeDelete(false);
     writeLastVisitedShop(SHOP_ID);
     writeSettingsReturn("/shops/shop-1/products");
 
@@ -155,6 +188,7 @@ describe("what a reset puts back", () => {
     expect(readAppLanding()).toBe("last-shop");
     expect(readNavigationCollapsed()).toBe(false);
     expect(readTimestampFormat()).toBe("relative");
+    expect(readConfirmBeforeDelete()).toBe(true);
     // Neither of these was chosen: the shell writes both as the operator moves, and a reset
     // that emptied them would mean "forget where I was" as well as "undo what I picked".
     expect(readLastVisitedShop()).toBe(SHOP_ID);

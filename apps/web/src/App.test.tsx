@@ -1700,8 +1700,8 @@ describe("a tone-of-voice guideline's own rules", () => {
     renderAt(`/shops/${SHOP_ID}/setup/tone`);
     const tone = within(await guidelines());
 
-    // Where the default's Remove would stand, the row says what to do instead. Slice 21 gives
-    // every surviving Remove its second press; this is about the one that is not offered.
+    // Where the default's Remove would stand, the row says what to do instead. Every surviving
+    // Remove asks a second time (ADR 0060); this is about the one that is not offered.
     const rows = tone.getAllByRole("listitem");
     expect(within(rows[0]).queryByRole("button", { name: "Remove Warm and precise" })).toBeNull();
     expect(within(rows[0]).getByText(TONE_DEFAULT_REMOVAL_RULE)).toBeVisible();
@@ -1715,6 +1715,7 @@ describe("a tone-of-voice guideline's own rules", () => {
     expect(within(moved[1]).queryByRole("button", { name: "Remove Brief" })).toBeNull();
     expect(within(moved[1]).getByText(TONE_DEFAULT_REMOVAL_RULE)).toBeVisible();
     await user.click(within(moved[0]).getByRole("button", { name: "Remove Warm and precise" }));
+    await user.click(tone.getByRole("button", { name: "Remove it" }));
 
     expect(tone.queryByText("Warm and precise")).toBeNull();
     expect(tone.getByText("Brief")).toBeVisible();
@@ -1896,7 +1897,7 @@ describe("the route tree under the data router", () => {
       ["/shops/:shopId/customers/new", "NewCustomerPage"],
       ["/shops/:shopId/tickets", "TicketsPage"],
       ["/shops/:shopId/tickets/:ticketId", "TicketsPage"],
-      ["/shops/:shopId/customers/:profileId", "CustomerEditorPage"],
+      ["/shops/:shopId/customers/:profileId", "CustomerEditorRoute"],
       ["/shops/:shopId/scenarios", "ScenariosPage"],
       ["/shops/:shopId/scenarios/new", "NewScenarioPage"],
       ["/shops/:shopId/scenarios/:scenarioId", "ScenarioEditorPage"],
@@ -2595,5 +2596,389 @@ describe("the rail's figures that come from the draft", () => {
     await user.click(form.getByRole("button", { name: "Add tone of voice" }));
 
     await waitFor(() => expect(within(railEntry("Tone of voice")).getByText("2")).toBeVisible());
+  });
+});
+
+describe("removing is deliberate", () => {
+  const CONFIRM_KEY = "agent-lab.confirm-before-delete";
+
+  afterEach(() => window.localStorage.removeItem(CONFIRM_KEY));
+
+  it("says how many variants choose an option before removing it, and takes their value with it", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    await user.click(options.getByRole("button", { name: "Remove Size" }));
+    const confirm = options.getByRole("group", { name: "Remove the option “Size”?" });
+    expect(confirm).toHaveAccessibleDescription(
+      /^2 variants choose a value of it and will lose it\. 2 variants would become identical — NS-ASJ-OB-M and NS-ASJ-OB-L \(Ocean Blue\) — and the shop is refused at publication until they differ again or one of them is removed\. Nothing is written until you save the draft/,
+    );
+    await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    const [product] = lastSaved().products;
+    expect(product.options.map((option) => option.key)).toEqual(["color"]);
+    // A variant that kept the value would be choosing for an option the product no longer
+    // declares, which no control on its row could take back out.
+    expect(product.variants.map((variant) => variant.option_values)).toEqual([
+      [{ key: "color", value: "Ocean Blue" }],
+      [{ key: "color", value: "Ocean Blue" }],
+    ]);
+  });
+
+  it("says which variants removing an option would leave identical, and that publishing is refused", async () => {
+    const [jacket] = READY_CONTENT.products;
+    const variant = (sku: string, color: string, size: string) => ({
+      ...jacket.variants[0],
+      sku,
+      option_values: [
+        { key: "color", value: color },
+        { key: "size", value: size },
+      ],
+    });
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...jacket,
+          options: [
+            { key: "color", name: "Color", values: ["Ocean Blue", "Charcoal"] },
+            { key: "size", name: "Size", values: ["M", "L"] },
+          ],
+          variants: [
+            variant("NS-ASJ-OB-M", "Ocean Blue", "M"),
+            variant("NS-ASJ-OB-L", "Ocean Blue", "L"),
+            variant("NS-ASJ-CH-M", "Charcoal", "M"),
+            variant("NS-ASJ-CH-L", "Charcoal", "L"),
+          ],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    await user.click(options.getByRole("button", { name: "Remove Size" }));
+
+    expect(
+      options.getByRole("group", { name: "Remove the option “Size”?" }),
+    ).toHaveAccessibleDescription(
+      /^4 variants choose a value of it and will lose it\. 4 variants would become identical in 2 groups — NS-ASJ-OB-M and NS-ASJ-OB-L \(Ocean Blue\); NS-ASJ-CH-M and NS-ASJ-CH-L \(Charcoal\) — and the shop is refused at publication until they differ again or one of them is removed\./,
+    );
+    // Each group is named by the values its variants would share.
+    await user.click(
+      within(options.getByRole("group", { name: "Remove the option “Size”?" })).getByRole(
+        "button",
+        { name: "Keep it" },
+      ),
+    );
+    await user.click(options.getByRole("button", { name: "Remove Color" }));
+    expect(options.getByRole("group", { name: "Remove the option “Color”?" })).toHaveTextContent(
+      "NS-ASJ-OB-M and NS-ASJ-CH-M (M); NS-ASJ-OB-L and NS-ASJ-CH-L (L)",
+    );
+  });
+
+  it("drops an armed row confirm when a discard lands, and when the product is renamed", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    const media = within(screen.getByRole("region", { name: "Media references" }));
+
+    // A discard re-reads the draft under the list, so what was armed is not about it any more.
+    await user.type(screen.getByLabelText("Description"), " Taped seams.");
+    await user.click(options.getByRole("button", { name: "Remove Size" }));
+    expect(options.getByRole("group", { name: "Remove the option “Size”?" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() =>
+      expect(options.queryByRole("group", { name: /Remove the option/ })).toBeNull(),
+    );
+    expect(options.getByRole("button", { name: "Remove Size" })).toBeVisible();
+
+    // The handle is the only identity this page gives a product, so a rename drops it too.
+    await user.click(media.getByRole("button", { name: "Remove media/alpine-shell.jpg" }));
+    expect(media.getByRole("group", { name: /Remove the media reference/ })).toBeVisible();
+    await user.type(screen.getByLabelText("Title"), " Pro");
+    expect(media.queryByRole("group", { name: /Remove the media reference/ })).toBeNull();
+  });
+
+  it("stops saying a variant was removed once Discard has put it back", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+
+    await user.click(variants.getByRole("button", { name: "Remove NS-ASJ-OB-L" }));
+    await user.click(variants.getByRole("button", { name: "Remove it" }));
+    expect(variants.getByText("Removed the variant NS-ASJ-OB-L from the draft.")).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await waitFor(() =>
+      expect(variants.getByRole("button", { name: "Remove NS-ASJ-OB-L" })).toBeVisible(),
+    );
+    expect(variants.queryByText(/Removed the variant/)).toBeNull();
+  });
+
+  it("does not blame an option's removal for variants that were already identical", async () => {
+    const [jacket] = READY_CONTENT.products;
+    const variant = (sku: string, size: string) => ({
+      ...jacket.variants[0],
+      sku,
+      option_values: [
+        { key: "color", value: "Ocean Blue" },
+        { key: "size", value: size },
+      ],
+    });
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...jacket,
+          variants: [variant("NS-A", "M"), variant("NS-B", "M"), variant("NS-C", "L")],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    await user.click(options.getByRole("button", { name: "Remove Color" }));
+
+    const confirm = options.getByRole("group", { name: "Remove the option “Color”?" });
+    expect(confirm).toHaveTextContent(
+      "NS-A and NS-B (Ocean Blue · M) are already identical, which the publish gate already refuses; removing this option does not change that.",
+    );
+    expect(confirm).not.toHaveTextContent("would become identical");
+  });
+
+  it("says when an option's removal adds a variant to a pair that is identical already", async () => {
+    const [jacket] = READY_CONTENT.products;
+    const variant = (sku: string, color: string, size: string) => ({
+      ...jacket.variants[0],
+      sku,
+      option_values: [
+        { key: "color", value: color },
+        { key: "size", value: size },
+      ],
+    });
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...jacket,
+          options: [
+            { key: "color", name: "Color", values: ["Ocean Blue", "Charcoal"] },
+            { key: "size", name: "Size", values: ["M"] },
+          ],
+          variants: [
+            variant("NS-A", "Ocean Blue", "M"),
+            variant("NS-B", "Ocean Blue", "M"),
+            variant("NS-C", "Charcoal", "M"),
+          ],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    await user.click(options.getByRole("button", { name: "Remove Color" }));
+
+    const confirm = options.getByRole("group", { name: "Remove the option “Color”?" });
+    // Named by what the pair shares today, and the removal blamed only for the variant it adds.
+    expect(confirm).toHaveTextContent(
+      "NS-A and NS-B (Ocean Blue · M) are already identical, which the publish gate already refuses, and removing this option makes NS-C identical to them too; all three would share M.",
+    );
+    expect(confirm).not.toHaveTextContent("would become identical");
+  });
+
+  it("lists three variants made identical with commas, and names both pairs two merge from", async () => {
+    const [jacket] = READY_CONTENT.products;
+    const variant = (sku: string, color: string, size: string) => ({
+      ...jacket.variants[0],
+      sku,
+      option_values: [
+        { key: "color", value: color },
+        { key: "size", value: size },
+      ],
+    });
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...jacket,
+          options: [
+            { key: "color", name: "Color", values: ["Ocean Blue", "Charcoal"] },
+            { key: "size", name: "Size", values: ["S", "M", "L"] },
+          ],
+          variants: [
+            variant("NS-A", "Ocean Blue", "S"),
+            variant("NS-B", "Ocean Blue", "M"),
+            variant("NS-C", "Ocean Blue", "L"),
+            variant("NS-D", "Charcoal", "M"),
+            variant("NS-E", "Charcoal", "M"),
+            variant("NS-F", "Ocean Blue", "M"),
+          ],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    // Without Size, every Ocean Blue variant chooses the same — B and F already did.
+    await user.click(options.getByRole("button", { name: "Remove Size" }));
+    const size = options.getByRole("group", { name: "Remove the option “Size”?" });
+    expect(size).toHaveTextContent(
+      "NS-B and NS-F (Ocean Blue · M) are already identical, which the publish gate already refuses, and removing this option makes NS-A and NS-C identical to them too; all four would share Ocean Blue.",
+    );
+    await user.click(within(size).getByRole("button", { name: "Keep it" }));
+
+    // Without Color, D and E (already a pair) and B and F (another) all choose M.
+    await user.click(options.getByRole("button", { name: "Remove Color" }));
+    expect(options.getByRole("group", { name: "Remove the option “Color”?" })).toHaveTextContent(
+      "NS-B and NS-F (Ocean Blue · M); NS-D and NS-E (Charcoal · M) are each already identical, which the publish gate already refuses, and removing this option makes them identical to one another; all four would share M.",
+    );
+  });
+
+  it("names a variant that joins two identical pairs, and what all of them would share", async () => {
+    const [jacket] = READY_CONTENT.products;
+    const variant = (sku: string, size: string) => ({
+      ...jacket.variants[0],
+      sku,
+      option_values: [
+        { key: "color", value: "Ocean Blue" },
+        { key: "size", value: size },
+      ],
+    });
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...jacket,
+          options: [
+            { key: "color", name: "Color", values: ["Ocean Blue"] },
+            { key: "size", name: "Size", values: ["S", "M", "L"] },
+          ],
+          variants: [
+            variant("NS-A", "M"),
+            variant("NS-B", "M"),
+            variant("NS-C", "L"),
+            variant("NS-D", "L"),
+            variant("NS-E", "S"),
+          ],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    await user.click(options.getByRole("button", { name: "Remove Size" }));
+
+    expect(options.getByRole("group", { name: "Remove the option “Size”?" })).toHaveTextContent(
+      "NS-A and NS-B (Ocean Blue · M); NS-C and NS-D (Ocean Blue · L) are each already identical, which the publish gate already refuses, and removing this option makes them and NS-E identical to one another; all five would share Ocean Blue.",
+    );
+  });
+
+  it("writes an identical part with no values the way a new group with none is written", async () => {
+    const [jacket] = READY_CONTENT.products;
+    const variant = (sku: string, values: { key: string; value: string }[]) => ({
+      ...jacket.variants[0],
+      sku,
+      option_values: values,
+    });
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...jacket,
+          options: [{ key: "size", name: "Size", values: ["M"] }],
+          // Two variants that choose nothing yet — already identical — and one choosing M.
+          variants: [
+            variant("NS-A", []),
+            variant("NS-B", []),
+            variant("NS-C", [{ key: "size", value: "M" }]),
+          ],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    await user.click(options.getByRole("button", { name: "Remove Size" }));
+
+    expect(options.getByRole("group", { name: "Remove the option “Size”?" })).toHaveTextContent(
+      "NS-A and NS-B (no option values) are already identical, which the publish gate already refuses, and removing this option makes NS-C identical to them too; none of them would have option values.",
+    );
+  });
+
+  it("joins three variants the removal alone makes identical with commas", async () => {
+    const [jacket] = READY_CONTENT.products;
+    const variant = (sku: string, size: string) => ({
+      ...jacket.variants[0],
+      sku,
+      option_values: [
+        { key: "color", value: "Ocean Blue" },
+        { key: "size", value: size },
+      ],
+    });
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        {
+          ...jacket,
+          options: [
+            { key: "color", name: "Color", values: ["Ocean Blue"] },
+            { key: "size", name: "Size", values: ["S", "M", "L"] },
+          ],
+          variants: [variant("NS-A", "S"), variant("NS-B", "M"), variant("NS-C", "L")],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+
+    await user.click(options.getByRole("button", { name: "Remove Size" }));
+
+    expect(options.getByRole("group", { name: "Remove the option “Size”?" })).toHaveTextContent(
+      "3 variants would become identical — NS-A, NS-B and NS-C (Ocean Blue) — and the shop is refused at publication",
+    );
+  });
+
+  it("says when removing a guideline leaves the shop without one", async () => {
+    currentContent = {
+      ...READY_CONTENT,
+      tone_of_voice_guidelines: [
+        { ...READY_CONTENT.tone_of_voice_guidelines[0], is_default: false },
+      ],
+      default_tone_of_voice_id: null,
+    };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
+
+    await user.click(tone.getByRole("button", { name: "Remove Warm and precise" }));
+
+    expect(
+      tone.getByRole("group", { name: "Remove the guideline “Warm and precise”?" }),
+    ).toHaveAccessibleDescription(
+      /It is the shop's last tone-of-voice guideline, and a shop with none is refused at publication\./,
+    );
+  });
+
+  it("removes on one press once the second press is turned off", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+
+    await user.click(variants.getByRole("button", { name: "Remove NS-ASJ-OB-L" }));
+    expect(screen.queryByRole("group", { name: /Remove the variant/ })).toBeNull();
+    expect(variants.queryByText("NS-ASJ-OB-L")).toBeNull();
+    expect(variants.getByText("Removed the variant NS-ASJ-OB-L from the draft.")).toHaveFocus();
   });
 });

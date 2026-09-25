@@ -4,9 +4,11 @@ import {
   groupIssues,
   issuesForProduct,
   ratingLabel,
+  removeOption,
   replaceProduct,
   shopSlugFromName,
   toPayload,
+  variantCollisions,
   variantOptionLabel,
   variantPriceLabel,
 } from "./shop";
@@ -167,5 +169,109 @@ describe("the slug a shop name suggests", () => {
     ]) {
       expect(shopSlugFromName(name)).toMatch(pattern);
     }
+  });
+});
+
+describe("removeOption", () => {
+  it("takes the value each variant chose for it, and leaves every other value", () => {
+    const product = {
+      ...content.products[0],
+      options: [...content.products[0].options, { key: "color", name: "Color", values: ["Red"] }],
+      variants: content.products[0].variants.map((variant) => ({
+        ...variant,
+        option_values: [...variant.option_values, { key: "color", value: "Red" }],
+      })),
+    };
+
+    const next = removeOption(product, "size");
+
+    expect(next.options.map((option) => option.key)).toEqual(["color"]);
+    expect(next.variants.map((variant) => variant.option_values)).toEqual([
+      [{ key: "color", value: "Red" }],
+      [{ key: "color", value: "Red" }],
+    ]);
+  });
+});
+
+describe("variantCollisions", () => {
+  it("says nothing where every variant still differs from every other", () => {
+    const product = {
+      ...content.products[0],
+      options: [...content.products[0].options, { key: "color", name: "Color", values: ["Red"] }],
+      variants: content.products[0].variants.map((variant) => ({
+        ...variant,
+        option_values: [...variant.option_values, { key: "color", value: "Red" }],
+      })),
+    };
+    // Without color, M and nothing still differ; without size, both choose Red.
+    expect(variantCollisions(product, "color")).toEqual([]);
+    expect(variantCollisions(product, "size")).toEqual([
+      { skus: ["NS-ASJ-M", "NS-ASJ-L"], values: "Red", before: [] },
+    ]);
+  });
+});
+
+describe("variantCollisions compares as the gate does", () => {
+  const base = content.products[0];
+  function withVariants(variants: { sku: string; values: [string, string][] }[]) {
+    return {
+      ...base,
+      options: [
+        { key: "color", name: "Color", values: ["Red", "red"] },
+        { key: "fit", name: "Fit", values: ["Slim"] },
+        { key: "size", name: "Size", values: ["M"] },
+      ],
+      variants: variants.map(({ sku, values }) => ({
+        ...base.variants[0],
+        sku,
+        option_values: values.map(([key, value]) => ({ key, value })),
+      })),
+    };
+  }
+
+  it("counts the same values listed in another order as the same combination", () => {
+    // `tuple(sorted(option_values))`: the order a variant lists its values in is not compared.
+    const product = withVariants([
+      {
+        sku: "A",
+        values: [
+          ["color", "Red"],
+          ["fit", "Slim"],
+          ["size", "M"],
+        ],
+      },
+      {
+        sku: "B",
+        values: [
+          ["fit", "Slim"],
+          ["color", "Red"],
+          ["size", "L"],
+        ],
+      },
+    ]);
+    const [group] = variantCollisions(product, "size");
+    expect(group.skus).toEqual(["A", "B"]);
+    // Written in the first variant's own order, as `variantOptionLabel` writes it.
+    expect(group.values).toBe("Red · Slim");
+  });
+
+  it("tells Red from red, because the gate compares values as spelled", () => {
+    const product = withVariants([
+      {
+        sku: "A",
+        values: [
+          ["color", "Red"],
+          ["size", "M"],
+        ],
+      },
+      {
+        sku: "B",
+        values: [
+          ["color", "red"],
+          ["size", "L"],
+        ],
+      },
+    ]);
+    expect(variantCollisions(product, "size")).toEqual([]);
   });
 });

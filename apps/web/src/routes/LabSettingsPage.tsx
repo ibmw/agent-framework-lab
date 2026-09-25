@@ -39,6 +39,7 @@ import {
   type AppLanding,
   forgetLastVisitedShop,
   readAppLanding,
+  readConfirmBeforeDelete,
   readLastVisitedShop,
   readNavigationCollapsed,
   readSettingsReturn,
@@ -46,6 +47,7 @@ import {
   resetChosenPreferences,
   type TimestampFormat,
   writeAppLanding,
+  writeConfirmBeforeDelete,
   writeNavigationCollapsed,
   writeTimestampFormat,
 } from "../lib/preferences";
@@ -229,16 +231,17 @@ const TIMESTAMP_EXAMPLE = "2026-09-19T14:07:00+00:00";
 
 /**
  * *Your preferences*: white, saved the moment they change, with one control that puts back the
- * three an operator chose.
+ * four an operator chose.
  *
- * Four rows, not the prototype's seven. Auto-offered tours and table density are cut
+ * Five rows, not the prototype's seven. Auto-offered tours and table density are cut
  * (`docs/design-direction.md`, *Proposals, not decisions*; ADR 0049 refused the first
- * outright), and confirm-before-delete lands with the confirm it governs.
+ * outright), and confirm-before-delete landed with the confirm it governs (ADR 0060).
  */
 function PreferencesZone({ surface }: { surface: LabSurfaceValue }) {
   const [landing, setLanding] = useState(readAppLanding);
   const [collapsed, setCollapsed] = useState(readNavigationCollapsed);
   const [stamps, setStamps] = useState(readTimestampFormat);
+  const [confirmDelete, setConfirmDelete] = useState(readConfirmBeforeDelete);
   const [rememberedId, setRememberedId] = useState(readLastVisitedShop);
 
   const rememberedShop = surface.shops.find((shop) => shop.shop_id === rememberedId) ?? null;
@@ -258,6 +261,11 @@ function PreferencesZone({ surface }: { surface: LabSurfaceValue }) {
     writeTimestampFormat(next);
   }
 
+  function chooseConfirmDelete(next: boolean) {
+    setConfirmDelete(next);
+    writeConfirmBeforeDelete(next);
+  }
+
   function forget() {
     setRememberedId(null);
     forgetLastVisitedShop();
@@ -267,6 +275,7 @@ function PreferencesZone({ surface }: { surface: LabSurfaceValue }) {
     setLanding("last-shop");
     setCollapsed(false);
     setStamps("relative");
+    setConfirmDelete(true);
     resetChosenPreferences();
   }
 
@@ -339,6 +348,21 @@ function PreferencesZone({ surface }: { surface: LabSurfaceValue }) {
               type="checkbox"
               checked={collapsed}
               onChange={(event) => chooseCollapsed(event.target.checked)}
+            />
+          </Field>
+
+          {/* The prototype's own sentence (`Workspace.dc.html` :3926). Both halves are true of
+              this lab: nothing here offers to delete a published version or a recorded run,
+              and no route would take the request. The native checkbox, as on the row above
+              — the prototype's switch is a `div` with no role and no name. */}
+          <Field
+            label="Confirm before anything is deleted"
+            hint="Turning this off removes the second press on deletes. A published shop version and a recorded run are never deletable, whichever way this is set."
+          >
+            <input
+              type="checkbox"
+              checked={confirmDelete}
+              onChange={(event) => chooseConfirmDelete(event.target.checked)}
             />
           </Field>
 

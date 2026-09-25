@@ -586,6 +586,40 @@ describe("objective block editor", () => {
     expect(parameters.map((entry) => entry.name)).toEqual(["severity", "doc_ref"]);
   });
 
+  it("removes the parameter it asked about, from the draft as it stands, when a neighbour moves", async () => {
+    const user = userEvent.setup();
+    currentObjective = {
+      ...OBJECTIVE_CONTENT,
+      parameters: [
+        ...OBJECTIVE_CONTENT.parameters,
+        {
+          name: "note",
+          kind: "text",
+          description: "A note.",
+          required: false,
+          default: "none",
+          shop_bound: false,
+        },
+      ],
+    };
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+
+    await screen.findByRole("heading", { name: "read-required-document" });
+    // [doc_ref, severity, note]: arm the first, then move the last past the middle one.
+    await user.click(screen.getByRole("button", { name: "Remove doc_ref" }));
+    await user.click(screen.getByRole("button", { name: "Move note up" }));
+
+    const confirm = screen.getByRole("group", { name: "Remove the parameter doc_ref?" });
+    await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    // The move made before the second press is kept: a removal acted on the draft as it was
+    // at the first press would put `note` back after `severity`.
+    expect(parameters.map((entry) => entry.name)).toEqual(["note", "severity"]);
+  });
+
   it("publishes a clean draft and names the frozen version", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);

@@ -11,7 +11,7 @@ import {
   NewObjectiveBlockPage,
   ObjectiveBlocksPage,
 } from "./routes/BlockLibraryPage";
-import { CustomerEditorPage } from "./routes/CustomerEditorPage";
+import { CustomerEditorRoute } from "./routes/CustomerEditorPage";
 import { CustomersPage, NewCustomerPage } from "./routes/CustomersPage";
 import { DocumentEditorPage } from "./routes/DocumentEditorPage";
 import { DocumentsPage, NewDocumentPage } from "./routes/DocumentsPage";
@@ -176,7 +176,7 @@ export const routeTree = createRoutesFromElements(
       <Route path="customers/new" element={<NewCustomerPage />} />
       <Route path="tickets" element={<TicketsPage />} />
       <Route path="tickets/:ticketId" element={<TicketsPage />} />
-      <Route path="customers/:profileId" element={<CustomerEditorPage />} />
+      <Route path="customers/:profileId" element={<CustomerEditorRoute />} />
       <Route path="scenarios" element={<ScenariosPage />} />
       {/* Creating the recipe is a page too (PLAN-UX Slice 14): `new` is a static segment and
           outranks the identifier beside it. */}

@@ -5,7 +5,7 @@ import type {
   ShopPayloadSchema,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -337,10 +337,40 @@ describe("the document editor", () => {
     await user.click(
       await screen.findByRole("button", { name: "Remove When will my order arrive?" }),
     );
+    // A scenario names a document (an error); a ticket only suggests one (a warning).
+    expect(
+      screen.getByRole("group", { name: "Remove “When will my order arrive?” from the shop?" }),
+    ).toHaveAccessibleDescription(
+      /A scenario that names it is refused at publication, because it names a document this shop no longer configures\. A ticket that suggests it is warned about\./,
+    );
+    await user.click(screen.getByRole("button", { name: "Remove it" }));
 
     expect(await screen.findByRole("region", { name: "Documents" })).toBeVisible();
+    // The editor unmounted, so the table says what was removed and focus is left there.
+    const said = await screen.findByText("Removed “When will my order arrive?” from the draft.");
+    await waitFor(() => expect(said).toHaveFocus());
     expect(bodyRows(table())).toBe(3);
     expect(screen.getByRole("button", { name: "FAQ 0" })).toBeVisible();
+  });
+
+  it("says a carried removal once, not again on a return through history", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp(`/shops/${SHOP_ID}/setup/documents/faq/delivery-times`);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Remove When will my order arrive?" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Remove it" }));
+    await screen.findByText("Removed “When will my order arrive?” from the draft.");
+
+    // Back to the editor of a document the draft no longer holds, and forward again: the
+    // history entry no longer carries the removal, so the table does not say it twice.
+    await act(() => router.navigate(-1));
+    await screen.findByRole("heading", { level: 1, name: "Document not found" });
+    await act(() => router.navigate(1));
+    expect(await screen.findByRole("region", { name: "Documents" })).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/Removed “When will my order arrive\?”/)).toBeNull();
   });
 });
 

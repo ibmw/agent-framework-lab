@@ -49,7 +49,7 @@ export interface DefinitionGuard {
    * succeeded, and would tell the operator their edit had not landed when it had. Anything it
    * does that the operator must see, it must show itself — which is what both callers do.
    */
-  afterSave?: () => Promise<void>;
+  afterSave?: () => Promise<unknown>;
 }
 
 /** Stable, so an editor that names nothing does not rebuild its callbacks every render. */

@@ -6,10 +6,7 @@ import type {
   ShopPayloadSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { slugify } from "./entryIds";
-
-/** `MAX_SLUG_LENGTH` in `domain/content.py`, which rejects a longer one. */
-const MAX_SLUG_LENGTH = 64;
+import { clampSlug, SLUG_MAX_LENGTH, slugify } from "./entryIds";
 
 /**
  * The slug a shop name suggests, in the spelling the shop identity rule accepts.
@@ -23,7 +20,7 @@ const MAX_SLUG_LENGTH = 64;
  * land on a hyphen and a trailing hyphen is the one thing the pattern refuses.
  */
 export function shopSlugFromName(name: string): string {
-  return slugify(name, "").slice(0, MAX_SLUG_LENGTH).replace(/-+$/, "");
+  return clampSlug(slugify(name, ""), SLUG_MAX_LENGTH);
 }
 
 /**
@@ -65,6 +62,108 @@ export function replaceProduct(
     ...content,
     products: content.products.map((product) => (product.handle === handle ? next : product)),
   };
+}
+
+/**
+ * The product without one option, and without the value every variant chose for it.
+ *
+ * A variant that kept the value would be choosing for an option the product no longer
+ * declares — `variant_unknown_option`, an error — and no control on the variant row can take
+ * a value out, so the removal takes it with it. That is what the confirm says happens to them.
+ */
+export function removeOption(product: ProductViewSchema, key: string): ProductViewSchema {
+  return {
+    ...product,
+    options: product.options.filter((option) => option.key !== key),
+    variants: product.variants.map((variant) => ({
+      ...variant,
+      option_values: variant.option_values.filter((chosen) => chosen.key !== key),
+    })),
+  };
+}
+
+/**
+ * What `validate_shop` compares two variants by: `tuple(sorted(option_values))`, so the order a
+ * variant lists its values in does not matter and their spelling — case included — does.
+ */
+function combination(variant: VariantSchema): string {
+  return JSON.stringify(
+    variant.option_values
+      .map((chosen) => [chosen.key, chosen.value])
+      // UTF-16 order rather than Python's code-point order. The two differ only past the Basic
+      // Multilingual Plane, and it does not matter here: signatures are compared only with
+      // each other, so any order applied to both sides answers the same equality.
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+  );
+}
+
+/** One group of variants a removal leaves identical, and which of them already were. */
+export interface VariantCollision {
+  skus: string[];
+  /** What they would share, in the first variant's own order. */
+  values: string;
+  /**
+   * Every part of the group that is identical *today*, each with the values it shares today —
+   * none, where the removal alone makes them identical.
+   */
+  before: { skus: string[]; values: string }[];
+}
+
+/** What a variant's values read as in a collision: its own order, or that it has none. */
+function sharedValues(variant: VariantSchema): string {
+  return variant.option_values.length === 0 ? "no option values" : variantOptionLabel(variant);
+}
+
+/**
+ * The variants that removing one option would leave choosing the same values, grouped.
+ *
+ * `validate_shop` refuses a product whose variants repeat a combination
+ * (`duplicate_variant_options`, an error), so a removal that merges two variants is a removal
+ * the confirm has to say will block publishing. Nothing is deleted to avoid it: which of two
+ * variants to keep, or what to tell them apart by, is the operator's.
+ *
+ * Where parts of a group are identical already, `before` says which parts and what each shares
+ * today, so the confirm does not blame the removal for a refusal the draft already carries.
+ * Values are written in the variant's own order, as `variantOptionLabel` writes them.
+ */
+export function variantCollisions(product: ProductViewSchema, key: string): VariantCollision[] {
+  const today = new Map(product.variants.map((variant) => [variant.sku, variant]));
+  const groups = new Map<string, { skus: string[]; values: string }>();
+  for (const variant of removeOption(product, key).variants) {
+    const signature = combination(variant);
+    const group = groups.get(signature) ?? {
+      skus: [],
+      values: sharedValues(variant),
+    };
+    group.skus.push(variant.sku);
+    groups.set(signature, group);
+  }
+  return [...groups.values()]
+    .filter((group) => group.skus.length > 1)
+    .map((group) => {
+      const shared = new Map<string, string[]>();
+      for (const sku of group.skus) {
+        const variant = today.get(sku);
+        if (variant) {
+          const signature = combination(variant);
+          shared.set(signature, [...(shared.get(signature) ?? []), sku]);
+        }
+      }
+      const before = [...shared.values()]
+        .filter((skus) => skus.length > 1)
+        .map((skus) => {
+          const first = today.get(skus[0]);
+          return { skus, values: first ? sharedValues(first) : "" };
+        });
+      return { ...group, before };
+    });
+}
+
+/** How many of a product's variants choose a value of one option. */
+export function variantsChoosing(product: ProductViewSchema, key: string): number {
+  return product.variants.filter((variant) =>
+    variant.option_values.some((chosen) => chosen.key === key),
+  ).length;
 }
 
 export function variantOptionLabel(variant: VariantSchema): string {

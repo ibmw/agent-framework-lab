@@ -1,9 +1,11 @@
-import type { PolicySchema } from "@agent-lab/contracts";
+import type { PolicySchema, ShopDocumentKind } from "@agent-lab/contracts";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { ConfirmRemove } from "../components/ConfirmRemove";
 import { Field, FieldRows } from "../components/FieldHint";
 import { Card, EditorSaveActions, PageHeader, VersionChips } from "../components/WorkspaceChrome";
 import {
+  documentIds,
   documentKindFromSlug,
   documentKindShape,
   documentsAt,
@@ -21,6 +23,7 @@ import {
   DOCUMENT_SLUG_FIXED_RULE,
   DOCUMENT_TITLE_RULE,
 } from "../lib/fieldRules";
+import { findingClauses, type RemovalFinding, removedState, useRemoval } from "../lib/removal";
 import { documentToolName } from "../lib/scenarios";
 import {
   destructiveSubtleButtonClasses,
@@ -31,6 +34,13 @@ import {
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const POLICY_KINDS = optionsOf(POLICY_KIND);
+
+/** The gate finding a shop raises once it holds none of a kind (`domain/shop.py`). */
+const LAST_OF_KIND: Record<ShopDocumentKind, RemovalFinding> = {
+  policy: "shop_without_policy",
+  faq_entry: "shop_without_faq",
+  support_guideline: "shop_without_support_guideline",
+};
 
 /**
  * One shop document, on a page of its own (`Workspace.dc.html`:3163).
@@ -58,6 +68,8 @@ export function DocumentEditorPage() {
   const { shopId, content, preview, edit, save, saving, discard, discarding, dirty, error } =
     useShopWorkspace();
   const navigate = useNavigate();
+  // Scoped to the document, so a confirm never follows the operator to another one.
+  const removal = useRemoval(`${addressed}/${docId}`);
   const kind = documentKindFromSlug(addressed);
   const document = kind === null ? undefined : findDocument(content, kind, docId);
 
@@ -80,6 +92,20 @@ export function DocumentEditorPage() {
   }
 
   const words = wordCount(document.body);
+
+  function drop() {
+    if (!document || kind === null) {
+      return;
+    }
+    edit(removeDocument(content, kind, document.id));
+    // This page is about to unmount, so the table it returns to says what was removed.
+    navigate(documentsAt(shopId), {
+      state: removedState(
+        `Removed “${documentTitle(document)}” from the draft.`,
+        `${kind}/${document.id}`,
+      ),
+    });
+  }
 
   return (
     <>
@@ -112,22 +138,45 @@ export function DocumentEditorPage() {
         <Card
           title="Document"
           footer={
-            // The three lists this table presents each carried a Remove per row before this
-            // slice, and a presentation is not where an author loses their only way to delete
-            // a policy. One press, as every other Remove in this workspace still is; PLAN-UX
-            // Slice 21 owns the second press and gives it to all of them together.
-            <button
-              className={destructiveSubtleButtonClasses}
-              type="button"
-              aria-label={`Remove ${documentTitle(document)}`}
-              onClick={() => {
-                edit(removeDocument(content, kind, document.id));
-                navigate(documentsAt(shopId));
-              }}
-            >
-              <ButtonIcon verb="delete" />
-              Remove
-            </button>
+            // The three lists this table presents each carried a Remove per row before it,
+            // and a presentation is not where an author loses their only way to delete a
+            // policy. The second press stands in the footer the Remove stood in (ADR 0060),
+            // and the move back to the table is inside the shop draft's reach, so the one
+            // unsaved-work guard has nothing to ask (ADR 0051).
+            removal.isArmed(document.id) ? (
+              <ConfirmRemove
+                title={`Remove “${documentTitle(document)}” from the shop?`}
+                consequence={
+                  <>
+                    Agents can no longer read it through{" "}
+                    <code className="font-mono">{documentToolName(kind)}</code> once the draft is
+                    published.{" "}
+                    {findingClauses([
+                      "context_document_missing_from_shop",
+                      "suggested_document_missing_from_shop",
+                      documentIds(content, kind).length === 1 && LAST_OF_KIND[kind],
+                    ])}{" "}
+                    Nothing is written until you save the draft, and a published shop version keeps
+                    it.
+                  </>
+                }
+                // No notice of its own: this page unmounts, and the table it lands on says what
+                // was removed (`removedState` in `drop`).
+                onConfirm={removal.confirm(drop, null)}
+                onKeep={removal.keep}
+              />
+            ) : (
+              <button
+                className={destructiveSubtleButtonClasses}
+                type="button"
+                aria-label={`Remove ${documentTitle(document)}`}
+                ref={removal.trigger(document.id)}
+                onClick={removal.ask(document.id, drop, null)}
+              >
+                <ButtonIcon verb="delete" />
+                Remove
+              </button>
+            )
           }
         >
           <FieldRows>

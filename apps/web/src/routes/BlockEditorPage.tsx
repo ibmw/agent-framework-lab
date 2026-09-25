@@ -14,6 +14,7 @@ import { type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { ParameterForm } from "../components/ParameterForm";
 import {
   Card,
@@ -43,6 +44,7 @@ import {
 } from "../lib/blocks";
 import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
@@ -111,6 +113,7 @@ function BlockEditor<
     afterSave: listing.refresh,
   });
   const { content, preview, edit } = editor;
+  const parameterRemoval = useRemoval(blockId);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
   if (editor.loading) {
@@ -253,11 +256,20 @@ function BlockEditor<
                     onRetype={(kind) => edit(retypeParameter(content, parameter.name, kind))}
                     onUpdate={(next) => edit(updateParameter(content, parameter.name, next))}
                     onMove={(direction) => edit(moveParameter(content, parameter.name, direction))}
+                    removal={parameterRemoval}
+                    // A mutation is injected at a bound moment, so its only timing parameter
+                    // is one `validate_mutation_block` refuses to lose.
+                    lastTiming={
+                      "effect" in content &&
+                      parameter.kind === "timing" &&
+                      content.parameters.filter((entry) => entry.kind === "timing").length === 1
+                    }
                     onRemove={() => edit(removeParameter(content, parameter.name))}
                   />
                 ))}
               </ul>
             )}
+            <RemovalNotice removal={parameterRemoval} />
             <ParameterForm
               taken={content.parameters.map((parameter) => parameter.name)}
               onAdd={(name, kind) => edit(addParameter(content, name, kind))}
@@ -303,6 +315,8 @@ function ParameterRow({
   onRetype,
   onUpdate,
   onMove,
+  removal,
+  lastTiming,
   onRemove,
 }: {
   parameter: BlockParameterSchema;
@@ -311,9 +325,31 @@ function ParameterRow({
   onRetype: (kind: BlockParameterKind) => void;
   onUpdate: (next: Partial<BlockParameterSchema>) => void;
   onMove: (direction: -1 | 1) => void;
+  /** The list's second press (ADR 0060). */
+  removal: Removal;
+  lastTiming: boolean;
   onRemove: () => void;
 }) {
   const literal = acceptsDefault(parameter.kind);
+
+  if (removal.isArmed(parameter.name)) {
+    return (
+      <ConfirmRemove
+        as="li"
+        title={`Remove the parameter ${parameter.name}?`}
+        consequence={consequenceOf(
+          "Its description, its default and whether it is required go with it, and a scenario composing the next published version has nothing to bind under this name.",
+          findingClauses([lastTiming && "mutation_without_timing"]),
+          "Nothing is written until you save the draft, and a published version — and every scenario that pinned one — keeps it.",
+        )}
+        onConfirm={removal.confirm(
+          onRemove,
+          `Removed the parameter ${parameter.name} from the draft.`,
+        )}
+        onKeep={removal.keep}
+      />
+    );
+  }
 
   return (
     <li className="grid gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
@@ -347,7 +383,12 @@ function ParameterRow({
             className={destructiveSubtleButtonClasses}
             type="button"
             aria-label={`Remove ${parameter.name}`}
-            onClick={onRemove}
+            ref={removal.trigger(parameter.name)}
+            onClick={removal.ask(
+              parameter.name,
+              onRemove,
+              `Removed the parameter ${parameter.name} from the draft.`,
+            )}
           >
             <ButtonIcon verb="delete" />
             Remove

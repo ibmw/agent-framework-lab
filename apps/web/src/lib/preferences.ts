@@ -2,7 +2,8 @@
  * View preferences that belong to the browser and to nothing else.
  *
  * These are per-viewer conveniences — where the app opens, how the rail starts, which shop to
- * offer a way back to, where Settings returns to and how a timestamp is written — so they live
+ * offer a way back to, where Settings returns to, how a timestamp is written and whether a
+ * removal asks twice — so they live
  * in `localStorage` rather than in the lab's database, whose every other row
  * is evidence an experiment pins. There is also no user to key a stored row to: tenancy is
  * deferred, so a settings table would be a singleton pretending to be a preference (ADR 0044).
@@ -152,8 +153,27 @@ export function writeTimestampFormat(format: TimestampFormat): void {
 }
 
 /**
- * What *Reset to defaults* puts back: the three preferences an operator chose on the settings
- * page, and nothing else (ADR 0058).
+ * Whether a Remove, a Delete or a Detach asks a second time before it acts (ADR 0060).
+ *
+ * On until somebody turns it off, which is the prototype's own default. Off removes the second
+ * press and nothing else: what a confirm would have said is still true, it is simply not said
+ * first. Read at the press rather than threaded through a context, for the reason
+ * `readTimestampFormat` is — it can only be changed on `/settings`, which removes nothing.
+ * Anything but `"false"` reads as on, so a value edited by hand can only ever add the press back.
+ */
+const CONFIRM_BEFORE_DELETE_KEY = "agent-lab.confirm-before-delete";
+
+export function readConfirmBeforeDelete(): boolean {
+  return readStored(CONFIRM_BEFORE_DELETE_KEY) !== "false";
+}
+
+export function writeConfirmBeforeDelete(confirm: boolean): void {
+  writeStored(CONFIRM_BEFORE_DELETE_KEY, confirm ? "true" : "false");
+}
+
+/**
+ * What *Reset to defaults* puts back: the four preferences an operator chose on the settings
+ * page, and nothing else (ADR 0058, ADR 0060).
  *
  * The last-visited shop and the location Settings returns to are written by the shell as the
  * operator moves. They record where a browser has been rather than how it should behave, so
@@ -167,4 +187,5 @@ export function resetChosenPreferences(): void {
   writeAppLanding("last-shop");
   writeNavigationCollapsed(false);
   writeTimestampFormat("relative");
+  writeConfirmBeforeDelete(true);
 }

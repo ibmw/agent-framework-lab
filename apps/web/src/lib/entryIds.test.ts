@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   nextReference,
   referencePrefix,
-  SKU_MAX_LENGTH,
+  SLUG_MAX_LENGTH,
   seriesPrefix,
   slugify,
+  uniqueClamped,
   uniqueId,
   uniqueSuggestion,
   uniqueVariantSku,
@@ -75,12 +76,26 @@ describe("variantSku", () => {
 });
 
 describe("uniqueVariantSku", () => {
-  it("uniquifies first and clamps afterwards so a collided sku stays within 64 characters", () => {
+  it("clamps before it compares, so the value it answers is free at the length it is stored", () => {
     const handle = "x".repeat(80);
-    const taken = [variantSku(handle, [])];
-    const { value } = uniqueVariantSku(handle, [], taken);
-    expect(value.length).toBeLessThanOrEqual(SKU_MAX_LENGTH);
-    expect(value).not.toBe(taken[0]);
+    // What the 80-character base is stored as: taken, so a value merely unequal to the
+    // unclamped base would collide with it after the cut.
+    const taken = ["X".repeat(SLUG_MAX_LENGTH)];
+    const { value, takenBase } = uniqueVariantSku(handle, [], taken);
+    expect(value.length).toBeLessThanOrEqual(SLUG_MAX_LENGTH);
+    expect(taken).not.toContain(value);
+    expect(value).toBe(`${"X".repeat(SLUG_MAX_LENGTH - 2)}-2`);
+    expect(takenBase).toBe(taken[0]);
+  });
+});
+
+describe("uniqueClamped", () => {
+  it("keeps every suffixed candidate within the cap and off a trailing hyphen", () => {
+    const base = `${"a".repeat(61)}-bc`;
+    const taken = [base.slice(0, 64), `${"a".repeat(61)}-2`];
+    const value = uniqueClamped(base, taken, 64);
+    expect(value).toBe(`${"a".repeat(61)}-3`);
+    expect(value.length).toBeLessThanOrEqual(64);
   });
 });
 

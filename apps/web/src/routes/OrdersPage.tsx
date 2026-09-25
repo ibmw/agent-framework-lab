@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
 import { createOrder, replaceOrder } from "../api/orders";
+import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
@@ -28,6 +29,7 @@ import {
   todayInput,
   toOrderRequest,
 } from "../lib/orders";
+import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -85,7 +87,11 @@ const FILTERS: FilterChipDefinition<Filter, OrderSummarySchema>[] = [
 export function OrdersPage() {
   // The listing this page renders is the one the rail counts, read once by the shop's shell
   // (ADR 0056). Creating is `/orders/new`, which refreshes it there.
-  const { listings } = useShopWorkspace();
+  const { shopId, listings } = useShopWorkspace();
+  // The order editor's Delete lands here, and this is where it says what it deleted. An
+  // order's delete cannot be undone, so no row is ever put back to silence it.
+  const removal = useRemoval(shopId);
+  useArrivedRemoval(removal);
   const orders = listings.orders.rows;
   const loading = listings.orders.loading;
   const loadError = listings.orders.error;
@@ -195,6 +201,7 @@ export function OrdersPage() {
             </tbody>
           </table>
         )}
+        <RemovalNotice removal={removal} />
       </section>
     </>
   );

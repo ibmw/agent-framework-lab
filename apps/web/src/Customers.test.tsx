@@ -8,7 +8,7 @@ import type {
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -938,5 +938,575 @@ describe("the rail's figure and this index", () => {
     const entry = railEntry("Customers");
     expect(within(entry).getByText(String(rows))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${rows} customer${rows === 1 ? "" : "s"}`);
+  });
+});
+
+describe("removing is deliberate", () => {
+  afterEach(() => window.localStorage.removeItem("agent-lab.confirm-before-delete"));
+
+  /** The confirm standing where a row stood, found by its question. */
+  function confirmNamed(question: RegExp | string) {
+    return screen.getByRole("group", { name: question });
+  }
+
+  it("asks a second time before an address leaves, and the first press can be walked back", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    const remove = screen.getByRole("button", { name: "Remove Home" });
+    await user.click(remove);
+
+    // The confirm takes the row's place: the row's own fields are gone, the question stands
+    // there instead, and it holds focus so the question and its consequence are read out.
+    const confirm = confirmNamed("Remove the address “Home”?");
+    expect(screen.queryByLabelText("Label for home")).toBeNull();
+    expect(confirm).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(
+      /^It is the profile's last address, and a profile with none is refused at publication\. An order shipped to it keeps its frozen copy, and its findings warn that the entry can no longer be reselected\./,
+    );
+
+    // Walking back puts the row back, focus on the Remove that asked, and writes nothing.
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(screen.queryByRole("group", { name: "Remove the address “Home”?" })).toBeNull();
+    expect(screen.getByLabelText("Label for home")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove Home" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+
+    // Escape is the same walk back, from the keyboard.
+    await user.click(screen.getByRole("button", { name: "Remove Home" }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Remove Home" })).toHaveFocus();
+
+    // Only the second press removes it.
+    await user.click(screen.getByRole("button", { name: "Remove Home" }));
+    await user.click(
+      within(confirmNamed("Remove the address “Home”?")).getByRole("button", {
+        name: "Remove it",
+      }),
+    );
+    expect(screen.queryByLabelText("Label for home")).toBeNull();
+    // The row is gone, so focus is left on the line that says so. Focus is what announces it:
+    // it is not also a live region, which would read it twice.
+    const said = screen.getByText("Removed the address “Home” from the draft.");
+    expect(said).toHaveFocus();
+    expect(said).not.toHaveAttribute("role");
+    expect(said).not.toHaveAttribute("aria-live");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].addresses).toEqual([]);
+  });
+
+  it("removes on one press once the operator has turned the second press off", async () => {
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.click(screen.getByRole("button", { name: "Remove Home" }));
+
+    expect(screen.queryByRole("group", { name: /Remove the address/ })).toBeNull();
+    expect(screen.queryByLabelText("Label for home")).toBeNull();
+    expect(screen.getByText("Removed the address “Home” from the draft.")).toHaveFocus();
+  });
+
+  it("detaches from this shop only on the second press, and returns to Customers", async () => {
+    const user = userEvent.setup();
+    const detached: string[] = [];
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/:shopId`, ({ params }) => {
+        detached.push(String(params.shopId));
+        return HttpResponse.json({ profile_id: PROFILE_ID, shop_ids: [] });
+      }),
+      // This shop's listing answers what the lab now holds: Maya is no longer in it.
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped && detached.length > 0 ? [] : [MAYA, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.click(screen.getByRole("button", { name: "Detach from Northstar Outfitters" }));
+    const confirm = confirmNamed("Detach Maya Laurent from Northstar Outfitters?");
+    expect(confirm).toHaveAccessibleDescription(
+      /The profile itself is kept.*Until the profile is attached again, an order of theirs in the shop they leave is reported as unable to seed a sandbox, and a ticket or a scenario bound to them is refused at publication\..*returns to Customers/,
+    );
+    expect(detached).toEqual([]);
+
+    await user.click(within(confirm).getByRole("button", { name: "Detach" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers`));
+    expect(detached).toEqual([SHOP_ID]);
+    expect(await screen.findByRole("heading", { level: 1, name: "Customers" })).toBeVisible();
+    // The editor unmounted, so Customers says what was detached and focus is left there.
+    const said = await screen.findByText("Detached Maya Laurent from this shop.");
+    await waitFor(() => expect(said).toHaveFocus());
+  });
+
+  it("stays on the profile when it is detached from another shop", async () => {
+    const user = userEvent.setup();
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${OTHER_SHOP_ID}`, () =>
+        HttpResponse.json({ profile_id: PROFILE_ID, shop_ids: [SHOP_ID] }),
+      ),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.click(await screen.findByRole("button", { name: "Detach from Aurora Supply Co." }));
+    await user.click(
+      within(confirmNamed("Detach Maya Laurent from Aurora Supply Co.?")).getByRole("button", {
+        name: "Detach",
+      }),
+    );
+
+    const card = screen.getByRole("region", { name: "Attached shops" });
+    await waitFor(() => expect(within(card).queryByText("Aurora Supply Co.")).toBeNull());
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    // The notice waits for the write, so it is said once the row has gone, and holds focus.
+    const said = await within(card).findByText("Detached Maya Laurent from Aurora Supply Co.");
+    await waitFor(() => expect(said).toHaveFocus());
+  });
+
+  it("sends one detach however fast it is pressed, and reads the list once", async () => {
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    const user = userEvent.setup();
+    const detached: string[] = [];
+    // The detach is held until both presses have landed, so the second one meets the first in
+    // flight — which is when a second write would be sent.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/:shopId`, async ({ params }) => {
+        detached.push(String(params.shopId));
+        await held;
+        return HttpResponse.json({ profile_id: PROFILE_ID, shop_ids: [] });
+      }),
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped && detached.length > 0 ? [] : [MAYA, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.dblClick(screen.getByRole("button", { name: "Detach from Northstar Outfitters" }));
+    release();
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers`));
+    expect(detached).toEqual([SHOP_ID]);
+    // A superseded refresh would have read as a failure and said so.
+    expect(screen.queryByText(/could not be refreshed/)).toBeNull();
+  });
+
+  it("says nothing was detached when the detach fails, and shows why", async () => {
+    const user = userEvent.setup();
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${OTHER_SHOP_ID}`, () =>
+        HttpResponse.json(
+          { code: "unavailable", message: "The lab could not detach it.", request_id: "r" },
+          { status: 503 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.click(await screen.findByRole("button", { name: "Detach from Aurora Supply Co." }));
+    await user.click(
+      within(confirmNamed("Detach Maya Laurent from Aurora Supply Co.?")).getByRole("button", {
+        name: "Detach",
+      }),
+    );
+
+    const card = screen.getByRole("region", { name: "Attached shops" });
+    expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "The lab could not detach it.",
+    );
+    expect(within(card).getByText("Aurora Supply Co.")).toBeVisible();
+    expect(screen.queryByText(/^Detached Maya Laurent/)).toBeNull();
+    // Walked back: focus returns to the Detach that asked, drawn again on its row.
+    await waitFor(() =>
+      expect(
+        within(card).getByRole("button", { name: "Detach from Aurora Supply Co." }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("stays on the profile when Customers cannot be read again after detaching from this shop", async () => {
+    const user = userEvent.setup();
+    let detached = false;
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${SHOP_ID}`, () => {
+        detached = true;
+        return HttpResponse.json({ profile_id: PROFILE_ID, shop_ids: [] });
+      }),
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        if (scoped && detached) {
+          return HttpResponse.json(
+            { code: "unavailable", message: "down", request_id: "r" },
+            { status: 503 },
+          );
+        }
+        return HttpResponse.json({
+          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.click(screen.getByRole("button", { name: "Detach from Northstar Outfitters" }));
+    await user.click(
+      within(confirmNamed("Detach Maya Laurent from Northstar Outfitters?")).getByRole("button", {
+        name: "Detach",
+      }),
+    );
+
+    // Customers would still list Maya beside a notice saying she was detached, so the page
+    // does not go there: it says the detach landed and the list did not.
+    const card = screen.getByRole("region", { name: "Attached shops" });
+    expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "The customer list could not be refreshed, so this page stays on the profile.",
+    );
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    expect(
+      await within(card).findByText("Detached Maya Laurent from Northstar Outfitters."),
+    ).toBeVisible();
+  });
+});
+
+/**
+ * What a detach does when its answer arrives after the operator has moved: the customer editor
+ * is mounted afresh per profile, so a late answer lands on the page that sent it — which is
+ * gone — and never on the profile now on screen (ADR 0060).
+ */
+describe("a detach that answers late", () => {
+  const CONFIRM_KEY = "agent-lab.confirm-before-delete";
+  afterEach(() => window.localStorage.removeItem(CONFIRM_KEY));
+
+  const failure = () =>
+    HttpResponse.json(
+      { code: "unavailable", message: "The lab could not detach it.", request_id: "r" },
+      { status: 503 },
+    );
+
+  function held() {
+    let release: () => void = () => {};
+    const promise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { promise, release: () => release() };
+  }
+
+  /** Tomás, a second profile attached to both shops, for a move away from Maya. */
+  function serveTomas() {
+    server.use(
+      http.get(`*/api/v1/customer-profiles/${UNATTACHED_ID}/draft`, () =>
+        HttpResponse.json({
+          ...profileDraft({
+            ...PROFILE_CONTENT,
+            display_name: "Tomás Rivera",
+          } as typeof PROFILE_CONTENT),
+          profile_id: UNATTACHED_ID,
+        }),
+      ),
+      http.get(`*/api/v1/customer-profiles/${UNATTACHED_ID}/draft/preview`, () =>
+        HttpResponse.json({ ...profilePreview(), profile_id: UNATTACHED_ID }),
+      ),
+      http.get(`*/api/v1/customer-profiles/${UNATTACHED_ID}/shops`, () =>
+        HttpResponse.json({ profile_id: UNATTACHED_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] }),
+      ),
+    );
+  }
+
+  it("A: a failure that lands after moving to another profile says nothing to it", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const user = userEvent.setup();
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    const hold = held();
+    serveTomas();
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${OTHER_SHOP_ID}`, async () => {
+        await hold.promise;
+        return failure();
+      }),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    await user.click(await screen.findByRole("button", { name: "Detach from Aurora Supply Co." }));
+
+    await act(() => router.navigate(`/shops/${SHOP_ID}/customers/${UNATTACHED_ID}`));
+    const heading = await screen.findByRole("heading", { name: "Tomás Rivera" });
+    const card = screen.getByRole("region", { name: "Attached shops" });
+    const tomasDetach = await within(card).findByRole("button", {
+      name: "Detach from Aurora Supply Co.",
+    });
+    // A fresh page: Maya's write in flight is not Tomás's.
+    expect(tomasDetach).toBeEnabled();
+    heading.setAttribute("tabindex", "-1");
+    heading.focus();
+
+    hold.release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Maya's failure does not reach Tomás: no alert on his card, and focus is not moved onto
+    // his Detach, where one Enter would detach the wrong customer.
+    expect(within(card).queryByRole("alert")).toBeNull();
+    expect(heading).toHaveFocus();
+    expect(tomasDetach).toBeEnabled();
+  });
+
+  it("B: a failure while another row is armed leaves focus there, and then on its own Detach", async () => {
+    const user = userEvent.setup();
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    const aurora = held();
+    const northstar = held();
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${OTHER_SHOP_ID}`, async () => {
+        await aurora.promise;
+        return failure();
+      }),
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${SHOP_ID}`, async () => {
+        await northstar.promise;
+        return failure();
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    await user.click(await screen.findByRole("button", { name: "Detach from Aurora Supply Co." }));
+    await user.click(
+      within(
+        screen.getByRole("group", { name: "Detach Maya Laurent from Aurora Supply Co.?" }),
+      ).getByRole("button", { name: "Detach" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Detach from Northstar Outfitters" }));
+    const armed = screen.getByRole("group", {
+      name: "Detach Maya Laurent from Northstar Outfitters?",
+    });
+
+    aurora.release();
+    await screen.findByText("The lab could not detach it.");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // The armed question keeps focus; Aurora's walk-back waits for nothing.
+    expect(armed).toHaveFocus();
+
+    await user.click(within(armed).getByRole("button", { name: "Detach" }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Confirming Northstar does not deliver Aurora's walk-back.
+    expect(screen.getByRole("button", { name: "Detach from Aurora Supply Co." })).not.toHaveFocus();
+
+    northstar.release();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Detach from Northstar Outfitters" }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("C: coming back mid-write is a fresh page, whose own detach is its own", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const user = userEvent.setup();
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    const hold = held();
+    let sent = 0;
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${OTHER_SHOP_ID}`, async () => {
+        sent += 1;
+        await hold.promise;
+        return failure();
+      }),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    await user.click(await screen.findByRole("button", { name: "Detach from Aurora Supply Co." }));
+    await act(() => router.navigate(`/shops/${SHOP_ID}/customers`));
+    await screen.findByRole("heading", { level: 1, name: "Customers" });
+    await act(() => router.navigate(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`));
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    // The page that sent the first write is gone, so nothing it held carries over: Aurora is
+    // listed as the lab last answered, its Detach is enabled, and pressing it sends a write.
+    const again = await screen.findByRole("button", { name: "Detach from Aurora Supply Co." });
+    expect(again).toBeEnabled();
+    await user.click(again);
+    hold.release();
+
+    const card = screen.getByRole("region", { name: "Attached shops" });
+    // Both writes fail; the old page says nothing, and this page says its own failure once.
+    expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "The lab could not detach it.",
+    );
+    expect(within(card).getAllByRole("alert")).toHaveLength(1);
+    expect(sent).toBe(2);
+    await waitFor(() =>
+      expect(
+        within(card).getByRole("button", { name: "Detach from Aurora Supply Co." }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("does not take the operator away when a detach from this shop lands after they moved on", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const user = userEvent.setup();
+    const hold = held();
+    serveTomas();
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${SHOP_ID}`, async () => {
+        await hold.promise;
+        return HttpResponse.json({ profile_id: PROFILE_ID, shop_ids: [] });
+      }),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Detach from Northstar Outfitters" }));
+
+    await act(() => router.navigate(`/shops/${SHOP_ID}/customers/${UNATTACHED_ID}`));
+    await screen.findByRole("heading", { name: "Tomás Rivera" });
+    hold.release();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/${UNATTACHED_ID}`);
+    expect(screen.queryByText(/^Detached Maya Laurent/)).toBeNull();
+  });
+
+  it("reads Customers again when a detach from this shop lands after the operator went there", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const user = userEvent.setup();
+    const hold = held();
+    let detached = false;
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${SHOP_ID}`, async () => {
+        await hold.promise;
+        detached = true;
+        return HttpResponse.json({ profile_id: PROFILE_ID, shop_ids: [] });
+      }),
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped && detached ? [] : [MAYA, UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
+    );
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Detach from Northstar Outfitters" }));
+
+    // The operator is on the index before the detach answers.
+    await act(() => router.navigate(`/shops/${SHOP_ID}/customers`));
+    await screen.findByRole("heading", { level: 1, name: "Customers" });
+    expect(await screen.findByRole("link", { name: "Maya Laurent" })).toBeVisible();
+
+    hold.release();
+
+    // The page that changed the listing has gone, and it still reads it again (ADR 0056): the
+    // index stops listing Maya, and the operator stays where they are.
+    await waitFor(() => expect(screen.queryByRole("link", { name: "Maya Laurent" })).toBeNull());
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers`);
+  });
+
+  it("still asks before leaving a profile with unsaved edits for another one", async () => {
+    const user = userEvent.setup();
+    serveTomas();
+    const { router } = renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    await user.type(screen.getByLabelText("Account notes"), " Prefers email.");
+
+    const leaving = router.navigate(`/shops/${SHOP_ID}/customers/${UNATTACHED_ID}`);
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+    await leaving;
+    expect(screen.getByLabelText("Account notes")).toHaveValue(
+      `${PROFILE_CONTENT.account.notes} Prefers email.`,
+    );
+  });
+});
+
+describe("one write per shop on this page", () => {
+  const CONFIRM_KEY = "agent-lab.confirm-before-delete";
+  afterEach(() => window.localStorage.removeItem(CONFIRM_KEY));
+
+  function heldDetach() {
+    let release: () => void = () => {};
+    const promise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sent: string[] = [];
+    server.use(
+      http.delete(`*/api/v1/customer-profiles/${PROFILE_ID}/shops/${OTHER_SHOP_ID}`, async () => {
+        sent.push(OTHER_SHOP_ID);
+        await promise;
+        return HttpResponse.json(
+          { code: "unavailable", message: "The lab could not detach it.", request_id: "r" },
+          { status: 503 },
+        );
+      }),
+    );
+    return { sent, release: () => release() };
+  }
+
+  it("sends one write for two presses in the same event tick (the pending set)", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    const detach = heldDetach();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const button = await screen.findByRole("button", { name: "Detach from Aurora Supply Co." });
+
+    // Inside one `act`, React does not re-render between the two, so the button is not yet
+    // disabled for the second: only the pending set can hold it back.
+    act(() => {
+      button.click();
+      button.click();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(detach.sent).toHaveLength(1);
+    detach.release();
+  });
+
+  it("disables that shop's Detach while its write is in flight", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const user = userEvent.setup();
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    const detach = heldDetach();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.click(await screen.findByRole("button", { name: "Detach from Aurora Supply Co." }));
+
+    expect(screen.getByRole("button", { name: "Detach from Aurora Supply Co." })).toBeDisabled();
+    detach.release();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Detach from Aurora Supply Co." })).toBeEnabled(),
+    );
+  });
+
+  it("allows a later write once the first has settled", async () => {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const user = userEvent.setup();
+    attachedShops = { profile_id: PROFILE_ID, shop_ids: [SHOP_ID, OTHER_SHOP_ID] };
+    const detach = heldDetach();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+
+    await user.click(await screen.findByRole("button", { name: "Detach from Aurora Supply Co." }));
+    detach.release();
+    await screen.findByText("The lab could not detach it.");
+    await user.click(screen.getByRole("button", { name: "Detach from Aurora Supply Co." }));
+
+    await waitFor(() => expect(detach.sent).toHaveLength(2));
   });
 });

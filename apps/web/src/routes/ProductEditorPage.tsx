@@ -10,6 +10,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } fr
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
 import {
@@ -54,14 +55,19 @@ import {
   VARIANT_SKU_RENAME_RULE,
   VARIANT_SKU_RULE,
 } from "../lib/fieldRules";
+import { consequenceOf, findingClauses, REMOVAL_FINDINGS, useRemoval } from "../lib/removal";
 import {
   findProduct,
   issuesForProduct,
   productTitle,
   ratingLabel,
+  removeOption,
   replaceProduct,
+  type VariantCollision,
+  variantCollisions,
   variantOptionLabel,
   variantPriceLabel,
+  variantsChoosing,
 } from "../lib/shop";
 import {
   accentButtonClasses,
@@ -522,6 +528,11 @@ function OptionsCard({ product, onChange }: EditorProps) {
   const [values, setValues] = useState<string[]>([]);
   const editor = useEntryEdit<OptionFields>(product.options.map((option) => option.key));
   const notice = useId();
+  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
+  // rename drops an armed row, which only ever errs toward asking again, and a discard that
+  // lands drops it too, because the draft under the list has been read again.
+  const { discarding } = useShopWorkspace();
+  const removal = useRemoval(product.handle, discarding);
   const taken = product.options.map((option) => option.key);
   const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(name, ""), taken);
 
@@ -539,74 +550,93 @@ function OptionsCard({ product, onChange }: EditorProps) {
   return (
     <Card title="Options">
       <ul className="grid gap-2 text-[13px]">
-        {product.options.map((option) => (
-          <EntryCard
-            key={option.key}
-            title={option.name}
-            chips={
-              <>
-                <EntryId value={option.key} />
-                {/* Frame 2c draws an option's values as pills on the saved row, the same pills
-                    the add form below — and the open row — enter them as. */}
-                <ChipList label={`Values of ${option.name}`} values={option.values} />
-              </>
-            }
-            edit={entryEdit(
-              editor,
-              notice,
-              option.key,
-              option.name,
-              () => ({ name: option.name, values: option.values }),
-              (fields) =>
-                onChange({
-                  ...product,
-                  options: product.options.map((entry) =>
-                    entry.key === option.key ? optionEntry(option.key, fields) : entry,
-                  ),
-                }),
-              (value, change) => (
+        {product.options.map((option) => {
+          const choosing = variantsChoosing(product, option.key);
+          const drop = () => onChange(removeOption(product, option.key));
+          const notice = `Removed the option “${option.name}” from the draft.`;
+          return removal.isArmed(option.key) ? (
+            <ConfirmRemove
+              key={option.key}
+              as="li"
+              title={`Remove the option “${option.name}”?`}
+              consequence={consequenceOf(
+                choosing === 0
+                  ? "No variant chooses a value of it."
+                  : choosing === 1
+                    ? "One variant chooses a value of it and will lose it."
+                    : `${choosing} variants choose a value of it and will lose it.`,
+                collisionSentence(variantCollisions(product, option.key)),
+                "Nothing is written until you save the draft, and an order keeps the frozen copy of its lines either way.",
+              )}
+              onConfirm={removal.confirm(drop, notice)}
+              onKeep={removal.keep}
+            />
+          ) : (
+            <EntryCard
+              key={option.key}
+              title={option.name}
+              chips={
                 <>
-                  <label className={fieldLabelClasses}>
-                    Option name
-                    <input
-                      className={fieldControlClasses}
-                      value={value.name}
-                      required
-                      onChange={(event) => change({ ...value, name: event.target.value })}
-                    />
-                  </label>
-                  <OptionValuesField
-                    values={value.values}
-                    onChange={(values) => change({ ...value, values })}
-                  />
+                  <EntryId value={option.key} />
+                  {/* Frame 2c draws an option's values as pills on the saved row, the same pills
+                    the add form below — and the open row — enter them as. */}
+                  <ChipList label={`Values of ${option.name}`} values={option.values} />
                 </>
-              ),
-              // An option with no value is one no variant can choose, which is what the add
-              // form already refuses.
-              (value) => value.values.length > 0,
-            )}
-            actions={
-              <button
-                className={destructiveSubtleButtonClasses}
-                type="button"
-                onClick={() =>
+              }
+              edit={entryEdit(
+                editor,
+                notice,
+                option.key,
+                option.name,
+                () => ({ name: option.name, values: option.values }),
+                (fields) =>
                   onChange({
                     ...product,
-                    options: product.options.filter((entry) => entry.key !== option.key),
-                  })
-                }
-              >
-                <ButtonIcon verb="delete" />
-                Remove {option.name}
-              </button>
-            }
-          />
-        ))}
+                    options: product.options.map((entry) =>
+                      entry.key === option.key ? optionEntry(option.key, fields) : entry,
+                    ),
+                  }),
+                (value, change) => (
+                  <>
+                    <label className={fieldLabelClasses}>
+                      Option name
+                      <input
+                        className={fieldControlClasses}
+                        value={value.name}
+                        required
+                        onChange={(event) => change({ ...value, name: event.target.value })}
+                      />
+                    </label>
+                    <OptionValuesField
+                      values={value.values}
+                      onChange={(values) => change({ ...value, values })}
+                    />
+                  </>
+                ),
+                // An option with no value is one no variant can choose, which is what the add
+                // form already refuses.
+                (value) => value.values.length > 0,
+              )}
+              actions={
+                <button
+                  className={destructiveSubtleButtonClasses}
+                  type="button"
+                  ref={removal.trigger(option.key)}
+                  onClick={removal.ask(option.key, drop, notice)}
+                >
+                  <ButtonIcon verb="delete" />
+                  Remove {option.name}
+                </button>
+              }
+            />
+          );
+        })}
         {product.options.length === 0 ? (
           <li className="text-admin-muted">No options yet.</li>
         ) : null}
       </ul>
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
+      <RemovalNotice removal={removal} />
       <form className="grid gap-2" onSubmit={add}>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className={fieldLabelClasses}>
@@ -652,6 +682,11 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   // rather than only in the description.
   const skuRuleId = useId();
   const editNoticeId = useId();
+  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
+  // rename drops an armed row, which only ever errs toward asking again, and a discard that
+  // lands drops it too, because the draft under the list has been read again.
+  const { discarding } = useShopWorkspace();
+  const removal = useRemoval(product.handle, discarding);
   const editor = useEntryEdit<VariantFields>(product.variants.map((variant) => variant.sku));
   const [optionValues, setOptionValues] = useState<Record<string, string>>({});
   const chosenValues = product.options.map(
@@ -739,6 +774,31 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
               // The row's own open edit, or null. Held once so the two cells it changes and
               // the buttons that close it read the same object.
               const rowEdit = editor.isOpen(variant.sku) ? editor.open : null;
+              const drop = () =>
+                onChange({
+                  ...product,
+                  variants: product.variants.filter((entry) => entry.sku !== variant.sku),
+                });
+              if (removal.isArmed(variant.sku)) {
+                return (
+                  <ConfirmRemove
+                    key={variant.sku}
+                    as="tr"
+                    columns={6}
+                    title={`Remove the variant ${variant.sku}?`}
+                    consequence={consequenceOf(
+                      "It leaves the catalog with its price and its stock, and agents can no longer find it once the draft is published. An order line that names it keeps its frozen copy and reports a SKU the catalog no longer has.",
+                      findingClauses([product.variants.length === 1 && "product_without_variant"]),
+                      "Nothing is written until you save the draft.",
+                    )}
+                    onConfirm={removal.confirm(
+                      drop,
+                      `Removed the variant ${variant.sku} from the draft.`,
+                    )}
+                    onKeep={removal.keep}
+                  />
+                );
+              }
               return (
                 <tr key={variant.sku}>
                   <td className={tableCellClasses}>
@@ -921,14 +981,12 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         <button
                           className={destructiveSubtleButtonClasses}
                           type="button"
-                          onClick={() =>
-                            onChange({
-                              ...product,
-                              variants: product.variants.filter(
-                                (entry) => entry.sku !== variant.sku,
-                              ),
-                            })
-                          }
+                          ref={removal.trigger(variant.sku)}
+                          onClick={removal.ask(
+                            variant.sku,
+                            drop,
+                            `Removed the variant ${variant.sku} from the draft.`,
+                          )}
                         >
                           <ButtonIcon verb="delete" />
                           Remove {variant.sku}
@@ -965,6 +1023,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
         </p>
       ) : null}
       <EntryEditNotice id={editNoticeId} label={editor.open?.label ?? null} />
+      <RemovalNotice removal={removal} />
 
       <form className="grid gap-2 sm:grid-cols-2" onSubmit={add}>
         {product.options.map((option) => (
@@ -1101,6 +1160,11 @@ function MediaCard({ product, onChange }: EditorProps) {
   const taken = product.media.map((entry) => entry.reference);
   const editor = useEntryEdit<MediaFields>(taken);
   const notice = useId();
+  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
+  // rename drops an armed row, which only ever errs toward asking again, and a discard that
+  // lands drops it too, because the draft under the list has been read again.
+  const { discarding } = useShopWorkspace();
+  const removal = useRemoval(product.handle, discarding);
 
   /** Computed once for both paths: a reference is free unless the row holding it is this one. */
   function collisionOf(reference: string, own?: string): string | undefined {
@@ -1118,54 +1182,78 @@ function MediaCard({ product, onChange }: EditorProps) {
   return (
     <Card title="Media references">
       <ul className="grid gap-2 text-[13px]">
-        {product.media.map((entry) => (
-          <EntryCard
-            key={entry.reference}
-            title={<code className="font-mono text-[12px]">{entry.reference}</code>}
-            edit={entryEdit(
-              editor,
-              notice,
-              entry.reference,
-              entry.reference,
-              () => ({ reference: entry.reference, altText: entry.alt_text }),
-              (fields) =>
-                onChange({
-                  ...product,
-                  media: product.media.map((item) =>
-                    item.reference === entry.reference ? mediaEntry(fields) : item,
-                  ),
-                }),
-              (value, change) => (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <MediaFieldset value={value} onChange={change} collision={openCollision} />
-                </div>
-              ),
-              (value) => value.reference !== "" && openCollision === undefined,
-            )}
-            actions={
-              <button
-                className={destructiveSubtleButtonClasses}
-                type="button"
-                onClick={() =>
+        {product.media.map((entry) => {
+          const drop = () =>
+            onChange({
+              ...product,
+              media: product.media.filter((item) => item.reference !== entry.reference),
+            });
+          return removal.isArmed(entry.reference) ? (
+            <ConfirmRemove
+              key={entry.reference}
+              as="li"
+              title={`Remove the media reference ${entry.reference}?`}
+              consequence={consequenceOf(
+                "The reference and its alt text leave the product; the file it points at is not this lab's and is not touched.",
+                findingClauses([product.media.length === 1 && "product_without_media"]),
+                "Nothing is written until you save the draft, and a published shop version keeps it.",
+              )}
+              onConfirm={removal.confirm(
+                drop,
+                `Removed the media reference ${entry.reference} from the draft.`,
+              )}
+              onKeep={removal.keep}
+            />
+          ) : (
+            <EntryCard
+              key={entry.reference}
+              title={<code className="font-mono text-[12px]">{entry.reference}</code>}
+              edit={entryEdit(
+                editor,
+                notice,
+                entry.reference,
+                entry.reference,
+                () => ({ reference: entry.reference, altText: entry.alt_text }),
+                (fields) =>
                   onChange({
                     ...product,
-                    media: product.media.filter((item) => item.reference !== entry.reference),
-                  })
-                }
-              >
-                <ButtonIcon verb="delete" />
-                Remove {entry.reference}
-              </button>
-            }
-          >
-            <p className="text-admin-muted">{entry.alt_text}</p>
-          </EntryCard>
-        ))}
+                    media: product.media.map((item) =>
+                      item.reference === entry.reference ? mediaEntry(fields) : item,
+                    ),
+                  }),
+                (value, change) => (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <MediaFieldset value={value} onChange={change} collision={openCollision} />
+                  </div>
+                ),
+                (value) => value.reference !== "" && openCollision === undefined,
+              )}
+              actions={
+                <button
+                  className={destructiveSubtleButtonClasses}
+                  type="button"
+                  ref={removal.trigger(entry.reference)}
+                  onClick={removal.ask(
+                    entry.reference,
+                    drop,
+                    `Removed the media reference ${entry.reference} from the draft.`,
+                  )}
+                >
+                  <ButtonIcon verb="delete" />
+                  Remove {entry.reference}
+                </button>
+              }
+            >
+              <p className="text-admin-muted">{entry.alt_text}</p>
+            </EntryCard>
+          );
+        })}
         {product.media.length === 0 ? (
           <li className="text-admin-muted">No media reference yet.</li>
         ) : null}
       </ul>
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
+      <RemovalNotice removal={removal} />
       <form
         className="grid gap-2 sm:grid-cols-[2fr_2fr_auto]"
         onSubmit={(event) => {
@@ -1289,6 +1377,11 @@ function AttributesCard({ product, onChange }: EditorProps) {
   const [fields, setFields] = useState<AttributeFields>(EMPTY_ATTRIBUTE);
   const editor = useEntryEdit<AttributeFields>(product.attributes.map((entry) => entry.key));
   const notice = useId();
+  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
+  // rename drops an armed row, which only ever errs toward asking again, and a discard that
+  // lands drops it too, because the draft under the list has been read again.
+  const { discarding } = useShopWorkspace();
+  const removal = useRemoval(product.handle, discarding);
   const taken = product.attributes.map((attribute) => attribute.key);
   const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(fields.label, ""), taken);
 
@@ -1305,76 +1398,96 @@ function AttributesCard({ product, onChange }: EditorProps) {
   return (
     <Card title="Custom attributes (typed)">
       <ul className="grid gap-2 text-[13px]">
-        {product.attributes.map((attribute) => (
-          <EntryCard
-            key={attribute.key}
-            title={attribute.label}
-            chips={
-              <>
-                <EntryId value={attribute.key} />
-                <EntryKind value={labelOf(ATTRIBUTE_TYPE, attribute.attribute_type)} />
-              </>
-            }
-            edit={entryEdit(
-              editor,
-              notice,
-              attribute.key,
-              attribute.label,
-              () => attributeFields(attribute),
-              (next) =>
-                onChange({
-                  ...product,
-                  attributes: product.attributes.map((entry) =>
-                    entry.key === attribute.key ? attributeEntry(attribute.key, next) : entry,
-                  ),
-                }),
-              (value, change) => (
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <AttributeFieldset value={value} onChange={change} />
-                </div>
-              ),
-            )}
-            actions={
-              <button
-                className={destructiveSubtleButtonClasses}
-                type="button"
-                onClick={() =>
+        {product.attributes.map((attribute) => {
+          const drop = () =>
+            onChange({
+              ...product,
+              attributes: product.attributes.filter((entry) => entry.key !== attribute.key),
+            });
+          return removal.isArmed(attribute.key) ? (
+            <ConfirmRemove
+              key={attribute.key}
+              as="li"
+              title={`Remove the attribute “${attribute.label}”?`}
+              consequence="Agents can no longer discover it through the catalog tools once the draft is published. Nothing is written until you save the draft, and a published shop version keeps it."
+              onConfirm={removal.confirm(
+                drop,
+                `Removed the attribute “${attribute.label}” from the draft.`,
+              )}
+              onKeep={removal.keep}
+            />
+          ) : (
+            <EntryCard
+              key={attribute.key}
+              title={attribute.label}
+              chips={
+                <>
+                  <EntryId value={attribute.key} />
+                  <EntryKind value={labelOf(ATTRIBUTE_TYPE, attribute.attribute_type)} />
+                </>
+              }
+              edit={entryEdit(
+                editor,
+                notice,
+                attribute.key,
+                attribute.label,
+                () => attributeFields(attribute),
+                (next) =>
                   onChange({
                     ...product,
-                    attributes: product.attributes.filter((entry) => entry.key !== attribute.key),
-                  })
-                }
-              >
-                <ButtonIcon verb="delete" />
-                Remove {attribute.label}
-              </button>
-            }
-          >
-            {/* The stored value, the unit and the choices are the row's *body*, not its
+                    attributes: product.attributes.map((entry) =>
+                      entry.key === attribute.key ? attributeEntry(attribute.key, next) : entry,
+                    ),
+                  }),
+                (value, change) => (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <AttributeFieldset value={value} onChange={change} />
+                  </div>
+                ),
+              )}
+              actions={
+                <button
+                  className={destructiveSubtleButtonClasses}
+                  type="button"
+                  ref={removal.trigger(attribute.key)}
+                  onClick={removal.ask(
+                    attribute.key,
+                    drop,
+                    `Removed the attribute “${attribute.label}” from the draft.`,
+                  )}
+                >
+                  <ButtonIcon verb="delete" />
+                  Remove {attribute.label}
+                </button>
+              }
+            >
+              {/* The stored value, the unit and the choices are the row's *body*, not its
                 header: a header stays put while the row is open, and a stale "20k" printed
                 beside the box editing it is the thing an operator reads instead of the box. */}
-            <span className="flex flex-wrap items-center gap-2">
-              <span>
-                {attribute.value}
-                {attribute.unit ? ` ${attribute.unit}` : ""}
-              </span>
-              {attribute.choices.length > 0 ? (
-                <>
-                  {/* "one of" is the rule the lab applies — `shop.py` refuses a choice
+              <span className="flex flex-wrap items-center gap-2">
+                <span>
+                  {attribute.value}
+                  {attribute.unit ? ` ${attribute.unit}` : ""}
+                </span>
+                {attribute.choices.length > 0 ? (
+                  <>
+                    {/* "one of" is the rule the lab applies — `shop.py` refuses a choice
                       attribute whose value is not among them — so it stays a word, and the
                       choices beside it become the chips frame 2c draws. */}
-                  <span className="text-admin-muted">one of</span>
-                  <ChipList label={`Choices for ${attribute.label}`} values={attribute.choices} />
-                </>
-              ) : null}
-            </span>
-          </EntryCard>
-        ))}
+                    <span className="text-admin-muted">one of</span>
+                    <ChipList label={`Choices for ${attribute.label}`} values={attribute.choices} />
+                  </>
+                ) : null}
+              </span>
+            </EntryCard>
+          );
+        })}
         {product.attributes.length === 0 ? (
           <li className="text-admin-muted">No custom attribute yet.</li>
         ) : null}
       </ul>
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
+      <RemovalNotice removal={removal} />
       <form className="grid gap-2 sm:grid-cols-3" onSubmit={add}>
         <AttributeFieldset
           value={fields}
@@ -1444,64 +1557,89 @@ function ReviewsCard({ product, onChange }: EditorProps) {
   const [fields, setFields] = useState<ReviewFields>({ author: "", rating: 5, body: "" });
   const editor = useEntryEdit<ReviewFields>(product.reviews.map((review) => review.id));
   const notice = useId();
+  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
+  // rename drops an armed row, which only ever errs toward asking again, and a discard that
+  // lands drops it too, because the draft under the list has been read again.
+  const { discarding } = useShopWorkspace();
+  const removal = useRemoval(product.handle, discarding);
 
   return (
     <Card title={`Ratings & reviews · ${ratingLabel(product)}`} label="Ratings and reviews">
       <ul className="grid gap-2 text-[13px]">
-        {product.reviews.map((review) => (
-          <EntryCard
-            key={review.id}
-            title={`${review.rating}★`}
-            chips={<EntryId value={review.id} />}
-            edit={entryEdit(
-              editor,
-              notice,
-              review.id,
-              `review ${review.id}`,
-              () => ({
-                author: review.author_display_name,
-                rating: review.rating,
-                body: review.body,
-              }),
-              (next) =>
-                onChange({
-                  ...product,
-                  reviews: product.reviews.map((entry) =>
-                    entry.id === review.id ? reviewEntry(review.id, next) : entry,
-                  ),
+        {product.reviews.map((review) => {
+          const drop = () =>
+            onChange({
+              ...product,
+              reviews: product.reviews.filter((entry) => entry.id !== review.id),
+            });
+          return removal.isArmed(review.id) ? (
+            <ConfirmRemove
+              key={review.id}
+              as="li"
+              title={`Remove the review by ${review.author_display_name}?`}
+              consequence="The rating summary is derived again without it. Nothing is written until you save the draft, and a published shop version keeps it."
+              onConfirm={removal.confirm(
+                drop,
+                `Removed the review by ${review.author_display_name} from the draft.`,
+              )}
+              onKeep={removal.keep}
+            />
+          ) : (
+            <EntryCard
+              key={review.id}
+              title={`${review.rating}★`}
+              chips={<EntryId value={review.id} />}
+              edit={entryEdit(
+                editor,
+                notice,
+                review.id,
+                `review ${review.id}`,
+                () => ({
+                  author: review.author_display_name,
+                  rating: review.rating,
+                  body: review.body,
                 }),
-              (value, change) => (
-                <div className="grid gap-2 sm:grid-cols-4">
-                  <ReviewFieldset value={value} onChange={change} />
-                </div>
-              ),
-            )}
-            actions={
-              <button
-                className={destructiveSubtleButtonClasses}
-                type="button"
-                onClick={() =>
+                (next) =>
                   onChange({
                     ...product,
-                    reviews: product.reviews.filter((entry) => entry.id !== review.id),
-                  })
-                }
-              >
-                <ButtonIcon verb="delete" />
-                Remove review {review.id}
-              </button>
-            }
-          >
-            <p className="text-admin-ink-soft">
-              “{review.body}” — {review.author_display_name}
-            </p>
-          </EntryCard>
-        ))}
+                    reviews: product.reviews.map((entry) =>
+                      entry.id === review.id ? reviewEntry(review.id, next) : entry,
+                    ),
+                  }),
+                (value, change) => (
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    <ReviewFieldset value={value} onChange={change} />
+                  </div>
+                ),
+              )}
+              actions={
+                <button
+                  className={destructiveSubtleButtonClasses}
+                  type="button"
+                  ref={removal.trigger(review.id)}
+                  onClick={removal.ask(
+                    review.id,
+                    drop,
+                    `Removed the review by ${review.author_display_name} from the draft.`,
+                  )}
+                >
+                  <ButtonIcon verb="delete" />
+                  Remove review {review.id}
+                </button>
+              }
+            >
+              <p className="text-admin-ink-soft">
+                “{review.body}” — {review.author_display_name}
+              </p>
+            </EntryCard>
+          );
+        })}
         {product.reviews.length === 0 ? (
           <li className="text-admin-muted">No synthetic review yet.</li>
         ) : null}
       </ul>
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
+      <RemovalNotice removal={removal} />
       <form
         className="grid gap-2 sm:grid-cols-4"
         onSubmit={(event) => {
@@ -1575,4 +1713,61 @@ function StarRatingField({ value, onChange }: { value: number; onChange: (star: 
       </div>
     </FieldGroupHint>
   );
+}
+
+/**
+ * What removing an option does to the variants it would leave identical, in the operator's
+ * words — or nothing, where every variant still differs from every other. A group that is
+ * identical already is said to be, with what it shares today, so the removal is blamed only for
+ * what it adds: a new group, or a variant joining one the gate already refuses.
+ */
+function collisionSentence(groups: VariantCollision[]): string | null {
+  const described = (list: { skus: string[]; values: string }[]) =>
+    list.map((group) => `${namedList(group.skus)} (${group.values})`).join("; ");
+  const sentences: string[] = [];
+  const made = groups.filter((group) => group.before.length === 0);
+  if (made.length > 0) {
+    const count = made.reduce((total, group) => total + group.skus.length, 0);
+    const across = made.length === 1 ? "" : ` in ${made.length} groups`;
+    sentences.push(
+      `${count} variants would become identical${across} — ${described(made)} — and ${REMOVAL_FINDINGS.duplicate_variant_options}.`,
+    );
+  }
+  for (const group of groups) {
+    const { before } = group;
+    if (before.length === 0) {
+      continue;
+    }
+    const covered = new Set(before.flatMap((part) => part.skus));
+    const joining = group.skus.filter((sku) => !covered.has(sku));
+    const already = `${described(before)} ${before.length === 1 ? "are" : "are each"} already identical, which the publish gate already refuses`;
+    sentences.push(
+      before.length === 1 && joining.length === 0
+        ? `${already}; removing this option does not change that.`
+        : before.length === 1
+          ? `${already}, and removing this option makes ${namedList(joining)} identical to them too; ${sharing(group)}.`
+          : `${already}, and removing this option makes ${joining.length === 0 ? "them" : `them and ${namedList(joining)}`} identical to one another; ${sharing(group)}.`,
+    );
+  }
+  return sentences.length === 0 ? null : sentences.join(" ");
+}
+
+/** "A", "A and B", "A, B and C". */
+function namedList(items: string[]): string {
+  return items.length <= 2
+    ? items.join(" and ")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** What every variant of a merged group would share — or that none of them has a value. */
+function sharing(group: VariantCollision): string {
+  return group.values === "no option values"
+    ? "none of them would have option values"
+    : `${allOf(group.skus.length)} would share ${group.values}`;
+}
+
+/** "all three", "all 14": what every variant of a merged group would share. */
+function allOf(count: number): string {
+  const words = ["", "", "both", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  return count === 2 ? "both" : count < words.length ? `all ${words[count]}` : `all ${count}`;
 }

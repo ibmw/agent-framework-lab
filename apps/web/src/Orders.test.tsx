@@ -1883,6 +1883,7 @@ describe("order editor", () => {
 
     await screen.findByRole("heading", { name: "NS-10482" });
     await user.click(screen.getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
+    await user.click(screen.getByRole("button", { name: "Remove it" }));
     await user.click(screen.getByRole("button", { name: "Save order" }));
 
     await waitFor(() => expect(savedRequests).toHaveLength(1));
@@ -1968,6 +1969,34 @@ describe("order editor", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
   });
 
+  it("deletes on one press with the second press turned off, and says it once", async () => {
+    window.localStorage.setItem("agent-lab.confirm-before-delete", "false");
+    try {
+      const user = userEvent.setup();
+      const { router } = renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+      await screen.findByRole("heading", { name: "NS-10482" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(screen.queryByRole("group", { name: /Delete order/ })).toBeNull();
+      await waitFor(() => expect(deleted).toEqual([ORDER_ID]));
+      expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
+      const said = await screen.findByText("Deleted order NS-10482.");
+      await waitFor(() => expect(said).toHaveFocus());
+      expect(screen.getAllByText("Deleted order NS-10482.")).toHaveLength(1);
+
+      // Back to the order and forward to the index: the history entry no longer carries it.
+      await act(() => router.navigate(-1));
+      await screen.findByRole("heading", { name: "NS-10482" });
+      await act(() => router.navigate(1));
+      expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText("Deleted order NS-10482.")).toBeNull();
+    } finally {
+      window.localStorage.removeItem("agent-lab.confirm-before-delete");
+    }
+  });
+
   it("deletes an order and returns to the index", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
@@ -1979,6 +2008,9 @@ describe("order editor", () => {
 
     await waitFor(() => expect(deleted).toEqual([ORDER_ID]));
     expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
+    // The editor unmounted, so the index says what was deleted and focus is left there.
+    const said = await screen.findByText("Deleted order NS-10482.");
+    await waitFor(() => expect(said).toHaveFocus());
   });
 
   it("does not ask about edits to an order it has just deleted", async () => {

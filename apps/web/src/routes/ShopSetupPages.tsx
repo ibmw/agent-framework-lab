@@ -5,6 +5,7 @@ import type {
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
@@ -33,6 +34,7 @@ import {
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_NAME_RULE,
 } from "../lib/fieldRules";
+import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
@@ -85,13 +87,28 @@ function SetupPage({ title, children }: { title: string; children: ReactNode }) 
  * titled a paragraph long, and a button that renders it stretches the row it sits on. Every
  * other editor in the workspace already names its Remove this way.
  */
-function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+function RemoveButton({
+  label,
+  removal,
+  entryKey,
+  notice,
+  onRemove,
+}: {
+  label: string;
+  /** The list's second press (ADR 0060), and the key this row is armed under. */
+  removal: Removal;
+  entryKey: string;
+  /** What the list's notice line says once the entry has gone. */
+  notice: string;
+  onRemove: () => void;
+}) {
   return (
     <button
       className={destructiveSubtleButtonClasses}
       type="button"
       aria-label={`Remove ${label}`}
-      onClick={onClick}
+      ref={removal.trigger(entryKey)}
+      onClick={removal.ask(entryKey, onRemove, notice)}
     >
       <ButtonIcon verb="delete" />
       Remove
@@ -386,7 +403,7 @@ function FulfilmentFieldset({
 }
 
 function PaymentAndFulfilmentCards() {
-  const { content, edit } = useShopWorkspace();
+  const { shopId, content, edit } = useShopWorkspace();
   const [payment, setPayment] = useState<{ id: string } & PaymentFields>({
     id: "",
     name: "",
@@ -404,6 +421,8 @@ function PaymentAndFulfilmentCards() {
   const paymentEditor = useEntryEdit<PaymentFields>(takenPaymentIds);
   const fulfilmentEditor = useEntryEdit<FulfilmentFields>(takenFulfilmentIds);
   const paymentNotice = useId();
+  const paymentRemoval = useRemoval(shopId);
+  const fulfilmentRemoval = useRemoval(shopId);
   const fulfilmentNotice = useId();
 
   const paymentSuggested = uniqueSuggestion(slugify(payment.name, ""), takenPaymentIds);
@@ -455,6 +474,20 @@ function PaymentAndFulfilmentCards() {
     setFulfilment({ id: "", name: "", carrier: "", min: 1, max: 3 });
   }
 
+  function dropPayment(id: string) {
+    edit({
+      ...content,
+      payment_methods: content.payment_methods.filter((entry) => entry.id !== id),
+    });
+  }
+
+  function dropFulfilment(id: string) {
+    edit({
+      ...content,
+      fulfilment_methods: content.fulfilment_methods.filter((entry) => entry.id !== id),
+    });
+  }
+
   function saveFulfilment(id: string, fields: FulfilmentFields) {
     edit({
       ...content,
@@ -468,76 +501,100 @@ function PaymentAndFulfilmentCards() {
     <>
       <Card title="Payment methods">
         <ul className="grid gap-2 text-[13px]">
-          {content.payment_methods.map((method) => (
-            <EntryCard
-              key={method.id}
-              title={method.name}
-              chips={
-                <>
-                  <EntryKind value={labelOf(PAYMENT_METHOD_KIND, method.kind)} />
-                  <EntryId value={method.id} />
-                  <label className="flex items-center gap-1.5 text-[12px] text-admin-muted">
-                    <input
-                      type="checkbox"
-                      checked={method.enabled}
-                      onChange={() =>
-                        edit({
-                          ...content,
-                          payment_methods: content.payment_methods.map((entry) =>
-                            entry.id === method.id ? { ...entry, enabled: !entry.enabled } : entry,
-                          ),
-                        })
-                      }
-                    />
-                    enabled
-                  </label>
-                </>
-              }
-              edit={entryEdit(
-                paymentEditor,
-                paymentNotice,
-                method.id,
-                method.name,
-                () => paymentFields(method),
-                (fields) => savePayment(method.id, fields),
-                (value, onChange) => (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <label className={fieldLabelClasses}>
-                      Name
+          {content.payment_methods.map((method) =>
+            paymentRemoval.isArmed(method.id) ? (
+              <ConfirmRemove
+                key={method.id}
+                as="li"
+                title={`Remove the payment method “${method.name}”?`}
+                consequence={consequenceOf(
+                  "The shop stops offering it once the draft is saved and published.",
+                  findingClauses(["payment_method_missing_from_shop"]),
+                  findingClauses([
+                    method.enabled &&
+                      !content.payment_methods.some(
+                        (other) => other.id !== method.id && other.enabled,
+                      ) &&
+                      "shop_without_payment_method",
+                  ]),
+                  "Nothing is written until you save the draft, and a published shop version keeps it.",
+                )}
+                onConfirm={paymentRemoval.confirm(
+                  () => dropPayment(method.id),
+                  `Removed the payment method “${method.name}” from the draft.`,
+                )}
+                onKeep={paymentRemoval.keep}
+              />
+            ) : (
+              <EntryCard
+                key={method.id}
+                title={method.name}
+                chips={
+                  <>
+                    <EntryKind value={labelOf(PAYMENT_METHOD_KIND, method.kind)} />
+                    <EntryId value={method.id} />
+                    <label className="flex items-center gap-1.5 text-[12px] text-admin-muted">
                       <input
-                        className={fieldControlClasses}
-                        value={value.name}
-                        required
-                        onChange={(event) => onChange({ ...value, name: event.target.value })}
+                        type="checkbox"
+                        checked={method.enabled}
+                        onChange={() =>
+                          edit({
+                            ...content,
+                            payment_methods: content.payment_methods.map((entry) =>
+                              entry.id === method.id
+                                ? { ...entry, enabled: !entry.enabled }
+                                : entry,
+                            ),
+                          })
+                        }
                       />
+                      enabled
                     </label>
-                    <PaymentKindField
-                      value={value.kind}
-                      onChange={(kind) => onChange({ ...value, kind })}
-                    />
-                  </div>
-                ),
-              )}
-              actions={
-                <RemoveButton
-                  label={method.name}
-                  onClick={() =>
-                    edit({
-                      ...content,
-                      payment_methods: content.payment_methods.filter(
-                        (entry) => entry.id !== method.id,
-                      ),
-                    })
-                  }
-                />
-              }
-            />
-          ))}
+                  </>
+                }
+                edit={entryEdit(
+                  paymentEditor,
+                  paymentNotice,
+                  method.id,
+                  method.name,
+                  () => paymentFields(method),
+                  (fields) => savePayment(method.id, fields),
+                  (value, onChange) => (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className={fieldLabelClasses}>
+                        Name
+                        <input
+                          className={fieldControlClasses}
+                          value={value.name}
+                          required
+                          onChange={(event) => onChange({ ...value, name: event.target.value })}
+                        />
+                      </label>
+                      <PaymentKindField
+                        value={value.kind}
+                        onChange={(kind) => onChange({ ...value, kind })}
+                      />
+                    </div>
+                  ),
+                )}
+                actions={
+                  <RemoveButton
+                    label={method.name}
+                    removal={paymentRemoval}
+                    entryKey={method.id}
+                    notice={`Removed the payment method “${method.name}” from the draft.`}
+                    onRemove={() => dropPayment(method.id)}
+                  />
+                }
+              />
+            ),
+          )}
           {content.payment_methods.length === 0 ? (
             <li className="text-admin-muted">No payment method yet.</li>
           ) : null}
         </ul>
         <EntryEditNotice id={paymentNotice} label={paymentEditor.open?.label ?? null} />
+        <RemovalNotice removal={paymentRemoval} />
         <form className={`${addFormClasses} sm:grid-cols-4`} onSubmit={addPayment}>
           <label className={fieldLabelClasses}>
             Name
@@ -574,60 +631,78 @@ function PaymentAndFulfilmentCards() {
 
       <Card title="Fulfilment methods">
         <ul className="grid gap-2 text-[13px]">
-          {content.fulfilment_methods.map((method) => (
-            <EntryCard
-              key={method.id}
-              title={method.name}
-              chips={
-                <>
-                  <span className="text-[12px] text-admin-muted">
-                    {method.carrier} · {method.min_transit_days}–{method.max_transit_days} days
-                  </span>
-                  <EntryId value={method.id} />
-                </>
-              }
-              edit={entryEdit(
-                fulfilmentEditor,
-                fulfilmentNotice,
-                method.id,
-                method.name,
-                () => fulfilmentFields(method),
-                (fields) => saveFulfilment(method.id, fields),
-                (value, onChange) => (
-                  <div className="grid gap-2 sm:grid-cols-4">
-                    <label className={fieldLabelClasses}>
-                      Name
-                      <input
-                        className={fieldControlClasses}
-                        value={value.name}
-                        required
-                        onChange={(event) => onChange({ ...value, name: event.target.value })}
-                      />
-                    </label>
-                    <FulfilmentFieldset value={value} onChange={onChange} />
-                  </div>
-                ),
-              )}
-              actions={
-                <RemoveButton
-                  label={method.name}
-                  onClick={() =>
-                    edit({
-                      ...content,
-                      fulfilment_methods: content.fulfilment_methods.filter(
-                        (entry) => entry.id !== method.id,
-                      ),
-                    })
-                  }
-                />
-              }
-            />
-          ))}
+          {content.fulfilment_methods.map((method) =>
+            fulfilmentRemoval.isArmed(method.id) ? (
+              <ConfirmRemove
+                key={method.id}
+                as="li"
+                title={`Remove the fulfilment method “${method.name}”?`}
+                consequence={consequenceOf(
+                  "The shop stops offering it once the draft is saved and published.",
+                  findingClauses(["fulfilment_method_missing_from_shop"]),
+                  findingClauses([
+                    content.fulfilment_methods.length === 1 && "shop_without_fulfilment_method",
+                  ]),
+                  "Nothing is written until you save the draft, and a published shop version keeps it.",
+                )}
+                onConfirm={fulfilmentRemoval.confirm(
+                  () => dropFulfilment(method.id),
+                  `Removed the fulfilment method “${method.name}” from the draft.`,
+                )}
+                onKeep={fulfilmentRemoval.keep}
+              />
+            ) : (
+              <EntryCard
+                key={method.id}
+                title={method.name}
+                chips={
+                  <>
+                    <span className="text-[12px] text-admin-muted">
+                      {method.carrier} · {method.min_transit_days}–{method.max_transit_days} days
+                    </span>
+                    <EntryId value={method.id} />
+                  </>
+                }
+                edit={entryEdit(
+                  fulfilmentEditor,
+                  fulfilmentNotice,
+                  method.id,
+                  method.name,
+                  () => fulfilmentFields(method),
+                  (fields) => saveFulfilment(method.id, fields),
+                  (value, onChange) => (
+                    <div className="grid gap-2 sm:grid-cols-4">
+                      <label className={fieldLabelClasses}>
+                        Name
+                        <input
+                          className={fieldControlClasses}
+                          value={value.name}
+                          required
+                          onChange={(event) => onChange({ ...value, name: event.target.value })}
+                        />
+                      </label>
+                      <FulfilmentFieldset value={value} onChange={onChange} />
+                    </div>
+                  ),
+                )}
+                actions={
+                  <RemoveButton
+                    label={method.name}
+                    removal={fulfilmentRemoval}
+                    entryKey={method.id}
+                    notice={`Removed the fulfilment method “${method.name}” from the draft.`}
+                    onRemove={() => dropFulfilment(method.id)}
+                  />
+                }
+              />
+            ),
+          )}
           {content.fulfilment_methods.length === 0 ? (
             <li className="text-admin-muted">No fulfilment method yet.</li>
           ) : null}
         </ul>
         <EntryEditNotice id={fulfilmentNotice} label={fulfilmentEditor.open?.label ?? null} />
+        <RemovalNotice removal={fulfilmentRemoval} />
         <form className={`${addFormClasses} sm:grid-cols-5`} onSubmit={addFulfilment}>
           <label className={fieldLabelClasses}>
             Name
@@ -675,12 +750,13 @@ function PaymentAndFulfilmentCards() {
 const refusalLineClasses = "text-xs text-admin-muted";
 
 export function ToneOfVoicePage() {
-  const { content, edit } = useShopWorkspace();
+  const { shopId, content, edit } = useShopWorkspace();
   const [tone, setTone] = useState<{ id: string } & ProseFields>({ id: "", name: "", text: "" });
   const takenToneIds = content.tone_of_voice_guidelines.map((entry) => entry.id);
   const toneEditor = useEntryEdit<ProseFields>(takenToneIds);
   const toneNotice = useId();
   const toneSuggested = uniqueSuggestion(slugify(tone.name, ""), takenToneIds);
+  const toneRemoval = useRemoval(shopId);
 
   /**
    * One cause, two refusals, one sentence each place it bites.
@@ -716,6 +792,36 @@ export function ToneOfVoicePage() {
             // renamed to nothing is a guideline that cannot be the default, and the radio
             // that would make it one says so instead of writing it.
             const namelessHere = toneEditor.isOpen(entry.id) && openNameless;
+            const drop = () =>
+              edit({
+                ...content,
+                tone_of_voice_guidelines: content.tone_of_voice_guidelines.filter(
+                  (item) => item.id !== entry.id,
+                ),
+              });
+            if (toneRemoval.isArmed(entry.id)) {
+              return (
+                <ConfirmRemove
+                  key={entry.id}
+                  as="li"
+                  title={`Remove the guideline “${entry.name}”?`}
+                  consequence={consequenceOf(
+                    "An agent configuration that names it as an override will be naming a guideline the shop's next published version does not have.",
+                    findingClauses([
+                      content.tone_of_voice_guidelines.length === 1
+                        ? "shop_without_tone_of_voice"
+                        : entry.is_default && "tone_of_voice_without_default",
+                    ]),
+                    "Nothing is written until you save the draft, and a published shop version keeps it.",
+                  )}
+                  onConfirm={toneRemoval.confirm(
+                    drop,
+                    `Removed the guideline “${entry.name}” from the draft.`,
+                  )}
+                  onKeep={toneRemoval.keep}
+                />
+              );
+            }
             return (
               <EntryCard
                 key={entry.id}
@@ -787,14 +893,10 @@ export function ToneOfVoicePage() {
                   ) : (
                     <RemoveButton
                       label={entry.name}
-                      onClick={() =>
-                        edit({
-                          ...content,
-                          tone_of_voice_guidelines: content.tone_of_voice_guidelines.filter(
-                            (item) => item.id !== entry.id,
-                          ),
-                        })
-                      }
+                      removal={toneRemoval}
+                      entryKey={entry.id}
+                      notice={`Removed the guideline “${entry.name}” from the draft.`}
+                      onRemove={drop}
                     />
                   )
                 }
@@ -808,6 +910,7 @@ export function ToneOfVoicePage() {
           ) : null}
         </ul>
         <EntryEditNotice id={toneNotice} label={toneEditor.open?.label ?? null} />
+        <RemovalNotice removal={toneRemoval} />
         <form
           className={addFormClasses}
           onSubmit={(event) => {

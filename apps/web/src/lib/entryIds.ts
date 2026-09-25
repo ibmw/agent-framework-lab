@@ -44,9 +44,6 @@ export function uniqueSuggestion(
   return { value };
 }
 
-/** The SKU contract's uppercase-kebab maximum. */
-export const SKU_MAX_LENGTH = 64;
-
 /**
  * Uppercase kebab from the product handle and the chosen option values, for example
  * `ALPINE-SHELL-JACKET-OCEAN-BLUE-M`. Missing option values are skipped.
@@ -61,21 +58,47 @@ export function variantSku(
   return parts.join("-");
 }
 
-function clampSku(value: string): string {
-  return value.length <= SKU_MAX_LENGTH ? value : value.slice(0, SKU_MAX_LENGTH).replace(/-+$/, "");
+/** `MAX_SLUG_LENGTH` in `domain/content.py`: the cap on a handle, a slug and a SKU alike. */
+export const SLUG_MAX_LENGTH = 64;
+
+/** Cut to `room` characters, never leaving the trailing hyphen every slug pattern refuses. */
+export function clampSlug(value: string, room: number): string {
+  return value.length <= room ? value : value.slice(0, room).replace(/-+$/, "");
 }
 
-/** Uniquify the derived SKU, then clamp so a collided suffix cannot exceed 64 characters. */
+/**
+ * The first free value of `base` within `max` characters.
+ *
+ * Clamped *before* it is compared, and every suffixed candidate clamped again with room left
+ * for its suffix, so the answer is both free and within the cap. Uniquifying first and
+ * clamping afterwards can hand back a value that is free at 70 characters and taken at 64 —
+ * two variants under one SKU, which the domain refuses along with the whole draft.
+ */
+export function uniqueClamped(base: string, taken: readonly string[], max: number): string {
+  if (!base) {
+    return "";
+  }
+  let candidate = clampSlug(base, max);
+  let suffix = 2;
+  while (taken.includes(candidate)) {
+    const tail = `-${suffix}`;
+    candidate = `${clampSlug(base, max - tail.length)}${tail}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+/** The derived SKU, made free within the cap. */
 export function uniqueVariantSku(
   handle: string,
   optionValues: readonly (string | null | undefined)[],
   taken: readonly string[],
 ): { value: string; takenBase?: string } {
   const base = variantSku(handle, optionValues);
-  const unique = uniqueId(base, taken);
-  const value = clampSku(unique);
-  if (base && unique !== base) {
-    return { value, takenBase: base };
+  const value = uniqueClamped(base, taken, SLUG_MAX_LENGTH);
+  const clamped = clampSlug(base, SLUG_MAX_LENGTH);
+  if (clamped && value !== clamped) {
+    return { value, takenBase: clamped };
   }
   return { value };
 }

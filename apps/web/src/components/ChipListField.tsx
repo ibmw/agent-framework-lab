@@ -1,8 +1,10 @@
 import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage } from "../lib/fieldRules";
+import { useRemoval } from "../lib/removal";
 import { fieldControlClasses, subtleButtonClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
+import { ConfirmRemove, RemovalNotice } from "./ConfirmRemove";
 import { FieldHint } from "./FieldHint";
 
 /**
@@ -82,6 +84,7 @@ export function ChipListField({
   normalize,
   maxLength,
   takenPlace = "in the list",
+  confirmRemoval,
   onChange,
 }: {
   /** Names the group: what this list *is* ("Values", "Tags"). */
@@ -105,9 +108,25 @@ export function ChipListField({
   maxLength: number;
   /** Completes "{value} is already {takenPlace}." */
   takenPlace?: string;
+  /**
+   * Where a value is not trivially typed again — an escalation condition is a sentence the
+   * identity's behaviour turns on — its remove asks a second time, and the confirm takes the
+   * chip's place (ADR 0060). Omitted on the lists whose values are one word re-typed in the
+   * field below them, where the second press would cost more than the value.
+   */
+  confirmRemoval?: {
+    /** What the list belongs to, so a confirm never follows the operator to another one. */
+    scope: string;
+    title: (value: string) => string;
+    /** Given the value and the whole list, which is what says whether it is the last one. */
+    consequence: (value: string, values: readonly string[]) => string;
+    /** What the list's notice line says once the value has gone. */
+    notice: (value: string) => string;
+  };
   onChange: (values: string[]) => void;
 }) {
   const [typed, setTyped] = useState("");
+  const removal = useRemoval(confirmRemoval?.scope);
   const trimmed = typed.trim();
   const candidate = normalize ? normalize(trimmed) : trimmed;
   const colliding = candidate !== "" && values.includes(candidate);
@@ -143,23 +162,39 @@ export function ChipListField({
     <fieldset className="grid gap-2">
       <legend className="text-xs font-semibold text-admin-muted">{legend}</legend>
       <ul className={pillRowClasses}>
-        {values.map((value) => (
-          <li key={value}>
-            <span className={`${pillClasses} gap-1 pr-1 pl-2.5`}>
-              <span className="[overflow-wrap:anywhere]">{value}</span>
-              <button
-                className="rounded-full px-1.5 text-admin-muted transition hover:bg-admin-canvas hover:text-admin-ink"
-                type="button"
-                aria-label={`Remove ${value}`}
-                onClick={() => onChange(values.filter((entry) => entry !== value))}
-              >
-                <span aria-hidden>✕</span>
-              </button>
-            </span>
-          </li>
-        ))}
+        {values.map((value) => {
+          const drop = () => onChange(values.filter((entry) => entry !== value));
+          return confirmRemoval && removal.isArmed(value) ? (
+            <ConfirmRemove
+              key={value}
+              as="li"
+              title={confirmRemoval.title(value)}
+              consequence={confirmRemoval.consequence(value, values)}
+              onConfirm={removal.confirm(drop, confirmRemoval.notice(value))}
+              onKeep={removal.keep}
+            />
+          ) : (
+            <li key={value}>
+              <span className={`${pillClasses} gap-1 pr-1 pl-2.5`}>
+                <span className="[overflow-wrap:anywhere]">{value}</span>
+                <button
+                  className="rounded-full px-1.5 text-admin-muted transition hover:bg-admin-canvas hover:text-admin-ink"
+                  type="button"
+                  aria-label={`Remove ${value}`}
+                  ref={confirmRemoval ? removal.trigger(value) : undefined}
+                  onClick={
+                    confirmRemoval ? removal.ask(value, drop, confirmRemoval.notice(value)) : drop
+                  }
+                >
+                  <span aria-hidden>✕</span>
+                </button>
+              </span>
+            </li>
+          );
+        })}
         {values.length === 0 && empty ? <li className="text-admin-muted">{empty}</li> : null}
       </ul>
+      {confirmRemoval ? <RemovalNotice removal={removal} /> : null}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-48 flex-1">
           <FieldHint

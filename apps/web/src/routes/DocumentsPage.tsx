@@ -1,6 +1,7 @@
 import type { ShopDocumentKind } from "@agent-lab/contracts";
 import { type FormEvent, useId, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldRows } from "../components/FieldHint";
@@ -34,6 +35,7 @@ import {
   KEBAB_PATTERN,
 } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import {
   accentButtonClasses,
   cardTitleClasses,
@@ -103,6 +105,9 @@ export function DocumentsPage() {
     useShopWorkspace();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
+  // The document editor's Remove lands here, and this is where it says what it removed.
+  const removal = useRemoval(shopId);
+  useArrivedRemoval(removal, discarding);
   const asked = params.get("kind");
   const filter: Filter = isFilter(asked) ? asked : "all";
 
@@ -117,6 +122,10 @@ export function DocumentsPage() {
   }
 
   const documents = shopDocuments(content);
+  // A document *Discard changes* put back is one the notice must stop saying was removed.
+  for (const document of documents) {
+    removal.present(`${document.kind}/${document.id}`);
+  }
   // Title and slug, which is what the prototype's own document search reads (`d.title` and
   // `d.slug` in its `shownDocs` filter).
   const { chips, visible } = filterList(documents, FILTERS, filter, {
@@ -207,6 +216,7 @@ export function DocumentsPage() {
             </tbody>
           </table>
         )}
+        <RemovalNotice removal={removal} />
       </section>
     </>
   );

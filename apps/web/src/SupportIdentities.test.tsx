@@ -293,6 +293,45 @@ describe("support identity workspace", () => {
     expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
   });
 
+  it("asks before an escalation condition leaves, where a trait or a value would not", async () => {
+    const user = userEvent.setup();
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+
+    await screen.findByRole("heading", { name: "Northstar tier 1" });
+    const conditions = within(screen.getByRole("group", { name: "Conditions" }));
+    await user.type(conditions.getByLabelText("New condition"), "a refund above 200 EUR");
+    await user.click(conditions.getByRole("button", { name: "Add condition" }));
+
+    await user.click(conditions.getByRole("button", { name: "Remove a refund above 200 EUR" }));
+    const confirm = conditions.getByRole("group", {
+      name: "Remove the escalation condition “a refund above 200 EUR”?",
+    });
+    expect(confirm).toHaveFocus();
+    // The one condition is the last, and the gate's warning about an identity without one is
+    // part of what the removal costs.
+    expect(confirm).toHaveAccessibleDescription(
+      /no longer escalates when it holds\. It is the identity's last escalation condition, which the publish gate warns about/,
+    );
+
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(conditions.getByRole("button", { name: "Remove a refund above 200 EUR" })).toHaveFocus();
+
+    await user.click(conditions.getByRole("button", { name: "Remove a refund above 200 EUR" }));
+    await user.click(
+      within(
+        conditions.getByRole("group", {
+          name: "Remove the escalation condition “a refund above 200 EUR”?",
+        }),
+      ).getByRole("button", { name: "Remove it" }),
+    );
+    expect(conditions.getByText("No condition yet; this identity never escalates.")).toBeVisible();
+    expect(
+      conditions.getByText(
+        "Removed the escalation condition “a refund above 200 EUR” from the draft.",
+      ),
+    ).toHaveFocus();
+  });
+
   it("enters escalation conditions one at a time, refusing a repeat", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/support-identities/${IDENTITY_ID}`);

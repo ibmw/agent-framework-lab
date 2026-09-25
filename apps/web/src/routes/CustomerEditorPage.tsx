@@ -9,8 +9,8 @@ import type {
   HiddenFactSchema,
   LoyaltyTier,
 } from "@agent-lab/contracts";
-import { useCallback, useEffect, useId, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
   attachCustomerProfileToShop,
@@ -24,6 +24,7 @@ import {
 } from "../api/customerProfiles";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
+import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CountryField } from "../components/CountryField";
 import { Field, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
@@ -57,6 +58,13 @@ import {
   PERSONA_TRAITS_RULE,
 } from "../lib/fieldRules";
 import { todayInput } from "../lib/orders";
+import {
+  consequenceOf,
+  findingClauses,
+  REMOVAL_FINDINGS,
+  removedState,
+  useRemoval,
+} from "../lib/removal";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
@@ -196,6 +204,21 @@ function HiddenFactFieldset({
   );
 }
 
+/**
+ * The customer editor, mounted afresh for every profile (ADR 0060).
+ *
+ * A move from one profile to another is otherwise the same page with a new parameter, and what
+ * the page holds for the profile it was opened on — an attach or detach still in flight, the
+ * controls a failed removal returns focus to, the attached-shops list a late answer rewrites —
+ * would land on the next one: a detach of Maya failing after the operator opened Tomás put
+ * focus on Tomás's own Detach. Keyed by the profile, the old page unmounts and its late answers
+ * go nowhere. The unsaved-work guard is asked before the move, so a dirty profile still asks.
+ */
+export function CustomerEditorRoute() {
+  const { profileId = "" } = useParams();
+  return <CustomerEditorPage key={profileId} />;
+}
+
 export function CustomerEditorPage() {
   const { profileId = "" } = useParams();
   const { shopId, shops, listings } = useShopWorkspace();
@@ -217,6 +240,25 @@ export function CustomerEditorPage() {
   );
   const backgroundNotice = useId();
   const hiddenFactNotice = useId();
+  const navigate = useNavigate();
+  const addressRemoval = useRemoval(profileId);
+  const backgroundRemoval = useRemoval(profileId);
+  const hiddenFactRemoval = useRemoval(profileId);
+  const shopRemoval = useRemoval(profileId);
+  // The shops an attach or a detach is in flight for, held twice: the ref answers a second
+  // press in the same event, the state disables the control until the write settles.
+  const pendingShops = useRef(new Set<string>());
+  const [pending, setPending] = useState<string[]>([]);
+  // Whether this page is still the one on screen when a write it sent answers. A write that
+  // settles after the operator has left — for another profile, which is a fresh page — must
+  // not navigate them, set this page's state, or say anything.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const reloadShops = useCallback(
     async (signal?: AbortSignal) => {
@@ -350,15 +392,69 @@ export function CustomerEditorPage() {
     edit({ ...content, hidden_facts: content.hidden_facts.filter((fact) => fact.id !== id) });
   }
 
-  async function toggleShop(targetShopId: string, attach: boolean) {
+  /**
+   * Attach or detach, answering whether the write landed — which is what a detach's notice
+   * waits for (ADR 0060): a detach that failed says nothing, and this page's error says why.
+   */
+  async function toggleShop(targetShopId: string, attach: boolean): Promise<boolean> {
+    // One write per shop at a time: a second press while the first is in flight would send a
+    // second write and supersede the first one's refresh, which would then read as a failure.
+    if (pendingShops.current.has(targetShopId)) {
+      return false;
+    }
+    pendingShops.current.add(targetShopId);
+    setPending((current) => [...current, targetShopId]);
     setAttachError(null);
     try {
       const response = attach
         ? await attachCustomerProfileToShop(profileId, targetShopId)
         : await detachCustomerProfileFromShop(profileId, targetShopId);
+      // Customers lists this shop's profiles, so it is read again whichever way the attachment
+      // moved, and whether or not this page is still on screen to see it (ADR 0056: a surface
+      // that changed what a listing holds refreshes it) — the operator may be on that index
+      // already. Awaited, so the index this page leaves for no longer lists the profile its
+      // notice says was detached. The refresh is the workspace's, safe to call late (ADR 0059).
+      const fresh = targetShopId === shopId ? await listings.customers.refresh() : true;
+      if (!mounted.current) {
+        return false;
+      }
       setAttachedShops(response.shop_ids);
+      if (targetShopId !== shopId) {
+        return true;
+      }
+      if (attach) {
+        return true;
+      }
+      if (!fresh) {
+        // The detach landed and the list did not answer. Customers would still list the
+        // profile beside a notice saying it was detached, so the page stays here and says
+        // both halves of what happened.
+        setAttachError(
+          "The customer list could not be refreshed, so this page stays on the profile.",
+        );
+        return true;
+      }
+      // The profile is no longer one of this shop's customers, so this page — which is this
+      // shop's view of it — has nothing left to stand on. Leaving goes through the one
+      // unsaved-work guard like any other navigation (ADR 0051): an edit to the profile is
+      // still an edit to something the lab holds, and is still asked about.
+      navigate(`/shops/${shopId}/customers`, {
+        state: removedState(
+          `Detached ${content?.display_name ?? "the profile"} from this shop.`,
+          profileId,
+        ),
+      });
+      return true;
     } catch (cause: unknown) {
-      setAttachError(describeApiError(cause, "The attachment could not be changed."));
+      if (mounted.current) {
+        setAttachError(describeApiError(cause, "The attachment could not be changed."));
+      }
+      return false;
+    } finally {
+      pendingShops.current.delete(targetShopId);
+      if (mounted.current) {
+        setPending((current) => current.filter((id) => id !== targetShopId));
+      }
     }
   }
 
@@ -570,114 +666,144 @@ export function CustomerEditorPage() {
               </p>
             ) : (
               <ul className="grid gap-3">
-                {content.addresses.map((entry) => (
-                  <li key={entry.id} className={`${surfaceClasses} grid gap-2 p-3`}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        aria-label={`Label for ${entry.id}`}
-                        className={`${fieldControlClasses} max-w-56`}
-                        value={entry.label}
-                        onChange={(event) => updateAddress(entry.id, { label: event.target.value })}
-                      />
-                      {entry.is_default ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
-                          <span aria-hidden>●</span> Default
-                        </span>
-                      ) : (
-                        <button
-                          className={subtleButtonClasses}
-                          type="button"
-                          aria-label={`Make ${entry.label} the default address`}
-                          onClick={() => makeDefault(entry.id)}
-                        >
-                          <ButtonIcon verb="makeDefault" />
-                          Make default
-                        </button>
+                {content.addresses.map((entry) =>
+                  addressRemoval.isArmed(entry.id) ? (
+                    <ConfirmRemove
+                      key={entry.id}
+                      as="li"
+                      title={`Remove the address “${entry.label}”?`}
+                      consequence={consequenceOf(
+                        findingClauses([
+                          content.addresses.length === 1
+                            ? "profile_without_address"
+                            : entry.is_default && "address_book_without_default",
+                          "shipping_address_source_removed",
+                        ]),
+                        "Published scenarios and snapshots are never rewritten. Nothing is written until you save the draft.",
                       )}
-                      <button
-                        className={`${destructiveSubtleButtonClasses} ml-auto`}
-                        type="button"
-                        aria-label={`Remove ${entry.label}`}
-                        onClick={() => removeAddress(entry.id)}
-                      >
-                        <ButtonIcon verb="delete" />
-                        Remove
-                      </button>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className={fieldLabelClasses}>
-                        Recipient
+                      onConfirm={addressRemoval.confirm(
+                        () => removeAddress(entry.id),
+                        `Removed the address “${entry.label}” from the draft.`,
+                      )}
+                      onKeep={addressRemoval.keep}
+                    />
+                  ) : (
+                    <li key={entry.id} className={`${surfaceClasses} grid gap-2 p-3`}>
+                      <div className="flex flex-wrap items-center gap-2">
                         <input
-                          className={fieldControlClasses}
-                          value={entry.recipient}
+                          aria-label={`Label for ${entry.id}`}
+                          className={`${fieldControlClasses} max-w-56`}
+                          value={entry.label}
                           onChange={(event) =>
-                            updateAddress(entry.id, { recipient: event.target.value })
+                            updateAddress(entry.id, { label: event.target.value })
                           }
                         />
-                      </label>
-                      <label className={fieldLabelClasses}>
-                        Street
-                        <input
-                          className={fieldControlClasses}
-                          value={entry.line1}
-                          onChange={(event) =>
-                            updateAddress(entry.id, { line1: event.target.value })
-                          }
+                        {entry.is_default ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
+                            <span aria-hidden>●</span> Default
+                          </span>
+                        ) : (
+                          <button
+                            className={subtleButtonClasses}
+                            type="button"
+                            aria-label={`Make ${entry.label} the default address`}
+                            onClick={() => makeDefault(entry.id)}
+                          >
+                            <ButtonIcon verb="makeDefault" />
+                            Make default
+                          </button>
+                        )}
+                        <button
+                          className={`${destructiveSubtleButtonClasses} ml-auto`}
+                          type="button"
+                          aria-label={`Remove ${entry.label}`}
+                          ref={addressRemoval.trigger(entry.id)}
+                          onClick={addressRemoval.ask(
+                            entry.id,
+                            () => removeAddress(entry.id),
+                            `Removed the address “${entry.label}” from the draft.`,
+                          )}
+                        >
+                          <ButtonIcon verb="delete" />
+                          Remove
+                        </button>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className={fieldLabelClasses}>
+                          Recipient
+                          <input
+                            className={fieldControlClasses}
+                            value={entry.recipient}
+                            onChange={(event) =>
+                              updateAddress(entry.id, { recipient: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className={fieldLabelClasses}>
+                          Street
+                          <input
+                            className={fieldControlClasses}
+                            value={entry.line1}
+                            onChange={(event) =>
+                              updateAddress(entry.id, { line1: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className={fieldLabelClasses}>
+                          Postal code
+                          <input
+                            className={fieldControlClasses}
+                            value={entry.postal_code}
+                            onChange={(event) =>
+                              updateAddress(entry.id, { postal_code: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className={fieldLabelClasses}>
+                          Street line 2
+                          <input
+                            className={fieldControlClasses}
+                            value={entry.line2 ?? ""}
+                            onChange={(event) =>
+                              updateAddress(entry.id, {
+                                line2: event.target.value === "" ? null : event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <label className={fieldLabelClasses}>
+                          City
+                          <input
+                            className={fieldControlClasses}
+                            value={entry.city}
+                            onChange={(event) =>
+                              updateAddress(entry.id, { city: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label className={fieldLabelClasses}>
+                          Region
+                          <input
+                            className={fieldControlClasses}
+                            value={entry.region ?? ""}
+                            onChange={(event) =>
+                              updateAddress(entry.id, {
+                                region: event.target.value === "" ? null : event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <CountryField
+                          value={entry.country}
+                          onChange={(country) => updateAddress(entry.id, { country })}
                         />
-                      </label>
-                      <label className={fieldLabelClasses}>
-                        Postal code
-                        <input
-                          className={fieldControlClasses}
-                          value={entry.postal_code}
-                          onChange={(event) =>
-                            updateAddress(entry.id, { postal_code: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={fieldLabelClasses}>
-                        Street line 2
-                        <input
-                          className={fieldControlClasses}
-                          value={entry.line2 ?? ""}
-                          onChange={(event) =>
-                            updateAddress(entry.id, {
-                              line2: event.target.value === "" ? null : event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className={fieldLabelClasses}>
-                        City
-                        <input
-                          className={fieldControlClasses}
-                          value={entry.city}
-                          onChange={(event) =>
-                            updateAddress(entry.id, { city: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label className={fieldLabelClasses}>
-                        Region
-                        <input
-                          className={fieldControlClasses}
-                          value={entry.region ?? ""}
-                          onChange={(event) =>
-                            updateAddress(entry.id, {
-                              region: event.target.value === "" ? null : event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <CountryField
-                        value={entry.country}
-                        onChange={(country) => updateAddress(entry.id, { country })}
-                      />
-                    </div>
-                  </li>
-                ))}
+                      </div>
+                    </li>
+                  ),
+                )}
               </ul>
             )}
+            <RemovalNotice removal={addressRemoval} />
             <AddressForm
               defaultCountry={countryForLocale(content.identity.locale)}
               onAdd={addAddress}
@@ -736,46 +862,72 @@ export function CustomerEditorPage() {
               <p className="text-[13px] text-admin-muted">No background authored yet.</p>
             ) : (
               <ul className="grid gap-2 text-[13px]">
-                {content.background.map((entry) => (
-                  <EntryCard
-                    key={entry.id}
-                    title={`${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`}
-                    chips={<EntryId value={entry.id} />}
-                    edit={entryEdit(
-                      backgroundEditor,
-                      backgroundNotice,
-                      entry.id,
-                      `${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`,
-                      () => ({
-                        kind: entry.kind,
-                        occurredOn: entry.occurred_on,
-                        note: entry.note,
-                      }),
-                      (fields) => saveBackground(entry.id, fields),
-                      (value, onChange) => (
-                        <div className="flex flex-wrap items-end gap-2">
-                          <BackgroundFieldset value={value} onChange={onChange} />
-                        </div>
-                      ),
-                    )}
-                    actions={
-                      <button
-                        className={destructiveSubtleButtonClasses}
-                        type="button"
-                        aria-label={`Remove the ${entry.occurred_on} background entry`}
-                        onClick={() => removeBackground(entry.id)}
-                      >
-                        <ButtonIcon verb="delete" />
-                        Remove
-                      </button>
-                    }
-                  >
-                    <EntryText label="Note" value={entry.note} />
-                  </EntryCard>
-                ))}
+                {content.background.map((entry) =>
+                  backgroundRemoval.isArmed(entry.id) ? (
+                    <ConfirmRemove
+                      key={entry.id}
+                      as="li"
+                      title={`Remove the ${entry.occurred_on} background entry?`}
+                      consequence={consequenceOf(
+                        "Its note leaves the profile's authored history, and the customer side of a simulation no longer has it to draw on.",
+                        findingClauses([
+                          content.background.length === 1 && "profile_without_background",
+                        ]),
+                        "Nothing is written until you save the draft; a published version keeps it.",
+                      )}
+                      onConfirm={backgroundRemoval.confirm(
+                        () => removeBackground(entry.id),
+                        `Removed the ${entry.occurred_on} background entry from the draft.`,
+                      )}
+                      onKeep={backgroundRemoval.keep}
+                    />
+                  ) : (
+                    <EntryCard
+                      key={entry.id}
+                      title={`${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`}
+                      chips={<EntryId value={entry.id} />}
+                      edit={entryEdit(
+                        backgroundEditor,
+                        backgroundNotice,
+                        entry.id,
+                        `${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`,
+                        () => ({
+                          kind: entry.kind,
+                          occurredOn: entry.occurred_on,
+                          note: entry.note,
+                        }),
+                        (fields) => saveBackground(entry.id, fields),
+                        (value, onChange) => (
+                          <div className="flex flex-wrap items-end gap-2">
+                            <BackgroundFieldset value={value} onChange={onChange} />
+                          </div>
+                        ),
+                      )}
+                      actions={
+                        <button
+                          className={destructiveSubtleButtonClasses}
+                          type="button"
+                          aria-label={`Remove the ${entry.occurred_on} background entry`}
+                          ref={backgroundRemoval.trigger(entry.id)}
+                          onClick={backgroundRemoval.ask(
+                            entry.id,
+                            () => removeBackground(entry.id),
+                            `Removed the ${entry.occurred_on} background entry from the draft.`,
+                          )}
+                        >
+                          <ButtonIcon verb="delete" />
+                          Remove
+                        </button>
+                      }
+                    >
+                      <EntryText label="Note" value={entry.note} />
+                    </EntryCard>
+                  ),
+                )}
               </ul>
             )}
             <EntryEditNotice id={backgroundNotice} label={backgroundEditor.open?.label ?? null} />
+            <RemovalNotice removal={backgroundRemoval} />
             <BackgroundForm
               onAdd={(fields) =>
                 edit({
@@ -808,44 +960,64 @@ export function CustomerEditorPage() {
               <p className="text-[13px] text-admin-muted">No hidden fact authored yet.</p>
             ) : (
               <ul className="grid gap-2 text-[13px]">
-                {content.hidden_facts.map((fact) => (
-                  <EntryCard
-                    key={fact.id}
-                    title={fact.note}
-                    chips={<EntryId value={fact.id} />}
-                    edit={entryEdit(
-                      hiddenFactEditor,
-                      hiddenFactNotice,
-                      fact.id,
-                      fact.note,
-                      () => ({ note: fact.note, revealedWhen: fact.revealed_when }),
-                      (fields) => saveHiddenFact(fact.id, fields),
-                      (value, onChange) => (
-                        <div className="flex flex-wrap items-end gap-2">
-                          <HiddenFactFieldset value={value} onChange={onChange} />
-                        </div>
-                      ),
-                    )}
-                    actions={
-                      <button
-                        className={destructiveSubtleButtonClasses}
-                        type="button"
-                        aria-label={`Remove ${fact.note}`}
-                        onClick={() => removeHiddenFact(fact.id)}
-                      >
-                        <ButtonIcon verb="delete" />
-                        Remove
-                      </button>
-                    }
-                  >
-                    {fact.revealed_when ? (
-                      <EntryText label="Revealed when" value={fact.revealed_when} />
-                    ) : null}
-                  </EntryCard>
-                ))}
+                {content.hidden_facts.map((fact) =>
+                  hiddenFactRemoval.isArmed(fact.id) ? (
+                    <ConfirmRemove
+                      key={fact.id}
+                      as="li"
+                      title={`Remove the hidden fact “${fact.note}”?`}
+                      consequence="The customer side of a simulation no longer knows it, so nothing it would have revealed can come up. Nothing is written until you save the draft; a published version keeps it."
+                      onConfirm={hiddenFactRemoval.confirm(
+                        () => removeHiddenFact(fact.id),
+                        `Removed the hidden fact “${fact.note}” from the draft.`,
+                      )}
+                      onKeep={hiddenFactRemoval.keep}
+                    />
+                  ) : (
+                    <EntryCard
+                      key={fact.id}
+                      title={fact.note}
+                      chips={<EntryId value={fact.id} />}
+                      edit={entryEdit(
+                        hiddenFactEditor,
+                        hiddenFactNotice,
+                        fact.id,
+                        fact.note,
+                        () => ({ note: fact.note, revealedWhen: fact.revealed_when }),
+                        (fields) => saveHiddenFact(fact.id, fields),
+                        (value, onChange) => (
+                          <div className="flex flex-wrap items-end gap-2">
+                            <HiddenFactFieldset value={value} onChange={onChange} />
+                          </div>
+                        ),
+                      )}
+                      actions={
+                        <button
+                          className={destructiveSubtleButtonClasses}
+                          type="button"
+                          aria-label={`Remove ${fact.note}`}
+                          ref={hiddenFactRemoval.trigger(fact.id)}
+                          onClick={hiddenFactRemoval.ask(
+                            fact.id,
+                            () => removeHiddenFact(fact.id),
+                            `Removed the hidden fact “${fact.note}” from the draft.`,
+                          )}
+                        >
+                          <ButtonIcon verb="delete" />
+                          Remove
+                        </button>
+                      }
+                    >
+                      {fact.revealed_when ? (
+                        <EntryText label="Revealed when" value={fact.revealed_when} />
+                      ) : null}
+                    </EntryCard>
+                  ),
+                )}
               </ul>
             )}
             <EntryEditNotice id={hiddenFactNotice} label={hiddenFactEditor.open?.label ?? null} />
+            <RemovalNotice removal={hiddenFactRemoval} />
             <HiddenFactForm
               onAdd={(fields) =>
                 edit({
@@ -880,22 +1052,54 @@ export function CustomerEditorPage() {
             <ul className="grid gap-2 text-[13px]">
               {shops
                 .filter((shop) => attachedShops.includes(shop.shop_id))
-                .map((shop) => (
-                  <li key={shop.shop_id} className="flex items-center gap-2">
-                    <span className="font-semibold">{shop.name}</span>
-                    {shop.shop_id === shopId ? (
-                      <span className="text-admin-muted">this shop</span>
-                    ) : null}
-                    <button
-                      className={`${subtleButtonClasses} ml-auto`}
-                      type="button"
-                      onClick={() => void toggleShop(shop.shop_id, false)}
-                    >
-                      Detach
-                    </button>
-                  </li>
-                ))}
+                .map((shop) =>
+                  shopRemoval.isArmed(shop.shop_id) ? (
+                    <ConfirmRemove
+                      key={shop.shop_id}
+                      as="li"
+                      title={`Detach ${content.display_name} from ${shop.name}?`}
+                      consequence={
+                        <>
+                          The profile itself is kept, with its address book and its other shops.{" "}
+                          {REMOVAL_FINDINGS.customer_not_attached_to_shop}
+                          {shop.shop_id === shopId
+                            ? " This page is this shop's view of the profile, so it returns to Customers."
+                            : ""}
+                        </>
+                      }
+                      confirmLabel="Detach"
+                      destroys={false}
+                      onConfirm={shopRemoval.confirm(
+                        () => toggleShop(shop.shop_id, false),
+                        endSentence(`Detached ${content.display_name} from ${shop.name}`),
+                      )}
+                      onKeep={shopRemoval.keep}
+                    />
+                  ) : (
+                    <li key={shop.shop_id} className="flex items-center gap-2">
+                      <span className="font-semibold">{shop.name}</span>
+                      {shop.shop_id === shopId ? (
+                        <span className="text-admin-muted">this shop</span>
+                      ) : null}
+                      <button
+                        className={`${subtleButtonClasses} ml-auto`}
+                        type="button"
+                        aria-label={`Detach from ${shop.name}`}
+                        disabled={pending.includes(shop.shop_id)}
+                        ref={shopRemoval.trigger(shop.shop_id)}
+                        onClick={shopRemoval.ask(
+                          shop.shop_id,
+                          () => toggleShop(shop.shop_id, false),
+                          endSentence(`Detached ${content.display_name} from ${shop.name}`),
+                        )}
+                      >
+                        Detach
+                      </button>
+                    </li>
+                  ),
+                )}
             </ul>
+            <RemovalNotice removal={shopRemoval} />
             {otherShops
               .filter((shop) => !attachedShops.includes(shop.shop_id))
               .map((shop) => (
@@ -1071,4 +1275,9 @@ function HiddenFactForm({ onAdd }: { onAdd: (fields: HiddenFactFields) => void }
       </button>
     </form>
   );
+}
+
+/** A sentence's full stop, unless the name it ends on already carries one ("Supply Co."). */
+function endSentence(text: string): string {
+  return text.endsWith(".") ? text : `${text}.`;
 }

@@ -800,6 +800,67 @@ describe("ticket thread", () => {
     expect(within(thread).getByText("first message")).toBeVisible();
   });
 
+  it("asks before the first message leaves, saying no earlier message takes its place", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const thread = within(await screen.findByRole("region", { name: "Ticket thread" }));
+
+    const remove = thread
+      .getAllByRole("button", { name: /^Remove message from Maya Laurent/ })
+      .at(-1);
+    if (!remove) {
+      throw new Error("The trigger carries no Remove.");
+    }
+    await user.click(remove);
+
+    const confirm = thread.getByRole("group", {
+      name: /^Remove the first message, from Maya Laurent/,
+    });
+    expect(confirm).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(
+      /the message every arm receives at experiment start.*An earlier message does not take its place/,
+    );
+    // The bubble it stands in for is gone; walking back puts it where it was.
+    expect(thread.queryByText("first message")).toBeNull();
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(thread.getByText("first message")).toBeVisible();
+
+    await user.click(
+      thread
+        .getAllByRole("button", { name: /^Remove message from Maya Laurent/ })
+        .at(-1) as HTMLElement,
+    );
+    await user.click(
+      within(thread.getByRole("group", { name: /^Remove the first message/ })).getByRole("button", {
+        name: "Remove it",
+      }),
+    );
+    expect(thread.getByText(/No first message yet/)).toBeVisible();
+  });
+
+  it("does not carry an armed confirm to another ticket whose message shares its id", async () => {
+    const user = userEvent.setup();
+    server.use(...otherTicketHandlers());
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
+    const thread = () => within(screen.getByRole("region", { name: "Ticket thread" }));
+
+    await user.click(
+      thread()
+        .getAllByRole("button", { name: /^Remove message from Maya Laurent/ })
+        .at(-1) as HTMLElement,
+    );
+    expect(thread().getByRole("group", { name: /^Remove the first message/ })).toBeVisible();
+
+    // Both fixtures key their first message `trigger`; the confirm was asked about T-204's.
+    const rows = within(within(screen.getByRole("region", { name: "Tickets" })).getByRole("list"));
+    await user.click(rows.getByRole("link", { name: /Sizing question/ }));
+    await screen.findByRole("heading", { name: /T-187 · Sizing question/ });
+
+    expect(thread().queryByRole("group", { name: /^Remove the first message/ })).toBeNull();
+    expect(thread().getByText("first message")).toBeVisible();
+  });
+
   it("says a live reply belongs to the bench, not to the ticket", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 
