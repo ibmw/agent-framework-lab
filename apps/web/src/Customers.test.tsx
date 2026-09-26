@@ -583,6 +583,34 @@ describe("customer workspace", () => {
     expect(saved[1].country).toBe("FR");
   });
 
+  /**
+   * A label may run to 200 characters and an address ID to 64 (`MAX_SLUG_LENGTH`). The ID is
+   * derived from the label and never shown, so an uncut one is a draft the domain refuses over
+   * a field the author cannot see.
+   */
+  it("derives an address ID the domain accepts from a label longer than an ID may be", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    const addForm = within(screen.getByRole("group", { name: "Add an address" }));
+    const label = "Office at the far end of the old silk quarter, second courtyard on the left";
+    await user.click(addForm.getByLabelText("Label"));
+    await user.paste(label);
+    await user.type(addForm.getByLabelText("Street"), "12 quai Perrache");
+    await user.type(addForm.getByLabelText("Postal code"), "69002");
+    await user.type(addForm.getByLabelText("City"), "Lyon");
+    await user.click(addForm.getByRole("button", { name: "Add address" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const saved = savedPayloads[0].addresses as Array<{ id: string; label: string }>;
+    expect(saved[1].label).toBe(label);
+    expect(saved[1].id).toBe("office-at-the-far-end-of-the-old-silk-quarter-second-courtyard-o");
+    expect(saved[1].id.length).toBeLessThanOrEqual(64);
+    expect(saved[1].id).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+  });
+
   it("moves the default address without leaving two defaults behind", async () => {
     const user = userEvent.setup();
     currentProfile = {

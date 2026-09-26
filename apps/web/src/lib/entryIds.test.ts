@@ -5,7 +5,6 @@ import {
   SLUG_MAX_LENGTH,
   seriesPrefix,
   slugify,
-  uniqueClamped,
   uniqueId,
   uniqueSuggestion,
   uniqueVariantSku,
@@ -39,6 +38,11 @@ describe("uniqueId", () => {
     expect(uniqueId("alpine-shell-jacket", ["alpine-shell-jacket", "alpine-shell-jacket-2"])).toBe(
       "alpine-shell-jacket-3",
     );
+  });
+
+  it("cuts to the domain's slug cap when no cap is given", () => {
+    expect(uniqueId("x".repeat(80), [])).toBe("x".repeat(64));
+    expect(uniqueId("x".repeat(80), ["x".repeat(64)])).toBe(`${"x".repeat(62)}-2`);
   });
 
   it("leaves an empty base empty rather than inventing a word", () => {
@@ -89,13 +93,68 @@ describe("uniqueVariantSku", () => {
   });
 });
 
-describe("uniqueClamped", () => {
+describe("uniqueId within the slug cap", () => {
   it("keeps every suffixed candidate within the cap and off a trailing hyphen", () => {
     const base = `${"a".repeat(61)}-bc`;
     const taken = [base.slice(0, 64), `${"a".repeat(61)}-2`];
-    const value = uniqueClamped(base, taken, 64);
+    const value = uniqueId(base, taken, 64);
     expect(value).toBe(`${"a".repeat(61)}-3`);
     expect(value.length).toBeLessThanOrEqual(64);
+  });
+});
+
+describe("uniqueSuggestion within the slug cap", () => {
+  const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  /** A slug of exactly `length` characters, made of words so a cut can land anywhere. */
+  function slugOf(length: number): string {
+    return "abcdefgh-"
+      .repeat(Math.ceil(length / 9) + 1)
+      .slice(0, length)
+      .replace(/-$/, "x");
+  }
+
+  it.each([63, 64])("leaves a %i-character source exactly as it is", (length) => {
+    const source = slugOf(length);
+    expect(source).toHaveLength(length);
+    expect(uniqueSuggestion(source, [])).toEqual({ value: source });
+  });
+
+  it.each([65, 200])("cuts a %i-character source to the domain's cap", (length) => {
+    const source = slugOf(length);
+    const { value, takenBase } = uniqueSuggestion(source, []);
+    expect(value.length).toBeLessThanOrEqual(SLUG_MAX_LENGTH);
+    expect(value).toMatch(SLUG);
+    expect(source.startsWith(value)).toBe(true);
+    expect(takenBase).toBeUndefined();
+  });
+
+  it("steps off a base that is only taken once it is cut, and names the cut base", () => {
+    const source = "x".repeat(80);
+    const stored = "x".repeat(SLUG_MAX_LENGTH);
+    const { value, takenBase } = uniqueSuggestion(source, [stored]);
+    expect(value).toBe(`${"x".repeat(SLUG_MAX_LENGTH - 2)}-2`);
+    expect(takenBase).toBe(stored);
+  });
+
+  it("never leaves a trailing hyphen where the cut lands", () => {
+    // Character 64 is a hyphen, so the plain cut would end on it.
+    const source = `${"a".repeat(63)}-${"b".repeat(20)}`;
+    expect(uniqueSuggestion(source, [])).toEqual({ value: "a".repeat(63) });
+    // And room for a suffix moves the cut onto a hyphen too: 61 characters, then "-2".
+    const tight = `${"a".repeat(61)}-${"b".repeat(20)}`;
+    expect(uniqueSuggestion(tight, [`${"a".repeat(61)}-bb`])).toEqual({
+      value: `${"a".repeat(61)}-2`,
+      takenBase: `${"a".repeat(61)}-bb`,
+    });
+  });
+
+  it("clamps to a limit other than the default when given one", () => {
+    const source = "block-name-that-is-long";
+    expect(uniqueSuggestion(source, [], 10)).toEqual({ value: "block-name" });
+    expect(uniqueSuggestion(source, ["block-name"], 10)).toEqual({
+      value: "block-na-2",
+      takenBase: "block-name",
+    });
   });
 });
 

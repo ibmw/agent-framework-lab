@@ -418,6 +418,39 @@ describe("the product editor's identity rows", () => {
     ).toHaveValue("alpine-shell-jacket");
   });
 
+  /**
+   * A title may run to 200 characters, a handle to 64 (`MAX_SLUG_LENGTH`). A handle followed
+   * from a long title uncut is a draft the domain refuses whole, over a field the operator
+   * never typed.
+   */
+  it("follows a title longer than a handle may be with a handle the draft save accepts", async () => {
+    const user = userEvent.setup();
+    currentContent = EMPTY_CONTENT;
+    const { router } = renderAt(`/shops/${SHOP_ID}/products`);
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    await user.click(screen.getByRole("button", { name: "New product" }));
+    const card = within(await screen.findByRole("region", { name: "Details" }));
+
+    const title = "Alpine Shell Jacket for Long Winter Traverses Across the High Glaciers";
+    // Its slug is 70 characters; cut at 64 it ends mid-word, on "gl".
+    await user.click(card.getByLabelText("Title"));
+    await user.paste(title);
+
+    const expected = "alpine-shell-jacket-for-long-winter-traverses-across-the-high-gl";
+    expect(card.getByLabelText("Handle")).toHaveValue(expected);
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/${expected}`),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    const [saved] = lastSaved().products;
+    expect(saved.title).toBe(title);
+    expect(saved.handle).toBe(expected);
+    expect(saved.handle.length).toBeLessThanOrEqual(64);
+    expect(saved.handle).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+  });
+
   it("offers a free handle and refuses one another product already holds", async () => {
     const user = userEvent.setup();
     const card = await openNewProduct(user);

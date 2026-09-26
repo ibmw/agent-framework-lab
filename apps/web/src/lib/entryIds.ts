@@ -18,32 +18,6 @@ export function slugify(value: string | null | undefined, fallback = "entry"): s
   );
 }
 
-/** Two entries may legitimately share a label; their IDs may not. */
-export function uniqueId(base: string, taken: readonly string[]): string {
-  if (!base) {
-    return "";
-  }
-  let candidate = base;
-  let suffix = 2;
-  while (taken.includes(candidate)) {
-    candidate = `${base}-${suffix}`;
-    suffix += 1;
-  }
-  return candidate;
-}
-
-/** The free id and, when the base itself was taken, that base — so the field can say why. */
-export function uniqueSuggestion(
-  base: string,
-  taken: readonly string[],
-): { value: string; takenBase?: string } {
-  const value = uniqueId(base, taken);
-  if (base && value !== base) {
-    return { value, takenBase: base };
-  }
-  return { value };
-}
-
 /**
  * Uppercase kebab from the product handle and the chosen option values, for example
  * `ALPINE-SHELL-JACKET-OCEAN-BLUE-M`. Missing option values are skipped.
@@ -58,7 +32,10 @@ export function variantSku(
   return parts.join("-");
 }
 
-/** `MAX_SLUG_LENGTH` in `domain/content.py`: the cap on a handle, a slug and a SKU alike. */
+/**
+ * `MAX_SLUG_LENGTH` in `domain/content.py`: the cap `require_slug` puts on every kebab-case
+ * identifier a definition stores (a handle, a slug, an entry ID) and on a SKU alike.
+ */
 export const SLUG_MAX_LENGTH = 64;
 
 /** Cut to `room` characters, never leaving the trailing hyphen every slug pattern refuses. */
@@ -67,14 +44,21 @@ export function clampSlug(value: string, room: number): string {
 }
 
 /**
- * The first free value of `base` within `max` characters.
+ * The first free value of `base` within `max` characters. Two entries may legitimately
+ * share a label; their IDs may not.
  *
  * Clamped *before* it is compared, and every suffixed candidate clamped again with room left
  * for its suffix, so the answer is both free and within the cap. Uniquifying first and
- * clamping afterwards can hand back a value that is free at 70 characters and taken at 64 —
- * two variants under one SKU, which the domain refuses along with the whole draft.
+ * clamping afterwards can hand back a value that is free at 70 characters and taken at 64,
+ * and a base derived from a long title or label would otherwise be refused with the whole
+ * draft. A base already within the cap is answered exactly as before: itself, or `base-2`,
+ * `base-3`, ... while those fit.
  */
-export function uniqueClamped(base: string, taken: readonly string[], max: number): string {
+export function uniqueId(
+  base: string,
+  taken: readonly string[],
+  max: number = SLUG_MAX_LENGTH,
+): string {
   if (!base) {
     return "";
   }
@@ -88,19 +72,31 @@ export function uniqueClamped(base: string, taken: readonly string[], max: numbe
   return candidate;
 }
 
+/**
+ * The free id within `max` and, when the clamped base itself was taken, that clamped base —
+ * so the field can say why. `takenBase` is what the base is stored as, not the longer text
+ * it was cut from.
+ */
+export function uniqueSuggestion(
+  base: string,
+  taken: readonly string[],
+  max: number = SLUG_MAX_LENGTH,
+): { value: string; takenBase?: string } {
+  const value = uniqueId(base, taken, max);
+  const clamped = clampSlug(base, max);
+  if (clamped && value !== clamped) {
+    return { value, takenBase: clamped };
+  }
+  return { value };
+}
+
 /** The derived SKU, made free within the cap. */
 export function uniqueVariantSku(
   handle: string,
   optionValues: readonly (string | null | undefined)[],
   taken: readonly string[],
 ): { value: string; takenBase?: string } {
-  const base = variantSku(handle, optionValues);
-  const value = uniqueClamped(base, taken, SLUG_MAX_LENGTH);
-  const clamped = clampSlug(base, SLUG_MAX_LENGTH);
-  if (clamped && value !== clamped) {
-    return { value, takenBase: clamped };
-  }
-  return { value };
+  return uniqueSuggestion(variantSku(handle, optionValues), taken);
 }
 
 /**
@@ -109,6 +105,10 @@ export function uniqueVariantSku(
  * Sibling of `uniqueId`: that suffixes a slug (`alpine-shell-jacket-2`); this increments the
  * numbered series a shop already quotes. References that do not match `{prefix}-{digits}`
  * are ignored, so `NS-ABC` does not steal the next `NS-n`.
+ *
+ * Unlike `uniqueId` it does not clamp, because cutting the prefix would break the
+ * `seriesPrefix` lookup; a reference over 64 characters is refused by the backend with a 422
+ * instead.
  */
 export function nextReference(prefix: string, taken: readonly string[]): string {
   if (!prefix) {
