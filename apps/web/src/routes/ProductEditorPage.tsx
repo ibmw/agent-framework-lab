@@ -13,6 +13,7 @@ import { ChipList, ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
+import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
   Card,
   EditorSaveActions,
@@ -63,7 +64,13 @@ import {
   VARIANT_SKU_RULE,
 } from "../lib/fieldRules";
 import { type DraftProduct, productEntryState, productKeyIn } from "../lib/productKeys";
-import { consequenceOf, findingClauses, REMOVAL_FINDINGS, useRemoval } from "../lib/removal";
+import {
+  consequenceOf,
+  findingClauses,
+  REMOVAL_FINDINGS,
+  removedState,
+  useRemoval,
+} from "../lib/removal";
 import {
   findProduct,
   findProductByHandle,
@@ -72,6 +79,7 @@ import {
   productTitle,
   ratingLabel,
   removeOption,
+  removeProduct,
   replaceProduct,
   type VariantCollision,
   variantCollisions,
@@ -81,9 +89,11 @@ import {
 } from "../lib/shop";
 import {
   accentButtonClasses,
+  destructiveOutlineButtonClasses,
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
+  outlineButtonClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -91,6 +101,7 @@ import {
 } from "../lib/ui";
 import { useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
+import { useDuplicateProduct } from "./useDuplicateProduct";
 
 const AVAILABILITIES = optionsOf(VARIANT_AVAILABILITY);
 
@@ -181,13 +192,21 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
   // It runs on the handle and the address alone. The entry's state is read, not depended on —
   // each stamp makes a new one — and one handle is navigated to at most once until the address
   // has caught up with it, so the effect cannot re-fire on its own navigation.
+  //
+  // The header's Delete leaves by the same door: it takes the product out of the draft and
+  // this effect, finding the key gone, goes to the catalog carrying what the Delete says there
+  // (`deleted`). One way out, so a Delete and a discard can never send the page two places.
   const handle = product?.handle;
   const entryState = useRef(location.state);
   entryState.current = location.state;
   const requested = useRef<string | null>(null);
+  const deleted = useRef<string | null>(null);
   useEffect(() => {
     if (handle === undefined) {
-      navigate(`/shops/${shopId}/products`, { replace: true });
+      navigate(`/shops/${shopId}/products`, {
+        replace: true,
+        state: deleted.current === null ? null : removedState(deleted.current, productKey),
+      });
       return;
     }
     if (addressed === handle) {
@@ -250,6 +269,12 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
     typedHandle !== product.handle
       ? typedHandle
       : null;
+  // The header's Delete is about this product and nothing else: scoped by its key, and dropped
+  // when a discard lands, because what the confirm said was read off the draft the discard
+  // threw away (ADR 0061, R4).
+  const removal = useRemoval(productKey, discarding);
+  const duplicate = useDuplicateProduct();
+
   useRegisterUnsavedWork(
     heldHandle === null
       ? null
@@ -285,6 +310,18 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
 
   function update(next: DraftProduct) {
     edit(replaceProduct(content, productKey, next));
+  }
+
+  /**
+   * The header's Delete: this product out of the draft, by its key, and back to the catalog,
+   * which says what was deleted (ADR 0062). The catalog is inside the shop draft's reach, so the
+   * one unsaved-work guard has nothing to ask on the way (ADR 0051); an open row of this product
+   * goes with the product, which is what the Delete was asked to do.
+   */
+  const deletedNotice = `Deleted “${productTitle(product)}” from the draft.`;
+  function deleteProduct() {
+    deleted.current = deletedNotice;
+    edit(removeProduct(content, productKey));
   }
 
   /**
@@ -344,16 +381,45 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
         chips={<VersionChips preview={preview} />}
         description={`Editing the shop draft · ${ratingLabel(product)}`}
         actions={
-          <EditorSaveActions
-            tone="accent"
-            dirty={dirty || heldHandle !== null}
-            saving={saving}
-            discarding={discarding}
-            onSave={() => void save()}
-            onDiscard={() => void discard()}
-          />
+          <>
+            {/* Frame 2c's pair, ahead of Save. The confirm stands under the header rather than
+                in it, because a header has no row for it to take the place of (ADR 0060). No
+                notice of its own: this page leaves, and the catalog says it. */}
+            {removal.isArmed("product") ? null : (
+              <button
+                className={destructiveOutlineButtonClasses}
+                type="button"
+                ref={removal.trigger("product")}
+                onClick={removal.ask("product", deleteProduct, null)}
+              >
+                <ButtonIcon verb="delete" />
+                Delete
+              </button>
+            )}
+            <button className={outlineButtonClasses} type="button" onClick={duplicate(productKey)}>
+              Duplicate
+            </button>
+            <EditorSaveActions
+              tone="accent"
+              dirty={dirty || heldHandle !== null}
+              saving={saving}
+              discarding={discarding}
+              onSave={() => void save()}
+              onDiscard={() => void discard()}
+            />
+          </>
         }
       />
+
+      {removal.isArmed("product") ? (
+        <div className="mb-4">
+          <ProductDeleteConfirm
+            product={product}
+            onConfirm={removal.confirm(deleteProduct, null)}
+            onKeep={removal.keep}
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">

@@ -1,7 +1,10 @@
 import type { DefinitionIssueSchema, ProductViewSchema } from "@agent-lab/contracts";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ButtonIcon } from "../components/ButtonIcon";
+import { RemovalNotice } from "../components/ConfirmRemove";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
+import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import { SearchField, SearchRow } from "../components/SearchField";
 import {
   EditorSaveActions,
@@ -13,9 +16,24 @@ import { uniqueId } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
 import { filterList } from "../lib/filters";
 import { type DraftProduct, productEntryState } from "../lib/productKeys";
-import { issuesForProduct, NEW_PRODUCT_HANDLE, productTitle, ratingLabel } from "../lib/shop";
-import { accentButtonClasses, surfaceClasses, tableCellClasses, tableHeadClasses } from "../lib/ui";
+import { useArrivedRemoval, useRemoval } from "../lib/removal";
+import {
+  issuesForProduct,
+  NEW_PRODUCT_HANDLE,
+  productTitle,
+  ratingLabel,
+  removeProduct,
+} from "../lib/shop";
+import {
+  accentButtonClasses,
+  destructiveSubtleButtonClasses,
+  subtleButtonClasses,
+  surfaceClasses,
+  tableCellClasses,
+  tableHeadClasses,
+} from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
+import { useDuplicateProduct } from "./useDuplicateProduct";
 
 function emptyProduct(key: string, handle: string): DraftProduct {
   return {
@@ -98,6 +116,18 @@ export function ProductsPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  // The row actions' Delete, and the editor header's, which lands here to say what it deleted.
+  // Both notices are keyed by the product's key, which a discard gives back to a product it
+  // restores: the notice clears exactly when that product is in the draft again, and outlives a
+  // discard that restored nothing (ADR 0062). An armed row is still dropped by a discard.
+  const removal = useRemoval(shopId, discarding, true);
+  useArrivedRemoval(removal);
+  const duplicate = useDuplicateProduct();
+  // Every product in the draft, not only the rows the search and the chips leave drawn: a
+  // product a discard put back is back whether or not this view shows it.
+  for (const product of content.products) {
+    removal.present(product.key);
+  }
 
   /**
    * Products are the one create in the workspace that is not a page (PLAN-UX Slice 12).
@@ -199,12 +229,31 @@ export function ProductsPage() {
                 <th className={tableHeadClasses}>Variants</th>
                 <th className={tableHeadClasses}>Ratings</th>
                 <th className={tableHeadClasses}>Findings</th>
+                <th className={tableHeadClasses}>
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {visible.map((product) => {
                 const findings = issuesForProduct(preview?.issues ?? [], product.handle);
                 const errors = findings.filter((issue) => issue.severity === "error").length;
+                const deletedNotice = `Deleted “${productTitle(product)}” from the draft.`;
+                if (removal.isArmed(product.key)) {
+                  return (
+                    <ProductDeleteConfirm
+                      key={product.key}
+                      product={product}
+                      as="tr"
+                      columns={6}
+                      onConfirm={removal.confirm(
+                        () => edit(removeProduct(content, product.key)),
+                        deletedNotice,
+                      )}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
                 return (
                   <tr key={product.key}>
                     <td className={tableCellClasses}>
@@ -235,12 +284,39 @@ export function ProductsPage() {
                         <span className="text-lab-success">Clear</span>
                       )}
                     </td>
+                    <td className={tableCellClasses}>
+                      <span className="flex items-center justify-end gap-1.5">
+                        <button
+                          className={subtleButtonClasses}
+                          type="button"
+                          aria-label={`Duplicate ${productTitle(product)}`}
+                          onClick={duplicate(product.key)}
+                        >
+                          Duplicate
+                        </button>
+                        <button
+                          className={destructiveSubtleButtonClasses}
+                          type="button"
+                          aria-label={`Delete ${productTitle(product)}`}
+                          ref={removal.trigger(product.key)}
+                          onClick={removal.ask(
+                            product.key,
+                            () => edit(removeProduct(content, product.key)),
+                            deletedNotice,
+                          )}
+                        >
+                          <ButtonIcon verb="delete" />
+                          Delete
+                        </button>
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         )}
+        <RemovalNotice removal={removal} />
       </section>
     </>
   );

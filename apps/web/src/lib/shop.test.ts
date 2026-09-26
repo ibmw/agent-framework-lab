@@ -1,12 +1,16 @@
 import type { DefinitionIssueSchema, ShopContentSchema } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
 import openapi from "../../../../packages/contracts/openapi/v1/openapi.yaml?raw";
-import type { ShopDraft } from "./productKeys";
+import { SLUG_MAX_LENGTH } from "./entryIds";
+import type { DraftProduct, ShopDraft } from "./productKeys";
 import {
+  COPY_SUFFIX,
+  duplicateProduct,
   groupIssues,
   issuesForProduct,
   ratingLabel,
   removeOption,
+  removeProduct,
   replaceProduct,
   shopSlugFromName,
   toPayload,
@@ -320,5 +324,168 @@ describe("variantCollisions compares as the gate does", () => {
       },
     ]);
     expect(variantCollisions(product, "size")).toEqual([]);
+  });
+});
+
+describe("removeProduct", () => {
+  it("takes out the product held under the key, whatever its handle, and nothing else", () => {
+    const [jacket] = keyed.products;
+    const renamed: ShopDraft = {
+      ...keyed,
+      products: [
+        { ...jacket, key: "x", handle: "x-first" },
+        { ...jacket, key: "alpine", handle: "alpine-shell-jacket" },
+      ],
+    };
+
+    expect(removeProduct(renamed, "alpine").products.map((product) => product.key)).toEqual(["x"]);
+    expect(removeProduct(renamed, "gone").products).toHaveLength(2);
+    expect(renamed.products).toHaveLength(2);
+  });
+});
+
+describe("duplicateProduct", () => {
+  /** A minter like the workspace's: every key it gives is new. */
+  function minter() {
+    let count = 0;
+    return () => {
+      count += 1;
+      return `minted-${count}`;
+    };
+  }
+
+  function draftOf(...products: DraftProduct[]): ShopDraft {
+    return { ...keyed, products };
+  }
+
+  const [jacket] = keyed.products;
+
+  it("appends a draft copy under a fresh key, with everything authored and new SKUs", () => {
+    const mint = minter();
+    const result = duplicateProduct(keyed, "product-0", mint);
+
+    expect(result).not.toBeNull();
+    const copy = result?.copy as DraftProduct;
+    expect(result?.content.products.map((product) => product.key)).toEqual([
+      "product-0",
+      "minted-1",
+    ]);
+    expect(result?.content.products[0]).toBe(jacket);
+    expect(copy).toMatchObject({
+      key: "minted-1",
+      handle: `alpine-shell-jacket${COPY_SUFFIX}`,
+      title: "Alpine Shell Jacket (copy)",
+      status: "draft",
+      description: jacket.description,
+      category: jacket.category,
+      options: jacket.options,
+      media: jacket.media,
+      attributes: jacket.attributes,
+      reviews: jacket.reviews,
+    });
+    // Derived again from the copy's handle and each variant's own values, as the editor would.
+    expect(copy.variants.map((variant) => variant.sku)).toEqual([
+      "ALPINE-SHELL-JACKET-COPY-M",
+      "ALPINE-SHELL-JACKET-COPY",
+    ]);
+    expect(copy.variants.map(({ sku: _sku, ...rest }) => rest)).toEqual(
+      jacket.variants.map(({ sku: _sku, ...rest }) => rest),
+    );
+  });
+
+  it("answers nothing for a key the draft does not hold", () => {
+    expect(duplicateProduct(keyed, "gone", minter())).toBeNull();
+  });
+
+  it("steps the handle to -copy-2, and to -copy-3 past a -copy-2 already there", () => {
+    const once = duplicateProduct(keyed, "product-0", minter());
+    const twice = once && duplicateProduct(once.content, "product-0", minter());
+    expect(twice?.copy.handle).toBe("alpine-shell-jacket-copy-2");
+
+    const held = draftOf(
+      jacket,
+      { ...jacket, key: "c2", handle: "alpine-shell-jacket-copy-2", variants: [] },
+      { ...jacket, key: "c1", handle: "alpine-shell-jacket-copy", variants: [] },
+    );
+    expect(duplicateProduct(held, "product-0", minter())?.copy.handle).toBe(
+      "alpine-shell-jacket-copy-3",
+    );
+  });
+
+  it("holds no SKU in the draft twice, nor one the copy has already taken", () => {
+    // Another product already holds the SKU the copy's first variant would derive, and the
+    // copy's two variants derive the same SKU as each other.
+    const source: DraftProduct = {
+      ...jacket,
+      variants: [
+        { ...jacket.variants[0], sku: "A", option_values: [{ key: "size", value: "M" }] },
+        { ...jacket.variants[0], sku: "B", option_values: [{ key: "size", value: "m" }] },
+      ],
+    };
+    const holder: DraftProduct = {
+      ...jacket,
+      key: "holder",
+      handle: "holder",
+      variants: [{ ...jacket.variants[0], sku: "ALPINE-SHELL-JACKET-COPY-M" }],
+    };
+    const result = duplicateProduct(draftOf(source, holder), "product-0", minter());
+
+    const skus = result?.copy.variants.map((variant) => variant.sku);
+    expect(skus).toEqual(["ALPINE-SHELL-JACKET-COPY-M-2", "ALPINE-SHELL-JACKET-COPY-M-3"]);
+    const all = result?.content.products.flatMap((product) =>
+      product.variants.map((variant) => variant.sku),
+    );
+    expect(new Set(all).size).toBe(all?.length);
+  });
+
+  it.each([60, 61, 62, 63, 64])(
+    "keeps a copy of a %i-character handle, and its SKUs, within the cap and distinct",
+    (length) => {
+      const handle = "a".repeat(length);
+      const source: DraftProduct = {
+        ...jacket,
+        handle,
+        variants: [
+          { ...jacket.variants[0], sku: "A", option_values: [{ key: "size", value: "M" }] },
+          { ...jacket.variants[0], sku: "B", option_values: [{ key: "size", value: "L" }] },
+        ],
+      };
+      const once = duplicateProduct(draftOf(source), "product-0", minter());
+      const twice = once && duplicateProduct(once.content, "product-0", minter());
+
+      for (const result of [once, twice]) {
+        const copy = result?.copy as DraftProduct;
+        expect(copy.handle.length).toBeLessThanOrEqual(SLUG_MAX_LENGTH);
+        expect(copy.handle).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+        for (const variant of copy.variants) {
+          expect(variant.sku.length).toBeLessThanOrEqual(SLUG_MAX_LENGTH);
+        }
+      }
+      // The source is cut to leave room for the suffix, rather than cut back to itself.
+      expect(once?.copy.handle).toBe(`${"a".repeat(SLUG_MAX_LENGTH - COPY_SUFFIX.length)}-copy`);
+      expect(twice?.copy.handle).not.toBe(once?.copy.handle);
+      const all = twice?.content.products.flatMap((product) =>
+        product.variants.map((variant) => variant.sku),
+      );
+      expect(new Set(all).size).toBe(all?.length);
+    },
+  );
+
+  it("keeps two SKUs that agree only after the cut distinct", () => {
+    // 64 characters of handle leave no room for the values, so both SKUs cut to the same base.
+    const source: DraftProduct = {
+      ...jacket,
+      handle: "b".repeat(64),
+      variants: [
+        { ...jacket.variants[0], sku: "A", option_values: [{ key: "size", value: "M" }] },
+        { ...jacket.variants[0], sku: "B", option_values: [{ key: "size", value: "L" }] },
+      ],
+    };
+    const skus = duplicateProduct(draftOf(source), "product-0", minter())?.copy.variants.map(
+      (variant) => variant.sku,
+    );
+
+    expect(skus?.[0]).not.toBe(skus?.[1]);
+    expect(skus?.every((sku) => sku.length <= SLUG_MAX_LENGTH)).toBe(true);
   });
 });

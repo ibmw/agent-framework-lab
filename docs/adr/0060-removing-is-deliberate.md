@@ -189,7 +189,8 @@ not one the removed machinery alone caused. The deletes that remain are of rows 
 product, scoped as above. Deleting and duplicating a product is its own slice (`docs/PLAN-UX.md`,
 *Slice 21 (remainder)*), which settles how the editor tracks a product across renames, deletes
 and discards in an ADR of its own before building on it. The sequences the reviews found are
-`docs/history/2026-09-25-product-identity-reproductions.md`.
+`docs/history/2026-09-25-product-identity-reproductions.md`. (Settled by ADR 0061, and built by
+ADR 0062: a product's Delete and Duplicate, on its key.)
 
 ### Removing an option takes the value its variants chose
 
@@ -237,7 +238,7 @@ says so once the detach has landed.
   the order's delete is the one that cannot be, and an Undo per removal would be a second history
   to keep in agreement with the draft's.
 - **A confirm on the chip lists and on a create page's removals**, for the reason above.
-- **A product's own Delete and Duplicate**, for the reason above.
+- **A product's own Delete and Duplicate**, for the reason above (since built, ADR 0062).
 - **A preference that reaches the lab.** It is this browser's, like the other five.
 
 ## Consequences

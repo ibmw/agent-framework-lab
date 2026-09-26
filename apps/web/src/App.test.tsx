@@ -3764,3 +3764,877 @@ describe("removing is deliberate", () => {
     expect(variants.getByText("Removed the variant NS-ASJ-OB-L from the draft.")).toHaveFocus();
   });
 });
+
+/**
+ * A product's own Delete and Duplicate (ADR 0062), built on the key ADR 0061 gives a product.
+ * The acceptance list is `docs/history/2026-09-25-product-identity-reproductions.md`: the
+ * sequences its reviews found that need a Delete or a Duplicate — R3, R4, R9, S1, S4, S7, S9 —
+ * as operator steps, and what the set-aside Delete and Duplicate tests asserted.
+ */
+describe("deleting and duplicating a product", () => {
+  const CONFIRM_KEY = "agent-lab.confirm-before-delete";
+  const ORDER_NAMING = "7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d";
+  const ORDER_ELSEWHERE = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
+  const products = `/shops/${SHOP_ID}/products`;
+  const CHECKING = "Checking which orders name one of its variants…";
+
+  afterEach(() => window.localStorage.removeItem(CONFIRM_KEY));
+
+  /** An order summary row and the order behind it, with one line per SKU given. */
+  function order(orderId: string, reference: string, skus: string[]) {
+    return {
+      summary: {
+        order_id: orderId,
+        reference,
+        customer_profile_id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        customer_display_name: "Maya Laurent",
+        placed_at: "2026-08-21T09:30:00+00:00",
+        payment_status: "paid",
+        fulfilment_status: "unfulfilled",
+        line_count: skus.length,
+        total: { amount: "249.00", currency: "EUR" },
+        updated_at: "2026-08-23T12:05:00+00:00",
+      },
+      detail: {
+        order_id: orderId,
+        shop_id: SHOP_ID,
+        content: {
+          reference,
+          lines: skus.map((sku, index) => ({
+            id: `line-${index}`,
+            sku,
+            product_handle: "some-product",
+            title: "A product",
+            variant_summary: "",
+            unit_price: { amount: "249.00", currency: "EUR" },
+            quantity: 1,
+            line_total: { amount: "249.00", currency: "EUR" },
+          })),
+        },
+        issues: [],
+      },
+    };
+  }
+
+  const naming = order(ORDER_NAMING, "NS-10482", ["NS-ASJ-OB-M"]);
+  const elsewhere = order(ORDER_ELSEWHERE, "NS-10483", ["NS-TRAIL-SOCK-M"]);
+
+  /**
+   * NS-10482 names Alpine's `NS-ASJ-OB-M`; NS-10483 names another product's SKU. `hold` keeps
+   * every order read in the air until it is released; `reads` counts them.
+   */
+  function serveOrders({ hold = false, naming: namingStatus = 200 } = {}) {
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reads: string[] = [];
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+        HttpResponse.json({ orders: [naming.summary, elsewhere.summary] }),
+      ),
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders/:orderId`, async ({ params }) => {
+        reads.push(String(params.orderId));
+        if (hold) {
+          await released;
+        }
+        if (params.orderId === ORDER_NAMING) {
+          return namingStatus === 200
+            ? HttpResponse.json(naming.detail)
+            : HttpResponse.json(
+                { code: "not_found", message: "No such order", request_id: "r" },
+                { status: namingStatus },
+              );
+        }
+        return HttpResponse.json(elsewhere.detail);
+      }),
+    );
+    return { release, reads };
+  }
+
+  /** X first, then Alpine Shell Jacket — the reproductions' fixture. */
+  function xFirstThenAlpine() {
+    const [jacket] = READY_CONTENT.products;
+    currentContent = {
+      ...READY_CONTENT,
+      products: [{ ...jacket, handle: "x-first", title: "X first", variants: [] }, jacket],
+    };
+  }
+
+  function address(router: ReturnType<typeof renderAt>["router"]) {
+    return router.state.location.pathname;
+  }
+
+  async function rename(user: ReturnType<typeof userEvent.setup>, handle: string) {
+    const field = await screen.findByLabelText("Handle");
+    await user.clear(field);
+    await user.type(field, handle);
+  }
+
+  async function settledOn(
+    router: ReturnType<typeof renderAt>["router"],
+    handle: string,
+    title: string,
+  ) {
+    await waitFor(() => expect(address(router)).toBe(`${products}/${handle}`));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(address(router)).toBe(`${products}/${handle}`);
+    expect(screen.queryByRole("heading", { name: "Product not found" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: title })).toBeVisible();
+    expect(screen.getByLabelText("Handle")).toHaveValue(handle);
+  }
+
+  function rail() {
+    return within(screen.getByLabelText("Shop workspace"));
+  }
+
+  /** The reproductions' step 1: X first deleted on the catalog, on one press. */
+  async function deleteXFirstOnTheCatalog(user: ReturnType<typeof userEvent.setup>) {
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const table = await screen.findByRole("table");
+    await user.click(within(table).getByRole("button", { name: "Delete X first" }));
+    expect(within(table).queryByRole("link", { name: "X first" })).toBeNull();
+  }
+
+  describe("Delete names the orders it would leave naming a gone variant", () => {
+    it("names order NS-10482 and its variant before the second press, and the first can be walked back", async () => {
+      // The slice's evidence.
+      serveOrders();
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      const confirm = screen.getByRole("group", { name: "Delete “Alpine Shell Jacket”?" });
+      expect(confirm).toHaveFocus();
+      await waitFor(() =>
+        expect(confirm).toHaveAccessibleDescription(
+          /Order NS-10482 names one of its variants, NS-ASJ-OB-M\. That order keeps its line as frozen, and once the draft is saved is reported as unable to seed a sandbox, because the line names a SKU the catalog no longer has\./,
+        ),
+      );
+      expect(confirm).toHaveAccessibleDescription(/^It leaves the catalog with its 2 variants/);
+      expect(confirm).not.toHaveTextContent("NS-10483");
+
+      await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
+      expect(address(router)).toBe(`${products}/alpine-shell-jacket`);
+      // Walking back wrote nothing, so there is nothing to save.
+      expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+      expect(screen.getByText("All changes saved")).toBeVisible();
+    });
+
+    it("walks the confirm back on Escape too", async () => {
+      serveOrders();
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await user.keyboard("{Escape}");
+
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
+    });
+
+    it("withholds Delete it, and says why, until the orders are read", async () => {
+      const lab = serveOrders({ hold: true });
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      const deleteIt = screen.getByRole("button", { name: "Delete it" });
+      expect(deleteIt).toBeDisabled();
+      expect(deleteIt).toHaveAccessibleDescription(CHECKING);
+      expect(screen.getByRole("group", { name: /Delete “/ })).toHaveTextContent(CHECKING);
+
+      lab.release();
+
+      await waitFor(() => expect(deleteIt).toBeEnabled());
+      expect(screen.getByRole("group", { name: /Delete “/ })).toHaveTextContent(
+        "Order NS-10482 names one of its variants",
+      );
+    });
+
+    it("reads the orders once, at the first press, and not while the page renders", async () => {
+      const lab = serveOrders();
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      await user.type(screen.getByLabelText("Description"), " Taped.");
+      expect(lab.reads).toEqual([]);
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Delete it" })).toBeEnabled());
+      // Typing while the confirm stands re-renders it; it does not read again.
+      await user.type(screen.getByLabelText("Description"), " Seams.");
+
+      expect([...lab.reads].sort()).toEqual([ORDER_ELSEWHERE, ORDER_NAMING].sort());
+    });
+
+    it("lets the delete through when the orders cannot be read, and says so", async () => {
+      serveOrders({ naming: 503 });
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      const confirm = screen.getByRole("group", { name: /Delete “/ });
+      await waitFor(() =>
+        expect(confirm).toHaveTextContent(
+          "Whether an order names one of its variants could not be read",
+        ),
+      );
+      const deleteIt = within(confirm).getByRole("button", { name: "Delete it" });
+      expect(deleteIt).toBeEnabled();
+      await user.click(deleteIt);
+      await waitFor(() => expect(address(router)).toBe(products));
+    });
+
+    it("asks for no further order once one read has failed", async () => {
+      // Eight orders: the first read fails at once, the five beside it are held in the air.
+      const eight = Array.from({ length: 8 }, (_, index) =>
+        order(`00000000-0000-4000-8000-00000000000${index}`, `NS-2000${index}`, ["NS-OTHER"]),
+      );
+      let release = () => {};
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const reads: string[] = [];
+      server.use(
+        http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+          HttpResponse.json({ orders: eight.map((entry) => entry.summary) }),
+        ),
+        http.get(`*/api/v1/shops/${SHOP_ID}/orders/:orderId`, async ({ params }) => {
+          reads.push(String(params.orderId));
+          const found = eight.find((entry) => entry.summary.order_id === params.orderId);
+          if (found === eight[0]) {
+            return HttpResponse.json(
+              { code: "unavailable", message: "Order service down", request_id: "r" },
+              { status: 500 },
+            );
+          }
+          await released;
+          return HttpResponse.json(found?.detail);
+        }),
+      );
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await waitFor(() =>
+        expect(screen.getByRole("group", { name: /Delete “/ })).toHaveTextContent(
+          "could not be read",
+        ),
+      );
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The six reads already in flight when the first failed, and none after them.
+      expect(reads).toHaveLength(6);
+    });
+
+    it("skips an order the lab no longer has", async () => {
+      serveOrders({ naming: 404 });
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      const confirm = screen.getByRole("group", { name: /Delete “/ });
+      await waitFor(() =>
+        expect(confirm).toHaveTextContent("No order in this shop names one of its variants."),
+      );
+      expect(within(confirm).getByRole("button", { name: "Delete it" })).toBeEnabled();
+    });
+
+    it("says the product is the shop's last, and what names it is refused", async () => {
+      serveOrders();
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(screen.getByRole("group", { name: /Delete “/ })).toHaveAccessibleDescription(
+        /with its 2 variants, and agents can no longer find it once the draft is published\. It is the shop's last product, and a shop that sells nothing is refused at publication\. A ticket opened from it is refused at publication once the draft is saved, because it names a product the catalog no longer has\. A scenario with a block bound to it is refused at publication once the draft is saved, because it names a product the catalog no longer has\. Nothing is written until you save the draft, and a published shop version keeps it\./,
+      );
+    });
+
+    it("does not call a product the shop's last while another is left", async () => {
+      serveOrders();
+      xFirstThenAlpine();
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      const confirm = screen.getByRole("group", { name: /Delete “/ });
+      expect(confirm).not.toHaveAccessibleDescription(/shop's last product/);
+      expect(confirm).toHaveAccessibleDescription(/A ticket opened from it is refused/);
+    });
+  });
+
+  describe("Delete it", () => {
+    it("takes the product out of the draft and lands on the catalog, saying so with focus there", async () => {
+      serveOrders();
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      const deleteIt = screen.getByRole("button", { name: "Delete it" });
+      await waitFor(() => expect(deleteIt).toBeEnabled());
+      await user.click(deleteIt);
+
+      // No unsaved-work prompt: the catalog saves the same draft (ADR 0051).
+      await waitFor(() => expect(address(router)).toBe(products));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+      expect(screen.getByText(/This shop sells nothing yet/)).toBeVisible();
+      const said = screen.getByText("Deleted “Alpine Shell Jacket” from the draft.");
+      await waitFor(() => expect(said).toHaveFocus());
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      expect(lastSaved().products).toEqual([]);
+    });
+
+    it("takes an open row of the product with it, without asking about the row", async () => {
+      window.localStorage.setItem(CONFIRM_KEY, "false");
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      const options = within(screen.getByRole("region", { name: "Options" }));
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      await waitFor(() => expect(address(router)).toBe(products));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      await waitFor(() =>
+        expect(screen.getByText("Deleted “Alpine Shell Jacket” from the draft.")).toHaveFocus(),
+      );
+    });
+
+    it("does not say it again on a Back and a Forward", async () => {
+      serveOrders();
+      const user = userEvent.setup();
+      const { router } = renderAt(`/shops/${SHOP_ID}`);
+      await screen.findByRole("heading", { level: 1, name: "Overview" });
+      await act(() => router.navigate(`${products}/alpine-shell-jacket`));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      const deleteIt = screen.getByRole("button", { name: "Delete it" });
+      await waitFor(() => expect(deleteIt).toBeEnabled());
+      await user.click(deleteIt);
+      await screen.findByText("Deleted “Alpine Shell Jacket” from the draft.");
+
+      await act(() => router.navigate(-1));
+      await screen.findByRole("heading", { level: 1, name: "Overview" });
+      await act(() => router.navigate(1));
+      expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(/Deleted “Alpine Shell Jacket”/)).toBeNull();
+    });
+
+    it("deletes on one press, and lands on the catalog, once the second press is turned off", async () => {
+      const lab = serveOrders();
+      window.localStorage.setItem(CONFIRM_KEY, "false");
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      await waitFor(() => expect(address(router)).toBe(products));
+      await waitFor(() =>
+        expect(screen.getByText("Deleted “Alpine Shell Jacket” from the draft.")).toHaveFocus(),
+      );
+      // Nothing was asked first, so nothing was read to ask it.
+      expect(lab.reads).toEqual([]);
+    });
+  });
+
+  describe("the catalog's row actions", () => {
+    it("replaces the row with the same confirm, and walks it back to the row's Delete", async () => {
+      serveOrders();
+      const user = userEvent.setup();
+      renderAt(products);
+      const table = await screen.findByRole("table");
+
+      await user.click(within(table).getByRole("button", { name: "Delete Alpine Shell Jacket" }));
+
+      const confirm = within(table).getByRole("group", { name: "Delete “Alpine Shell Jacket”?" });
+      expect(within(table).queryByRole("link", { name: "Alpine Shell Jacket" })).toBeNull();
+      expect(confirm).toHaveFocus();
+      await waitFor(() =>
+        expect(confirm).toHaveTextContent("Order NS-10482 names one of its variants, NS-ASJ-OB-M."),
+      );
+      expect(confirm).not.toHaveTextContent("NS-10483");
+
+      await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+
+      expect(within(table).getByRole("link", { name: "Alpine Shell Jacket" })).toBeVisible();
+      expect(
+        within(table).getByRole("button", { name: "Delete Alpine Shell Jacket" }),
+      ).toHaveFocus();
+      expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+    });
+
+    it("deletes on the second press and says so under the table, with focus there", async () => {
+      serveOrders();
+      xFirstThenAlpine();
+      const user = userEvent.setup();
+      renderAt(products);
+      const table = await screen.findByRole("table");
+
+      await user.click(within(table).getByRole("button", { name: "Delete Alpine Shell Jacket" }));
+      const deleteIt = within(table).getByRole("button", { name: "Delete it" });
+      await waitFor(() => expect(deleteIt).toBeEnabled());
+      await user.click(deleteIt);
+
+      expect(within(table).queryByRole("link", { name: "Alpine Shell Jacket" })).toBeNull();
+      expect(screen.getByText("Deleted “Alpine Shell Jacket” from the draft.")).toHaveFocus();
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      expect(lastSaved().products.map((product) => product.handle)).toEqual(["x-first"]);
+    });
+
+    it("keeps saying a row's delete through a discard that does not bring the product back", async () => {
+      // The delete is saved, but the answer is lost: the lab holds the draft without Alpine
+      // while the page still counts it unsaved, so Discard re-reads a draft that lacks it.
+      xFirstThenAlpine();
+      window.localStorage.setItem(CONFIRM_KEY, "false");
+      server.use(
+        http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+          const body = (await request.json()) as { payload: ShopPayloadSchema };
+          savedDrafts.push(body.payload);
+          currentContent = {
+            ...currentContent,
+            products: currentContent.products.filter((product) =>
+              body.payload.products.some((sent) => sent.handle === product.handle),
+            ),
+          };
+          return HttpResponse.error();
+        }),
+      );
+      const user = userEvent.setup();
+      renderAt(products);
+      const table = await screen.findByRole("table");
+
+      await user.click(within(table).getByRole("button", { name: "Delete Alpine Shell Jacket" }));
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      expect(await screen.findByRole("alert")).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      await waitFor(() => expect(screen.getByText("All changes saved")).toBeVisible());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(within(table).queryByRole("link", { name: "Alpine Shell Jacket" })).toBeNull();
+      expect(screen.getByText("Deleted “Alpine Shell Jacket” from the draft.")).toBeVisible();
+    });
+
+    it("duplicates from the row into the copy's editor", async () => {
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      const table = await screen.findByRole("table");
+
+      await user.click(
+        within(table).getByRole("button", { name: "Duplicate Alpine Shell Jacket" }),
+      );
+
+      await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-copy`));
+      expect(
+        await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket (copy)" }),
+      ).toBeVisible();
+    });
+
+    it("drops an armed row when a discard lands, though its product is back under its key", async () => {
+      serveOrders();
+      const user = userEvent.setup();
+      renderAt(products);
+      // Something to discard: a new product, left unnamed on the catalog.
+      await user.click(await screen.findByRole("button", { name: "New product" }));
+      await user.click(rail().getByRole("link", { name: "Products" }));
+      const table = await screen.findByRole("table");
+
+      await user.click(within(table).getByRole("button", { name: "Delete Alpine Shell Jacket" }));
+      expect(within(table).getByRole("group", { name: /Delete “/ })).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      await waitFor(() =>
+        expect(within(table).queryByRole("group", { name: /Delete “/ })).toBeNull(),
+      );
+      expect(within(table).getByRole("link", { name: "Alpine Shell Jacket" })).toBeVisible();
+      expect(within(table).queryByRole("link", { name: "Untitled product" })).toBeNull();
+    });
+  });
+
+  describe("Duplicate copies everything authored, under names nothing holds, as a draft", () => {
+    it("opens a draft copy with free handle and SKUs, and leaves the source as it was", async () => {
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+
+      await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-copy`));
+      expect(
+        await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket (copy)" }),
+      ).toBeVisible();
+      expect(screen.getByLabelText("Status")).toHaveValue("draft");
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const [source, copy] = lastSaved().products;
+      expect(source).toEqual(toPayload(READY_CONTENT).products[0]);
+      expect(copy).toMatchObject({
+        handle: "alpine-shell-jacket-copy",
+        title: "Alpine Shell Jacket (copy)",
+        status: "draft",
+        description: source.description,
+        category: source.category,
+        options: source.options,
+        media: source.media,
+        attributes: source.attributes,
+        reviews: source.reviews,
+      });
+      expect(copy.variants.map((variant) => variant.sku)).toEqual([
+        "ALPINE-SHELL-JACKET-COPY-OCEAN-BLUE-M",
+        "ALPINE-SHELL-JACKET-COPY-OCEAN-BLUE-L",
+      ]);
+      expect(copy.variants.map(({ sku: _sku, ...rest }) => rest)).toEqual(
+        source.variants.map(({ sku: _sku, ...rest }) => rest),
+      );
+    });
+
+    it("steps a second copy's handle and holds no SKU in the draft twice", async () => {
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      const table = await screen.findByRole("table");
+
+      await user.click(
+        within(table).getByRole("button", { name: "Duplicate Alpine Shell Jacket" }),
+      );
+      await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-copy`));
+      await user.click(rail().getByRole("link", { name: "Products" }));
+      await user.click(
+        within(await screen.findByRole("table")).getByRole("button", {
+          name: "Duplicate Alpine Shell Jacket",
+        }),
+      );
+      await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-copy-2`));
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const skus = lastSaved().products.flatMap((product) =>
+        product.variants.map((variant) => variant.sku),
+      );
+      expect(new Set(skus).size).toBe(skus.length);
+      expect(lastSaved().products.map((product) => product.handle)).toEqual([
+        "alpine-shell-jacket",
+        "alpine-shell-jacket-copy",
+        "alpine-shell-jacket-copy-2",
+      ]);
+    });
+
+    it("makes one copy of a double-click whose second click lands on the copy's own Duplicate", async () => {
+      // In a browser the second click of a double-click lands on whatever is under the pointer
+      // once the first has been answered — the copy's Duplicate, in the same place. jsdom sends
+      // a double-click's second click to the element the first was on, which has gone, so the
+      // second click is sent where a browser sends it, with the click count it carries.
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Duplicate" }), { detail: 1 });
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket (copy)" });
+      fireEvent.click(screen.getByRole("button", { name: "Duplicate" }), { detail: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(address(router)).toBe(`${products}/alpine-shell-jacket-copy`);
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      expect(lastSaved().products.map((product) => product.handle)).toEqual([
+        "alpine-shell-jacket",
+        "alpine-shell-jacket-copy",
+      ]);
+    });
+
+    it("makes one copy of a row's double-click, whose second click lands on the copy's editor", async () => {
+      const user = userEvent.setup();
+      renderAt(products);
+      const table = await screen.findByRole("table");
+
+      fireEvent.click(
+        within(table).getByRole("button", { name: "Duplicate Alpine Shell Jacket" }),
+        {
+          detail: 1,
+        },
+      );
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket (copy)" });
+      fireEvent.click(screen.getByRole("button", { name: "Duplicate" }), { detail: 2 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      expect(lastSaved().products).toHaveLength(2);
+    });
+
+    it("makes no second copy on a press after the unsaved-work prompt kept the operator on the source", async () => {
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      // An open row is work no other page can save, so leaving for the copy asks (ADR 0051).
+      const options = within(screen.getByRole("region", { name: "Options" }));
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      await user.click(await screen.findByRole("button", { name: "Stay on this page" }));
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      // The press goes to the copy it already made, and asks again on the way.
+      await user.click(await screen.findByRole("button", { name: "Stay on this page" }));
+
+      expect(address(router)).toBe(`${products}/alpine-shell-jacket`);
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      expect(lastSaved().products.map((product) => product.handle)).toEqual([
+        "alpine-shell-jacket",
+        "alpine-shell-jacket-copy",
+      ]);
+    });
+
+    it("carries no armed confirm onto the copy, nor back to the product it was on", async () => {
+      serveOrders();
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      // An option's confirm, then Duplicate: the copy opens with nothing asked about.
+      const options = () => within(screen.getByRole("region", { name: "Options" }));
+      await user.click(options().getByRole("button", { name: "Remove Size" }));
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      expect(
+        await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket (copy)" }),
+      ).toBeVisible();
+      expect(screen.queryByRole("group", { name: /Remove the option/ })).toBeNull();
+      expect(options().getByRole("button", { name: "Remove Size" })).toBeVisible();
+
+      // The header's confirm, then Duplicate and back: neither is asked about.
+      await act(() => router.navigate(-1));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      expect(screen.getByRole("group", { name: /Delete “Alpine Shell Jacket”/ })).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      await screen.findByRole("heading", { level: 1, name: /\(copy\)/ });
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      await act(() => router.navigate(-1));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Delete" })).not.toHaveFocus();
+    });
+
+    it("lands no late order read on the copy the operator went on to", async () => {
+      const lab = serveOrders({ hold: true });
+      const user = userEvent.setup();
+      renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      // Alpine's read is in the air when the operator goes on to its copy and asks there.
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket (copy)" });
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      const confirm = screen.getByRole("group", { name: "Delete “Alpine Shell Jacket (copy)”?" });
+      lab.release();
+
+      await waitFor(() =>
+        expect(confirm).toHaveTextContent("No order in this shop names one of its variants."),
+      );
+      expect(confirm).not.toHaveTextContent("NS-10482");
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
+
+  describe("the reproductions", () => {
+    it("R3: a rename onto a deleted product's handle, then Discard, stays on the renamed product", async () => {
+      xFirstThenAlpine();
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      await deleteXFirstOnTheCatalog(user);
+      await user.click(screen.getByRole("link", { name: "Alpine Shell Jacket" }));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await rename(user, "x-first");
+      await waitFor(() => expect(address(router)).toBe(`${products}/x-first`));
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      await settledOn(router, "alpine-shell-jacket", "Alpine Shell Jacket");
+    });
+
+    it("R4: a Delete armed before the Discard is dropped by it", async () => {
+      serveOrders();
+      xFirstThenAlpine();
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      await deleteXFirstOnTheCatalog(user);
+      await user.click(screen.getByRole("link", { name: "Alpine Shell Jacket" }));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      await rename(user, "x-first");
+      await waitFor(() => expect(address(router)).toBe(`${products}/x-first`));
+
+      window.localStorage.setItem(CONFIRM_KEY, "true");
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      expect(screen.getByRole("group", { name: "Delete “Alpine Shell Jacket”?" })).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      await settledOn(router, "alpine-shell-jacket", "Alpine Shell Jacket");
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Delete" })).toBeVisible();
+    });
+
+    it("S7: a new product titled onto a deleted one's handle, Delete armed, Discard: nothing is deleted", async () => {
+      serveOrders();
+      xFirstThenAlpine();
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      await deleteXFirstOnTheCatalog(user);
+      await user.click(screen.getByRole("button", { name: "New product" }));
+      await user.type(await screen.findByLabelText("Title"), "X first");
+      await waitFor(() => expect(address(router)).toBe(`${products}/x-first`));
+
+      window.localStorage.setItem(CONFIRM_KEY, "true");
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      expect(screen.getByRole("group", { name: "Delete “X first”?" })).toHaveAccessibleDescription(
+        /^It leaves the catalog, and agents/,
+      );
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      // The new product was never saved: its page leaves for the catalog, and its confirm goes
+      // with it. X first is back, and there is no Delete it to press.
+      await waitFor(() => expect(address(router)).toBe(products));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Delete it" })).toBeNull();
+      expect(screen.queryByText(/Deleted “/)).toBeNull();
+      const table = screen.getByRole("table");
+      expect(within(table).getByRole("link", { name: "X first" })).toBeVisible();
+      expect(within(table).getByRole("link", { name: "Alpine Shell Jacket" })).toBeVisible();
+      expect(screen.getByText("All changes saved")).toBeVisible();
+    });
+
+    it("S1: Alpine renamed onto a deleted product's handle and reopened, Delete armed, Discard: back on Alpine, nothing armed", async () => {
+      serveOrders();
+      xFirstThenAlpine();
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      await deleteXFirstOnTheCatalog(user);
+      await user.click(screen.getByRole("link", { name: "Alpine Shell Jacket" }));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      await rename(user, "x-first");
+      await waitFor(() => expect(address(router)).toBe(`${products}/x-first`));
+      await user.click(rail().getByRole("link", { name: "Products" }));
+      await user.click(
+        within(await screen.findByRole("table")).getByRole("link", { name: "Alpine Shell Jacket" }),
+      );
+      // Reopening derives nothing (S8): the page stays on the handle it was given.
+      await settledOn(router, "x-first", "Alpine Shell Jacket");
+
+      window.localStorage.setItem(CONFIRM_KEY, "true");
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      expect(screen.getByRole("group", { name: "Delete “Alpine Shell Jacket”?" })).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      await settledOn(router, "alpine-shell-jacket", "Alpine Shell Jacket");
+      expect(screen.queryByRole("group", { name: /Delete “/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Delete it" })).toBeNull();
+    });
+
+    it("R9: the catalog's Deleted notice clears once a Discard puts the product back", async () => {
+      window.localStorage.setItem(CONFIRM_KEY, "false");
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      await user.type(screen.getByLabelText("Title"), " Pro");
+      await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-pro`));
+
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+      await screen.findByRole("heading", { level: 1, name: "Products" });
+      expect(
+        await screen.findByText("Deleted “Alpine Shell Jacket Pro” from the draft."),
+      ).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      expect(await screen.findByRole("link", { name: "Alpine Shell Jacket" })).toBeVisible();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(screen.queryByText(/Deleted “Alpine Shell Jacket/)).toBeNull();
+    });
+
+    it("R9, searched away: the notice clears for a product back in the draft that the view does not show", async () => {
+      window.localStorage.setItem(CONFIRM_KEY, "false");
+      const user = userEvent.setup();
+      renderAt(products);
+      const table = await screen.findByRole("table");
+      await user.click(within(table).getByRole("button", { name: "Delete Alpine Shell Jacket" }));
+      expect(screen.getByText("Deleted “Alpine Shell Jacket” from the draft.")).toBeVisible();
+
+      await user.type(screen.getByRole("searchbox", { name: "Search products" }), "parka");
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      expect(await screen.findByText("No product matches this view.")).toBeVisible();
+      await waitFor(() => expect(screen.queryByText(/Deleted “Alpine Shell Jacket”/)).toBeNull());
+    });
+
+    it("S4: Duplicate, then Discard, goes to the catalog rather than to a product not found", async () => {
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-copy`));
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      await waitFor(() => expect(address(router)).toBe(products));
+      expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+      expect(screen.queryByRole("heading", { name: "Product not found" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Alpine Shell Jacket (copy)" })).toBeNull();
+    });
+
+    it("S9: jk renamed onto a deleted product's handle, reopened, renamed again, Discard: back on jk", async () => {
+      const [jacket] = READY_CONTENT.products;
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          { ...jacket, handle: "x-first", title: "X first", variants: [] },
+          { ...jacket, handle: "jk", title: "jk", variants: [] },
+        ],
+      };
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      await deleteXFirstOnTheCatalog(user);
+      await user.click(screen.getByRole("link", { name: "jk" }));
+      await screen.findByRole("heading", { level: 1, name: "jk" });
+      await rename(user, "x-first");
+      await waitFor(() => expect(address(router)).toBe(`${products}/x-first`));
+      await user.click(rail().getByRole("link", { name: "Products" }));
+      await user.click(within(await screen.findByRole("table")).getByRole("link", { name: "jk" }));
+      await settledOn(router, "x-first", "jk");
+
+      await rename(user, "jk-two");
+      await waitFor(() => expect(address(router)).toBe(`${products}/jk-two`));
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      await settledOn(router, "jk", "jk");
+    });
+  });
+});

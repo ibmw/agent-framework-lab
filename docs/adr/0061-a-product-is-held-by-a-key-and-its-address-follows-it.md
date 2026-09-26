@@ -229,7 +229,8 @@ where a sequence needs them.
 ## Deliberately not here
 
 - **Delete and Duplicate themselves** — the header buttons, the catalog row actions, the order
-  lookup, handle and SKU stepping for a copy, and their notices. That is *Slice 21 (remainder)*, and it inherits:
+  lookup, handle and SKU stepping for a copy, and their notices. That is *Slice 21 (remainder)*,
+  since built (ADR 0062), and it inherits:
   `ShopDraft` and its keyed lookups, minting a key when appending, the keyring, the location-state
   stamp, the "key gone → catalog" rule, the guard's same-product exemption, and removal scoped by
   key. A notice carried to a page on its history entry (`useArrivedRemoval`) is taken off that

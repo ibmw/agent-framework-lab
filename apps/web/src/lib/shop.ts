@@ -6,7 +6,7 @@ import type {
   ShopPayloadSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { clampSlug, SLUG_MAX_LENGTH, slugify } from "./entryIds";
+import { clampSlug, SLUG_MAX_LENGTH, slugify, uniqueId, uniqueVariantSku } from "./entryIds";
 import type { DraftProduct, ShopDraft } from "./productKeys";
 
 /**
@@ -85,6 +85,77 @@ export function replaceProduct(content: ShopDraft, key: string, next: DraftProdu
     ...content,
     products: content.products.map((product) => (product.key === key ? next : product)),
   };
+}
+
+/**
+ * The draft without the product it holds under `key` (ADR 0062). A draft edit like every other
+ * on the catalog: nothing is written until the shop draft is saved, and a published version
+ * keeps the product. By key, never by handle: the handle is data, and a handle captured
+ * earlier may by now name another product (ADR 0061).
+ */
+export function removeProduct(content: ShopDraft, key: string): ShopDraft {
+  return { ...content, products: content.products.filter((product) => product.key !== key) };
+}
+
+/** What a copy's handle adds to its source's (ADR 0062). */
+export const COPY_SUFFIX = "-copy";
+
+/**
+ * A copy of the product the draft holds under `key`, appended to the draft (ADR 0062).
+ *
+ * Everything authored is copied — description, options, media, typed attributes, the synthetic
+ * reviews, each variant's values, price, stock and availability — under names nothing else
+ * holds. The handle is the source's cut to leave room for `-copy`, then made free among the
+ * draft's handles; every SKU is derived again from that handle and the variant's own option
+ * values, exactly as the editor suggests one, and made free among every SKU in the draft and
+ * every SKU the copy has already taken, because SKUs are unique across the whole shop — so no
+ * SKU in the draft is held twice (a SKU only a deleted product had may be taken again; ADR
+ * 0062). At the 64-character cap a stepped copy reads `<…>-co-2`: `uniqueId` cuts the whole base
+ * again for its own suffix. Both are
+ * clamped to the 64 characters `domain/content.py` allows *before* they are made unique
+ * (`uniqueId`, `uniqueVariantSku`), so two that agree only after the cut stay distinct.
+ *
+ * The copy is a **draft** whatever the source was, so an agent is never handed two identical
+ * active products before anyone has said how they differ. It carries a key freshly minted by
+ * the workspace (`mint`), never one the keyring knows as saved: it is new to the draft, and a
+ * discard that takes it back must leave its page for the catalog (ADR 0061, S4).
+ */
+export function duplicateProduct(
+  content: ShopDraft,
+  key: string,
+  mint: () => string,
+): { content: ShopDraft; copy: DraftProduct } | null {
+  const source = findProduct(content, key);
+  if (!source) {
+    return null;
+  }
+  // The source is cut to leave room for `-copy` rather than the whole being cut after it: a
+  // 64-character handle would otherwise be cut straight back to itself.
+  const handle = uniqueId(
+    `${clampSlug(source.handle, SLUG_MAX_LENGTH - COPY_SUFFIX.length)}${COPY_SUFFIX}`,
+    content.products.map((product) => product.handle),
+  );
+  const taken = content.products.flatMap((product) =>
+    product.variants.map((variant) => variant.sku),
+  );
+  const variants = source.variants.map((variant) => {
+    const { value: sku } = uniqueVariantSku(
+      handle,
+      variant.option_values.map((chosen) => chosen.value),
+      taken,
+    );
+    taken.push(sku);
+    return { ...variant, sku };
+  });
+  const copy: DraftProduct = {
+    ...source,
+    key: mint(),
+    handle,
+    title: source.title === "" ? "" : `${source.title} (copy)`,
+    status: "draft",
+    variants,
+  };
+  return { content: { ...content, products: [...content.products, copy] }, copy };
 }
 
 /**

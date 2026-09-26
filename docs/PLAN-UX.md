@@ -71,9 +71,8 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). In Group C, slices 21 (remainder) and 22–25 can start
-now; the remainder of Slice 21 settles a product's identity in the editor before anything else is
-built on it. Slices 26 and 27 close the milestone, and 28 is optional.
+connection leaves unreachable (ADR 0053). In Group C, slices 22–25 can start now. Slices 26 and
+27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -87,22 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 21 (remainder) — Deleting and duplicating a product
-
-- [ ] Delete and Duplicate on the product editor header and as a row action, Delete naming any
-  order line that references one of the product's variants, built on the product key, keyring
-  and keyed route of ADR 0061.
-
-Frames: DEPRECADED frame 2c.
-
-Branch: `feat/product-delete-duplicate`. Checks: the acceptance list is
-`docs/history/2026-09-25-product-identity-reproductions.md` — every sequence the reviews of the
-first attempt found, and what its Delete and Duplicate asserted; product delete and duplicate
-on the draft payload; Playwright `shop-publication` if it removes an entry.
-
-Slice evidence: an operator deleting a product is told that order NS-10482 names one of its
-variants before the second press, and can walk the first back.
 
 #### Slice 22 — Refused with a reason
 

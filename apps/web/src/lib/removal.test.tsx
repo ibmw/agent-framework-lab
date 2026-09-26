@@ -372,3 +372,82 @@ describe("a notice whose line is drawn after an unrelated commit", () => {
     await waitFor(() => expect(screen.getByText("Removed a.")).toHaveFocus());
   });
 });
+
+describe("the clauses a product's Delete says (ADR 0062)", () => {
+  // Every finding the domain raises when a product leaves the shop draft, by the severity it
+  // gives each: all four are errors.
+  it("names each as a refusal, or as an order unable to seed a sandbox", () => {
+    expect(findingClauses(["shop_without_product"])).toBe(
+      "It is the shop's last product, and a shop that sells nothing is refused at publication.",
+    );
+    expect(findingClauses(["origin_product_missing_from_catalog"])).toMatch(
+      /^A ticket opened from it is refused at publication once the draft is saved/,
+    );
+    expect(findingClauses(["binding_product_missing_from_catalog"])).toMatch(
+      /^A scenario with a block bound to it is refused at publication once the draft is saved/,
+    );
+    expect(REMOVAL_FINDINGS.line_sku_missing_from_catalog).toMatch(
+      /reported as unable to seed a sandbox/,
+    );
+  });
+});
+
+/**
+ * A list whose rows are keyed by an identity a discard gives back, told a row was removed, with
+ * a discard in flight or landed (`discarding`) and the rows it draws after it.
+ */
+function KeyedByIdentity({ drawn, discarding }: { drawn: string[]; discarding: boolean }) {
+  const removal = useRemoval("catalog", discarding, true);
+  return (
+    <>
+      <ul>
+        {drawn.map((key) =>
+          removal.isArmed(key) ? (
+            <li key={key}>Asking about {key}</li>
+          ) : (
+            <li key={key}>
+              <button type="button" onClick={removal.ask(key, () => {}, `Removed ${key}.`)}>
+                Remove {key}
+              </button>
+            </li>
+          ),
+        )}
+      </ul>
+      <button type="button" onClick={() => removal.announce("Removed gone.", "gone")}>
+        Say gone was removed
+      </button>
+      <RemovalNotice removal={removal} />
+    </>
+  );
+}
+
+describe("a notice keyed by an identity a discard gives back", () => {
+  it("outlives a discard that restores nothing, and clears once its entry is back", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<KeyedByIdentity drawn={["a"]} discarding={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Say gone was removed" }));
+    expect(screen.getByText("Removed gone.")).toBeVisible();
+
+    // A discard lands and the entry is still not in the list: the notice is still true.
+    rerender(<KeyedByIdentity drawn={["a"]} discarding={true} />);
+    rerender(<KeyedByIdentity drawn={["a"]} discarding={false} />);
+    expect(screen.getByText("Removed gone.")).toBeVisible();
+
+    // The entry is back under its key: the notice would now be untrue.
+    rerender(<KeyedByIdentity drawn={["a", "gone"]} discarding={false} />);
+    await waitFor(() => expect(screen.queryByText("Removed gone.")).toBeNull());
+  });
+
+  it("still drops an armed row when a discard lands", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<KeyedByIdentity drawn={["a"]} discarding={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Remove a" }));
+    expect(screen.getByText("Asking about a")).toBeVisible();
+    rerender(<KeyedByIdentity drawn={["a"]} discarding={true} />);
+    rerender(<KeyedByIdentity drawn={["a"]} discarding={false} />);
+
+    await waitFor(() => expect(screen.queryByText("Asking about a")).toBeNull());
+  });
+});

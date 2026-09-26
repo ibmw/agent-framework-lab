@@ -61,8 +61,14 @@ export interface Removal {
  * `discarding` is the draft's own flag, for a list whose subject has no identity steadier than
  * the key it is addressed by (a product, ADR 0060): once a discard lands, the draft under the
  * list has been read again, and neither an armed row nor the last notice is about it any more.
+ *
+ * `noticeByKey` keeps the notice through that discard, for a list whose rows are keyed by an
+ * identity the discard gives back — the catalog's products, by their key (ADR 0062). The armed
+ * row is still dropped, because what its confirm said was read off the draft the discard threw
+ * away; the notice clears exactly when the entry it names is on screen again, and says on
+ * while it is not, which a discard that restored nothing has left true.
  */
-export function useRemoval(scope = "", discarding = false): Removal {
+export function useRemoval(scope = "", discarding = false, noticeByKey = false): Removal {
   const [armed, setArmed] = useState<{ scope: string; key: string } | null>(null);
   // Every notice is said once and focused once, and which one is still owed focus is part of
   // the same state as the notice itself: the effect below focuses a `said` it has not focused
@@ -106,10 +112,12 @@ export function useRemoval(scope = "", discarding = false): Removal {
   useEffect(() => {
     if (wasDiscarding.current && !discarding) {
       setArmed(null);
-      setSaid(null);
+      if (!noticeByKey) {
+        setSaid(null);
+      }
     }
     wasDiscarding.current = discarding;
-  }, [discarding]);
+  }, [discarding, noticeByKey]);
 
   useEffect(() => {
     if (armedKey !== null && !asked.current.has(armedKey)) {
@@ -271,6 +279,8 @@ export const REMOVAL_FINDINGS = {
     "It is the product's last variant, and the shop is refused at publication while a product has none.",
   product_without_media:
     "It is the product's last media reference, which the publish gate warns about.",
+  shop_without_product:
+    "It is the shop's last product, and a shop that sells nothing is refused at publication.",
   shop_without_payment_method:
     "It is the shop's last enabled payment method, and a shop with none is refused at publication.",
   shop_without_fulfilment_method:
@@ -325,6 +335,14 @@ export const REMOVAL_FINDINGS = {
     "A ticket that links it, or a scenario bound to it, is refused at publication, because it names an order this shop no longer has.",
   customer_not_attached_to_shop:
     "Until the profile is attached again, an order of theirs in the shop they leave is reported as unable to seed a sandbox, and a ticket or a scenario bound to them is refused at publication.",
+  // domain/order_fixture.py — a fragment, said after the orders a product's Delete names
+  line_sku_missing_from_catalog:
+    "keeps its line as frozen, and once the draft is saved is reported as unable to seed a sandbox, because the line names a SKU the catalog no longer has",
+  // domain/ticket.py and domain/scenario.py read the shop draft's product handles
+  origin_product_missing_from_catalog:
+    "A ticket opened from it is refused at publication once the draft is saved, because it names a product the catalog no longer has.",
+  binding_product_missing_from_catalog:
+    "A scenario with a block bound to it is refused at publication once the draft is saved, because it names a product the catalog no longer has.",
   // domain/ticket.py
   ticket_without_trigger:
     "It is the message every arm receives at experiment start, and a ticket without one is refused at publication. An earlier message does not take its place.",
