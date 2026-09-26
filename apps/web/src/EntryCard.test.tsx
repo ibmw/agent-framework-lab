@@ -2,8 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useId, useState } from "react";
 import { describe, expect, it } from "vitest";
+import { RefusalLine } from "./components/PrimaryAction";
 import { EntryCard, EntryEditNotice, EntryId } from "./components/WorkspaceChrome";
 import { useEntryEdit } from "./lib/entryEdit";
+import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 
 interface Note {
   id: string;
@@ -23,6 +25,8 @@ const NOTES: Note[] = [
 function noteEntry(id: string, fields: { title: string; body: string }): Note {
   return { id, title: fields.title, body: fields.body };
 }
+
+const TITLE_REFUSAL = "A note needs a title.";
 
 function Harness({
   initial = NOTES,
@@ -69,8 +73,15 @@ function Harness({
                 editor.close();
               },
               onCancel: () => editor.close(),
+              saveRefusal:
+                editor.isOpen(note.id) && editor.open?.fields.title === ""
+                  ? { id: "title-refusal", reason: TITLE_REFUSAL }
+                  : undefined,
               fields: editor.open ? (
                 <>
+                  {editor.open.fields.title === "" ? (
+                    <RefusalLine id="title-refusal">{TITLE_REFUSAL}</RefusalLine>
+                  ) : null}
                   <label>
                     Title
                     <input
@@ -110,6 +121,31 @@ function Harness({
 }
 
 describe("EntryCard edit mode", () => {
+  it("refuses Save with its reason, reachable, and saves nothing by a press or by Enter", async () => {
+    const user = userEvent.setup();
+    const writes: Note[][] = [];
+    render(<Harness onWrite={(notes) => writes.push(notes)} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    await user.clear(screen.getByLabelText("Title"));
+
+    const save = screen.getByRole("button", { name: "Save Returns" });
+    expectRefused(save, TITLE_REFUSAL);
+    await user.click(save);
+    save.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    // Enter in a field of the row's form is implicit submission, which clicks this Save.
+    await user.type(screen.getByLabelText("Body"), "{Enter}");
+    // And a submission without the press is refused by the row's own form handler.
+    await submitWithoutPressing(save);
+    expect(writes).toEqual([]);
+    expect(screen.getByLabelText("Title")).toHaveValue("");
+
+    await user.type(screen.getByLabelText("Title"), "Returns");
+    expectNotRefused(save);
+  });
+
   it("opens the row's fields in place, with the identifier still on the header", async () => {
     const user = userEvent.setup();
     render(<Harness />);

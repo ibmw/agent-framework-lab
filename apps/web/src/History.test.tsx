@@ -16,6 +16,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { HISTORY_TOTAL_PAGE_SIZE } from "./shell/listings";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { expectNotRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -878,7 +879,7 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
     const replay = within(row).getByRole("button", { name: "Replay recorded versions" });
     const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
     expect(replay).toBeEnabled();
-    expect(fork).toBeEnabled();
+    expectNotRefused(fork);
     expect(replay).not.toHaveAttribute("title");
     expect(fork).not.toHaveAttribute("title");
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
@@ -932,7 +933,7 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
     const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
     await waitFor(() => expect(replay).toBeDisabled());
     await versionRead(2);
-    expect(fork).toBeEnabled();
+    expectNotRefused(fork);
     expect(fork).not.toHaveAttribute("title");
     expect(replay).toHaveAccessibleDescription(NOTE);
     expect(within(row).getAllByText(NOTE)).toHaveLength(1);

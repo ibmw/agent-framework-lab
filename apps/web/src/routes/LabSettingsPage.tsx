@@ -24,6 +24,7 @@ import {
 } from "../api/modelConnections";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Card, EntryCard, EntryId, EntryKind, PageHeader } from "../components/WorkspaceChrome";
 import { describeArchitecture, describeProvider, readableTerm } from "../lib/agents";
 import {
@@ -52,7 +53,6 @@ import {
   writeTimestampFormat,
 } from "../lib/preferences";
 import {
-  accentButtonClasses,
   cardTitleClasses,
   fieldControlClasses,
   focusRingClasses,
@@ -687,17 +687,16 @@ function ConnectionCard({
             <ButtonIcon verb="discard" />
             Discard
           </button>
-          <button
+          <PrimaryAction
             type="button"
-            className={accentButtonClasses}
-            disabled={blockedBy !== null || saving}
-            title={blockedBy ?? undefined}
-            aria-describedby={blockedBy === null ? undefined : reasonId}
+            variant="accent"
+            refusal={blockedBy === null ? null : { id: reasonId, reason: blockedBy }}
+            busy={saving}
             onClick={save}
           >
             <ButtonIcon verb="save" />
             {saving ? "Saving…" : "Save connection"}
-          </button>
+          </PrimaryAction>
         </div>
       ) : null}
 
@@ -825,16 +824,15 @@ function ConnectionCard({
             <div className="flex flex-wrap items-center gap-2.5">
               {/* No glyph: the prototype's bolt is one of the two marks outside this
                   workspace's verb vocabulary (`lib/ui.ts`, `buttonIcon`). */}
-              <button
+              <PrimaryAction
                 type="button"
-                className={outlineButtonClasses}
-                disabled={blockedBy !== null || testing || saving}
-                title={blockedBy ?? undefined}
-                aria-describedby={blockedBy === null ? undefined : reasonId}
+                variant="outline"
+                refusal={blockedBy === null ? null : { id: reasonId, reason: blockedBy }}
+                busy={testing || saving}
                 onClick={test}
               >
                 {testing ? "Reaching the endpoint…" : "Test connection"}
-              </button>
+              </PrimaryAction>
               {/* Mounted whether or not it has anything to say, so an answer is announced
                   rather than appearing as a new element. */}
               <p role="status" className="text-[13px]">
@@ -858,15 +856,9 @@ function ConnectionCard({
         </FieldRows>
       </Card>
 
-      {/* One muted line the controls' `aria-describedby` names, as *A blocked primary action
-          says why* asks of a control outside a create page until Slice 22 — written from the
-          start, because a disabled button takes no focus and its `title` reaches no keyboard
-          or touch reader. */}
-      {blockedBy === null ? null : (
-        <p id={reasonId} className="text-xs text-admin-muted">
-          {blockedBy}
-        </p>
-      )}
+      {/* The one line both refused controls name (ADR 0063): a keyboard reader who lands on
+          either is told it, and it is on screen for everyone else. */}
+      {blockedBy === null ? null : <RefusalLine id={reasonId}>{blockedBy}</RefusalLine>}
       {refusal === null ? null : (
         <p role="alert" className="text-[13px] leading-relaxed text-lab-error">
           {refusal}

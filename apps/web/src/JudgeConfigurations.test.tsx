@@ -16,6 +16,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -505,7 +506,10 @@ describe("judge workspace", () => {
 
     const gate = await screen.findByRole("region", { name: "Publish gate" });
     expect(within(gate).getByText(/the rubric names pydantic-ai/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /Publish v1/ })).toBeDisabled();
+    expectRefused(
+      screen.getByRole("button", { name: /Publish v1/ }),
+      /Resolve 1 error\(s\) to publish/,
+    );
   });
 
   it("publishes the judge every later verdict will name", async () => {
@@ -551,7 +555,7 @@ describe("the provider the lab can reach", () => {
         within(screen.getByRole("region", { name: "Publish gate" })).queryByText(NOTE),
       ).toBeNull();
       expect(screen.queryByText(/to publish\./)).toBeNull();
-      expect(screen.getByRole("button", { name: "Publish v1" })).toBeEnabled();
+      expectNotRefused(screen.getByRole("button", { name: "Publish v1" }));
     });
   }
 
@@ -683,16 +687,16 @@ describe("the new-judge page", () => {
 
     // The slice's own evidence: the reason names what is actually missing, and it is read
     // beside the control rather than only hovered.
-    expect(create).toBeDisabled();
     const reason =
       "The judge has no rubric yet, and the rubric is the whole of what a judge is: nothing can be scored until it is written.";
+    expectRefused(create, reason);
     expect(create).toHaveAccessibleDescription(reason);
     expect(create).toHaveAttribute("title", reason);
     expect(screen.getByText(reason)).toBeVisible();
 
     await user.type(screen.getByLabelText("Criteria"), "Score whether the incident was resolved.");
 
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
     expect(screen.queryByText(reason)).toBeNull();
   });
 

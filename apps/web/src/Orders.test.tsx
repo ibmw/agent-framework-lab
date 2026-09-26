@@ -15,6 +15,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ORDER_METHOD_RULE } from "./lib/fieldRules";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -641,14 +642,14 @@ describe("the new-order page", () => {
     await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483"));
 
     const create = screen.getByRole("button", { name: "Create order" });
-    expect(create).toBeDisabled();
+    expectRefused(create, /at least one line/i);
     expect(create).toHaveAttribute("title", expect.stringMatching(/at least one line/i));
     expect(create).toHaveAccessibleDescription(/at least one line/i);
     // The reason is on screen as well as in `title`, which is never the only carrier.
     expect(screen.getByText(/An order needs at least one line/)).toBeVisible();
 
     await user.selectOptions(screen.getByLabelText("Variant"), "NS-ASJ-OB-M");
-    expect(screen.getByRole("button", { name: "Create order" })).toBeEnabled();
+    expectNotRefused(screen.getByRole("button", { name: "Create order" }));
   });
 
   it("asks for the customer before it will take one", async () => {
@@ -656,7 +657,7 @@ describe("the new-order page", () => {
 
     await screen.findByRole("option", { name: "Maya Laurent" });
     const create = screen.getByRole("button", { name: "Create order" });
-    expect(create).toBeDisabled();
+    expectRefused(create, /needs the customer it belongs to/i);
     expect(create).toHaveAccessibleDescription(/needs the customer it belongs to/i);
   });
 
@@ -852,7 +853,10 @@ describe("the new-order page", () => {
       /ns-10482 is already used by an order in this shop/i,
     );
     // And the page will not go: a taken reference is one of the reasons Create states.
-    expect(screen.getByRole("button", { name: "Create order" })).toBeDisabled();
+    expectRefused(
+      screen.getByRole("button", { name: "Create order" }),
+      /ns-10482 is already used by an order in this shop/i,
+    );
     expect(screen.getByRole("button", { name: "Create order" })).toHaveAccessibleDescription(
       /ns-10482 is already used by an order in this shop/i,
     );
@@ -1503,7 +1507,7 @@ describe("the new-order page", () => {
     expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/orders/new`);
 
     // And the retry the refusal invites is a run of its own, so the page is not left inert.
-    expect(screen.getByRole("button", { name: "Create order" })).toBeEnabled();
+    expectNotRefused(screen.getByRole("button", { name: "Create order" }));
 
     // Settle the navigation this case left pending rather than leaving it to the teardown.
     await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
@@ -1677,7 +1681,7 @@ describe("the new-order page", () => {
     // called what the lab called it, so the field keeps it and the retry is still pressable.
     expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483");
     expect(screen.getByRole("heading", { level: 1, name: "NS-10483" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create order" })).toBeEnabled();
+    expectNotRefused(screen.getByRole("button", { name: "Create order" }));
   });
 
   it("hands the order's own reference back when the field is emptied after a refusal", async () => {

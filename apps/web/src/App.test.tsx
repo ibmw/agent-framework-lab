@@ -18,12 +18,14 @@ import {
   SHOP_NAME_RULE,
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_NAME_RULE,
+  VARIANT_SKU_RENAME_RULE,
 } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { CREATE_ROUTES, tourAt } from "./lib/tours";
 import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1284,7 +1286,7 @@ describe("shop workspace", () => {
     await userEvent.click(screen.getByRole("link", { name: "Overview" }));
 
     const publish = await screen.findByRole("button", { name: "Review 1 change & publish" });
-    expect(publish).toBeDisabled();
+    expectRefused(publish, /Save the draft first — publishing freezes the saved draft/);
     // Scoped to the card, which is the one place the publish gate's refusal is rendered.
     expect(
       within(screen.getByRole("region", { name: "Versions of this shop" })).getByText(
@@ -1295,7 +1297,7 @@ describe("shop workspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Review 1 change & publish" })).toBeEnabled(),
+      expectNotRefused(screen.getByRole("button", { name: "Review 1 change & publish" })),
     );
   });
 
@@ -1310,7 +1312,10 @@ describe("shop workspace", () => {
     });
     renderAt(`/shops/${SHOP_ID}`);
 
-    expect(await screen.findByRole("button", { name: "Publish v2" })).toBeDisabled();
+    expectRefused(
+      await screen.findByRole("button", { name: "Publish v2" }),
+      /there is nothing new to freeze/,
+    );
     expect(screen.getByText(/there is nothing\s+new to freeze/)).toBeVisible();
   });
 
@@ -1481,7 +1486,12 @@ describe("shop workspace", () => {
     const options = within(await screen.findByRole("region", { name: "Options" }));
     await user.type(options.getByLabelText("Option name"), "Fit");
     // An option with no value is refused, as it was when the values were one comma-separated
-    // field: the domain requires at least one and the form never builds a draft without it.
+    // field: the domain requires at least one and the form never builds a draft without it —
+    // and it says so beside the button now, rather than going quiet (ADR 0063).
+    expectRefused(
+      options.getByRole("button", { name: "Add option" }),
+      "An option needs at least one value before a variant can choose it.",
+    );
     await user.click(options.getByRole("button", { name: "Add option" }));
     expect(options.queryByRole("button", { name: "Remove Fit" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Alpine Shell Jacket" })).toBeVisible();
@@ -2284,7 +2294,11 @@ describe("editing a saved entry in place", () => {
 
     expect(sku).toBeInvalid();
     expect(variants.getByText("NS-ASJ-OB-L is already in the draft.")).toBeVisible();
-    expect(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" })).toBeDisabled();
+    const save = variants.getByRole("button", { name: "Save NS-ASJ-OB-M" });
+    expectRefused(save, "NS-ASJ-OB-L is already in the draft.");
+    // Reachable, and a press that does nothing: the row stays open on what was typed.
+    await user.click(save);
+    expect(variants.getByLabelText("SKU for NS-ASJ-OB-M")).toHaveValue("NS-ASJ-OB-L");
     // And the rename says what it will cost before it is pressed.
     expect(sku).toHaveAccessibleDescription(/reads as a removal and an addition/);
   });
@@ -2307,7 +2321,10 @@ describe("editing a saved entry in place", () => {
     // constraint validation — which is the whole reason the shape is checked in the gate.
     expect(sku).toHaveAttribute("aria-invalid", "true");
     expect(sku).toBeInvalid();
-    expect(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" })).toBeDisabled();
+    expectRefused(
+      variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }),
+      VARIANT_SKU_RENAME_RULE,
+    );
     expect(savedDrafts).toEqual([]);
   });
 
@@ -2340,7 +2357,14 @@ describe("editing a saved entry in place", () => {
     expect(reference).toHaveAccessibleDescription(
       /media\/alpine-charcoal\.jpg is already a media reference of this product/,
     );
-    expect(open.getByRole("button", { name: "Save media/alpine-shell.jpg" })).toBeDisabled();
+    // Save is refused by that same line, not by a second copy of it.
+    expectRefused(
+      open.getByRole("button", { name: "Save media/alpine-shell.jpg" }),
+      /media\/alpine-charcoal\.jpg is already a media reference of this product/,
+    );
+    expect(
+      open.getAllByText(/media\/alpine-charcoal\.jpg is already a media reference/),
+    ).toHaveLength(1);
     await user.click(open.getByRole("button", { name: "Cancel editing media/alpine-shell.jpg" }));
 
     // The add form refuses the same duplicate in the same words — it refused nothing at all
@@ -2351,6 +2375,42 @@ describe("editing a saved entry in place", () => {
 
     expect(card.getByLabelText("Reference")).toBeInvalid();
     expect(card.getAllByRole("listitem")).toHaveLength(2);
+    expect(savedDrafts).toEqual([]);
+  });
+
+  it("refuses a media row with no reference, and an option row with no value, saying why", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    await user.click(options.getByRole("button", { name: "Edit Size" }));
+    const openOption = within(options.getByRole("form", { name: "Edit Size" }));
+    const values = openOption
+      .getAllByRole("button", { name: /^Remove / })
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
+    for (const name of values) {
+      await user.click(openOption.getByRole("button", { name }));
+      const confirm = openOption.queryByRole("button", { name: "Remove it" });
+      if (confirm) {
+        await user.click(confirm);
+      }
+    }
+    expectRefused(
+      options.getByRole("button", { name: "Save Size" }),
+      "An option needs at least one value before a variant can choose it.",
+    );
+    await user.click(options.getByRole("button", { name: "Cancel editing Size" }));
+
+    const media = within(screen.getByRole("region", { name: "Media references" }));
+    const [edit] = media.getAllByRole("button", { name: /^Edit / });
+    const entry = (edit.getAttribute("aria-label") ?? "").replace(/^Edit /, "");
+    await user.click(edit);
+    const open = within(media.getByRole("form", { name: `Edit ${entry}` }));
+    await user.clear(open.getByLabelText("Reference"));
+    const save = open.getByRole("button", { name: `Save ${entry}` });
+    expectRefused(save, "A media entry needs a reference.");
+    await user.click(save);
+    expect(open.getByLabelText("Reference")).toHaveValue("");
     expect(savedDrafts).toEqual([]);
   });
 
@@ -2413,27 +2473,29 @@ describe("a tone-of-voice guideline's own rules", () => {
     const tone = within(await guidelines());
 
     const blocked = tone.getByRole("button", { name: "Add tone of voice" });
-    expect(blocked).toBeDisabled();
+    expectRefused(blocked, TONE_NAME_RULE);
     expect(blocked).toHaveAttribute("title", TONE_NAME_RULE);
     expect(blocked).toHaveAccessibleDescription(TONE_NAME_RULE);
 
     // A whole form with no name is the case `required` on the Name input already refused.
     await user.type(tone.getByLabelText("ID"), "brief");
     await user.type(tone.getByLabelText("Guidance"), BRIEF.guidance);
-    expect(tone.getByRole("button", { name: "Add tone of voice" })).toBeDisabled();
+    expectRefused(tone.getByRole("button", { name: "Add tone of voice" }), TONE_NAME_RULE);
 
     // This is the door the rule actually closes. `required` is satisfied by a space, so a
     // name of nothing but spaces used to reach the draft and come back a 422 from
     // `require_label`; the button refuses it here, in the same words.
     await user.type(tone.getByLabelText("Name"), " ");
     const padded = tone.getByRole("button", { name: "Add tone of voice" });
-    expect(padded).toBeDisabled();
-    expect(padded).toHaveAccessibleDescription(TONE_NAME_RULE);
+    expectRefused(padded, TONE_NAME_RULE);
+    // Pressed anyway, it adds nothing: the draft is as it was.
+    await user.click(padded);
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
     await user.clear(tone.getByLabelText("Name"));
     await user.type(tone.getByLabelText("Name"), "Brief");
     const allowed = tone.getByRole("button", { name: "Add tone of voice" });
-    expect(allowed).toBeEnabled();
+    expectNotRefused(allowed);
     expect(allowed).not.toHaveAccessibleDescription(TONE_NAME_RULE);
 
     await user.click(allowed);
@@ -2451,7 +2513,7 @@ describe("a tone-of-voice guideline's own rules", () => {
     await user.clear(open.getByLabelText("Name"));
 
     const save = tone.getByRole("button", { name: "Save Brief" });
-    expect(save).toBeDisabled();
+    expectRefused(save, TONE_NAME_RULE);
     expect(save).toHaveAttribute("title", TONE_NAME_RULE);
     expect(save).toHaveAccessibleDescription(TONE_NAME_RULE);
 
@@ -2469,7 +2531,7 @@ describe("a tone-of-voice guideline's own rules", () => {
     ).toBeEnabled();
 
     await user.type(open.getByLabelText("Name"), "Brief and plain");
-    expect(tone.getByRole("button", { name: "Save Brief" })).toBeEnabled();
+    expectNotRefused(tone.getByRole("button", { name: "Save Brief" }));
     expect(tone.getByRole("radio", { name: "Make Brief the shop default" })).toBeEnabled();
     expect(open.queryByText(TONE_NAME_RULE)).toBeNull();
   });
@@ -2801,7 +2863,10 @@ describe("unsaved work is protected", () => {
       "Warm and precise is open for editing, and nothing typed in it has reached the draft.",
     ]);
     // One of the two cannot be saved from here, so neither is saved from here.
-    expect(within(prompt).getByRole("button", { name: "Save and leave" })).toBeDisabled();
+    expectRefused(
+      within(prompt).getByRole("button", { name: "Save and leave" }),
+      /Stay, then press the row's own Save or Cancel/,
+    );
 
     await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
@@ -2830,11 +2895,41 @@ describe("unsaved work is protected", () => {
     );
     // The prompt cannot save it, and says where it can be saved rather than offering to.
     const save = within(prompt).getByRole("button", { name: "Save and leave" });
-    expect(save).toBeDisabled();
+    expectRefused(save, /Stay, then press the row's own Save or Cancel/);
     expect(save).toHaveAccessibleDescription(/Stay, then press the row's own Save or Cancel/);
 
     await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Lab settings" })).toBeVisible();
+  });
+
+  it("does nothing when the refused Save and leave is pressed: the page stays, and so does the row", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+
+    const tone = within(await screen.findByRole("region", { name: "Guidelines" }));
+    await user.click(tone.getByRole("button", { name: "Edit Warm and precise" }));
+    const open = within(tone.getByRole("form", { name: "Edit Warm and precise" }));
+    await user.clear(open.getByLabelText("Guidance"));
+    await user.type(open.getByLabelText("Guidance"), "Lead with the fact.");
+    await user.click(screen.getByRole("link", { name: "Settings" }));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    const save = within(prompt).getByRole("button", { name: "Save and leave" });
+    await user.click(save);
+    save.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    // Nothing left: the navigation is still the one the prompt is asking about.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByRole("dialog", { name: "Unsaved changes" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 1, name: "Lab settings" })).toBeNull();
+
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+    expect(
+      within(tone.getByRole("form", { name: "Edit Warm and precise" })).getByLabelText("Guidance"),
+    ).toHaveValue("Lead with the fact.");
   });
 
   /**

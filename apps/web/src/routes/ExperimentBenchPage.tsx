@@ -10,7 +10,7 @@ import type {
   ParticipantTurnSchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -22,6 +22,7 @@ import {
 } from "../api/experiments";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   COMPARISON_DIMENSION,
@@ -40,7 +41,6 @@ import {
   writesOf,
 } from "../lib/evidence";
 import {
-  accentButtonClasses,
   fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
@@ -83,6 +83,7 @@ export function ExperimentBenchPage() {
   const [targets, setTargets] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
+  const sendReasonId = useId();
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -324,13 +325,21 @@ export function ExperimentBenchPage() {
                   </label>
                 ))}
               </fieldset>
-              <button
-                className={accentButtonClasses}
+              <PrimaryAction
+                variant="accent"
                 type="submit"
-                disabled={working !== null || !experiment.runs.some(driveable)}
+                refusal={
+                  experiment.runs.some(driveable)
+                    ? null
+                    : { id: sendReasonId, reason: EVERY_ARM_COMPLETED }
+                }
+                busy={working !== null}
               >
                 {working !== null ? "Running…" : "Send as the customer"}
-              </button>
+              </PrimaryAction>
+              {experiment.runs.some(driveable) ? null : (
+                <RefusalLine id={sendReasonId}>{EVERY_ARM_COMPLETED}</RefusalLine>
+              )}
             </form>
           </Card>
         </div>
@@ -663,6 +672,9 @@ function RunCost({ metrics }: { metrics: ArmMetricsSchema }) {
  * An arm at its scenario's turn cap is refused by the backend, so a composer that offered it
  * would invite a request that can only fail (ADR 0029, ADR 0030).
  */
+/** Why the composer sends nothing: a completed arm takes no further customer turn. */
+const EVERY_ARM_COMPLETED = "Every arm has completed, so there is no arm left to send a turn to.";
+
 function driveable(run: ExperimentRunSchema): boolean {
   return run.standing.awaiting !== "completed";
 }

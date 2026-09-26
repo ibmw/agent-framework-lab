@@ -9,7 +9,7 @@ import type {
   ScenarioResolutionSchema,
   ScenarioResourcesSchema,
 } from "@agent-lab/contracts";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -27,10 +27,11 @@ import {
   Fingerprint,
   IssueList,
   PageHeader,
+  PublishButton,
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
@@ -66,7 +67,6 @@ import {
   withCurrentChoice,
 } from "../lib/scenarios";
 import {
-  accentButtonClasses,
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
@@ -122,6 +122,7 @@ export function ScenarioEditorPage() {
     }),
     [shopId],
   );
+  const publishReasonsId = useId();
   const editor = useDefinitionEditor(scenarioId, client, {
     label: "The scenario draft has unsaved changes.",
     // The Scenarios index prints the row this editor is changing, and it renders the shell's
@@ -221,10 +222,12 @@ export function ScenarioEditorPage() {
               onSave={() => void editor.save()}
               onDiscard={() => void editor.discard()}
             />
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => {
+            <PublishButton
+              preview={preview}
+              dirty={editor.dirty}
+              publishing={editor.publishing}
+              reasonsId={publishReasonsId}
+              onPublish={() => {
                 // A frozen version is printed by the index this editor was opened from, and
                 // that index renders the shell's listing (ADR 0056).
                 void editor.publish().then((version) => {
@@ -234,11 +237,7 @@ export function ScenarioEditorPage() {
                   }
                 });
               }}
-              disabled={editor.publishing || !canPublish(preview, editor.dirty)}
-            >
-              <ButtonIcon verb="publish" />
-              {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
-            </button>
+            />
           </>
         }
       />
@@ -263,9 +262,12 @@ export function ScenarioEditorPage() {
           </button>
         </div>
       ) : null}
-      <div className="mb-4 grid gap-1">
-        <PublishReasons preview={preview} dirty={editor.dirty} />
-      </div>
+      <PublishReasons
+        id={publishReasonsId}
+        className="mb-4 grid gap-1"
+        preview={preview}
+        dirty={editor.dirty}
+      />
       {publishedVersion !== null ? (
         <p role="status" className="mb-4 text-[13px] text-lab-success">
           Published version {publishedVersion}. It keeps the ticket and template versions it pinned,

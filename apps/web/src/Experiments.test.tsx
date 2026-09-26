@@ -36,6 +36,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1258,9 +1259,8 @@ describe("experiment setup and the provider the lab can reach", () => {
       await chooseArm(user, 0, "cfg-atlas");
 
       const start = screen.getByRole("button", { name: "Start experiment" });
-      await waitFor(() => expect(start).toBeDisabled());
-      // The blocked-control rule until Slice 22: the reason in `title`, and in one muted line
-      // the button's description names.
+      await waitFor(() => expectRefused(start, NOTE));
+      // Refused with its reason (ADR 0063): in `title`, and in the line its description names.
       expect(start).toHaveAttribute("title", NOTE);
       expect(start).toHaveAccessibleDescription(NOTE);
       expect(screen.getByText(NOTE)).toBeVisible();
@@ -1271,9 +1271,34 @@ describe("experiment setup and the provider the lab can reach", () => {
 
       await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
       await user.click(start);
+      // Nor by the keyboard: Enter on it, Space on it, and Enter in a field of its form.
+      start.focus();
+      await user.keyboard("{Enter}");
+      await user.keyboard(" ");
+      await user.type(screen.getByLabelText("Experiment name"), "{Enter}");
       expect(started).toHaveLength(0);
     });
   }
+
+  it("refuses a Start submitted without a press, by the form's own handler", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await chooseArm(user, 0, "cfg-atlas");
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectRefused(start, NOTE));
+
+    // `requestSubmit` fires the submit without the click `PrimaryAction` swallows.
+    const form = (start as HTMLButtonElement).form as HTMLFormElement;
+    await act(async () => {
+      form.requestSubmit(start as HTMLButtonElement);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(started).toHaveLength(0);
+  });
 
   it("writes one sentence for two arms that name the same unreachable provider", async () => {
     const user = userEvent.setup();
@@ -1286,7 +1311,7 @@ describe("experiment setup and the provider the lab can reach", () => {
     await chooseArm(user, 1, "cfg-atlas");
 
     const start = screen.getByRole("button", { name: "Start experiment" });
-    await waitFor(() => expect(start).toBeDisabled());
+    await waitFor(() => expectRefused(start, NOTE));
     expect(start).toHaveAccessibleDescription(NOTE);
   });
 
@@ -1298,7 +1323,7 @@ describe("experiment setup and the provider the lab can reach", () => {
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
     await chooseArm(user, 0, "cfg-beacon");
     await reachabilityRead();
-    expect(screen.getByRole("button", { name: "Start experiment" })).toBeEnabled();
+    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
     await user.type(screen.getByLabelText("Experiment name"), "Control only");
     await user.click(screen.getByRole("button", { name: "Start experiment" }));
 
@@ -1316,11 +1341,11 @@ describe("experiment setup and the provider the lab can reach", () => {
     await user.click(screen.getByRole("button", { name: "Add a second arm" }));
     await chooseArm(user, 1, "cfg-atlas");
     const start = screen.getByRole("button", { name: "Start experiment" });
-    await waitFor(() => expect(start).toBeDisabled());
+    await waitFor(() => expectRefused(start, NOTE));
 
     await chooseArm(user, 1, "cfg-beacon");
 
-    await waitFor(() => expect(start).toBeEnabled());
+    await waitFor(() => expectNotRefused(start));
     expect(start).not.toHaveAttribute("title");
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
@@ -1353,7 +1378,7 @@ describe("experiment setup and the provider the lab can reach", () => {
       await reachabilityRead();
 
       const start = screen.getByRole("button", { name: "Start experiment" });
-      expect(start).toBeEnabled();
+      expectNotRefused(start);
       expect(start).not.toHaveAttribute("title");
       expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
     });
@@ -1374,7 +1399,7 @@ describe("experiment setup and the provider the lab can reach", () => {
     await chooseArm(user, 0, "cfg-atlas");
     await reachabilityRead();
 
-    expect(screen.getByRole("button", { name: "Start experiment" })).toBeEnabled();
+    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 
@@ -1394,7 +1419,7 @@ describe("experiment setup and the provider the lab can reach", () => {
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
     await chooseArm(user, 0, "cfg-atlas");
     const start = screen.getByRole("button", { name: "Start experiment" });
-    await waitFor(() => expect(start).toBeDisabled());
+    await waitFor(() => expectRefused(start, NOTE));
 
     const reads = versionReads;
     const arm = screen.getByRole("group", { name: "Arm A" });
@@ -1405,7 +1430,7 @@ describe("experiment setup and the provider the lab can reach", () => {
     });
 
     // What the lab knows about version 2 is nothing, so it says nothing about it.
-    expect(start).toBeEnabled();
+    expectNotRefused(start);
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 
@@ -1418,7 +1443,7 @@ describe("experiment setup and the provider the lab can reach", () => {
       await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
       await chooseArm(user, 0, "cfg-atlas");
       await reachabilityRead();
-      expect(screen.getByRole("button", { name: "Start experiment" })).toBeEnabled();
+      expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
       expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
       await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
       await user.click(screen.getByRole("button", { name: "Start experiment" }));
@@ -1749,6 +1774,42 @@ describe("live bench", () => {
     // Nothing offers a move the backend would refuse: no advance, and no message.
     expect(within(armA).queryByRole("button", { name: /Arm A's agent/ })).toBeNull();
     expect(within(composer).getByRole("checkbox", { name: /Arm A/ })).toBeDisabled();
+  });
+
+  it("refuses to send once every arm has completed, and says why where the press is", async () => {
+    const user = userEvent.setup();
+    maxTurns = 1;
+    turns = [
+      ...OPENED,
+      turn(ARM_A, 1, "reply-1", "Any update?"),
+      turn(ARM_B, 1, "reply-1", "Any update?"),
+    ];
+    agentTurns = [agentTurn(ARM_A, 1), agentTurn(ARM_B, 1)];
+    renderBench();
+
+    const composer = await screen.findByRole("region", { name: "Customer composer" });
+    await within(composer).findByRole("checkbox", { name: /Arm B/ });
+    const send = within(composer).getByRole("button", { name: "Send as the customer" });
+    const reason = "Every arm has completed, so there is no arm left to send a turn to.";
+    expectRefused(send, reason);
+    expect(within(composer).getByText(reason)).toBeVisible();
+
+    await user.type(within(composer).getByLabelText("Message"), "Hello?");
+    await user.click(send);
+    send.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    // Without the press, the composer's own handler refuses: no arm is left to deliver to.
+    await submitWithoutPressing(send);
+    expect(delivered).toEqual([]);
+  });
+
+  it("offers the send while an arm still waits for the customer", async () => {
+    renderBench();
+
+    const composer = await screen.findByRole("region", { name: "Customer composer" });
+    expectNotRefused(within(composer).getByRole("button", { name: "Send as the customer" }));
+    expect(within(composer).queryByText(/Every arm has completed/)).toBeNull();
   });
 
   it("reads both arms back to the one starting state they were cloned from", async () => {
@@ -2227,6 +2288,42 @@ describe("notes and tags", () => {
     expect(within(strip).queryByRole("listitem")).toBeNull();
   });
 
+  it("refuses an empty tag and an empty note with a reason, and sends neither", async () => {
+    const user = userEvent.setup();
+    let notesPosted = 0;
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/notes`, () => {
+        notesPosted += 1;
+        return HttpResponse.json(annotations, { status: 201 });
+      }),
+    );
+    renderResults();
+    const strip = within(await screen.findByRole("region", { name: "Notes & tags" }));
+
+    const addTag = strip.getByRole("button", { name: "Add tag" });
+    expectRefused(addTag, "Type the tag to file this run under.");
+    await user.click(addTag);
+    await user.type(strip.getByLabelText("Add a tag"), "   {Enter}");
+    expectRefused(addTag, "Type the tag to file this run under.");
+
+    const addNote = strip.getByRole("button", { name: "Add note" });
+    expectRefused(addNote, "Write the note before adding it.");
+    await user.click(addNote);
+    addNote.focus();
+    await user.keyboard("{Enter}");
+    // Without the press, each form's own handler refuses.
+    await submitWithoutPressing(addTag);
+    await submitWithoutPressing(addNote);
+
+    expect(filed).toEqual([]);
+    expect(notesPosted).toBe(0);
+
+    await user.type(strip.getByLabelText("Add a tag"), "gap");
+    expectNotRefused(addTag);
+    await user.type(strip.getByLabelText("Add a note"), "Something.");
+    expectNotRefused(addNote);
+  });
+
   it("keeps a note as written and answers with everything on the run", async () => {
     const user = userEvent.setup();
     renderResults();
@@ -2395,7 +2492,9 @@ describe("replay", () => {
     // A derivation that changes nothing is a replay, and there is a button for that beside
     // this one — so the control says it is not ready rather than sending a request that can
     // only fail.
-    expect(within(panel).getByRole("button", { name: "Fork this run" })).toBeDisabled();
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    expectRefused(fork, "Change at least one arm: a fork that changes nothing is a replay.");
+    await user.click(fork);
     expect(forked).toEqual([]);
   });
 
@@ -2575,8 +2674,8 @@ describe("replay, fork and the provider the lab can reach", () => {
 
       const replay = await screen.findByRole("button", { name: "Replay" });
       await waitFor(() => expect(replay).toBeDisabled());
-      // The blocked-control rule until Slice 22: the reason in `title`, and in one muted
-      // line the button's description names. Two arms on one provider are one reason.
+      // A secondary control, so natively disabled (ADR 0063): the reason in `title`, and in
+      // one muted line the button's description names. Two arms on one provider are one reason.
       expect(replay).toHaveAttribute("title", NOTE);
       expect(replay).toHaveAccessibleDescription(NOTE);
       expect(screen.getAllByText(NOTE)).toHaveLength(1);
@@ -2616,7 +2715,7 @@ describe("replay, fork and the provider the lab can reach", () => {
 
       expect(replay).toBeEnabled();
       expect(replay).not.toHaveAttribute("title");
-      expect(within(panel).getByRole("button", { name: "Fork this run" })).toBeEnabled();
+      expectNotRefused(within(panel).getByRole("button", { name: "Fork this run" }));
       expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
     });
   }
@@ -2630,7 +2729,7 @@ describe("replay, fork and the provider the lab can reach", () => {
     await connectionRead();
 
     const fork = within(panel).getByRole("button", { name: "Fork this run" });
-    expect(fork).toBeEnabled();
+    expectNotRefused(fork);
     expect(fork).not.toHaveAttribute("title");
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
@@ -2648,7 +2747,7 @@ describe("replay, fork and the provider the lab can reach", () => {
       await forkArmOnto(user, panel, 1, "cfg-atlas");
       const fork = within(panel).getByRole("button", { name: "Fork this run" });
 
-      await waitFor(() => expect(fork).toBeDisabled());
+      await waitFor(() => expectRefused(fork, NOTE));
       expect(fork).toHaveAttribute("title", NOTE);
       expect(fork).toHaveAccessibleDescription(NOTE);
       expect(within(panel).getAllByText(NOTE)).toHaveLength(1);
@@ -2669,21 +2768,21 @@ describe("replay, fork and the provider the lab can reach", () => {
 
     // Arm B onto a configuration whose newest version names OpenAI: blocked.
     await forkArmOnto(user, panel, 1, "cfg-atlas");
-    await waitFor(() => expect(fork).toBeDisabled());
+    await waitFor(() => expectRefused(fork, NOTE));
     expect(fork).toHaveAccessibleDescription(NOTE);
 
     // Arm B onto the declared control's newest version instead: released.
     await forkArmOnto(user, panel, 1, "cfg-beacon");
-    await waitFor(() => expect(fork).toBeEnabled());
+    await waitFor(() => expectNotRefused(fork));
     expect(fork).not.toHaveAttribute("title");
     expect(within(panel).queryByText(/cannot be advanced here/)).toBeNull();
 
     // And blocked again when the choice moves back, from the version already read.
     await forkArmOnto(user, panel, 1, "cfg-atlas");
-    await waitFor(() => expect(fork).toBeDisabled());
+    await waitFor(() => expectRefused(fork, NOTE));
 
     await forkArmOnto(user, panel, 1, "cfg-beacon");
-    await waitFor(() => expect(fork).toBeEnabled());
+    await waitFor(() => expectNotRefused(fork));
     await user.click(fork);
     expect(forked).toEqual([
       [
@@ -2706,7 +2805,7 @@ describe("replay, fork and the provider the lab can reach", () => {
     await versionRead(1);
 
     const fork = within(panel).getByRole("button", { name: "Fork this run" });
-    expect(fork).toBeDisabled();
+    expectRefused(fork, NOTE);
     expect(fork).toHaveAttribute("title", NOTE);
     expect(fork).toHaveAccessibleDescription(NOTE);
     await user.click(fork);
@@ -2728,7 +2827,7 @@ describe("replay, fork and the provider the lab can reach", () => {
     await forkArmOnto(user, panel, 1, "cfg-atlas");
     await versionRead(1);
 
-    expect(within(panel).getByRole("button", { name: "Fork this run" })).toBeEnabled();
+    expectNotRefused(within(panel).getByRole("button", { name: "Fork this run" }));
     expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
   });
 });

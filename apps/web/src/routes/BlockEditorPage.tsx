@@ -10,7 +10,7 @@ import type {
   ObjectiveBlockPreviewResponse,
   ObjectiveEvidence,
 } from "@agent-lab/contracts";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
@@ -22,6 +22,7 @@ import {
   Fingerprint,
   IssueList,
   PageHeader,
+  PublishButton,
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
@@ -42,11 +43,10 @@ import {
   shopBoundCount,
   updateParameter,
 } from "../lib/blocks";
-import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
-  accentButtonClasses,
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
@@ -106,6 +106,7 @@ function BlockEditor<
   typeAxis: (content: PayloadT, edit: (next: PayloadT) => void) => ReactNode;
   publishedNote: string;
 }) {
+  const publishReasonsId = useId();
   const editor = useDefinitionEditor(blockId, client, {
     label: `The ${noun} draft has unsaved changes.`,
     // Declared on the editor rather than on the button, because the navigation prompt saves
@@ -158,10 +159,12 @@ function BlockEditor<
               onSave={() => void editor.save()}
               onDiscard={() => void editor.discard()}
             />
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => {
+            <PublishButton
+              preview={preview}
+              dirty={editor.dirty}
+              publishing={editor.publishing}
+              reasonsId={publishReasonsId}
+              onPublish={() => {
                 // A frozen version is printed by the library index this editor was opened
                 // from, and that index renders the shell's listing (ADR 0056).
                 void editor.publish().then((version) => {
@@ -171,11 +174,7 @@ function BlockEditor<
                   }
                 });
               }}
-              disabled={editor.publishing || !canPublish(preview, editor.dirty)}
-            >
-              <ButtonIcon verb="publish" />
-              {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
-            </button>
+            />
           </>
         }
       />
@@ -185,9 +184,12 @@ function BlockEditor<
           {editor.error}
         </p>
       ) : null}
-      <div className="mb-4 grid gap-1">
-        <PublishReasons preview={preview} dirty={editor.dirty} />
-      </div>
+      <PublishReasons
+        id={publishReasonsId}
+        className="mb-4 grid gap-1"
+        preview={preview}
+        dirty={editor.dirty}
+      />
       {publishedVersion !== null ? (
         <p role="status" className="mb-4 text-[13px] text-lab-success">
           Published version {publishedVersion}. {publishedNote}
@@ -273,7 +275,7 @@ function BlockEditor<
             <ParameterForm
               taken={content.parameters.map((parameter) => parameter.name)}
               onAdd={(name, kind) => edit(addParameter(content, name, kind))}
-              disabled={content.parameters.length >= MAX_PARAMETERS}
+              full={content.parameters.length >= MAX_PARAMETERS}
             />
           </Card>
         </div>

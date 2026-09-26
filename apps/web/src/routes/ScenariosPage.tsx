@@ -315,7 +315,7 @@ function ComposeFromLibrary({
       </fieldset>
       {/* The cap is the contract's (`MAX_SCENARIO_OBJECTIVES`, `MAX_SCENARIO_MUTATIONS`), and
           the chip that would exceed it is off rather than refused by the write that follows.
-          Drawing the running "N of 12" beside every picker is PLAN-UX Slice 22's. */}
+          The picker says the cap once it is reached; no running "N of" its cap is drawn. */}
       {full ? <p className="text-xs text-admin-muted">{atCapacity}</p> : null}
       {chosen.length > 0 ? (
         <ol aria-label={composedLabel} className="grid gap-1.5 text-[13px]">

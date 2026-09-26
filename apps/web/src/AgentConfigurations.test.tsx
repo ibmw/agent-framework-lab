@@ -16,6 +16,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -973,7 +974,7 @@ describe("the provider the lab can reach", () => {
         within(screen.getByRole("region", { name: "Publish gate" })).queryByText(NOTE),
       ).toBeNull();
       expect(screen.queryByText(/to publish\./)).toBeNull();
-      expect(screen.getByRole("button", { name: "Publish v1" })).toBeEnabled();
+      expectNotRefused(screen.getByRole("button", { name: "Publish v1" }));
     });
   }
 
@@ -990,6 +991,10 @@ describe("the provider the lab can reach", () => {
     expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
     expect(gate.queryByText(NOTE)).toBeNull();
     expect(screen.getAllByText(NOTE)).toHaveLength(1);
+    // Publish is refused by the gate's count, not by the machine's note, and says so.
+    const publish = screen.getByRole("button", { name: "Publish v1" });
+    expectRefused(publish, "Resolve 1 error(s) to publish.");
+    expect(publish).not.toHaveAccessibleDescription(new RegExp(NOTE));
   });
 
   for (const source of ["saved", "environment"] as const) {
@@ -1096,7 +1101,9 @@ describe("the new-configuration page", () => {
     renderAt("/lab/agent-configurations/new");
 
     const create = await screen.findByRole("button", { name: "Create configuration" });
-    await waitFor(() => expect(create).toBeDisabled());
+    await waitFor(() =>
+      expectRefused(create, "The configuration needs a name before it can be created."),
+    );
     // The reason is beside the control and in its accessible description, not only in
     // `title` — `docs/design-direction.md`, *The form language*.
     expect(create).toHaveAccessibleDescription(
@@ -1110,7 +1117,7 @@ describe("the new-configuration page", () => {
     await user.type(screen.getByLabelText("Name"), "Frontline B");
 
     expect(screen.getByRole("heading", { level: 1, name: "Frontline B" })).toBeVisible();
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
   });
 
   it("puts each field's hint in that control's accessible description", async () => {

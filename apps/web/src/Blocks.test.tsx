@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -640,7 +641,7 @@ describe("objective block editor", () => {
     await screen.findByRole("heading", { name: "read-required-document" });
     await user.type(screen.getByLabelText("Statement"), " now");
 
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+    expectRefused(screen.getByRole("button", { name: "Publish v1" }), /Save the draft first/);
     expect(publishAttempts).toBe(0);
   });
 });
@@ -653,7 +654,10 @@ describe("mutation block editor", () => {
       await screen.findByRole("heading", { name: "concurrent-entity-mutation" }),
     ).toBeVisible();
     expect(screen.getByText(/must declare a timing parameter/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+    expectRefused(
+      screen.getByRole("button", { name: "Publish v1" }),
+      /Resolve 2 error\(s\) to publish/,
+    );
   });
 
   it("adds the timing parameter the gate asks for", async () => {
@@ -711,7 +715,9 @@ describe("the two create pages", () => {
     renderAt("/lab/objective-blocks/new");
 
     const create = await screen.findByRole("button", { name: "Create block" });
-    await waitFor(() => expect(create).toBeDisabled());
+    await waitFor(() =>
+      expectRefused(create, "The template needs a name before it can be created."),
+    );
     expect(create).toHaveAccessibleDescription(
       "The template needs a name before it can be created.",
     );
@@ -720,7 +726,7 @@ describe("the two create pages", () => {
 
     expect(screen.getByLabelText("Name")).toHaveAccessibleDescription(/saved as identify-entity/i);
     expect(screen.getByRole("heading", { level: 1, name: "identify-entity" })).toBeVisible();
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
   });
 
   it("refuses a name this library already answers to, and says which", async () => {
@@ -775,6 +781,27 @@ describe("the two create pages", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "identify-entity" })).toBeVisible();
   });
 
+  it("refuses a ninth parameter with the cap, instead of going quiet", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks/new");
+
+    await user.type(await screen.findByLabelText("Name"), "Identify entity");
+    const addParameter = within(screen.getByRole("form", { name: "Add a parameter" }));
+    for (let index = 1; index <= 8; index += 1) {
+      await user.type(addParameter.getByLabelText("Label"), `p${index}`);
+      await user.click(addParameter.getByRole("button", { name: "Add parameter" }));
+    }
+
+    const add = addParameter.getByRole("button", { name: "Add parameter" });
+    expectRefused(add, "A template carries at most 8 parameters.");
+    // Neither the press nor Enter in the label adds a ninth.
+    await user.type(addParameter.getByLabelText("Label"), "p9{Enter}");
+    await user.click(add);
+    await submitWithoutPressing(add);
+    expect(screen.getAllByRole("button", { name: /^Remove p\d$/ })).toHaveLength(8);
+    expect(screen.queryByRole("button", { name: "Remove p9" })).toBeNull();
+  });
+
   it("takes a parameter back off before anything is created", async () => {
     const user = userEvent.setup();
     renderAt("/lab/mutation-blocks/new");
@@ -827,7 +854,7 @@ describe("the two create pages", () => {
     ).toBeVisible();
     expect(screen.getByLabelText("Name")).toBeDisabled();
     const create = screen.getByRole("button", { name: "Create block" });
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
 
     await user.click(create);
 

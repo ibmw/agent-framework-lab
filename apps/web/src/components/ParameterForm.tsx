@@ -1,10 +1,14 @@
 import type { BlockParameterKind } from "@agent-lab/contracts";
-import { type FormEvent, useState } from "react";
-import { PARAMETER_KINDS, toIdentifier, uniqueParameterName } from "../lib/blocks";
+import { type FormEvent, useId, useState } from "react";
+import { MAX_PARAMETERS, PARAMETER_KINDS, toIdentifier, uniqueParameterName } from "../lib/blocks";
 import { savedAsPreview } from "../lib/fieldPreviews";
-import { fieldControlClasses, fieldLabelClasses, inkButtonClasses } from "../lib/ui";
+import { fieldControlClasses, fieldLabelClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
 import { FieldHint } from "./FieldHint";
+import { PrimaryAction, RefusalLine } from "./PrimaryAction";
+
+/** Mirrors the contract's `MAX_BLOCK_PARAMETERS` refusal, in the workspace's words. */
+const PARAMETERS_FULL = `A template carries at most ${MAX_PARAMETERS} parameters.`;
 
 /**
  * The control that adds a typed parameter to a block template.
@@ -17,22 +21,29 @@ import { FieldHint } from "./FieldHint";
  * The label is typed and the identifier is derived — *identifiers are derived, never asked
  * first* — with the saved spelling previewed under the field, and a name another parameter
  * already answers to is suffixed rather than refused.
+ *
+ * At the contract's cap it refuses with the cap, rather than going quiet (ADR 0063).
  */
 export function ParameterForm({
   taken,
   onAdd,
-  disabled,
+  full,
 }: {
   taken: readonly string[];
   onAdd: (name: string, kind: BlockParameterKind) => void;
-  disabled: boolean;
+  /** The template already carries `MAX_PARAMETERS`. */
+  full: boolean;
 }) {
+  const reasonId = useId();
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<BlockParameterKind>("document_reference");
   const identifier = uniqueParameterName(toIdentifier(label), taken);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (full) {
+      return;
+    }
     onAdd(label, kind);
     setLabel("");
   }
@@ -71,10 +82,19 @@ export function ParameterForm({
           ))}
         </select>
       </label>
-      <button className={inkButtonClasses} type="submit" disabled={disabled}>
+      <PrimaryAction
+        variant="ink"
+        type="submit"
+        refusal={full ? { id: reasonId, reason: PARAMETERS_FULL } : null}
+      >
         <ButtonIcon verb="create" />
         Add parameter
-      </button>
+      </PrimaryAction>
+      {full ? (
+        <RefusalLine id={reasonId} className="w-full">
+          {PARAMETERS_FULL}
+        </RefusalLine>
+      ) : null}
     </form>
   );
 }

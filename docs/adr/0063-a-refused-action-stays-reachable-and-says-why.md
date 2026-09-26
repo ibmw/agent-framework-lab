@@ -1,0 +1,232 @@
+# ADR 0063 — A refused action stays reachable and says why
+
+Status: accepted — 2026-09-26
+
+Settles the question `docs/PLAN-UX.md` Slice 22 leaves open and `docs/design-direction.md` defers
+to it twice (*A blocked primary action says why*; the *Save connection* row of *Departures from
+the handoff, in force*): whether the dashed blocked weight is a natively `disabled` button or an
+`aria-disabled` one, decided once for every primary action that can be refused rather than for
+the create pages ahead of the rest — nine route files, `BlockLibraryPage` serving both block
+libraries, so ten surfaces. The weight itself was minted with those pages in PLAN-UX
+Slice 12 (`lib/ui.ts`, `blockedButtonClasses`) without an ADR; this is its first record.
+
+Records six decisions: a primary action refused for a reason is `aria-disabled`, never
+`disabled`; the button swallows its own activation, so no press, key or implicit submission gets
+through; a press already in flight is not a refusal and keeps native `disabled`; one component
+draws the weight, the reason and the guard, and the surface keeps the line; the reason line
+and the validation message are one weight; and which actions are primary here.
+
+## Context
+
+A blocked primary action has been drawn two ways on `main`. The create pages (`CreatePage`) wear
+the dashed weight, natively `disabled`, with the reason in `title` and in a 13px 600 `#9d3028`
+line the button's `aria-describedby` names. Everywhere else — Publish on seven editors and the
+overview, Start, *Save connection*, *Fork this run*, *Save and leave*, *Add tone of voice* — the
+button keeps its own weight, natively `disabled`, and the reason is a muted line, a
+`PublishReasons` block the button does not name, or nothing: *Attach to this shop*, *Add
+parameter* and the bench's *Send as the customer* are disabled with their reason nowhere.
+
+Native `disabled` costs four things, each already worked around in the code:
+
+- **The control leaves the tab order.** A keyboard reader never lands on it, so the
+  `aria-describedby` that carries the reason is announced to nobody who tabs; it is found only by
+  a screen reader's virtual cursor. The plan says so in as many words.
+- **`title` is unreliable on it.** A disabled button fires no mouse events in several engines,
+  so the tooltip that is half the rule does not show (`ExperimentHistoryPage.tsx`, the Fork
+  comment: "a browser does not reliably show a `title` on a disabled control").
+- **Focus is dropped when a focused control becomes disabled** (the HTML focus fixup rule).
+  `ScenariosPage.tsx`'s compose chips are "busy, never disabled" for exactly this reason, and
+  `ShopHomePage.tsx` keeps a ref to put focus back after each publish press.
+- **Nothing in the weight can take focus**, so `blockedButtonClasses` carries no ring and
+  `ui.test.ts` asserts it carries none — correct for a control that can never be focused, and
+  the reason a reachable one needs a decision rather than a class swap.
+
+The prototype draws the blocked weight as a `div` with a `title` (`Workspace.dc.html` :1965,
+:2933, :3987) — no element, no role, no focus — so it is silent on the question; the README says
+"a dashed disabled variant with the reason in `title` and, where it matters, spelled out inline",
+which describes the look and not the attribute.
+
+## Decision
+
+### A primary action refused for a reason is `aria-disabled`, never `disabled`
+
+Every primary action — a button at the accent or ink weight, or the one submit of a form — that
+the page refuses to run for a reason it can state renders `aria-disabled="true"` and stays in the
+tab order. On focus a screen reader announces its name, "dimmed" or "unavailable", and its
+description, which holds the reason; a pointer reader gets the `title` on hover; a sighted reader
+reads the line. A control that becomes blocked while focused keeps focus.
+
+`disabled` is refused for this state because it hides the one control the reason belongs to from
+the readers most likely to need the reason spelled out, and because every workaround above would
+have to be repeated on every adopter.
+
+### The button swallows its own activation
+
+An `aria-disabled` button is still a button: a click, Enter, Space, and a form's implicit
+submission all reach it. The primitive therefore handles `click` itself while blocked — it calls
+`preventDefault()` and does not call the caller's handler. That one listener covers all four
+routes, because Enter and Space on a focused button dispatch `click`, a submit button's
+activation is cancelled by `preventDefault()`, and implicit submission from a text field is
+specified as a synthetic `click` on the form's default button — including a submit that sits
+outside its form under `form=`, as `CreatePage`'s does.
+
+Every **submit** handler keeps a check of its own for the same refusal, because a submission can
+reach a form without the click — `form.requestSubmit(button)` does — and because a handler that
+trusts its button leaves the page one refactor from losing work: `start` refuses an unnamed
+experiment and an unreachable arm, the bench's `send` an empty message and a turn with no arm left
+to take it, `attach` an unchosen profile, a saved row's form a refused Save, `ParameterForm` a
+template at its cap, and the tag, note and thread forms an empty entry — the thread also a cleared
+time. Each is proven by a test that submits without pressing and writes nothing, and fails when
+its check is deleted.
+
+A `type="button"` action has no route to its handler but the click, so it relies on the swallow
+alone: *Save connection* and *Test connection*, Publish (`PublishButton`), the variant row's Save
+(`EntryEditButtons` outside a form, whose `onSave` is the click), *Fork this run* and *Save and
+leave*. The last two keep a handler check anyway — without it a press on *Save and leave* would
+leave and drop an open row's typing — and neither check has a test of its own: nothing but the
+swallowed click reaches them.
+The lab refuses what the page misses. The guard is what stops the press; those are what stop a submission that arrives
+some other way.
+
+### A press in flight is not a refusal
+
+*Saving…*, *Publishing…*, *Creating…*, *Starting…* and the rest keep native `disabled` and the
+button table's `disabled:opacity-55`. They have no reason to state, they end on their own, and
+Slice 24 (*ActionStatus*) owns how a running action reports itself. So does a gate that has not
+answered yet: Publish while the preview is loading is in flight, not refused, and is drawn so until
+Slice 24 writes "Checking the draft…". **Busy wins**: a refusal can arrive while a press is in
+flight — the name cleared during *Creating…*, an edit during *Publishing…* — and until the press
+ends the button stays natively disabled under its busy label, with no dashed weight and no reason;
+once it ends, the refusal takes over.
+
+### One component draws the weight, the reason and the guard; the surface keeps the line
+
+`components/PrimaryAction.tsx` exports `PrimaryAction`, a `<button>` with:
+
+- `variant: "accent" | "ink" | "outline"` — the weight it wears when it can proceed, read off
+  `buttonVariantClasses`;
+- `refusal?: { id: string; reason: string }` — the shape `entryEdit`'s `saveRefusal` already has.
+  Present, the button wears `blockedButtonClasses`, `aria-disabled="true"`, `title={reason}`, and
+  `aria-describedby` with `id` merged ahead of any the caller passes, and swallows its click;
+- `busy?: boolean` — native `disabled` for a press in flight;
+- the rest of a button's attributes (`type`, `form`, `onClick`, `aria-label`, `ref`, `children`).
+
+The line the `id` names is the surface's to place, because where the reason reads best differs:
+under the create header, under Start in its card, above the connection form, beside a row's Save.
+`RefusalLine` (same file) is that line — `<p id>` at the validation weight — for a surface that has
+one sentence; Publish names the `PublishReasons` block it already renders, which gains an `id`.
+
+`blockedButtonClasses` gains `focusRingClasses` and still no hover, and `ui.test.ts`'s "claims no
+state it can never show" becomes "shows a focus ring and no hover": the control can now be
+focused, and a hover would suggest a press that does nothing.
+
+### The reason line and the validation message are one weight
+
+`validationMessageClasses` in `lib/ui.ts` is the handoff's validation message — 13px, 600,
+`#9d3028` (`lab-error`). `RefusalLine` wears it, `CreatePage`'s reason already does, and a `Field`
+or `FieldGroup` row's second line wears it at `extraTone="error"` (it does today); the stacked
+`FieldHint` arrangement's error line moves from 12px 400 to the same weight, so a refusal reads
+the same whichever arrangement drew it. A `Field` whose second line is an error also marks its
+control `aria-invalid`. The muted reason lines on Start, *Save connection*, *Save and leave* and
+the guideline editor move to it, which retires the two departure rows that were holding them.
+
+### Which actions this is
+
+A primary action is one at the accent or ink weight, or the one submit of a form. "Compose", as
+`docs/PLAN-UX.md` Slice 22 named it, is the bench's *Send as the customer* in the Customer
+composer card. A saved row's Save (`EntryEditButtons`) is primary: it is the accent action of
+the row's own form, so `entryEdit`'s verdict is `true | { id, reason }` and never a bare
+`false`. Secondary buttons are not, and keep their weights and native `disabled` (below).
+
+The adopters are `CreatePage` (ten surfaces), `PublishButton` on the seven definition editors
+and both of the overview's publish buttons, Start, *Save connection* and *Test connection* — the
+connection form's two actions, refused by one line — *Send as the customer*, *Attach to this
+shop*, *Fork this run*, *Save and leave*, *Add tone of voice*, *Add parameter*, *Add option*, and
+every row Save: the guideline, the product option, the media entry, the variant. *Add tag* and
+*Add note* on a run's results and *Add to thread* on a ticket are the one submit of their forms,
+so they are adopters too — *Add tag* moves from the subtle weight to the outline *Add note*
+wears, since the blocked weight takes a primary's shape. *Add to thread* says its reason beside
+the button rather than on a field, because neither field can: an empty message box and a cleared
+time are both states those controls legitimately hold. A row whose
+refusal is already said on a field — a media reference another entry holds — names that field's
+line (`Field`'s `extraId`) rather than writing the sentence twice.
+
+## Deliberately not here
+
+- **Secondary controls refused for a reason** — Replay in the results header, the History row's
+  *Replay recorded versions* and *Fork with newer versions*, an entry's Edit while another row is
+  open. They keep their own weights and native `disabled` with the reason they already describe;
+  whether they follow this rule is a decision about the button table's secondary rows, not the
+  blocked weight.
+- **Native form controls** — a checkbox, a radio, a select, an option — keep `disabled`.
+  `aria-disabled` on an input would also have to suppress `change`, and none of them is an action.
+  The guideline's default radio keeps its description.
+- **An add form's submit refused only by its own field**: a derived identifier that is empty or a
+  field left blank (native `required`, which the browser says on the field) or taken
+  (`DerivedIdField`, which says so on the field, audibly, and marks it invalid). *Add fulfilment
+  method*, *Add variant*, *Add payment method*, the order's *Add line*, the identity's *Add
+  guidance* and the profile's *Add address*, *Add entry* and *Add fact* submit, and their handler
+  returns or the browser stops them; the field is the control that is wrong, and it already says
+  why. *Attach to this shop* was named by the plan and is an adopter all the same. An
+  add form refused for a reason no field states — *Add option* with no value — is an adopter.
+- **The destructive confirm** (`ConfirmRemove`'s *Remove it* while a read is in flight) is a press
+  in flight.
+- **Losing focus when a press in flight disables its button** is Slice 24's to settle with the
+  status it adds.
+- **Refusals said after the press**: *Materialize snapshot* and *Clone sandbox* refuse a cleared
+  seed or label with an alert when pressed. They say why, which is the rule this ADR enforces
+  rather than the weight; drawing them refused beforehand is a change for the slice that next
+  touches that page.
+
+## Consequences
+
+- `docs/design-direction.md`, *A blocked primary action says why*, reads "dashed,
+  `aria-disabled` and reachable, the reason in `title` and inline in its accessible description";
+  "The ten create pages wear it and nothing else does" and the interim paragraph go; the
+  *Save connection* departure row and the "Start, Replay and Fork keep their weights until Slice
+  22" clause of the Provider row are removed or narrowed to what stays.
+- Every adopter above renders through `PrimaryAction`; three that used to go quiet now say why:
+  *Attach to this shop* ("Choose the profile to attach." / "Every profile in the lab is already
+  attached to this shop."), *Add parameter* at the cap, and *Send as the customer* once every arm
+  has completed. *Fork this run* with nothing moved says so beside it rather than only in the
+  panel's introduction.
+- `@testing-library/jest-dom`'s `toBeDisabled` reads the `disabled` attribute only, so every page
+  test asserting a blocked primary is rewritten against one helper in `src/test/`:
+  `expectRefused(button, reason)` — `aria-disabled="true"`, the `title`, the reason in the
+  accessible description, and focusable. Playwright 1.62's `toBeDisabled` and its click
+  actionability both honour `aria-disabled` (`getAriaDisabled`), so the e2e assertions on Publish,
+  Review and *Fork this run* stand unchanged.
+
+## Verification
+
+- `ui.test.ts`: the blocked weight keeps the accent's shape, is dashed and quiet, has a focus ring
+  and no hover, and is not a row of the button table; `validationMessageClasses` is 13px, 600 and
+  `lab-error`.
+- `test/refused.ts`: `expectRefused` reads the reason off the elements `aria-describedby` names,
+  each of which must exist, and not off the computed description, which falls back to `title`
+  when the ids resolve to nothing; and the refusal's own line — the first id — must hold the
+  reason and be drawn (no `hidden`, `display: none` or `visibility: hidden` on it or an
+  ancestor). Renaming `RefusalLine`'s id fails 49 tests, `PublishReasons`' 14, and a
+  `RefusalLine` rendered `hidden` 49. `submitWithoutPressing` calls `form.requestSubmit(button)`
+  for the submit handlers' checks; *Attach to this shop*'s select is natively `required`, which
+  stops `requestSubmit` first, so its handler is reached with a `submit` event on the form.
+- `PrimaryAction.test.tsx`: refused, it is in the tab order, named, described by the reason and
+  titled with it; a click, Enter and Space call no handler, and submit no form it is nested in or
+  names with `form=` — including implicit submission, which jsdom does not perform, so the test
+  finds the form's default button as the HTML standard does, asserts it is the refused one, and
+  clicks it; it keeps focus when it becomes refused; busy, it is natively disabled and says
+  nothing, and busy wins over a refusal until the press ends. Removing the click guard fails the three activation tests.
+- `FieldHint.test.tsx`: an error line is 13px 600 `lab-error` in both arrangements and marks the
+  control `aria-invalid`; a preview does neither.
+- `WorkspaceChrome.test.tsx`: `PublishButton` refuses unsaved edits, the gate's errors and an
+  unchanged draft, each with its sentence, and is a press in flight while publishing and while
+  the gate has not answered.
+- One `expectRefused` (`src/test/refused.ts`) per adopter in its page's suite — `aria-disabled`,
+  no `disabled`, the reason in `title` and in the description, focusable and focused — and, on
+  most, a press, Enter or Space that writes nothing.
+- `pnpm test:e2e`, whose `toBeDisabled` on Publish, Review, Create and *Fork this run* reads
+  `aria-disabled` unchanged.
+
+## Migration
+
+None. No contract, payload, route or stored value changes; accessible names are unchanged.

@@ -16,19 +16,13 @@ import {
   EditorSaveActions,
   IssueList,
   PageHeader,
+  PublishButton,
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { canPublish } from "../lib/definitionEditor";
 import { shopIssueEntries } from "../lib/issueRoutes";
 import { type ActivityEntry, recentActivity } from "../lib/recentActivity";
-import {
-  formatTimestamp,
-  inkButtonClasses,
-  labNoteClasses,
-  outlineButtonClasses,
-  surfaceClasses,
-} from "../lib/ui";
+import { formatTimestamp, labNoteClasses, outlineButtonClasses, surfaceClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 /**
@@ -256,6 +250,7 @@ export function ShopHomePage() {
   // The review's list is named by the sentence above it, so what becomes the next version is
   // one named thing rather than a second unnamed list beside the timeline's.
   const becomingId = useId();
+  const publishReasonsId = useId();
   const [experiments, setExperiments] = useState<ExperimentSummarySchema[]>([]);
   const [experimentsError, setExperimentsError] = useState<string | null>(null);
 
@@ -319,7 +314,6 @@ export function ShopHomePage() {
 
   const changes: DefinitionChangeSchema[] = preview?.changes ?? [];
   const nextVersion = preview?.next_version;
-  const publishable = canPublish(preview, dirty);
   /**
    * The published notice stands only while it is still true.
    *
@@ -444,18 +438,20 @@ export function ShopHomePage() {
                     ))}
                   </ul>
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <button
+                    <PublishButton
                       ref={(node) => {
                         footerControl.current = node;
                       }}
-                      className={inkButtonClasses}
-                      type="button"
-                      onClick={() => void onPublish()}
-                      disabled={publishing || !publishable}
+                      variant="ink"
+                      preview={preview}
+                      dirty={dirty}
+                      publishing={publishing}
+                      reasonsId={publishReasonsId}
+                      onPublish={() => void onPublish()}
                     >
                       <ButtonIcon verb="publish" />
                       {publishing ? "Publishing…" : `Publish v${nextVersion}`}
-                    </button>
+                    </PublishButton>
                     <button
                       className={outlineButtonClasses}
                       type="button"
@@ -474,7 +470,7 @@ export function ShopHomePage() {
                       </p>
                     )}
                   </div>
-                  <PublishReasons preview={preview} dirty={dirty} />
+                  <PublishReasons id={publishReasonsId} preview={preview} dirty={dirty} />
                 </div>
               ) : (
                 <div className="grid gap-2">
@@ -483,25 +479,28 @@ export function ShopHomePage() {
                       Publishing freezes the draft as <strong>v{nextVersion}</strong>. Nothing
                       already published changes.
                     </p>
-                    <button
+                    <PublishButton
                       ref={(node) => {
                         footerControl.current = node;
                       }}
-                      className={`ml-auto ${inkButtonClasses}`}
-                      type="button"
-                      onClick={() => {
+                      variant="ink"
+                      className="ml-auto"
+                      preview={preview}
+                      dirty={dirty}
+                      publishing={false}
+                      reasonsId={publishReasonsId}
+                      onPublish={() => {
                         pressed.current = true;
                         setReviewing(true);
                       }}
-                      disabled={!publishable}
                     >
                       <ButtonIcon verb="publish" />
                       {changes.length === 0
                         ? `Publish v${nextVersion}`
                         : `Review ${plural(changes.length, "change")} & publish`}
-                    </button>
+                    </PublishButton>
                   </div>
-                  <PublishReasons preview={preview} dirty={dirty} />
+                  <PublishReasons id={publishReasonsId} preview={preview} dirty={dirty} />
                 </div>
               )
             }

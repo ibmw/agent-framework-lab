@@ -1,6 +1,12 @@
 import type { DefinitionIssueSchema } from "@agent-lab/contracts";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { Link } from "react-router-dom";
+import {
+  PUBLISH_UNSAVED_REASON,
+  publishErrorsReason,
+  publishRefusalReason,
+  publishUnchangedReason,
+} from "../lib/definitionEditor";
 import type { EntryEdit } from "../lib/entryEdit";
 import { groupFindings, type IssueEntry, type IssueGroup } from "../lib/issueRoutes";
 import {
@@ -9,8 +15,10 @@ import {
   outlineButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
+  validationMessageClasses,
 } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
+import { PrimaryAction } from "./PrimaryAction";
 
 /**
  * Draft and published state is never carried by colour alone: every chip pairs its colour
@@ -200,7 +208,6 @@ export function EntryEditButtons({
   onOpen,
   onSave,
   onCancel,
-  saveable = true,
   saveRefusal,
   submit = false,
 }: {
@@ -210,13 +217,10 @@ export function EntryEditButtons({
   onOpen: () => void;
   onSave: () => void;
   onCancel: () => void;
-  saveable?: boolean;
   /**
-   * Why Save is refused, and the id of the line in the row that says so. The reason rides in
-   * `title` and the line carries it visibly, which is the blocked-action rule as
-   * `docs/design-direction.md` states it. The dashed weight is `blockedButtonClasses`, whose
-   * adopters Slice 22 settles in one pass together with whether a blocked control stays in
-   * the tab order at all — which is what a disabled button's description is waiting on.
+   * Why Save is refused, and the id of the line in the row that says so. Present, Save is
+   * refused through `PrimaryAction`: the dashed weight, `aria-disabled` and reachable, the
+   * reason in `title` and in the line it names (ADR 0063).
    */
   saveRefusal?: { id: string; reason: string };
   /** True where the fields sit in a `<form>`, so Enter in a field saves the row. */
@@ -239,18 +243,16 @@ export function EntryEditButtons({
   }
   return (
     <>
-      <button
-        className={accentButtonClasses}
+      <PrimaryAction
+        variant="accent"
         type={submit ? "submit" : "button"}
         aria-label={`Save ${label}`}
-        disabled={!saveable}
-        title={saveable ? undefined : saveRefusal?.reason}
-        aria-describedby={saveable ? undefined : saveRefusal?.id}
+        refusal={saveRefusal ?? null}
         onClick={submit ? undefined : onSave}
       >
         <ButtonIcon verb="save" />
         Save
-      </button>
+      </PrimaryAction>
       <button
         className={subtleButtonClasses}
         type="button"
@@ -351,6 +353,10 @@ export function EntryCard({
           className="grid min-w-0 gap-2"
           onSubmit={(event) => {
             event.preventDefault();
+            // Save refuses the press itself; a submission that arrives another way does too.
+            if (edit.saveRefusal) {
+              return;
+            }
             edit.onSave();
           }}
         >
@@ -542,30 +548,37 @@ export interface PublishGate extends VersionProvenance {
   issues: DefinitionIssueSchema[];
 }
 
-/** Why the publish button is disabled, in the order an author can act on. */
+/**
+ * Why the publish button is refused, in the order an author can act on.
+ *
+ * `id` is what the button's `aria-describedby` names (`PublishButton`'s `reasonsId`), so every
+ * line here is read to a keyboard reader who lands on a refused Publish.
+ */
 export function PublishReasons({
+  id,
+  className = "grid gap-1",
   preview,
   dirty,
 }: {
+  id: string;
+  className?: string;
   preview: PublishGate | null;
   dirty: boolean;
 }) {
   const errors = preview?.issues.filter((issue) => issue.severity === "error") ?? [];
   const warnings = preview?.issues.filter((issue) => issue.severity === "warning") ?? [];
   return (
-    <>
-      {dirty ? (
-        <p className="text-xs text-lab-error">
-          Save the draft first — publishing freezes the saved draft, not unsaved edits.
-        </p>
-      ) : null}
+    <div id={id} className={className}>
+      {/* The three reasons Publish is refused for, at the validation weight every refusal reads
+          at (ADR 0063) — "identical to vN" among them, since it refuses the press as surely as
+          an error does. The warnings line refuses nothing and stays muted. */}
+      {dirty ? <p className={validationMessageClasses}>{PUBLISH_UNSAVED_REASON}</p> : null}
       {preview && !preview.publishable ? (
-        <p className="text-xs text-lab-error">Resolve {errors.length} error(s) to publish.</p>
+        <p className={validationMessageClasses}>{publishErrorsReason(errors.length)}</p>
       ) : null}
       {preview?.matches_latest_published ? (
-        <p className="text-xs text-admin-muted">
-          The draft is identical to v{preview.latest_published_version}; there is nothing new to
-          freeze.
+        <p className={validationMessageClasses}>
+          {publishUnchangedReason(preview.latest_published_version)}
         </p>
       ) : null}
       {warnings.length > 0 ? (
@@ -573,7 +586,58 @@ export function PublishReasons({
           {warnings.length} warning(s) do not block publication.
         </p>
       ) : null}
-    </>
+    </div>
+  );
+}
+
+/**
+ * Publish, refused with its reason while the gate or the draft says no (ADR 0063).
+ *
+ * One button for every definition editor and the overview, so the refusal, its `title`, and the
+ * `PublishReasons` block it is described by cannot drift apart between them. Publishing — and a
+ * gate that has not answered — is a press in flight.
+ */
+export function PublishButton({
+  preview,
+  dirty,
+  publishing,
+  reasonsId,
+  onPublish,
+  variant = "accent",
+  className,
+  ref,
+  children,
+}: {
+  preview: PublishGate | null;
+  dirty: boolean;
+  publishing: boolean;
+  /** The `id` given to this page's `PublishReasons`. */
+  reasonsId: string;
+  onPublish: () => void;
+  variant?: "accent" | "ink";
+  className?: string;
+  ref?: Ref<HTMLButtonElement>;
+  /** The label, where it is not `Publish vN`. */
+  children?: ReactNode;
+}) {
+  const reason = publishRefusalReason(preview, dirty);
+  return (
+    <PrimaryAction
+      ref={ref}
+      variant={variant}
+      type="button"
+      className={className}
+      refusal={reason === null ? null : { id: reasonsId, reason }}
+      busy={publishing || preview === null}
+      onClick={onPublish}
+    >
+      {children ?? (
+        <>
+          <ButtonIcon verb="publish" />
+          {publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
+        </>
+      )}
+    </PrimaryAction>
   );
 }
 

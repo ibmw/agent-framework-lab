@@ -14,6 +14,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 /**
@@ -372,7 +373,7 @@ describe("publishing in two steps", () => {
     expect(listed[1]).toHaveTextContent("Updated Alpine Shell Jacket description");
     expect(listed[2]).toHaveTextContent("Added policy Returns");
     expect(versions.getByText("Scenarios stay on v3 until you repoint them.")).toBeVisible();
-    expect(versions.getByRole("button", { name: "Publish v4" })).toBeEnabled();
+    expectNotRefused(versions.getByRole("button", { name: "Publish v4" }));
   });
 
   it("walks the review back without publishing anything", async () => {
@@ -454,7 +455,10 @@ describe("publishing in two steps", () => {
     await openOverview();
 
     const versions = within(card("Versions of this shop"));
-    expect(versions.getByRole("button", { name: "Review 3 changes & publish" })).toBeDisabled();
+    expectRefused(
+      versions.getByRole("button", { name: "Review 3 changes & publish" }),
+      "Resolve 2 error(s) to publish.",
+    );
     expect(versions.getByText("Resolve 2 error(s) to publish.")).toBeVisible();
     expect(versions.getByText("1 warning(s) do not block publication.")).toBeVisible();
   });
@@ -470,7 +474,7 @@ describe("publishing in two steps", () => {
     await openOverview();
 
     const publish = screen.getByRole("button", { name: "Publish v4" });
-    expect(publish).toBeDisabled();
+    expectRefused(publish, /there is nothing new to freeze/);
     expect(screen.getByText(/there is nothing\s+new to freeze/)).toBeVisible();
   });
 });

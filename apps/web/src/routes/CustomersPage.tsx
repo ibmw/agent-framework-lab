@@ -12,6 +12,7 @@ import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
@@ -100,6 +101,7 @@ export function CustomersPage() {
   const [attachOpen, setAttachOpen] = useState(false);
   // What the disclosure's button controls, so a reader it tells "expanded" can be taken there.
   const attachPanelId = useId();
+  const attachReasonId = useId();
   const [attachId, setAttachId] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -131,6 +133,10 @@ export function CustomersPage() {
 
   async function attach(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // The button already refuses this; a submission that arrives some other way does too.
+    if (attachId === "") {
+      return;
+    }
     setAttaching(true);
     setAttachError(null);
     try {
@@ -159,6 +165,14 @@ export function CustomersPage() {
   const attachable = everything.filter(
     (profile) => !attached.some((row) => row.profile_id === profile.profile_id),
   );
+  // Why *Attach to this shop* will not go (ADR 0063): there is nothing left to attach, or
+  // nothing has been chosen yet.
+  const attachRefusal =
+    attachable.length === 0
+      ? "Every profile in the lab is already attached to this shop."
+      : attachId === ""
+        ? "Choose the profile to attach."
+        : null;
 
   return (
     <>
@@ -214,14 +228,22 @@ export function CustomersPage() {
                   ))}
                 </select>
               </label>
-              <button
-                className={outlineButtonClasses}
+              <PrimaryAction
+                variant="outline"
                 type="submit"
-                disabled={attaching || attachable.length === 0}
+                refusal={
+                  attachRefusal === null ? null : { id: attachReasonId, reason: attachRefusal }
+                }
+                busy={attaching}
               >
                 <ButtonIcon verb="create" />
                 Attach to this shop
-              </button>
+              </PrimaryAction>
+              {attachRefusal === null ? null : (
+                <RefusalLine id={attachReasonId} className="w-full">
+                  {attachRefusal}
+                </RefusalLine>
+              )}
               {attachError ? (
                 <p role="alert" className="w-full text-[13px] text-lab-error">
                   {attachError}

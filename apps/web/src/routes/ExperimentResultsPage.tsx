@@ -8,11 +8,12 @@ import type {
   ObjectiveResultSchema,
   ParticipantTurnSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { describeApiError } from "../api/client";
 import { addExperimentNote, scoreExperiment, setExperimentTags } from "../api/experiments";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
 import {
   changeValue,
@@ -28,8 +29,6 @@ import {
 import {
   fieldControlClasses,
   formatTimestamp,
-  outlineButtonClasses,
-  subtleButtonClasses,
   tableCellClasses,
   tableHeadClasses,
   textAreaClasses,
@@ -237,6 +236,12 @@ export function ExperimentResultsPage() {
   );
 }
 
+/** Why *Add tag* is refused: there is no tag to file the run under yet. */
+const TAG_EMPTY = "Type the tag to file this run under.";
+
+/** Why *Add note* is refused: an empty note says nothing about the run. */
+const NOTE_EMPTY = "Write the note before adding it.";
+
 /**
  * Frame 9's notes-and-tags strip: what an operator concluded, beside what the run did.
  *
@@ -261,6 +266,10 @@ function NotesAndTags({
 }) {
   const [note, setNote] = useState("");
   const [tag, setTag] = useState("");
+  const tagReasonId = useId();
+  const noteReasonId = useId();
+  const tagEmpty = tag.trim() === "";
+  const noteEmpty = note.trim() === "";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -285,6 +294,11 @@ function NotesAndTags({
 
   const submitNote = (event: FormEvent) => {
     event.preventDefault();
+    // The button refuses an empty note itself (ADR 0063); a submission that arrives some
+    // other way is refused here too, rather than sent for the lab to refuse.
+    if (noteEmpty) {
+      return;
+    }
     void write(
       () => addExperimentNote(shopId, experimentId, { body: note.trim() }),
       "This note could not be saved.",
@@ -304,6 +318,9 @@ function NotesAndTags({
 
   const submitTag = (event: FormEvent) => {
     event.preventDefault();
+    if (tagEmpty) {
+      return;
+    }
     // The whole set every time, because that is what the contract takes: the backend folds
     // what was typed, so a tag already on the run comes back as the one chip it always was.
     void file([...annotations.tags, tag.trim()], () => setTag(""));
@@ -353,7 +370,7 @@ function NotesAndTags({
             </span>
           ))
         )}
-        <form className="flex items-center gap-2" onSubmit={submitTag}>
+        <form className="flex flex-wrap items-center gap-2" onSubmit={submitTag}>
           <label className="sr-only" htmlFor="experiment-tag">
             Add a tag
           </label>
@@ -367,14 +384,22 @@ function NotesAndTags({
             value={tag}
             onChange={(event) => setTag(event.target.value)}
           />
-          <button
-            className={subtleButtonClasses}
+          {/* The form's one submit, so a primary action refused with its reason (ADR 0063) —
+              at the outline weight *Add note* wears, which is also the height of the field. */}
+          <PrimaryAction
+            variant="outline"
             type="submit"
-            disabled={busy || tag.trim() === ""}
+            refusal={tagEmpty ? { id: tagReasonId, reason: TAG_EMPTY } : null}
+            busy={busy}
           >
             <ButtonIcon verb="create" />
             Add tag
-          </button>
+          </PrimaryAction>
+          {tagEmpty ? (
+            <RefusalLine id={tagReasonId} className="w-full">
+              {TAG_EMPTY}
+            </RefusalLine>
+          ) : null}
         </form>
       </div>
 
@@ -400,15 +425,17 @@ function NotesAndTags({
           value={note}
           onChange={(event) => setNote(event.target.value)}
         />
-        <div>
-          <button
-            className={outlineButtonClasses}
+        <div className="grid justify-items-start gap-1.5">
+          <PrimaryAction
+            variant="outline"
             type="submit"
-            disabled={busy || note.trim() === ""}
+            refusal={noteEmpty ? { id: noteReasonId, reason: NOTE_EMPTY } : null}
+            busy={busy}
           >
             <ButtonIcon verb="create" />
             Add note
-          </button>
+          </PrimaryAction>
+          {noteEmpty ? <RefusalLine id={noteReasonId}>{NOTE_EMPTY}</RefusalLine> : null}
         </div>
       </form>
     </Card>

@@ -348,30 +348,36 @@ export const subtleButtonClasses = buttonVariants.subtle;
 export const destructiveSubtleButtonClasses = buttonVariants.destructiveSubtle;
 
 /**
- * A primary action that cannot proceed: dashed, quiet, and never pressable.
+ * A primary action that cannot proceed: dashed, quiet, reachable, and never pressable.
  *
  * `docs/design-direction.md` states the rule — *A blocked primary action says why*: dashed,
- * disabled, the reason in `title` and inline. The prototype draws exactly this weight on the
- * blocked *Create scenario* (`Workspace.dc.html`:2933), *Save connection* (:3987) and *Done*
- * (:1965): `1px dashed #d4d8db` over `#fafbfb` in `#9aa2a8`. All four shop-scope create
- * headers draw a solid grey slab instead (:216 *Create shop*, :1210 *Create order*, :1341
- * *Create profile*, :1651 *Create identity*), and the README settles that one value against
- * the other — "Blocked primary actions render as a dashed disabled
- * variant with the reason in `title`" — under the Authority's rule 3. The dashed weight is
- * what ships on all of them.
+ * `aria-disabled` and reachable, the reason in `title` and inline in its accessible description.
+ * The prototype draws exactly this weight on the blocked *Create scenario*
+ * (`Workspace.dc.html`:2933), *Save connection* (:3987) and *Done* (:1965): `1px dashed #d4d8db`
+ * over `#fafbfb` in `#9aa2a8`. All four shop-scope create headers draw a solid grey slab instead
+ * (:216 *Create shop*, :1210 *Create order*, :1341 *Create profile*, :1651 *Create identity*),
+ * and the README settles that one value against the other — "Blocked primary actions render as
+ * a dashed disabled variant with the reason in `title`" — under the Authority's rule 3. The
+ * dashed weight is what ships on all of them.
  *
  * **It is deliberately not a row of `buttonVariants`.** Every row of that table is swept for a
- * hover and a `focus-visible` ring, and this control is always `disabled`: a hover it can never
- * show and a ring no keyboard reader can ever reach would be two assertions passing over
- * declarations that do nothing. What carries the reason instead is the inline sentence beside
- * the control, in the control's accessible description — which is what *The form language*
- * means by "`title=` is never the only carrier". `ui.test.ts` holds this set to its own rules
+ * hover, and this control must not have one: a hover would promise a press that does nothing.
+ * It does carry the focus ring, because since ADR 0063 a refused action is `aria-disabled`
+ * rather than `disabled` and stays in the tab order — a keyboard reader lands on it and is told
+ * the reason, and has to see where they landed. `ui.test.ts` holds this set to its own rules
  * rather than to the table's.
  *
- * Minted here with the four create pages of PLAN-UX Slice 12 as its first consumers. Publish,
- * Start, Save connection and Compose adopt it in Slice 22; nothing else wears it yet.
+ * Drawn only by `PrimaryAction` (`components/PrimaryAction.tsx`), which also swallows the press.
  */
-export const blockedButtonClasses = `${buttonShapeClasses} cursor-not-allowed border border-dashed border-[#d4d8db] bg-[#fafbfb] text-[#9aa2a8]`;
+export const blockedButtonClasses = `${buttonShapeClasses} ${focusRingClasses} cursor-not-allowed border border-dashed border-[#d4d8db] bg-[#fafbfb] text-[#9aa2a8]`;
+
+/**
+ * The handoff's validation message — "Validation messages sit under the control: 13px 600
+ * `#9d3028`" (`tmp/design-frames/README.md`, *The form pattern*) — and, since ADR 0063, the
+ * reason a refused action gives inline too: one weight for "this cannot proceed", wherever the
+ * sentence is drawn. `lab-error` is `#9d3028`.
+ */
+export const validationMessageClasses = "text-[13px] font-semibold text-lab-error";
 
 /**
  * The verbs a button's glyph may mean. The set is closed: what is fixed is which glyph means

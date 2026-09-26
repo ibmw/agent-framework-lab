@@ -9,7 +9,7 @@ import type {
   TicketStatus,
   TicketSummarySchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -25,17 +25,19 @@ import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldHint } from "../components/FieldHint";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   EditorSaveActions,
   Fingerprint,
   IssueList,
   PageHeader,
+  PublishButton,
   PublishReasons,
   StatusPill,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { nextReference } from "../lib/entryIds";
 import { optionsOf, TICKET_ORIGIN_KIND, TICKET_STATUS } from "../lib/enumLabels";
 import {
@@ -70,7 +72,6 @@ import {
   cardTitleClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  outlineButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
   textAreaClasses,
@@ -489,6 +490,7 @@ function TicketWorkspace({
     }),
     [refreshContext, onSaved],
   );
+  const publishReasonsId = useId();
   const editor = useDefinitionEditor(ticketId, client, guard);
   const { content, preview, edit } = editor;
 
@@ -534,17 +536,15 @@ function TicketWorkspace({
                 onSave={() => void editor.save()}
                 onDiscard={() => void editor.discard()}
               />
-              <button
-                className={accentButtonClasses}
-                type="button"
-                onClick={() => {
+              <PublishButton
+                preview={preview}
+                dirty={editor.dirty}
+                publishing={editor.publishing}
+                reasonsId={publishReasonsId}
+                onPublish={() => {
                   void editor.publish().then((version) => setPublishedVersion(version));
                 }}
-                disabled={editor.publishing || !canPublish(preview, editor.dirty)}
-              >
-                <ButtonIcon verb="publish" />
-                {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
-              </button>
+              />
             </div>
           </div>
           <p className="text-[13px] text-admin-muted">
@@ -564,9 +564,12 @@ function TicketWorkspace({
             {editor.error}
           </p>
         ) : null}
-        <div className="grid gap-1">
-          <PublishReasons preview={preview} dirty={editor.dirty} />
-        </div>
+        <PublishReasons
+          id={publishReasonsId}
+          className="grid gap-1"
+          preview={preview}
+          dirty={editor.dirty}
+        />
         {publishedVersion !== null ? (
           <p role="status" className="text-[13px] text-lab-success">
             Published version {publishedVersion}. A scenario built on this ticket freezes this exact
@@ -591,6 +594,12 @@ function TicketWorkspace({
   );
 }
 
+/** Why *Add to thread* is refused with no message typed. */
+const THREAD_BODY_EMPTY = "Write the message before adding it to the thread.";
+
+/** Why *Add to thread* is refused once the time is cleared: the thread is ordered by it. */
+const THREAD_SENT_AT_EMPTY = "Give the message the time it was sent; the thread is ordered by it.";
+
 function Thread({
   scope,
   content,
@@ -608,11 +617,17 @@ function Thread({
   const [sentAt, setSentAt] = useState(() => toLocalInput(new Date().toISOString()));
   const [refused, setRefused] = useState<string | null>(null);
   const removal = useRemoval(scope);
+  const addReasonId = useId();
+  const instant = fromLocalInput(sentAt);
+  // Why *Add to thread* will not go (ADR 0063): said beside it, not left to a press that
+  // silently does nothing. Neither field can say it — an empty box and a cleared time are
+  // both valid states of those controls.
+  const addRefusal =
+    body.trim() === "" ? THREAD_BODY_EMPTY : instant === null ? THREAD_SENT_AT_EMPTY : null;
 
   function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const instant = fromLocalInput(sentAt);
-    if (!body.trim() || instant === null) {
+    if (addRefusal !== null || instant === null) {
       return;
     }
     const addition = appendMessage(content, author, body.trim(), instant);
@@ -734,15 +749,20 @@ function Thread({
           </p>
         ) : null}
         <div className="flex items-center gap-2">
-          <button className={outlineButtonClasses} type="submit">
+          <PrimaryAction
+            variant="outline"
+            type="submit"
+            refusal={addRefusal === null ? null : { id: addReasonId, reason: addRefusal }}
+          >
             <ButtonIcon verb="create" />
             Add to thread
-          </button>
+          </PrimaryAction>
           <p className="text-xs text-admin-muted">
             Adds fixture history to this ticket — not a live reply. The newest message from the
             customer becomes the trigger.
           </p>
         </div>
+        {addRefusal === null ? null : <RefusalLine id={addReasonId}>{addRefusal}</RefusalLine>}
       </form>
     </section>
   );

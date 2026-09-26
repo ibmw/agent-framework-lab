@@ -18,6 +18,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./shell/AppShell";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -560,7 +561,7 @@ describe("the model provider zone", () => {
 
     await user.click(card.getByRole("radio", { name: "vLLM" }));
 
-    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+    expectNotRefused(card.getByRole("button", { name: "Save connection" }));
     await user.click(card.getByRole("button", { name: "Discard" }));
 
     expect(card.getByLabelText("Base URL")).toHaveValue("http://localhost:11434/v1");
@@ -569,6 +570,13 @@ describe("the model provider zone", () => {
 
   it("refuses to save with nothing to reach, and says so where the press was refused", async () => {
     const user = userEvent.setup();
+    let requests = 0;
+    server.use(
+      http.put("*/api/v1/model-connections/openai", () => {
+        requests += 1;
+        return HttpResponse.json(currentConnections.providers[0]);
+      }),
+    );
     currentConnections = pointedAt("http://localhost:11434/v1");
     renderAt("/settings");
     const card = await openZone();
@@ -576,9 +584,21 @@ describe("the model provider zone", () => {
     await user.clear(card.getByLabelText("Base URL"));
 
     const save = card.getByRole("button", { name: "Save connection" });
-    expect(save).toBeDisabled();
-    expect(save).toHaveAccessibleDescription(/No base URL to reach/);
-    expect(card.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    expectRefused(save, /No base URL to reach/);
+    expectRefused(card.getByRole("button", { name: "Test connection" }), /No base URL to reach/);
+    // At the validation weight, which is the weight every refusal reads at (ADR 0063).
+    expect(card.getByText(/No base URL to reach/)).toHaveClass(
+      "text-[13px]",
+      "font-semibold",
+      "text-lab-error",
+    );
+
+    // Reachable, and a press sends nothing.
+    await user.click(save);
+    save.focus();
+    await user.keyboard("{Enter}");
+    expect(save).toHaveFocus();
+    expect(requests).toBe(0);
   });
 
   it.each([
@@ -600,9 +620,8 @@ describe("the model provider zone", () => {
     expect(card.getByLabelText("Base URL")).toHaveValue(blank);
 
     const save = card.getByRole("button", { name: "Save connection" });
-    expect(save).toBeDisabled();
-    expect(save).toHaveAccessibleDescription(/No base URL to reach/);
-    expect(card.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    expectRefused(save, /No base URL to reach/);
+    expectRefused(card.getByRole("button", { name: "Test connection" }), /No base URL to reach/);
   });
 
   it("saves what was typed, and reads back the endpoint the lab stored", async () => {
@@ -688,7 +707,7 @@ describe("the model provider zone", () => {
     // The page has no opinion about base URLs: `domain/model_connection.py` decides what may
     // be stored, and a second gate here would stop matching the one that decides.
     await user.type(card.getByLabelText("Base URL"), "http://api.example.com/v1");
-    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+    expectNotRefused(card.getByRole("button", { name: "Save connection" }));
     await user.click(card.getByRole("button", { name: "Save connection" }));
 
     expect(await card.findByRole("alert")).toHaveTextContent(/only use http for a loopback/);
@@ -792,9 +811,7 @@ describe("the model provider zone", () => {
     await user.click(card.getByRole("radio", { name: "vLLM" }));
     answer({ outcome: "reachable", latency_ms: 312, status_class: "2xx" });
 
-    await waitFor(() =>
-      expect(card.getByRole("button", { name: "Test connection" })).toBeEnabled(),
-    );
+    await waitFor(() => expectNotRefused(card.getByRole("button", { name: "Test connection" })));
     expect(card.queryByText(/312 ms/)).toBeNull();
     expect(card.queryByText(/Answered/)).toBeNull();
   });
@@ -1084,7 +1101,7 @@ describe("the model provider zone", () => {
       expect(card.queryByRole("button", { name: "Save connection" }), spelling).toBeNull();
     }
     await user.type(card.getByLabelText("Base URL"), "/chat");
-    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+    expectNotRefused(card.getByRole("button", { name: "Save connection" }));
   });
 
   it.each([
@@ -1136,7 +1153,7 @@ describe("the model provider zone", () => {
     const card = await openZone();
 
     expect(card.getByRole("radio", { name: "Ollama" })).toBeChecked();
-    expect(card.getByRole("button", { name: "Save connection" })).toBeEnabled();
+    expectNotRefused(card.getByRole("button", { name: "Save connection" }));
     await user.click(card.getByRole("button", { name: "Test connection" }));
 
     await waitFor(() =>
@@ -1188,13 +1205,13 @@ describe("the model provider zone", () => {
   });
 
   it("writes why Test is refused from the start, where a keyboard reader can find it", async () => {
-    // *A blocked primary action says why*: in `title` and inline. A disabled button takes no
-    // focus, so its `title` reaches no keyboard or touch reader, and the line is the reason.
+    // *A blocked primary action says why*: in `title` and inline, and the control stays
+    // reachable so a keyboard reader who lands on it is told (ADR 0063).
     renderAt("/settings");
     const card = await openZone();
 
     const test = card.getByRole("button", { name: "Test connection" });
-    expect(test).toBeDisabled();
+    expectRefused(test, /No base URL to reach/);
     expect(test).toHaveAttribute("title", expect.stringMatching(/No base URL to reach/));
     expect(test).toHaveAccessibleDescription(/No base URL to reach/);
     expect(card.getByText(/No base URL to reach/)).not.toHaveClass("sr-only");

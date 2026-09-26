@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS, tourAt } from "./lib/tours";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
+import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -887,6 +888,38 @@ describe("ticket thread", () => {
     expect(within(thread).getByText("first message")).toBeVisible();
   });
 
+  it("refuses to add an empty message, or one with no time, and says which", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const thread = within(await screen.findByRole("region", { name: "Ticket thread" }));
+    const articles = thread.getAllByRole("article").length;
+
+    const add = thread.getByRole("button", { name: "Add to thread" });
+    expectRefused(add, "Write the message before adding it to the thread.");
+    await user.click(add);
+    await submitWithoutPressing(add);
+    expect(thread.getAllByRole("article")).toHaveLength(articles);
+
+    await user.type(thread.getByLabelText("Add a history message"), "Hello again.");
+    expectNotRefused(add);
+    fireEvent.change(thread.getByLabelText("Sent at"), { target: { value: "" } });
+    expectRefused(add, "Give the message the time it was sent; the thread is ordered by it.");
+    await user.click(add);
+    // Refused by the handler, not by a throw on the way to appending a message with no time:
+    // an exception in an event listener reaches the window as an `error` event.
+    const thrown: ErrorEvent[] = [];
+    const listen = (event: ErrorEvent) => {
+      thrown.push(event);
+      event.preventDefault();
+    };
+    window.addEventListener("error", listen);
+    await submitWithoutPressing(add);
+    window.removeEventListener("error", listen);
+    expect(thrown.map((event) => event.message)).toEqual([]);
+    expect(thread.getAllByRole("article")).toHaveLength(articles);
+    expect(thread.getByLabelText("Add a history message")).toHaveValue("Hello again.");
+  });
+
   it("refuses history that would land at or after the first message", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
@@ -1063,7 +1096,7 @@ describe("saving and publishing", () => {
 
     await user.selectOptions(within(card("Ticket details")).getByLabelText("Status"), "resolved");
 
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+    expectRefused(screen.getByRole("button", { name: "Publish v1" }), /Save the draft first/);
     expect(screen.getByText(/Save the draft first/)).toBeVisible();
   });
 

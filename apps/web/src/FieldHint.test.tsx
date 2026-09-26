@@ -96,6 +96,24 @@ describe("FieldHint", () => {
     expect(document.getElementById(extraId ?? "")).not.toHaveAttribute("aria-live");
   });
 
+  it("draws a refusal at the validation weight and marks the control invalid (ADR 0063)", () => {
+    const { rerender } = render(
+      <FieldHint label="Handle" hint="Lowercase with hyphens." extra="Taken." extraTone="error">
+        <input />
+      </FieldHint>,
+    );
+    expect(screen.getByRole("alert")).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
+    expect(screen.getByLabelText("Handle")).toHaveAttribute("aria-invalid", "true");
+
+    // A preview is not a refusal: small, normal, and the control is not invalid.
+    rerender(
+      <FieldHint label="Handle" hint="Lowercase with hyphens." extra="Saved as `h`.">
+        <input />
+      </FieldHint>,
+    );
+    expect(screen.getByLabelText("Handle")).not.toHaveAttribute("aria-invalid");
+  });
+
   it("marks the minority as optional, the way the product editor writes price", () => {
     render(
       <FieldHint label="Price" hint="Leave empty to add in the editor." optional>
@@ -201,7 +219,9 @@ describe("Field", () => {
     );
 
     expect(screen.getByLabelText("Handle")).toHaveAccessibleDescription(/already in the draft/i);
+    expect(screen.getByLabelText("Handle")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByRole("alert")).toHaveTextContent(/already in the draft/i);
+    expect(screen.getByRole("alert")).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
     // The handoff puts a validation message under the control, not under the label.
     expect(row(container).right).toContainElement(screen.getByRole("alert"));
   });

@@ -1,10 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { CreatePage } from "./components/CreatePage";
 import { blockedButtonClasses } from "./lib/ui";
+import { expectNotRefused, expectRefused } from "./test/refused";
 
 /**
  * The create layout itself, over a form of one field (PLAN-UX Slice 12).
@@ -92,7 +93,7 @@ describe("the create page's blocked state", () => {
     renderPage(<Harness />);
 
     const create = screen.getByRole("button", { name: "Create thing" });
-    expect(create).toBeDisabled();
+    expectRefused(create, "The thing needs a name before it can be created.");
     for (const utility of blockedButtonClasses.split(" ")) {
       expect(create.className).toContain(utility);
     }
@@ -105,6 +106,28 @@ describe("the create page's blocked state", () => {
     ).toBeVisible();
   });
 
+  it("stays in the tab order, and neither a press nor Enter in the form creates anything", async () => {
+    const user = userEvent.setup();
+    renderPage(<Harness />);
+
+    const create = screen.getByRole("button", { name: "Create thing" });
+    await user.tab(); // the back arrow
+    await user.tab(); // the breadcrumb link
+    await user.tab(); // Cancel
+    await user.tab();
+    expect(create).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await user.click(create);
+    expect(screen.getByText("0 created")).toBeVisible();
+    // Enter in the body's field is implicit submission, which a browser performs as a click on
+    // the form's default button — this header button, associated by `form=`.
+    const form = document.getElementById("thing-form") as HTMLFormElement;
+    expect(Array.from(form.elements).find((element) => element.tagName === "BUTTON")).toBe(create);
+    fireEvent.click(create);
+    expect(screen.getByText("0 created")).toBeVisible();
+  });
+
   it("becomes the primary action the moment the form can submit", async () => {
     const user = userEvent.setup();
     renderPage(<Harness />);
@@ -112,7 +135,7 @@ describe("the create page's blocked state", () => {
     await user.type(screen.getByLabelText("Name"), "Harbour Lane");
 
     const create = screen.getByRole("button", { name: "Create thing" });
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
     expect(create).not.toHaveAttribute("title");
     expect(create.className).not.toContain("border-dashed");
     expect(screen.queryByText(/needs a name before/)).toBeNull();

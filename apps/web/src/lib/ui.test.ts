@@ -28,6 +28,7 @@ import {
   searchFieldRowClasses,
   searchFieldWrapClasses,
   textAreaClasses,
+  validationMessageClasses,
 } from "./ui";
 
 /**
@@ -106,14 +107,14 @@ describe("button variants", () => {
 });
 
 /**
- * The blocked weight, minted with the create pages of PLAN-UX Slice 12 and adopted by four
- * more primary actions in Slice 22.
+ * The blocked weight, minted with the create pages and worn by every refused primary action since
+ * ADR 0063.
  *
  * It is not a row of `buttonVariantClasses`, so the table's rules above do not reach it and
  * these are written out. What it must be is the prototype's dashed, quiet slab
  * (`Workspace.dc.html`:2933) at the shape of the primary action it replaces — and what it
- * must *not* have is a hover or a focus ring, because it is drawn only on a control that is
- * always `disabled` and neither would ever be seen.
+ * must *not* have is a hover, because a press on it does nothing — and since ADR 0063 it is
+ * reachable, so it carries the focus ring.
  */
 describe("the blocked primary action", () => {
   it("is dashed, quiet, and says a press will not work", () => {
@@ -133,11 +134,24 @@ describe("the blocked primary action", () => {
     }
   });
 
-  it("claims no state it can never show", () => {
+  it("shows where a keyboard reader landed, and no hover that promises a press", () => {
+    // Reachable since ADR 0063: a refused action is `aria-disabled`, stays in the tab order,
+    // and so needs the ring every other control has.
+    for (const utility of focusRingClasses.split(" ")) {
+      expect(blockedButtonClasses, utility).toContain(utility);
+    }
     expect(blockedButtonClasses).not.toMatch(/(^|\s)hover:/);
-    expect(blockedButtonClasses).not.toContain("focus-visible:");
     // And it is not in the table, so the sweep above is not quietly passing over it.
     expect(Object.values(buttonVariantClasses)).not.toContain(blockedButtonClasses);
+  });
+});
+
+describe("the validation message", () => {
+  it("is the handoff's 13px 600 #9d3028", () => {
+    expect(validationMessageClasses.split(" ").sort()).toEqual(
+      ["font-semibold", "text-[13px]", "text-lab-error"].sort(),
+    );
+    expect(themeSource).toMatch(/--color-lab-error:\s*#9d3028;/);
   });
 });
 

@@ -259,3 +259,39 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
 export function canPublish(preview: PublishGate | null, dirty: boolean): boolean {
   return preview?.publishable === true && !dirty && !preview.matches_latest_published;
 }
+
+/** Saving comes before publishing: a publish freezes the saved draft. */
+export const PUBLISH_UNSAVED_REASON =
+  "Save the draft first — publishing freezes the saved draft, not unsaved edits.";
+
+export function publishErrorsReason(errors: number): string {
+  return `Resolve ${errors} error(s) to publish.`;
+}
+
+export function publishUnchangedReason(version: number | null): string {
+  return `The draft is identical to v${version}; there is nothing new to freeze.`;
+}
+
+/**
+ * Why Publish is refused, in one sentence — the first of `PublishReasons`' lines, which is what
+ * the button's `title` carries — or null where it is not refused.
+ *
+ * A preview that has not answered is not a refusal: there is nothing to say yet, and the gate
+ * ends on its own, so the button is drawn as a press in flight (ADR 0063), with no line of its
+ * own for that state.
+ */
+export function publishRefusalReason(preview: PublishGate | null, dirty: boolean): string | null {
+  if (dirty) {
+    return PUBLISH_UNSAVED_REASON;
+  }
+  if (preview === null) {
+    return null;
+  }
+  if (!preview.publishable) {
+    return publishErrorsReason(preview.issues.filter((issue) => issue.severity === "error").length);
+  }
+  if (preview.matches_latest_published) {
+    return publishUnchangedReason(preview.latest_published_version);
+  }
+  return null;
+}

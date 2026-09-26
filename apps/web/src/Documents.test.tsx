@@ -12,6 +12,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { toPayload } from "./lib/shop";
 import { renderApp } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 /**
@@ -416,11 +417,11 @@ describe("creating a document", () => {
     await openCreate();
 
     const create = screen.getByRole("button", { name: "Create document" });
-    expect(create).toBeDisabled();
+    expectRefused(create, /needs a title/);
     expect(create).toHaveAccessibleDescription(/needs a title/);
 
     await user.type(screen.getByRole("textbox", { name: "Title" }), "Warranty");
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
   });
 
   it("appends one row to one list and lands in its editor", async () => {

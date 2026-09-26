@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { SHOP_NAME_RULE } from "./lib/fieldRules";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "9c8b7a6d-5e4f-4a3b-9c8d-7e6f5a4b3c2d";
@@ -111,12 +112,12 @@ describe("the shops index and its create page", () => {
     const card = await createShopPage();
 
     const create = () => card.getByRole("button", { name: "Create shop" });
-    expect(create()).toBeDisabled();
+    expectRefused(create(), /needs a name/i);
     expect(create()).toHaveAccessibleDescription(/needs a name/i);
     expect(create()).toHaveAttribute("title", expect.stringMatching(/needs a name/i));
 
     await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
-    expect(create()).toBeEnabled();
+    expectNotRefused(create());
   });
 
   it("lands in the new shop's workspace", async () => {

@@ -11,6 +11,7 @@ import {
 type ControlProps = {
   id?: string;
   "aria-describedby"?: string;
+  "aria-invalid"?: boolean | "true" | "false";
 };
 
 /**
@@ -46,12 +47,17 @@ type ExtraTone = keyof typeof EXTRA_TONES;
  */
 function useBoundControl(
   children: ReactElement<ControlProps>,
-  { htmlFor, hasHint }: { htmlFor?: string; hasHint: boolean },
+  {
+    htmlFor,
+    hasHint,
+    invalid,
+    extraId: givenExtraId,
+  }: { htmlFor?: string; hasHint: boolean; invalid: boolean; extraId?: string },
 ) {
   const generatedId = useId();
   const controlId = htmlFor ?? children.props.id ?? generatedId;
   const hintId = `${generatedId}-hint`;
-  const extraId = `${generatedId}-extra`;
+  const extraId = givenExtraId ?? `${generatedId}-extra`;
   const describedBy = [children.props["aria-describedby"], hasHint ? hintId : null, extraId]
     .filter(Boolean)
     .join(" ");
@@ -59,7 +65,13 @@ function useBoundControl(
     controlId,
     hintId,
     extraId,
-    control: cloneElement(children, { id: controlId, "aria-describedby": describedBy }),
+    // A second line in the error tone is a refusal of what the control holds, so the control
+    // says it is invalid too (ADR 0063); a control that already says so keeps its own answer.
+    control: cloneElement(children, {
+      id: controlId,
+      "aria-describedby": describedBy,
+      ...(invalid ? { "aria-invalid": true } : {}),
+    }),
   };
 }
 
@@ -134,6 +146,11 @@ type FieldHintProps = {
    * as an alert because nothing has been refused.
    */
   extraTone?: ExtraTone;
+  /**
+   * The second line's `id`, where something else must name it too — a row's Save refused for
+   * the very reason the line gives, which is one sentence rather than two (ADR 0063).
+   */
+  extraId?: string;
   optional?: boolean;
   /** `"row"` draws this field as a `Field`. See `FieldHint` for the one case it is for. */
   arrangement?: Arrangement;
@@ -148,10 +165,15 @@ function StackedFieldHint({
   hint,
   extra,
   extraTone = "muted",
+  extraId: givenExtraId,
   optional = false,
   children,
 }: Omit<FieldHintProps, "arrangement">) {
-  const { controlId, hintId, extraId, control } = useBoundControl(children, { hasHint: true });
+  const { controlId, hintId, extraId, control } = useBoundControl(children, {
+    hasHint: true,
+    invalid: extraTone === "error" && Boolean(extra),
+    extraId: givenExtraId,
+  });
 
   return (
     <div className={fieldLabelClasses}>
@@ -163,7 +185,13 @@ function StackedFieldHint({
       <p id={hintId} className="font-normal text-admin-muted">
         {hint}
       </p>
-      <ExtraLine id={extraId} tone={extraTone} className="font-normal">
+      {/* A refusal reads at the validation weight in either arrangement (ADR 0063); a preview
+          keeps the stacked label's small type. */}
+      <ExtraLine
+        id={extraId}
+        tone={extraTone}
+        className={extraTone === "error" ? "text-[13px] font-semibold" : "font-normal"}
+      >
         {extra}
       </ExtraLine>
     </div>
@@ -201,6 +229,7 @@ export function Field({
   htmlFor,
   extra,
   extraTone = "muted",
+  extraId: givenExtraId,
   optional = false,
   children,
 }: {
@@ -210,12 +239,16 @@ export function Field({
   htmlFor?: string;
   extra?: ReactNode;
   extraTone?: ExtraTone;
+  /** As on `FieldHint`: the second line's `id`, where something else names it too. */
+  extraId?: string;
   optional?: boolean;
   children: ReactElement<ControlProps>;
 }) {
   const { controlId, hintId, extraId, control } = useBoundControl(children, {
     htmlFor,
     hasHint: Boolean(hint),
+    invalid: extraTone === "error" && Boolean(extra),
+    extraId: givenExtraId,
   });
 
   return (

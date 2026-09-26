@@ -13,6 +13,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -289,7 +290,10 @@ describe("support identity workspace", () => {
 
     await screen.findByRole("heading", { name: "Northstar tier 1" });
 
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+    expectRefused(
+      screen.getByRole("button", { name: "Publish v1" }),
+      /Resolve 1 error\(s\) to publish/,
+    );
     expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
   });
 
@@ -449,16 +453,16 @@ describe("the new-identity page", () => {
     await newIdentity();
 
     const create = () => screen.getByRole("button", { name: "Create identity" });
-    expect(create()).toBeDisabled();
+    expectRefused(create(), /needs a name/i);
     expect(create()).toHaveAccessibleDescription(/needs a name/i);
     expect(create()).toHaveAttribute("title", expect.stringMatching(/needs a name/i));
 
     await user.type(screen.getByLabelText("Name"), "Northstar tier 3");
-    expect(create()).toBeDisabled();
+    expectRefused(create(), /role title the agent presents as/i);
     expect(create()).toHaveAccessibleDescription(/role title the agent presents as/i);
 
     await user.type(screen.getByLabelText("Role title"), "Senior support");
-    expect(create()).toBeEnabled();
+    expectNotRefused(create());
   });
 
   it("puts each field's hint in that control's accessible description", async () => {

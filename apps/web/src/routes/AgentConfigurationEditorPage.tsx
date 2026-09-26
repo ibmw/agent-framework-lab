@@ -9,7 +9,7 @@ import type {
   ToneOfVoiceOptionSchema,
   ToneOfVoiceSource,
 } from "@agent-lab/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getAgentConfigurationDraft,
@@ -19,7 +19,6 @@ import {
   replaceAgentConfigurationDraft,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
-import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
@@ -28,11 +27,12 @@ import {
   Fingerprint,
   IssueList,
   PageHeader,
+  PublishButton,
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { ARCHITECTURE_LABELS, ARCHITECTURES, describeProvider } from "../lib/agents";
-import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { labelOf, SUPPORT_PERMISSION } from "../lib/enumLabels";
 import {
   PROVEN_PROVIDER_RULE,
@@ -44,7 +44,6 @@ import {
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
 import {
-  accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   subtleButtonClasses,
@@ -100,6 +99,7 @@ const VARIABLE_PATTERN = /\{\{([^{}]*)\}\}/g;
 export function AgentConfigurationEditorPage() {
   const { configurationId = "" } = useParams();
   const { currentShop, loading: shopsLoading, listings } = useLabWorkspace();
+  const publishReasonsId = useId();
   const editor = useDefinitionEditor(configurationId, CLIENT, {
     label: "The agent configuration draft has unsaved changes.",
     // The library index prints the row this editor is changing, and it renders the shell's
@@ -360,17 +360,15 @@ export function AgentConfigurationEditorPage() {
               onSave={() => void save()}
               onDiscard={() => void editor.discard()}
             />
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => {
+            <PublishButton
+              preview={preview}
+              dirty={editor.dirty}
+              publishing={editor.publishing}
+              reasonsId={publishReasonsId}
+              onPublish={() => {
                 void publish().then((version) => setPublishedVersion(version));
               }}
-              disabled={editor.publishing || !canPublish(preview, editor.dirty)}
-            >
-              <ButtonIcon verb="publish" />
-              {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
-            </button>
+            />
           </>
         }
       />
@@ -380,9 +378,12 @@ export function AgentConfigurationEditorPage() {
           {editor.error ?? contextError}
         </p>
       ) : null}
-      <div className="mb-4 grid gap-1">
-        <PublishReasons preview={preview} dirty={editor.dirty} />
-      </div>
+      <PublishReasons
+        id={publishReasonsId}
+        className="mb-4 grid gap-1"
+        preview={preview}
+        dirty={editor.dirty}
+      />
       {publishedVersion !== null ? (
         <p role="status" className="mb-4 text-[13px] text-lab-success">
           Published version {publishedVersion}. An experiment pins this exact version.

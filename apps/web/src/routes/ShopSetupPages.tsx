@@ -10,6 +10,7 @@ import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   DefaultToneChip,
@@ -741,13 +742,11 @@ function PaymentAndFulfilmentCards() {
 }
 
 /**
- * The muted line a refused control on this page is described by.
- *
- * Deliberately not the validation weight — 13px 600 `#9d3028` under the control it refuses is
- * the rule `docs/design-direction.md` states as *planned*, and Slice 22 puts it on every
- * `Field` row at once rather than on this one page first.
+ * The muted line that stands where the shop default's Remove would: a refusal with a way out,
+ * rather than a refused action, so not the validation weight (`docs/design-direction.md`, *A
+ * refusal that has a way out names the way out*).
  */
-const refusalLineClasses = "text-xs text-admin-muted";
+const wayOutLineClasses = "text-xs text-admin-muted";
 
 export function ToneOfVoicePage() {
   const { shopId, content, edit } = useShopWorkspace();
@@ -873,9 +872,7 @@ export function ToneOfVoicePage() {
                         onChange={onChange}
                       />
                       {value.name.trim() === "" ? (
-                        <p id={openRefusalId} className={refusalLineClasses}>
-                          {TONE_NAME_RULE}
-                        </p>
+                        <RefusalLine id={openRefusalId}>{TONE_NAME_RULE}</RefusalLine>
                       ) : null}
                     </>
                   ),
@@ -889,7 +886,7 @@ export function ToneOfVoicePage() {
                   // prototype writes the refusal in exactly that place (`Workspace.dc.html`
                   // :1897) rather than as a Remove that argues with itself.
                   entry.is_default ? (
-                    <p className={refusalLineClasses}>{TONE_DEFAULT_REMOVAL_RULE}</p>
+                    <p className={wayOutLineClasses}>{TONE_DEFAULT_REMOVAL_RULE}</p>
                   ) : (
                     <RemoveButton
                       label={entry.name}
@@ -958,21 +955,16 @@ export function ToneOfVoicePage() {
               />
             }
           />
-          <button
-            className={`${accentButtonClasses} justify-self-start`}
+          <PrimaryAction
+            variant="accent"
+            className="justify-self-start"
             type="submit"
-            disabled={addNameless}
-            title={addNameless ? TONE_NAME_RULE : undefined}
-            aria-describedby={addNameless ? addRefusalId : undefined}
+            refusal={addNameless ? { id: addRefusalId, reason: TONE_NAME_RULE } : null}
           >
             <ButtonIcon verb="create" />
             Add tone of voice
-          </button>
-          {addNameless ? (
-            <p id={addRefusalId} className={refusalLineClasses}>
-              {TONE_NAME_RULE}
-            </p>
-          ) : null}
+          </PrimaryAction>
+          {addNameless ? <RefusalLine id={addRefusalId}>{TONE_NAME_RULE}</RefusalLine> : null}
         </form>
         <p className="text-xs text-admin-muted">
           Agent configurations resolve the shop default through{" "}

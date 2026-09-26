@@ -38,10 +38,11 @@ import {
   Fingerprint,
   IssueList,
   PageHeader,
+  PublishButton,
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
-import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
@@ -66,7 +67,6 @@ import {
   useRemoval,
 } from "../lib/removal";
 import {
-  accentButtonClasses,
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
@@ -222,6 +222,7 @@ export function CustomerEditorRoute() {
 export function CustomerEditorPage() {
   const { profileId = "" } = useParams();
   const { shopId, shops, listings } = useShopWorkspace();
+  const publishReasonsId = useId();
   const editor = useDefinitionEditor(profileId, CLIENT, {
     label: "The customer profile draft has unsaved changes.",
     // The Customers index prints the row this editor is changing, and it renders the shell's
@@ -488,10 +489,12 @@ export function CustomerEditorPage() {
               onSave={() => void editor.save()}
               onDiscard={() => void editor.discard()}
             />
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => {
+            <PublishButton
+              preview={preview}
+              dirty={editor.dirty}
+              publishing={editor.publishing}
+              reasonsId={publishReasonsId}
+              onPublish={() => {
                 // A frozen version is printed by the index this editor was opened from, and
                 // that index renders the shell's listing (ADR 0056).
                 void editor.publish().then((version) => {
@@ -501,11 +504,7 @@ export function CustomerEditorPage() {
                   }
                 });
               }}
-              disabled={editor.publishing || !canPublish(preview, editor.dirty)}
-            >
-              <ButtonIcon verb="publish" />
-              {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
-            </button>
+            />
           </>
         }
       />
@@ -515,9 +514,12 @@ export function CustomerEditorPage() {
           {editor.error}
         </p>
       ) : null}
-      <div className="mb-4 grid gap-1">
-        <PublishReasons preview={preview} dirty={editor.dirty} />
-      </div>
+      <PublishReasons
+        id={publishReasonsId}
+        className="mb-4 grid gap-1"
+        preview={preview}
+        dirty={editor.dirty}
+      />
       {publishedVersion !== null ? (
         <p role="status" className="mb-4 text-[13px] text-lab-success">
           Published version {publishedVersion}. It is immutable; editing continues on the draft.

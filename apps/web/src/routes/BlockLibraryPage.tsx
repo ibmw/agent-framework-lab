@@ -386,7 +386,7 @@ function NewBlockPage<PayloadT extends BlockPayload>({
         <ParameterForm
           taken={parameters.map((parameter) => parameter.name)}
           onAdd={(added, kind) => setParameters((current) => addedParameter(current, added, kind))}
-          disabled={parameters.length >= MAX_PARAMETERS}
+          full={parameters.length >= MAX_PARAMETERS}
         />
       </Card>
     </CreatePage>

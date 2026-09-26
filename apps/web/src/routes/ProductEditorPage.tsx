@@ -13,6 +13,7 @@ import { ChipList, ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
   Card,
@@ -98,6 +99,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
   textAreaClasses,
+  validationMessageClasses,
 } from "../lib/ui";
 import { useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
@@ -700,6 +702,15 @@ interface PricedEditorProps extends EditorProps {
   currencies: Currency[];
 }
 
+/** Why an option is refused with no value: no variant could choose it. */
+const OPTION_NEEDS_VALUE = "An option needs at least one value before a variant can choose it.";
+
+/** Why a media entry is refused with no reference: the reference is what keys it. */
+const MEDIA_NEEDS_REFERENCE = "A media entry needs a reference.";
+
+/** Why a variant row is refused with no SKU: the SKU is what an order line names. */
+const VARIANT_NEEDS_SKU = "A variant needs a SKU.";
+
 /** An option's values, as both paths enter them: one chip at a time, duplicates refused. */
 function OptionValuesField({
   values,
@@ -730,6 +741,8 @@ function OptionsCard({ product, onChange }: EditorProps) {
   const [values, setValues] = useState<string[]>([]);
   const editor = useEntryEdit<OptionFields>(product.options.map((option) => option.key));
   const notice = useId();
+  const openRefusalId = useId();
+  const addRefusalId = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
@@ -813,11 +826,17 @@ function OptionsCard({ product, onChange }: EditorProps) {
                       values={value.values}
                       onChange={(values) => change({ ...value, values })}
                     />
+                    {value.values.length === 0 ? (
+                      <RefusalLine id={openRefusalId}>{OPTION_NEEDS_VALUE}</RefusalLine>
+                    ) : null}
                   </>
                 ),
                 // An option with no value is one no variant can choose, which is what the add
-                // form already refuses.
-                (value) => value.values.length > 0,
+                // form refuses too, in the same words.
+                (value) =>
+                  value.values.length > 0
+                    ? true
+                    : { id: openRefusalId, reason: OPTION_NEEDS_VALUE },
               )}
               actions={
                 <button
@@ -865,10 +884,18 @@ function OptionsCard({ product, onChange }: EditorProps) {
           />
         </div>
         <OptionValuesField values={values} onChange={setValues} />
-        <button className={`${accentButtonClasses} justify-self-start`} type="submit">
+        <PrimaryAction
+          variant="accent"
+          className="justify-self-start"
+          type="submit"
+          refusal={values.length === 0 ? { id: addRefusalId, reason: OPTION_NEEDS_VALUE } : null}
+        >
           <ButtonIcon verb="create" />
           Add option
-        </button>
+        </PrimaryAction>
+        {values.length === 0 ? (
+          <RefusalLine id={addRefusalId}>{OPTION_NEEDS_VALUE}</RefusalLine>
+        ) : null}
       </form>
     </Card>
   );
@@ -883,6 +910,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   // the one field on this table whose edit is a rename, so it is visible while a row is open
   // rather than only in the description.
   const skuRuleId = useId();
+  const skuRefusalId = useId();
   const editNoticeId = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
@@ -953,7 +981,16 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   // the same constant the pattern is built from, so the edit path refuses exactly what the
   // add form's submit refuses rather than letting "NS ASJ_1" wait for the publish gate.
   const skuMisshapen = openSku !== "" && !isVariantSku(openSku);
-  const skuSaveable = openSku !== "" && !skuCollides && !skuMisshapen;
+  const skuRefusal =
+    editor.open === null
+      ? null
+      : openSku === ""
+        ? VARIANT_NEEDS_SKU
+        : skuCollides
+          ? alreadyTakenMessage(openSku, "in the draft")
+          : skuMisshapen
+            ? VARIANT_SKU_RENAME_RULE
+            : null;
 
   return (
     <Card title="Variants">
@@ -1167,7 +1204,9 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         label={variant.sku}
                         open={rowEdit !== null}
                         blockedBy={editor.blocked(variant.sku) ? editNoticeId : undefined}
-                        saveable={skuSaveable}
+                        saveRefusal={
+                          skuRefusal === null ? undefined : { id: skuRefusalId, reason: skuRefusal }
+                        }
                         onOpen={() =>
                           editor.begin(variant.sku, variant.sku, variantFields(variant))
                         }
@@ -1219,11 +1258,11 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
       <p id={skuRuleId} className={editor.open ? "text-xs text-admin-muted" : "sr-only"}>
         {VARIANT_SKU_RENAME_RULE}
       </p>
-      {skuCollides || skuMisshapen ? (
-        <p role="alert" className="text-xs text-lab-error">
-          {skuCollides ? alreadyTakenMessage(openSku, "in the draft") : VARIANT_SKU_RENAME_RULE}
+      {skuRefusal === null ? null : (
+        <p id={skuRefusalId} role="alert" className={validationMessageClasses}>
+          {skuRefusal}
         </p>
-      ) : null}
+      )}
       <EntryEditNotice id={editNoticeId} label={editor.open?.label ?? null} />
       <RemovalNotice removal={removal} />
 
@@ -1321,11 +1360,14 @@ function MediaFieldset({
   value,
   onChange,
   collision,
+  collisionId,
 }: {
   value: MediaFields;
   onChange: (next: MediaFields) => void;
   /** Why this reference cannot be saved, when another entry already holds it. */
   collision?: string;
+  /** The collision line's `id`, where a refused Save is described by it. */
+  collisionId?: string;
 }) {
   return (
     <>
@@ -1334,6 +1376,7 @@ function MediaFieldset({
         hint={MEDIA_REFERENCE_RULE}
         extra={collision}
         extraTone={collision ? "error" : "muted"}
+        extraId={collisionId}
       >
         <input
           className={fieldControlClasses}
@@ -1362,6 +1405,8 @@ function MediaCard({ product, onChange }: EditorProps) {
   const taken = product.media.map((entry) => entry.reference);
   const editor = useEntryEdit<MediaFields>(taken);
   const notice = useId();
+  const openCollisionId = useId();
+  const openEmptyId = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
@@ -1425,10 +1470,27 @@ function MediaCard({ product, onChange }: EditorProps) {
                   }),
                 (value, change) => (
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <MediaFieldset value={value} onChange={change} collision={openCollision} />
+                    <MediaFieldset
+                      value={value}
+                      onChange={change}
+                      collision={openCollision}
+                      collisionId={openCollisionId}
+                    />
+                    {value.reference === "" ? (
+                      <RefusalLine id={openEmptyId} className="sm:col-span-2">
+                        {MEDIA_NEEDS_REFERENCE}
+                      </RefusalLine>
+                    ) : null}
                   </div>
                 ),
-                (value) => value.reference !== "" && openCollision === undefined,
+                // The collision is said once, on the field, and Save points at that line
+                // rather than repeating it (*Two refusals with one cause are one sentence*).
+                (value) =>
+                  value.reference === ""
+                    ? { id: openEmptyId, reason: MEDIA_NEEDS_REFERENCE }
+                    : openCollision !== undefined
+                      ? { id: openCollisionId, reason: openCollision }
+                      : true,
               )}
               actions={
                 <button

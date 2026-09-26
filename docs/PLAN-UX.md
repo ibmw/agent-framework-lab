@@ -89,32 +89,32 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
 
 #### Slice 22 — Refused with a reason
 
-- [ ] `blockedButtonClasses` — the dashed, disabled weight with the reason in `title`, minted
-  in Slice 12 and worn by the nine create pages and nothing else — on **every** primary action
-  that cannot proceed. Publish, Start, Save connection and Compose are the named adopters; the sweep is
-  for the rest, and *Attach to this shop* on Customers is one of them, `disabled` today with
-  its reason nowhere.
-- [ ] Decide whether the weight is `disabled` or `aria-disabled`. Natively disabled, it leaves
-  the tab order and only the inline reason carries — which is the rule as
-  `docs/design-direction.md` states it, and enough, but a keyboard reader never reaches the
-  control to be told. The slice that puts the weight on every blocked primary is the slice to
-  settle it on all of them at once rather than on four pages ahead of the rest.
-- [ ] Validation messages sit under the control at 13px 600 `#9d3028`, in the control's
-  accessible description, on the `Field` row.
-- [ ] The rules the September plan listed and the gate still says first: fulfilment max transit
-  at least min; stock zero while "in stock"; an active product with no priced variant, on the
-  editor; `paid_at` and `shipped_at` prefilled from `placed_at`; scenario caps as "N of 12";
-  the block parameter's default-when-optional beside its checkbox; the judge editor's rubric
-  required with reserved terms highlighted — the create page already refuses without one; Start
-  listing what is missing.
+The weight, its reachability and the validation weight are ADR 0063 and landed: every refused
+primary action renders through `PrimaryAction`, and a `Field` whose line is an error reads at
+13px 600 `#9d3028` and marks its control `aria-invalid`. What is left are the rules the September
+plan listed and the gate still says first, each said under its control at that weight, in the
+control's accessible description. They land as two units.
+
+- [ ] **22b, the shop draft** (`feat/refused-shop-rules`): fulfilment max transit at least min,
+  said under the transit fields on the add form and the open row, which keep their layout; stock
+  zero while "in stock", said on the variant's row, which keeps the table; "no priced variant" on
+  the Variants card, for every status; `paid_at` prefilled from `placed_at` when the payment status moves to paid and
+  it is empty, `shipped_at` likewise on shipped, and each cleared when its status moves back, with
+  `PAID_AT_RULE` and `SHIPPED_AT_RULE` saying so.
+- [ ] **22c, the lab** (`feat/refused-lab-rules`): each scenario card reads its own cap —
+  objectives "N of 24", mutations "N of 8", context documents "N of 12"; the block parameter's
+  default-when-optional beside its checkbox; the judge editor's rubric required, and a line
+  naming the reserved terms the rubric matches, on the word boundaries `_mentions` uses — the
+  create page already refuses without one; Start listing what is missing.
 
 Frames: README, *The form pattern* and *Interactions*; DEPRECADED frames 2c, 4, 7.
 
-Branch: `feat/refused-with-a-reason`. Checks: `lib/ui.test.ts` for the variant; page tests per
-rule; Playwright `scenario-authoring` and `experiment-start` if they press a blocked control.
+Checks: page tests per rule; Playwright `scenario-authoring` and `experiment-start` if they press
+a refused control.
 
 Slice evidence: an operator who types a minimum of 5 and a maximum of 3 transit days reads why
-under the field; Start on the bench is dashed until it can work and says what it waits for.
+under the field (22b); Start on the bench is dashed until it can work and says what it waits for
+(22c).
 
 #### Slice 23 — Defaults, and the experiment setup as a sequence
 

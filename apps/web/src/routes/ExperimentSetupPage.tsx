@@ -20,12 +20,12 @@ import { listExperiments, previewExperiment, startExperiment } from "../api/expe
 import { listScenarios, listScenarioVersions } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
-  accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
@@ -248,8 +248,23 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     return () => controller.abort();
   }, [shopId, setup]);
 
+  // Why Start will not start: a chosen arm pins a version naming a provider this lab cannot
+  // reach, which the advance would refuse with 422 and no recorded turn (ADR 0053). One
+  // sentence per provider, so two arms on one unreachable provider are one reason, not two.
+  // A note on this machine, never an issue: the preview's issues are the gate's, and the gate
+  // answers identically wherever it is asked.
+  const startBlocked = unreachableArmsNote(
+    arms.map((arm) => armProviders[arm.id] ?? null),
+    unreachable,
+  );
+
   const start = async (event: FormEvent) => {
     event.preventDefault();
+    // The button refuses this itself (ADR 0063); a submission that reaches the form without
+    // pressing it — `requestSubmit` — is refused here, rather than left to the advance's 422.
+    if (startBlocked !== "") {
+      return;
+    }
     if (label.trim() === "") {
       setError("Name the experiment so it can be found again beside the ones before it.");
       return;
@@ -282,16 +297,6 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
       setWorking(false);
     }
   };
-
-  // Why Start will not start: a chosen arm pins a version naming a provider this lab cannot
-  // reach, which the advance would refuse with 422 and no recorded turn (ADR 0053). One
-  // sentence per provider, so two arms on one unreachable provider are one reason, not two.
-  // A note on this machine, never an issue: the preview's issues are the gate's, and the gate
-  // answers identically wherever it is asked.
-  const startBlocked = unreachableArmsNote(
-    arms.map((arm) => armProviders[arm.id] ?? null),
-    unreachable,
-  );
 
   const editArm = (index: number, next: ArmDraft) => {
     setArms((current) => current.map((arm, position) => (position === index ? next : arm)));
@@ -481,24 +486,18 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
             <p className="text-xs text-admin-muted">
               Participant: human operator — you play the customer in both arms.
             </p>
-            {/*
-             * The blocked-control rule until Slice 22 gives Start the dashed weight: the reason
-             * in `title`, and in one muted line the button's `aria-describedby` names.
-             */}
-            <button
-              className={accentButtonClasses}
+            {/* Refused with its reason, reachable and titled (ADR 0063). */}
+            <PrimaryAction
+              variant="accent"
               type="submit"
-              disabled={working || startBlocked !== ""}
-              title={startBlocked === "" ? undefined : startBlocked}
-              aria-describedby={startBlocked === "" ? undefined : startNoteId}
+              refusal={startBlocked === "" ? null : { id: startNoteId, reason: startBlocked }}
+              busy={working}
             >
               <ButtonIcon verb="start" />
               {working ? "Starting…" : "Start experiment"}
-            </button>
+            </PrimaryAction>
             {startBlocked === "" ? null : (
-              <p id={startNoteId} className="text-xs text-admin-muted">
-                {startBlocked}
-              </p>
+              <RefusalLine id={startNoteId}>{startBlocked}</RefusalLine>
             )}
           </Card>
 

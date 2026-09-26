@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { accentButtonClasses, blockedButtonClasses, focusRingClasses } from "../lib/ui";
+import { focusRingClasses, validationMessageClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
+import { PrimaryAction, RefusalLine } from "./PrimaryAction";
 
 /**
  * Creating is a page, and this is the page (PLAN-UX Slice 12).
@@ -17,10 +18,10 @@ import { ButtonIcon } from "./ButtonIcon";
  * - **The title is what is being typed.** It reads back the name the operator is entering, so a
  *   page they arrived at empty becomes the thing they are making while they make it. `untitled`
  *   is what stands in until there is one; the chip beside it says the page has written nothing.
- * - **Create says why it will not go.** `blockedBy` is one sentence: it disables the button,
- *   dresses it in the dashed weight, puts the sentence in `title`, and prints it *inline* next
- *   to the control in the button's own accessible description — because `title=` is never the
- *   only carrier (`docs/design-direction.md`, *The form language*).
+ * - **Create says why it will not go.** `blockedBy` is one sentence: it refuses the button
+ *   through `PrimaryAction` — the dashed weight, `aria-disabled` so a keyboard reader still lands
+ *   on it, the sentence in `title` — and prints it *inline* under the control, in the button's
+ *   own accessible description, because `title=` is never the only carrier (ADR 0063).
  * - **A refused create keeps the operator here.** `error` renders in the same place under the
  *   button, as an alert; the page does not navigate and nothing it holds is lost.
  * - **Leaving asks nothing.** A half-typed create form is not an edit to something that exists,
@@ -124,31 +125,27 @@ export function CreatePage({
           >
             Cancel
           </Link>
-          <button
-            className={blocked ? blockedButtonClasses : accentButtonClasses}
+          <PrimaryAction
+            variant="accent"
             type="submit"
             form={formId}
-            disabled={blocked || creating}
-            title={blockedBy}
-            aria-describedby={blocked ? reasonId : error ? errorId : undefined}
+            refusal={blocked ? { id: reasonId, reason: blockedBy } : null}
+            busy={creating}
+            aria-describedby={!blocked && error ? errorId : undefined}
           >
             <ButtonIcon verb="save" />
             {creating ? creatingLabel : createLabel}
-          </button>
+          </PrimaryAction>
         </div>
         {/* Under the button, spanning the row, so a reason and a refusal are read in the place
             the press was refused rather than hunted for down the form. */}
         {blocked ? (
-          <p id={reasonId} className="w-full text-right text-[13px] font-semibold text-lab-error">
+          <RefusalLine id={reasonId} className="w-full text-right">
             {blockedBy}
-          </p>
+          </RefusalLine>
         ) : null}
         {error ? (
-          <p
-            id={errorId}
-            role="alert"
-            className="w-full text-right text-[13px] font-semibold text-lab-error"
-          >
+          <p id={errorId} role="alert" className={`w-full text-right ${validationMessageClasses}`}>
             {error}
           </p>
         ) : null}

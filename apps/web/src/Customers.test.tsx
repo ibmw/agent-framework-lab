@@ -8,7 +8,7 @@ import type {
   ShopListResponse,
   ShopPreviewResponse,
 } from "@agent-lab/contracts";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -17,6 +17,7 @@ import { toProfilePayload } from "./api/customerProfiles";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -370,6 +371,62 @@ describe("customer workspace", () => {
 
     await waitFor(() => expect(attachedProfileIds).toEqual([UNATTACHED.profile_id]));
   });
+
+  it("refuses the attach until a profile is chosen, and says so; a press or Enter attaches nothing", async () => {
+    const user = userEvent.setup();
+    // Every attach request, whatever profile it names — an unchosen one names none.
+    let attachRequests = 0;
+    server.use(
+      http.post("*/api/v1/customer-profiles/*", () => {
+        attachRequests += 1;
+        return HttpResponse.json({}, { status: 500 });
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    await screen.findByRole("option", { name: /Tomás Rivera/ });
+
+    const attach = screen.getByRole("button", { name: "Attach to this shop" });
+    expectRefused(attach, "Choose the profile to attach.");
+    await user.click(attach);
+    attach.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    // `requestSubmit` stops at the select's native `required` before any handler runs, so the
+    // handler's own check is reached the one way that skips constraint validation: a `submit`
+    // event on the form itself.
+    await submitWithoutPressing(attach);
+    await act(async () => {
+      fireEvent.submit((attach as HTMLButtonElement).form as HTMLFormElement);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(attachedProfileIds).toEqual([]);
+    expect(attachRequests).toBe(0);
+
+    await user.selectOptions(screen.getByLabelText("Profile to attach"), UNATTACHED.profile_id);
+    expectNotRefused(attach);
+  });
+
+  it("says there is nothing left to attach, where it used to go quiet", async () => {
+    server.use(
+      http.get("*/api/v1/customer-profiles", () =>
+        HttpResponse.json({ profiles: [MAYA] } satisfies CustomerProfileListResponse),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+
+    const reason = "Every profile in the lab is already attached to this shop.";
+    await waitFor(() =>
+      expectRefused(screen.getByRole("button", { name: "Attach to this shop" }), reason),
+    );
+    expect(screen.getByText(reason)).toBeVisible();
+  });
 });
 
 describe("the new-customer page", () => {
@@ -407,17 +464,17 @@ describe("the new-customer page", () => {
     await newCustomer();
 
     const create = () => screen.getByRole("button", { name: "Create profile" });
-    expect(create()).toBeDisabled();
+    expectRefused(create(), /given name and a family name/i);
     expect(create()).toHaveAccessibleDescription(/given name and a family name/i);
     expect(create()).toHaveAttribute("title", expect.stringMatching(/given name/i));
 
     await user.type(screen.getByLabelText("Given name"), "Camille");
     await user.type(screen.getByLabelText("Family name"), "Dupont");
-    expect(create()).toBeDisabled();
+    expectRefused(create(), /needs an email address/i);
     expect(create()).toHaveAccessibleDescription(/needs an email address/i);
 
     await user.type(screen.getByLabelText("Email"), "camille.dupont@example.org");
-    expect(create()).toBeEnabled();
+    expectNotRefused(create());
   });
 
   it("puts each field's hint in that control's accessible description", async () => {
@@ -539,7 +596,10 @@ describe("customer workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Maya Laurent" })).toBeVisible();
     expect(screen.getByText(/one address-book entry must be the default/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+    expectRefused(
+      screen.getByRole("button", { name: "Publish v1" }),
+      /Resolve 1 error\(s\) to publish/,
+    );
     expect(screen.getByText("Resolve 1 error(s) to publish.")).toBeVisible();
   });
 
@@ -549,13 +609,13 @@ describe("customer workspace", () => {
     renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
 
     await screen.findByRole("heading", { name: "Maya Laurent" });
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeEnabled();
+    expectNotRefused(screen.getByRole("button", { name: "Publish v1" }));
 
     await user.type(screen.getByLabelText("Given name"), "h");
 
     // Publishing freezes what the server holds, so the button closes rather than freezing
     // a draft older than the edits on screen.
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+    expectRefused(screen.getByRole("button", { name: "Publish v1" }), /Save the draft first/);
     expect(screen.getByText(/Save the draft first/)).toBeVisible();
   });
 

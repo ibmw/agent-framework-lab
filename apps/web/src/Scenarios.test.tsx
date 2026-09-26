@@ -21,6 +21,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -610,7 +611,7 @@ describe("the new-scenario page", () => {
     const create = await screen.findByRole("button", { name: "Create scenario" });
     const unnamed = "Give the scenario a name first.";
     await waitFor(() => expect(create).toHaveAccessibleDescription(unnamed));
-    expect(create).toBeDisabled();
+    expectRefused(create, unnamed);
     expect(screen.getByText(unnamed)).toBeVisible();
 
     await user.type(screen.getByLabelText("Name"), "Damaged delivery");
@@ -618,14 +619,14 @@ describe("the new-scenario page", () => {
     // The reason moves to what is actually missing next, and is read beside the control
     // rather than only hovered.
     const unscored = "Compose at least one objective — a run needs something to be scored against.";
-    expect(create).toBeDisabled();
+    expectRefused(create, unscored);
     expect(create).toHaveAccessibleDescription(unscored);
     expect(create).toHaveAttribute("title", unscored);
     expect(screen.getByText(unscored)).toBeVisible();
 
     await compose(user, "read-required-document");
 
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
     expect(screen.queryByText(unscored)).toBeNull();
   });
 
@@ -637,7 +638,10 @@ describe("the new-scenario page", () => {
     await compose(user, "read-required-document");
 
     const create = screen.getByRole("button", { name: "Create scenario" });
-    expect(create).toBeDisabled();
+    expectRefused(
+      create,
+      "Wrong shipping address is the name of a scenario this shop already holds.",
+    );
     expect(create).toHaveAccessibleDescription(
       "Wrong shipping address is the name of a scenario this shop already holds.",
     );
@@ -891,7 +895,7 @@ describe("the new-scenario page", () => {
     // And the listing it just re-read holds this page's own name, which is the "until the
     // scenario exists" half of the taken-name refusal: counting it would refuse the retry of
     // the create that made it.
-    expect(screen.getByRole("button", { name: "Create scenario" })).toBeEnabled();
+    expectNotRefused(screen.getByRole("button", { name: "Create scenario" }));
   });
 
   it("says the libraries failed rather than that it is still reading them", async () => {
@@ -950,7 +954,7 @@ describe("the new-scenario page", () => {
     await user.type(await screen.findByLabelText("Name"), "Damaged delivery");
     await compose(user, "read-required-document");
     const create = screen.getByRole("button", { name: "Create scenario" });
-    expect(create).toBeEnabled();
+    expectNotRefused(create);
 
     // The second template's draft is held open, so the page is composing something it
     // cannot build yet.
@@ -958,7 +962,7 @@ describe("the new-scenario page", () => {
     await user.click(heldChip);
     const reason = "Reading what the template just composed declares…";
     await waitFor(() => expect(create).toHaveAccessibleDescription(reason));
-    expect(create).toBeDisabled();
+    expectRefused(create, reason);
     expect(screen.getByText(reason)).toBeVisible();
     // The chip keeps its place in the tab order while it waits: a browser blurs a focused
     // control the moment it is disabled, and jsdom does not, so this is asserted rather
@@ -968,7 +972,7 @@ describe("the new-scenario page", () => {
 
     release();
 
-    await waitFor(() => expect(create).toBeEnabled());
+    await waitFor(() => expectNotRefused(create));
     await user.click(create);
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
@@ -989,7 +993,10 @@ describe("the new-scenario page", () => {
         "This shop's scenarios could not be read, so a free name cannot be told from a taken one.",
       ),
     );
-    expect(create).toBeDisabled();
+    expectRefused(
+      create,
+      "This shop's scenarios could not be read, so a free name cannot be told from a taken one.",
+    );
   });
 
   it("composes nothing when the template it was asked for cannot be read", async () => {
@@ -1014,7 +1021,10 @@ describe("the new-scenario page", () => {
       "false",
     );
     expect(screen.queryByRole("list", { name: "Composed objectives" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Create scenario" })).toBeDisabled();
+    expectRefused(
+      screen.getByRole("button", { name: "Create scenario" }),
+      /Compose at least one objective/,
+    );
   });
 
   it("asks nothing while the create form is only half filled", async () => {
@@ -1241,7 +1251,7 @@ describe("scenario editor", () => {
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await user.type(screen.getByLabelText("Hidden facts"), "Maya confirms the Lyon address.");
 
-    expect(screen.getByRole("button", { name: "Publish v1" })).toBeDisabled();
+    expectRefused(screen.getByRole("button", { name: "Publish v1" }), /Save the draft first/);
     expect(screen.getByText(/publishing freezes the saved draft, not unsaved edits/)).toBeVisible();
   });
 });

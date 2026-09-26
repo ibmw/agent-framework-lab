@@ -11,13 +11,18 @@ import {
 } from "react";
 import { Outlet, useBlocker } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { sameProductEntry } from "../lib/productKeys";
-import { accentButtonClasses, outlineButtonClasses, surfaceClasses } from "../lib/ui";
+import { outlineButtonClasses, surfaceClasses } from "../lib/ui";
 import {
   type RegisteredWork,
   UnsavedWorkContext,
   type UnsavedWorkRegister,
 } from "../lib/unsavedWork";
+
+/** Why *Save and leave* is refused while a row is open: its typing is not in any draft yet. */
+const OPEN_ROW_REASON =
+  "A row that is open for editing cannot be saved from here: nothing typed in it has reached the draft yet. Stay, then press the row's own Save or Cancel.";
 
 /**
  * The root of the route tree: it holds the workspace's register of unsaved work, and it is the
@@ -185,6 +190,11 @@ function UnsavedChangesPrompt({
   }
 
   async function saveAndLeave() {
+    // The button refuses this press itself (ADR 0063); a press that reaches here some other way
+    // must not leave either, because an open row's typing is in no draft and would be lost.
+    if (!savableHere) {
+      return;
+    }
     setPhase("saving");
     const answers = await Promise.all(works.map((work) => work.save?.() ?? Promise.resolve(null)));
     const refused = answers.filter((answer): answer is string => answer !== null);
@@ -246,12 +256,7 @@ function UnsavedChangesPrompt({
             ))}
           </div>
         ) : null}
-        {savableHere ? null : (
-          <p id={reasonId} className="text-xs text-admin-muted">
-            A row that is open for editing cannot be saved from here: nothing typed in it has
-            reached the draft yet. Stay, then press the row's own Save or Cancel.
-          </p>
-        )}
+        {savableHere ? null : <RefusalLine id={reasonId}>{OPEN_ROW_REASON}</RefusalLine>}
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button className={outlineButtonClasses} type="button" onClick={onStay} disabled={busy}>
             Stay on this page
@@ -265,16 +270,16 @@ function UnsavedChangesPrompt({
             <ButtonIcon verb="discard" />
             Discard and leave
           </button>
-          <button
-            className={accentButtonClasses}
+          <PrimaryAction
+            variant="accent"
             type="button"
             onClick={() => void saveAndLeave()}
-            disabled={busy || !savableHere}
-            aria-describedby={savableHere ? undefined : reasonId}
+            refusal={savableHere ? null : { id: reasonId, reason: OPEN_ROW_REASON }}
+            busy={busy}
           >
             <ButtonIcon verb="save" />
             {busy ? "Saving…" : "Save and leave"}
-          </button>
+          </PrimaryAction>
         </div>
       </div>
     </div>

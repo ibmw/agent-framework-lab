@@ -551,8 +551,8 @@ function HistoryRow({
       arm.agent_configuration_latest_version !== null &&
       arm.agent_configuration_latest_version > arm.agent_configuration_version,
   );
-  // The reach line, in the blocked-control shape until Slice 22: the reason in `title`, and
-  // in one muted line the button's `aria-describedby` names. Two refusals with one cause are
+  // The reach line: these two are secondary controls, so they keep native `disabled` (ADR
+  // 0063) with the reason in `title` and in one muted line the button's `aria-describedby` names. Two refusals with one cause are
   // one sentence, so a replay and a fork refused for the same provider share one line.
   const replayNoteId = `${experiment.experiment_id}-replay-reach`;
   const forkReach = newer ? forkBlocked : "";

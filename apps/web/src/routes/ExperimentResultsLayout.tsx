@@ -23,6 +23,7 @@ import {
   replayExperiment,
 } from "../api/experiments";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
 import { unreachableArmsNote } from "../lib/modelConnections";
@@ -30,7 +31,6 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
-  inkButtonClasses,
   subtleButtonClasses,
 } from "../lib/ui";
 import { pinKey, usePinnedProviders } from "../lib/usePinnedProviders";
@@ -213,8 +213,8 @@ export function ExperimentResultsLayout() {
               className={subtleButtonClasses}
               type="button"
               onClick={replay}
-              // The blocked-control rule until Slice 22: the reason in `title`, and in one
-              // muted line the button's `aria-describedby` names.
+              // A secondary control keeps native `disabled` (ADR 0063): the reason in `title`,
+              // and in one muted line the button's `aria-describedby` names.
               disabled={deriving || replayBlocked !== ""}
               title={replayBlocked === "" ? undefined : replayBlocked}
               aria-describedby={replayBlocked === "" ? undefined : replayNoteId}
@@ -404,6 +404,9 @@ function ForkPanel({
     ),
     unreachable,
   );
+  // An arm the lab cannot reach refuses the whole derivation; failing that, a fork that moved
+  // nothing is a replay (ADR 0063: refused with a reason, never silently).
+  const forkRefusal = forkBlocked !== "" ? forkBlocked : moved ? null : FORK_UNMOVED_REASON;
 
   return (
     <section
@@ -436,33 +439,39 @@ function ForkPanel({
         />
       ))}
       <div>
-        <button
-          className={inkButtonClasses}
+        <PrimaryAction
+          variant="ink"
           type="button"
-          disabled={deriving || !moved || forkBlocked !== ""}
-          title={forkBlocked === "" ? undefined : forkBlocked}
-          aria-describedby={forkBlocked === "" ? undefined : forkNoteId}
-          onClick={() =>
+          refusal={forkRefusal === null ? null : { id: forkNoteId, reason: forkRefusal }}
+          busy={deriving}
+          onClick={() => {
+            // The button swallows a refused press itself; this is the handler's own check.
+            if (forkRefusal !== null) {
+              return;
+            }
             onFork(
               chosen.map((arm) => ({
                 configuration_id: arm.configurationId,
                 version: arm.version,
               })),
-            )
-          }
+            );
+          }}
         >
           <ButtonIcon verb="fork" />
           {deriving ? "Deriving…" : "Fork this run"}
-        </button>
-        {forkBlocked === "" ? null : (
-          <p id={forkNoteId} className="mt-1 text-xs text-admin-muted">
-            {forkBlocked}
-          </p>
+        </PrimaryAction>
+        {forkRefusal === null ? null : (
+          <RefusalLine id={forkNoteId} className="mt-1">
+            {forkRefusal}
+          </RefusalLine>
         )}
       </div>
     </section>
   );
 }
+
+/** Why *Fork this run* is refused while every arm stands where the run left it. */
+const FORK_UNMOVED_REASON = "Change at least one arm: a fork that changes nothing is a replay.";
 
 /** One arm of a fork as the panel holds it, before it becomes a request. */
 interface ForkDraft {

@@ -4,7 +4,7 @@ import type {
   JudgeConfigurationResourcesResponse,
   JudgeEvidenceScope,
 } from "@agent-lab/contracts";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -14,7 +14,6 @@ import {
   readJudgeConfigurationResources,
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
-import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
@@ -23,11 +22,12 @@ import {
   Fingerprint,
   IssueList,
   PageHeader,
+  PublishButton,
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
-import { canPublish, type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
+import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { JUDGE_EVIDENCE_SCOPE } from "../lib/enumLabels";
 import {
   PROVEN_PROVIDER_RULE,
@@ -36,12 +36,7 @@ import {
   unprovenJudgeProviderRule,
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
-import {
-  accentButtonClasses,
-  fieldControlClasses,
-  fieldLabelClasses,
-  textAreaClasses,
-} from "../lib/ui";
+import { fieldControlClasses, fieldLabelClasses, textAreaClasses } from "../lib/ui";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
@@ -74,6 +69,7 @@ const CLIENT: DefinitionClient<
 export function JudgeConfigurationEditorPage() {
   const { judgeId = "" } = useParams();
   const { listings } = useLabWorkspace();
+  const publishReasonsId = useId();
   const editor = useDefinitionEditor(judgeId, CLIENT, {
     label: "The judge draft has unsaved changes.",
     // The library index prints the row this editor is changing (ADR 0056).
@@ -194,10 +190,12 @@ export function JudgeConfigurationEditorPage() {
               onSave={() => void editor.save()}
               onDiscard={() => void editor.discard()}
             />
-            <button
-              className={accentButtonClasses}
-              type="button"
-              onClick={() => {
+            <PublishButton
+              preview={preview}
+              dirty={editor.dirty}
+              publishing={editor.publishing}
+              reasonsId={publishReasonsId}
+              onPublish={() => {
                 // A frozen version is printed by the index this editor was opened from, and
                 // that index renders the shell's listing (ADR 0056).
                 void editor.publish().then((version) => {
@@ -207,11 +205,7 @@ export function JudgeConfigurationEditorPage() {
                   }
                 });
               }}
-              disabled={editor.publishing || !canPublish(preview, editor.dirty)}
-            >
-              <ButtonIcon verb="publish" />
-              {editor.publishing ? "Publishing…" : `Publish v${preview?.next_version ?? 1}`}
-            </button>
+            />
           </>
         }
       />
@@ -221,9 +215,12 @@ export function JudgeConfigurationEditorPage() {
           {editor.error ?? resourceError}
         </p>
       ) : null}
-      <div className="mb-4 grid gap-1">
-        <PublishReasons preview={preview} dirty={editor.dirty} />
-      </div>
+      <PublishReasons
+        id={publishReasonsId}
+        className="mb-4 grid gap-1"
+        preview={preview}
+        dirty={editor.dirty}
+      />
       {publishedVersion !== null ? (
         <p role="status" className="mb-4 text-[13px] text-lab-success">
           Published version {publishedVersion}. Every verdict records the version that produced it.
