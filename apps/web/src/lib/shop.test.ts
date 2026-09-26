@@ -1,5 +1,7 @@
 import type { DefinitionIssueSchema, ShopContentSchema } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
+import openapi from "../../../../packages/contracts/openapi/v1/openapi.yaml?raw";
+import type { ShopDraft } from "./productKeys";
 import {
   groupIssues,
   issuesForProduct,
@@ -63,6 +65,27 @@ const content: ShopContentSchema = {
   default_tone_of_voice_id: null,
 };
 
+/** The same content as the workspace holds it, each product keyed (ADR 0061). */
+const keyed: ShopDraft = {
+  ...content,
+  products: content.products.map((product, index) => ({ ...product, key: `product-${index}` })),
+};
+
+/**
+ * The properties `openapi.yaml` lets a product payload carry. `ProductSchema` is declared
+ * `additionalProperties: false`, so a key that leaked into the write is a 422, not a field the
+ * lab ignores.
+ */
+function contractProductProperties(): string[] {
+  const block = openapi.match(
+    /^ {4}ProductSchema:\n {6}properties:\n([\s\S]*?)^ {6}additionalProperties: false$/m,
+  );
+  if (block === null) {
+    throw new Error("ProductSchema is not a closed object in the contract");
+  }
+  return [...block[1].matchAll(/^ {8}([a-z_]+):$/gm)].map(([, name]) => name);
+}
+
 describe("toPayload", () => {
   it("strips derived read-only evidence the draft write must not echo back", () => {
     const payload = toPayload(content);
@@ -72,18 +95,42 @@ describe("toPayload", () => {
     expect(payload.products[0].variants).toHaveLength(2);
     expect(payload.identity).toEqual(content.identity);
   });
+
+  it("strips the key the workspace gave each product, so the write is the contract's", () => {
+    // Read first, or a parse that found nothing would let any payload through (ADR 0023).
+    expect(contractProductProperties()).toEqual([
+      "handle",
+      "title",
+      "description",
+      "status",
+      "category",
+      "options",
+      "variants",
+      "media",
+      "attributes",
+      "reviews",
+    ]);
+
+    const [product] = toPayload(keyed).products;
+
+    expect(product).not.toHaveProperty("key");
+    expect(Object.keys(product).sort()).toEqual(contractProductProperties().sort());
+    expect(toPayload(keyed)).toStrictEqual(toPayload(content));
+  });
 });
 
 describe("replaceProduct", () => {
-  it("replaces one product and leaves the rest of the draft untouched", () => {
-    const next = replaceProduct(content, "alpine-shell-jacket", {
-      ...content.products[0],
+  it("replaces one product by its key and leaves the rest of the draft untouched", () => {
+    const next = replaceProduct(keyed, "product-0", {
+      ...keyed.products[0],
       title: "Renamed",
+      handle: "renamed",
     });
 
     expect(next.products[0].title).toBe("Renamed");
-    expect(next.identity).toBe(content.identity);
-    expect(content.products[0].title).toBe("Alpine Shell Jacket");
+    expect(next.products[0].key).toBe("product-0");
+    expect(next.identity).toBe(keyed.identity);
+    expect(keyed.products[0].title).toBe("Alpine Shell Jacket");
   });
 });
 

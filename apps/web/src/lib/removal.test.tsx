@@ -1,8 +1,17 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useLayoutEffect, useReducer, useRef, useState } from "react";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { RemovalNotice } from "../components/ConfirmRemove";
-import { findingClauses, REMOVAL_FINDINGS, useRemoval } from "./removal";
+import { productEntryState, productKeyIn } from "./productKeys";
+import {
+  findingClauses,
+  REMOVAL_FINDINGS,
+  removedState,
+  useArrivedRemoval,
+  useRemoval,
+} from "./removal";
 
 /** One list with one row keyed `a`, belonging to `scope`. */
 function List({ scope }: { scope: string }) {
@@ -267,5 +276,99 @@ describe("the tone-of-voice clauses", () => {
     expect(findingClauses(["tone_of_voice_without_default"])).toBe(
       "It is the shop default, and the shop is refused at publication until another guideline is made the default.",
     );
+  });
+});
+
+/** A page that says a removal carried to it, as the indexes do. */
+function Arrived() {
+  const removal = useRemoval("page");
+  useArrivedRemoval(removal);
+  return <RemovalNotice removal={removal} />;
+}
+
+describe("a notice carried to a page", () => {
+  it("is taken off the entry without the product key the entry is stamped with (ADR 0061)", async () => {
+    const router = createMemoryRouter([{ path: "/products/:handle", element: <Arrived /> }], {
+      initialEntries: [
+        {
+          pathname: "/products/alpine-shell-jacket",
+          state: { ...removedState("Removed a.", "a"), ...productEntryState("product-k-1") },
+        },
+      ],
+    });
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText("Removed a.")).toBeVisible();
+    await waitFor(() => expect(router.state.location.state).not.toHaveProperty("removed"));
+    expect(productKeyIn(router.state.location.state)).toBe("product-k-1");
+  });
+
+  it("leaves an entry that carried nothing else with no state at all", async () => {
+    const router = createMemoryRouter([{ path: "/orders", element: <Arrived /> }], {
+      initialEntries: [{ pathname: "/orders", state: removedState("Removed a.", "a") }],
+    });
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText("Removed a.")).toBeVisible();
+    await waitFor(() => expect(router.state.location.state).toBeNull());
+  });
+});
+
+/**
+ * One row `a` whose removal is a write that lands inside an unrelated commit of this list — a
+ * router navigation's, say — so the removal says its notice after that commit and before the
+ * commit's passive effects have run: the effect that runs next still sees no notice.
+ */
+function InterruptedRow() {
+  const removal = useRemoval("list");
+  const [gone, setGone] = useState(false);
+  const [tick, rerender] = useReducer((count: number) => count + 1, 0);
+  const land = useRef<((landed: boolean) => void) | null>(null);
+  useLayoutEffect(() => {
+    if (tick > 0) {
+      land.current?.(true);
+      land.current = null;
+    }
+  }, [tick]);
+  const write = () => {
+    setGone(true);
+    // A render outside any event: its commit's effects are passive, run after the microtask
+    // that says the notice.
+    setTimeout(rerender, 0);
+    return new Promise<boolean>((resolve) => {
+      land.current = resolve;
+    });
+  };
+  return (
+    <>
+      {gone ? null : removal.isArmed("a") ? (
+        <button key="confirm" type="button" onClick={removal.confirm(write, "Removed a.")}>
+          Confirm a
+        </button>
+      ) : (
+        <button
+          key="row"
+          type="button"
+          ref={removal.trigger("a")}
+          onClick={removal.ask("a", write, "Removed a.")}
+        >
+          Remove a
+        </button>
+      )}
+      <RemovalNotice removal={removal} />
+    </>
+  );
+}
+
+describe("a notice whose line is drawn after an unrelated commit", () => {
+  it("still takes focus once it is drawn", async () => {
+    const user = userEvent.setup();
+    render(<InterruptedRow />);
+
+    await user.click(screen.getByRole("button", { name: "Remove a" }));
+    await user.click(screen.getByRole("button", { name: "Confirm a" }));
+
+    expect(await screen.findByText("Removed a.")).toBeVisible();
+    await waitFor(() => expect(screen.getByText("Removed a.")).toHaveFocus());
   });
 });

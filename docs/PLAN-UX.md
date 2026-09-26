@@ -90,14 +90,9 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
 
 #### Slice 21 (remainder) — Deleting and duplicating a product
 
-- [ ] Settle, in an ADR, how the product editor tracks a product across renames, deletes and
-  discards — today its handle is both its address and its identity and moves with its title —
-  before building Delete and Duplicate on it.
 - [ ] Delete and Duplicate on the product editor header and as a row action, Delete naming any
-  order line that references one of the product's variants.
-- [ ] The two identity defects already on `main` that the note records — a discard following a
-  renamed product back loses the typing in an open row (S10, S3), and opening a product whose
-  handle is not its title's slug renames it (S8) — are fixed, not worked around.
+  order line that references one of the product's variants, built on the product key, keyring
+  and keyed route of ADR 0061.
 
 Frames: DEPRECADED frame 2c.
 

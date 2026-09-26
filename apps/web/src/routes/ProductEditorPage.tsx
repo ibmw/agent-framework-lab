@@ -7,7 +7,7 @@ import type {
   VariantSchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
@@ -27,7 +27,14 @@ import {
 } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
-import { slugify, uniqueId, uniqueSuggestion, uniqueVariantSku } from "../lib/entryIds";
+import {
+  isSlug,
+  SLUG_MAX_LENGTH,
+  slugify,
+  uniqueId,
+  uniqueSuggestion,
+  uniqueVariantSku,
+} from "../lib/entryIds";
 import {
   ATTRIBUTE_TYPE,
   labelOf,
@@ -55,9 +62,12 @@ import {
   VARIANT_SKU_RENAME_RULE,
   VARIANT_SKU_RULE,
 } from "../lib/fieldRules";
+import { type DraftProduct, productEntryState, productKeyIn } from "../lib/productKeys";
 import { consequenceOf, findingClauses, REMOVAL_FINDINGS, useRemoval } from "../lib/removal";
 import {
   findProduct,
+  findProductByHandle,
+  isPlaceholderHandle,
   issuesForProduct,
   productTitle,
   ratingLabel,
@@ -79,6 +89,7 @@ import {
   tableHeadClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const AVAILABILITIES = optionsOf(VARIANT_AVAILABILITY);
@@ -87,121 +98,238 @@ const ATTRIBUTE_TYPES = optionsOf(ATTRIBUTE_TYPE);
 
 const PRODUCT_STATUSES = optionsOf(PRODUCT_STATUS);
 
-export function ProductEditorPage() {
-  const { handle: addressed = "" } = useParams();
-  const { shopId, content, preview, edit, save, saving, discard, discarding, dirty, error } =
-    useShopWorkspace();
+/** Why a value typed into the Handle field is not written: the lab would not store it. */
+function handleRefusal(typed: string, kept: string): string {
+  return `${typed} cannot be a handle: lowercase letters and digits joined by single hyphens, at most ${SLUG_MAX_LENGTH} characters. The product is still ${kept}.`;
+}
+
+/**
+ * The product editor, mounted afresh for every product (ADR 0061).
+ *
+ * The address is the product's handle, which a rename or a discard moves; what the page is
+ * *about* is the key the workspace gave the product, which neither does. A history entry the
+ * workspace made carries that key in its state — the catalog's links, *New product*, and the
+ * page's own `replace` — and names that product whatever handle the address spells. An entry
+ * with no key this load minted — typed, bookmarked, or from before a reload — is resolved by
+ * handle once and stamped before the page mounts, so nothing the operator does on the page can
+ * race the stamp. Keyed by the product, the page never remounts while the operator stays on one
+ * product, and a move to another one starts clean, as `CustomerEditorRoute` does for a profile.
+ */
+export function ProductEditorRoute() {
+  const { handle = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  /**
-   * The handle of the product this editor is showing, which is the address until the Handle
-   * row changes it.
-   *
-   * A product is addressed *by* its handle, so renaming one moves the page it is on. The draft
-   * and the router are two stores and settle in two commits, so looking the product up by the
-   * route parameter alone would find nothing for one render after a rename and draw "Product
-   * not found" over a product that is right there. This holds what is being edited, and the
-   * effect below puts the address back on it.
-   */
-  const [shown, setShown] = useState(addressed);
-  /**
-   * Where in the draft the product being edited sits, so a rename that is undone can be
-   * followed back.
-   *
-   * A rename lives only in the draft until it is saved, so *Discard changes* can take the
-   * handle this page is standing on out of existence: the draft goes back to what the lab
-   * holds, the address and `shown` both name a product that is no longer in it, and the page
-   * would draw "Product not found" over a product that is right there under its old name.
-   *
-   * The position is what survives that, and a remembered *handle* does not: `discard` marks
-   * the draft clean before the read that restores it (ADR 0051), so there is a commit in
-   * which the editor is clean and the content is still the edited one — and anything keyed
-   * on "clean" would record the handle that is about to disappear. Nothing renames, adds or
-   * reorders products behind this page, so the slot is stable.
-   */
-  const at = content.products.findIndex((entry) => entry.handle === shown);
-  const slot = useRef(at);
-  const product = at === -1 ? undefined : content.products[at];
-  const elsewhere = findProduct(content, addressed);
+  const { content, productKeyMinted } = useShopWorkspace();
+  const stamped = productKeyIn(location.state);
+  const key = stamped !== null && productKeyMinted(stamped) ? stamped : null;
+  const resolved = key === null ? (findProductByHandle(content, handle)?.key ?? null) : null;
 
   useEffect(() => {
-    if (at !== -1) {
-      slot.current = at;
-      return;
+    if (resolved !== null) {
+      navigate(`${location.pathname}${location.search}${location.hash}`, {
+        replace: true,
+        state: productEntryState(resolved, location.state),
+      });
     }
-    const back = content.products[slot.current];
-    if (back !== undefined) {
-      setShown(back.handle);
-      setTypedHandle(null);
-    }
-  }, [at, content]);
+  }, [resolved, navigate, location.pathname, location.search, location.hash, location.state]);
 
-  useEffect(() => {
-    if (addressed === shown) {
-      return;
-    }
-    if (elsewhere) {
-      // A real navigation — a link, the back button — to another product in the same draft.
-      setShown(addressed);
-      setTypedHandle(null);
-      return;
-    }
-    // A rename, or a discard that undid one: the address is stale, and `replace` keeps one
-    // history entry per product rather than one per keystroke of the handle.
-    navigate(`/shops/${shopId}/products/${shown}`, { replace: true });
-  }, [addressed, shown, elsewhere, navigate, shopId]);
-
-  /**
-   * The handles the *other* products hold, by identity rather than by spelling.
-   *
-   * Renaming rewrites this product's own handle in the draft as it is typed, so a list
-   * filtered by spelling would stop recognising the product being renamed and start
-   * recognising its own new handle as taken.
-   */
-  const takenHandles = content.products
-    .filter((entry) => entry.handle !== shown)
-    .map((entry) => entry.handle);
-  /**
-   * What the handle would be if it followed the title, never nothing.
-   *
-   * On a create form an untitled product suggests an empty handle and the field simply sits
-   * empty. Here the field is bound to something that exists and is addressed by it, so a
-   * suggestion of "" would rename the product to nothing the moment it was followed. An
-   * untitled product therefore suggests the handle it already has, which is a no-op.
-   */
-  const derivedHandle = slugify(product?.title ?? "", "");
-  const { value: suggestedHandle, takenBase: takenHandleBase } = uniqueSuggestion(
-    derivedHandle === "" ? shown : derivedHandle,
-    takenHandles,
+  if (key !== null) {
+    return <ProductEditorPage key={key} productKey={key} />;
+  }
+  if (resolved !== null) {
+    return null;
+  }
+  return (
+    <>
+      <PageHeader title="Product not found" />
+      <p className="text-[13px] text-admin-muted">
+        This draft has no product <code>{handle}</code>.{" "}
+        <Link className="font-semibold text-lab-ink" to=".." relative="path">
+          Back to products
+        </Link>
+      </p>
+    </>
   );
+}
+
+function ProductEditorPage({ productKey }: { productKey: string }) {
+  const { handle: addressed = "" } = useParams();
+  const location = useLocation();
+  const {
+    shopId,
+    content,
+    preview,
+    edit,
+    save,
+    saving,
+    discard,
+    discarding,
+    dirty,
+    error,
+    productSaved,
+  } = useShopWorkspace();
+  const navigate = useNavigate();
+  const product = findProduct(content, productKey);
+
+  // The address follows the product, never the other way round (ADR 0061). A rename, or a
+  // discard that undid one, leaves the address on a handle the product no longer has: it is
+  // `replace`d, keeping one history entry per product rather than one per keystroke, and
+  // stamped with the key so the route keeps naming this product. A product whose key has left
+  // the draft — a discard took back one that was never saved — sends the page to the catalog;
+  // the handle is never asked, because by then it may name another product.
+  //
+  // It runs on the handle and the address alone. The entry's state is read, not depended on —
+  // each stamp makes a new one — and one handle is navigated to at most once until the address
+  // has caught up with it, so the effect cannot re-fire on its own navigation.
+  const handle = product?.handle;
+  const entryState = useRef(location.state);
+  entryState.current = location.state;
+  const requested = useRef<string | null>(null);
+  useEffect(() => {
+    if (handle === undefined) {
+      navigate(`/shops/${shopId}/products`, { replace: true });
+      return;
+    }
+    if (addressed === handle) {
+      requested.current = null;
+      return;
+    }
+    if (requested.current === handle) {
+      return;
+    }
+    requested.current = handle;
+    navigate(`/shops/${shopId}/products/${encodeURIComponent(handle)}`, {
+      replace: true,
+      state: productEntryState(productKey, entryState.current),
+    });
+  }, [addressed, handle, productKey, shopId, navigate]);
+
   /**
    * What is in the Handle field, while it differs from the handle the draft holds.
    *
-   * Emptying the field is how `DerivedIdField` is told to follow the title again, and it
-   * reports the empty string on the way. A product cannot be addressed by nothing, so the
-   * draft is left alone until there is a handle to write; the field shows what was typed and
-   * restores the suggestion on blur, exactly as it does on every other surface.
+   * Emptying the field is how the operator hands the handle back to the title, and it reports
+   * the empty string on the way. A product cannot be addressed by nothing, so the draft is left
+   * alone until there is a handle to write; the field shows what was typed and restores the
+   * suggestion on blur, exactly as it does on every other surface.
    */
   const [typedHandle, setTypedHandle] = useState<string | null>(null);
+  /**
+   * The handle as it stood after the last title edit on this page, if it was then the title's;
+   * `null` if it was not; `undefined` if no title has been edited here yet.
+   *
+   * The one thing about following that is not a fact of the product: a title that derives no
+   * slug says nothing about the handle, so whether the handle follows *through* it is what it
+   * was doing when the title was emptied — and only while the handle is still the one it was
+   * then (ADR 0061).
+   */
+  const titled = useRef<string | null | undefined>(undefined);
+  // A discard that lands puts back the handle the lab holds, so what was half-typed in the
+  // Handle field, and what the last title edit made of the handle, are no longer about the
+  // draft under it.
+  const wasDiscarding = useRef(discarding);
+  useEffect(() => {
+    if (wasDiscarding.current && !discarding) {
+      setTypedHandle(null);
+      titled.current = undefined;
+    }
+    wasDiscarding.current = discarding;
+  }, [discarding]);
+
+  /**
+   * A value the Handle field holds and the draft does not — refused as no handle, or taken —
+   * is unsaved work like an open row's (ADR 0051): the header does not call the draft saved
+   * over it and leaving asks (ADR 0061). An emptied field is not: it is how the handle is
+   * handed back to the title, and leaving the field puts the suggestion back. Nor is anything
+   * held for a product that has left the draft: there is no product for it to be the handle of,
+   * and the page is on its way to the catalog.
+   */
+  const heldHandle =
+    product !== undefined &&
+    typedHandle !== null &&
+    typedHandle !== "" &&
+    typedHandle !== product.handle
+      ? typedHandle
+      : null;
+  useRegisterUnsavedWork(
+    heldHandle === null
+      ? null
+      : {
+          label: `The Handle field holds “${heldHandle}”, which the draft could not take; the product is still ${product?.handle ?? ""}.`,
+          discard: () => setTypedHandle(null),
+        },
+  );
 
   if (!product) {
-    return (
-      <>
-        <PageHeader title="Product not found" />
-        <p className="text-[13px] text-admin-muted">
-          This draft has no product <code>{addressed}</code>.{" "}
-          <Link className="font-semibold text-lab-ink" to=".." relative="path">
-            Back to products
-          </Link>
-        </p>
-      </>
-    );
+    return null;
   }
 
-  function update(next: ProductViewSchema) {
-    edit(replaceProduct(content, shown, next));
-    if (next.handle !== shown) {
-      setShown(next.handle);
+  /** The handles the *other* products hold, by key rather than by spelling. */
+  const takenHandles = content.products
+    .filter((entry) => entry.key !== productKey)
+    .map((entry) => entry.handle);
+  /**
+   * What the handle would be if it followed `title`, never nothing.
+   *
+   * The field is bound to something that exists and is addressed by it, so a suggestion of ""
+   * would rename the product to nothing the moment it was followed. An untitled product
+   * therefore suggests the handle it already has, which is a no-op.
+   */
+  const suggestionFor = (title: string, current: DraftProduct) => {
+    const derived = slugify(title, "");
+    return uniqueSuggestion(derived === "" ? current.handle : derived, takenHandles);
+  };
+  const { value: suggestedHandle, takenBase: takenHandleBase } = suggestionFor(
+    product.title,
+    product,
+  );
+
+  function update(next: DraftProduct) {
+    edit(replaceProduct(content, productKey, next));
+  }
+
+  /**
+   * Whether the handle is the title's, before the keystroke that changes the title (ADR 0061).
+   *
+   * A title that derives a slug makes the handle the title's when the handle is what it
+   * suggests. A title that derives none — empty, or punctuation alone — says nothing about the
+   * handle, so the handle follows through it only if it was the title's when the title was
+   * emptied on this page and has not been changed since (`titled`). A page opened on such a
+   * title has no such memory, and falls back on the one fact there is: a product new to the
+   * draft whose handle is still the placeholder *New product* gave it follows its first title;
+   * any other handle — typed, or saved — stays.
+   */
+  function handleIsTitles(current: DraftProduct): boolean {
+    if (slugify(current.title, "") !== "") {
+      return current.handle === suggestedHandle;
     }
+    if (titled.current !== undefined) {
+      return current.handle === titled.current;
+    }
+    return !productSaved(current.key) && isPlaceholderHandle(current.handle);
+  }
+
+  /**
+   * The one place the handle is derived (ADR 0061).
+   *
+   * The handle follows the title while it *is* the title's, or while the operator has emptied
+   * the field to hand it back. That is a fact about the product rather than this page's
+   * memory, so opening a product, a discard or a save's echo landing derives nothing: a
+   * product whose handle is not its title's opens as it is, clean.
+   */
+  function retitle(title: string) {
+    if (!product) {
+      return;
+    }
+    const follows = typedHandle === "" || (typedHandle === null && handleIsTitles(product));
+    if (!follows) {
+      titled.current = null;
+      update({ ...product, title });
+      return;
+    }
+    const handle = suggestionFor(title, product).value;
+    titled.current = handle;
+    setTypedHandle(null);
+    update({ ...product, title, handle });
   }
 
   return (
@@ -218,7 +346,7 @@ export function ProductEditorPage() {
         actions={
           <EditorSaveActions
             tone="accent"
-            dirty={dirty}
+            dirty={dirty || heldHandle !== null}
             saving={saving}
             discarding={discarding}
             onSave={() => void save()}
@@ -244,15 +372,15 @@ export function ProductEditorPage() {
                 <input
                   className={fieldControlClasses}
                   value={product.title}
-                  onChange={(event) => update({ ...product, title: event.target.value })}
+                  onChange={(event) => retitle(event.target.value)}
                 />
               </Field>
               {/*
                * The handle the tools address this product by, asked here because the catalog
                * no longer asks it: *New product* appends an empty row and opens this editor
-               * (PLAN-UX Slice 12), so this is the one surface that can name it. It follows
-               * the title exactly as every other derived identifier does, and the page's own
-               * address follows it — see `shown` above.
+               * (PLAN-UX Slice 12), so this is the one surface that can name it. It follows the
+               * title only from the Title's own edit (`retitle`), so the field's own follow is
+               * off, and the page's address follows the handle (ADR 0061).
                */}
               <DerivedIdField
                 arrangement="row"
@@ -260,6 +388,12 @@ export function ProductEditorPage() {
                 hint={PRODUCT_HANDLE_RULE}
                 value={typedHandle ?? product.handle}
                 suggested={suggestedHandle}
+                follows={false}
+                refusal={
+                  typedHandle !== null && typedHandle !== "" && !isSlug(typedHandle)
+                    ? handleRefusal(typedHandle, product.handle)
+                    : undefined
+                }
                 taken={takenHandles}
                 takenBase={takenHandleBase}
                 takenPlace="in the draft"
@@ -268,19 +402,21 @@ export function ProductEditorPage() {
                 placeholder="alpine-shell-jacket"
                 required
                 onChange={(next) => {
-                  // The field reports the handle back on mount, when it follows the title
-                  // and when it is emptied. Only a *different*, non-empty, free handle is
-                  // written: re-writing the same one would mark a clean draft dirty, and
-                  // writing a taken one would put two products under one address, which is
-                  // the collision the field is refusing on screen.
+                  // Only a *different*, free handle the lab would store is written: re-writing
+                  // the same one would mark a clean draft dirty, a taken one would put two
+                  // products under one address, and anything else — `#b`, `/b`, `..` — is an
+                  // address the router reads as some other page (ADR 0061). The field keeps
+                  // what was typed and refuses it on screen, and the page counts it as unsaved.
                   if (next === product.handle) {
                     setTypedHandle(null);
                     return;
                   }
-                  setTypedHandle(next);
-                  if (next !== "" && !takenHandles.includes(next)) {
+                  if (isSlug(next) && !takenHandles.includes(next)) {
+                    setTypedHandle(null);
                     update({ ...product, handle: next });
+                    return;
                   }
+                  setTypedHandle(next);
                 }}
               />
               <Field label="Status" hint={PRODUCT_STATUS_RULE}>
@@ -489,8 +625,8 @@ function variantFields(variant: VariantSchema): VariantFields {
 }
 
 interface EditorProps {
-  product: ProductViewSchema;
-  onChange: (next: ProductViewSchema) => void;
+  product: DraftProduct;
+  onChange: (next: DraftProduct) => void;
 }
 
 interface PricedEditorProps extends EditorProps {
@@ -528,11 +664,11 @@ function OptionsCard({ product, onChange }: EditorProps) {
   const [values, setValues] = useState<string[]>([]);
   const editor = useEntryEdit<OptionFields>(product.options.map((option) => option.key));
   const notice = useId();
-  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
-  // rename drops an armed row, which only ever errs toward asking again, and a discard that
-  // lands drops it too, because the draft under the list has been read again.
+  // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
+  // product. A discard that lands still drops what was armed, because what the confirm states
+  // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
-  const removal = useRemoval(product.handle, discarding);
+  const removal = useRemoval(product.key, discarding);
   const taken = product.options.map((option) => option.key);
   const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(name, ""), taken);
 
@@ -682,11 +818,11 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   // rather than only in the description.
   const skuRuleId = useId();
   const editNoticeId = useId();
-  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
-  // rename drops an armed row, which only ever errs toward asking again, and a discard that
-  // lands drops it too, because the draft under the list has been read again.
+  // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
+  // product. A discard that lands still drops what was armed, because what the confirm states
+  // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
-  const removal = useRemoval(product.handle, discarding);
+  const removal = useRemoval(product.key, discarding);
   const editor = useEntryEdit<VariantFields>(product.variants.map((variant) => variant.sku));
   const [optionValues, setOptionValues] = useState<Record<string, string>>({});
   const chosenValues = product.options.map(
@@ -1160,11 +1296,11 @@ function MediaCard({ product, onChange }: EditorProps) {
   const taken = product.media.map((entry) => entry.reference);
   const editor = useEntryEdit<MediaFields>(taken);
   const notice = useId();
-  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
-  // rename drops an armed row, which only ever errs toward asking again, and a discard that
-  // lands drops it too, because the draft under the list has been read again.
+  // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
+  // product. A discard that lands still drops what was armed, because what the confirm states
+  // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
-  const removal = useRemoval(product.handle, discarding);
+  const removal = useRemoval(product.key, discarding);
 
   /** Computed once for both paths: a reference is free unless the row holding it is this one. */
   function collisionOf(reference: string, own?: string): string | undefined {
@@ -1377,11 +1513,11 @@ function AttributesCard({ product, onChange }: EditorProps) {
   const [fields, setFields] = useState<AttributeFields>(EMPTY_ATTRIBUTE);
   const editor = useEntryEdit<AttributeFields>(product.attributes.map((entry) => entry.key));
   const notice = useId();
-  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
-  // rename drops an armed row, which only ever errs toward asking again, and a discard that
-  // lands drops it too, because the draft under the list has been read again.
+  // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
+  // product. A discard that lands still drops what was armed, because what the confirm states
+  // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
-  const removal = useRemoval(product.handle, discarding);
+  const removal = useRemoval(product.key, discarding);
   const taken = product.attributes.map((attribute) => attribute.key);
   const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(fields.label, ""), taken);
 
@@ -1557,11 +1693,11 @@ function ReviewsCard({ product, onChange }: EditorProps) {
   const [fields, setFields] = useState<ReviewFields>({ author: "", rating: 5, body: "" });
   const editor = useEntryEdit<ReviewFields>(product.reviews.map((review) => review.id));
   const notice = useId();
-  // Scoped by the product's handle, the only identity this page gives it (ADR 0060): a
-  // rename drops an armed row, which only ever errs toward asking again, and a discard that
-  // lands drops it too, because the draft under the list has been read again.
+  // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
+  // product. A discard that lands still drops what was armed, because what the confirm states
+  // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
-  const removal = useRemoval(product.handle, discarding);
+  const removal = useRemoval(product.key, discarding);
 
   return (
     <Card title={`Ratings & reviews · ${ratingLabel(product)}`} label="Ratings and reviews">

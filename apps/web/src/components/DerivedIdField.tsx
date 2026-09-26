@@ -39,6 +39,8 @@ export function DerivedIdField({
   required = false,
   arrangement,
   normalize,
+  follows = true,
+  refusal,
   onChange,
 }: {
   label: string;
@@ -62,6 +64,20 @@ export function DerivedIdField({
    */
   arrangement?: Arrangement;
   normalize?: (value: string) => string;
+  /**
+   * Whether this field writes `suggested` itself when it changes. A parent that derives the
+   * value in its own source's change handler — the product handle, which is the address of
+   * something saved and must never be rewritten by a mount, a discard or an echo landing
+   * (ADR 0061) — turns it off. The suggestion is still shown, previewed and handed back on
+   * blur-while-empty.
+   */
+  follows?: boolean;
+  /**
+   * Why the value in the field cannot be taken, when the parent refuses it for a reason of its
+   * own — a product handle the lab would not store (ADR 0061). The field is then invalid and
+   * says so, and never previews the value as what will be saved.
+   */
+  refusal?: string;
   onChange: (value: string) => void;
 }) {
   const generatedId = useId();
@@ -121,7 +137,7 @@ export function DerivedIdField({
   // reloaded list moves `suggested`, which is what brings the next one in; the field is
   // reconciled rather than remounted, so nothing here resets.
   useEffect(() => {
-    if (editedRef.current) {
+    if (!follows || editedRef.current) {
       return;
     }
     // A keystroke is in the DOM before React has been told about it: this effect can run
@@ -132,7 +148,7 @@ export function DerivedIdField({
       return;
     }
     onChangeRef.current(suggested);
-  }, [suggested]);
+  }, [suggested, follows]);
 
   useEffect(() => {
     inputRef.current?.setCustomValidity(collisionMessage);
@@ -159,10 +175,13 @@ export function DerivedIdField({
     }
   }
 
+  const refused = !pending && !colliding && refusal !== undefined && refusal !== "";
   const extra = pending ? (
     `Reading what is already ${takenPlace}…`
   ) : colliding ? (
     collisionMessage
+  ) : refused ? (
+    refusal
   ) : value || whyTaken ? (
     <>
       {value ? savedAsPreview(value) : null}
@@ -175,7 +194,7 @@ export function DerivedIdField({
       label={label}
       hint={hint}
       extra={extra}
-      extraTone={colliding ? "error" : "muted"}
+      extraTone={colliding || refused ? "error" : "muted"}
       arrangement={arrangement}
     >
       <input
@@ -192,7 +211,7 @@ export function DerivedIdField({
         // opens, so there is no moment in which this input is both open and empty.
         disabled={pending}
         aria-busy={pending || undefined}
-        aria-invalid={colliding || undefined}
+        aria-invalid={colliding || refused || undefined}
         onChange={(event) => change(event.target.value)}
         onBlur={restoreIfEmpty}
       />

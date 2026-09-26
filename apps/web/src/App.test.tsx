@@ -6,7 +6,7 @@ import type {
   ShopVersionListResponse,
   ShopVersionResponse,
 } from "@agent-lab/contracts";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -214,7 +214,8 @@ const server = setupServer(
     const body = (await request.json()) as { payload: Record<string, unknown> };
     // The contract forbids echoing derived evidence back into a draft write.
     const products = body.payload.products as Array<Record<string, unknown>>;
-    if (products.some((product) => "ratings" in product)) {
+    // Nor the key the workspace gives each product, which is the browser's alone (ADR 0061).
+    if (products.some((product) => "ratings" in product || "key" in product)) {
       return HttpResponse.json(
         { code: "validation_error", message: "Request validation failed", request_id: "r" },
         { status: 422 },
@@ -465,6 +466,752 @@ describe("the product editor's identity rows", () => {
     await user.clear(card.getByLabelText("Handle"));
     await user.type(card.getByLabelText("Handle"), "alpine-shell-jacket");
     expect(card.getByLabelText("Handle")).toBeInvalid();
+  });
+});
+
+/**
+ * The sequences of `docs/history/2026-09-25-product-identity-reproductions.md` that need no
+ * product Delete or Duplicate, as operator steps (ADR 0061). The page follows a product by the
+ * key the workspace gave it, so its address follows the product back when a discard undoes a
+ * rename, and nothing on it remounts on the way.
+ */
+describe("a product's identity across renames, saves and discards", () => {
+  /** What the lab holds after a write: the payload, with the ratings it derives from reviews. */
+  function contentOf(payload: ShopPayloadSchema): ShopDraftResponse["content"] {
+    return {
+      ...currentContent,
+      ...payload,
+      products: payload.products.map((product) => ({
+        ...product,
+        ratings: {
+          review_count: product.reviews.length,
+          average_rating:
+            product.reviews.length === 0
+              ? null
+              : (
+                  product.reviews.reduce((sum, review) => sum + review.rating, 0) /
+                  product.reviews.length
+                ).toFixed(1),
+        },
+      })),
+    };
+  }
+
+  /**
+   * A lab that keeps what it is sent, so a discard reads back the last write that landed.
+   * `hold` keeps each write in the air until it is released; `afterWrite` runs once it lands.
+   */
+  function keepingWrites({ hold = false, afterWrite = () => {} } = {}) {
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: ShopPayloadSchema };
+        if (hold) {
+          await released;
+        }
+        savedDrafts.push(body.payload);
+        currentContent = contentOf(body.payload);
+        afterWrite();
+        return HttpResponse.json(draft(currentContent));
+      }),
+    );
+    return { release };
+  }
+
+  function address(router: ReturnType<typeof renderAt>["router"]) {
+    return router.state.location.pathname;
+  }
+
+  const products = `/shops/${SHOP_ID}/products`;
+
+  async function openAlpine() {
+    const rendered = renderAt(`${products}/alpine-shell-jacket`);
+    await screen.findByRole("region", { name: "Details" });
+    return rendered;
+  }
+
+  async function rename(user: ReturnType<typeof userEvent.setup>, handle: string) {
+    const field = screen.getByLabelText("Handle");
+    await user.clear(field);
+    await user.type(field, handle);
+  }
+
+  async function settledAt(router: ReturnType<typeof renderAt>["router"], handle: string) {
+    await waitFor(() => expect(address(router)).toBe(`${products}/${handle}`));
+    expect(screen.queryByRole("heading", { name: "Product not found" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
+    expect(screen.getByLabelText("Handle")).toHaveValue(handle);
+  }
+
+  /** Opens the Size option's row and types into it, handing back the input typed in. */
+  async function typeInSizeRow(user: ReturnType<typeof userEvent.setup>) {
+    const options = within(screen.getByRole("region", { name: "Options" }));
+    await user.click(options.getByRole("button", { name: "Edit Size" }));
+    const input = within(options.getByRole("form", { name: "Edit Size" })).getByLabelText(
+      "Option name",
+    );
+    await user.type(input, " typed");
+    return input;
+  }
+
+  /**
+   * Discard, pressed without taking focus from where the operator was typing. The button itself
+   * leaves the header once the draft is clean, so a press that focused it would put focus on the
+   * document whatever the page did; what is asserted is that the page itself takes nothing away.
+   */
+  function discardFromTheKeyboardFocus() {
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+  }
+
+  async function openRowSurvived(input: HTMLElement) {
+    const options = within(screen.getByRole("region", { name: "Options" }));
+    const open = within(options.getByRole("form", { name: "Edit Size" }));
+    // The same element, not a new one with the same value: the row was never unmounted.
+    expect(open.getByLabelText("Option name")).toBe(input);
+    expect(input).toHaveValue("Size typed");
+    expect(input).toHaveFocus();
+  }
+
+  it("R1: lands on the handle a save recorded when a later rename is discarded", async () => {
+    const user = userEvent.setup();
+    keepingWrites();
+    const { router } = await openAlpine();
+
+    await rename(user, "saved-one");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(screen.getByText("All changes saved")).toBeVisible());
+    await rename(user, "second-name");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await settledAt(router, "saved-one");
+  });
+
+  it("R2: follows the product back through two rename–discards", async () => {
+    const user = userEvent.setup();
+    const { router } = await openAlpine();
+
+    await rename(user, "alpine-jacket");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await settledAt(router, "alpine-shell-jacket");
+    await rename(user, "other-jacket");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await settledAt(router, "alpine-shell-jacket");
+  });
+
+  // S0 was a debugging variant of this sequence and is covered by it (ADR 0061).
+  it("R5: follows the product back after it was left and reopened from the catalog", async () => {
+    const user = userEvent.setup();
+    const { router } = renderAt(products);
+    await user.click(await screen.findByRole("link", { name: "Alpine Shell Jacket" }));
+    await screen.findByRole("region", { name: "Details" });
+
+    await rename(user, "ren");
+    await user.click(
+      within(screen.getByLabelText("Shop workspace")).getByRole("link", { name: "Products" }),
+    );
+    await user.click(await screen.findByRole("link", { name: "Alpine Shell Jacket" }));
+    await waitFor(() => expect(address(router)).toBe(`${products}/ren`));
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await settledAt(router, "alpine-shell-jacket");
+  });
+
+  it("R6: follows the product back when the save was refused", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
+        HttpResponse.json(
+          { code: "validation_error", message: "Request validation failed", request_id: "r" },
+          { status: 422 },
+        ),
+      ),
+    );
+    const { router } = await openAlpine();
+
+    await rename(user, "refused-one");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await settledAt(router, "alpine-shell-jacket");
+  });
+
+  it("R7: lands on the saved handle when the title was typed in while the save was in flight", async () => {
+    const user = userEvent.setup();
+    const lab = keepingWrites({ hold: true });
+    const { router } = await openAlpine();
+
+    await rename(user, "saved-seven");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await user.type(screen.getByLabelText("Title"), " Pro");
+    lab.release();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await settledAt(router, "saved-seven");
+  });
+
+  it("R8: lands on the saved handle when a second rename was made while the save was in flight", async () => {
+    const user = userEvent.setup();
+    const lab = keepingWrites({ hold: true });
+    const { router } = await openAlpine();
+
+    await rename(user, "saved-b");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await rename(user, "third-c");
+    lab.release();
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled());
+    // The echo was declined — the draft was edited while the write was in the air.
+    expect(address(router)).toBe(`${products}/third-c`);
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await settledAt(router, "saved-b");
+  });
+
+  it("S5: lands on the saved handle when the preview read after a landed write failed", async () => {
+    const user = userEvent.setup();
+    let failPreview = false;
+    keepingWrites({
+      afterWrite: () => {
+        failPreview = true;
+      },
+    });
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, () => {
+        if (failPreview) {
+          failPreview = false;
+          return HttpResponse.json(
+            { code: "unavailable", message: "Preview failed", request_id: "r" },
+            { status: 503 },
+          );
+        }
+        return HttpResponse.json(currentPreview);
+      }),
+    );
+    const { router } = await openAlpine();
+
+    await rename(user, "saved-one");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(savedDrafts).toHaveLength(1);
+    await rename(user, "second");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await settledAt(router, "saved-one");
+  });
+
+  it("S2: keeps an open row, its typing and its focus through a plain discard", async () => {
+    const user = userEvent.setup();
+    const { router } = await openAlpine();
+
+    await user.type(screen.getByLabelText("Description"), " Taped seams.");
+    const input = await typeInSizeRow(user);
+    discardFromTheKeyboardFocus();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Description")).toHaveValue("Three-layer waterproof shell."),
+    );
+    expect(address(router)).toBe(`${products}/alpine-shell-jacket`);
+    await openRowSurvived(input);
+  });
+
+  it("S3: keeps an open row, its typing and its focus through a discard that undoes a rename", async () => {
+    const user = userEvent.setup();
+    const { router } = await openAlpine();
+
+    await rename(user, "ren");
+    const input = await typeInSizeRow(user);
+    discardFromTheKeyboardFocus();
+
+    await settledAt(router, "alpine-shell-jacket");
+    await openRowSurvived(input);
+  });
+
+  it("S10: keeps an open row, its typing and its focus through a discard that undoes a retitle", async () => {
+    const user = userEvent.setup();
+    const { router } = await openAlpine();
+
+    await user.type(screen.getByLabelText("Title"), " Pro");
+    await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-pro`));
+    const input = await typeInSizeRow(user);
+    discardFromTheKeyboardFocus();
+
+    await settledAt(router, "alpine-shell-jacket");
+    expect(screen.getByLabelText("Title")).toHaveValue("Alpine Shell Jacket");
+    await openRowSurvived(input);
+  });
+
+  it("S6: goes Back to the catalog after a discard that undid a rename", async () => {
+    const user = userEvent.setup();
+    const { router } = renderAt(products);
+    await user.click(await screen.findByRole("link", { name: "Alpine Shell Jacket" }));
+    await screen.findByRole("region", { name: "Details" });
+
+    await rename(user, "ren");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await settledAt(router, "alpine-shell-jacket");
+    await act(() => router.navigate(-1));
+
+    expect(address(router)).toBe(products);
+    expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+  });
+
+  it("S8: opens a product whose handle is not its title's slug as it is, clean", async () => {
+    const user = userEvent.setup();
+    const [jacket] = READY_CONTENT.products;
+    currentContent = { ...READY_CONTENT, products: [{ ...jacket, handle: "custom-handle" }] };
+    const { router } = renderAt(`${products}/custom-handle`);
+    await screen.findByRole("region", { name: "Details" });
+
+    expect(screen.getByLabelText("Handle")).toHaveValue("custom-handle");
+    expect(address(router)).toBe(`${products}/custom-handle`);
+    expect(screen.getByText("All changes saved")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Discard changes" })).toBeNull();
+
+    // Nor does a title edit move it: the handle is not the title's, so it does not follow.
+    await user.type(screen.getByLabelText("Title"), " Pro");
+    expect(screen.getByLabelText("Handle")).toHaveValue("custom-handle");
+    expect(address(router)).toBe(`${products}/custom-handle`);
+  });
+
+  it("leaves for the catalog when a discard takes back an unsaved product, never for the product holding its handle", async () => {
+    const user = userEvent.setup();
+    const { router } = await openAlpine();
+
+    // Alpine gives up its handle in the draft, and a new product is titled onto it (the
+    // reproductions' S7 without a Delete): the address now names the new product.
+    await rename(user, "alpine-old");
+    await user.click(
+      within(screen.getByLabelText("Shop workspace")).getByRole("link", { name: "Products" }),
+    );
+    await user.click(await screen.findByRole("button", { name: "New product" }));
+    await user.type(await screen.findByLabelText("Title"), "Alpine Shell Jacket");
+    await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket`));
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // The new product was never saved, so the discard takes it; Alpine is back at the address
+    // the page is standing on, and the page does not become Alpine's editor.
+    await waitFor(() => expect(address(router)).toBe(products));
+    expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+  });
+
+  /** Counts the router's updates, and stops a runaway before it can hang the suite. */
+  function countingNavigations(router: ReturnType<typeof renderAt>["router"]) {
+    let count = 0;
+    router.subscribe(() => {
+      count += 1;
+      if (count > 40) {
+        router.dispose();
+      }
+    });
+    return () => count;
+  }
+
+  it.each(["#b", "?b", "/b", ".", ".."])(
+    "writes no address from a handle the lab would refuse, like %s, and settles",
+    async (typed) => {
+      const user = userEvent.setup();
+      const { router } = await openAlpine();
+      const navigations = countingNavigations(router);
+      const field = screen.getByLabelText("Handle");
+
+      await user.clear(field);
+      await user.type(field, typed);
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+      // The field keeps what was typed and refuses it; the draft, and so the address, keep
+      // the handle the product had.
+      expect(navigations()).toBe(0);
+      expect(field).toHaveValue(typed);
+      expect(field).toBeInvalid();
+      expect(address(router)).toBe(`${products}/alpine-shell-jacket`);
+      expect(screen.getByRole("heading", { level: 1, name: "Alpine Shell Jacket" })).toBeVisible();
+    },
+  );
+
+  it("does not leave an open row behind when a handle like . is typed", async () => {
+    const user = userEvent.setup();
+    const { router } = await openAlpine();
+    const input = await typeInSizeRow(user);
+    const field = screen.getByLabelText("Handle");
+
+    await user.clear(field);
+    await user.type(field, ".");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+    expect(address(router)).toBe(`${products}/alpine-shell-jacket`);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveValue("Size typed");
+  });
+
+  /** A lab that keeps each write and answers it with `answer` — nothing, or an error. */
+  function keepingWritesAnswering(answer: () => Response) {
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: ShopPayloadSchema };
+        savedDrafts.push(body.payload);
+        currentContent = contentOf(body.payload);
+        return answer();
+      }),
+    );
+  }
+
+  const UNKNOWN_OUTCOMES: [string, () => Response][] = [
+    ["the answer is lost", () => HttpResponse.error()],
+    [
+      "the lab answers 500",
+      () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "Internal error", request_id: "r" },
+          { status: 500 },
+        ),
+    ],
+  ];
+
+  // With nothing held in the Handle field, and with a value it refused held there as the discard
+  // lands: the page leaves either way, and a value held for a product that has left the draft
+  // is nobody's unsaved work.
+  it.each(
+    UNKNOWN_OUTCOMES.flatMap(([outcome, answer]) =>
+      [null, "Bad Value"].map((held) => [outcome, held, answer] as const),
+    ),
+  )(
+    "leaves for the catalog when a write landed and %s, never onto another product (held: %s)",
+    async (_, held, answer) => {
+      const user = userEvent.setup();
+      const [jacket] = READY_CONTENT.products;
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          {
+            ...jacket,
+            handle: "x-first",
+            title: "X first",
+            variants: [],
+            media: [],
+            attributes: [],
+            reviews: [],
+            options: [],
+            ratings: { review_count: 0, average_rating: null },
+          },
+          jacket,
+        ],
+      };
+      // The lab keeps the write, and the browser cannot tell that it did.
+      keepingWritesAnswering(answer);
+      const rail = () => within(screen.getByLabelText("Shop workspace"));
+      const { router } = renderAt(products);
+
+      await user.click(await screen.findByRole("link", { name: "Alpine Shell Jacket" }));
+      await screen.findByRole("region", { name: "Details" });
+      await rename(user, "alpine-old");
+      await user.click(rail().getByRole("link", { name: "Products" }));
+      await user.click(await screen.findByRole("link", { name: "X first" }));
+      await screen.findByRole("heading", { level: 1, name: "X first" });
+      await rename(user, "alpine-shell-jacket");
+      await user.click(rail().getByRole("link", { name: "Products" }));
+      await user.click(await screen.findByRole("link", { name: "Alpine Shell Jacket" }));
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      expect(await screen.findByRole("alert")).toBeVisible();
+      expect(savedDrafts).toHaveLength(1);
+      if (held !== null) {
+        await rename(user, held);
+      }
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      // Whether the write landed is unknown, and the write moved both handles: no saved handle
+      // is known to name its key, the page cannot tell which product is Alpine, and it leaves
+      // rather than guess.
+      await waitFor(() => expect(address(router)).toBe(products));
+      expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    },
+  );
+
+  it.each(UNKNOWN_OUTCOMES)(
+    "stays on the product when a write that renamed nothing landed and %s",
+    async (_, answer) => {
+      const user = userEvent.setup();
+      keepingWritesAnswering(answer);
+      const { router } = await openAlpine();
+
+      await user.type(screen.getByLabelText("Description"), " Taped seams.");
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      expect(await screen.findByRole("alert")).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      // Landed or not, the lab holds Alpine under the handle it was sent under.
+      await waitFor(() =>
+        expect(screen.getByLabelText("Description")).toHaveValue(
+          "Three-layer waterproof shell. Taped seams.",
+        ),
+      );
+      await settledAt(router, "alpine-shell-jacket");
+    },
+  );
+
+  it("keeps a handle that is not the title's through a cleared title after a write whose answer was lost", async () => {
+    const user = userEvent.setup();
+    const [jacket] = READY_CONTENT.products;
+    currentContent = { ...READY_CONTENT, products: [{ ...jacket, handle: "custom-handle" }] };
+    keepingWritesAnswering(() => HttpResponse.error());
+    const { router } = renderAt(`${products}/custom-handle`);
+    await screen.findByRole("region", { name: "Details" });
+
+    await user.type(screen.getByLabelText("Description"), " Taped seams.");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Summit Parka");
+
+    expect(screen.getByLabelText("Handle")).toHaveValue("custom-handle");
+    expect(address(router)).toBe(`${products}/custom-handle`);
+  });
+
+  describe("a handle the field holds and the draft does not", () => {
+    it.each(["Bad Value", "alpine-shell-jacket"])(
+      "is nobody's unsaved work once a discard takes back the new product holding %s",
+      async (typed) => {
+        const user = userEvent.setup();
+        const { router } = renderAt(products);
+        await user.click(await screen.findByRole("button", { name: "New product" }));
+        await screen.findByRole("region", { name: "Details" });
+
+        await rename(user, typed);
+        await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+        await waitFor(() => expect(address(router)).toBe(products));
+        expect(await screen.findByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+        expect(screen.queryByRole("dialog")).toBeNull();
+      },
+    );
+
+    it.each([
+      ["Summit Parka", /Summit Parka cannot be a handle/],
+      ["-summit", /-summit cannot be a handle/],
+      ["x".repeat(65), /cannot be a handle/],
+    ])("refuses %s on the field, says why, and never says it is saved", async (typed, why) => {
+      const user = userEvent.setup();
+      await openAlpine();
+      const field = screen.getByLabelText("Handle");
+
+      await user.clear(field);
+      await user.type(field, typed);
+
+      expect(field).toHaveAttribute("aria-invalid", "true");
+      expect(field).toHaveAccessibleDescription(why);
+      expect(field).not.toHaveAccessibleDescription(/Saved as/);
+    });
+
+    it("says a handle another product holds is taken, on the field", async () => {
+      const user = userEvent.setup();
+      const [jacket] = READY_CONTENT.products;
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          jacket,
+          { ...jacket, handle: "summit-parka", title: "Summit Parka", variants: [] },
+        ],
+      };
+      await openAlpine();
+      const field = screen.getByLabelText("Handle");
+
+      await user.clear(field);
+      await user.type(field, "summit-parka");
+
+      expect(field).toHaveAttribute("aria-invalid", "true");
+      expect(field).toHaveAccessibleDescription(/summit-parka is already in the draft/);
+      expect(field).not.toHaveAccessibleDescription(/Saved as/);
+    });
+
+    /** Alpine beside a second product, so one handle the field could hold is taken. */
+    function besideSummitParka() {
+      const [jacket] = READY_CONTENT.products;
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          jacket,
+          { ...jacket, handle: "summit-parka", title: "Summit Parka", variants: [] },
+        ],
+      };
+    }
+
+    const HELD = ["Summit Parka", "summit-parka"];
+
+    it.each(HELD)("does not report the draft saved while the field holds %s", async (typed) => {
+      const user = userEvent.setup();
+      besideSummitParka();
+      // A lab that answers the write with what it was sent, as the real one does.
+      keepingWrites();
+      await openAlpine();
+      const field = screen.getByLabelText("Handle");
+
+      await user.clear(field);
+      await user.type(field, typed);
+
+      expect(screen.queryByText("All changes saved")).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      // What was written is the last handle the draft could take — whatever the keystrokes
+      // before the refused one made of it — and the field still holds another.
+      expect(lastSaved().products[0].handle).not.toBe(typed);
+      expect(screen.queryByText("All changes saved")).toBeNull();
+      expect(field).toHaveValue(typed);
+    });
+
+    it.each(HELD)("asks before leaving while the field holds %s", async (typed) => {
+      const user = userEvent.setup();
+      besideSummitParka();
+      await openAlpine();
+      const field = screen.getByLabelText("Handle");
+
+      await user.clear(field);
+      await user.type(field, typed);
+      await user.click(
+        within(screen.getByLabelText("Shop workspace")).getByRole("link", { name: "Orders" }),
+      );
+
+      const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      expect(prompt).toHaveTextContent(typed);
+    });
+  });
+
+  describe("a title that derives no handle", () => {
+    function customHandle() {
+      const [jacket] = READY_CONTENT.products;
+      currentContent = { ...READY_CONTENT, products: [{ ...jacket, handle: "custom-handle" }] };
+    }
+
+    it("does not make a handle that is not the title's follow the next title", async () => {
+      const user = userEvent.setup();
+      customHandle();
+      const { router } = renderAt(`${products}/custom-handle`);
+      await screen.findByRole("region", { name: "Details" });
+
+      await user.clear(screen.getByLabelText("Title"));
+      await user.type(screen.getByLabelText("Title"), "Summit Parka");
+
+      expect(screen.getByLabelText("Handle")).toHaveValue("custom-handle");
+      expect(address(router)).toBe(`${products}/custom-handle`);
+    });
+
+    it("does not either through a title of punctuation alone", async () => {
+      const user = userEvent.setup();
+      customHandle();
+      const { router } = renderAt(`${products}/custom-handle`);
+      await screen.findByRole("region", { name: "Details" });
+
+      await user.clear(screen.getByLabelText("Title"));
+      await user.type(screen.getByLabelText("Title"), "!!!");
+      await user.type(screen.getByLabelText("Title"), " Summit Parka");
+
+      expect(screen.getByLabelText("Handle")).toHaveValue("custom-handle");
+      expect(address(router)).toBe(`${products}/custom-handle`);
+    });
+
+    async function newProduct(user: ReturnType<typeof userEvent.setup>) {
+      const rendered = renderAt(products);
+      await user.click(await screen.findByRole("button", { name: "New product" }));
+      await screen.findByRole("region", { name: "Details" });
+      return rendered;
+    }
+
+    it("keeps a handle typed on a new product when its first title comes", async () => {
+      const user = userEvent.setup();
+      const { router } = await newProduct(user);
+
+      await rename(user, "my-custom");
+      await user.type(screen.getByLabelText("Title"), "Summit Parka");
+
+      expect(screen.getByLabelText("Handle")).toHaveValue("my-custom");
+      await waitFor(() => expect(address(router)).toBe(`${products}/my-custom`));
+    });
+
+    it("keeps a handle typed on a new product through a cleared and retyped title", async () => {
+      const user = userEvent.setup();
+      const { router } = await newProduct(user);
+
+      await user.type(screen.getByLabelText("Title"), "Alpine");
+      await rename(user, "my-custom");
+      await user.clear(screen.getByLabelText("Title"));
+      await user.type(screen.getByLabelText("Title"), "Summit Parka");
+
+      expect(screen.getByLabelText("Handle")).toHaveValue("my-custom");
+      await waitFor(() => expect(address(router)).toBe(`${products}/my-custom`));
+    });
+
+    it("follows a new product's title through a cleared title when the handle was the title's", async () => {
+      const user = userEvent.setup();
+      await newProduct(user);
+
+      await user.type(screen.getByLabelText("Title"), "Alpine");
+      await user.clear(screen.getByLabelText("Title"));
+      await user.type(screen.getByLabelText("Title"), "Summit Parka");
+
+      expect(screen.getByLabelText("Handle")).toHaveValue("summit-parka");
+    });
+
+    it("keeps the placeholder handle of a saved product whose title derives none", async () => {
+      const user = userEvent.setup();
+      const [jacket] = READY_CONTENT.products;
+      currentContent = {
+        ...READY_CONTENT,
+        products: [{ ...jacket, handle: "new-product-2", title: "!!!" }],
+      };
+      const { router } = renderAt(`${products}/new-product-2`);
+      await screen.findByRole("region", { name: "Details" });
+
+      // The lab holds it, so the placeholder is its saved handle, not a new product's stand-in.
+      await user.type(screen.getByLabelText("Title"), "Summit Parka");
+
+      expect(screen.getByLabelText("Handle")).toHaveValue("new-product-2");
+      expect(address(router)).toBe(`${products}/new-product-2`);
+    });
+
+    it("forgets what the last title edit made of the handle when a discard lands", async () => {
+      const user = userEvent.setup();
+      const [jacket] = READY_CONTENT.products;
+      // Saved with a title that derives no handle, under a handle that is not its title's.
+      currentContent = {
+        ...READY_CONTENT,
+        products: [{ ...jacket, handle: "summit", title: "!!!" }],
+      };
+      renderAt(`${products}/summit`);
+      await screen.findByRole("region", { name: "Details" });
+      const title = () => screen.getByLabelText("Title");
+
+      // "Summit " makes the handle the title's, and clearing the title from there leaves the
+      // page remembering `summit` as the handle that followed it.
+      await user.clear(title());
+      await user.type(title(), "Summit ");
+      await user.clear(title());
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+      await waitFor(() => expect(title()).toHaveValue("!!!"));
+      await user.type(title(), "Parka");
+
+      // The lab's `summit` was never this title's; what the page remembered was about the draft
+      // the discard threw away.
+      expect(screen.getByLabelText("Handle")).toHaveValue("summit");
+    });
+
+    it("still gives a new product a handle from its first title", async () => {
+      const user = userEvent.setup();
+      const { router } = renderAt(products);
+      await user.click(await screen.findByRole("button", { name: "New product" }));
+
+      await user.type(await screen.findByLabelText("Title"), "Summit Parka");
+
+      expect(screen.getByLabelText("Handle")).toHaveValue("summit-parka");
+      await waitFor(() => expect(address(router)).toBe(`${products}/summit-parka`));
+    });
   });
 });
 
@@ -1922,7 +2669,7 @@ describe("the route tree under the data router", () => {
       ["/shops/:shopId", "ShopWorkspace"],
       ["/shops/:shopId [index]", "ShopHomePage"],
       ["/shops/:shopId/products", "ProductsPage"],
-      ["/shops/:shopId/products/:handle", "ProductEditorPage"],
+      ["/shops/:shopId/products/:handle", "ProductEditorRoute"],
       ["/shops/:shopId/orders", "OrdersPage"],
       ["/shops/:shopId/orders/new", "NewOrderPage"],
       ["/shops/:shopId/orders/:orderId", "OrderEditorPage"],
@@ -2713,7 +3460,7 @@ describe("removing is deliberate", () => {
     );
   });
 
-  it("drops an armed row confirm when a discard lands, and when the product is renamed", async () => {
+  it("drops an armed row confirm when a discard lands, and keeps it through a rename", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
     const options = within(await screen.findByRole("region", { name: "Options" }));
@@ -2729,11 +3476,13 @@ describe("removing is deliberate", () => {
     );
     expect(options.getByRole("button", { name: "Remove Size" })).toBeVisible();
 
-    // The handle is the only identity this page gives a product, so a rename drops it too.
+    // A rename is the same product, held by the same key (ADR 0061), so the confirm stays on
+    // the row it was asked about.
     await user.click(media.getByRole("button", { name: "Remove media/alpine-shell.jpg" }));
     expect(media.getByRole("group", { name: /Remove the media reference/ })).toBeVisible();
     await user.type(screen.getByLabelText("Title"), " Pro");
-    expect(media.queryByRole("group", { name: /Remove the media reference/ })).toBeNull();
+    expect(screen.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket-pro");
+    expect(media.getByRole("group", { name: /Remove the media reference/ })).toBeVisible();
   });
 
   it("stops saying a variant was removed once Discard has put it back", async () => {

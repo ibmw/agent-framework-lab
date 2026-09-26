@@ -64,11 +64,16 @@ export interface Removal {
  */
 export function useRemoval(scope = "", discarding = false): Removal {
   const [armed, setArmed] = useState<{ scope: string; key: string } | null>(null);
+  // Every notice is said once and focused once, and which one is still owed focus is part of
+  // the same state as the notice itself: the effect below focuses a `said` it has not focused
+  // yet, when it is on screen. A flag kept beside it would be read by whichever commit ran its
+  // effects next — possibly one rendered before the notice, which would take the flag and
+  // leave the notice unfocused.
   const [said, setSaid] = useState<{ scope: string; text: string; key: string } | null>(null);
+  const focused = useRef<object | null>(null);
   const triggers = useRef(new Map<string, HTMLElement>());
   const returnTo = useRef<string | null>(null);
   const noticeElement = useRef<HTMLElement | null>(null);
-  const focusNotice = useRef(false);
   // A write that did not land walks the removal back from outside a render; this is what asks
   // for the render that puts focus back on the control that asked.
   const [, walkedBack] = useReducer((count: number) => count + 1, 0);
@@ -131,10 +136,14 @@ export function useRemoval(scope = "", discarding = false): Removal {
     // unless the line was emptied in this same pass: a notice about an entry that is still on
     // screen (a removal carried here onto a list that still draws it) is dropped rather than
     // said, and focusing the empty, hidden line would leave the reader nowhere.
-    if (focusNotice.current && (clearing || notice === null)) {
-      focusNotice.current = false;
-    } else if (focusNotice.current && noticeElement.current?.isConnected) {
-      focusNotice.current = false;
+    if (
+      said !== null &&
+      notice !== null &&
+      !clearing &&
+      focused.current !== said &&
+      noticeElement.current?.isConnected
+    ) {
+      focused.current = said;
       noticeElement.current.focus();
     }
   });
@@ -149,7 +158,6 @@ export function useRemoval(scope = "", discarding = false): Removal {
       const say = () => {
         if (text !== null) {
           setSaid({ scope, text, key });
-          focusNotice.current = true;
         }
       };
       const done = act();
@@ -218,7 +226,6 @@ export function useRemoval(scope = "", discarding = false): Removal {
   const announce = useCallback(
     (text: string, key: string) => {
       setSaid({ scope, text, key });
-      focusNotice.current = true;
     },
     [scope],
   );
@@ -384,9 +391,21 @@ export function useArrivedRemoval(removal: Removal, discarding = false): void {
       return;
     }
     announce(carried.text, carried.key);
+    // Only the notice is taken off the entry. Whatever else it carries is another surface's —
+    // the product key a product editor's entry is stamped with (ADR 0061) — and dropping it
+    // would leave that page resolving its subject from the address alone.
+    const { removed: _removed, ...rest } = location.state as RemovedState & Record<string, unknown>;
     navigate(`${location.pathname}${location.search}${location.hash}`, {
       replace: true,
-      state: null,
+      state: Object.keys(rest).length > 0 ? rest : null,
     });
-  }, [carried, announce, navigate, location.pathname, location.search, location.hash]);
+  }, [
+    carried,
+    announce,
+    navigate,
+    location.pathname,
+    location.search,
+    location.hash,
+    location.state,
+  ]);
 }

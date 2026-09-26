@@ -1,12 +1,7 @@
-import type {
-  ShopContentSchema,
-  ShopPayloadSchema,
-  ShopPreviewResponse,
-  ShopSummarySchema,
-} from "@agent-lab/contracts";
+import type { ShopPreviewResponse, ShopSummarySchema } from "@agent-lab/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
-import { describeApiError } from "../api/client";
+import { describeApiError, LabApiError } from "../api/client";
 import {
   getShopDraft,
   listShops,
@@ -16,19 +11,11 @@ import {
 } from "../api/shops";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { writeLastVisitedShop } from "../lib/preferences";
+import { createProductKeyring, type ShopDraft } from "../lib/productKeys";
 import { shopDraftIsSavableAt, toPayload } from "../lib/shop";
 import { AppShell, type RailCounts } from "./AppShell";
 import { type ShopListings, useShopListings } from "./listings";
 import { WorkspaceContext } from "./useShopWorkspace";
-
-const CLIENT: DefinitionClient<ShopContentSchema, ShopPayloadSchema, ShopPreviewResponse> = {
-  getDraft: getShopDraft,
-  previewDraft: previewShopDraft,
-  replaceDraft: replaceShopDraft,
-  publish: publishShop,
-  toPayload,
-  unavailable: "The shop service is unavailable.",
-};
 
 export interface ShopWorkspaceValue {
   shopId: string;
@@ -39,14 +26,20 @@ export interface ShopWorkspaceValue {
    * changes what it lists calls that listing's `refresh`.
    */
   listings: ShopListings;
-  content: ShopContentSchema;
+  content: ShopDraft;
   preview: ShopPreviewResponse | null;
   dirty: boolean;
   saving: boolean;
   discarding: boolean;
   publishing: boolean;
   error: string | null;
-  edit: (next: ShopContentSchema) => void;
+  edit: (next: ShopDraft) => void;
+  /** A key for a product about to be appended to the draft (ADR 0061). */
+  mintProductKey: () => string;
+  /** Whether this workspace gave out `key`; a key from another load or shop names nothing. */
+  productKeyMinted: (key: string) => boolean;
+  /** Whether the lab is known to hold the product under `key`, rather than it being new. */
+  productSaved: (key: string) => boolean;
   save: () => Promise<string | null>;
   discard: () => Promise<void>;
   publish: () => Promise<number | null>;
@@ -87,7 +80,47 @@ export function ShopWorkspace() {
     }),
     [shopId, refreshShops],
   );
-  const editor = useDefinitionEditor(shopId, CLIENT, guard);
+  // The keys the draft's products are edited under, one keyring per shop (ADR 0061). Every
+  // draft the lab answers with is keyed through it, and every write that lands rewrites it from
+  // the products that were *sent* — the moment the write answers, before the preview is read and
+  // whether or not the echo is applied, so a rename that landed is recorded even when a later
+  // keystroke means the echo is not. The client is rebuilt only with the shop, which is what the
+  // editor's load effect already reloads on.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new shop is a new keyring
+  const keyring = useMemo(() => createProductKeyring(), [shopId]);
+  const client = useMemo<DefinitionClient<ShopDraft, ShopDraft, ShopPreviewResponse>>(
+    () => ({
+      getDraft: async (id, signal) => {
+        const draft = await getShopDraft(id, signal);
+        return { content: keyring.keyed(draft.content) };
+      },
+      previewDraft: previewShopDraft,
+      replaceDraft: async (id, sent) => {
+        let saved: Awaited<ReturnType<typeof replaceShopDraft>>;
+        try {
+          saved = await replaceShopDraft(id, toPayload(sent));
+        } catch (cause: unknown) {
+          // A refusal the lab answered — a 4xx — wrote nothing, and the keyring still says
+          // what the lab holds. Anything else — a lost answer, a 5xx, a network error — may
+          // have landed or not, and a keyring that guessed either way could hand one product's
+          // key to another: it keeps only what is true both ways (ADR 0061).
+          if (!(cause instanceof LabApiError && cause.status >= 400 && cause.status < 500)) {
+            keyring.unsure(sent);
+          }
+          throw cause;
+        }
+        keyring.landed(sent);
+        return { content: keyring.keyed(saved.content) };
+      },
+      publish: publishShop,
+      // The draft is sent keyed so the write can record which key each handle now names;
+      // `replaceDraft` strips the keys, with the derived evidence, on the way out.
+      toPayload: (content) => content,
+      unavailable: "The shop service is unavailable.",
+    }),
+    [keyring],
+  );
+  const editor = useDefinitionEditor(shopId, client, guard);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -168,6 +201,9 @@ export function ShopWorkspace() {
           save: editor.save,
           discard: editor.discard,
           publish,
+          mintProductKey: keyring.mint,
+          productKeyMinted: keyring.minted,
+          productSaved: keyring.saved,
         }}
       >
         <Outlet />

@@ -170,10 +170,10 @@ export function findDocument(
  * without changing a single word. The two collections this document is not in are handed back
  * by reference.
  */
-export function replaceDocument(
-  content: ShopContentSchema,
+export function replaceDocument<C extends ShopContentSchema>(
+  content: C,
   document: ShopDocument,
-): ShopContentSchema {
+): C {
   const { id, title, body } = document;
   switch (document.kind) {
     case "policy":
@@ -209,10 +209,7 @@ export function replaceDocument(
 export const DEFAULT_POLICY_KIND: PolicySchema["kind"] = "returns";
 
 /** A new document at the end of its own collection, leaving the other two untouched. */
-export function appendDocument(
-  content: ShopContentSchema,
-  document: ShopDocument,
-): ShopContentSchema {
+export function appendDocument<C extends ShopContentSchema>(content: C, document: ShopDocument): C {
   const { id, title, body } = document;
   switch (document.kind) {
     case "policy":
@@ -234,11 +231,11 @@ export function appendDocument(
 }
 
 /** The document taken out of its own collection, leaving the other two untouched. */
-export function removeDocument(
-  content: ShopContentSchema,
+export function removeDocument<C extends ShopContentSchema>(
+  content: C,
   kind: ShopDocumentKind,
   id: string,
-): ShopContentSchema {
+): C {
   switch (kind) {
     case "policy":
       return { ...content, policies: content.policies.filter((entry) => entry.id !== id) };

@@ -29,7 +29,7 @@ import { LabSettingsPage } from "./routes/LabSettingsPage";
 import { Landing } from "./routes/Landing";
 import { OrderEditorPage } from "./routes/OrderEditorPage";
 import { NewOrderPage, OrdersPage } from "./routes/OrdersPage";
-import { ProductEditorPage } from "./routes/ProductEditorPage";
+import { ProductEditorRoute } from "./routes/ProductEditorPage";
 import { ProductsPage } from "./routes/ProductsPage";
 import {
   LabRedirect,
@@ -168,7 +168,7 @@ export const routeTree = createRoutesFromElements(
     <Route path="/shops/:shopId" element={<ShopWorkspace />}>
       <Route index element={<ShopHomePage />} />
       <Route path="products" element={<ProductsPage />} />
-      <Route path="products/:handle" element={<ProductEditorPage />} />
+      <Route path="products/:handle" element={<ProductEditorRoute />} />
       <Route path="orders" element={<OrdersPage />} />
       <Route path="orders/new" element={<NewOrderPage />} />
       <Route path="orders/:orderId" element={<OrderEditorPage />} />

@@ -108,7 +108,8 @@ The product editor's lists are scoped by the product's **handle**, because that 
 identity the page gives a product: it is addressed by its handle, follows a rename by the handle,
 and after *Discard changes* undoes a rename it follows the product back by its place in the draft
 (unchanged by this ADR). So a rename — a title edit drives the handle — drops an armed row
-confirm and its notice, which only ever errs toward asking again. And those lists pass the draft's
+confirm and its notice, which only ever errs toward asking again. (Superseded by ADR 0061: the lists are
+scoped by the product's key, and a rename keeps an armed row.) And those lists pass the draft's
 `discarding` flag to `useRemoval`, which drops what was armed or said once a discard lands: the
 draft under the list has been read again, and a discard can put back a different product under
 the handle the page stands on.
@@ -257,8 +258,8 @@ says so once the detach has landed.
 - `App.test.tsx`: removing an option says how many variants choose it, names the groups it would
   leave identical — a Size × Color product's two pairs, a pair already identical, a variant
   joining one — and strips their values; the last guideline's clause; with the preference off one
-  press removes a variant; an armed row confirm is dropped when a discard lands and when the
-  product is renamed; the notice clears when *Discard changes* puts the variant back.
+  press removes a variant; an armed row confirm is dropped when a discard lands, and — since
+  ADR 0061 — kept through a rename; the notice clears when *Discard changes* puts the variant back.
 - `SupportIdentities.test.tsx` and `Tickets.test.tsx`: an escalation condition and the first
   message ask, while `ChipListField.test.tsx` still removes an option value on one press.
 - `Documents.test.tsx`, `Orders.test.tsx`: a document and an order are named on the list the page

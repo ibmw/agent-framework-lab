@@ -12,27 +12,19 @@ import {
 import { uniqueId } from "../lib/entryIds";
 import { labelOf, PRODUCT_STATUS } from "../lib/enumLabels";
 import { filterList } from "../lib/filters";
-import { issuesForProduct, productTitle, ratingLabel } from "../lib/shop";
+import { type DraftProduct, productEntryState } from "../lib/productKeys";
+import { issuesForProduct, NEW_PRODUCT_HANDLE, productTitle, ratingLabel } from "../lib/shop";
 import { accentButtonClasses, surfaceClasses, tableCellClasses, tableHeadClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
-/**
- * The handle a brand-new product is addressed by, before it has a title to derive one from.
- *
- * The prototype appends a record with an empty handle and lets the editor ask for one
- * (:6931); this workspace addresses a product editor *by* its handle, so a product with no
- * handle has no address and cannot be opened. The draft's own handles decide the suffix, so a
- * second unnamed product is `new-product-2` rather than a collision.
- */
-const NEW_PRODUCT_HANDLE = "new-product";
-
-function emptyProduct(handle: string, title: string, category: string): ProductViewSchema {
+function emptyProduct(key: string, handle: string): DraftProduct {
   return {
+    key,
     handle,
-    title,
+    title: "",
     description: "",
     status: "draft",
-    category,
+    category: "",
     options: [],
     variants: [],
     media: [],
@@ -90,8 +82,19 @@ function productFilters(
 }
 
 export function ProductsPage() {
-  const { shopId, content, preview, edit, save, saving, discard, discarding, dirty, error } =
-    useShopWorkspace();
+  const {
+    shopId,
+    content,
+    preview,
+    edit,
+    save,
+    saving,
+    discard,
+    discarding,
+    dirty,
+    error,
+    mintProductKey,
+  } = useShopWorkspace();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -114,11 +117,16 @@ export function ProductsPage() {
       NEW_PRODUCT_HANDLE,
       content.products.map((product) => product.handle),
     );
+    // Its key is minted as it is appended, and the entry is stamped with it, so the editor
+    // follows this product rather than whatever the address comes to spell (ADR 0061).
+    const key = mintProductKey();
     edit({
       ...content,
-      products: [...content.products, emptyProduct(handle, "", "")],
+      products: [...content.products, emptyProduct(key, handle)],
     });
-    navigate(`/shops/${shopId}/products/${handle}`);
+    navigate(`/shops/${shopId}/products/${encodeURIComponent(handle)}`, {
+      state: productEntryState(key),
+    });
   }
 
   // The title alone, which is what the prototype's products search reads (`p.title` in its
@@ -198,11 +206,12 @@ export function ProductsPage() {
                 const findings = issuesForProduct(preview?.issues ?? [], product.handle);
                 const errors = findings.filter((issue) => issue.severity === "error").length;
                 return (
-                  <tr key={product.handle}>
+                  <tr key={product.key}>
                     <td className={tableCellClasses}>
                       <Link
                         className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                        to={product.handle}
+                        to={encodeURIComponent(product.handle)}
+                        state={productEntryState(product.key)}
                       >
                         {productTitle(product)}
                       </Link>

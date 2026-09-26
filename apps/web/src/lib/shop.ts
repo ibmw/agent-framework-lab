@@ -7,6 +7,7 @@ import type {
   VariantSchema,
 } from "@agent-lab/contracts";
 import { clampSlug, SLUG_MAX_LENGTH, slugify } from "./entryIds";
+import type { DraftProduct, ShopDraft } from "./productKeys";
 
 /**
  * The slug a shop name suggests, in the spelling the shop identity rule accepts.
@@ -24,11 +25,27 @@ export function shopSlugFromName(name: string): string {
 }
 
 /**
- * The API answers with derived read-only evidence (ratings, the resolved default tone)
- * that a draft write must not echo back. Editing therefore works on the returned content
- * and this projection strips the derived fields before every save.
+ * The handle a brand-new product is addressed by, before it has a title to derive one from.
+ *
+ * The prototype appends a record with an empty handle and lets the editor ask for one
+ * (:6931); this workspace addresses a product editor *by* its handle, so a product with no
+ * handle has no address and cannot be opened. The draft's own handles decide the suffix, so a
+ * second unnamed product is `new-product-2` rather than a collision.
  */
-export function toPayload(content: ShopContentSchema): ShopPayloadSchema {
+export const NEW_PRODUCT_HANDLE = "new-product";
+
+/** Whether `handle` is one *New product* gives an unnamed product: `new-product`, `-2`, … */
+export function isPlaceholderHandle(handle: string): boolean {
+  return new RegExp(`^${NEW_PRODUCT_HANDLE}(?:-[0-9]+)?$`).test(handle);
+}
+
+/**
+ * The API answers with derived read-only evidence (ratings, the resolved default tone)
+ * that a draft write must not echo back, and the workspace keys each product for itself
+ * (ADR 0061). Editing therefore works on the returned content and this projection strips
+ * both before every save.
+ */
+export function toPayload(content: ShopContentSchema | ShopDraft): ShopPayloadSchema {
   return {
     identity: content.identity,
     products: content.products.map(toProductPayload),
@@ -41,26 +58,32 @@ export function toPayload(content: ShopContentSchema): ShopPayloadSchema {
   };
 }
 
-function toProductPayload(product: ProductViewSchema): ProductSchema {
-  const { ratings: _ratings, ...payload } = product;
-  return payload;
+function toProductPayload(product: ProductViewSchema | DraftProduct): ProductSchema {
+  const { ratings: _ratings, ...rest } = product;
+  if ("key" in rest) {
+    const { key: _key, ...payload } = rest;
+    return payload;
+  }
+  return rest;
 }
 
-export function findProduct(
-  content: ShopContentSchema,
-  handle: string,
-): ProductViewSchema | undefined {
+/** The product the draft holds under `key`, which no rename moves (ADR 0061). */
+export function findProduct(content: ShopDraft, key: string): DraftProduct | undefined {
+  return content.products.find((product) => product.key === key);
+}
+
+/**
+ * The product the draft addresses by `handle` — only for an address that carries no key: one
+ * typed, bookmarked, or from before a reload (ADR 0061).
+ */
+export function findProductByHandle(content: ShopDraft, handle: string): DraftProduct | undefined {
   return content.products.find((product) => product.handle === handle);
 }
 
-export function replaceProduct(
-  content: ShopContentSchema,
-  handle: string,
-  next: ProductViewSchema,
-): ShopContentSchema {
+export function replaceProduct(content: ShopDraft, key: string, next: DraftProduct): ShopDraft {
   return {
     ...content,
-    products: content.products.map((product) => (product.handle === handle ? next : product)),
+    products: content.products.map((product) => (product.key === key ? next : product)),
   };
 }
 
@@ -71,7 +94,7 @@ export function replaceProduct(
  * declares — `variant_unknown_option`, an error — and no control on the variant row can take
  * a value out, so the removal takes it with it. That is what the confirm says happens to them.
  */
-export function removeOption(product: ProductViewSchema, key: string): ProductViewSchema {
+export function removeOption<P extends ProductViewSchema>(product: P, key: string): P {
   return {
     ...product,
     options: product.options.filter((option) => option.key !== key),

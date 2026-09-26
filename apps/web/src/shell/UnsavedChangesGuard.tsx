@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Outlet, useBlocker } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { sameProductEntry } from "../lib/productKeys";
 import { accentButtonClasses, outlineButtonClasses, surfaceClasses } from "../lib/ui";
 import {
   type RegisteredWork,
@@ -59,6 +60,9 @@ export function UnsavedChangesGuard() {
     useCallback(
       ({ currentLocation, nextLocation }) =>
         currentLocation.pathname !== nextLocation.pathname &&
+        // The product editor moving its own address after a rename or a discard: the same
+        // product, the same mounted page, nothing left behind (ADR 0061).
+        !sameProductEntry(currentLocation, nextLocation) &&
         strandedBy(nextLocation.pathname).length > 0,
       [strandedBy],
     ),

@@ -38,6 +38,18 @@ export function variantSku(
  */
 export const SLUG_MAX_LENGTH = 64;
 
+/** `_SLUG_PATTERN` in `domain/content.py`, anchored as its `fullmatch` is. */
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Whether the lab would store `value` as a handle, slug or entry ID: lowercase kebab-case
+ * within the cap. The product editor writes nothing else into the draft, because that value
+ * is also the page's address (ADR 0061).
+ */
+export function isSlug(value: string): boolean {
+  return value.length <= SLUG_MAX_LENGTH && SLUG_PATTERN.test(value);
+}
+
 /** Cut to `room` characters, never leaving the trailing hyphen every slug pattern refuses. */
 export function clampSlug(value: string, room: number): string {
   return value.length <= room ? value : value.slice(0, room).replace(/-+$/, "");
