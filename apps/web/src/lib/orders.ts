@@ -33,6 +33,76 @@ export function eventKindLabel(kind: OrderEventKind): string {
 }
 
 /**
+ * The statuses whose time the lab refuses, and the ones that owe one.
+ *
+ * `PaymentState.__post_init__` in `domain/order_fixture.py` refuses a capture time on a
+ * pending or authorized order, and `paid_order_without_capture_time` requires one on a paid
+ * order; a refunded order may carry one or not. `FulfilmentState.__post_init__` refuses a
+ * shipping time on an unfulfilled order, and nothing requires one once something shipped.
+ */
+export const CAPTURE_TIME_REFUSED: readonly PaymentStatus[] = ["pending", "authorized"];
+export const CAPTURE_TIME_OWED: readonly PaymentStatus[] = ["paid"];
+export const SHIPPING_TIME_REFUSED: readonly FulfilmentStatus[] = ["unfulfilled"];
+
+/** The placement time, when it is one a timestamp field can carry; otherwise nothing. */
+function placementTime(content: OrderContentSchema): string | null {
+  const placed = content.placed_at;
+  return placed && !Number.isNaN(Date.parse(placed)) ? placed : null;
+}
+
+/**
+ * The order with its payment status moved, and the capture time moved with it.
+ *
+ * - Into a status that refuses a capture time, it is cleared: the lab would refuse the save.
+ * - Into Paid from any other status, an empty capture time takes the placement time, because
+ *   the gate refuses a paid order without one and the placement is the one time the order
+ *   already knows. A capture time already there — typed by the operator or saved — is kept.
+ * - Anything else keeps what it holds.
+ *
+ * A placement time that is empty or unreadable prefills nothing: the field stays empty and
+ * the gate says what it owes.
+ */
+export function withPaymentStatus(
+  content: OrderContentSchema,
+  status: PaymentStatus,
+): OrderContentSchema {
+  const previous = content.payment.status;
+  let paidAt = content.payment.paid_at;
+  if (CAPTURE_TIME_REFUSED.includes(status)) {
+    paidAt = null;
+  } else if (
+    CAPTURE_TIME_OWED.includes(status) &&
+    !CAPTURE_TIME_OWED.includes(previous) &&
+    paidAt === null
+  ) {
+    paidAt = placementTime(content);
+  }
+  return { ...content, payment: { ...content.payment, status, paid_at: paidAt } };
+}
+
+/**
+ * The order with its fulfilment status moved, and the shipping time moved with it.
+ *
+ * - Back to Unfulfilled, it is cleared: the lab would refuse the save.
+ * - Off Unfulfilled, an empty shipping time takes the placement time. One already there is
+ *   kept, and a move between two shipped statuses touches nothing: whatever the field holds
+ *   there is the operator's answer, an empty one included.
+ */
+export function withFulfilmentStatus(
+  content: OrderContentSchema,
+  status: FulfilmentStatus,
+): OrderContentSchema {
+  const previous = content.fulfilment.status;
+  let shippedAt = content.fulfilment.shipped_at;
+  if (SHIPPING_TIME_REFUSED.includes(status)) {
+    shippedAt = null;
+  } else if (SHIPPING_TIME_REFUSED.includes(previous) && shippedAt === null) {
+    shippedAt = placementTime(content);
+  }
+  return { ...content, fulfilment: { ...content.fulfilment, status, shipped_at: shippedAt } };
+}
+
+/**
  * The order a client sends is a set of *selections*, never materialized commerce content:
  * line prices come from the catalog and the shipping address from the address book, both
  * resolved by the lab. This projection is where that contract is honoured.

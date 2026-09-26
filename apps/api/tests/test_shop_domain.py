@@ -5,10 +5,12 @@ import pytest
 from capability_lab.domain.shop import (
     AttributeType,
     Currency,
+    FulfilmentMethod,
     Money,
     PolicyDocument,
     PolicyKind,
     ProductReview,
+    ProductStatus,
     ProductVariant,
     ShopChangeKind,
     ShopConfigurationError,
@@ -303,3 +305,55 @@ def test_added_and_removed_products_are_reported_at_the_collection_level() -> No
 
 def test_an_unchanged_draft_reports_no_changes() -> None:
     assert summarize_shop_changes(publishable_shop(), publishable_shop()) == ()
+
+
+# The Studio says these four sentences under the controls that break them, character for
+# character (`apps/web/src/lib/fieldRules.ts`, whose test reads this module's templates). These
+# assert the rendered messages from this end, and that the rules hold for every product status.
+
+
+def test_a_transit_window_shorter_at_the_top_than_the_bottom_is_refused() -> None:
+    def method(minimum: int, maximum: int) -> FulfilmentMethod:
+        return FulfilmentMethod(
+            id="express",
+            name="Express",
+            carrier="Nordic Post",
+            min_transit_days=minimum,
+            max_transit_days=maximum,
+        )
+
+    # Every maximum from zero to one past the minimum: below it refused, from it on taken.
+    for maximum in range(7):
+        if maximum < 5:
+            with pytest.raises(ShopConfigurationError) as refused:
+                method(5, maximum)
+            assert str(refused.value) == (
+                "maximum transit days cannot be shorter than minimum transit days"
+            )
+        else:
+            assert method(5, maximum).max_transit_days == maximum
+
+
+@pytest.mark.parametrize("status", list(ProductStatus))
+def test_the_variant_findings_hold_for_every_product_status(status: ProductStatus) -> None:
+    empty = validate_shop(publishable_shop(products=(product(status=status, variants=()),)))
+    assert {(issue.code, issue.message) for issue in empty.errors} >= {
+        ("product_without_variant", "product Alpine Shell Jacket has no sellable variant")
+    }
+
+    unpriced = ProductVariant(
+        sku="NS-ASJ-OB-L",
+        option_values=(("color", "Ocean Blue"), ("size", "L")),
+        availability=VariantAvailability.IN_STOCK,
+        stock_quantity=0,
+    )
+    findings = validate_shop(
+        publishable_shop(products=(product(status=status, variants=(variant(), unpriced)),))
+    )
+    assert {(issue.code, issue.message) for issue in findings.errors} == {
+        ("variant_without_price", "variant NS-ASJ-OB-L is missing a price"),
+        (
+            "variant_in_stock_without_inventory",
+            "variant NS-ASJ-OB-L is in stock but holds no inventory",
+        ),
+    }

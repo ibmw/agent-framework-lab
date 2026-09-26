@@ -133,7 +133,13 @@ export function FieldHint({ arrangement = "stacked", ...props }: FieldHintProps)
 
 type FieldHintProps = {
   label: string;
-  hint: ReactNode;
+  /**
+   * The field's rule. Every field that has one states it; a field whose only line is a
+   * refusal it can be in — the fulfilment window's maximum, which no rule of its own
+   * constrains until the minimum passes it — draws no hint, exactly as a hint-less `Field`
+   * row does, and its description holds the second line alone.
+   */
+  hint?: ReactNode;
   /** A second description line (for example a live "Saved as" preview), also tied by aria-describedby. */
   extra?: ReactNode;
   /**
@@ -170,7 +176,7 @@ function StackedFieldHint({
   children,
 }: Omit<FieldHintProps, "arrangement">) {
   const { controlId, hintId, extraId, control } = useBoundControl(children, {
-    hasHint: true,
+    hasHint: Boolean(hint),
     invalid: extraTone === "error" && Boolean(extra),
     extraId: givenExtraId,
   });
@@ -182,9 +188,11 @@ function StackedFieldHint({
         {optional ? " (optional)" : null}
       </label>
       {control}
-      <p id={hintId} className="font-normal text-admin-muted">
-        {hint}
-      </p>
+      {hint ? (
+        <p id={hintId} className="font-normal text-admin-muted">
+          {hint}
+        </p>
+      ) : null}
       {/* A refusal reads at the validation weight in either arrangement (ADR 0063); a preview
           keeps the stacked label's small type. */}
       <ExtraLine
@@ -213,7 +221,7 @@ function StackedFieldHint({
  * which is where the handoff puts a validation message and where `form-decisions.md` 1.5 puts
  * "any refusal".
  *
- * `hint` is optional here and required on `FieldHint`. The refresh gives every one of its rows
+ * `hint` is optional here, as it is on `FieldHint`. The refresh gives every one of its rows
  * a rule and this component does not encourage a row without one; but the four editors this
  * slice adopts it on hold rows whose rule has not been written yet, and a row is better in the
  * pattern with no hint than outside it with none either.

@@ -204,6 +204,49 @@ export function unprovenJudgeProviderRule(provider: string): string {
   return `${provider} is not a provider the lab has proven it can judge with`;
 }
 
+/*
+ * The shop draft's own refusals, said under the control that breaks them.
+ *
+ * The same one-copy rule as the sentences above: each is the lab's message, character for
+ * character, and `fieldRules.test.ts` reads `domain/shop.py` to prove it, while
+ * `test_shop_domain.py` asserts the rendered Python messages from the other end. Written here
+ * rather than read off `preview.issues` for the reason given above — the preview answers for
+ * the *saved* draft, and these are said while the operator types.
+ */
+
+/**
+ * `FulfilmentMethod.__post_init__` in `domain/shop.py`: a write refusal, not a gate finding —
+ * the lab answers `422 shop_configuration_error` with this message, so a draft holding the
+ * inverted window cannot be saved at all.
+ */
+export const TRANSIT_WINDOW_RULE =
+  "maximum transit days cannot be shorter than minimum transit days";
+
+/**
+ * `product_without_variant` in `_validate_product`: a publish-gate **error**, for every
+ * product status. The draft saves with it; publication is refused.
+ */
+export function productWithoutVariantRule(title: string): string {
+  return `product ${title} has no sellable variant`;
+}
+
+/**
+ * `variant_without_price`: a gate **error** on each unpriced variant, whatever the product's
+ * status and however many of its siblings are priced. `ProductVariant` keeps the price
+ * optional "so an unfinished draft can be saved", so this refuses publication, not the save.
+ */
+export function variantWithoutPriceRule(sku: string): string {
+  return `variant ${sku} is missing a price`;
+}
+
+/**
+ * `variant_in_stock_without_inventory`: a gate **error** when availability is in stock and
+ * the stock is exactly zero. Like the two above, it refuses publication and not the save.
+ */
+export function variantInStockWithoutInventoryRule(sku: string): string {
+  return `variant ${sku} is in stock but holds no inventory`;
+}
+
 /** What a tone-of-voice override names, and where the names come from. */
 export const TONE_OVERRIDE_RULE =
   "The ID of a guideline the target shop publishes. The list is the preview shop's own.";
@@ -382,13 +425,21 @@ export const PAYMENT_STATUS_RULE =
 export const FULFILMENT_STATUS_RULE =
   "Only the statuses reachable from the one saved, and never back. Once fulfilled, a run can no longer change the address.";
 
-/** `PaymentState.__post_init__`: a pending or authorized order may carry no capture time. */
+/**
+ * `PaymentState.__post_init__`: a pending or authorized order may carry no capture time; and
+ * `paid_order_without_capture_time`: a paid one must. `withPaymentStatus` in `lib/orders.ts`
+ * does what the second and third sentences say, and `orders.test.ts` holds the sentences to
+ * the statuses that function acts on.
+ */
 export const PAID_AT_RULE =
-  "Only once the money moved. A pending or authorized order cannot record a capture time, and saving one is refused.";
+  "Only once the money moved. Choosing Paid fills an empty one with the time the order was placed. Moving back to Pending or Authorized clears it, because a pending or authorized order cannot record a capture time, and saving one is refused.";
 
-/** `FulfilmentState.__post_init__`: an unfulfilled order may carry no shipping time. */
+/**
+ * `FulfilmentState.__post_init__`: an unfulfilled order may carry no shipping time.
+ * `withFulfilmentStatus` in `lib/orders.ts` does what the second and third sentences say.
+ */
 export const SHIPPED_AT_RULE =
-  "Only once something shipped. An unfulfilled order cannot record a shipping time, and saving one is refused.";
+  "Only once something shipped. Moving off Unfulfilled fills an empty one with the time the order was placed. Moving back to Unfulfilled clears it, because an unfulfilled order cannot record a shipping time, and saving one is refused.";
 
 /**
  * Both method selects, which is one sentence because it is one rule.

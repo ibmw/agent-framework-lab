@@ -114,6 +114,30 @@ describe("FieldHint", () => {
     expect(screen.getByLabelText("Handle")).not.toHaveAttribute("aria-invalid");
   });
 
+  it("stacks a field with no rule, described by its second line alone", () => {
+    const { rerender } = render(
+      <FieldHint label="Max days">
+        <input />
+      </FieldHint>,
+    );
+    const control = screen.getByLabelText("Max days");
+    // No hint paragraph, and no id pointing at one: every id the description names exists.
+    const ids = control.getAttribute("aria-describedby")?.split(" ") ?? [];
+    expect(ids).toHaveLength(1);
+    expect(document.getElementById(ids[0])).not.toBeNull();
+    expect(control).toHaveAccessibleDescription("");
+
+    rerender(
+      <FieldHint label="Max days" extra="Shorter than the minimum." extraTone="error">
+        <input />
+      </FieldHint>,
+    );
+    expect(screen.getByLabelText("Max days")).toHaveAccessibleDescription(
+      "Shorter than the minimum.",
+    );
+    expect(screen.getByLabelText("Max days")).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("marks the minority as optional, the way the product editor writes price", () => {
     render(
       <FieldHint label="Price" hint="Leave empty to add in the editor." optional>

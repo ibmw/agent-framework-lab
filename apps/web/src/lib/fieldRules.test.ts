@@ -4,11 +4,16 @@ import { describe, expect, it } from "vitest";
 // declares it, so the file is what they have to read.
 import agentCapabilities from "../../../../apps/api/src/capability_lab/application/agent_capabilities.py?raw";
 import judgeCapabilities from "../../../../apps/api/src/capability_lab/application/judge_capabilities.py?raw";
+import shopDomain from "../../../../apps/api/src/capability_lab/domain/shop.py?raw";
 import * as fieldRules from "./fieldRules";
 import {
+  productWithoutVariantRule,
+  TRANSIT_WINDOW_RULE,
   unexercisedModelRule,
   unprovenAgentProviderRule,
   unprovenJudgeProviderRule,
+  variantInStockWithoutInventoryRule,
+  variantWithoutPriceRule,
 } from "./fieldRules";
 import fieldRulesSource from "./fieldRules?raw";
 import { unreachableProviderNote } from "./modelConnections";
@@ -142,6 +147,62 @@ describe("the publish gate's sentences, as the Studio repeats them", () => {
       unprovenJudgeProviderRule("p"),
     ];
     for (const sentence of sentences) {
+      expect(sentence.endsWith(".")).toBe(false);
+    }
+  });
+});
+
+/**
+ * The shop draft's refusals the product editor and the fulfilment card say as the operator
+ * types, pinned to `domain/shop.py` the same way. `test_shop_domain.py`
+ * asserts the rendered Python messages from the other end.
+ */
+describe("the shop draft's sentences, as the editors repeat them", () => {
+  it("spells a product with no variant exactly as `_validate_product` writes it", () => {
+    const rendered = render(messageTemplate(shopDomain, "product_without_variant"), {
+      "product.title": "Alpine Shell Jacket",
+    });
+
+    expect(productWithoutVariantRule("Alpine Shell Jacket")).toBe(rendered);
+  });
+
+  it("spells an unpriced variant exactly as `_validate_product` writes it", () => {
+    const rendered = render(messageTemplate(shopDomain, "variant_without_price"), {
+      "variant.sku": "NS-ASJ-OB-L",
+    });
+
+    expect(variantWithoutPriceRule("NS-ASJ-OB-L")).toBe(rendered);
+  });
+
+  it("spells an empty in-stock variant exactly as `_validate_product` writes it", () => {
+    const rendered = render(messageTemplate(shopDomain, "variant_in_stock_without_inventory"), {
+      "variant.sku": "NS-ASJ-OB-M",
+    });
+
+    expect(variantInStockWithoutInventoryRule("NS-ASJ-OB-M")).toBe(rendered);
+  });
+
+  it("spells an inverted transit window exactly as `FulfilmentMethod` refuses it", () => {
+    // A raise, not an `issue_*` call: the lab answers 422 with this message, so the sentence
+    // under Max days is the one the save would have come back with. Adjacent literals joined
+    // as Python joins them, then the raise read out of the class that makes it.
+    const joined = shopDomain.replaceAll(/"\s*\n\s*"/g, "");
+    const fulfilmentMethod = joined.slice(joined.indexOf("class FulfilmentMethod"));
+    const match =
+      /if self\.max_transit_days < self\.min_transit_days:\s*raise ShopConfigurationError\(\s*"([^"]*)"/.exec(
+        fulfilmentMethod,
+      );
+
+    expect(match?.[1]).toBe(TRANSIT_WINDOW_RULE);
+  });
+
+  it("ends none of them with punctuation the lab does not carry", () => {
+    for (const sentence of [
+      productWithoutVariantRule("t"),
+      variantWithoutPriceRule("S"),
+      variantInStockWithoutInventoryRule("S"),
+      TRANSIT_WINDOW_RULE,
+    ]) {
       expect(sentence.endsWith(".")).toBe(false);
     }
   });

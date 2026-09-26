@@ -45,6 +45,8 @@ import {
   previewTotals,
   toLocalInput,
   toOrderRequest,
+  withFulfilmentStatus,
+  withPaymentStatus,
 } from "../lib/orders";
 import {
   consequenceOf,
@@ -565,13 +567,12 @@ export function OrderEditorPage() {
                   className={fieldControlClasses}
                   value={content.payment.status}
                   onChange={(event) =>
-                    edit({
-                      ...content,
-                      payment: {
-                        ...content.payment,
-                        status: event.target.value as OrderContentSchema["payment"]["status"],
-                      },
-                    })
+                    edit(
+                      withPaymentStatus(
+                        content,
+                        event.target.value as OrderContentSchema["payment"]["status"],
+                      ),
+                    )
                   }
                 >
                   {order.payment_status_options.map((status) => (
@@ -680,13 +681,12 @@ export function OrderEditorPage() {
                   className={fieldControlClasses}
                   value={content.fulfilment.status}
                   onChange={(event) =>
-                    edit({
-                      ...content,
-                      fulfilment: {
-                        ...content.fulfilment,
-                        status: event.target.value as OrderContentSchema["fulfilment"]["status"],
-                      },
-                    })
+                    edit(
+                      withFulfilmentStatus(
+                        content,
+                        event.target.value as OrderContentSchema["fulfilment"]["status"],
+                      ),
+                    )
                   }
                 >
                   {order.fulfilment_status_options.map((status) => (

@@ -1,5 +1,7 @@
-import type { OrderContentSchema } from "@agent-lab/contracts";
+import type { FulfilmentStatus, OrderContentSchema, PaymentStatus } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
+import { FULFILMENT_STATUS, labelOf, membersOf, PAYMENT_STATUS } from "./enumLabels";
+import { PAID_AT_RULE, SHIPPED_AT_RULE } from "./fieldRules";
 import {
   clampQuantity,
   fromLocalInput,
@@ -8,6 +10,8 @@ import {
   todayInput,
   toLocalInput,
   toOrderRequest,
+  withFulfilmentStatus,
+  withPaymentStatus,
 } from "./orders";
 
 const CONTENT: OrderContentSchema = {
@@ -141,5 +145,141 @@ describe("today's date", () => {
   it("answers a date input value in the author's own zone", () => {
     expect(todayInput()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(todayInput()).toBe(toLocalInput(new Date().toISOString()).slice(0, 10));
+  });
+});
+
+/**
+ * Every move of each status select, written out rather than derived: what a move does to the
+ * timestamp beside it is the rule, so the table is the specification and the function is
+ * checked against it. `P` is the placement time, `T` a time the operator typed or the lab
+ * saved, and `–` an empty field. Each row gives the result for an empty field and for a filled
+ * one. The page only offers the statuses reachable from the saved one, but between two saves
+ * an operator can move the select back and forth among them, so every pair is a move.
+ */
+const P = CONTENT.placed_at;
+const T = "2026-08-22T09:30:00.000Z";
+type Cell = "P" | "T" | "–";
+const cell = (value: string | null): Cell => (value === null ? "–" : value === P ? "P" : "T");
+
+const PAYMENT_MOVES: ReadonlyArray<[PaymentStatus, PaymentStatus, Cell, Cell]> = [
+  ["pending", "pending", "–", "–"],
+  ["pending", "authorized", "–", "–"],
+  ["pending", "paid", "P", "T"],
+  ["pending", "refunded", "–", "T"],
+  ["authorized", "pending", "–", "–"],
+  ["authorized", "authorized", "–", "–"],
+  ["authorized", "paid", "P", "T"],
+  ["authorized", "refunded", "–", "T"],
+  ["paid", "pending", "–", "–"],
+  ["paid", "authorized", "–", "–"],
+  ["paid", "paid", "–", "T"],
+  ["paid", "refunded", "–", "T"],
+  ["refunded", "pending", "–", "–"],
+  ["refunded", "authorized", "–", "–"],
+  ["refunded", "paid", "P", "T"],
+  ["refunded", "refunded", "–", "T"],
+];
+
+const FULFILMENT_MOVES: ReadonlyArray<[FulfilmentStatus, FulfilmentStatus, Cell, Cell]> = [
+  ["unfulfilled", "unfulfilled", "–", "–"],
+  ["unfulfilled", "partially_fulfilled", "P", "T"],
+  ["unfulfilled", "fulfilled", "P", "T"],
+  ["partially_fulfilled", "unfulfilled", "–", "–"],
+  ["partially_fulfilled", "partially_fulfilled", "–", "T"],
+  ["partially_fulfilled", "fulfilled", "–", "T"],
+  ["fulfilled", "unfulfilled", "–", "–"],
+  ["fulfilled", "partially_fulfilled", "–", "T"],
+  ["fulfilled", "fulfilled", "–", "T"],
+];
+
+function paying(status: PaymentStatus, paidAt: string | null): OrderContentSchema {
+  return { ...CONTENT, payment: { ...CONTENT.payment, status, paid_at: paidAt } };
+}
+
+function shipping(status: FulfilmentStatus, shippedAt: string | null): OrderContentSchema {
+  return { ...CONTENT, fulfilment: { ...CONTENT.fulfilment, status, shipped_at: shippedAt } };
+}
+
+describe("moving a status moves the time beside it", () => {
+  it("lists every pair of payment statuses, and every pair of fulfilment statuses, once", () => {
+    const payment = membersOf(PAYMENT_STATUS);
+    const fulfilment = membersOf(FULFILMENT_STATUS);
+    expect(PAYMENT_MOVES.map(([from, to]) => `${from}>${to}`)).toStrictEqual(
+      payment.flatMap((from) => payment.map((to) => `${from}>${to}`)),
+    );
+    expect(FULFILMENT_MOVES.map(([from, to]) => `${from}>${to}`)).toStrictEqual(
+      fulfilment.flatMap((from) => fulfilment.map((to) => `${from}>${to}`)),
+    );
+  });
+
+  it.each(PAYMENT_MOVES)(
+    "payment %s → %s: empty gives %s, filled gives %s",
+    (from, to, empty, filled) => {
+      const fromEmpty = withPaymentStatus(paying(from, null), to);
+      const fromFilled = withPaymentStatus(paying(from, T), to);
+      expect(fromEmpty.payment.status).toBe(to);
+      expect(cell(fromEmpty.payment.paid_at)).toBe(empty);
+      expect(cell(fromFilled.payment.paid_at)).toBe(filled);
+      // Nothing else on the order moves with it.
+      expect({ ...fromFilled, payment: CONTENT.payment }).toStrictEqual(CONTENT);
+    },
+  );
+
+  it.each(FULFILMENT_MOVES)(
+    "fulfilment %s → %s: empty gives %s, filled gives %s",
+    (from, to, empty, filled) => {
+      const fromEmpty = withFulfilmentStatus(shipping(from, null), to);
+      const fromFilled = withFulfilmentStatus(shipping(from, T), to);
+      expect(fromEmpty.fulfilment.status).toBe(to);
+      expect(cell(fromEmpty.fulfilment.shipped_at)).toBe(empty);
+      expect(cell(fromFilled.fulfilment.shipped_at)).toBe(filled);
+      expect({ ...fromFilled, fulfilment: CONTENT.fulfilment }).toStrictEqual(CONTENT);
+    },
+  );
+
+  it.each(["", "not a time"])("prefills nothing from a placement time of %j", (placed) => {
+    const order = { ...CONTENT, placed_at: placed };
+    expect(
+      withPaymentStatus(
+        { ...order, payment: { ...order.payment, status: "authorized", paid_at: null } },
+        "paid",
+      ).payment.paid_at,
+    ).toBeNull();
+    expect(
+      withFulfilmentStatus(
+        { ...order, fulfilment: { ...order.fulfilment, status: "unfulfilled", shipped_at: null } },
+        "fulfilled",
+      ).fulfilment.shipped_at,
+    ).toBeNull();
+  });
+});
+
+/**
+ * The two rules say what the functions above do, held to the statuses the functions act on:
+ * each rule names, by its label, every status that fills the field and every status that
+ * clears it, and names no status that does neither.
+ */
+describe("the timestamp rules name the statuses that move them", () => {
+  const named = (rule: string, label: string) => new RegExp(`\\b${label}\\b`).test(rule);
+
+  it("names Paid, Pending and Authorized under Paid at, and not Refunded", () => {
+    const acting = PAYMENT_MOVES.filter(
+      ([, , empty, filled]) => empty !== "–" || filled === "–",
+    ).map(([, to]) => to);
+    for (const status of membersOf(PAYMENT_STATUS)) {
+      expect(named(PAID_AT_RULE, labelOf(PAYMENT_STATUS, status)), status).toBe(
+        acting.includes(status),
+      );
+    }
+  });
+
+  it("names Unfulfilled under Shipped at, and neither shipped status", () => {
+    // A move *off* Unfulfilled fills the field, so the rule names the status left rather than
+    // the two arrived at.
+    for (const status of membersOf(FULFILMENT_STATUS)) {
+      expect(named(SHIPPED_AT_RULE, labelOf(FULFILMENT_STATUS, status)), status).toBe(
+        status === "unfulfilled",
+      );
+    }
   });
 });

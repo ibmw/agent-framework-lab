@@ -168,7 +168,8 @@ line (`Field`'s `extraId`) rather than writing the sentence twice.
   guidance* and the profile's *Add address*, *Add entry* and *Add fact* submit, and their handler
   returns or the browser stops them; the field is the control that is wrong, and it already says
   why. *Attach to this shop* was named by the plan and is an adopter all the same. An
-  add form refused for a reason no field states — *Add option* with no value — is an adopter.
+  add form refused for a reason no field states — *Add option* with no value — is an adopter,
+  and so is one refused by a relation between two fields (the amendment below).
 - **The destructive confirm** (`ConfirmRemove`'s *Remove it* while a read is in flight) is a press
   in flight.
 - **Losing focus when a press in flight disables its button** is Slice 24's to settle with the
@@ -230,3 +231,46 @@ line (`Field`'s `extraId`) rather than writing the sentence twice.
 ## Migration
 
 None. No contract, payload, route or stored value changes; accessible names are unchanged.
+
+## Amendment — 2026-09-27: the shop draft's rules
+
+PLAN-UX Slice 22b says four of the lab's shop-draft rules while the operator types. They are
+recorded here rather than in an ADR of their own because three of them are this ADR's rule
+applied, and the one exclusion they move is this ADR's.
+
+- **A refusal between two fields refuses the add form's submit.** `FulfilmentMethod` refuses a
+  maximum transit shorter than the minimum with `422 shop_configuration_error`. Neither field
+  is invalid alone and no native constraint stops the submit, so this is not *refused only by its
+  own field*: *Add fulfilment method* becomes an adopter, and the open row's Save refuses through
+  `entryEdit`'s verdict. The sentence is said once, under **Max days** — the bound the lab's
+  message makes its subject, and the one typed second — at the validation weight, in its
+  description, with Max days `aria-invalid` and Min days not; Add and Save name that line
+  through `FieldHint`'s `extraId`, as the media row already does. Equal bounds are the lab's and
+  are not refused. `FieldHint` takes no `hint` where a stacked field has only a refusal to say,
+  so both forms keep their stacked fields.
+- **A publish-gate error is said on its control and refuses no write.** `variant_without_price`,
+  `variant_in_stock_without_inventory` and `product_without_variant` are gate errors on a draft
+  the lab stores, for every product status. The variant's row says the first under its price and
+  the second under its stock — the availability select is described by the same line, since
+  either control clears it — at the validation weight, with the control `aria-invalid`, and the
+  Variants card's empty table says the third. None refuses the row's Save or *Save draft*, since
+  the lab does not. The line is polite and stays mounted while empty, as `FieldHint`'s warning
+  line does, because nothing has been refused; each sentence is the gate's, character for
+  character, so the validation card repeats it in the same words once the draft is saved. The
+  gate raises the price finding per variant, so the card says it per variant and never "no
+  priced variant", which would pass a product the gate refuses.
+- **A status carries the time the lab ties to it.** A payment status moving to Paid fills an
+  empty `paid_at` from `placed_at`, which the gate otherwise refuses as
+  `paid_order_without_capture_time`, and moving to Pending or Authorized clears it, which the
+  lab otherwise refuses. A fulfilment status moving off Unfulfilled fills an empty `shipped_at`
+  the same way, and moving back clears it. A time already there, typed or saved, is never
+  overwritten; a move that neither enters nor leaves those states touches nothing; an empty or
+  unreadable `placed_at` fills nothing. `PAID_AT_RULE` and `SHIPPED_AT_RULE` say so.
+
+Verification: `App.test.tsx` *the shop draft's refusals, said under their controls* (the
+slice's evidence — a minimum of 5 and a maximum of 3 read why under Max days, and Add is refused
+for it); `Orders.test.tsx` *a status moves the time beside it*; `orders.test.ts` lists all 16
+payment moves and all 9 fulfilment moves and holds each rule's sentence to the statuses it
+names; `fieldRules.test.ts` reads the four sentences out of `domain/shop.py`, and
+`test_shop_domain.py` asserts them from the Python side, for every product status and every
+maximum around the minimum.

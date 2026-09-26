@@ -8,7 +8,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
-import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
@@ -34,6 +34,7 @@ import {
   SHOP_SLUG_DETAIL_RULE,
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_NAME_RULE,
+  TRANSIT_WINDOW_RULE,
 } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
@@ -360,14 +361,37 @@ function PaymentKindField({
   );
 }
 
-/** Carrier and transit window, on the add form and in an open row alike. */
+/**
+ * Whether a transit window is one the lab refuses to store: `FulfilmentMethod.__post_init__`
+ * raises on a maximum shorter than the minimum, and on nothing else between the two.
+ */
+function transitInverted(value: FulfilmentFields): boolean {
+  return value.max < value.min;
+}
+
+/**
+ * Carrier and transit window, on the add form and in an open row alike — including the
+ * refusal, which both paths therefore make in the same words and on the same control.
+ *
+ * The window is refused on **Max days**. The lab's sentence makes the maximum its subject, and
+ * the maximum is the bound typed second, so the line appears under the control the operator
+ * is in when the window turns over. It is the lab's own message (`TRANSIT_WINDOW_RULE`), at
+ * the validation weight, in Max days' description, with Max days marked invalid; the add
+ * form's Add and the open row's Save name this line rather than write the sentence twice
+ * (ADR 0063, *Field's `extraId`*). Min days is not marked: the operator may mean either bound,
+ * and the one line under the pair says which rule they broke.
+ */
 function FulfilmentFieldset({
   value,
   onChange,
+  transitRefusalId,
 }: {
   value: FulfilmentFields;
   onChange: (next: FulfilmentFields) => void;
+  /** The id of the line that says the window is inverted, which the form's action names. */
+  transitRefusalId: string;
 }) {
+  const inverted = transitInverted(value);
   return (
     <>
       <label className={fieldLabelClasses}>
@@ -389,8 +413,12 @@ function FulfilmentFieldset({
           onChange={(event) => onChange({ ...value, min: Number(event.target.value) })}
         />
       </label>
-      <label className={fieldLabelClasses}>
-        Max days
+      <FieldHint
+        label="Max days"
+        extra={inverted ? TRANSIT_WINDOW_RULE : undefined}
+        extraTone={inverted ? "error" : "muted"}
+        extraId={transitRefusalId}
+      >
         <input
           type="number"
           min={0}
@@ -398,7 +426,7 @@ function FulfilmentFieldset({
           value={value.max}
           onChange={(event) => onChange({ ...value, max: Number(event.target.value) })}
         />
-      </label>
+      </FieldHint>
     </>
   );
 }
@@ -425,6 +453,10 @@ function PaymentAndFulfilmentCards() {
   const paymentRemoval = useRemoval(shopId);
   const fulfilmentRemoval = useRemoval(shopId);
   const fulfilmentNotice = useId();
+  // One line per window the page can hold open: the add form's, and the one open row's.
+  const addTransitRefusalId = useId();
+  const openTransitRefusalId = useId();
+  const addTransitInverted = transitInverted(fulfilment);
 
   const paymentSuggested = uniqueSuggestion(slugify(payment.name, ""), takenPaymentIds);
   const fulfilmentSuggested = uniqueSuggestion(slugify(fulfilment.name, ""), takenFulfilmentIds);
@@ -462,7 +494,9 @@ function PaymentAndFulfilmentCards() {
 
   function addFulfilment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!fulfilment.id || takenFulfilmentIds.includes(fulfilment.id)) {
+    // The refused Add swallows its press; this is what refuses a submission that arrives
+    // without one (ADR 0063).
+    if (!fulfilment.id || takenFulfilmentIds.includes(fulfilment.id) || addTransitInverted) {
       return;
     }
     edit({
@@ -672,7 +706,7 @@ function PaymentAndFulfilmentCards() {
                   () => fulfilmentFields(method),
                   (fields) => saveFulfilment(method.id, fields),
                   (value, onChange) => (
-                    <div className="grid gap-2 sm:grid-cols-4">
+                    <div className="grid items-start gap-2 sm:grid-cols-4">
                       <label className={fieldLabelClasses}>
                         Name
                         <input
@@ -682,9 +716,17 @@ function PaymentAndFulfilmentCards() {
                           onChange={(event) => onChange({ ...value, name: event.target.value })}
                         />
                       </label>
-                      <FulfilmentFieldset value={value} onChange={onChange} />
+                      <FulfilmentFieldset
+                        value={value}
+                        onChange={onChange}
+                        transitRefusalId={openTransitRefusalId}
+                      />
                     </div>
                   ),
+                  (value) =>
+                    transitInverted(value)
+                      ? { id: openTransitRefusalId, reason: TRANSIT_WINDOW_RULE }
+                      : true,
                 )}
                 actions={
                   <RemoveButton
@@ -704,7 +746,10 @@ function PaymentAndFulfilmentCards() {
         </ul>
         <EntryEditNotice id={fulfilmentNotice} label={fulfilmentEditor.open?.label ?? null} />
         <RemovalNotice removal={fulfilmentRemoval} />
-        <form className={`${addFormClasses} sm:grid-cols-5`} onSubmit={addFulfilment}>
+        {/* `items-start`: the transit sentence under Max days wraps in its narrow cell, and a
+            stretched row would grow every sibling control with it. The open row's grid does
+            the same. */}
+        <form className={`${addFormClasses} items-start sm:grid-cols-5`} onSubmit={addFulfilment}>
           <label className={fieldLabelClasses}>
             Name
             <input
@@ -730,11 +775,19 @@ function PaymentAndFulfilmentCards() {
           <FulfilmentFieldset
             value={fulfilment}
             onChange={(next) => setFulfilment({ ...fulfilment, ...next })}
+            transitRefusalId={addTransitRefusalId}
           />
-          <button className={`${accentButtonClasses} self-end`} type="submit">
+          <PrimaryAction
+            variant="accent"
+            className="self-end"
+            type="submit"
+            refusal={
+              addTransitInverted ? { id: addTransitRefusalId, reason: TRANSIT_WINDOW_RULE } : null
+            }
+          >
             <ButtonIcon verb="create" />
             Add fulfilment method
-          </button>
+          </PrimaryAction>
         </form>
       </Card>
     </>

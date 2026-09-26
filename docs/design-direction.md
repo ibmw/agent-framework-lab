@@ -340,9 +340,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   submit of a form, a saved row's Save included; every create page (nine route files, ten
   surfaces), Publish everywhere (`PublishButton`, described by `PublishReasons`), Start, the
   connection's Save and Test, the bench's *Send as the customer*, *Attach to this shop*, *Fork
-  this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread* and the add forms refused
-  for a reason no field states wear it. A
-  press in flight is not a refusal: it keeps native `disabled` and says nothing, and so does a
+  this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, *Add fulfilment method*
+  (a transit window the lab refuses, said under Max days) and the add forms refused for a
+  reason no field states wear it. A press in flight is not a refusal: it keeps native `disabled` and says nothing, and so does a
   Publish whose gate has not answered; while a press is in flight it wins over a refusal that
   arrives meanwhile. Every submit handler also checks the refusal itself, so a submission that
   reaches the form without the press is refused too. A `type="button"` action has no route but

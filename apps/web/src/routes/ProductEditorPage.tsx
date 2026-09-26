@@ -59,10 +59,13 @@ import {
   PRODUCT_HANDLE_RULE,
   PRODUCT_STATUS_RULE,
   PRODUCT_TITLE_RULE,
+  productWithoutVariantRule,
   REFERENCE_PATTERN,
   REVIEW_RATING_RULE,
   VARIANT_SKU_RENAME_RULE,
   VARIANT_SKU_RULE,
+  variantInStockWithoutInventoryRule,
+  variantWithoutPriceRule,
 } from "../lib/fieldRules";
 import { type DraftProduct, productEntryState, productKeyIn } from "../lib/productKeys";
 import {
@@ -901,6 +904,29 @@ function OptionsCard({ product, onChange }: EditorProps) {
   );
 }
 
+/**
+ * A publish-gate error said under the cell that holds it, at the validation weight.
+ *
+ * Polite rather than an alert, because nothing has been refused: the lab stores the draft and
+ * refuses it at publication, which is the reason `FieldHint` gives its warning tone for
+ * announcing politely. The element stays mounted while it holds nothing — `sr-only` and empty
+ * — for the reason `FieldHint`'s second line does: a live region that appears at the moment it
+ * has something to say is one no reader is listening to yet. The sentence is the gate's
+ * (`lib/fieldRules.ts`), so it matches the validation card word for word once the draft is
+ * saved rather than saying the same finding twice in two voices.
+ */
+function GateFindingLine({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <p
+      id={id}
+      aria-live="polite"
+      className={children ? `${validationMessageClasses} mt-1 max-w-56` : "sr-only"}
+    >
+      {children}
+    </p>
+  );
+}
+
 function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   const defaultCurrency = currencies[0];
   // One description for every row's price box: the rule is the same on all of them, and a
@@ -912,6 +938,9 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   const skuRuleId = useId();
   const skuRefusalId = useId();
   const editNoticeId = useId();
+  // The prefix of each row's two gate lines — the unpriced variant under its price, the empty
+  // in-stock variant under its stock — which are per row, so the SKU completes the id.
+  const rowFindingId = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
@@ -1038,6 +1067,14 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                   />
                 );
               }
+              // The gate's two findings a row's own cells can raise, said on the row while it
+              // holds them. Neither refuses a save — the lab stores both and
+              // refuses them at publication — so they refuse no Save here either: they say it.
+              const unpriced = variant.price === null;
+              const emptyInStock =
+                variant.availability === "in_stock" && variant.stock_quantity === 0;
+              const unpricedId = `${rowFindingId}-price-${variant.sku}`;
+              const emptyInStockId = `${rowFindingId}-stock-${variant.sku}`;
               return (
                 <tr key={variant.sku}>
                   <td className={tableCellClasses}>
@@ -1139,7 +1176,8 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         inputMode="decimal"
                         pattern={MONEY_PATTERN}
                         title={MONEY_RULE}
-                        aria-describedby={priceRuleId}
+                        aria-describedby={unpriced ? `${priceRuleId} ${unpricedId}` : priceRuleId}
+                        aria-invalid={unpriced || undefined}
                         placeholder={variantPriceLabel(variant)}
                         onChange={(event) =>
                           updateVariant(index, {
@@ -1157,6 +1195,9 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         {variant.price?.currency ?? defaultCurrency}
                       </span>
                     </span>
+                    <GateFindingLine id={unpricedId}>
+                      {unpriced ? variantWithoutPriceRule(variant.sku) : null}
+                    </GateFindingLine>
                   </td>
                   <td className={tableCellClasses}>
                     <label className="sr-only" htmlFor={`availability-${variant.sku}`}>
@@ -1165,6 +1206,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                     <select
                       id={`availability-${variant.sku}`}
                       className={`${fieldControlClasses} max-w-36`}
+                      aria-describedby={emptyInStock ? emptyInStockId : undefined}
                       value={variant.availability}
                       onChange={(event) =>
                         updateVariant(index, {
@@ -1189,6 +1231,8 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                       type="number"
                       min={0}
                       className={`${fieldControlClasses} max-w-24`}
+                      aria-describedby={emptyInStock ? emptyInStockId : undefined}
+                      aria-invalid={emptyInStock || undefined}
                       value={variant.stock_quantity}
                       onChange={(event) =>
                         updateVariant(index, {
@@ -1197,6 +1241,9 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         })
                       }
                     />
+                    <GateFindingLine id={emptyInStockId}>
+                      {emptyInStock ? variantInStockWithoutInventoryRule(variant.sku) : null}
+                    </GateFindingLine>
                   </td>
                   <td className={tableCellClasses}>
                     <span className="flex items-center gap-1.5">
@@ -1240,8 +1287,13 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
             })}
             {product.variants.length === 0 ? (
               <tr>
-                <td className={`${tableCellClasses} text-admin-muted`} colSpan={6}>
-                  No sellable variant yet.
+                <td className={tableCellClasses} colSpan={6}>
+                  {/* The gate's own sentence, whatever the product's status: the empty table
+                      is the one place the finding has to stand, and the product's
+                      validation card repeats it in the same words once the draft is saved. */}
+                  <p className={validationMessageClasses}>
+                    {productWithoutVariantRule(product.title)}
+                  </p>
                 </td>
               </tr>
             ) : null}

@@ -13,7 +13,8 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { ORDER_METHOD_RULE } from "./lib/fieldRules";
+import { ORDER_METHOD_RULE, PAID_AT_RULE, SHIPPED_AT_RULE } from "./lib/fieldRules";
+import { toLocalInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -2134,5 +2135,111 @@ describe("the field pattern on the order editor", () => {
     expect(
       within(shipping).getByRole("link", { name: "the customer's address book" }),
     ).toBeVisible();
+  });
+});
+
+/**
+ * A status move carries its timestamp with it, so a paid order is not left
+ * owing `paid_order_without_capture_time`, and a move back is not refused by the lab for a
+ * time the status no longer allows. `orders.test.ts` holds every pair of statuses; these hold
+ * the page to the same moves, through to what the save sends.
+ */
+describe("a status moves the time beside it", () => {
+  const AUTHORIZED_ORDER: ShopOrderResponse = {
+    ...PAID_ORDER,
+    content: {
+      ...PAID_ORDER.content,
+      payment: { ...PAID_ORDER.content.payment, status: "authorized", paid_at: null },
+    },
+    payment_status_options: ["authorized", "paid", "refunded"],
+  };
+
+  async function openEditor() {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    return {
+      payment: within(card("Line items & payment")),
+      shipping: within(card("Fulfilment & shipping")),
+    };
+  }
+
+  async function saved() {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    return savedRequests[0];
+  }
+
+  it("says so under Paid at and Shipped at", async () => {
+    const { payment, shipping } = await openEditor();
+    expect(payment.getByLabelText("Paid at")).toHaveAccessibleDescription(
+      wholeDescription(PAID_AT_RULE),
+    );
+    expect(shipping.getByLabelText("Shipped at")).toHaveAccessibleDescription(
+      wholeDescription(SHIPPED_AT_RULE),
+    );
+  });
+
+  it("fills an empty capture time with the placement time when the order is paid", async () => {
+    const user = userEvent.setup();
+    currentOrder = AUTHORIZED_ORDER;
+    const { payment } = await openEditor();
+    expect(payment.getByLabelText("Paid at")).toHaveValue("");
+
+    await user.selectOptions(payment.getByLabelText("Payment status"), "paid");
+
+    expect(payment.getByLabelText("Paid at")).toHaveValue(toLocalInput(PLACED_AT));
+    expect((await saved()).payment).toMatchObject({ status: "paid", paid_at: PLACED_AT });
+  });
+
+  it("clears the capture time when the order moves back to authorized", async () => {
+    const user = userEvent.setup();
+    currentOrder = AUTHORIZED_ORDER;
+    const { payment } = await openEditor();
+
+    await user.selectOptions(payment.getByLabelText("Payment status"), "paid");
+    await user.selectOptions(payment.getByLabelText("Payment status"), "authorized");
+
+    expect(payment.getByLabelText("Paid at")).toHaveValue("");
+    expect((await saved()).payment).toMatchObject({ status: "authorized", paid_at: null });
+  });
+
+  it("keeps a capture time the operator typed, and a refund keeps the one it has", async () => {
+    const user = userEvent.setup();
+    currentOrder = AUTHORIZED_ORDER;
+    const { payment } = await openEditor();
+    const typed = "2026-08-22T10:15";
+
+    // Typed while authorized — which the lab would refuse on its own — then made paid.
+    await user.type(payment.getByLabelText("Paid at"), typed);
+    await user.selectOptions(payment.getByLabelText("Payment status"), "paid");
+    expect(payment.getByLabelText("Paid at")).toHaveValue(typed);
+    await user.selectOptions(payment.getByLabelText("Payment status"), "refunded");
+    expect(payment.getByLabelText("Paid at")).toHaveValue(typed);
+
+    expect((await saved()).payment).toMatchObject({
+      status: "refunded",
+      paid_at: new Date(typed).toISOString(),
+    });
+  });
+
+  it("fills an empty shipping time once something ships, and clears it when nothing has", async () => {
+    const user = userEvent.setup();
+    const { shipping } = await openEditor();
+    expect(shipping.getByLabelText("Shipped at")).toHaveValue("");
+
+    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "partially_fulfilled");
+    expect(shipping.getByLabelText("Shipped at")).toHaveValue(toLocalInput(PLACED_AT));
+    // Between two shipped statuses the time is the operator's, and stays.
+    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "fulfilled");
+    expect(shipping.getByLabelText("Shipped at")).toHaveValue(toLocalInput(PLACED_AT));
+    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "unfulfilled");
+    expect(shipping.getByLabelText("Shipped at")).toHaveValue("");
+    await user.selectOptions(shipping.getByLabelText("Fulfilment status"), "fulfilled");
+
+    expect((await saved()).fulfilment).toMatchObject({
+      status: "fulfilled",
+      shipped_at: PLACED_AT,
+    });
   });
 });

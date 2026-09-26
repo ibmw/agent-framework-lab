@@ -15,17 +15,21 @@ import type { RouteObject } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   PRODUCT_TITLE_RULE,
+  productWithoutVariantRule,
   SHOP_NAME_RULE,
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_NAME_RULE,
+  TRANSIT_WINDOW_RULE,
   VARIANT_SKU_RENAME_RULE,
+  variantInStockWithoutInventoryRule,
+  variantWithoutPriceRule,
 } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { CREATE_ROUTES, tourAt } from "./lib/tours";
 import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -2647,6 +2651,244 @@ function routedElements(routes: RouteObject[], prefix = ""): [string, string][] 
     return [...self, ...routedElements(route.children ?? [], here)];
   });
 }
+
+/**
+ * The shop draft's refusals. Each rule is the lab's own, said under the control that breaks it, at the
+ * validation weight, in that control's description, with the control marked invalid. The
+ * transit window is a write the lab refuses, so the actions that would write it are refused
+ * too; the two variant findings are the publish gate's, which stores the draft, so they are
+ * said and refuse nothing.
+ */
+describe("the shop draft's refusals, said under their controls", () => {
+  const STANDARD = {
+    id: "standard",
+    name: "Standard",
+    carrier: "Nordic Post",
+    min_transit_days: 2,
+    max_transit_days: 5,
+  };
+
+  it("says why a maximum of 3 after a minimum of 5 is refused, and Add says it too", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const fulfilment = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+
+    await user.type(fulfilment.getByLabelText("Name"), "Express");
+    await user.type(fulfilment.getByLabelText("Carrier"), "Nordic Post");
+    await user.clear(fulfilment.getByLabelText("Min days"));
+    await user.type(fulfilment.getByLabelText("Min days"), "5");
+    await user.clear(fulfilment.getByLabelText("Max days"));
+    await user.type(fulfilment.getByLabelText("Max days"), "3");
+
+    // The reason, under Max days, in its description, the control marked invalid.
+    const max = fulfilment.getByLabelText("Max days");
+    expect(max).toHaveAccessibleDescription(TRANSIT_WINDOW_RULE);
+    expect(max).toHaveAttribute("aria-invalid", "true");
+    const line = fulfilment.getByText(TRANSIT_WINDOW_RULE);
+    expect(line).toBeVisible();
+    expect(line).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
+    expect(precedes(max, line)).toBe(true);
+    expect(fulfilment.getByLabelText("Min days")).not.toHaveAttribute("aria-invalid");
+    // The sentence wraps in Max days' narrow cell; the form's grid aligns its cells to the
+    // start, so that line never stretches the row and grows the controls beside it.
+    const addGrid = max.parentElement?.parentElement;
+    expect(addGrid?.tagName).toBe("FORM");
+    expect(addGrid).toHaveClass("grid", "items-start");
+
+    // Add is refused for that reason, names that one line, and writes nothing when pressed,
+    // nor when its form is submitted without the press.
+    const add = fulfilment.getByRole("button", { name: "Add fulfilment method" });
+    expectRefused(add, TRANSIT_WINDOW_RULE);
+    expect(add.getAttribute("aria-describedby")?.split(" ")[0]).toBe(line.id);
+    await user.click(add);
+    await submitWithoutPressing(add);
+    expect(fulfilment.queryByText(/Nordic Post ·/)).toBeNull();
+    expect(fulfilment.getByText("No fulfilment method yet.")).toBeVisible();
+
+    // A window of one day each way is the lab's, so equal bounds are not refused.
+    await user.clear(fulfilment.getByLabelText("Max days"));
+    await user.type(fulfilment.getByLabelText("Max days"), "5");
+    expect(fulfilment.getByLabelText("Max days")).not.toHaveAttribute("aria-invalid");
+    expect(fulfilment.queryByText(TRANSIT_WINDOW_RULE)).toBeNull();
+    expectNotRefused(add);
+    await user.click(add);
+    expect(fulfilment.getByText("Nordic Post · 5–5 days")).toBeVisible();
+    expect(fulfilment.queryByText("No fulfilment method yet.")).toBeNull();
+  });
+
+  it("refuses an open row's Save while its window is inverted, and saves it once it is not", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, fulfilment_methods: [STANDARD] };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    await user.click(card.getByRole("button", { name: "Edit Standard" }));
+    const open = within(card.getByRole("form", { name: "Edit Standard" }));
+    await user.clear(open.getByLabelText("Min days"));
+    await user.type(open.getByLabelText("Min days"), "6");
+
+    // The row keeps its stacked fields; the line is under Max days, which it describes.
+    const max = open.getByLabelText("Max days");
+    expect(max).toHaveAccessibleDescription(TRANSIT_WINDOW_RULE);
+    // The row's grid holds Name and the fieldset's four cells, aligned to the start as the
+    // add form's are, so the line under Max days grows none of its neighbours.
+    const rowGrid = max.parentElement?.parentElement;
+    expect(rowGrid).toContainElement(open.getByLabelText("Name"));
+    expect(rowGrid).toHaveClass("grid", "items-start");
+    expect(max).toHaveAttribute("aria-invalid", "true");
+    const save = open.getByRole("button", { name: "Save Standard" });
+    expectRefused(save, TRANSIT_WINDOW_RULE);
+    expect(save.getAttribute("aria-describedby")?.split(" ")[0]).toBe(
+      open.getByText(TRANSIT_WINDOW_RULE).id,
+    );
+    await user.click(save);
+    await submitWithoutPressing(save);
+    // Still open, and nothing reached the draft.
+    expect(card.getByRole("form", { name: "Edit Standard" })).toBeVisible();
+    expect(screen.getByText("All changes saved")).toBeVisible();
+
+    await user.clear(open.getByLabelText("Max days"));
+    await user.type(open.getByLabelText("Max days"), "8");
+    expectNotRefused(open.getByRole("button", { name: "Save Standard" }));
+    await user.click(open.getByRole("button", { name: "Save Standard" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().fulfilment_methods).toStrictEqual([
+      { ...STANDARD, min_transit_days: 6, max_transit_days: 8 },
+    ]);
+  });
+
+  it("says an empty in-stock variant on its row, and still saves it", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    const sentence = variantInStockWithoutInventoryRule("NS-ASJ-OB-M");
+    const stock = variants.getByLabelText("Stock for NS-ASJ-OB-M");
+    const availability = variants.getByLabelText("Availability for NS-ASJ-OB-M");
+    expect(stock).not.toHaveAttribute("aria-invalid");
+    expect(variants.queryByText(sentence)).toBeNull();
+
+    await user.clear(stock);
+    await user.type(stock, "0");
+
+    // On the variant's own row, under its stock, at the validation weight.
+    const line = variants.getByText(sentence);
+    expect(line).toBeVisible();
+    expect(line).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
+    // Polite, not an alert: the lab refuses nothing here.
+    expect(line).toHaveAttribute("aria-live", "polite");
+    expect(line).not.toHaveAttribute("role");
+    expect(line.closest("tr")).toBe(stock.closest("tr"));
+    expect(line.closest("td")).toBe(stock.closest("td"));
+    expect(stock).toHaveAttribute("aria-invalid", "true");
+    expect(stock).toHaveAccessibleDescription(sentence);
+    // Either control fixes it, so the availability select is described by the same line.
+    expect(availability).toHaveAccessibleDescription(sentence);
+    // The table keeps its six columns; the line is inside the Stock cell, not a row of its own.
+    expect(within(line.closest("tr") as HTMLElement).getAllByRole("cell")).toHaveLength(6);
+
+    // The gate stores it and refuses it at publication, so nothing here refuses the write.
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    expectNotRefused(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }));
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }));
+    expectNotRefused(screen.getByRole("button", { name: "Save draft" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().products[0].variants[0]).toMatchObject({
+      sku: "NS-ASJ-OB-M",
+      availability: "in_stock",
+      stock_quantity: 0,
+    });
+
+    // Not in stock, an empty stock is what the variant says of itself.
+    await user.selectOptions(availability, "backorder");
+    expect(variants.queryByText(sentence)).toBeNull();
+    expect(stock).not.toHaveAttribute("aria-invalid");
+    // The same live region stays mounted while it has nothing to say, so the next time the
+    // row breaks the rule it is a region a reader is already listening to.
+    const quiet = document.getElementById(line.id);
+    expect(quiet).toBe(line);
+    expect(quiet).toBeEmptyDOMElement();
+    expect(quiet).toHaveClass("sr-only");
+    expect(quiet).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("says a stock of zero only while in stock, for every availability", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    const sentence = variantInStockWithoutInventoryRule("NS-ASJ-OB-M");
+    const availability = variants.getByLabelText("Availability for NS-ASJ-OB-M");
+    const stock = variants.getByLabelText("Stock for NS-ASJ-OB-M");
+    for (const option of within(availability).getAllByRole("option") as HTMLOptionElement[]) {
+      await user.selectOptions(availability, option.value);
+      for (const quantity of ["0", "1"]) {
+        await user.clear(stock);
+        await user.type(stock, quantity);
+        const expected = quantity === "0" && option.value === "in_stock";
+        expect(variants.queryByText(sentence) !== null, `${option.value} × ${quantity}`).toBe(
+          expected,
+        );
+        expect(stock.getAttribute("aria-invalid") === "true").toBe(expected);
+      }
+    }
+  });
+
+  it("says each unpriced variant under its price, whatever the product's status", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    const status = screen.getByLabelText("Status");
+    const unpriced = variants.getByLabelText("Price for NS-ASJ-OB-L");
+    const priced = variants.getByLabelText("Price for NS-ASJ-OB-M");
+
+    for (const option of within(status).getAllByRole("option") as HTMLOptionElement[]) {
+      await user.selectOptions(status, option.value);
+      // Per variant, as the gate raises it: the priced sibling does not excuse this one.
+      const line = variants.getByText(variantWithoutPriceRule("NS-ASJ-OB-L"));
+      expect(line, option.value).toBeVisible();
+      expect(line).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
+      expect(line.closest("td")).toBe(unpriced.closest("td"));
+      expect(unpriced).toHaveAttribute("aria-invalid", "true");
+      expect(unpriced).toHaveAccessibleDescription(
+        new RegExp(`${variantWithoutPriceRule("NS-ASJ-OB-L")}$`),
+      );
+      expect(priced).not.toHaveAttribute("aria-invalid");
+      expect(variants.queryByText(variantWithoutPriceRule("NS-ASJ-OB-M"))).toBeNull();
+    }
+
+    // Priced, it says nothing; emptied again, it says it again. Neither refuses the save.
+    await user.type(unpriced, "249.00");
+    expect(variants.queryByText(variantWithoutPriceRule("NS-ASJ-OB-L"))).toBeNull();
+    expect(unpriced).not.toHaveAttribute("aria-invalid");
+    await user.clear(priced);
+    expect(variants.getByText(variantWithoutPriceRule("NS-ASJ-OB-M"))).toBeVisible();
+    expectNotRefused(screen.getByRole("button", { name: "Save draft" }));
+  });
+
+  it("says a product with no variant on the Variants card, whatever its status", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...READY_CONTENT,
+      products: [{ ...READY_CONTENT.products[0], variants: [] }],
+    };
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    const status = screen.getByLabelText("Status");
+
+    for (const option of within(status).getAllByRole("option") as HTMLOptionElement[]) {
+      await user.selectOptions(status, option.value);
+      const line = variants.getByText(productWithoutVariantRule("Alpine Shell Jacket"));
+      expect(line, option.value).toBeVisible();
+      expect(line).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
+    }
+
+    await user.click(variants.getByRole("button", { name: "Add variant" }));
+    expect(variants.queryByText(productWithoutVariantRule("Alpine Shell Jacket"))).toBeNull();
+    // The new variant has no price, so the row says that instead — the gate's next finding.
+    expect(variants.getByText(/^variant .* is missing a price$/)).toBeVisible();
+  });
+});
 
 describe("the tree's create pages and the tour table", () => {
   it("excludes every create route the tree declares from the tours", () => {
