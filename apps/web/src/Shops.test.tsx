@@ -442,6 +442,34 @@ describe("the currencies a shop sells in", () => {
   });
 });
 
+describe("the channels a new shop answers on", () => {
+  it("answers on chat unless chosen otherwise, and creates the shop on what is chosen", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const card = await createShopPage();
+
+    const channels = within(
+      within(card.getByRole("region", { name: "Channels" })).getByRole("group", {
+        name: "Answers on",
+      }),
+    );
+    // The same chips as Shop details, the last one on held on, with the rule on the group.
+    expect(channels.getByRole("checkbox", { name: "Chat" })).toBeChecked();
+    expect(channels.getByRole("checkbox", { name: "Chat" })).toBeDisabled();
+    expect(card.getByRole("group", { name: "Answers on" })).toHaveAccessibleDescription(
+      /the last channel left on stays on/i,
+    );
+
+    await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
+    await user.click(channels.getByRole("checkbox", { name: "Email" }));
+    await user.click(channels.getByRole("checkbox", { name: "Chat" }));
+    await user.click(card.getByRole("button", { name: "Create shop" }));
+
+    await waitFor(() => expect(created).not.toBeNull());
+    expect(created).toMatchObject({ identity: { channels: ["email"] } });
+  });
+});
+
 describe("create-form guidance", () => {
   it("puts each field's hint in that control's accessible description", async () => {
     renderNewShop();

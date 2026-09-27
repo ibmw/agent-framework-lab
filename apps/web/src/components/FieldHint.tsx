@@ -405,7 +405,8 @@ export function FieldGroupHint({ arrangement = "stacked", ...props }: FieldGroup
 
 type FieldGroupHintProps = {
   legend: string;
-  hint: ReactNode;
+  /** The set's rule. A group with none to state — the bench's arms — draws no hint. */
+  hint?: ReactNode;
   /** A live second description line: what the hint's rule currently resolves to. */
   extra?: ReactNode;
   /** `"row"` draws this group as a `FieldGroup`. See `FieldHint` for the one case it is for. */
@@ -422,13 +423,16 @@ function StackedFieldGroupHint({
   const generatedId = useId();
   const hintId = `${generatedId}-hint`;
   const extraId = `${generatedId}-extra`;
+  const describedBy = [hint ? hintId : null, extraId].filter(Boolean).join(" ");
   return (
-    <fieldset className={fieldLabelClasses} aria-describedby={`${hintId} ${extraId}`}>
+    <fieldset className={fieldLabelClasses} aria-describedby={describedBy}>
       <legend className="text-xs font-semibold text-admin-muted">{legend}</legend>
       {children}
-      <p id={hintId} className="font-normal text-admin-muted">
-        {hint}
-      </p>
+      {hint ? (
+        <p id={hintId} className="font-normal text-admin-muted">
+          {hint}
+        </p>
+      ) : null}
       <ExtraLine id={extraId} tone="muted" className="font-normal">
         {extra}
       </ExtraLine>

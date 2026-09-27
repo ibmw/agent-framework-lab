@@ -601,8 +601,12 @@ export function IssueList({
     <ul className="grid gap-2.5">
       {groups.map((group) =>
         group.entry === null ? (
-          // A path the map does not recognise keeps its finding and loses only its Open.
-          <Finding key={group.key} issue={group.issues[0]} />
+          // A path the map does not recognise keeps its findings — every one of them, since a
+          // product deleted or renamed on screen leaves all its findings at one unknown path —
+          // and loses only its Open.
+          group.issues.map((issue) => (
+            <Finding key={`${issue.code}:${issue.path}:${issue.message}`} issue={issue} />
+          ))
         ) : (
           <li key={group.key} className="overflow-hidden rounded-[9px] border border-admin-border">
             <div className="flex flex-wrap items-center gap-2 border-b border-admin-border/60 bg-admin-canvas px-3 py-2">

@@ -8,10 +8,12 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
-import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
+import { Field, FieldHint, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { PrimaryAction, type Refusal, RefusalLine } from "../components/PrimaryAction";
+import { SetupChecklist } from "../components/SetupChecklist";
 import { ShopLogoCard } from "../components/ShopLogoCard";
+import { ToggleChipGroup } from "../components/ToggleChipGroup";
 import {
   Card,
   DefaultToneChip,
@@ -21,7 +23,6 @@ import {
   EntryId,
   EntryKind,
   EntryText,
-  IssueList,
   PageHeader,
   VersionChips,
 } from "../components/WorkspaceChrome";
@@ -40,6 +41,7 @@ import {
   TRANSIT_WINDOW_RULE,
 } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
+import { unsoldCurrencyFindings } from "../lib/setupChecklist";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
@@ -71,7 +73,8 @@ function SetupPage({
   saveRefusal?: Refusal | null;
   children: ReactNode;
 }) {
-  const { preview, save, saving, discard, discarding, dirty, error } = useShopWorkspace();
+  const { shopId, content, preview, checking, save, saving, discard, discarding, dirty, error } =
+    useShopWorkspace();
   return (
     <>
       <PageHeader
@@ -97,11 +100,18 @@ function SetupPage({
         }
         sticky
       />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid gap-4">{children}</div>
-        <Card title="Draft validation">
-          <IssueList issues={preview?.issues ?? []} />
-        </Card>
+      {/* The prototype's two columns: the cards at most 790px wide and the 312px checklist
+          beside them, top-aligned. Narrower than both need, the checklist follows the cards,
+          which is where the prototype's wrapping row puts it. */}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,790px)_312px]">
+        <div className="grid min-w-0 gap-4">{children}</div>
+        <SetupChecklist
+          shopId={shopId}
+          content={content}
+          issues={preview?.issues ?? []}
+          checking={checking}
+          dirty={dirty}
+        />
       </div>
     </>
   );
@@ -355,19 +365,6 @@ export function ShopIdentityPage() {
     }
   }
 
-  // A shop must always answer on at least one channel, so the last checked box stays checked
-  // instead of failing at save. `CurrencyField` holds the same rule for the currencies.
-  function toggle<T extends string>(list: T[], value: T): T[] {
-    if (!list.includes(value)) {
-      return [...list, value];
-    }
-    return list.length === 1 ? list : list.filter((entry) => entry !== value);
-  }
-
-  function isLastSelected<T extends string>(list: readonly T[], value: T): boolean {
-    return list.length === 1 && list[0] === value;
-  }
-
   return (
     <SetupPage
       title="Shop details"
@@ -378,7 +375,13 @@ export function ShopIdentityPage() {
           : null
       }
     >
-      <Card title="Shop identity">
+      {/* The prototype's cards, in its order (`Workspace.dc.html` :2016): Identity, the Logo,
+          Commerce, Channels. The two method lists this page also holds follow them. */}
+      <Card title="Identity">
+        <p className="text-[13px] text-admin-muted">
+          What the shop is called, and the slug scenarios, orders and published versions address it
+          by.
+        </p>
         <FieldRows>
           <Field label="Name" hint={SHOP_NAME_RULE}>
             <input
@@ -407,50 +410,6 @@ export function ShopIdentityPage() {
             onChange={changeSlug}
             onLeave={() => setSlugOrigin(null)}
           />
-          {/* `LocaleField` and `CurrencyField` each carry their own label and their own rule,
-              so neither is wrapped in a row that would name it a second time. They are asked
-              to draw themselves as rows instead, which is what keeps one card to one label
-              typography and one unbroken run of dividing rules. */}
-          <LocaleField
-            arrangement="row"
-            value={identity.locale}
-            onChange={(locale) => edit({ ...content, identity: { ...identity, locale } })}
-          />
-          <CurrencyField
-            arrangement="row"
-            value={identity.currencies}
-            onChange={(currencies) => edit({ ...content, identity: { ...identity, currencies } })}
-          />
-          {/* The set of boxes is one control with no element for a `for` to point at, so the
-              row names it with `role="group"` and `aria-labelledby`. The rule about the last
-              box belongs to the set, the way `CurrencyField`'s does: a box that cannot be
-              clicked is not a place to read why. */}
-          <FieldGroup
-            label="Support channels"
-            hint="A shop must answer somewhere. The last channel left on cannot be turned off."
-          >
-            <div className="flex flex-wrap gap-3 text-[13px]">
-              {CHANNELS.map((channel) => (
-                <label key={channel.value} className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={identity.channels.includes(channel.value)}
-                    disabled={isLastSelected(identity.channels, channel.value)}
-                    onChange={() =>
-                      edit({
-                        ...content,
-                        identity: {
-                          ...identity,
-                          channels: toggle([...identity.channels], channel.value),
-                        },
-                      })
-                    }
-                  />
-                  {channel.label}
-                </label>
-              ))}
-            </div>
-          </FieldGroup>
         </FieldRows>
       </Card>
 
@@ -459,6 +418,44 @@ export function ShopIdentityPage() {
         logo={content.logo}
         onChange={(logo) => edit({ ...content, logo })}
       />
+
+      <Card title="Commerce">
+        <p className="text-[13px] text-admin-muted">
+          Where the shop trades and what it can price in.
+        </p>
+        {/* `LocaleField` and `CurrencyField` each carry their own label and their own rule,
+            so neither is wrapped in a row that would name it a second time. They are asked
+            to draw themselves as rows instead, which is what keeps one card to one label
+            typography and one unbroken run of dividing rules. */}
+        <FieldRows>
+          <LocaleField
+            arrangement="row"
+            value={identity.locale}
+            onChange={(locale) => edit({ ...content, identity: { ...identity, locale } })}
+          />
+          <CurrencyField
+            arrangement="row"
+            value={identity.currencies}
+            findings={unsoldCurrencyFindings(content)}
+            onChange={(currencies) => edit({ ...content, identity: { ...identity, currencies } })}
+          />
+        </FieldRows>
+      </Card>
+
+      <Card title="Channels">
+        <p className="text-[13px] text-admin-muted">A shop must always answer on at least one.</p>
+        <FieldRows>
+          <ToggleChipGroup
+            arrangement="row"
+            label="Answers on"
+            hint="The last channel left on stays on. A ticket arrives on one of these, and its gate refuses a channel the shop does not offer."
+            options={CHANNELS.map((channel) => ({ value: channel.value, label: channel.label }))}
+            value={identity.channels}
+            keepOne="A shop answers on at least one channel."
+            onChange={(channels) => edit({ ...content, identity: { ...identity, channels } })}
+          />
+        </FieldRows>
+      </Card>
 
       <PaymentAndFulfilmentCards />
     </SetupPage>

@@ -419,10 +419,10 @@ export const TOURS: Record<TourId, Tour> = {
     route: "/shops/:shopId/setup/identity",
     steps: [
       {
-        anchor: '[aria-label="Shop identity"]',
-        title: "The name, the money and the channels",
+        anchor: '[aria-label="Commerce"]',
+        title: "The locale and the money",
         body: [
-          "The identity is what the rest of the [[shop]] is bounded by. Its currencies are the ones a variant may be priced in, and its locale is the language the incident is conducted in — the create form answers that pair together, and this is where either is changed afterwards.",
+          "Commerce is what the rest of the [[shop]] is bounded by. Its currencies are the ones a variant may be priced in, and its locale is the language the incident is conducted in — the create form answers that pair together, and this is where either is changed afterwards.",
         ],
       },
       {
@@ -433,7 +433,7 @@ export const TOURS: Record<TourId, Tour> = {
         ],
       },
       {
-        anchor: '[aria-label="Draft validation"]',
+        anchor: '[aria-label="Setup checklist"]',
         title: "Everything here is one draft",
         body: [
           "These pages edit different parts of a single [[definition]], and the gate reads all of it at once. An error raised by the tone-of-voice page shows here too, which is why *Save draft* on any of them saves the same draft rather than that page's share of it.",

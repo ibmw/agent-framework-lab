@@ -248,6 +248,15 @@ export function variantWithoutPriceRule(sku: string): string {
 }
 
 /**
+ * `variant_currency_unsupported`: a gate **error** on each variant priced in a currency the
+ * shop does not sell in. Shop details says it on that currency's chip as the operator unticks
+ * it; the draft saves with it, and publication is refused.
+ */
+export function variantCurrencyUnsupportedRule(sku: string, currency: string): string {
+  return `variant ${sku} is priced in ${currency}, which the shop does not sell in`;
+}
+
+/**
  * `variant_in_stock_without_inventory`: a gate **error** when availability is in stock and
  * the stock is exactly zero. Like the two above, it refuses publication and not the save.
  */

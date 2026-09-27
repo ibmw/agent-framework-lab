@@ -54,8 +54,9 @@ Three things the prototype draws are decided outside this plan, so that no slice
 - **The lab is a mode, and the routes say so** — ADR 0054: the two modes, the `/lab` route
   scheme, the current-shop rule, the redirects, and what the shop rail lost. Landed; every
   slice below is written against the routes it left behind.
-- **The Setup checklist is not built**, and the overview's readiness card reads one listing —
-  `docs/design-direction.md`, *Navigation and chrome*. Built with the overview.
+- **The overview's readiness card reads one listing** — `docs/design-direction.md`,
+  *Navigation and chrome*. Built with the overview. The setup pages' checklist reads the shop's
+  own gate and nothing else (ADR 0071).
 - **A rail entry's count comes from the listing its index renders**, held by the workspace —
   ADR 0056, which also measured and refused the additive counts read. Landed.
 - **Three of the five proposed preferences earn a consumer**, and the logo was built as a shop
@@ -104,8 +105,9 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ## Deliberately not here
 
-- **The Setup checklist**, and any per-step reading of what the shop still lacks. ADR 0044 and
-  ADR 0045 stand; the overview's readiness card reads one listing and says one sentence.
+- **Any reading of what the lab still lacks across listings.** ADR 0044 and ADR 0045 stand; the
+  overview's readiness card reads one listing and says one sentence, and the setup checklist
+  reads the shop's own gate only (ADR 0071).
 - **Auto-offered tours and table density.** Neither preference decides anything a surface reads;
   ADR 0049 refused the first outright.
 - **A model on the connection, a masked key, a per-configuration endpoint.** Refused in ADR 0052

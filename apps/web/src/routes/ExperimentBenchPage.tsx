@@ -24,6 +24,7 @@ import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { ToggleChipGroup } from "../components/ToggleChipGroup";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
 import {
   ARM_PROGRESS,
@@ -432,30 +433,18 @@ export function ExperimentBenchPage() {
                   onChange={(event) => setMessage(event.target.value)}
                 />
               </label>
-              <fieldset className="flex flex-wrap items-center gap-3">
-                <legend className="text-xs font-semibold text-admin-muted">Deliver to</legend>
-                {experiment.runs.map((run) => (
-                  <label key={run.run_id} className="flex items-center gap-2 text-[13px]">
-                    <input
-                      type="checkbox"
-                      checked={targets?.includes(run.run_id) ?? false}
-                      disabled={!driveable(run)}
-                      onChange={(event) =>
-                        setTargets((current) => {
-                          const selected = current ?? [];
-                          return event.target.checked
-                            ? [...selected, run.run_id]
-                            : selected.filter((identifier) => identifier !== run.run_id);
-                        })
-                      }
-                    />
-                    {run.label}
-                    {driveable(run) ? null : (
-                      <span className="text-xs text-admin-muted">— completed</span>
-                    )}
-                  </label>
-                ))}
-              </fieldset>
+              {/* The arms are a small closed set of toggles, drawn as every such set is. A
+                  completed arm cannot take a turn, so its chip is off and says why beneath. */}
+              <ToggleChipGroup
+                label="Deliver to"
+                options={experiment.runs.map((run) => ({
+                  value: run.run_id,
+                  label: run.label,
+                  disabledReason: driveable(run) ? undefined : `${run.label} has completed.`,
+                }))}
+                value={targets ?? []}
+                onChange={setTargets}
+              />
               <PrimaryAction
                 variant="accent"
                 type="submit"

@@ -1974,6 +1974,211 @@ describe("a shop's logo, on Shop details", () => {
   });
 });
 
+/**
+ * The setup checklist that took "Draft validation"'s place beside the setup pages. What it
+ * must not do is lose anything the flat list said: every finding the gate returns is still on
+ * the panel, in its words, under the line that owns it.
+ */
+describe("the setup checklist beside Shop details", () => {
+  function line(panel: HTMLElement, label: string): HTMLElement {
+    const item = within(panel)
+      .getAllByRole("listitem")
+      .find((entry) => entry.querySelector("p")?.textContent?.startsWith(label));
+    if (!item) {
+      throw new Error(`no checklist line ${label}`);
+    }
+    return item;
+  }
+
+  it("draws the prototype's lines, each a ✓ or a !, a label and a note", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const panel = await screen.findByRole("region", { name: "Setup checklist" });
+    await within(panel).findByText("At least one product");
+    const labels = [
+      "At least one product",
+      "A payment method enabled",
+      "A fulfilment method",
+      "A policy",
+      "A tone of voice default",
+      "An FAQ",
+      "Support guidelines",
+      "No blocking findings",
+    ];
+    // The fixture's gate: an unpriced variant (an error) and no FAQ (a warning).
+    const expected: Record<string, [string, string]> = {
+      "At least one product": ["✓", "done"],
+      "A payment method enabled": ["✓", "done"],
+      // The fixture offers no fulfilment method, but its gate does not say so: the line is the
+      // gate's answer, not a second reading of the draft.
+      "A fulfilment method": ["✓", "done"],
+      "A policy": ["✓", "done"],
+      "A tone of voice default": ["✓", "done"],
+      "An FAQ": ["!", "to do"],
+      "Support guidelines": ["✓", "done"],
+      "No blocking findings": ["!", "to do"],
+    };
+    for (const label of labels) {
+      const item = line(panel, label);
+      const [glyph, spoken] = expected[label];
+      expect(item.querySelector('[aria-hidden="true"]')).toHaveTextContent(glyph);
+      expect(within(item).getByText(label).textContent).toBe(`${label} — ${spoken}`);
+    }
+    expect(line(panel, "At least one product")).toHaveTextContent("1 product in the draft");
+    expect(line(panel, "A tone of voice default")).toHaveTextContent("Warm and precise");
+    expect(line(panel, "A payment method enabled")).toHaveTextContent("1 method enabled");
+  });
+
+  it("keeps every finding the gate returns, in its words, under the line that owns it", async () => {
+    currentPreview = preview({
+      issues: [
+        {
+          severity: "error",
+          code: "variant_without_price",
+          message: "variant NS-ASJ-OB-L is missing a price",
+          path: "products.alpine-shell-jacket.variants.NS-ASJ-OB-L",
+        },
+        {
+          severity: "warning",
+          code: "product_without_media",
+          message: "product Alpine Shell Jacket has no media reference",
+          path: "products.alpine-shell-jacket",
+        },
+        {
+          severity: "error",
+          code: "shop_without_fulfilment_method",
+          message: "a published shop must offer at least one fulfilment method",
+          path: "fulfilment_methods",
+        },
+        {
+          severity: "error",
+          code: "tone_of_voice_without_default",
+          message: "one tone-of-voice guideline must be the shop default",
+          path: "tone_of_voice_guidelines",
+        },
+        { severity: "warning", code: "shop_without_faq", message: "no FAQ yet", path: "faq" },
+      ],
+    });
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const panel = await screen.findByRole("region", { name: "Setup checklist" });
+    await within(panel).findByText("a published shop must offer at least one fulfilment method");
+    for (const finding of currentPreview.issues) {
+      // Once each, with its severity word and its path beside it, as the flat list drew it.
+      const message = within(panel).getByText(finding.message);
+      const row = message.closest("li") as HTMLElement;
+      expect(row).toHaveTextContent(finding.severity === "error" ? "Error" : "Warning");
+      expect(within(row).getByText(finding.path, { selector: "code" })).toBeInTheDocument();
+    }
+    expect(line(panel, "A fulfilment method")).toHaveTextContent(
+      "a published shop must offer at least one fulfilment method",
+    );
+    expect(line(panel, "A tone of voice default")).toHaveTextContent(
+      "one tone-of-voice guideline must be the shop default",
+    );
+    // A product's findings are grouped on the product, tallied, with the way to its editor.
+    const rest = line(panel, "No blocking findings");
+    expect(rest).toHaveTextContent("1 error · 1 warning");
+    expect(within(rest).getByRole("link", { name: "Open Alpine Shell Jacket" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/products/alpine-shell-jacket`,
+    );
+  });
+
+  it("keeps every finding about a product the draft on screen no longer holds", async () => {
+    currentPreview = preview({
+      issues: [
+        {
+          severity: "warning",
+          code: "product_without_description",
+          message: "product Alpha has no description for support agents to read",
+          path: "products.alpha",
+        },
+        {
+          severity: "warning",
+          code: "product_without_media",
+          message: "product Alpha has no media reference",
+          path: "products.alpha",
+        },
+      ],
+    });
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const panel = await screen.findByRole("region", { name: "Setup checklist" });
+    const rest = line(panel, "No blocking findings");
+    expect(await within(rest).findByText(/product Alpha has no description/)).toBeVisible();
+    expect(within(rest).getByText(/product Alpha has no media reference/)).toBeVisible();
+    expect(rest).toHaveTextContent("2 warnings");
+  });
+
+  it("marks every line done when the gate finds nothing", async () => {
+    currentPreview = preview({ issues: [], publishable: true });
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const panel = await screen.findByRole("region", { name: "Setup checklist" });
+    await within(panel).findByText("Nothing else in the draft is refused.");
+    expect(within(panel).queryByText("!")).toBeNull();
+    expect(within(panel).queryByText(/to do$/)).toBeNull();
+  });
+
+  it("says it reads the saved draft while the one on screen has unsaved edits", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const panel = await screen.findByRole("region", { name: "Setup checklist" });
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
+    expect(within(panel).queryByText(/read off the saved draft/i)).toBeNull();
+    await user.type(identity.getByLabelText("Name"), " Co");
+    const note = within(panel).getByText(/read off the saved draft/i);
+    expect(note).toBeVisible();
+    // Under the title, before the first line, not at the foot of a panel a screen tall.
+    const first = within(panel).getByText("At least one product");
+    expect(note.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.querySelector("h2")?.compareDocumentPosition(note)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("stands beside the tone-of-voice page too, which edits the same draft", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/tone`);
+
+    const panel = await screen.findByRole("region", { name: "Setup checklist" });
+    expect(await within(panel).findByText("A tone of voice default")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Draft validation" })).toBeNull();
+  });
+});
+
+describe("a currency a variant is priced in, on Shop details", () => {
+  it("says on the chip which variants its removal leaves unsold, and still saves", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const currencies = within(await screen.findByRole("group", { name: "Currencies" }));
+    const eur = currencies.getByRole("checkbox", { name: "EUR — Euro" });
+    expect(eur).not.toHaveAttribute("aria-invalid");
+
+    await user.click(currencies.getByRole("checkbox", { name: "CHF — Swiss franc" }));
+    await user.click(eur);
+
+    const finding = "variant NS-ASJ-OB-M is priced in EUR, which the shop does not sell in";
+    expect(eur).not.toBeChecked();
+    expect(eur).toHaveAttribute("aria-invalid", "true");
+    expect(eur).toHaveAccessibleDescription(finding);
+    expect(currencies.getByText(finding)).toBeVisible();
+    // The unpriced variant is priced in nothing, so it is not one of them.
+    expect(currencies.queryByText(/NS-ASJ-OB-L/)).toBeNull();
+    // A gate error refuses no write (ADR 0063's amendment).
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity.currencies).toEqual(["CHF"]);
+
+    // Ticked back, the finding is gone.
+    await user.click(eur);
+    expect(eur).not.toHaveAttribute("aria-invalid");
+    expect(currencies.queryByText(finding)).toBeNull();
+  });
+});
+
 describe("the currencies a shop sells in, on Shop details", () => {
   async function currencyGroup() {
     return within(await screen.findByRole("group", { name: "Currencies" }));
@@ -3494,32 +3699,91 @@ describe("the field pattern on the shop editors", () => {
     );
   });
 
-  it("names the channel boxes as one group, with the rule the disabled box cannot state", async () => {
+  it("names the channel chips as one group, with the rule the held chip cannot state", async () => {
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
-    const channels = await screen.findByRole("group", { name: "Support channels" });
-    expect(channels).toHaveAccessibleDescription(
-      /a shop must answer somewhere. the last channel left on cannot be turned off/i,
+    const card = within(await screen.findByRole("region", { name: "Channels" }));
+    const channels = card.getByRole("group", { name: "Answers on" });
+    expect(channels).toHaveAccessibleDescription(/the last channel left on stays on/i);
+    const chat = within(channels).getByRole("checkbox", { name: "Chat" });
+    expect(chat).toBeChecked();
+    // The rule is true of the control as well as said by it, and the chip says it on hover.
+    expect(chat).toBeDisabled();
+    expect(chat.closest("label")).toHaveAttribute(
+      "title",
+      "A shop answers on at least one channel.",
     );
-    expect(within(channels).getByRole("checkbox", { name: "Chat" })).toBeChecked();
-    // The rule is true of the control as well as said by it.
-    expect(within(channels).getByRole("checkbox", { name: "Chat" })).toBeDisabled();
+  });
+
+  it("adds a channel to the draft it saves, and frees the chip that was the last one on", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const channels = within(await screen.findByRole("group", { name: "Answers on" }));
+    await user.click(channels.getByRole("checkbox", { name: "Email" }));
+
+    expect(channels.getByRole("checkbox", { name: "Email" })).toBeChecked();
+    expect(channels.getByRole("checkbox", { name: "Chat" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity.channels).toEqual(["chat", "email"]);
+  });
+
+  it("draws the prototype's cards in its order: Identity, Logo, Commerce, Channels", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    await screen.findByRole("region", { name: "Identity" });
+    const main = screen.getByRole("heading", { level: 1, name: "Shop details" }).closest("main");
+    const cards = within(main as HTMLElement)
+      .getAllByRole("region")
+      .map((region) => region.getAttribute("aria-label"));
+    expect(cards).toEqual([
+      "Identity",
+      "Logo",
+      "Commerce",
+      "Channels",
+      "Payment methods",
+      "Fulfilment methods",
+      "Setup checklist",
+    ]);
+  });
+
+  it("puts each field in the card the prototype puts it in, and loses none", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
+    const logo = within(screen.getByRole("region", { name: "Logo" }));
+    const commerce = within(screen.getByRole("region", { name: "Commerce" }));
+    const channels = within(screen.getByRole("region", { name: "Channels" }));
+    expect(identity.getByLabelText("Name")).toHaveValue("Northstar Outfitters");
+    expect(identity.getByLabelText("Slug")).toHaveValue("northstar");
+    for (const group of ["Mark", "Background", "Mark colour"]) {
+      expect(logo.getByRole("group", { name: group })).toBeInTheDocument();
+    }
+    expect(commerce.getByLabelText("Locale")).toHaveValue("en-GB");
+    expect(commerce.getByRole("group", { name: "Currencies" })).toBeInTheDocument();
+    expect(channels.getByRole("group", { name: "Answers on" })).toBeInTheDocument();
+    // Nothing moved is still in the card it left.
+    expect(identity.queryByLabelText("Locale")).toBeNull();
+    expect(identity.queryByRole("group", { name: "Currencies" })).toBeNull();
+    expect(identity.queryByRole("group", { name: "Answers on" })).toBeNull();
   });
 
   it("binds Shop details' own rows and leaves the shared fields naming themselves once", async () => {
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
-    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
+    const commerce = within(screen.getByRole("region", { name: "Commerce" }));
     for (const label of ["Name", "Slug"] as const) {
       expect(identity.getByText(label).getAttribute("for")).toBe(identity.getByLabelText(label).id);
     }
     // `LocaleField` and `CurrencyField` were not wrapped — a row around either would have
     // produced a second name for one control — but they are asked to draw themselves as rows,
-    // so the card holds one label typography rather than two.
-    expect(identity.getAllByLabelText("Locale")).toHaveLength(1);
-    expect(identity.getAllByRole("group", { name: "Currencies" })).toHaveLength(1);
-    expect(identity.getByText("Locale").className).toBe(identity.getByText("Name").className);
-    expect(identity.getByRole("group", { name: "Currencies" }).className).toContain("flex-wrap");
+    // so every card holds one label typography rather than two.
+    expect(commerce.getAllByLabelText("Locale")).toHaveLength(1);
+    expect(commerce.getAllByRole("group", { name: "Currencies" })).toHaveLength(1);
+    expect(commerce.getByText("Locale").className).toBe(identity.getByText("Name").className);
+    expect(commerce.getByRole("group", { name: "Currencies" }).className).toContain("flex-wrap");
     // The two rows of the card's own carry their rules, and Name is the create form's.
     expect(identity.getByLabelText("Name")).toHaveAccessibleDescription(
       wholeDescription(SHOP_NAME_RULE),
@@ -3534,8 +3798,8 @@ describe("the field pattern on the shop editors", () => {
     );
     expect(identity.getByLabelText("Slug")).not.toHaveAccessibleDescription(/follows the name/i);
     // And neither shared field lost the rule it carries itself.
-    expect(identity.getByLabelText("Locale")).toHaveAccessibleDescription(/pick a locale/i);
-    expect(identity.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
+    expect(commerce.getByLabelText("Locale")).toHaveAccessibleDescription(/pick a locale/i);
+    expect(commerce.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
       /variants may only be priced in these; the first is the default/i,
     );
   });
@@ -3564,7 +3828,7 @@ describe("a shop's slug on Shop details", () => {
     currentContent = alpenglow;
     server.use(http.get("*/api/v1/shops", () => HttpResponse.json(bothShops)));
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
     const slug = identity.getByLabelText("Slug");
     await waitFor(() => expect(slug).toBeEnabled());
     return slug;
@@ -3626,7 +3890,7 @@ describe("a shop's slug on Shop details", () => {
     await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
 
     // The name, edited beside it, is what a save from anywhere in the workspace would carry.
-    const identity = within(screen.getByRole("region", { name: "Shop identity" }));
+    const identity = within(screen.getByRole("region", { name: "Identity" }));
     await user.type(identity.getByLabelText("Name"), " Co");
     expectRefused(screen.getByRole("button", { name: "Save draft" }), "northstar is already");
 
@@ -3726,7 +3990,7 @@ describe("a shop's slug on Shop details", () => {
       ),
     );
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
     const slug = identity.getByLabelText("Slug");
     await waitFor(() => expect(slug).toBeEnabled());
     expect(slug).not.toHaveAttribute("aria-invalid");
@@ -3763,7 +4027,7 @@ describe("a shop's slug on Shop details", () => {
       ),
     );
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
     const slug = identity.getByLabelText("Slug");
     await waitFor(() => expect(slug).toBeEnabled());
     return slug;
@@ -3798,9 +4062,9 @@ describe("a shop's slug on Shop details", () => {
     await user.click(rail.getByRole("link", { name: "Products" }));
     await screen.findByRole("heading", { level: 1, name: "Products" });
     await user.click(rail.getByRole("link", { name: "Shop details" }));
-    const back = within(
-      await screen.findByRole("region", { name: "Shop identity" }),
-    ).getByLabelText("Slug");
+    const back = within(await screen.findByRole("region", { name: "Identity" })).getByLabelText(
+      "Slug",
+    );
     expect(back).toHaveValue("outdoor");
 
     await user.clear(back);
@@ -3813,7 +4077,7 @@ describe("a shop's slug on Shop details", () => {
     currentContent = alpenglow;
     server.use(http.get("*/api/v1/shops", () => new Promise<never>(() => {})));
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
 
     const slug = identity.getByLabelText("Slug");
     expect(slug).toBeDisabled();
@@ -3832,7 +4096,7 @@ describe("a shop's slug on Shop details", () => {
       ),
     );
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
-    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const identity = within(await screen.findByRole("region", { name: "Identity" }));
     const slug = identity.getByLabelText("Slug");
     await waitFor(() => expect(slug).toBeEnabled());
 

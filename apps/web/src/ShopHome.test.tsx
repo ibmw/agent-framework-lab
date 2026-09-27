@@ -558,6 +558,33 @@ describe("findings on the draft", () => {
     expect(findings.getByText("1 warning")).toBeVisible();
   });
 
+  it("keeps every finding about a product the draft on screen no longer holds", async () => {
+    // A product deleted or renamed and not yet saved: the gate still speaks of `alpha`, and the
+    // resolver, reading the draft on screen, knows no such product.
+    currentPreview = preview({
+      issues: [
+        {
+          severity: "warning",
+          code: "product_without_description",
+          message: "product Alpha has no description for support agents to read",
+          path: "products.alpha",
+        },
+        {
+          severity: "warning",
+          code: "product_without_media",
+          message: "product Alpha has no media reference",
+          path: "products.alpha",
+        },
+      ],
+    });
+    await openOverview();
+    const findings = within(card("Findings on the draft"));
+
+    expect(findings.getByText(/product Alpha has no description/)).toBeVisible();
+    expect(findings.getByText(/product Alpha has no media reference/)).toBeVisible();
+    expect(findings.queryByRole("link", { name: /Open Alpha/ })).toBeNull();
+  });
+
   it("says so when the gate is refusing nothing", async () => {
     currentPreview = preview({ issues: [] });
     await openOverview();

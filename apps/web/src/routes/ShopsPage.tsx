@@ -1,4 +1,4 @@
-import type { ShopLogoViewSchema, ShopSummarySchema } from "@agent-lab/contracts";
+import type { ShopLogoViewSchema, ShopSummarySchema, SupportChannel } from "@agent-lab/contracts";
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
@@ -12,9 +12,11 @@ import { LocaleField } from "../components/LocaleField";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { ShopBadge } from "../components/ShopBadge";
 import { ShopLogoCard } from "../components/ShopLogoCard";
+import { ToggleChipGroup } from "../components/ToggleChipGroup";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
 import { uniqueSuggestion } from "../lib/entryIds";
+import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
   alreadyTakenMessage,
   KEBAB_PATTERN,
@@ -36,6 +38,8 @@ import {
   tableHeadClasses,
 } from "../lib/ui";
 import { AppShell } from "../shell/AppShell";
+
+const SUPPORT_CHANNELS = optionsOf(SUPPORT_CHANNEL);
 
 /** A ready-made identity for the form, for an operator who came to see the product rather than
  * to name a shop. It fills the four fields and creates nothing: what gets written is still
@@ -233,6 +237,7 @@ export function NewShopPage() {
   const [slug, setSlug] = useState("");
   const [locale, setLocale] = useState(DEFAULT_LOCALE.tag);
   const [currencies, setCurrencies] = useState<Currency[]>([DEFAULT_LOCALE.currency]);
+  const [channels, setChannels] = useState<SupportChannel[]>(["chat"]);
   const [logo, setLogo] = useState<ShopLogoViewSchema | null>(null);
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
@@ -285,7 +290,7 @@ export function NewShopPage() {
           slug,
           locale,
           currencies,
-          channels: ["chat"],
+          channels,
         },
         logo,
       );
@@ -365,11 +370,26 @@ export function NewShopPage() {
             </FieldRows>
           </Card>
 
+          {/* Shop details' own group: the create request carries the channels, so the page
+              asks here what it used to fix at chat and send the operator on to change. */}
           <Card title="Channels">
-            <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-              A shop must answer somewhere. A new shop answers on <strong>chat</strong>; email and
-              phone are added under Shop details once it exists.
+            <p className="text-[13px] text-admin-muted">
+              A shop must always answer on at least one.
             </p>
+            <FieldRows>
+              <ToggleChipGroup
+                arrangement="row"
+                label="Answers on"
+                hint="A new shop answers on chat unless you choose otherwise. The last channel left on stays on, and Shop details changes them once it exists."
+                options={SUPPORT_CHANNELS.map((channel) => ({
+                  value: channel.value,
+                  label: channel.label,
+                }))}
+                value={channels}
+                keepOne="A shop answers on at least one channel."
+                onChange={setChannels}
+              />
+            </FieldRows>
             <p className="text-xs text-admin-muted">
               The shop is created as an empty draft. Nothing is published and no experiment can read
               it until a catalog is authored and a first version published.

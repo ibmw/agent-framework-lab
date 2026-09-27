@@ -2670,7 +2670,16 @@ describe("live bench", () => {
     expect(within(objectives).getByText(/read-address-change-policy missed/)).toBeInTheDocument();
     // Nothing offers a move the backend would refuse: no advance, and no message.
     expect(within(armA).queryByRole("button", { name: /Arm A's agent/ })).toBeNull();
-    expect(within(composer).getByRole("checkbox", { name: /Arm A/ })).toBeDisabled();
+    const armAChip = within(composer).getByRole("checkbox", { name: "Arm A" });
+    expect(armAChip).toBeDisabled();
+    // And says why, beside the chip and in its description, rather than only by fading.
+    expect(armAChip).toHaveAccessibleDescription("Arm A has completed.");
+    const described = (armAChip.getAttribute("aria-describedby") ?? "").split(" ");
+    expect(described.map((id) => document.getElementById(id)?.textContent)).toContain(
+      "Arm A has completed.",
+    );
+    expect(within(composer).getByText("Arm A has completed.")).toBeVisible();
+    expect(within(composer).getByRole("group", { name: "Deliver to" })).toBeInTheDocument();
   });
 
   it("refuses to send once every arm has completed, and says why where the press is", async () => {

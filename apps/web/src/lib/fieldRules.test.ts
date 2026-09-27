@@ -22,6 +22,7 @@ import {
   unexercisedModelRule,
   unprovenAgentProviderRule,
   unprovenJudgeProviderRule,
+  variantCurrencyUnsupportedRule,
   variantInStockWithoutInventoryRule,
   variantWithoutPriceRule,
 } from "./fieldRules";
@@ -193,6 +194,18 @@ describe("the shop draft's sentences, as the editors repeat them", () => {
     expect(variantInStockWithoutInventoryRule("NS-ASJ-OB-M")).toBe(rendered);
   });
 
+  it("spells a variant priced in an unsold currency exactly as `_validate_product` writes it", () => {
+    // An f-string then a plain literal, joined as Python joins them before the template is read.
+    const joined = shopDomain.replaceAll(/"\s*\n\s*"/g, "");
+    const rendered = render(messageTemplate(joined, "variant_currency_unsupported"), {
+      "variant.sku": "NS-ASJ-OB-M",
+      "variant.price.currency": "EUR",
+    });
+
+    expect(rendered).toContain("which the shop does not sell in");
+    expect(variantCurrencyUnsupportedRule("NS-ASJ-OB-M", "EUR")).toBe(rendered);
+  });
+
   it("spells an inverted transit window exactly as `FulfilmentMethod` refuses it", () => {
     // A raise, not an `issue_*` call: the lab answers 422 with this message, so the sentence
     // under Max days is the one the save would have come back with. Adjacent literals joined
@@ -212,6 +225,7 @@ describe("the shop draft's sentences, as the editors repeat them", () => {
       productWithoutVariantRule("t"),
       variantWithoutPriceRule("S"),
       variantInStockWithoutInventoryRule("S"),
+      variantCurrencyUnsupportedRule("S", "EUR"),
       TRANSIT_WINDOW_RULE,
     ]) {
       expect(sentence.endsWith(".")).toBe(false);

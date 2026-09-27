@@ -92,7 +92,10 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Compact controls | 42/40px in sub-editors and filters | the one 44px control | no compact component exists to size |
 | Filter chips on Tickets and the block libraries | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked. Policies & FAQ left this row when its documents became a table with four chips (ADR 0057) |
 | Model on the connection, masked key | drawn | neither | ADR 0052 |
-| Setup checklist | drawn on Shop details | not built | ADR 0044, ADR 0045 |
+| *A support identity* on the setup checklist | a line of the panel | not drawn | identities are a lab listing, and counting them on a shop page is the cross-listing progress reading ADR 0045 removed; the panel reads the shop's own gate only (ADR 0071) |
+| Identity's line under its title | "The slug was fixed at creation and cannot change." | what the two fields are for | the slug changes here and only a taken one is refused (ADR 0069) |
+| A currency a variant is priced in | locked on Shop details | tickable, the gate's sentence on its chip | the lab saves the draft and refuses it at publication; a gate error refuses no write (ADR 0063's amendment, ADR 0071) |
+| A new shop's channels | fixed at chat, "Fixed at creation." | asked, on chat until chosen otherwise | the create request carries them (ADR 0071) |
 | Preferences | seven rows | five: where the app opens, the last-visited shop with *Forget*, the rail's collapsed default, confirm-before-delete, the timestamp format | a preference no surface reads is not a slice. Confirm-before-delete landed with the confirm it governs (ADR 0060), as a native checkbox for the reason the rail's row is one; auto-offered tours and table density are cut (*Proposals, not decisions*, and ADR 0049 refused the first outright) |
 | The settings page's title | "Workspace settings" | "Lab settings" | two things called Settings, one of which silently means "this shop", is the ambiguity ADR 0044's first decision exists to remove — and *workspace* is already the word for a rail (`nav[aria-label="Shop workspace"]`). Rule 5: it is an accessible name a Playwright spec asserts on |
 | The rail preference's control | a 42×25 pill switch | the native checkbox already there | the prototype's switch is a `div` with `tabIndex` and no role and no name at all, and the README's own form pattern says every label is bound to a native control; the form language has no switch to reach for. Rule 5 |
@@ -237,7 +240,8 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   above the page, never in it; nothing starts unbidden, nothing is remembered, no tour crosses a
   screen, a popover explains and never performs; every step and every surface's route declared
   in one table and swept by Playwright against that surface.
-- **Nothing about progress is stored and no surface reads it** (ADR 0044, ADR 0045). The
+- **Nothing about progress is stored and no surface reads it** (ADR 0044, ADR 0045), save the
+  setup pages' checklist, which is the shop gate read with labels over it (ADR 0071). The
   overview's readiness card reads one listing and says one sentence: it names the shop's most
   recently edited published scenario, and the shop version it would resolve against, with a
   link to New experiment — or says none is published, with a link to Scenarios. **It names
@@ -323,6 +327,20 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   without the "Saved as" preview; a date defaults to the operator's own today.
 - **A list entered one value at a time is one control** (`ChipListField`): named remove
   buttons, duplicates refused and said, respelling previewed to the shape the gate wants.
+- **A small closed set of toggles is one control** (`ToggleChipGroup`, ADR 0071): the
+  prototype's chips — pine with a check when on, plain when off — each a native checkbox laid
+  transparent over its chip, in a fieldset named by the row. The last chip of a set the lab
+  will not let be empty stays on, disabled and titled with the rule its hint states; a chip that
+  cannot change for its own reason says it in a line under the chips; a gate error a chip's
+  state causes marks it `aria-invalid` in the gate's words and refuses nothing. The shop's
+  currencies and channels, on both pages, and the bench's *Deliver to* are built on it. A set
+  whose options need an explanation or carry metadata, an open-ended list, and a press that
+  starts something are not this control.
+- **The setup pages carry the setup checklist** (ADR 0071): beside the cards from `xl`, after
+  them below it, each line a ✓ or a !, a label and a note, decided by the saved draft's gate. A
+  line still to do lists the gate's findings for it as `IssueList` draws them; the last line,
+  "No blocking findings", holds every finding no other line owns, grouped by product with an
+  *Open*. It says when it is reading a saved draft the screen has moved past.
 - **A number field says what it accepts** and refuses at the save what a pattern cannot. A
   closed set of five is five named radios.
 - **A create form asks for what constrains the work that follows** and names where the rest
