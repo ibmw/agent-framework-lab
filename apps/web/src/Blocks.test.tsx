@@ -503,6 +503,50 @@ describe("objective block editor", () => {
     expect(screen.getByText(/a template\s+cannot default it/)).toBeVisible();
   });
 
+  it("says beside its checkbox that an optional parameter has nothing to fall back on, and saves it", async () => {
+    const user = userEvent.setup();
+    const sentence =
+      "severity is optional but has nothing to fall back on, so a scenario that omits it leaves the runtime with no value; give it a default";
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+
+    await screen.findByRole("heading", { name: "read-required-document" });
+    const defaultOf = screen.getByLabelText("Default of severity");
+    const row = within(defaultOf.closest("li") as HTMLElement);
+    const required = row.getByRole("checkbox", { name: "A scenario must bind this" });
+    expect(screen.queryByText(sentence)).toBeNull();
+
+    // Required with no default is the gate's own answer: nothing to say.
+    await user.selectOptions(defaultOf, "");
+    expect(screen.queryByText(sentence)).toBeNull();
+    expect(required).not.toHaveAttribute("aria-invalid");
+
+    // Optional with no default is `optional_parameter_without_default`, said under the checkbox.
+    await user.click(required);
+    const line = row.getByText(sentence);
+    expect(line).toBeVisible();
+    expect(line).toHaveAttribute("aria-live", "polite");
+    expect(line).not.toHaveAttribute("role", "alert");
+    expect(required).toHaveAttribute("aria-invalid", "true");
+    expect(required).toHaveAccessibleDescription(sentence);
+    expect(defaultOf).toHaveAccessibleDescription(sentence);
+
+    // A default clears it, and so would requiring the parameter again.
+    await user.selectOptions(defaultOf, "expected");
+    expect(screen.queryByText(sentence)).toBeNull();
+    expect(required).not.toHaveAttribute("aria-invalid");
+    await user.selectOptions(defaultOf, "");
+    expect(row.getByText(sentence)).toBeVisible();
+    await user.click(required);
+    expect(screen.queryByText(sentence)).toBeNull();
+    await user.click(required);
+
+    // A finding, not a refusal: the lab stores the draft, so Save saves it.
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(parameters[1]).toMatchObject({ name: "severity", required: false, default: null });
+  });
+
   it("drops a default the new kind cannot carry when a parameter is retyped", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);

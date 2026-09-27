@@ -15,6 +15,7 @@ import {
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
 import { FieldHint } from "../components/FieldHint";
+import { GateFindingLine } from "../components/GateFindingLine";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
@@ -31,11 +32,14 @@ import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEdi
 import { JUDGE_EVIDENCE_SCOPE } from "../lib/enumLabels";
 import {
   PROVEN_PROVIDER_RULE,
+  RUBRIC_EMPTY_RULE,
+  rubricNamesAnArmRule,
   TEMPERATURE_PATTERN,
   TEMPERATURE_RULE,
   unprovenJudgeProviderRule,
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
+import { namedTerms } from "../lib/rubric";
 import { fieldControlClasses, fieldLabelClasses, textAreaClasses } from "../lib/ui";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
@@ -70,6 +74,8 @@ export function JudgeConfigurationEditorPage() {
   const { judgeId = "" } = useParams();
   const { listings } = useLabWorkspace();
   const publishReasonsId = useId();
+  const rubricRuleId = useId();
+  const rubricFindingId = useId();
   const editor = useDefinitionEditor(judgeId, CLIENT, {
     label: "The judge draft has unsaved changes.",
     // The library index prints the row this editor is changing (ADR 0056).
@@ -118,6 +124,14 @@ export function JudgeConfigurationEditorPage() {
     });
   }
 
+  // The gate's two rubric findings, said under the rubric as it is typed: `rubric_empty` on an
+  // empty one, and `rubric_names_an_arm` once for each reserved term it names, read on the
+  // gate's own boundaries (`lib/rubric.ts`) against the terms the catalog serves. Findings, not
+  // refusals — the draft saves with either, and publication refuses it — so they refuse no Save.
+  const rubricFindings =
+    content.rubric === ""
+      ? [RUBRIC_EMPTY_RULE]
+      : namedTerms(content.rubric, resources?.reserved_terms ?? []).map(rubricNamesAnArmRule);
   const provider =
     resources?.judges.find((judge) => judge.provider === content.model.provider) ?? null;
   const models = provider?.models ?? [];
@@ -246,15 +260,31 @@ export function JudgeConfigurationEditorPage() {
                 onChange={(event) => edit({ ...content, description: event.target.value })}
               />
             </label>
-            <label className={fieldLabelClasses}>
-              How this judge scores
-              <textarea
-                className={`${textAreaClasses} min-h-56 font-mono`}
-                value={content.rubric}
-                onChange={(event) => edit({ ...content, rubric: event.target.value })}
-              />
-            </label>
-            <p className="text-xs text-admin-muted">
+            <div className="grid gap-1">
+              <label className={fieldLabelClasses}>
+                How this judge scores
+                <textarea
+                  className={`${textAreaClasses} min-h-56 font-mono`}
+                  value={content.rubric}
+                  aria-required
+                  aria-describedby={
+                    rubricFindings.length > 0 ? `${rubricRuleId} ${rubricFindingId}` : rubricRuleId
+                  }
+                  aria-invalid={rubricFindings.length > 0 || undefined}
+                  onChange={(event) => edit({ ...content, rubric: event.target.value })}
+                />
+              </label>
+              <GateFindingLine id={rubricFindingId}>
+                {rubricFindings.length > 0
+                  ? rubricFindings.map((finding) => (
+                      <span key={finding} className="block">
+                        {finding}
+                      </span>
+                    ))
+                  : null}
+              </GateFindingLine>
+            </div>
+            <p id={rubricRuleId} className="text-xs text-admin-muted">
               What "met", "missed", and "unclear" mean is the lab's rule and travels above every
               rubric — including that "unclear" is a real answer rather than a failure. Write what
               the judge is looking for, not how to report it.

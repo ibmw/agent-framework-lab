@@ -4,10 +4,20 @@ import { describe, expect, it } from "vitest";
 // declares it, so the file is what they have to read.
 import agentCapabilities from "../../../../apps/api/src/capability_lab/application/agent_capabilities.py?raw";
 import judgeCapabilities from "../../../../apps/api/src/capability_lab/application/judge_capabilities.py?raw";
+import blocksDomain from "../../../../apps/api/src/capability_lab/domain/blocks.py?raw";
+import judgeDomain from "../../../../apps/api/src/capability_lab/domain/judge.py?raw";
+import scenarioDomain from "../../../../apps/api/src/capability_lab/domain/scenario.py?raw";
 import shopDomain from "../../../../apps/api/src/capability_lab/domain/shop.py?raw";
 import * as fieldRules from "./fieldRules";
 import {
+  CONTEXT_DOCUMENTS_CAP_RULE,
+  capCount,
+  MUTATIONS_CAP_RULE,
+  OBJECTIVES_CAP_RULE,
+  optionalParameterWithoutDefaultRule,
   productWithoutVariantRule,
+  RUBRIC_EMPTY_RULE,
+  rubricNamesAnArmRule,
   TRANSIT_WINDOW_RULE,
   unexercisedModelRule,
   unprovenAgentProviderRule,
@@ -17,6 +27,7 @@ import {
 } from "./fieldRules";
 import fieldRulesSource from "./fieldRules?raw";
 import { unreachableProviderNote } from "./modelConnections";
+import { MAX_CONTEXT_DOCUMENTS, MAX_MUTATIONS, MAX_OBJECTIVES } from "./scenarios";
 
 /**
  * The Studio's copy of three publish-gate sentences, pinned to the gate that writes them.
@@ -202,6 +213,111 @@ describe("the shop draft's sentences, as the editors repeat them", () => {
       variantWithoutPriceRule("S"),
       variantInStockWithoutInventoryRule("S"),
       TRANSIT_WINDOW_RULE,
+    ]) {
+      expect(sentence.endsWith(".")).toBe(false);
+    }
+  });
+});
+
+/**
+ * A Python source with its implicit string concatenation undone, whether or not each literal
+ * is an f-string — `messageTemplate` joins only f-strings, and two of the messages below are
+ * a plain literal after an f-string, or plain throughout.
+ */
+function joinedLiterals(source: string): string {
+  return source.replaceAll(/"\s*\n\s*f?"/g, "");
+}
+
+/** One `issue_*` call's message, plain or f-string, once its literals are joined. */
+function issueMessage(source: string, code: string): string {
+  const match = new RegExp(`"${code}",\\s*f?"([^"]*)"`).exec(joinedLiterals(source));
+  if (match === null) {
+    throw new Error(`no issue message found for ${code}`);
+  }
+  return match[1];
+}
+
+/** A module-level `NAME = <integer>` constant. */
+function pythonConstant(source: string, name: string): number {
+  const match = new RegExp(`^${name} = (\\d+)$`, "m").exec(source);
+  if (match === null) {
+    throw new Error(`no constant ${name}`);
+  }
+  return Number(match[1]);
+}
+
+/**
+ * The lab's scenario, block and judge refusals that the editors say as the author works,
+ * pinned to the Python the same way; `test_scenario_domain.py`, `test_block_domain.py` and
+ * `test_judge_domain.py` assert the rendered messages from the other end.
+ */
+describe("the scenario, block and judge sentences, as the editors repeat them", () => {
+  it("counts to the caps `domain/scenario.py` declares", () => {
+    expect(MAX_CONTEXT_DOCUMENTS).toBe(pythonConstant(scenarioDomain, "MAX_CONTEXT_DOCUMENTS"));
+    expect(MAX_OBJECTIVES).toBe(pythonConstant(scenarioDomain, "MAX_SCENARIO_OBJECTIVES"));
+    expect(MAX_MUTATIONS).toBe(pythonConstant(scenarioDomain, "MAX_SCENARIO_MUTATIONS"));
+    expect(capCount(3, MAX_OBJECTIVES)).toBe("3 of 24");
+  });
+
+  it("spells each cap exactly as `ScenarioPayload` refuses it", () => {
+    const post = joinedLiterals(scenarioDomain);
+    for (const [constant, rule] of [
+      ["MAX_CONTEXT_DOCUMENTS", CONTEXT_DOCUMENTS_CAP_RULE],
+      ["MAX_SCENARIO_OBJECTIVES", OBJECTIVES_CAP_RULE],
+      ["MAX_SCENARIO_MUTATIONS", MUTATIONS_CAP_RULE],
+    ] as const) {
+      const match = new RegExp(
+        `raise ScenarioConfigurationError\\(\\s*f"([^"]*\\{${constant}\\}[^"]*)"`,
+      ).exec(post);
+      expect(match, `no raise names ${constant}`).not.toBeNull();
+      const rendered = render(match?.[1] ?? "", {
+        [constant]: String(pythonConstant(scenarioDomain, constant)),
+      });
+      expect(rule).toBe(rendered);
+    }
+  });
+
+  it("spells an optional parameter with nothing to fall back on as `_parameter_issues` does", () => {
+    const remedies =
+      /remedy = \(\s*"([^"]*)"\s*if parameter\.kind in LITERAL_PARAMETER_KINDS\s*else "([^"]*)"\s*\)/.exec(
+        joinedLiterals(blocksDomain),
+      );
+    expect(remedies).not.toBeNull();
+    const template = issueMessage(blocksDomain, "optional_parameter_without_default");
+
+    expect(optionalParameterWithoutDefaultRule("delay", true)).toBe(
+      render(template, { "parameter.name": "delay", remedy: remedies?.[1] ?? "" }),
+    );
+    expect(optionalParameterWithoutDefaultRule("doc_ref", false)).toBe(
+      render(template, { "parameter.name": "doc_ref", remedy: remedies?.[2] ?? "" }),
+    );
+  });
+
+  it("spells an empty rubric exactly as `judge_configuration_issues` writes it", () => {
+    expect(RUBRIC_EMPTY_RULE).toBe(issueMessage(judgeDomain, "rubric_empty"));
+    // Raised on an exactly empty rubric, which is what the editor says it on.
+    expect(judgeDomain).toMatch(
+      /if not payload\.rubric:\s*issues\.append\(\s*issue_error\(\s*"rubric_empty"/,
+    );
+  });
+
+  it("spells a rubric naming a reserved term exactly as `_anonymity_issues` writes it", () => {
+    const rendered = render(issueMessage(judgeCapabilities, "rubric_names_an_arm"), {
+      term: "pydantic-ai",
+    });
+
+    expect(rubricNamesAnArmRule("pydantic-ai")).toBe(rendered);
+  });
+
+  it("ends none of them with punctuation the lab does not carry", () => {
+    for (const sentence of [
+      CONTEXT_DOCUMENTS_CAP_RULE,
+      OBJECTIVES_CAP_RULE,
+      MUTATIONS_CAP_RULE,
+      optionalParameterWithoutDefaultRule("p", true),
+      optionalParameterWithoutDefaultRule("p", false),
+      RUBRIC_EMPTY_RULE,
+      rubricNamesAnArmRule("fake"),
     ]) {
       expect(sentence.endsWith(".")).toBe(false);
     }

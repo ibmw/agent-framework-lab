@@ -15,6 +15,7 @@ import type {
   ExperimentTimelineResponse,
   ExperimentTracesResponse,
   JudgeConfigurationListResponse,
+  LabStatusResponse,
   ModelConnectionSource,
   MutationEventSchema,
   ObjectiveResultSchema,
@@ -33,6 +34,14 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  NO_ARM,
+  NO_NAME,
+  NO_SCENARIO,
+  NO_SCENARIO_VERSION,
+  NO_SEED,
+  SEED_OUT_OF_RANGE,
+} from "./lib/experimentStart";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
@@ -1133,6 +1142,13 @@ function renderBench() {
   return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}`);
 }
 
+/** Start's reasons, one per line of the refusal its description names — or none. */
+function startReasons(start: HTMLElement): string[] {
+  const [id] = (start.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+  const list = id ? document.getElementById(id) : null;
+  return Array.from(list?.querySelectorAll("li") ?? [], (item) => item.textContent ?? "");
+}
+
 async function chooseArm(user: ReturnType<typeof userEvent.setup>, position: number, name: string) {
   const arm = screen.getByRole("group", { name: `Arm ${String.fromCharCode(65 + position)}` });
   await user.selectOptions(within(arm).getByLabelText("Agent configuration"), name);
@@ -1195,10 +1211,236 @@ describe("experiment setup", () => {
 
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
     await chooseArm(user, 0, "cfg-atlas");
-    await user.click(screen.getByRole("button", { name: "Start experiment" }));
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([NO_NAME]));
+    expectRefused(start, NO_NAME);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Name the experiment/);
+    await user.click(start);
+    start.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await submitWithoutPressing(start);
     expect(started).toHaveLength(0);
+    // A name that is only padding is no name: the lab trims it and refuses what is left.
+    await user.type(screen.getByLabelText("Experiment name"), "   ");
+    expect(startReasons(start)).toEqual([NO_NAME]);
+    // And the field stops where the lab would refuse a longer one.
+    expect(screen.getByLabelText("Experiment name")).toHaveAttribute("maxlength", "200");
+  });
+
+  it("is dashed until it can work, and says everything it still waits for", async () => {
+    const user = userEvent.setup();
+    const toneError = {
+      severity: "error" as const,
+      code: "tone_override_unknown_in_shop",
+      message:
+        "cfg-beacon writes in tone-of-voice guideline 'playful', which this scenario's shop does not publish",
+      path: "arms[0].tone_of_voice",
+    };
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+        const body = (await request.json()) as { arms: { configuration_id: string }[] };
+        const beacon = body.arms.some((arm) => arm.configuration_id === BEACON_ID);
+        return HttpResponse.json({ ...PREVIEW, issues: beacon ? [toneError] : PREVIEW.issues });
+      }),
+    );
+    renderSetup();
+
+    // Nothing chosen, and a seed the contract would refuse: every reason at once, in the
+    // order the form asks for them.
+    const seed = await screen.findByLabelText("Seed");
+    await user.clear(seed);
+    await user.type(seed, "-1");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    expect(startReasons(start)).toEqual([NO_SCENARIO, SEED_OUT_OF_RANGE, NO_NAME, NO_ARM]);
+    for (const reason of [NO_SCENARIO, SEED_OUT_OF_RANGE, NO_NAME, NO_ARM]) {
+      expectRefused(start, reason);
+    }
+
+    await user.selectOptions(screen.getByLabelText("Recipe"), "Wrong shipping address");
+    await waitFor(() => expect(startReasons(start)).toEqual([SEED_OUT_OF_RANGE, NO_NAME, NO_ARM]));
+
+    await user.clear(seed);
+    await user.type(seed, "42");
+    expect(startReasons(start)).toEqual([NO_NAME, NO_ARM]);
+
+    await user.type(screen.getByLabelText("Experiment name"), "Tone comparison");
+    expect(startReasons(start)).toEqual([NO_ARM]);
+
+    // A configuration without its version is not an arm yet.
+    const arm = screen.getByRole("group", { name: "Arm A" });
+    await user.selectOptions(within(arm).getByLabelText("Agent configuration"), "cfg-beacon");
+    expect(startReasons(start)).toEqual([NO_ARM]);
+
+    // Chosen whole, the arm is judged, and the gate's error is what is left — in its words.
+    await user.selectOptions(within(arm).getByLabelText("Published version"), "1");
+    await waitFor(() => expect(startReasons(start)).toEqual([toneError.message]));
+    expectRefused(start, toneError.message);
+    await user.click(start);
+    expect(started).toHaveLength(0);
+
+    // A warning is not a refusal: the gate's warning stays in the card, and Start is free.
+    await chooseArm(user, 0, "cfg-atlas");
+    await waitFor(() => expectNotRefused(start));
+    expect(start).not.toHaveAttribute("title");
+    expect(screen.getByText(/differ in 2 dimensions/)).toBeVisible();
+
+    await user.click(start);
+    await waitFor(() => expect(started).toHaveLength(1));
+    expect(started[0]).toMatchObject({ label: "Tone comparison", seed: 42 });
+  });
+
+  it("holds a setup to the gate's answer for it, never to the answer for the one before", async () => {
+    const user = userEvent.setup();
+    const toneError = {
+      severity: "error" as const,
+      code: "tone_override_unknown_in_shop",
+      message: "cfg-beacon writes in a tone-of-voice guideline this shop does not publish",
+      path: "arms[0].tone_of_voice",
+    };
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+        const body = (await request.json()) as { arms: { version: number }[] };
+        if (body.arms[0].version === 1) {
+          return HttpResponse.json({ ...PREVIEW, issues: [toneError] });
+        }
+        await held;
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await user.type(screen.getByLabelText("Experiment name"), "Tone comparison");
+    await chooseArm(user, 0, "cfg-beacon");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([toneError.message]));
+
+    // Straight from one whole setup to the next: the gate has not answered for version 2 yet,
+    // and its answer for version 1 is not this setup's, so it refuses nothing. Start is a
+    // press in flight until the answer arrives.
+    const arm = screen.getByRole("group", { name: "Arm A" });
+    await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
+    expect(startReasons(start)).toEqual([]);
+    expect(start).toBeDisabled();
+    expect(start).not.toHaveAttribute("aria-disabled");
+    await user.click(start);
+    expect(started).toHaveLength(0);
+
+    release();
+    await waitFor(() => expectNotRefused(start));
+  });
+
+  it("judges the setup on the default seed while the typed one is refused, and refuses on it", async () => {
+    const user = userEvent.setup();
+    const previewed: { seed: unknown }[] = [];
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+        previewed.push((await request.json()) as { seed: unknown });
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    const seed = await screen.findByLabelText("Seed");
+    await user.clear(seed);
+    await user.type(seed, "-1");
+    await user.selectOptions(screen.getByLabelText("Recipe"), "Wrong shipping address");
+    await user.type(screen.getByLabelText("Experiment name"), "Seeded");
+    await chooseArm(user, 0, "cfg-atlas");
+
+    // The gate never reads the seed, and the contract would refuse the whole preview for it.
+    await waitFor(() => expect(previewed.length).toBeGreaterThan(0));
+    expect(previewed.map((body) => body.seed)).toEqual(previewed.map(() => 20260828));
+    // Start is held to the seed the operator typed.
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([SEED_OUT_OF_RANGE]));
+  });
+
+  it("says an emptied seed apart from one out of range", async () => {
+    const user = userEvent.setup();
+    renderSetup();
+
+    const seed = await screen.findByLabelText("Seed");
+    await user.selectOptions(screen.getByLabelText("Recipe"), "Wrong shipping address");
+    await chooseArm(user, 0, "cfg-atlas");
+    await user.type(screen.getByLabelText("Experiment name"), "Seeded");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+
+    await user.clear(seed);
+    expect(startReasons(start)).toEqual([NO_SEED]);
+    await user.type(seed, "4294967296");
+    expect(startReasons(start)).toEqual([SEED_OUT_OF_RANGE]);
+    await user.clear(seed);
+    await user.type(seed, "4294967295");
+    await waitFor(() => expectNotRefused(start));
+  });
+
+  it("says a scenario has no published version to run", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions`, () =>
+        HttpResponse.json({ versions: [] } satisfies ScenarioVersionListResponse),
+      ),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await user.type(screen.getByLabelText("Experiment name"), "Unpublished");
+    await chooseArm(user, 0, "cfg-atlas");
+
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([NO_SCENARIO_VERSION]));
+  });
+
+  it("says why the lab refuses to judge the setup, since it would refuse to start it too", async () => {
+    const user = userEvent.setup();
+    const gone = "agent configuration 1a2b3c4d has no published version 1";
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, () =>
+        HttpResponse.json(
+          { code: "agent_configuration_version_not_found", message: gone, request_id: "r" },
+          { status: 404 },
+        ),
+      ),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await user.type(screen.getByLabelText("Experiment name"), "Gone");
+    await chooseArm(user, 0, "cfg-atlas");
+
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([gone]));
+    await user.click(start);
+    expect(started).toHaveLength(0);
+  });
+
+  it("refuses nothing for a preview it could not reach, and leaves the start to answer", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The lab could not complete it.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await user.type(screen.getByLabelText("Experiment name"), "Unjudged");
+    await chooseArm(user, 0, "cfg-atlas");
+
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expectNotRefused(start));
+    await user.click(start);
+    await waitFor(() => expect(started).toHaveLength(1));
   });
 
   it("starts the experiment against the exact versions chosen and opens the bench", async () => {
@@ -1256,6 +1498,8 @@ describe("experiment setup and the provider the lab can reach", () => {
       renderSetup();
 
       await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      // Named first, so the provider is the only thing Start could still be waiting for.
+      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
       await chooseArm(user, 0, "cfg-atlas");
 
       const start = screen.getByRole("button", { name: "Start experiment" });
@@ -1269,7 +1513,6 @@ describe("experiment setup and the provider the lab can reach", () => {
       expect(before.getByText(/differ in 2 dimensions/)).toBeVisible();
       expect(screen.getAllByText(NOTE)).toHaveLength(1);
 
-      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
       await user.click(start);
       // Nor by the keyboard: Enter on it, Space on it, and Enter in a field of its form.
       start.focus();
@@ -1286,8 +1529,9 @@ describe("experiment setup and the provider the lab can reach", () => {
     renderSetup();
 
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
-    await chooseArm(user, 0, "cfg-atlas");
+    // Named first, so the provider is the only thing Start could still be waiting for.
     await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await chooseArm(user, 0, "cfg-atlas");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expectRefused(start, NOTE));
 
@@ -1300,12 +1544,97 @@ describe("experiment setup and the provider the lab can reach", () => {
     expect(started).toHaveLength(0);
   });
 
+  it("waits for the arm's provider to be read before Start can be pressed", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(
+        "*/api/v1/agent-configurations/:configurationId/versions/:version",
+        async ({ params }) => {
+          versionReads += 1;
+          await held;
+          return HttpResponse.json(
+            publishedVersion(String(params.configurationId), Number(params.version)),
+          );
+        },
+      ),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await chooseArm(user, 0, "cfg-atlas");
+    // The gate has answered and the lab's reach is known; only the arm's provider is not.
+    await screen.findByText(/differ in 2 dimensions/);
+    await waitFor(() => expect(connectionServed.statuses).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(versionReads).toBeGreaterThanOrEqual(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Not read is not reachable: a press in flight, never free.
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    expect(start).toBeDisabled();
+    expect(start).not.toHaveAttribute("aria-disabled");
+    await user.click(start);
+    expect(started).toHaveLength(0);
+
+    release();
+    await waitFor(() => expectRefused(start, NOTE));
+  });
+
+  it("waits for the lab to say which providers it reaches before Start can be pressed", async () => {
+    const user = userEvent.setup();
+    connectionSource = "none";
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get("*/api/v1/lab-status", async () => {
+        await held;
+        connectionServed.statuses += 1;
+        return HttpResponse.json({
+          run_mode: "offline",
+          connection_source: "none",
+          model_id: "gpt-5-mini",
+          trace_export_configured: false,
+        } satisfies LabStatusResponse);
+      }),
+    );
+    renderSetup();
+
+    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await chooseArm(user, 0, "cfg-atlas");
+    await screen.findByText(/differ in 2 dimensions/);
+    await waitFor(() => expect(versionReads).toBeGreaterThanOrEqual(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    expect(start).toBeDisabled();
+    expect(start).not.toHaveAttribute("aria-disabled");
+    await user.click(start);
+    expect(started).toHaveLength(0);
+
+    release();
+    await waitFor(() => expectRefused(start, NOTE));
+  });
+
   it("writes one sentence for two arms that name the same unreachable provider", async () => {
     const user = userEvent.setup();
     connectionSource = "none";
     renderSetup();
 
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    // Named first, so the provider is the only thing Start could still be waiting for.
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     await user.click(screen.getByRole("button", { name: "Add a second arm" }));
     await chooseArm(user, 1, "cfg-atlas");
@@ -1321,10 +1650,11 @@ describe("experiment setup and the provider the lab can reach", () => {
     renderSetup();
 
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    // Named first, so the provider is the only thing Start could still be waiting for.
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
     await chooseArm(user, 0, "cfg-beacon");
     await reachabilityRead();
     expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
-    await user.type(screen.getByLabelText("Experiment name"), "Control only");
     await user.click(screen.getByRole("button", { name: "Start experiment" }));
 
     await waitFor(() => expect(started).toHaveLength(1));
@@ -1337,6 +1667,8 @@ describe("experiment setup and the provider the lab can reach", () => {
     renderSetup();
 
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    // Named first, so the provider is the only thing Start could still be waiting for.
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
     await chooseArm(user, 0, "cfg-beacon");
     await user.click(screen.getByRole("button", { name: "Add a second arm" }));
     await chooseArm(user, 1, "cfg-atlas");
@@ -1374,6 +1706,8 @@ describe("experiment setup and the provider the lab can reach", () => {
       renderSetup();
 
       await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      // Named first, so the provider is the only thing Start could still be waiting for.
+      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
       await chooseArm(user, 0, "cfg-atlas");
       await reachabilityRead();
 
@@ -1396,6 +1730,8 @@ describe("experiment setup and the provider the lab can reach", () => {
     renderSetup();
 
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    // Named first, so the provider is the only thing Start could still be waiting for.
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     await reachabilityRead();
 
@@ -1417,6 +1753,8 @@ describe("experiment setup and the provider the lab can reach", () => {
     renderSetup();
 
     await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    // Named first, so the provider is the only thing Start could still be waiting for.
+    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expectRefused(start, NOTE));
@@ -1441,11 +1779,12 @@ describe("experiment setup and the provider the lab can reach", () => {
       renderSetup();
 
       await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      // Named first, so the provider is the only thing Start could still be waiting for.
+      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
       await chooseArm(user, 0, "cfg-atlas");
       await reachabilityRead();
       expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
       expect(screen.queryByText(/cannot be advanced here/)).toBeNull();
-      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
       await user.click(screen.getByRole("button", { name: "Start experiment" }));
 
       await waitFor(() => expect(started).toHaveLength(1));

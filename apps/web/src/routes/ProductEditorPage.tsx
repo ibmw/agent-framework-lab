@@ -13,6 +13,7 @@ import { ChipList, ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
+import { GateFindingLine } from "../components/GateFindingLine";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
@@ -904,29 +905,6 @@ function OptionsCard({ product, onChange }: EditorProps) {
   );
 }
 
-/**
- * A publish-gate error said under the cell that holds it, at the validation weight.
- *
- * Polite rather than an alert, because nothing has been refused: the lab stores the draft and
- * refuses it at publication, which is the reason `FieldHint` gives its warning tone for
- * announcing politely. The element stays mounted while it holds nothing — `sr-only` and empty
- * — for the reason `FieldHint`'s second line does: a live region that appears at the moment it
- * has something to say is one no reader is listening to yet. The sentence is the gate's
- * (`lib/fieldRules.ts`), so it matches the validation card word for word once the draft is
- * saved rather than saying the same finding twice in two voices.
- */
-function GateFindingLine({ id, children }: { id: string; children: ReactNode }) {
-  return (
-    <p
-      id={id}
-      aria-live="polite"
-      className={children ? `${validationMessageClasses} mt-1 max-w-56` : "sr-only"}
-    >
-      {children}
-    </p>
-  );
-}
-
 function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   const defaultCurrency = currencies[0];
   // One description for every row's price box: the rule is the same on all of them, and a
@@ -1195,7 +1173,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         {variant.price?.currency ?? defaultCurrency}
                       </span>
                     </span>
-                    <GateFindingLine id={unpricedId}>
+                    <GateFindingLine id={unpricedId} className="mt-1 max-w-56">
                       {unpriced ? variantWithoutPriceRule(variant.sku) : null}
                     </GateFindingLine>
                   </td>
@@ -1241,7 +1219,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         })
                       }
                     />
-                    <GateFindingLine id={emptyInStockId}>
+                    <GateFindingLine id={emptyInStockId} className="mt-1 max-w-56">
                       {emptyInStock ? variantInStockWithoutInventoryRule(variant.sku) : null}
                     </GateFindingLine>
                   </td>

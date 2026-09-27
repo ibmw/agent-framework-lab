@@ -149,6 +149,35 @@ def test_the_optional_parameter_remedy_depends_on_the_kind() -> None:
     assert "make it required" in reference.errors[0].message
 
 
+def test_the_optional_parameter_sentence_is_the_one_the_block_editor_repeats() -> None:
+    """`optionalParameterWithoutDefaultRule` in `apps/web/src/lib/fieldRules.ts` spells these.
+
+    It is a gate finding and not a write refusal: the draft that holds it is stored.
+    """
+    literal = severity_parameter(required=False, default=None)
+    reference = parameter(required=False)
+
+    assert [
+        issue.message
+        for issue in validate_objective_block(
+            publishable_objective(parameters=(parameter(), literal))
+        ).errors
+    ] == [
+        "severity is optional but has nothing to fall back on, so a scenario that omits it "
+        "leaves the runtime with no value; give it a default"
+    ]
+    assert [
+        issue.message
+        for issue in validate_objective_block(
+            publishable_objective(parameters=(reference, severity_parameter()))
+        ).errors
+    ] == [
+        "doc_ref is optional but has nothing to fall back on, so a scenario that omits it "
+        "leaves the runtime with no value; make it required, since a template cannot default "
+        "an object reference"
+    ]
+
+
 def test_a_parameter_without_a_description_only_warns() -> None:
     payload = publishable_objective(parameters=(parameter(description=""), severity_parameter()))
     validation = validate_objective_block(payload)

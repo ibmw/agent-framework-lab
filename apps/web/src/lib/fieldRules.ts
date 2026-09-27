@@ -1,3 +1,5 @@
+import { MAX_CONTEXT_DOCUMENTS, MAX_MUTATIONS, MAX_OBJECTIVES } from "./scenarios";
+
 /**
  * Format rules that a create-form hint and its matching `title=` both carry.
  *
@@ -245,6 +247,56 @@ export function variantWithoutPriceRule(sku: string): string {
  */
 export function variantInStockWithoutInventoryRule(sku: string): string {
   return `variant ${sku} is in stock but holds no inventory`;
+}
+
+/*
+ * The lab's own refusals, said under the control that breaks them — the scenario, the block
+ * template and the judge. The same one-copy rule as the shop's: `fieldRules.test.ts` reads each
+ * out of the Python that writes it, and a Python suite asserts the rendered message.
+ */
+
+/**
+ * `ScenarioPayload.__post_init__` in `domain/scenario.py`: write refusals, not gate findings —
+ * a draft over any of the three caps is answered `422` with this sentence and is not stored.
+ * The numbers are `lib/scenarios.ts`' mirrors of `MAX_CONTEXT_DOCUMENTS`,
+ * `MAX_SCENARIO_OBJECTIVES` and `MAX_SCENARIO_MUTATIONS`, pinned there by the same test.
+ */
+export const CONTEXT_DOCUMENTS_CAP_RULE = `a scenario carries at most ${MAX_CONTEXT_DOCUMENTS} context documents`;
+
+export const OBJECTIVES_CAP_RULE = `a scenario composes at most ${MAX_OBJECTIVES} objectives`;
+
+export const MUTATIONS_CAP_RULE = `a scenario composes at most ${MAX_MUTATIONS} mutations`;
+
+/** How far into its cap a scenario's collection is: the count each card reads beside its title. */
+export function capCount(count: number, max: number): string {
+  return `${count} of ${max}`;
+}
+
+/**
+ * `optional_parameter_without_default` in `_parameter_issues` (`domain/blocks.py`): a gate
+ * **error** on a parameter that is not required and carries no default. `BlockParameter` stores
+ * it, so the draft saves and publication is refused. The remedy is the gate's own, chosen by the
+ * kind: a literal can be given a default, and a reference never can.
+ */
+export function optionalParameterWithoutDefaultRule(name: string, literal: boolean): string {
+  const remedy = literal
+    ? "give it a default"
+    : "make it required, since a template cannot default an object reference";
+  return `${name} is optional but has nothing to fall back on, so a scenario that omits it leaves the runtime with no value; ${remedy}`;
+}
+
+/**
+ * `rubric_empty` in `judge_configuration_issues` (`domain/judge.py`): a gate **error** on a
+ * rubric that is exactly empty. The draft saves with it; publication is refused.
+ */
+export const RUBRIC_EMPTY_RULE = "a published judge must carry the rubric it scores by";
+
+/**
+ * `rubric_names_an_arm` in `_anonymity_issues` (`application/judge_capabilities.py`): a gate
+ * **error**, raised once for each reserved term the rubric names (`lib/rubric.ts`).
+ */
+export function rubricNamesAnArmRule(term: string): string {
+  return `the rubric names ${term}, and a judge is shown no such thing: the brief carries what the arm did, never what ran it`;
 }
 
 /** What a tone-of-voice override names, and where the names come from. */

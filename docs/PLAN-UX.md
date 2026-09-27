@@ -71,7 +71,7 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). In Group C, slices 22–25 can start now. Slices 26 and
+connection leaves unreachable (ADR 0053). In Group C, slices 23–25 can start now. Slices 26 and
 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
@@ -86,27 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 22 — Refused with a reason
-
-The weight, its reachability and the validation weight are ADR 0063 and landed: every refused
-primary action renders through `PrimaryAction`, and a `Field` whose line is an error reads at
-13px 600 `#9d3028` and marks its control `aria-invalid`. What is left are the rules the September
-plan listed and the gate still says first, each said under its control at that weight, in the
-control's accessible description. What is left lands as one unit.
-
-- [ ] **22c, the lab** (`feat/refused-lab-rules`): each scenario card reads its own cap —
-  objectives "N of 24", mutations "N of 8", context documents "N of 12"; the block parameter's
-  default-when-optional beside its checkbox; the judge editor's rubric required, and a line
-  naming the reserved terms the rubric matches, on the word boundaries `_mentions` uses — the
-  create page already refuses without one; Start listing what is missing.
-
-Frames: README, *The form pattern* and *Interactions*; DEPRECADED frames 2c, 4, 7.
-
-Checks: page tests per rule; Playwright `scenario-authoring` and `experiment-start` if they press
-a refused control.
-
-Slice evidence: Start on the bench is dashed until it can work and says what it waits for.
 
 #### Slice 23 — Defaults, and the experiment setup as a sequence
 

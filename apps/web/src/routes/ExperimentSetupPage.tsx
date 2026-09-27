@@ -20,9 +20,10 @@ import { listExperiments, previewExperiment, startExperiment } from "../api/expe
 import { listScenarios, listScenarioVersions } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { PrimaryAction } from "../components/PrimaryAction";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
+import { EXPERIMENT_LABEL_MAX_LENGTH, isSeed, startRefusals } from "../lib/experimentStart";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
@@ -31,8 +32,9 @@ import {
   formatTimestamp,
   tableCellClasses,
   tableHeadClasses,
+  validationMessageClasses,
 } from "../lib/ui";
-import { useUnreachableProviders } from "../lib/useUnreachableProviders";
+import { useReachability } from "../lib/useUnreachableProviders";
 import { NoCurrentShop } from "../shell/LabWorkspace";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
@@ -160,14 +162,23 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const [seed, setSeed] = useState(String(DEFAULT_SEED));
   const [arms, setArms] = useState<ArmDraft[]>(() => [emptyArm()]);
   const [preview, setPreview] = useState<ExperimentPreviewResponse | null>(null);
+  // Which setup the gate last answered for, and whether it refused to judge it at all. Start
+  // reads the gate's errors only once they are the answer for the setup on screen.
+  const [judged, setJudged] = useState<{
+    setup: StartExperimentRequest;
+    refusal: string | null;
+  } | null>(null);
   const [issues, setIssues] = useState<DefinitionIssueSchema[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   // The provider each arm's pinned version names, by arm, as the arm reads it. Held here
   // rather than in the picker because Start is what it blocks.
-  const [armProviders, setArmProviders] = useState<Record<string, string | null>>({});
-  const unreachable = useUnreachableProviders();
+  // `undefined` while the arm's pinned version is being read: not yet known, which is not the
+  // same as `null`, the answer for an arm with nothing to read or whose read failed.
+  const [armProviders, setArmProviders] = useState<Record<string, string | null | undefined>>({});
+  const reachability = useReachability();
+  const unreachable = reachability.status === "loaded" ? reachability.unreachable : null;
   const startNoteId = useId();
 
   useEffect(() => {
@@ -221,8 +232,13 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   // ref and the preview below does not re-ask the server a question it has already answered
   // on every keystroke of a name. They are still sent — the preview judges a whole request —
   // but the values it carries are the ones current when the setup last changed.
+  //
+  // A seed the contract would refuse is not sent to the preview: the gate never reads it, but
+  // the request's own validation would refuse the whole preview for it, and a matrix that
+  // vanished whenever the seed field was mid-edit would hide the answer to a question the seed
+  // has no part in. Start is what refuses it, and says so.
   const naming = useRef({ label, seed });
-  naming.current = { label, seed };
+  naming.current = { label, seed: isSeed(seed) ? seed : String(DEFAULT_SEED) };
 
   const setup = useMemo(
     () => setupOf({ scenarioId, scenarioVersion, arms, ...naming.current }),
@@ -238,11 +254,19 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     }
     const controller = new AbortController();
     previewExperiment(shopId, setup, controller.signal)
-      .then(setPreview)
+      .then((judgement) => {
+        setPreview(judgement);
+        setJudged({ setup, refusal: null });
+      })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setPreview(null);
           setError(describeApiError(cause, "This setup could not be judged."));
+          // A refusal of the setup — a version this shop does not publish, an arm version that
+          // is gone — is what a start would answer too, so Start says it. A preview that could
+          // not be reached says nothing about the setup, and refuses nothing.
+          const refused = cause instanceof LabApiError && cause.status < 500;
+          setJudged({ setup, refusal: refused ? cause.message : null });
         }
       });
     return () => controller.abort();
@@ -257,28 +281,41 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     arms.map((arm) => armProviders[arm.id] ?? null),
     unreachable,
   );
+  // The gate has not answered for the setup on screen yet. Start is then a press in flight
+  // rather than a refusal (ADR 0063) — unless something else already refuses it, which is said
+  // meanwhile, and the gate's own errors join it when it answers.
+  const gatePending = setup !== null && judged?.setup !== setup;
+  const answered = setup !== null && judged?.setup === setup;
+  const reasons = startRefusals({
+    scenarioId,
+    scenarioVersion,
+    seed,
+    label,
+    chosenArms: arms.filter((arm) => arm.configurationId !== "" && arm.version !== "").length,
+    gateIssues: answered ? (preview?.issues ?? []) : [],
+    previewRefusal: answered ? (judged?.refusal ?? null) : null,
+    unreachable: startBlocked,
+  });
+  // Nor can it be free while the lab has not yet said which providers it reaches, or an arm's
+  // provider has not been read: "not read yet" is not "reachable", and an experiment started in
+  // that moment would find its arm refused at the first advance.
+  const chosenArms = arms.filter((arm) => arm.configurationId !== "" && arm.version !== "");
+  const reachPending =
+    chosenArms.length > 0 &&
+    (reachability.status === "loading" ||
+      chosenArms.some((arm) => armProviders[arm.id] === undefined));
+  const checking = (gatePending || reachPending) && reasons.length === 0;
 
   const start = async (event: FormEvent) => {
     event.preventDefault();
     // The button refuses this itself (ADR 0063); a submission that reaches the form without
-    // pressing it — `requestSubmit` — is refused here, rather than left to the advance's 422.
-    if (startBlocked !== "") {
-      return;
-    }
-    if (label.trim() === "") {
-      setError("Name the experiment so it can be found again beside the ones before it.");
-      return;
-    }
-    // `Number("")` is 0 and a cleared field is NaN, so an emptied seed would either freeze
-    // against a seed nobody chose or reach the contract as null. The seed is a behavioral
-    // input; it has to be said out loud.
-    if (seed.trim() === "") {
-      setError("Enter the seed this experiment's starting state is frozen with.");
+    // pressing it — `requestSubmit` — is refused here, for every reason the button gives,
+    // rather than left to the lab's 422 or the advance's.
+    if (working || checking || reasons.length > 0) {
       return;
     }
     const chosen = setupOf({ scenarioId, scenarioVersion, arms, label, seed });
     if (chosen === null) {
-      setError("Choose a published scenario version and at least one agent configuration.");
       return;
     }
     setWorking(true);
@@ -391,6 +428,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
               <input
                 className={fieldControlClasses}
                 value={label}
+                maxLength={EXPERIMENT_LABEL_MAX_LENGTH}
                 onChange={(event) => setLabel(event.target.value)}
               />
             </label>
@@ -486,18 +524,27 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
             <p className="text-xs text-admin-muted">
               Participant: human operator — you play the customer in both arms.
             </p>
-            {/* Refused with its reason, reachable and titled (ADR 0063). */}
+            {/* Refused until it can work, reachable and titled, with every reason at once
+                (ADR 0063). */}
             <PrimaryAction
               variant="accent"
               type="submit"
-              refusal={startBlocked === "" ? null : { id: startNoteId, reason: startBlocked }}
-              busy={working}
+              refusal={
+                reasons.length === 0 ? null : { id: startNoteId, reason: reasons.join("\n") }
+              }
+              busy={working || checking}
             >
               <ButtonIcon verb="start" />
               {working ? "Starting…" : "Start experiment"}
             </PrimaryAction>
-            {startBlocked === "" ? null : (
-              <RefusalLine id={startNoteId}>{startBlocked}</RefusalLine>
+            {working || reasons.length === 0 ? null : (
+              <ul id={startNoteId} className={`${validationMessageClasses} grid gap-1`}>
+                {reasons.map((reason, index) => (
+                  // Two arms can raise one finding in one sentence; the position tells them apart.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: the list is rebuilt, never reordered
+                  <li key={`${index}:${reason}`}>{reason}</li>
+                ))}
+              </ul>
             )}
           </Card>
 
@@ -543,8 +590,11 @@ function ArmPicker({
   arm: ArmDraft;
   configurations: AgentConfigurationSummarySchema[];
   onChange: (next: ArmDraft) => void;
-  /** The provider the pinned version names, or null while no version is chosen or read. */
-  onProvider: (provider: string | null) => void;
+  /**
+   * The provider the pinned version names; `undefined` while it is being read; `null` where no
+   * version is chosen or the read failed.
+   */
+  onProvider: (provider: string | null | undefined) => void;
 }) {
   const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
   const name = String.fromCharCode(65 + position);
@@ -570,14 +620,21 @@ function ArmPicker({
   const reportProvider = useRef(onProvider);
   reportProvider.current = onProvider;
   useEffect(() => {
-    reportProvider.current(null);
     if (arm.configurationId === "" || arm.version === "") {
+      reportProvider.current(null);
       return;
     }
+    // Being read: neither reachable nor not, until the version answers.
+    reportProvider.current(undefined);
     const controller = new AbortController();
     getAgentConfigurationVersion(arm.configurationId, Number(arm.version), controller.signal)
       .then((published) => reportProvider.current(published.content.model.provider))
-      .catch(() => {});
+      .catch(() => {
+        // Read and unknown: it says nothing, and holds nothing up.
+        if (!controller.signal.aborted) {
+          reportProvider.current(null);
+        }
+      });
     return () => controller.abort();
   }, [arm.configurationId, arm.version]);
 

@@ -15,6 +15,7 @@ import { Link, useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
+import { GateFindingLine } from "../components/GateFindingLine";
 import { ParameterForm } from "../components/ParameterForm";
 import {
   Card,
@@ -45,6 +46,7 @@ import {
 } from "../lib/blocks";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import { optionalParameterWithoutDefaultRule } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
   destructiveSubtleButtonClasses,
@@ -333,6 +335,11 @@ function ParameterRow({
   onRemove: () => void;
 }) {
   const literal = acceptsDefault(parameter.kind);
+  // The gate's `optional_parameter_without_default`, said beside the checkbox that raises it.
+  // A finding and not a refusal — `BlockParameter` stores it and publication refuses it — so it
+  // refuses no save: it is said, on the checkbox and on the default that would clear it.
+  const findingId = useId();
+  const optionalWithoutDefault = !parameter.required && parameter.default === null;
 
   if (removal.isArmed(parameter.name)) {
     return (
@@ -433,6 +440,7 @@ function ParameterRow({
             {parameter.kind === "severity" ? (
               <select
                 aria-label={`Default of ${parameter.name}`}
+                aria-describedby={optionalWithoutDefault ? findingId : undefined}
                 className={fieldControlClasses}
                 value={parameter.default ?? ""}
                 onChange={(event) => onUpdate({ default: event.target.value || null })}
@@ -447,6 +455,7 @@ function ParameterRow({
             ) : (
               <input
                 aria-label={`Default of ${parameter.name}`}
+                aria-describedby={optionalWithoutDefault ? findingId : undefined}
                 className={fieldControlClasses}
                 value={parameter.default ?? ""}
                 placeholder={parameter.kind === "timing" ? "after_first_read" : "PT30S"}
@@ -454,14 +463,23 @@ function ParameterRow({
               />
             )}
           </div>
-          <label className="flex items-center gap-2 text-[13px]">
-            <input
-              type="checkbox"
-              checked={parameter.required}
-              onChange={(event) => onUpdate({ required: event.target.checked })}
-            />
-            A scenario must bind this
-          </label>
+          <div className="grid gap-1">
+            <label className="flex items-center gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                checked={parameter.required}
+                aria-describedby={optionalWithoutDefault ? findingId : undefined}
+                aria-invalid={optionalWithoutDefault || undefined}
+                onChange={(event) => onUpdate({ required: event.target.checked })}
+              />
+              A scenario must bind this
+            </label>
+            <GateFindingLine id={findingId}>
+              {optionalWithoutDefault
+                ? optionalParameterWithoutDefaultRule(parameter.name, literal)
+                : null}
+            </GateFindingLine>
+          </div>
         </>
       ) : (
         // A template that defaulted a reference would hand one shop's object to every other

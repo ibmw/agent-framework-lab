@@ -14,19 +14,42 @@ import { unreachableProviders } from "./modelConnections";
  * connection as it now stands.
  */
 export function useUnreachableProviders(): ReadonlySet<string> | null {
-  const [unreachable, setUnreachable] = useState<ReadonlySet<string> | null>(null);
+  const reachability = useReachability();
+  return reachability.status === "loaded" ? reachability.unreachable : null;
+}
+
+/** The same two reads, saying whether they are still in flight or have failed for good. */
+export type Reachability =
+  | { status: "loading" }
+  | { status: "failed" }
+  /** `unreachable` is `null` where the answer cannot be attributed to a provider. */
+  | { status: "loaded"; unreachable: ReadonlySet<string> | null };
+
+/**
+ * `useUnreachableProviders`, for a surface that must wait for the answer rather than read "not
+ * yet" as "nothing to say": Start, which would otherwise be free for the moment between the
+ * bench opening and the connection being read.
+ */
+export function useReachability(): Reachability {
+  const [reachability, setReachability] = useState<Reachability>({ status: "loading" });
 
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([listModelConnections(controller.signal), getLabStatus(controller.signal)])
       .then(([connections, status]) =>
-        setUnreachable(unreachableProviders(connections, status.connection_source)),
+        setReachability({
+          status: "loaded",
+          unreachable: unreachableProviders(connections, status.connection_source),
+        }),
       )
       .catch(() => {
         // See above: an unreadable connection says nothing, rather than something wrong.
+        if (!controller.signal.aborted) {
+          setReachability({ status: "failed" });
+        }
       });
     return () => controller.abort();
   }, []);
 
-  return unreachable;
+  return reachability;
 }

@@ -274,3 +274,73 @@ payment moves and all 9 fulfilment moves and holds each rule's sentence to the s
 names; `fieldRules.test.ts` reads the four sentences out of `domain/shop.py`, and
 `test_shop_domain.py` asserts them from the Python side, for every product status and every
 maximum around the minimum.
+
+## Amendment — 2026-09-27: the lab's rules
+
+The last of what the September plan listed: the scenario's caps, the block parameter's
+default, the judge's rubric and the bench's Start, each said before the press rather than
+after it. Recorded here for the reason the shop amendment above gave — each is this ADR's rule
+applied, or the shop amendment's.
+
+- **A cap is counted on its card, and refused at it in the lab's sentence.** `ScenarioPayload`
+  refuses a draft over `MAX_CONTEXT_DOCUMENTS`, `MAX_SCENARIO_OBJECTIVES` or
+  `MAX_SCENARIO_MUTATIONS` with `422`. Each card's title reads its own "N of 12", "N of 24" or
+  "N of 8" (`CappedTitle`), counted from the draft on screen, so it moves with every add and
+  removal; the card keeps its bare title as its name. At the cap the editor's *Add* — the one
+  submit of the picker's form — is an adopter, refused with the lab's own sentence ("a scenario
+  composes at most 24 objectives") under the picker; its handler checks the cap too. An unchosen
+  template is its own field's to say, so the select is natively `required` and Add is not
+  refused for it. A context document's checkbox and the new-scenario page's compose chips are a
+  native control and a secondary one: they keep native `disabled` at the cap, with the sentence
+  in `title` and in a muted line their description names. The two workspace sentences the create
+  page wrote give way to the lab's, so one cap reads one way everywhere.
+- **A publish-gate error is said on its control and refuses no write** — the shop amendment's
+  rule, on two more editors. `optional_parameter_without_default` is said under the parameter's
+  *A scenario must bind this*, which it marks `aria-invalid`, and describes the default beside
+  it, since either clears it. `rubric_empty` is said under an exactly empty rubric, and
+  `rubric_names_an_arm` once for every reserved term the rubric names, in the order the catalog
+  serves them; the rubric is `aria-required` and marked invalid while either holds. Neither
+  refuses *Save draft*. The line is `GateFindingLine`, which moves out of the product editor to
+  be shared, polite and mounted while empty. The terms are the served `reserved_terms`, never a
+  list of the page's. Which of them a rubric names is `lib/rubric.ts`, a mirror of `_mentions`
+  built from an enumeration rather than by analogy: Python's `[\w-]` is `[\p{L}\p{N}_-]` at
+  every code point Python assigns, and is read on the neighbours without case folding, because
+  a JavaScript `i` flag folds a class too and would count U+0345 as a letter; `re.IGNORECASE`
+  is JavaScript's simple case folding at every cased code point but `İ` and `ı`, which Python
+  also holds to be `i`, so a term's `i` is written as that class. Where the two Unicode
+  databases differ is only at code points Python has not assigned. The tables are Python 3.12's
+  (Unicode 15). The repository pins no Python, so they are held to the backend only on a Python
+  whose database is the fixture's `unicode_version`, and skipped elsewhere with both versions
+  named. The 55 rubric rows answer alike on Unicode 15 and 16 and run on every Python. When the
+  Unicode version the lab runs on moves, the fixture is regenerated on that Python, and the web
+  suite re-proves the mirror against the new tables.
+- **Start lists what it waits for, all of it.** Start is refused until it can work, and its
+  reason is a list, one line per cause, in the order the form asks: a scenario, then a published
+  version of it; a seed, then one inside 0..`MAX_SCENARIO_SEED`; a name that is not empty once
+  trimmed; one arm with a configuration and a version; every **error** the setup gate raises,
+  in its words; the preview's own refusal of the setup (a `4xx`, which the start would answer
+  identically); and the provider this lab cannot reach. The request's conditions are said in
+  the page's words, because the lab's there are the contract's generic validation messages or
+  name padding the page never sends; the gate's are its own. The name field stops at
+  `MAX_LABEL_LENGTH`. A gate that has not answered for the setup on screen is a press in flight
+  when nothing else refuses Start, and adds its errors when it answers; a preview that could not
+  be reached refuses nothing. So is a chosen arm whose provider has not been read, and a lab
+  that has not yet said which providers it reaches: "not read" is not "reachable". A read that
+  fails says nothing and holds nothing up. A seed the contract would refuse is not sent to the preview, which
+  never reads it and would refuse the whole request for it. `start` checks every reason itself.
+  Not listed, because nothing before the press can know it: `materialize`'s own gate, re-run
+  against the orders as they read at the start (ADR 0019); a start it refuses still answers with
+  its findings under the form.
+
+Verification: `Experiments.test.tsx` *is dashed until it can work, and says everything it still
+waits for* (the slice's evidence — from nothing chosen and an out-of-range seed, the list goes
+from four causes to three, two, one, the gate's error, and none, and Start is free only then);
+`experimentStart.test.ts` enumerates all 648 combinations of the seven causes; `Scenarios.test.tsx`
+*the scenario's caps, each read on its own card*; `Blocks.test.tsx` and
+`JudgeConfigurations.test.tsx` for the two gate findings and the Save each still allows;
+`rubric.test.ts` holds `lib/rubric.ts` to `apps/api/tests/fixtures/rubric_mentions.json` — the
+gate's own answers for 55 rubrics, Python's `[\w-]` over every assigned code point and its
+case classes over every cased one — which `test_rubric_mentions.py` writes and holds to the
+backend; `fieldRules.test.ts` reads the six sentences and the three caps out of the Python, and
+`test_scenario_domain.py`, `test_block_domain.py` and `test_judge_domain.py` assert them from
+the other end.

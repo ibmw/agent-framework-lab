@@ -63,6 +63,15 @@ def test_a_judge_without_a_rubric_cannot_be_published() -> None:
     assert "rubric_empty" in {issue.code for issue in validation.issues}
 
 
+def test_the_empty_rubric_sentence_is_the_one_the_judge_editor_repeats() -> None:
+    """`RUBRIC_EMPTY_RULE` in `apps/web/src/lib/fieldRules.ts` spells it; the draft still saves."""
+    validation = validate_judge_configuration(publishable_judge(rubric=""))
+
+    assert [issue.message for issue in validation.errors] == [
+        "a published judge must carry the rubric it scores by"
+    ]
+
+
 def test_a_judge_shown_nothing_cannot_be_published() -> None:
     assert "evidence_scope_empty" in codes(publishable_judge(evidence=()))
 

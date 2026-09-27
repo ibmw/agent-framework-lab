@@ -9,7 +9,15 @@ import type {
   ScenarioResolutionSchema,
   ScenarioResourcesSchema,
 } from "@agent-lab/contracts";
-import { type ReactNode, useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -20,7 +28,9 @@ import {
   replaceScenarioDraft,
 } from "../api/scenarios";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { CappedTitle } from "../components/CappedTitle";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   EditorSaveActions,
@@ -33,6 +43,11 @@ import {
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import {
+  CONTEXT_DOCUMENTS_CAP_RULE,
+  MUTATIONS_CAP_RULE,
+  OBJECTIVES_CAP_RULE,
+} from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
   addMutation,
@@ -70,7 +85,6 @@ import {
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  outlineButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
   textAreaClasses,
@@ -123,6 +137,7 @@ export function ScenarioEditorPage() {
     [shopId],
   );
   const publishReasonsId = useId();
+  const documentsCapId = useId();
   const editor = useDefinitionEditor(scenarioId, client, {
     label: "The scenario draft has unsaved changes.",
     // The Scenarios index prints the row this editor is changing, and it renders the shell's
@@ -188,6 +203,7 @@ export function ScenarioEditorPage() {
   const objectiveOptions = resources?.objective_blocks ?? [];
   const mutationOptions = resources?.mutation_blocks ?? [];
   const readers = readChecksByDocument(content, objectiveOptions);
+  const documentsFull = content.context_documents.length >= MAX_CONTEXT_DOCUMENTS;
 
   return (
     <>
@@ -309,7 +325,14 @@ export function ScenarioEditorPage() {
           </Card>
 
           <Card
-            title="Context documents"
+            title={
+              <CappedTitle
+                title="Context documents"
+                count={content.context_documents.length}
+                max={MAX_CONTEXT_DOCUMENTS}
+              />
+            }
+            label="Context documents"
             footer={
               <p className="text-xs text-admin-muted">
                 Readable by the agent through tools only. Listing a document here does not make the
@@ -345,9 +368,11 @@ export function ScenarioEditorPage() {
                         <input
                           type="checkbox"
                           checked={listed}
-                          disabled={
-                            !listed && content.context_documents.length >= MAX_CONTEXT_DOCUMENTS
-                          }
+                          // A native control keeps `disabled` at the cap (ADR 0063), with the
+                          // lab's sentence in `title` and in the line its description names.
+                          disabled={!listed && documentsFull}
+                          title={!listed && documentsFull ? CONTEXT_DOCUMENTS_CAP_RULE : undefined}
+                          aria-describedby={!listed && documentsFull ? documentsCapId : undefined}
                           onChange={() =>
                             edit(
                               toggleContextDocument(content, {
@@ -375,10 +400,22 @@ export function ScenarioEditorPage() {
                 })}
               </ul>
             )}
+            {documentsFull ? (
+              <p id={documentsCapId} className="text-xs text-admin-muted">
+                {CONTEXT_DOCUMENTS_CAP_RULE}
+              </p>
+            ) : null}
           </Card>
 
           <Card
-            title="Objectives"
+            title={
+              <CappedTitle
+                title="Objectives"
+                count={content.objectives.length}
+                max={MAX_OBJECTIVES}
+              />
+            }
+            label="Objectives"
             footer={
               <p className="text-xs text-admin-muted">
                 Order is priority, not a script: a scenario stays goal-based and never implies a
@@ -454,13 +491,17 @@ export function ScenarioEditorPage() {
               label="Add objective block"
               options={objectiveOptions}
               pending={pending}
-              disabled={content.objectives.length >= MAX_OBJECTIVES}
+              full={content.objectives.length >= MAX_OBJECTIVES}
+              capRule={OBJECTIVES_CAP_RULE}
               onAdd={(option) => edit(addObjective(content, option))}
             />
           </Card>
 
           <Card
-            title="Mutations"
+            title={
+              <CappedTitle title="Mutations" count={content.mutations.length} max={MAX_MUTATIONS} />
+            }
+            label="Mutations"
             footer={
               <p className="text-xs text-admin-muted">
                 Injected into the run's sandbox at a bound moment and never exposed as an agent tool
@@ -508,7 +549,8 @@ export function ScenarioEditorPage() {
               label="Add mutation block"
               options={mutationOptions}
               pending={pending}
-              disabled={content.mutations.length >= MAX_MUTATIONS}
+              full={content.mutations.length >= MAX_MUTATIONS}
+              capRule={MUTATIONS_CAP_RULE}
               onAdd={(option) => edit(addMutation(content, option))}
             />
           </Card>
@@ -939,17 +981,22 @@ function TemplatePicker({
   label,
   options,
   pending,
-  disabled,
+  full,
+  capRule,
   onAdd,
 }: {
   label: string;
   options: readonly ScenarioBlockOptionSchema[];
   /** The library has not answered yet: an unloaded list is not an empty one. */
   pending: boolean;
-  disabled: boolean;
+  /** The scenario already composes as many of these as the lab stores. */
+  full: boolean;
+  /** The lab's sentence for that cap, which the refused Add says. */
+  capRule: string;
   onAdd: (option: ScenarioBlockOptionSchema) => void;
 }) {
   const [blockId, setBlockId] = useState("");
+  const capId = useId();
 
   if (pending) {
     return <p className="text-[13px] text-admin-muted">Loading the library…</p>;
@@ -964,14 +1011,28 @@ function TemplatePicker({
     );
   }
 
+  // Add is the one submit of this form, so at the cap it is refused with the lab's sentence
+  // rather than going quiet (ADR 0063); an unchosen template is its own field's to say, which
+  // the select does natively as `required`, and the handler checks both.
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const option = options.find((entry) => entry.block_id === blockId);
+    if (full || option === undefined) {
+      return;
+    }
+    onAdd(option);
+    setBlockId("");
+  }
+
   return (
-    <div className="flex flex-wrap items-end gap-2">
+    <form className="flex flex-wrap items-end gap-2" onSubmit={submit}>
       <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
         {label}
         <select
           aria-label={label}
           className={fieldControlClasses}
           value={blockId}
+          required
           onChange={(event) => setBlockId(event.target.value)}
         >
           <option value="">Select a template</option>
@@ -985,21 +1046,19 @@ function TemplatePicker({
           ))}
         </select>
       </label>
-      <button
-        className={outlineButtonClasses}
-        type="button"
-        disabled={disabled || !blockId}
-        onClick={() => {
-          const option = options.find((entry) => entry.block_id === blockId);
-          if (option) {
-            onAdd(option);
-            setBlockId("");
-          }
-        }}
+      <PrimaryAction
+        variant="outline"
+        type="submit"
+        refusal={full ? { id: capId, reason: capRule } : null}
       >
         <ButtonIcon verb="create" />
         Add
-      </button>
-    </div>
+      </PrimaryAction>
+      {full ? (
+        <RefusalLine id={capId} className="w-full">
+          {capRule}
+        </RefusalLine>
+      ) : null}
+    </form>
   );
 }

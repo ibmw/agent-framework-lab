@@ -488,6 +488,77 @@ describe("judge workspace", () => {
     expect(within(anonymity).getByText(/pydantic-ai/)).toBeVisible();
   });
 
+  it("says under the rubric what the gate will refuse it for, as it is typed, and saves it", async () => {
+    const user = userEvent.setup();
+    const names = (term: string) =>
+      `the rubric names ${term}, and a judge is shown no such thing: the brief carries what the arm did, never what ran it`;
+    const empty = "a published judge must carry the rubric it scores by";
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const rubric = await screen.findByRole("textbox", { name: "How this judge scores" });
+    const card = within(screen.getByRole("region", { name: "Rubric" }));
+    expect(rubric).toHaveAttribute("aria-required", "true");
+    await screen.findByText(/pydantic-ai/);
+    expect(rubric).not.toHaveAttribute("aria-invalid");
+    expect(card.queryByText(/the rubric names/)).toBeNull();
+
+    // Required: the gate's `rubric_empty`, said once the rubric is empty and only then.
+    await user.clear(rubric);
+    const line = card.getByText(empty);
+    expect(line).toBeVisible();
+    expect(line.closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
+    expect(rubric).toHaveAttribute("aria-invalid", "true");
+    expect(rubric).toHaveAccessibleDescription(new RegExp(empty));
+
+    // One sentence per reserved term the rubric names, in the order the catalog serves them —
+    // and a term inside a longer word, or joined by a hyphen, is not named.
+    await user.type(rubric, "Prefer the deterministic FAKE arm, not a fake-friendly one.");
+    expect(card.queryByText(empty)).toBeNull();
+    const findings = rubric.getAttribute("aria-describedby")?.split(" ").at(-1) ?? "";
+    expect(
+      Array.from(document.getElementById(findings)?.children ?? [], (entry) => entry.textContent),
+    ).toEqual([names("Deterministic fake"), names("fake")]);
+    expect(rubric).toHaveAccessibleDescription(new RegExp(names("fake")));
+
+    await user.clear(rubric);
+    await user.type(rubric, "Score the gpt-5-mini-2 answer, and the one on gpt-5-mini.");
+    expect(card.getByText(names("gpt-5-mini"))).toBeVisible();
+    expect(card.queryByText(names("fake"))).toBeNull();
+
+    await user.clear(rubric);
+    await user.type(rubric, "Score the fakery on the unfaked order.");
+    expect(card.queryByText(/the rubric names/)).toBeNull();
+    expect(rubric).not.toHaveAttribute("aria-invalid");
+
+    // Findings, not refusals: the draft saves with one, as the lab stores it.
+    await user.clear(rubric);
+    await user.type(rubric, "Prefer the openai arm.");
+    expect(card.getByText(names("openai"))).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].rubric).toBe("Prefer the openai arm.");
+  });
+
+  it("names the terms the catalog serves, not a list of its own", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/v1/judge-configurations/resources", () =>
+        HttpResponse.json({ ...RESOURCES, reserved_terms: ["zeta-agents"] }),
+      ),
+    );
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const rubric = await screen.findByRole("textbox", { name: "How this judge scores" });
+    await screen.findByText(/zeta-agents/);
+    await user.clear(rubric);
+    await user.type(rubric, "Prefer the pydantic-ai arm to the Zeta-Agents one.");
+
+    const card = within(screen.getByRole("region", { name: "Rubric" }));
+    // Named as the catalog spells it, whatever case the rubric typed it in, as the gate does.
+    expect(card.getByText(/^the rubric names zeta-agents, and a judge/)).toBeVisible();
+    expect(card.queryByText(/the rubric names pydantic-ai/)).toBeNull();
+  });
+
   it("refuses to publish a rubric that names what an arm runs, and says which word", async () => {
     currentPreview = preview({
       publishable: false,

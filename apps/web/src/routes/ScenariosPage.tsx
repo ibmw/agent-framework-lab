@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { describeApiError } from "../api/client";
 import { createScenario, replaceScenarioDraft } from "../api/scenarios";
+import { CappedTitle } from "../components/CappedTitle";
 import { ChipListField } from "../components/ChipListField";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
@@ -16,7 +17,7 @@ import { type FilterChipDefinition, FilterChips } from "../components/FilterChip
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { useCreateThenComplete } from "../lib/createDefinition";
-import { CHIP_LABEL_MAX_LENGTH } from "../lib/fieldRules";
+import { CHIP_LABEL_MAX_LENGTH, MUTATIONS_CAP_RULE, OBJECTIVES_CAP_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import {
   addMutation,
@@ -270,9 +271,11 @@ function ComposeFromLibrary({
   reading: readonly string[];
   loading: boolean;
   max: number;
+  /** The lab's sentence for that cap (`lib/fieldRules.ts`). */
   atCapacity: string;
   onToggle: (blockId: string) => void;
 }) {
+  const capId = useId();
   if (loading) {
     return <p className="text-[13px] text-admin-muted">Loading the library…</p>;
   }
@@ -303,7 +306,11 @@ function ComposeFromLibrary({
               // disabled, so a keyboard operator would lose their place on every compose.
               // `toggleTemplate` is what ignores a second press while the read is in flight.
               aria-busy={busy || undefined}
+              // A secondary control keeps native `disabled` at the cap (ADR 0063), with the
+              // lab's sentence in `title` and in the line its description names.
               disabled={!on && full}
+              title={!on && full ? atCapacity : undefined}
+              aria-describedby={!on && full ? capId : undefined}
               className={on ? composeChipClasses.on : composeChipClasses.off}
               onClick={() => onToggle(block.block_id)}
             >
@@ -313,10 +320,14 @@ function ComposeFromLibrary({
           );
         })}
       </fieldset>
-      {/* The cap is the contract's (`MAX_SCENARIO_OBJECTIVES`, `MAX_SCENARIO_MUTATIONS`), and
-          the chip that would exceed it is off rather than refused by the write that follows.
-          The picker says the cap once it is reached; no running "N of" its cap is drawn. */}
-      {full ? <p className="text-xs text-admin-muted">{atCapacity}</p> : null}
+      {/* The cap is the lab's (`MAX_SCENARIO_OBJECTIVES`, `MAX_SCENARIO_MUTATIONS`), and the
+          chip that would exceed it is off rather than refused by the write that follows. The
+          card's title counts towards it; the lab's own sentence is said once it is reached. */}
+      {full ? (
+        <p id={capId} className="text-xs text-admin-muted">
+          {atCapacity}
+        </p>
+      ) : null}
       {chosen.length > 0 ? (
         <ol aria-label={composedLabel} className="grid gap-1.5 text-[13px]">
           {chosen.map((blockId, index) => {
@@ -668,7 +679,8 @@ export function NewScenarioPage() {
         </Card>
 
         <Card
-          title="Objectives"
+          title={<CappedTitle title="Objectives" count={objectives.length} max={MAX_OBJECTIVES} />}
+          label="Objectives"
           footer={
             <p className="text-xs text-admin-muted">
               At least one is required: it is what a run is scored against. Order is priority, not a
@@ -685,7 +697,7 @@ export function NewScenarioPage() {
             reading={reading}
             loading={libraryLoading}
             max={MAX_OBJECTIVES}
-            atCapacity={`A scenario asserts at most ${MAX_OBJECTIVES} objectives.`}
+            atCapacity={OBJECTIVES_CAP_RULE}
             onToggle={(blockId) =>
               void toggleTemplate(blockId, objectives, setObjectives, objectiveBlocks)
             }
@@ -693,7 +705,8 @@ export function NewScenarioPage() {
         </Card>
 
         <Card
-          title="Mutations"
+          title={<CappedTitle title="Mutations" count={mutations.length} max={MAX_MUTATIONS} />}
+          label="Mutations"
           footer={
             <p className="text-xs text-admin-muted">
               Optional. Both arms always receive the identical schedule, so a difference in outcome
@@ -710,7 +723,7 @@ export function NewScenarioPage() {
             reading={reading}
             loading={libraryLoading}
             max={MAX_MUTATIONS}
-            atCapacity={`A scenario schedules at most ${MAX_MUTATIONS} mutations.`}
+            atCapacity={MUTATIONS_CAP_RULE}
             onToggle={(blockId) =>
               void toggleTemplate(blockId, mutations, setMutations, mutationBlocks)
             }

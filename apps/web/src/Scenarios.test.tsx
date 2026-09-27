@@ -21,7 +21,12 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import {
+  describedText,
+  expectNotRefused,
+  expectRefused,
+  submitWithoutPressing,
+} from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1260,6 +1265,219 @@ describe("scenario editor", () => {
  * The rail's figure and this index are one listing, read once by the shell and handed to
  * both, so they cannot come to disagree (ADR 0056).
  */
+/** The card's title, which reads how far into the lab's cap its collection is. */
+function capOf(card: string): string {
+  const region = screen.getByRole("region", { name: card });
+  return within(region).getByRole("heading").textContent ?? "";
+}
+
+const OBJECTIVES_CAP = "a scenario composes at most 24 objectives";
+const MUTATIONS_CAP = "a scenario composes at most 8 mutations";
+const DOCUMENTS_CAP = "a scenario carries at most 12 context documents";
+
+function objectivesUpTo(count: number): BoundObjectiveSchema[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `acknowledge-${index + 1}`,
+    block_id: EXPECTED_BLOCK_ID,
+    severity: "expected" as const,
+    bindings: [],
+  }));
+}
+
+function mutationsUpTo(count: number): ScenarioContentSchema["mutations"] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `mutation-${index + 1}`,
+    block_id: MUTATION_BLOCK_ID,
+    bindings: [],
+  }));
+}
+
+describe("the scenario's caps, each read on its own card", () => {
+  it("counts every card against its cap, and follows each add and removal", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+    expect(capOf("Context documents")).toMatch(/1 of 12$/);
+    expect(capOf("Objectives")).toMatch(/0 of 24$/);
+    expect(capOf("Mutations")).toMatch(/0 of 8$/);
+
+    await addBlock(user, "Objectives", "Add objective block", EXPECTED_BLOCK_ID);
+    await addBlock(user, "Objectives", "Add objective block", EXPECTED_BLOCK_ID);
+    expect(capOf("Objectives")).toMatch(/2 of 24$/);
+    await addBlock(user, "Mutations", "Add mutation block", MUTATION_BLOCK_ID);
+    expect(capOf("Mutations")).toMatch(/1 of 8$/);
+    await user.click(screen.getByRole("checkbox", { name: "Escalation" }));
+    expect(capOf("Context documents")).toMatch(/2 of 12$/);
+
+    const objectives = within(screen.getByRole("region", { name: "Objectives" }));
+    await user.click(objectives.getAllByRole("button", { name: /^Remove/ })[0]);
+    await user.click(objectives.getByRole("button", { name: "Remove it" }));
+    expect(capOf("Objectives")).toMatch(/1 of 24$/);
+    await user.click(screen.getByRole("checkbox", { name: "Address-change policy" }));
+    await user.click(screen.getByRole("checkbox", { name: "Escalation" }));
+    expect(capOf("Context documents")).toMatch(/0 of 12$/);
+    // The card keeps its bare title as its name, whatever the count reads.
+    expect(screen.getByRole("region", { name: "Objectives" })).toBeVisible();
+  });
+
+  for (const [card, picker, blockId, cap, max, content] of [
+    [
+      "Objectives",
+      "Add objective block",
+      EXPECTED_BLOCK_ID,
+      OBJECTIVES_CAP,
+      24,
+      () => ({ objectives: objectivesUpTo(24) }),
+    ],
+    [
+      "Mutations",
+      "Add mutation block",
+      MUTATION_BLOCK_ID,
+      MUTATIONS_CAP,
+      8,
+      () => ({ mutations: mutationsUpTo(8) }),
+    ],
+  ] as const) {
+    it(`refuses Add at the ${card.toLowerCase()} cap with the lab's own sentence, and adds nothing`, async () => {
+      const user = userEvent.setup();
+      current = { ...EMPTY_CONTENT, ...content() };
+      renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+      await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+      const region = within(screen.getByRole("region", { name: card }));
+      expect(capOf(card)).toMatch(new RegExp(`${max} of ${max}$`));
+      const add = region.getByRole("button", { name: "Add" });
+      expectRefused(add, cap);
+      expect(region.getByText(cap)).toBeVisible();
+
+      // Neither the press, nor Enter or Space on it, nor a submission without it adds one.
+      await user.selectOptions(screen.getByLabelText(picker), blockId);
+      await user.click(add);
+      add.focus();
+      await user.keyboard("{Enter}");
+      await user.keyboard(" ");
+      await submitWithoutPressing(add);
+      expect(capOf(card)).toMatch(new RegExp(`${max} of ${max}$`));
+      // Nothing was edited at all: the draft is as the lab stored it.
+      expect(screen.getByText("All changes saved")).toBeVisible();
+
+      // One removed is one the lab will store again.
+      await user.click(region.getAllByRole("button", { name: /^Remove/ })[0]);
+      await user.click(region.getByRole("button", { name: "Remove it" }));
+      expect(capOf(card)).toMatch(new RegExp(`${max - 1} of ${max}$`));
+      expectNotRefused(add);
+      expect(region.queryByText(cap)).toBeNull();
+      await user.selectOptions(screen.getByLabelText(picker), blockId);
+      await user.click(add);
+      expect(capOf(card)).toMatch(new RegExp(`${max} of ${max}$`));
+      expectRefused(add, cap);
+    });
+  }
+
+  it("leaves an unchosen template to its own field to say, and adds nothing for it", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+    for (const [card, picker] of [
+      ["Objectives", "Add objective block"],
+      ["Mutations", "Add mutation block"],
+    ] as const) {
+      // Natively required, so the browser says it on the select; Add is not refused for it.
+      const select = screen.getByLabelText(picker);
+      expect(select).toBeRequired();
+      expect(select).toHaveValue("");
+      const add = within(screen.getByRole("region", { name: card })).getByRole("button", {
+        name: "Add",
+      });
+      expectNotRefused(add);
+      await submitWithoutPressing(add);
+      expect(capOf(card)).toMatch(/0 of \d+$/);
+    }
+  });
+
+  it("keeps an unlisted document off at the context cap, and says why on it", async () => {
+    const user = userEvent.setup();
+    current = {
+      ...EMPTY_CONTENT,
+      context_documents: [
+        { kind: "policy", document_id: "address-change" },
+        ...Array.from({ length: 11 }, (_, index) => ({
+          kind: "faq_entry" as const,
+          document_id: `question-${index + 1}`,
+        })),
+      ],
+    };
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+    expect(capOf("Context documents")).toMatch(/12 of 12$/);
+    // A native control keeps `disabled`, with the reason in `title` and in its description.
+    const escalation = screen.getByRole("checkbox", { name: "Escalation" });
+    expect(escalation).toBeDisabled();
+    expect(escalation).toHaveAttribute("title", DOCUMENTS_CAP);
+    // Read off the line its description names, not the computed description, which would fall
+    // back to `title` and pass on the tooltip alone.
+    expect(describedText(escalation)).toBe(DOCUMENTS_CAP);
+    expect(screen.getByText(DOCUMENTS_CAP)).toBeVisible();
+    // A listed one can always be taken off.
+    const listed = screen.getByRole("checkbox", { name: "Address-change policy" });
+    expect(listed).toBeEnabled();
+    expect(listed).not.toHaveAttribute("title");
+
+    await user.click(listed);
+    expect(capOf("Context documents")).toMatch(/11 of 12$/);
+    expect(escalation).toBeEnabled();
+    expect(escalation).not.toHaveAttribute("title");
+    expect(screen.queryByText(DOCUMENTS_CAP)).toBeNull();
+  });
+
+  it("counts the new scenario's compositions, and turns the chips off at the cap with its reason", async () => {
+    const user = userEvent.setup();
+    const blocks = Array.from({ length: 9 }, (_, index) => ({
+      ...MUTATION_LIBRARY.blocks[0],
+      block_id: `b2d42c7f-6a1e-4a2f-8c6b-3d5f7a9b1c${String(index).padStart(2, "0")}`,
+      name: `mutation-${index + 1}`,
+    }));
+    server.use(
+      http.get("*/api/v1/mutation-blocks", () => HttpResponse.json({ blocks })),
+      http.get("*/api/v1/mutation-blocks/:blockId/draft", ({ params }) =>
+        HttpResponse.json({
+          ...mutationDraft(MUTATION_BLOCK_ID),
+          block_id: String(params.blockId),
+        }),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    await screen.findByRole("button", { name: "mutation-1" });
+    expect(capOf("Objectives")).toMatch(/0 of 24$/);
+    expect(capOf("Mutations")).toMatch(/0 of 8$/);
+    await compose(user, "read-required-document");
+    expect(capOf("Objectives")).toMatch(/1 of 24$/);
+    for (let index = 1; index <= 8; index += 1) {
+      await compose(user, `mutation-${index}`);
+    }
+
+    expect(capOf("Mutations")).toMatch(/8 of 8$/);
+    const ninth = screen.getByRole("button", { name: "mutation-9" });
+    expect(ninth).toBeDisabled();
+    expect(ninth).toHaveAttribute("title", MUTATIONS_CAP);
+    expect(describedText(ninth)).toBe(MUTATIONS_CAP);
+    expect(screen.getByText(MUTATIONS_CAP)).toBeVisible();
+    // A pressed chip stays reachable, so one can be taken back off at the cap.
+    const first = screen.getByRole("button", { name: /mutation-1$/ });
+    expect(first).toBeEnabled();
+
+    await user.click(first);
+    await waitFor(() => expect(capOf("Mutations")).toMatch(/7 of 8$/));
+    expect(ninth).toBeEnabled();
+    expect(ninth).not.toHaveAttribute("title");
+    expect(screen.queryByText(MUTATIONS_CAP)).toBeNull();
+  });
+});
+
 describe("the rail's figure and this index", () => {
   it("says on the rail what the table has rows", async () => {
     renderAt(`/shops/${SHOP_ID}/scenarios`);

@@ -109,6 +109,36 @@ def test_every_collection_a_scenario_carries_is_bounded() -> None:
         )
 
 
+def test_each_cap_is_refused_in_the_sentence_the_scenario_editor_repeats() -> None:
+    """The `*_CAP_RULE` sentences in `apps/web/src/lib/fieldRules.ts`, and the caps they name.
+
+    Refused at the write, one past the cap, and not at the cap itself.
+    """
+    documents = tuple(
+        ContextDocument(kind=ShopDocumentKind.POLICY, document_id=f"policy-{index}")
+        for index in range(MAX_CONTEXT_DOCUMENTS + 1)
+    )
+    objectives = tuple(read_check(f"read-{index}") for index in range(MAX_SCENARIO_OBJECTIVES + 1))
+    mutations = tuple(
+        concurrent_mutation(f"mutation-{index}") for index in range(MAX_SCENARIO_MUTATIONS + 1)
+    )
+    assert (MAX_CONTEXT_DOCUMENTS, MAX_SCENARIO_OBJECTIVES, MAX_SCENARIO_MUTATIONS) == (12, 24, 8)
+
+    publishable_scenario(
+        context_documents=documents[:-1], objectives=objectives[:-1], mutations=mutations[:-1]
+    )
+    with pytest.raises(ScenarioConfigurationError) as refused_documents:
+        publishable_scenario(context_documents=documents)
+    with pytest.raises(ScenarioConfigurationError) as refused_objectives:
+        publishable_scenario(objectives=objectives)
+    with pytest.raises(ScenarioConfigurationError) as refused_mutations:
+        publishable_scenario(mutations=mutations)
+
+    assert str(refused_documents.value) == "a scenario carries at most 12 context documents"
+    assert str(refused_objectives.value) == "a scenario composes at most 24 objectives"
+    assert str(refused_mutations.value) == "a scenario composes at most 8 mutations"
+
+
 def test_one_document_cannot_be_listed_as_context_twice() -> None:
     entry = ContextDocument(kind=ShopDocumentKind.POLICY, document_id="address-change")
 
