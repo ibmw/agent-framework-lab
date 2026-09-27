@@ -12355,7 +12355,7 @@ components:
           title: Default Tone Of Voice Id
         logo:
           anyOf:
-          - $ref: '#/components/schemas/ShopLogoSchema'
+          - $ref: '#/components/schemas/ShopLogoViewSchema'
           - type: 'null'
       additionalProperties: false
       type: object
@@ -12479,6 +12479,7 @@ components:
       - plum
       - forest
       - ochre
+      - brick
       - stone
       title: ShopLogoBackground
       description: The named backgrounds a logo can sit on; a token's hex never moves
@@ -12486,17 +12487,51 @@ components:
     ShopLogoSchema:
       properties:
         mark:
-          $ref: '#/components/schemas/ShopMark'
+          anyOf:
+          - $ref: '#/components/schemas/ShopMark'
+          - type: 'null'
+          description: 'One of the lab''s marks, or null for the monogram: the name''s
+            first letters.'
         background:
           $ref: '#/components/schemas/ShopLogoBackground'
+        mark_colour:
+          anyOf:
+          - $ref: '#/components/schemas/ShopMarkColour'
+          - type: 'null'
+          description: What the mark or the monogram is drawn in. Absent or null takes
+            the colour of the higher contrast against the background. Any pair is
+            accepted.
       additionalProperties: false
       type: object
       required:
       - mark
       - background
       title: ShopLogoSchema
-      description: A mark on a named background; the lab derives the mark's colour
-        from the background.
+      description: 'A logo as a writer sends it: a mark or the monogram, a background,
+        and a mark colour.'
+    ShopLogoViewSchema:
+      properties:
+        mark:
+          anyOf:
+          - $ref: '#/components/schemas/ShopMark'
+          - type: 'null'
+          description: 'One of the lab''s marks, or null for the monogram: the name''s
+            first letters.'
+        background:
+          $ref: '#/components/schemas/ShopLogoBackground'
+        mark_colour:
+          $ref: '#/components/schemas/ShopMarkColour'
+          description: 'What the mark or the monogram is drawn in: the colour chosen,
+            or, for a logo stored before the colour was chosen, the one the lab derived.'
+      additionalProperties: false
+      type: object
+      required:
+      - mark
+      - background
+      - mark_colour
+      title: ShopLogoViewSchema
+      description: A logo as the lab answers it, with the colour its mark is drawn
+        in.
     ShopMark:
       type: string
       enum:
@@ -12531,6 +12566,13 @@ components:
       title: ShopMark
       description: The twenty-eight marks a logo can draw; extend deliberately, never
         from input.
+    ShopMarkColour:
+      type: string
+      enum:
+      - white
+      - ink
+      title: ShopMarkColour
+      description: What a mark or the monogram is drawn in.
     ShopOrderResponse:
       properties:
         order_id:
@@ -12723,7 +12765,7 @@ components:
           title: Published Version Count
         logo:
           anyOf:
-          - $ref: '#/components/schemas/ShopLogoSchema'
+          - $ref: '#/components/schemas/ShopLogoViewSchema'
           - type: 'null'
       additionalProperties: false
       type: object

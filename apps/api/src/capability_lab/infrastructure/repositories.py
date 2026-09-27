@@ -29,6 +29,7 @@ from capability_lab.application.customer_profiles import CUSTOMER_PROFILE_CODEC
 from capability_lab.application.definition_authoring import (
     DefinitionDraftRecord,
     DefinitionListing,
+    DefinitionVersionIntegrityError,
     DefinitionVersionRecord,
     PayloadCodec,
 )
@@ -181,7 +182,7 @@ class PersistedScenarioIntegrityError(RuntimeError):
     """Raised when persisted state no longer matches its recorded fingerprint."""
 
 
-class PersistedDefinitionIntegrityError(RuntimeError):
+class PersistedDefinitionIntegrityError(DefinitionVersionIntegrityError):
     """Raised when a stored published version no longer matches its content fingerprint."""
 
 

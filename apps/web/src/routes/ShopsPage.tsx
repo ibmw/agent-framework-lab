@@ -1,4 +1,4 @@
-import type { ShopLogoSchema, ShopSummarySchema } from "@agent-lab/contracts";
+import type { ShopLogoViewSchema, ShopSummarySchema } from "@agent-lab/contracts";
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
@@ -233,7 +233,7 @@ export function NewShopPage() {
   const [slug, setSlug] = useState("");
   const [locale, setLocale] = useState(DEFAULT_LOCALE.tag);
   const [currencies, setCurrencies] = useState<Currency[]>([DEFAULT_LOCALE.currency]);
-  const [logo, setLogo] = useState<ShopLogoSchema | null>(null);
+  const [logo, setLogo] = useState<ShopLogoViewSchema | null>(null);
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
   // One token for both derived fields: the example answers a name and a locale, and both the

@@ -6,12 +6,14 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from capability_lab.domain.shop import ShopLogo, ShopLogoBackground, ShopMark
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
     create_session_factory,
 )
 from capability_lab.presentation.api import create_app
+from capability_lab.presentation.shops import ShopLogoViewSchema
 
 IDENTITY: dict[str, Any] = {
     "name": "Northstar Outfitters",
@@ -336,7 +338,7 @@ async def test_a_logo_is_optional_on_every_write_and_always_answered(client: Asy
     shop_id = await create_shop(client)
     assert (await client.get(f"/api/v1/shops/{shop_id}/draft")).json()["content"]["logo"] is None
 
-    logo = {"mark": "anchor", "background": "indigo"}
+    logo = {"mark": "anchor", "background": "indigo", "mark_colour": "ink"}
     saved = await client.put(
         f"/api/v1/shops/{shop_id}/draft", json={"payload": {**PAYLOAD, "logo": logo}}
     )
@@ -358,7 +360,7 @@ async def test_a_logo_is_optional_on_every_write_and_always_answered(client: Asy
 
 
 async def test_a_shop_is_created_with_its_logo(client: AsyncClient) -> None:
-    logo = {"mark": "storefront", "background": "pine"}
+    logo = {"mark": "storefront", "background": "brick", "mark_colour": "white"}
     response = await client.post("/api/v1/shops", json={"identity": IDENTITY, "logo": logo})
 
     assert response.status_code == 201
@@ -366,17 +368,77 @@ async def test_a_shop_is_created_with_its_logo(client: AsyncClient) -> None:
 
 
 @pytest.mark.parametrize(
+    ("background", "derived"),
+    [("indigo", "white"), ("ochre", "ink"), ("stone", "ink")],
+)
+async def test_a_writer_without_a_mark_colour_gets_the_higher_contrast_one(
+    client: AsyncClient, background: str, derived: str
+) -> None:
+    """A writer from before the colour was chosen sends `{mark, background}` and still works."""
+    response = await client.post(
+        "/api/v1/shops",
+        json={"identity": IDENTITY, "logo": {"mark": "anchor", "background": background}},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["content"]["logo"] == {
+        "mark": "anchor",
+        "background": background,
+        "mark_colour": derived,
+    }
+
+
+@pytest.mark.parametrize(
+    ("background", "derived"),
+    [("clay", "white"), ("ochre", "ink"), ("brick", "white"), ("stone", "ink")],
+)
+def test_a_logo_stored_without_a_colour_is_answered_with_the_derived_one(
+    background: str, derived: str
+) -> None:
+    stored = ShopLogo(ShopMark.COMPASS, ShopLogoBackground(background), mark_colour=None)
+
+    assert ShopLogoViewSchema.from_domain(stored).model_dump(mode="json") == {
+        "mark": "compass",
+        "background": background,
+        "mark_colour": derived,
+    }
+
+
+async def test_a_low_contrast_pair_and_a_monogram_are_accepted(client: AsyncClient) -> None:
+    """The lab warns about a pair under 3:1 where it is chosen; it never refuses one."""
+    shop_id = await create_shop(client)
+    low = {"mark": "compass", "background": "forest", "mark_colour": "ink"}
+    saved = await client.put(
+        f"/api/v1/shops/{shop_id}/draft", json={"payload": {**PAYLOAD, "logo": low}}
+    )
+    assert saved.status_code == 200
+    assert saved.json()["content"]["logo"] == low
+
+    monogram = {"mark": None, "background": "ochre", "mark_colour": "white"}
+    saved = await client.put(
+        f"/api/v1/shops/{shop_id}/draft", json={"payload": {**PAYLOAD, "logo": monogram}}
+    )
+    assert saved.status_code == 200
+    assert saved.json()["content"]["logo"] == monogram
+    published = await client.post(f"/api/v1/shops/{shop_id}/versions")
+    assert published.json()["content"]["logo"] == monogram
+
+
+@pytest.mark.parametrize(
     "logo",
     [
         {"mark": "rocket", "background": "pine"},
-        {"mark": "anchor", "background": "brick"},
+        {"mark": "anchor", "background": "crimson"},
         {"mark": "anchor", "background": "#1d6241"},
-        {"mark": "anchor", "background": "pine", "mark_colour": "white"},
+        {"mark": "anchor", "background": "pine", "mark_colour": "red"},
+        {"mark": "anchor", "background": "pine", "mark_colour": "#ffffff"},
+        {"mark": "anchor", "background": "pine", "mark_colour": "white", "size": 30},
+        {"background": "pine", "mark_colour": "white"},
         {"mark": "anchor"},
     ],
 )
 async def test_a_logo_outside_the_closed_sets_is_refused_by_the_contract(
-    client: AsyncClient, logo: dict[str, str]
+    client: AsyncClient, logo: dict[str, object]
 ) -> None:
     response = await client.post("/api/v1/shops", json={"identity": IDENTITY, "logo": logo})
 

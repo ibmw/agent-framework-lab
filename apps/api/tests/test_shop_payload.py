@@ -8,6 +8,7 @@ from capability_lab.application.canonical_document import DocumentReader, requir
 from capability_lab.application.canonical_json import CanonicalSerializationError
 from capability_lab.application.shop_payload import (
     SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION,
+    SHOP_PAYLOAD_WITH_DERIVED_COLOUR_LOGO_CANONICAL_SCHEMA_VERSION,
     SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION,
     shop_content_fingerprint,
     shop_payload_canonical_json,
@@ -21,6 +22,7 @@ from capability_lab.domain.shop import (
     ShopLogo,
     ShopLogoBackground,
     ShopMark,
+    ShopMarkColour,
     ShopPayload,
     VariantAvailability,
 )
@@ -28,6 +30,8 @@ from shop_factories import (
     PRE_LOGO_IDENTITY_ONLY_DOCUMENT,
     PRE_LOGO_IDENTITY_ONLY_FINGERPRINT,
     PRE_LOGO_PUBLISHABLE_FINGERPRINT,
+    V2_LOGO_DOCUMENT,
+    V2_LOGO_FINGERPRINT,
     identity,
     product,
     publishable_shop,
@@ -95,7 +99,7 @@ def test_document_declares_its_schema_version_and_rejects_another() -> None:
     assert document["canonical_schema_version"] == SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION
 
     with pytest.raises(CanonicalSerializationError, match="unsupported shop payload schema"):
-        shop_payload_from_document({**document, "canonical_schema_version": "shop-payload-v3"})
+        shop_payload_from_document({**document, "canonical_schema_version": "shop-payload-v4"})
 
 
 def test_malformed_stored_documents_report_the_failing_path() -> None:
@@ -135,7 +139,14 @@ def test_unsupported_enum_values_are_rejected_rather_than_silently_dropped() -> 
         shop_payload_from_document(document)
 
 
-LOGO = ShopLogo(mark=ShopMark.COMPASS, background=ShopLogoBackground.CLAY)
+LOGO = ShopLogo(
+    mark=ShopMark.COMPASS, background=ShopLogoBackground.CLAY, mark_colour=ShopMarkColour.INK
+)
+V1, V2, V3 = (
+    SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION,
+    SHOP_PAYLOAD_WITH_DERIVED_COLOUR_LOGO_CANONICAL_SCHEMA_VERSION,
+    SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION,
+)
 
 
 def test_a_shop_without_a_logo_keeps_the_bytes_and_fingerprint_it_had_before_logos() -> None:
@@ -147,59 +158,128 @@ def test_a_shop_without_a_logo_keeps_the_bytes_and_fingerprint_it_had_before_log
     assert shop_payload_from_document(json.loads(PRE_LOGO_IDENTITY_ONLY_DOCUMENT)) == bare
 
 
-def test_a_shop_with_a_logo_is_written_as_v2_and_round_trips() -> None:
-    payload = replace(publishable_shop(), logo=LOGO)
+def test_a_logo_stored_before_the_colour_was_chosen_keeps_its_bytes_and_fingerprint() -> None:
+    """A v2 document reads as its derived colour and renders back to the bytes it was stored as."""
+    stored = shop_payload_from_document(json.loads(V2_LOGO_DOCUMENT))
+
+    assert stored.logo == ShopLogo(
+        mark=ShopMark.COMPASS, background=ShopLogoBackground.OCHRE, mark_colour=None
+    )
+    assert stored.logo is not None
+    assert stored.logo.drawn_mark_colour is ShopMarkColour.INK
+    assert shop_payload_canonical_json(stored) == V2_LOGO_DOCUMENT
+    assert shop_content_fingerprint(stored) == V2_LOGO_FINGERPRINT
+
+
+def test_a_v2_logo_given_its_colour_is_written_as_v3() -> None:
+    stored = shop_payload_from_document(json.loads(V2_LOGO_DOCUMENT))
+    assert stored.logo is not None
+    chosen = replace(stored, logo=replace(stored.logo, mark_colour=ShopMarkColour.INK))
+
+    assert shop_payload_document(chosen)["canonical_schema_version"] == V3
+    assert shop_content_fingerprint(chosen) != V2_LOGO_FINGERPRINT
+
+
+@pytest.mark.parametrize(
+    ("logo", "written"),
+    [
+        (LOGO, {"background": "clay", "mark": "compass", "mark_colour": "ink"}),
+        (
+            ShopLogo(
+                mark=None, background=ShopLogoBackground.BRICK, mark_colour=ShopMarkColour.WHITE
+            ),
+            {"background": "brick", "mark": None, "mark_colour": "white"},
+        ),
+    ],
+)
+def test_a_shop_with_a_logo_is_written_as_v3_and_round_trips(
+    logo: ShopLogo, written: dict[str, object]
+) -> None:
+    payload = replace(publishable_shop(), logo=logo)
     document = json.loads(shop_payload_canonical_json(payload))
 
-    assert document["canonical_schema_version"] == SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION
-    assert document["logo"] == {"background": "clay", "mark": "compass"}
+    assert document["canonical_schema_version"] == V3
+    assert document["logo"] == written
     assert shop_payload_from_document(document) == payload
     assert shop_content_fingerprint(payload) != PRE_LOGO_PUBLISHABLE_FINGERPRINT
-    assert shop_content_fingerprint(
-        replace(payload, logo=replace(LOGO, background=ShopLogoBackground.PINE))
-    ) != shop_content_fingerprint(payload)
-    assert shop_content_fingerprint(
-        replace(payload, logo=replace(LOGO, mark=ShopMark.ANCHOR))
-    ) != shop_content_fingerprint(payload)
 
 
-def test_code_that_reads_only_v1_refuses_a_logo_document_by_its_token() -> None:
-    """What the codec before the logo does with a v2 document: refuse it, never drop the logo."""
+def test_the_fingerprint_moves_with_the_mark_the_background_and_the_colour() -> None:
+    payload = replace(publishable_shop(), logo=LOGO)
+    baseline = shop_content_fingerprint(payload)
+
+    for other in (
+        replace(LOGO, background=ShopLogoBackground.PINE),
+        replace(LOGO, mark=ShopMark.ANCHOR),
+        replace(LOGO, mark=None),
+        replace(LOGO, mark_colour=ShopMarkColour.WHITE),
+    ):
+        assert shop_content_fingerprint(replace(payload, logo=other)) != baseline
+
+
+@pytest.mark.parametrize("reader_token", [V1, V2])
+def test_code_that_reads_only_v1_or_v2_refuses_a_v3_document_by_its_token(
+    reader_token: str,
+) -> None:
+    """What the codec before the chosen colour does with a v3 document: refuse it by name."""
     document = shop_payload_document(replace(publishable_shop(), logo=LOGO))
 
     with pytest.raises(
-        CanonicalSerializationError, match="unsupported shop payload schema version shop-payload-v2"
+        CanonicalSerializationError, match="unsupported shop payload schema version shop-payload-v3"
     ):
         require_schema_version(
-            DocumentReader(document, "shop payload"),
-            SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION,
-            "shop payload",
+            DocumentReader(document, "shop payload"), reader_token, "shop payload"
         )
 
 
 @pytest.mark.parametrize(
     ("token", "logo", "message"),
     [
+        (V1, None, r"logo is written only under shop-payload-v3"),
         (
-            SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION,
-            None,
-            r"logo is written only under shop-payload-v2",
-        ),
-        (
-            SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION,
+            V1,
             {"background": "clay", "mark": "compass"},
-            r"logo is written only under shop-payload-v2",
+            r"logo is written only under shop-payload-v3",
         ),
-        (SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION, None, r"logo must be an object"),
+        (V2, None, r"logo must be an object"),
+        (V2, {"background": "crimson", "mark": "compass"}, r"logo\.background is not a supported"),
+        (V2, {"background": "clay", "mark": "rocket"}, r"logo\.mark is not a supported ShopMark"),
+        (V2, {"background": "clay", "mark": None}, r"logo\.mark is not a supported ShopMark"),
         (
-            SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION,
-            {"background": "brick", "mark": "compass"},
-            r"logo\.background is not a supported ShopLogoBackground",
+            V2,
+            {"background": "clay", "mark": "compass", "mark_colour": "white"},
+            r"logo\.mark_colour is written only under shop-payload-v3",
         ),
         (
-            SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION,
-            {"background": "clay", "mark": "rocket"},
+            V2,
+            {"background": "clay", "mark": "compass", "mark_colour": None},
+            r"logo\.mark_colour is written only under shop-payload-v3",
+        ),
+        (V3, None, r"logo must be an object"),
+        (
+            V3,
+            {"background": "clay", "mark": "compass"},
+            r"logo\.mark_colour is not a supported ShopMarkColour",
+        ),
+        (
+            V3,
+            {"background": "clay", "mark": "compass", "mark_colour": None},
+            r"logo\.mark_colour is not a supported ShopMarkColour",
+        ),
+        (
+            V3,
+            {"background": "clay", "mark": "compass", "mark_colour": "red"},
+            r"logo\.mark_colour is not a supported ShopMarkColour",
+        ),
+        (
+            V3,
+            {"background": "clay", "mark_colour": "white"},
             r"logo\.mark is not a supported ShopMark",
+        ),
+        (
+            V3,
+            {"background": "crimson", "mark": None, "mark_colour": "white"},
+            r"logo\.background is not a supported ShopLogoBackground",
         ),
     ],
 )
@@ -216,9 +296,10 @@ def test_a_logo_the_token_does_not_promise_is_refused_with_its_path(
         shop_payload_from_document(document)
 
 
-def test_a_v2_document_without_its_logo_is_refused() -> None:
+@pytest.mark.parametrize("token", [V2, V3])
+def test_a_logo_document_without_its_logo_is_refused(token: str) -> None:
     document = shop_payload_document(publishable_shop())
-    document["canonical_schema_version"] = SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION
+    document["canonical_schema_version"] = token
 
     with pytest.raises(CanonicalSerializationError, match=r"shop payload\.logo must be an object"):
         shop_payload_from_document(document)

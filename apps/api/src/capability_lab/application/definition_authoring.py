@@ -49,6 +49,10 @@ class DefinitionVersionNotFoundError(DefinitionResolutionError):
     """Raised when a published version of a definition does not exist."""
 
 
+class DefinitionVersionIntegrityError(RuntimeError):
+    """Raised by a repository when a published version no longer matches its fingerprint."""
+
+
 class DefinitionNotPublishableError(DefinitionResolutionError):
     """Raised when a draft still has publish-gate errors."""
 

@@ -7,7 +7,7 @@ publish gate, and the list projection.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import UUID
 
@@ -19,6 +19,7 @@ from capability_lab.application.definition_authoring import (
     DefinitionNotFoundError,
     DefinitionNotPublishableError,
     DefinitionRepository,
+    DefinitionVersionIntegrityError,
     DefinitionVersionNotFoundError,
     DefinitionVersionRecord,
     PayloadCodec,
@@ -34,6 +35,7 @@ from capability_lab.domain.shop import (
     ShopIdentity,
     ShopLogo,
     ShopPayload,
+    keep_unchosen_logo,
     summarize_shop_changes,
     validate_shop,
 )
@@ -112,6 +114,36 @@ class ShopService(DefinitionAuthoringService[ShopPayload]):
             )
             for listing in self.list_definitions()
         )
+
+    def replace_draft(self, definition_id: UUID, payload: ShopPayload) -> ShopDraftRecord:
+        """Replace the draft, keeping a v2 logo whose derived colour was only echoed back.
+
+        Every writer that reads a draft before writing it sends a stored v2 logo back with the
+        colour the lab answered for it (ADR 0070). Held here rather than in any one client, so
+        a save that leaves the logo alone leaves its bytes alone. The echo is measured against
+        the draft and against the latest published version: a colour changed and changed back
+        draws the published v2 logo again, and must be that logo again.
+        """
+        logo = keep_unchosen_logo(self.get_draft(definition_id).payload.logo, payload.logo)
+        logo = keep_unchosen_logo(self._latest_published_logo(definition_id), logo)
+        if logo is not payload.logo:
+            payload = replace(payload, logo=logo)
+        return super().replace_draft(definition_id, payload)
+
+    def _latest_published_logo(self, definition_id: UUID) -> ShopLogo | None:
+        """The latest published version's logo, or none to compare with.
+
+        A published version that no longer matches its fingerprint does not block a draft save:
+        the save goes ahead without the comparison, and every read of that version still
+        reports the corruption.
+        """
+        latest = self._repository.latest_published_version(shop_definition_id(definition_id))
+        if latest is None:
+            return None
+        try:
+            return self.get_version(definition_id, latest).payload.logo
+        except DefinitionVersionIntegrityError:
+            return None
 
     def create_shop(self, identity: ShopIdentity, logo: ShopLogo | None = None) -> ShopDraftRecord:
         """Create a shop's stable identity and its first, deliberately incomplete draft."""

@@ -5,9 +5,16 @@ introduces it. `shop-payload-v1` is the shop's schema: a lossless canonical docu
 the ADR 0007 serialization rules, so a published version's content fingerprint is stable
 and a stored version round-trips back into the typed domain aggregate.
 
-`shop-payload-v2` is v1 plus a required `logo` (ADR 0070), and it is written only for a shop
-that has one. A shop without a logo is still written as v1, key for key, so no document
-stored before the logo existed renders to different bytes — and no recorded fingerprint moves.
+A shop without a logo is written as v1, key for key, so no document stored before the logo
+existed renders to different bytes — and no recorded fingerprint moves (ADR 0070).
+
+`shop-payload-v3` is v1 plus a required `logo` of `{background, mark, mark_colour}`, where
+`mark` is `null` for the monogram. It is what every logo is written as now.
+
+`shop-payload-v2` is v1 plus a `logo` of `{background, mark}` only, from before the operator
+chose the mark colour. It is still read — as a logo drawn in the colour the lab derived — and
+a logo read from it is written back as v2, so a stored v2 version keeps its bytes and its
+fingerprint. Nothing authors a v2 logo any more.
 """
 
 from __future__ import annotations
@@ -44,6 +51,7 @@ from capability_lab.domain.shop import (
     ShopLogo,
     ShopLogoBackground,
     ShopMark,
+    ShopMarkColour,
     ShopPayload,
     SupportChannel,
     SupportGuideline,
@@ -53,7 +61,8 @@ from capability_lab.domain.shop import (
 )
 
 SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION = "shop-payload-v1"
-SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION = "shop-payload-v2"
+SHOP_PAYLOAD_WITH_DERIVED_COLOUR_LOGO_CANONICAL_SCHEMA_VERSION = "shop-payload-v2"
+SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION = "shop-payload-v3"
 
 
 def _money_document(price: Money) -> dict[str, CanonicalValue]:
@@ -110,8 +119,26 @@ def _product_document(product: Product) -> dict[str, CanonicalValue]:
     }
 
 
+def _logo_document(logo: ShopLogo) -> tuple[str, dict[str, CanonicalValue]]:
+    """The logo's token and object: v3 with its chosen colour, v2 for one read without it."""
+    colour = logo.mark_colour
+    if colour is None:
+        # Only a logo read from v2 has no chosen colour, and v2 had no monogram.
+        if logo.mark is None:
+            raise CanonicalSerializationError("a monogram logo must carry its mark colour")
+        return SHOP_PAYLOAD_WITH_DERIVED_COLOUR_LOGO_CANONICAL_SCHEMA_VERSION, {
+            "background": logo.background.value,
+            "mark": logo.mark.value,
+        }
+    return SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION, {
+        "background": logo.background.value,
+        "mark": None if logo.mark is None else logo.mark.value,
+        "mark_colour": colour.value,
+    }
+
+
 def shop_payload_document(payload: ShopPayload) -> dict[str, CanonicalValue]:
-    """Render one shop payload as its canonical document: v1 without a logo, v2 with one."""
+    """Render one shop payload as its canonical document: v1 without a logo, v3 with one."""
     document: dict[str, CanonicalValue] = {
         "canonical_schema_version": SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION,
         "faq": [
@@ -171,11 +198,7 @@ def shop_payload_document(payload: ShopPayload) -> dict[str, CanonicalValue]:
     # Absent means unwritten: a `"logo": null` would move the bytes, and so the fingerprint,
     # of every shop stored before the logo existed.
     if payload.logo is not None:
-        document["canonical_schema_version"] = SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION
-        document["logo"] = {
-            "background": payload.logo.background.value,
-            "mark": payload.logo.mark.value,
-        }
+        document["canonical_schema_version"], document["logo"] = _logo_document(payload.logo)
     return document
 
 
@@ -256,16 +279,36 @@ def _read_product(reader: DocumentReader) -> Product:
 
 
 def _read_logo(root: DocumentReader) -> ShopLogo | None:
-    """The logo the schema token says the document holds: none under v1, one under v2.
+    """The logo the schema token says the document holds: none under v1, one under v2 or v3.
 
-    A v1 document carrying `logo` — even `null` — is refused rather than read: no writer
-    produces one, and re-rendering it would not give back the bytes that were stored.
+    A key the token does not promise is refused rather than read — `logo` under v1 (even
+    `null`), `mark_colour` under v2 — because no writer produces one, and re-rendering it would
+    not give back the bytes that were stored.
     """
-    if root.text("canonical_schema_version") == SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION:
+    token = root.text("canonical_schema_version")
+    if token == SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION:
         logo = root.reader("logo")
+        return ShopLogo(
+            # `null` is the monogram; an absent `mark` is refused as not a string.
+            mark=(
+                None
+                if logo.has("mark") and logo.optional_text("mark") is None
+                else logo.enum(ShopMark, "mark")
+            ),
+            background=logo.enum(ShopLogoBackground, "background"),
+            mark_colour=logo.enum(ShopMarkColour, "mark_colour"),
+        )
+    if token == SHOP_PAYLOAD_WITH_DERIVED_COLOUR_LOGO_CANONICAL_SCHEMA_VERSION:
+        logo = root.reader("logo")
+        if logo.has("mark_colour"):
+            raise CanonicalSerializationError(
+                f"{logo.path}.mark_colour is written only under "
+                f"{SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION}"
+            )
         return ShopLogo(
             mark=logo.enum(ShopMark, "mark"),
             background=logo.enum(ShopLogoBackground, "background"),
+            mark_colour=None,
         )
     require_schema_version(root, SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION, "shop payload")
     if root.has("logo"):

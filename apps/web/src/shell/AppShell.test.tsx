@@ -614,8 +614,8 @@ describe("the shop switcher", () => {
   it("draws a logo in the bar and the panel, and names neither mark nor colour", async () => {
     renderShell("shop", {
       shops: [
-        { ...SHOPS[0], logo: { mark: "compass", background: "clay" } },
-        { ...SHOPS[1], logo: { mark: "mountain", background: "stone" } },
+        { ...SHOPS[0], logo: { mark: "compass", background: "clay", mark_colour: "white" } },
+        { ...SHOPS[1], logo: { mark: null, background: "stone", mark_colour: "ink" } },
       ] as ShopSummarySchema[],
     });
 
@@ -634,9 +634,10 @@ describe("the shop switcher", () => {
     const badge = other.querySelector("[data-shop-badge]") as HTMLElement;
     expect(badge).toHaveAttribute("aria-hidden", "true");
     expect(badge.className).toContain("h-[26px]");
-    // Stone is light, so the lab draws the mark in ink.
+    // A monogram logo: the initials, on the background and in the colour chosen.
     expect(badge).toHaveStyle({ backgroundColor: "#eceef0", color: "#16332d" });
-    expect(badge.querySelector("svg")).toHaveAttribute("data-mark", "mountain");
+    expect(badge.querySelector("svg")).toBeNull();
+    expect(badge).toHaveTextContent(/^AS$/);
   });
 
   it("opens a menu holding the current shop, the others with their version, and All shops", async () => {

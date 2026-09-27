@@ -105,7 +105,7 @@ describe("toPayload", () => {
   });
 
   it("carries the logo, and a shop without one as null (ADR 0070)", () => {
-    const logo = { mark: "leaf", background: "plum" } as const;
+    const logo = { mark: "leaf", background: "plum", mark_colour: "white" } as const;
 
     expect(toPayload({ ...content, logo }).logo).toEqual(logo);
     expect(toPayload(content).logo).toBeNull();

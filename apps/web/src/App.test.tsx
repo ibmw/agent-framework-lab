@@ -27,6 +27,7 @@ import {
   variantWithoutPriceRule,
 } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
+import { markColourFor } from "./lib/shopLogo";
 import { CREATE_ROUTES, tourAt } from "./lib/tours";
 import { HELD_VALUE_REASON } from "./lib/unsavedWork";
 import { routeTree } from "./routeTree";
@@ -503,6 +504,14 @@ describe("a product's identity across renames, saves and discards", () => {
                 ).toFixed(1),
         },
       })),
+      // A logo written without its colour is answered with the one the lab derives.
+      logo:
+        payload.logo == null
+          ? null
+          : {
+              ...payload.logo,
+              mark_colour: payload.logo.mark_colour ?? markColourFor(payload.logo.background),
+            },
     };
   }
 
@@ -1843,55 +1852,125 @@ describe("every enum has a name", () => {
 });
 
 describe("a shop's logo, on Shop details", () => {
-  it("opens on the initials, takes a mark and a background, and saves both", async () => {
+  function badgeOf(region: HTMLElement): HTMLElement {
+    return region.querySelector("[data-shop-badge]") as HTMLElement;
+  }
+
+  it("opens on the monogram, takes a mark, a background and a colour, and saves all three", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
-    const logo = within(await screen.findByRole("region", { name: "Logo" }));
+    const region = await screen.findByRole("region", { name: "Logo" });
+    const logo = within(region);
     const marks = within(logo.getByRole("group", { name: "Mark" }));
-    expect(marks.getByRole("radio", { name: "None — initials" })).toBeChecked();
-    // No mark, no background to choose: the initials are drawn on the lab's own ground.
-    expect(logo.queryByRole("group", { name: "Background" })).toBeNull();
+    const backgrounds = within(logo.getByRole("group", { name: "Background" }));
+    const colours = within(logo.getByRole("group", { name: "Mark colour" }));
+    expect(
+      marks.getByRole("radio", { name: "Monogram — the first letters of the name" }),
+    ).toBeChecked();
+    // No logo: nothing chosen, and the initials on the lab's own ground.
+    expect(
+      backgrounds.getAllByRole("radio").filter((radio) => (radio as HTMLInputElement).checked),
+    ).toEqual([]);
+    expect(colours.getAllByRole("radio").map((radio) => radio.closest("label")?.title)).toEqual([
+      "White",
+      "Ink",
+    ]);
+    expect(
+      colours.getAllByRole("radio").filter((radio) => (radio as HTMLInputElement).checked),
+    ).toEqual([]);
+    expect(badgeOf(region)).toHaveTextContent(/^NO$/);
 
     await user.click(marks.getByRole("radio", { name: "Compass" }));
-    const backgrounds = within(logo.getByRole("group", { name: "Background" }));
-    // A mark lands on the prototype's Pine, and the lab draws it in white there.
+    // A mark lands on the prototype's Pine, in the colour that reads there.
     expect(backgrounds.getByRole("radio", { name: "Pine" })).toBeChecked();
-    expect(marks.getByRole("radio", { name: "Compass" })).toHaveAccessibleDescription(
-      /draws the mark in white on Pine, the higher contrast of the two at 7\.3:1/,
+    expect(colours.getByRole("radio", { name: "White" })).toBeChecked();
+    expect(logo.getByRole("group", { name: "Mark colour" })).not.toHaveAccessibleDescription(
+      /Hard to read/,
     );
 
     await user.click(backgrounds.getByRole("radio", { name: "Stone" }));
-    expect(marks.getByRole("radio", { name: "Compass" })).toHaveAccessibleDescription(
-      /draws the mark in ink on Stone, the higher contrast of the two at 11\.7:1/,
+    // The colour stays what it was; white on Stone is 1.16:1, so the group says so.
+    expect(colours.getByRole("radio", { name: "White" })).toBeChecked();
+    expect(logo.getByRole("group", { name: "Mark colour" })).toHaveAccessibleDescription(
+      "What the icon or the letters are drawn in. Hard to read against that background. Try the other one.",
     );
-    // There is no mark colour to choose: it follows the background.
-    expect(logo.queryByRole("group", { name: "Mark colour" })).toBeNull();
+    expect(badgeOf(region)).toHaveStyle({ backgroundColor: "#eceef0", color: "#ffffff" });
 
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await user.click(colours.getByRole("radio", { name: "Ink" }));
+    expect(logo.queryByText("Hard to read against that background. Try the other one.")).toBeNull();
+    expect(badgeOf(region)).toHaveStyle({ backgroundColor: "#eceef0", color: "#16332d" });
+    await user.click(colours.getByRole("radio", { name: "White" }));
+    expect(
+      logo.getByText("Hard to read against that background. Try the other one."),
+    ).toBeVisible();
+
+    // A warning, not a refusal: the draft saves the pair as chosen.
+    const save = screen.getByRole("button", { name: "Save draft" });
+    expect(save).toBeEnabled();
+    await user.click(save);
     await waitFor(() => expect(savedDrafts).toHaveLength(1));
-    expect(lastSaved().logo).toEqual({ mark: "compass", background: "stone" });
+    expect(lastSaved().logo).toEqual({
+      mark: "compass",
+      background: "stone",
+      mark_colour: "white",
+    });
   });
 
-  it("gives the logo back to the initials by choosing None", async () => {
+  it("colours the monogram, on Brick, as the prototype draws it", async () => {
     const user = userEvent.setup();
-    currentContent = { ...currentContent, logo: { mark: "anchor", background: "indigo" } };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
-    const logo = within(await screen.findByRole("region", { name: "Logo" }));
-    expect(logo.getByRole("radio", { name: "Anchor" })).toBeChecked();
-    expect(logo.getByRole("radio", { name: "Indigo" })).toBeChecked();
+    const region = await screen.findByRole("region", { name: "Logo" });
+    const logo = within(region);
+    await user.click(logo.getByRole("radio", { name: "Brick" }));
 
-    await user.click(logo.getByRole("radio", { name: "None — initials" }));
-    expect(logo.queryByRole("group", { name: "Background" })).toBeNull();
-    // A mark chosen again lands on the background the shop had, not on Pine.
-    await user.click(logo.getByRole("radio", { name: "Gem" }));
-    expect(logo.getByRole("radio", { name: "Indigo" })).toBeChecked();
+    expect(
+      logo.getByRole("radio", { name: "Monogram — the first letters of the name" }),
+    ).toBeChecked();
+    expect(logo.getByRole("radio", { name: "White" })).toBeChecked();
+    expect(badgeOf(region)).toHaveTextContent(/^NO$/);
+    expect(badgeOf(region)).toHaveStyle({ backgroundColor: "#9d3028", color: "#ffffff" });
 
-    await user.click(logo.getByRole("radio", { name: "None — initials" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedDrafts).toHaveLength(1));
-    expect(lastSaved().logo).toBeNull();
+    expect(lastSaved().logo).toEqual({ mark: null, background: "brick", mark_colour: "white" });
+  });
+
+  it("sends a v2 logo back exactly as answered when Products saves, so the lab keeps it", async () => {
+    // The lab keeps a v2 logo whose derived colour comes back unchanged (ADR 0070); the
+    // workspace's part is to send back what it was answered, and nothing else for the logo.
+    const answered = { mark: "compass", background: "ochre", mark_colour: "ink" } as const;
+    currentContent = { ...currentContent, logo: answered };
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products`);
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    await user.click(screen.getByRole("button", { name: "New product" }));
+    const card = within(await screen.findByRole("region", { name: "Details" }));
+    await user.click(card.getByLabelText("Title"));
+    await user.paste("Trail Flask");
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().logo).toEqual(answered);
+    expect(lastSaved().products.map((product) => product.title)).toContain("Trail Flask");
+  });
+
+  it("opens a logo stored before the colour was chosen on the colour the lab derived", async () => {
+    // A v2 logo on Ochre is answered with the derived ink, and the card shows exactly that.
+    currentContent = {
+      ...currentContent,
+      logo: { mark: "anchor", background: "ochre", mark_colour: "ink" },
+    };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const region = await screen.findByRole("region", { name: "Logo" });
+    const logo = within(region);
+    expect(logo.getByRole("radio", { name: "Anchor" })).toBeChecked();
+    expect(logo.getByRole("radio", { name: "Ochre" })).toBeChecked();
+    expect(logo.getByRole("radio", { name: "Ink" })).toBeChecked();
+    expect(logo.getByRole("radio", { name: "White" })).not.toBeChecked();
+    expect(badgeOf(region)).toHaveStyle({ backgroundColor: "#a8802a", color: "#16332d" });
   });
 });
 

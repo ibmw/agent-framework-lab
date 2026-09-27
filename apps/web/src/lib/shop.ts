@@ -44,6 +44,10 @@ export function isPlaceholderHandle(handle: string): boolean {
  * that a draft write must not echo back, and the workspace keys each product for itself
  * (ADR 0061). Editing therefore works on the returned content and this projection strips
  * both before every save.
+ *
+ * The logo goes back as answered, `mark_colour` included. For a logo stored before the colour
+ * was chosen that colour is derived, but nothing in the answer says so, and the lab keeps the
+ * stored logo when the colour it answered comes back unchanged (ADR 0070).
  */
 export function toPayload(content: ShopContentSchema | ShopDraft): ShopPayloadSchema {
   return {

@@ -461,14 +461,13 @@ class ShopIdentity:
         return self.currencies[0]
 
 
-# A shop's logo (ADR 0070): one of twenty-eight marks on one of seven named backgrounds. It is
-# authored content of the payload and nothing an agent reads. Both axes are closed; a
-# background token's hex is frozen once published, so a different colour is a new token.
+# A shop's logo (ADR 0070): one of twenty-eight marks, or the monogram, on one of eight named
+# backgrounds, drawn in one of two mark colours. It is authored content of the payload and
+# nothing an agent reads. Every axis is closed; a background token's hex is frozen once
+# published, so a different colour is a new token.
 #
-# The mark's colour is not authored. The lab draws it in White or Ink, whichever is higher in
-# contrast against the background, and every background in the palette gives that choice at
-# least the 3:1 of WCAG 2.2 SC 1.4.11 — so no logo the payload can hold is unreadable, and
-# there is nothing to refuse.
+# The operator chooses the mark colour, and the lab accepts any pair: a pair under the 3:1 of
+# WCAG 2.2 SC 1.4.11 is warned about where it is chosen, never refused.
 class ShopMark(StrEnum):
     """The twenty-eight marks a logo can draw; extend deliberately, never from input."""
 
@@ -511,11 +510,12 @@ class ShopLogoBackground(StrEnum):
     PLUM = "plum"
     FOREST = "forest"
     OCHRE = "ochre"
+    BRICK = "brick"
     STONE = "stone"
 
 
 class ShopMarkColour(StrEnum):
-    """What the lab draws a mark in; derived from the background, never authored."""
+    """What a mark or the monogram is drawn in."""
 
     WHITE = "white"
     INK = "ink"
@@ -528,6 +528,7 @@ SHOP_LOGO_BACKGROUND_HEX: dict[ShopLogoBackground, str] = {
     ShopLogoBackground.PLUM: "#6b3f8c",
     ShopLogoBackground.FOREST: "#16332d",
     ShopLogoBackground.OCHRE: "#a8802a",
+    ShopLogoBackground.BRICK: "#9d3028",
     ShopLogoBackground.STONE: "#eceef0",
 }
 
@@ -558,7 +559,10 @@ def contrast_ratio(first: str, second: str) -> float:
 
 
 def mark_colour_for(background: ShopLogoBackground) -> ShopMarkColour:
-    """The mark colour of the higher contrast against `background`."""
+    """The mark colour of the higher contrast against `background`.
+
+    What a logo written before the mark colour was chosen is drawn in (`shop-payload-v2`).
+    """
     ground = SHOP_LOGO_BACKGROUND_HEX[background]
     return max(
         ShopMarkColour,
@@ -566,22 +570,69 @@ def mark_colour_for(background: ShopLogoBackground) -> ShopMarkColour:
     )
 
 
+def is_low_contrast(background: ShopLogoBackground, mark_colour: ShopMarkColour) -> bool:
+    """Whether the pair falls under 3:1 — the editor warns about it; nothing refuses it."""
+    return (
+        contrast_ratio(SHOP_LOGO_BACKGROUND_HEX[background], SHOP_MARK_COLOUR_HEX[mark_colour])
+        < MIN_MARK_CONTRAST
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ShopLogo:
-    """A mark on a background; the mark's colour follows from the background."""
+    """A mark, or the monogram, on a background, in a mark colour.
 
-    mark: ShopMark
+    `mark` is `None` for the monogram: the first letters of the shop's name, which follow it
+    when the shop is renamed. `mark_colour` is `None` only for a logo written before the colour
+    was chosen, which is drawn in the colour the lab derived then (`mark_colour_for`) and keeps
+    the bytes it was stored with. Every logo authored now carries its colour.
+    """
+
+    mark: ShopMark | None
     background: ShopLogoBackground
+    mark_colour: ShopMarkColour | None
 
     def __post_init__(self) -> None:
-        _require_instance(self.mark, ShopMark, "a shop logo must use one of the lab's marks")
+        if self.mark is not None:
+            _require_instance(self.mark, ShopMark, "a shop logo must use one of the lab's marks")
         _require_instance(
             self.background, ShopLogoBackground, "a shop logo must use one of the lab's backgrounds"
         )
+        if self.mark_colour is not None:
+            _require_instance(
+                self.mark_colour,
+                ShopMarkColour,
+                "a shop logo must use one of the lab's mark colours",
+            )
+        elif self.mark is None:
+            raise ShopConfigurationError("a monogram logo must choose its mark colour")
 
     @property
-    def mark_colour(self) -> ShopMarkColour:
-        return mark_colour_for(self.background)
+    def drawn_mark_colour(self) -> ShopMarkColour:
+        """What the mark is drawn in: the chosen colour, or the derived one when none was."""
+        if self.mark_colour is None:
+            return mark_colour_for(self.background)
+        return self.mark_colour
+
+
+def keep_unchosen_logo(stored: ShopLogo | None, incoming: ShopLogo | None) -> ShopLogo | None:
+    """The logo a draft write keeps: the stored one, where the write draws exactly what it drew.
+
+    A logo stored before the colour was chosen is answered with the colour the lab derived, and
+    a writer echoes that colour back. The echo is not a choice: the same mark on the same
+    background in the same drawn colour keeps the stored logo, and so its bytes. Anything
+    different — the other colour, another mark or background — is the incoming logo.
+    """
+    if (
+        stored is not None
+        and incoming is not None
+        and stored.mark_colour is None
+        and incoming.mark == stored.mark
+        and incoming.background == stored.background
+        and incoming.drawn_mark_colour == stored.drawn_mark_colour
+    ):
+        return stored
+    return incoming
 
 
 @dataclass(frozen=True, slots=True)

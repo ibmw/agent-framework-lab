@@ -19,7 +19,13 @@ from capability_lab.application.shops import (
     shop_definition_id,
 )
 from capability_lab.domain.definitions import DefinitionType
-from capability_lab.domain.shop import ShopLogo, ShopLogoBackground, ShopMark, ShopPayload
+from capability_lab.domain.shop import (
+    ShopLogo,
+    ShopLogoBackground,
+    ShopMark,
+    ShopMarkColour,
+    ShopPayload,
+)
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -33,6 +39,8 @@ from capability_lab.infrastructure.repositories import (
 from shop_factories import (
     PRE_LOGO_IDENTITY_ONLY_DOCUMENT,
     PRE_LOGO_IDENTITY_ONLY_FINGERPRINT,
+    V2_LOGO_DOCUMENT,
+    V2_LOGO_FINGERPRINT,
     identity,
     product,
     publishable_shop,
@@ -321,11 +329,99 @@ def test_a_version_published_before_logos_existed_still_reads(tmp_path: Path) ->
     assert stored.published.content_fingerprint == PRE_LOGO_IDENTITY_ONLY_FINGERPRINT
 
 
+V2_LOGO = ShopLogo(mark=ShopMark.COMPASS, background=ShopLogoBackground.OCHRE, mark_colour=None)
+
+
+def test_a_logo_stored_before_the_colour_was_chosen_still_reads(tmp_path: Path) -> None:
+    """Rows holding the exact v2 document and fingerprint the codec wrote at fcaa115."""
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'v2-logo.db'}")
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    with session_scope(factory) as writing:
+        service = ShopService(shop_repository(writing), AdvancingClock())
+        record = service.create_shop(identity())
+        service.replace_draft(record.definition.id, publishable_shop())
+        service.publish(record.definition.id)
+
+    with engine.begin() as connection:
+        for statement in (
+            "UPDATE definition_versions SET payload = json(:payload), "
+            "content_fingerprint = :fingerprint WHERE version = 1",
+            "UPDATE definition_drafts SET payload = json(:payload)",
+        ):
+            connection.execute(
+                text(statement),
+                {"payload": V2_LOGO_DOCUMENT.decode(), "fingerprint": V2_LOGO_FINGERPRINT},
+            )
+
+    with session_scope(factory) as reading:
+        reader = ShopService(shop_repository(reading), AdvancingClock())
+        published = reader.get_version(record.definition.id, 1)
+        draft = reader.get_draft(record.definition.id)
+        preview = reader.preview_draft(record.definition.id)
+        listed = reader.list_shops()
+
+    for payload in (published.payload, draft.payload):
+        assert payload == ShopPayload(identity=identity(), logo=V2_LOGO)
+        assert payload.logo is not None
+        assert payload.logo.drawn_mark_colour is ShopMarkColour.INK
+    assert published.published.content_fingerprint == V2_LOGO_FINGERPRINT
+    assert preview.matches_latest_published
+    assert [summary.logo for summary in listed] == [V2_LOGO]
+    with engine.connect() as connection:
+        stored = connection.execute(
+            text("SELECT content_fingerprint FROM definition_versions WHERE version = 1")
+        ).scalar_one()
+    assert stored == V2_LOGO_FINGERPRINT
+
+
+@pytest.mark.parametrize(
+    ("sent", "token"),
+    [
+        # The colour the lab answered for the v2 logo, echoed back: not a choice.
+        (replace(V2_LOGO, mark_colour=ShopMarkColour.INK), "shop-payload-v2"),
+        # The other colour is a choice, and a chosen colour is written as v3.
+        (replace(V2_LOGO, mark_colour=ShopMarkColour.WHITE), "shop-payload-v3"),
+        (replace(V2_LOGO, mark=ShopMark.ANCHOR, mark_colour=ShopMarkColour.INK), "shop-payload-v3"),
+    ],
+)
+def test_a_v2_draft_keeps_its_bytes_unless_its_logo_changes(
+    tmp_path: Path, sent: ShopLogo, token: str
+) -> None:
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'v2-draft.db'}")
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    with session_scope(factory) as writing:
+        record = ShopService(shop_repository(writing), AdvancingClock()).create_shop(identity())
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE definition_drafts SET payload = json(:payload)"),
+            {"payload": V2_LOGO_DOCUMENT.decode()},
+        )
+
+    with session_scope(factory) as writing:
+        service = ShopService(shop_repository(writing), AdvancingClock())
+        service.replace_draft(record.definition.id, ShopPayload(identity=identity(), logo=sent))
+
+    with engine.connect() as connection:
+        document = connection.execute(text("SELECT payload FROM definition_drafts")).scalar_one()
+    assert f'"{token}"' in document
+    with session_scope(factory) as reading:
+        reread = ShopService(shop_repository(reading), AdvancingClock()).get_draft(
+            record.definition.id
+        )
+    assert reread.payload.logo == (V2_LOGO if token == "shop-payload-v2" else sent)
+    if token == "shop-payload-v2":
+        assert shop_content_fingerprint(reread.payload) == V2_LOGO_FINGERPRINT
+
+
 def test_a_logo_edit_mints_a_new_version_that_reads_back(tmp_path: Path) -> None:
     engine = create_database_engine(f"sqlite:///{tmp_path / 'logo.db'}")
     Base.metadata.create_all(engine)
     factory = create_session_factory(engine)
-    logo = ShopLogo(mark=ShopMark.TRUCK, background=ShopLogoBackground.OCHRE)
+    logo = ShopLogo(
+        mark=ShopMark.TRUCK, background=ShopLogoBackground.OCHRE, mark_colour=ShopMarkColour.WHITE
+    )
     with session_scope(factory) as writing:
         service = ShopService(shop_repository(writing), AdvancingClock())
         record = service.create_shop(identity())
@@ -351,7 +447,9 @@ def test_a_logo_edit_mints_a_new_version_that_reads_back(tmp_path: Path) -> None
 
 
 def test_a_shop_can_be_created_with_its_logo(service: ShopService) -> None:
-    logo = ShopLogo(mark=ShopMark.STOREFRONT, background=ShopLogoBackground.PINE)
+    logo = ShopLogo(
+        mark=None, background=ShopLogoBackground.BRICK, mark_colour=ShopMarkColour.WHITE
+    )
     record = service.create_shop(identity(), logo)
 
     assert service.get_draft(record.definition.id).payload.logo == logo

@@ -1,4 +1,4 @@
-import type { ShopLogoSchema, ShopMark } from "@agent-lab/contracts";
+import type { ShopLogoViewSchema, ShopMark } from "@agent-lab/contracts";
 import { logoColours, SHOP_MARK_PATHS, shopInitials } from "../lib/shopLogo";
 
 /** The four sizes the frames draw: the panel, the bar and the index row, the editor preview. */
@@ -35,7 +35,8 @@ export function ShopMarkGlyph({ mark, size }: { mark: ShopMark; size: number }) 
 }
 
 /**
- * A shop's badge: its logo, or its initials on `lab-ink` when it has none (ADR 0070).
+ * A shop's badge: its mark or its monogram, on its background in its mark colour, or its
+ * initials in white on `lab-ink` when it has no logo (ADR 0070).
  *
  * Hidden from a reader everywhere it is drawn: the shop's name is beside it, and a badge that
  * announced itself would say the name twice — or, for a mark, say "compass" where the reader
@@ -47,7 +48,7 @@ export function ShopBadge({
   size,
 }: {
   name: string;
-  logo: ShopLogoSchema | null;
+  logo: ShopLogoViewSchema | null;
   size: BadgeSize;
 }) {
   const metrics = METRICS[size];
@@ -59,7 +60,11 @@ export function ShopBadge({
       className={`flex flex-none items-center justify-center font-bold tracking-[0.02em] ${metrics.box}`}
       style={{ backgroundColor: colours.background, color: colours.mark }}
     >
-      {logo === null ? shopInitials(name) : <ShopMarkGlyph mark={logo.mark} size={metrics.glyph} />}
+      {logo === null || logo.mark === null ? (
+        shopInitials(name)
+      ) : (
+        <ShopMarkGlyph mark={logo.mark} size={metrics.glyph} />
+      )}
     </span>
   );
 }

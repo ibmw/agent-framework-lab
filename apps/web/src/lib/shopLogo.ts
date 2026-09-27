@@ -1,12 +1,17 @@
-import type { ShopLogoBackground, ShopLogoSchema, ShopMark } from "@agent-lab/contracts";
+import type {
+  ShopLogoBackground,
+  ShopLogoViewSchema,
+  ShopMark,
+  ShopMarkColour,
+} from "@agent-lab/contracts";
 
 /**
  * A shop's logo, as the workspace draws it (ADR 0070).
  *
- * The lab holds a mark and a background, both closed sets; this module holds how each one is
- * drawn. The mark's colour is not held anywhere: it is White or Ink, whichever is higher in
- * contrast against the background, derived here exactly as `domain/shop.py` derives it —
- * `shopLogo.test.ts` reads the palette out of that file and asserts both agree.
+ * The lab holds a mark or the monogram, a background and a mark colour, all closed sets; this
+ * module holds how each one is drawn and when a pair is hard to read. The palette and the
+ * contrast rule are the ones `domain/shop.py` holds — `shopLogo.test.ts` reads the palette out
+ * of that file and asserts both sides warn about the same pairs.
  */
 
 /**
@@ -127,9 +132,8 @@ export function markName(mark: ShopMark): string {
 }
 
 /**
- * The backgrounds, in the prototype's order, minus its Brick: `#9d3028` is the workspace's
- * validation and destructive red, and the warm red is destructive and nothing else. A token's
- * hex is frozen once published — a different colour is a new token.
+ * The backgrounds, in the prototype's order and with its names. A token's hex is frozen once
+ * published — a different colour is a new token.
  */
 export const SHOP_LOGO_BACKGROUNDS: readonly {
   value: ShopLogoBackground;
@@ -142,15 +146,15 @@ export const SHOP_LOGO_BACKGROUNDS: readonly {
   { value: "plum", name: "Plum", hex: "#6b3f8c" },
   { value: "forest", name: "Forest", hex: "#16332d" },
   { value: "ochre", name: "Ochre", hex: "#a8802a" },
+  { value: "brick", name: "Brick", hex: "#9d3028" },
   { value: "stone", name: "Stone", hex: "#eceef0" },
 ];
 
-export type MarkColour = "white" | "ink";
-
-export const MARK_COLOURS: Record<MarkColour, { name: string; hex: string }> = {
-  white: { name: "white", hex: "#ffffff" },
-  ink: { name: "ink", hex: "#16332d" },
-};
+/** The two mark colours, in the prototype's order and with its names. */
+export const SHOP_MARK_COLOURS: readonly { value: ShopMarkColour; name: string; hex: string }[] = [
+  { value: "white", name: "White", hex: "#ffffff" },
+  { value: "ink", name: "Ink", hex: "#16332d" },
+];
 
 /** WCAG 2.2 SC 1.4.11: a graphical object against its adjacent colour. */
 export const MIN_MARK_CONTRAST = 3;
@@ -184,27 +188,43 @@ export function backgroundHex(background: ShopLogoBackground): string {
   return entry.hex;
 }
 
-/** The mark colour of the higher contrast against `background`, as the lab derives it. */
-export function markColourFor(background: ShopLogoBackground): MarkColour {
+export function markColourHex(colour: ShopMarkColour): string {
+  const entry = SHOP_MARK_COLOURS.find((candidate) => candidate.value === colour);
+  if (entry === undefined) {
+    throw new Error(`Unknown mark colour ${colour}`);
+  }
+  return entry.hex;
+}
+
+/**
+ * The mark colour of the higher contrast against `background`: what a logo takes when its
+ * background is chosen before its colour.
+ */
+export function markColourFor(background: ShopLogoBackground): ShopMarkColour {
   const ground = backgroundHex(background);
-  return contrastRatio(ground, MARK_COLOURS.white.hex) >=
-    contrastRatio(ground, MARK_COLOURS.ink.hex)
+  return contrastRatio(ground, markColourHex("white")) >=
+    contrastRatio(ground, markColourHex("ink"))
     ? "white"
     : "ink";
 }
 
-/** What a badge paints: the ground and the ink, for a logo or for the initials without one. */
-export function logoColours(logo: ShopLogoSchema | null): { background: string; mark: string } {
-  if (logo === null) {
-    return { background: "var(--color-lab-ink)", mark: MARK_COLOURS.white.hex };
-  }
-  return {
-    background: backgroundHex(logo.background),
-    mark: MARK_COLOURS[markColourFor(logo.background)].hex,
-  };
+/** Whether the pair falls under 3:1: the editor warns about it, and saves it all the same. */
+export function isLowContrast(background: ShopLogoBackground, colour: ShopMarkColour): boolean {
+  return contrastRatio(backgroundHex(background), markColourHex(colour)) < MIN_MARK_CONTRAST;
 }
 
-/** A shop without a logo is its initials: the first letters of the name's first two words. */
+/** The prototype's sentence under *Mark colour* for a pair under 3:1. */
+export const LOW_CONTRAST_WARNING = "Hard to read against that background. Try the other one.";
+
+/** What a badge paints: the ground and the ink, for a logo or for the initials without one. */
+export function logoColours(logo: ShopLogoViewSchema | null): { background: string; mark: string } {
+  if (logo === null) {
+    return { background: "var(--color-lab-ink)", mark: markColourHex("white") };
+  }
+  return { background: backgroundHex(logo.background), mark: markColourHex(logo.mark_colour) };
+}
+
+/** The monogram: the first letters of the name's first two words. */
 export function shopInitials(name: string): string {
   return name
     .split(" ")
@@ -214,16 +234,19 @@ export function shopInitials(name: string): string {
     .toUpperCase();
 }
 
-/** The background a mark lands on when a shop without a logo picks one: the prototype's Pine. */
+/** The background a logo starts on when a shop without one picks a mark or a colour: Pine. */
 export const DEFAULT_LOGO_BACKGROUND: ShopLogoBackground = "pine";
 
-/** What the preview says under the mark tiles: where the letters come from, or what the lab drew. */
-export function logoPreviewNote(logo: ShopLogoSchema | null): string {
+/** The name the prototype gives the first mark tile. */
+export const MONOGRAM_NAME = "Monogram — the first letters of the name";
+
+/** What the preview says beside the badge: where the letters come from, or that an icon stays. */
+export function logoPreviewNote(logo: ShopLogoViewSchema | null): string {
   if (logo === null) {
-    return "No logo: the badge is the first letters of the name, and follows it if the shop is renamed.";
+    return "Letters taken from the name, on the lab's own ink until you pick a background. They change if the shop is renamed.";
   }
-  const colour = markColourFor(logo.background);
-  const ground = SHOP_LOGO_BACKGROUNDS.find((entry) => entry.value === logo.background);
-  const ratio = contrastRatio(backgroundHex(logo.background), MARK_COLOURS[colour].hex);
-  return `The lab draws the mark in ${MARK_COLOURS[colour].name} on ${ground?.name ?? logo.background}, the higher contrast of the two at ${ratio.toFixed(1)}:1. It stays whatever the shop is called.`;
+  if (logo.mark === null) {
+    return "Letters taken from the name — they change if the shop is renamed.";
+  }
+  return "This icon stays whatever the shop is called.";
 }

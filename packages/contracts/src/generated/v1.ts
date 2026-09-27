@@ -5566,7 +5566,7 @@ export interface components {
       tone_of_voice_guidelines: components["schemas"]["ToneOfVoiceSchema"][];
       /** Default Tone Of Voice Id */
       default_tone_of_voice_id: string | null;
-      logo: components["schemas"]["ShopLogoSchema"] | null;
+      logo: components["schemas"]["ShopLogoViewSchema"] | null;
     };
     /**
      * ShopDocumentKind
@@ -5621,14 +5621,36 @@ export interface components {
      * @description The named backgrounds a logo can sit on; a token's hex never moves once published.
      * @enum {string}
      */
-    ShopLogoBackground: "clay" | "pine" | "indigo" | "plum" | "forest" | "ochre" | "stone";
+    ShopLogoBackground:
+      | "clay"
+      | "pine"
+      | "indigo"
+      | "plum"
+      | "forest"
+      | "ochre"
+      | "brick"
+      | "stone";
     /**
      * ShopLogoSchema
-     * @description A mark on a named background; the lab derives the mark's colour from the background.
+     * @description A logo as a writer sends it: a mark or the monogram, a background, and a mark colour.
      */
     ShopLogoSchema: {
-      mark: components["schemas"]["ShopMark"];
+      /** @description One of the lab's marks, or null for the monogram: the name's first letters. */
+      mark: components["schemas"]["ShopMark"] | null;
       background: components["schemas"]["ShopLogoBackground"];
+      /** @description What the mark or the monogram is drawn in. Absent or null takes the colour of the higher contrast against the background. Any pair is accepted. */
+      mark_colour?: components["schemas"]["ShopMarkColour"] | null;
+    };
+    /**
+     * ShopLogoViewSchema
+     * @description A logo as the lab answers it, with the colour its mark is drawn in.
+     */
+    ShopLogoViewSchema: {
+      /** @description One of the lab's marks, or null for the monogram: the name's first letters. */
+      mark: components["schemas"]["ShopMark"] | null;
+      background: components["schemas"]["ShopLogoBackground"];
+      /** @description What the mark or the monogram is drawn in: the colour chosen, or, for a logo stored before the colour was chosen, the one the lab derived. */
+      mark_colour: components["schemas"]["ShopMarkColour"];
     };
     /**
      * ShopMark
@@ -5664,6 +5686,12 @@ export interface components {
       | "home"
       | "truck"
       | "globe";
+    /**
+     * ShopMarkColour
+     * @description What a mark or the monogram is drawn in.
+     * @enum {string}
+     */
+    ShopMarkColour: "white" | "ink";
     /**
      * ShopOrderResponse
      * @description One authored order, its findings, and the statuses it may still move to.
@@ -5763,7 +5791,7 @@ export interface components {
       latest_published_version: number | null;
       /** Published Version Count */
       published_version_count: number;
-      logo: components["schemas"]["ShopLogoSchema"] | null;
+      logo: components["schemas"]["ShopLogoViewSchema"] | null;
     };
     /** ShopVersionListResponse */
     ShopVersionListResponse: {

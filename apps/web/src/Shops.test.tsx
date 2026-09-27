@@ -504,7 +504,7 @@ describe("the shop logo (ADR 0070)", () => {
         updated_at: "2026-08-23T12:05:00+00:00",
         latest_published_version: 1,
         published_version_count: 1,
-        logo: { mark: "compass", background: "ochre" },
+        logo: { mark: "compass", background: "ochre", mark_colour: "white" },
       },
       {
         shop_id: "1b2c3d4e-5f60-4718-9a0b-c1d2e3f4a5b6",
@@ -523,7 +523,7 @@ describe("the shop logo (ADR 0070)", () => {
     return link.closest("tr") as HTMLElement;
   }
 
-  it("draws each index row's badge: the mark in its derived colour, or the initials", async () => {
+  it("draws each index row's badge: the mark in its chosen colour, or the initials", async () => {
     server.use(http.get("*/api/v1/shops", () => HttpResponse.json(listed)));
     renderShops();
     await screen.findByRole("link", { name: "Northstar Outfitters" });
@@ -531,8 +531,8 @@ describe("the shop logo (ADR 0070)", () => {
     const logod = rowOf("Northstar Outfitters").querySelector("[data-shop-badge]") as HTMLElement;
     expect(logod).toHaveAttribute("aria-hidden", "true");
     expect(logod.className).toContain("h-[30px]");
-    // Ochre passes 3:1 with both; the lab draws the higher of the two, which is ink.
-    expect(logod).toHaveStyle({ backgroundColor: "#a8802a", color: "#16332d" });
+    // Ochre passes 3:1 with both, and the operator chose white: the badge draws white.
+    expect(logod).toHaveStyle({ backgroundColor: "#a8802a", color: "#ffffff" });
     expect(logod.querySelector("svg")).toHaveAttribute("data-mark", "compass");
     expect(logod).not.toHaveTextContent("NO");
 
@@ -554,14 +554,45 @@ describe("the shop logo (ADR 0070)", () => {
     const page = await createShopPage();
 
     const logo = within(page.getByRole("region", { name: "Logo" }));
-    expect(logo.getByRole("radio", { name: "None — initials" })).toBeChecked();
-    expect(logo.getAllByRole("radio")).toHaveLength(29);
+    expect(
+      logo.getByRole("radio", { name: "Monogram — the first letters of the name" }),
+    ).toBeChecked();
+    // The monogram and 28 marks, eight backgrounds, two colours.
+    expect(logo.getAllByRole("radio")).toHaveLength(29 + 8 + 2);
+    expect(
+      logo.getAllByRole("radio").filter((radio) => (radio as HTMLInputElement).checked),
+    ).toHaveLength(1);
 
     await user.type(page.getByLabelText("Name"), "Harbour Lane Supply");
-    // The preview is the initials of the name as typed.
-    expect(logo.getByText("HL")).toHaveAttribute("aria-hidden", "true");
+    // The preview is the initials of the name as typed, on the lab's own ground.
+    const badge = page
+      .getByRole("region", { name: "Logo" })
+      .querySelector("[data-shop-badge]") as HTMLElement;
+    expect(badge).toHaveTextContent(/^HL$/);
+    expect(badge).toHaveAttribute("aria-hidden", "true");
     await user.click(page.getByRole("button", { name: "Create shop" }));
 
+    await waitFor(() => expect(created).not.toBeNull());
+    expect(created).not.toHaveProperty("logo");
+  });
+
+  it("keeps a shop without a logo without one when the monogram is chosen again", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const page = await createShopPage();
+    const logo = within(page.getByRole("region", { name: "Logo" }));
+    const monogram = logo.getByRole("radio", { name: "Monogram — the first letters of the name" });
+
+    await user.click(monogram);
+    monogram.focus();
+    await user.keyboard(" ");
+
+    expect(monogram).toBeChecked();
+    expect(
+      logo.getAllByRole("radio").filter((radio) => (radio as HTMLInputElement).checked),
+    ).toEqual([monogram]);
+    await user.type(page.getByLabelText("Name"), "Harbour Lane Supply");
+    await user.click(page.getByRole("button", { name: "Create shop" }));
     await waitFor(() => expect(created).not.toBeNull());
     expect(created).not.toHaveProperty("logo");
   });
@@ -575,33 +606,73 @@ describe("the shop logo (ADR 0070)", () => {
     const logo = within(page.getByRole("region", { name: "Logo" }));
     await user.click(logo.getByRole("radio", { name: "Anchor" }));
     await user.click(logo.getByRole("radio", { name: "Clay" }));
+    await user.click(logo.getByRole("radio", { name: "Ink" }));
+    // Ink on Clay is 2.96:1: said under Mark colour, and Create is not refused for it.
+    expect(logo.getByRole("group", { name: "Mark colour" })).toHaveAccessibleDescription(
+      /Hard to read against that background\. Try the other one\./,
+    );
     await user.click(page.getByRole("button", { name: "Create shop" }));
 
     await waitFor(() => expect(created).not.toBeNull());
-    expect(created?.logo).toEqual({ mark: "anchor", background: "clay" });
+    expect(created?.logo).toEqual({ mark: "anchor", background: "clay", mark_colour: "ink" });
   });
 });
 
-describe("the logo card's background (ADR 0070)", () => {
-  it("keeps the background chosen before None when a mark is chosen again", async () => {
+describe("the logo card's swatches (ADR 0070)", () => {
+  it("offers the prototype's eight backgrounds and two mark colours, each named by its colour", async () => {
+    renderNewShop();
+    const page = await createShopPage();
+    const logo = within(page.getByRole("region", { name: "Logo" }));
+
+    const backgrounds = within(logo.getByRole("group", { name: "Background" }));
+    expect(backgrounds.getAllByRole("radio").map((radio) => radio.closest("label")?.title)).toEqual(
+      ["Clay", "Pine", "Indigo", "Plum", "Forest", "Ochre", "Brick", "Stone"],
+    );
+    expect(backgrounds.getByRole("radio", { name: "Brick" }).closest("label")).toHaveStyle({
+      backgroundColor: "#9d3028",
+    });
+    const colours = within(logo.getByRole("group", { name: "Mark colour" }));
+    expect(colours.getByRole("radio", { name: "White" }).closest("label")).toHaveStyle({
+      backgroundColor: "#ffffff",
+    });
+    expect(colours.getByRole("radio", { name: "Ink" }).closest("label")).toHaveStyle({
+      backgroundColor: "#16332d",
+    });
+    expect(logo.getByRole("group", { name: "Mark colour" })).toHaveAccessibleDescription(
+      /^What the icon or the letters are drawn in\.\s*$/,
+    );
+  });
+
+  it("moves between swatches with the arrow keys, one tab stop per group", async () => {
     const user = userEvent.setup();
     renderNewShop();
     const page = await createShopPage();
     const logo = within(page.getByRole("region", { name: "Logo" }));
 
-    await user.click(logo.getByRole("radio", { name: "Compass" }));
-    expect(logo.getByRole("radio", { name: "Pine" })).toBeChecked();
-    await user.click(logo.getByRole("radio", { name: "Indigo" }));
-    await user.click(logo.getByRole("radio", { name: "None — initials" }));
-    expect(logo.queryByRole("radio", { name: "Indigo" })).toBeNull();
+    // A first background starts the logo in the colour that reads on it: ink on Ochre.
+    await user.click(logo.getByRole("radio", { name: "Ochre" }));
+    expect(logo.getByRole("radio", { name: "Ochre" })).toHaveFocus();
+    expect(logo.getByRole("radio", { name: "Ink" })).toBeChecked();
+    await user.keyboard("{ArrowRight}");
+    expect(logo.getByRole("radio", { name: "Brick" })).toHaveFocus();
+    expect(logo.getByRole("radio", { name: "Brick" })).toBeChecked();
+    // The colour does not follow the background: ink on Brick is 1.87:1, and the group says so.
+    const warning = "Hard to read against that background. Try the other one.";
+    const line = logo.getByText(warning);
+    expect(line).toBeVisible();
+    // A warning, not a refusal: announced politely, never as an alert, and not in the red.
+    expect(line).not.toHaveAttribute("role", "alert");
+    expect(line).toHaveAttribute("aria-live", "polite");
+    expect(line).toHaveClass("text-admin-draft-ink", "font-normal");
+    expect(line).not.toHaveClass("text-lab-error");
+    expect(line).not.toHaveClass("font-semibold");
+    expect(logo.getByRole("radio", { name: "Ink" })).not.toHaveAttribute("aria-invalid");
 
-    await user.click(logo.getByRole("radio", { name: "Anchor" }));
-    expect(logo.getByRole("radio", { name: "Indigo" })).toBeChecked();
-    expect(logo.getByRole("radio", { name: "Pine" })).not.toBeChecked();
-
-    await user.type(page.getByLabelText("Name"), "Harbour Lane Supply");
-    await user.click(page.getByRole("button", { name: "Create shop" }));
-    await waitFor(() => expect(created).not.toBeNull());
-    expect(created?.logo).toEqual({ mark: "anchor", background: "indigo" });
+    await user.tab();
+    expect(logo.getByRole("radio", { name: "Ink" })).toHaveFocus();
+    await user.keyboard("{ArrowLeft}");
+    expect(logo.getByRole("radio", { name: "White" })).toHaveFocus();
+    expect(logo.getByRole("radio", { name: "White" })).toBeChecked();
+    expect(logo.queryByText(warning)).toBeNull();
   });
 });

@@ -131,3 +131,15 @@ PRE_LOGO_IDENTITY_ONLY_FINGERPRINT = (
 PRE_LOGO_PUBLISHABLE_FINGERPRINT = (
     "6f39c79ee7d9a4da9fac8451cda142799d1d99bb6a8222a8b3a941dd2c55cf38"
 )
+
+# ADR 0070, amended. What the codec wrote for a logo before the mark colour was chosen
+# (commit fcaa115): `identity()` with a compass on Ochre, as `shop-payload-v2`. A stored v2
+# logo must still read — drawn in the derived Ink — and render back to these exact bytes.
+V2_LOGO_DOCUMENT = (
+    b'{"canonical_schema_version":"shop-payload-v2","faq":[],"fulfilment_methods":[],'
+    b'"identity":{"channels":["chat"],"currencies":["EUR"],"locale":"en-GB",'
+    b'"name":"Northstar Outfitters","slug":"northstar"},'
+    b'"logo":{"background":"ochre","mark":"compass"},"payment_methods":[],"policies":[],'
+    b'"products":[],"support_guidelines":[],"tone_of_voice_guidelines":[]}'
+)
+V2_LOGO_FINGERPRINT = "60552fc256f6a83e4e622f1e70323d81146de24a36f83d18875adf5c7ad8af13"

@@ -35,12 +35,14 @@ from capability_lab.domain.shop import (
     ShopLogo,
     ShopLogoBackground,
     ShopMark,
+    ShopMarkColour,
     ShopPayload,
     SupportChannel,
     SupportGuideline,
     ToneOfVoiceGuideline,
     TypedAttribute,
     VariantAvailability,
+    mark_colour_for,
 )
 from capability_lab.presentation.base import StrictApiModel
 from capability_lab.presentation.definitions import (
@@ -394,17 +396,47 @@ class ShopIdentitySchema(StrictApiModel):
 
 
 class ShopLogoSchema(StrictApiModel):
-    """A mark on a named background; the lab derives the mark's colour from the background."""
+    """A logo as a writer sends it: a mark or the monogram, a background, and a mark colour."""
 
-    mark: ShopMark
+    mark: ShopMark | None = Field(
+        description="One of the lab's marks, or null for the monogram: the name's first letters."
+    )
     background: ShopLogoBackground
+    mark_colour: ShopMarkColour | None = Field(
+        default=None,
+        description=(
+            "What the mark or the monogram is drawn in. Absent or null takes the colour of the "
+            "higher contrast against the background. Any pair is accepted."
+        ),
+    )
+
+    def to_domain(self) -> ShopLogo:
+        return ShopLogo(
+            mark=self.mark,
+            background=self.background,
+            mark_colour=(
+                mark_colour_for(self.background) if self.mark_colour is None else self.mark_colour
+            ),
+        )
+
+
+class ShopLogoViewSchema(StrictApiModel):
+    """A logo as the lab answers it, with the colour its mark is drawn in."""
+
+    mark: ShopMark | None = Field(
+        description="One of the lab's marks, or null for the monogram: the name's first letters."
+    )
+    background: ShopLogoBackground
+    mark_colour: ShopMarkColour = Field(
+        description=(
+            "What the mark or the monogram is drawn in: the colour chosen, or, for a logo "
+            "stored before the colour was chosen, the one the lab derived."
+        )
+    )
 
     @classmethod
     def from_domain(cls, logo: ShopLogo) -> Self:
-        return cls(mark=logo.mark, background=logo.background)
-
-    def to_domain(self) -> ShopLogo:
-        return ShopLogo(mark=self.mark, background=self.background)
+        return cls(mark=logo.mark, background=logo.background, mark_colour=logo.drawn_mark_colour)
 
 
 class ShopPayloadSchema(StrictApiModel):
@@ -452,7 +484,7 @@ class ShopContentSchema(StrictApiModel):
     support_guidelines: list[SupportGuidelineSchema]
     tone_of_voice_guidelines: list[ToneOfVoiceSchema]
     default_tone_of_voice_id: str | None
-    logo: ShopLogoSchema | None
+    logo: ShopLogoViewSchema | None
 
     @classmethod
     def from_domain(cls, payload: ShopPayload) -> Self:
@@ -477,7 +509,7 @@ class ShopContentSchema(StrictApiModel):
                 for guideline in payload.tone_of_voice_guidelines
             ],
             default_tone_of_voice_id=None if default_tone is None else default_tone.id,
-            logo=None if payload.logo is None else ShopLogoSchema.from_domain(payload.logo),
+            logo=None if payload.logo is None else ShopLogoViewSchema.from_domain(payload.logo),
         )
 
 
@@ -539,7 +571,7 @@ class ShopSummarySchema(StrictApiModel):
     updated_at: str
     latest_published_version: int | None
     published_version_count: int
-    logo: ShopLogoSchema | None
+    logo: ShopLogoViewSchema | None
 
     @classmethod
     def from_domain(cls, summary: ShopSummary) -> Self:
@@ -550,7 +582,7 @@ class ShopSummarySchema(StrictApiModel):
             updated_at=summary.updated_at.isoformat(),
             latest_published_version=summary.latest_published_version,
             published_version_count=summary.published_version_count,
-            logo=None if summary.logo is None else ShopLogoSchema.from_domain(summary.logo),
+            logo=None if summary.logo is None else ShopLogoViewSchema.from_domain(summary.logo),
         )
 
 
