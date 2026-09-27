@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { CreatePage } from "./components/CreatePage";
+import { stickyHeaderClasses } from "./lib/stickyHeader";
 import { blockedButtonClasses } from "./lib/ui";
 import { expectNotRefused, expectRefused } from "./test/refused";
 
@@ -85,6 +86,14 @@ describe("the create page's header", () => {
     expect(screen.getByRole("heading", { level: 1, name: "New thing" })).toBeVisible();
     await user.type(screen.getByLabelText("Name"), "Harbour Lane");
     expect(screen.getByRole("heading", { level: 1, name: "Harbour Lane" })).toBeVisible();
+  });
+
+  it("is pinned by the same classes an editor's header is", () => {
+    renderPage(<Harness />);
+
+    for (const utility of stickyHeaderClasses.split(" ")) {
+      expect(header()).toHaveClass(utility);
+    }
   });
 });
 

@@ -785,6 +785,13 @@ describe("the new-scenario page", () => {
     });
 
     // And the operator ends in the scenario editor with the name they typed in its header.
+    //
+    // Waited for as a page and not as a heading: the create page's own title reads back the
+    // name as it is typed, so a heading called "Damaged delivery" is on screen *before* the
+    // editor is — and on a loaded machine the query found the create page's one and it was
+    // unmounted by the landing before it could be asserted on. The create page is gone once its
+    // Cancel is; only the editor's heading is left to find.
+    await waitFor(() => expect(screen.queryByRole("link", { name: "Cancel" })).toBeNull());
     expect(
       await screen.findByRole("heading", { level: 1, name: "Damaged delivery" }),
     ).toBeVisible();

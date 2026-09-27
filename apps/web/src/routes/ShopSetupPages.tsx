@@ -50,7 +50,10 @@ const PAYMENT_KINDS = optionsOf(PAYMENT_METHOD_KIND);
 
 const CHANNELS = optionsOf(SUPPORT_CHANNEL);
 
-/** The four pages that edit one shop draft between them. */
+/**
+ * The pages that edit one shop draft between them. Their header is an editor's and pinned like
+ * one: Save is in it, and Shop details runs to more than two screens (ADR 0066).
+ */
 function SetupPage({ title, children }: { title: string; children: ReactNode }) {
   const { preview, save, saving, discard, discarding, dirty, error } = useShopWorkspace();
   return (
@@ -68,12 +71,15 @@ function SetupPage({ title, children }: { title: string; children: ReactNode }) 
             onDiscard={() => void discard()}
           />
         }
+        reasons={
+          error ? (
+            <p role="alert" className="text-[13px] text-lab-error">
+              {error}
+            </p>
+          ) : null
+        }
+        sticky
       />
-      {error ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
-        </p>
-      ) : null}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-4">{children}</div>
         <Card title="Draft validation">

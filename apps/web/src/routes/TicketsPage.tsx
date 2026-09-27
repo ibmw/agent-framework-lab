@@ -30,6 +30,7 @@ import {
   Card,
   EditorSaveActions,
   Fingerprint,
+  HeaderReport,
   IssueList,
   PageHeader,
   PublishButton,
@@ -50,6 +51,7 @@ import {
 import { fromLocalInput, fulfilmentLabel, paymentLabel, toLocalInput } from "../lib/orders";
 import { consequenceOf, REMOVAL_FINDINGS, type Removal, useRemoval } from "../lib/removal";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
+import { clearStickyHeader, stickyInsetHeaderClasses } from "../lib/stickyHeader";
 import {
   appendMessage,
   authorLabel,
@@ -525,7 +527,11 @@ function TicketWorkspace({
   return (
     <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="grid min-w-0 content-start gap-4">
-        <header className="grid gap-2">
+        {/* The ticket's own header, pinned like every editor's and what its actions report
+            said beside them. It is held within this column, so Save and Publish stay in reach
+            down the thread — and down the whole page only at 2xl, where the context panel
+            stands beside the column rather than under it (ADR 0066). */}
+        <header ref={clearStickyHeader} className={`${stickyInsetHeaderClasses} grid gap-2`}>
           <div className="flex flex-wrap items-center gap-2.5">
             {/* The thread's own subject, the one heading the prototype draws between a
                 page title and a card title: Georgia 19px 700, no tracking
@@ -555,6 +561,25 @@ function TicketWorkspace({
               />
             </div>
           </div>
+          <HeaderReport>
+            {editor.error ? (
+              <p role="alert" className="text-[13px] text-lab-error">
+                {editor.error}
+              </p>
+            ) : null}
+            {publishedVersion !== null ? (
+              <p role="status" className="text-[13px] text-lab-success">
+                Published version {publishedVersion}. A scenario built on this ticket freezes this
+                exact version.
+              </p>
+            ) : null}
+            <PublishReasons
+              id={publishReasonsId}
+              preview={preview}
+              dirty={editor.dirty}
+              checking={editor.checking}
+            />
+          </HeaderReport>
           <p className="text-[13px] text-admin-muted">
             {channelLabel(content.channel)} · from {originLabel(content.origin.kind)}
             {content.origin.product_handle ? ` ${content.origin.product_handle}` : ""}
@@ -566,25 +591,6 @@ function TicketWorkspace({
             ) : null}
           </p>
         </header>
-
-        {editor.error ? (
-          <p role="alert" className="text-[13px] text-lab-error">
-            {editor.error}
-          </p>
-        ) : null}
-        <PublishReasons
-          id={publishReasonsId}
-          className="grid gap-1"
-          preview={preview}
-          dirty={editor.dirty}
-          checking={editor.checking}
-        />
-        {publishedVersion !== null ? (
-          <p role="status" className="text-[13px] text-lab-success">
-            Published version {publishedVersion}. A scenario built on this ticket freezes this exact
-            version.
-          </p>
-        ) : null}
 
         <Thread
           scope={ticketId}

@@ -419,6 +419,14 @@ export function OrderEditorPage() {
             />
           </>
         }
+        reasons={
+          error ? (
+            <p role="alert" className="text-[13px] text-lab-error">
+              {error}
+            </p>
+          ) : null
+        }
+        sticky
       />
 
       {orderRemoval.isArmed("order") ? (
@@ -436,12 +444,6 @@ export function OrderEditorPage() {
             onKeep={orderRemoval.keep}
           />
         </div>
-      ) : null}
-
-      {error ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
-        </p>
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">

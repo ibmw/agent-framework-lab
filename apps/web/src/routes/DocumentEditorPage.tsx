@@ -126,13 +126,15 @@ export function DocumentEditorPage() {
             onDiscard={() => void discard()}
           />
         }
+        reasons={
+          error ? (
+            <p role="alert" className="text-[13px] text-lab-error">
+              {error}
+            </p>
+          ) : null
+        }
+        sticky
       />
-
-      {error ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
-        </p>
-      ) : null}
 
       <div className="grid max-w-[790px] gap-4">
         <Card

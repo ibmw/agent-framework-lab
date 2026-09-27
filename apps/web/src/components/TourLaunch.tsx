@@ -64,6 +64,24 @@ function TourBody({ step }: { step: TourStep }) {
   );
 }
 
+/**
+ * Align a step to the foot of the pinned header where the header covers its top.
+ *
+ * "Covered" is read off the scrolling pane's `scroll-padding-top`, which is exactly the room the
+ * pinned header takes (and which is unset where no header is pinned); `block: "start"` honours
+ * the same padding, so the step's top lands at the header's foot.
+ */
+function clearOfPinnedHeader(element: Element) {
+  const pane = element.closest("main");
+  if (pane === null) {
+    return;
+  }
+  const clearance = Number.parseFloat(getComputedStyle(pane).scrollPaddingTop) || 0;
+  if (element.getBoundingClientRect().top < pane.getBoundingClientRect().top + clearance - 1) {
+    element.scrollIntoView({ block: "start" });
+  }
+}
+
 export function TourLaunch() {
   const { pathname } = useLocation();
   const id = tourAt(pathname);
@@ -109,6 +127,24 @@ function SurfaceTour({ id }: { id: TourId }) {
       nextBtnText: "Next",
       prevBtnText: "Back",
       doneBtnText: "Done",
+      // `driver.js` scrolls a step's element into view only when it is outside the *window*,
+      // and an element under a pinned header is inside the window and hidden all the same. So
+      // the step is brought clear of the header twice over, both before anything is painted:
+      //
+      // - first `nearest`, which moves nothing already in view and measures "in view" against
+      //   the pane's `scroll-padding-top` — the header's height (`lib/stickyHeader.ts`) — so
+      //   the library's own check then finds a step that fits on screen and leaves it there;
+      // - then, once the library has made its own scroll — synchronously, straight after this
+      //   hook — a step taller than the room under the header, which the library has centred
+      //   in the window and so pushed up under the header, is aligned to the header's foot.
+      //   A microtask, so it lands before the frame the library draws its stage in: one jump.
+      onHighlightStarted: (element) => {
+        if (element === undefined) {
+          return;
+        }
+        element.scrollIntoView({ block: "nearest" });
+        queueMicrotask(() => clearOfPinnedHeader(element));
+      },
       steps: steps.map((step, index) => ({
         element: step.anchor,
         popover: {

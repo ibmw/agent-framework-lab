@@ -71,8 +71,8 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). In Group C, slice 25 can start now. Slices 26
-and 27 close the milestone, and 28 is optional.
+connection leaves unreachable (ADR 0053). In Group C, slices 26 and 27
+close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -86,21 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 25 — Save stays in reach
-
-- [ ] `PageHeader` sticks to the top of the scrolling main pane on every editor, with the canvas
-  background and the 1px rule the prototype draws (:207), so Save and Publish are in view at the
-  foot of a six-card editor; `PublishReasons` stays beside Publish. The create pages' own header
-  already sticks — `CreatePage` draws it — so this is the editors' half of that rule.
-
-Frames: `Workspace.dc.html` :207, :387, :483, :890, :1197, :1328, :1638, :1746.
-
-Branch: `feat/sticky-actions`. Checks: `WorkspaceChrome.test.tsx` for the header's role and
-order; Playwright `tour-anchors`, because the tour lights the page name.
-
-Slice evidence: an operator at the bottom of the product editor's reviews card presses Save
-without scrolling, and the tour's first step still finds the page name.
 
 #### Slice 26 — Consistency sweep
 

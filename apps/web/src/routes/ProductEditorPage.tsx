@@ -415,6 +415,14 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
             />
           </>
         }
+        reasons={
+          error ? (
+            <p role="alert" className="text-[13px] text-lab-error">
+              {error}
+            </p>
+          ) : null
+        }
+        sticky
       />
 
       {removal.isArmed("product") ? (
@@ -425,12 +433,6 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
             onKeep={removal.keep}
           />
         </div>
-      ) : null}
-
-      {error ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
-        </p>
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">

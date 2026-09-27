@@ -9,6 +9,7 @@ import {
   PublishReasons,
 } from "./components/WorkspaceChrome";
 import { PUBLISH_UNSAVED_REASON } from "./lib/definitionEditor";
+import { STICKY_REPORT_ATTRIBUTE, stickyHeaderClasses } from "./lib/stickyHeader";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 
 /**
@@ -47,6 +48,85 @@ describe("the page title", () => {
     // A size left beside the new one is the shape a half-revert takes; `text-2xl` is not one of
     // the words below, so this holds the title to exactly one size.
     expect(title.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/);
+  });
+});
+
+describe("an editor's header", () => {
+  function EditorHeader({ sticky }: { sticky?: boolean }) {
+    return (
+      <main>
+        <PageHeader
+          title="Frontline A"
+          chips={<span>Draft v2 in progress</span>}
+          actions={
+            <>
+              <button type="button">Save draft</button>
+              <button type="button">Publish v2</button>
+            </>
+          }
+          reasons={<p>Save the draft first.</p>}
+          description="Shop-independent."
+          sticky={sticky}
+        />
+        <p>The page it heads.</p>
+      </main>
+    );
+  }
+
+  it("reads its name, its actions, why one is refused, then what the page is, in that order", () => {
+    render(<EditorHeader sticky />);
+
+    const header = screen.getByRole("heading", { level: 1, name: "Frontline A" }).closest("header");
+    if (header === null) {
+      throw new Error("the page name is not in a header");
+    }
+
+    const inOrder = [
+      screen.getByRole("heading", { level: 1 }),
+      screen.getByRole("button", { name: "Save draft" }),
+      screen.getByRole("button", { name: "Publish v2" }),
+      screen.getByText("Save the draft first."),
+      screen.getByText("Shop-independent."),
+    ];
+    for (const element of inOrder) {
+      expect(header).toContainElement(element);
+    }
+    // Why Publish is refused is pinned with Publish: it is read straight after the actions, not
+    // after the description and not in the page below.
+    for (const [earlier, later] of inOrder
+      .slice(1)
+      .map((element, index) => [inOrder[index], element])) {
+      expect(
+        earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    expect(header).not.toContainElement(screen.getByText("The page it heads."));
+  });
+
+  it("marks what its actions report as a report, bounded, so the header holds without it", () => {
+    render(<EditorHeader sticky />);
+
+    const row = screen.getByText("Save the draft first.").parentElement;
+    // What `clearStickyHeader` leaves out of the height it decides on (ADR 0066).
+    expect(row).toHaveAttribute(STICKY_REPORT_ATTRIBUTE);
+    // And never taller than a quarter of the window, scrolling within that...
+    expect(row).toHaveClass("max-h-[25vh]", "overflow-y-auto");
+    // ...as a named region, since an overflowing row is a stop on the keyboard's way through.
+    expect(screen.getByRole("region", { name: "What the actions report" })).toBe(row);
+  });
+
+  it("is pinned with the create page's own classes, and only where it is asked to be", () => {
+    const { unmount } = render(<EditorHeader sticky />);
+    const pinned = screen.getByRole("heading", { level: 1 }).closest("header");
+    for (const utility of stickyHeaderClasses.split(" ")) {
+      expect(pinned).toHaveClass(utility);
+    }
+    unmount();
+
+    render(<EditorHeader />);
+    const scrolling = screen.getByRole("heading", { level: 1 }).closest("header");
+    expect(scrolling?.className).not.toMatch(/sticky/);
+    expect(scrolling).not.toHaveClass("border-b");
   });
 });
 
@@ -170,6 +250,44 @@ describe("PublishButton", () => {
     ).toHaveClass(...VALIDATION_WEIGHT);
     await userEvent.click(screen.getByRole("button", { name: "Publish v2" }));
     expect(onPublish).not.toHaveBeenCalled();
+  });
+
+  it("does not call an edited draft identical to the last version: that is the saved draft", () => {
+    render(
+      <Publish
+        preview={{
+          ...GATE,
+          latest_published_version: 1,
+          next_version: 2,
+          matches_latest_published: true,
+        }}
+        dirty
+      />,
+    );
+
+    const publish = screen.getByRole("button", { name: "Publish v2" });
+    expectRefused(publish, PUBLISH_UNSAVED_REASON);
+    expect(screen.queryByText(/identical to v1/)).toBeNull();
+    expect(publish).toHaveAccessibleDescription(PUBLISH_UNSAVED_REASON);
+  });
+
+  it("draws nothing where there is nothing to say, so the header it stands in keeps its spacing", () => {
+    render(
+      <PageHeader
+        title="Frontline A"
+        actions={<Publish preview={GATE} />}
+        reasons={<PublishReasons id="reasons" preview={GATE} dirty={false} checking={false} />}
+        description="Shop-independent."
+      />,
+    );
+
+    expectNotRefused(screen.getByRole("button", { name: "Publish v1" }));
+    expect(document.getElementById("reasons")).toBeNull();
+    // The row the reasons would take is empty, and an empty one is not drawn: without it the
+    // header's 5px gap would open twice between the name and the description.
+    const row = screen.getByText("Shop-independent.").previousElementSibling;
+    expect(row).toBeEmptyDOMElement();
+    expect(row).toHaveClass("empty:hidden");
   });
 
   it("is a press in flight, not a refusal, while publishing and while the gate has not answered", () => {

@@ -10,6 +10,11 @@ import {
 import type { EntryEdit } from "../lib/entryEdit";
 import { groupFindings, type IssueEntry, type IssueGroup } from "../lib/issueRoutes";
 import {
+  clearStickyHeader,
+  STICKY_REPORT_ATTRIBUTE,
+  stickyHeaderClasses,
+} from "../lib/stickyHeader";
+import {
   accentButtonClasses,
   cardTitleClasses,
   outlineButtonClasses,
@@ -79,20 +84,48 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
  *
  * The 5px between the title and its description is the prototype's own
  * (`Workspace.dc.html`:154, 816), and it is the whole of this header's density change.
+ *
+ * **An editor's header sticks** (`sticky`): the prototype draws every page that edits one
+ * thing — a product, an order, a customer, a document, a scenario, an agent, a judge, a block,
+ * an identity — with its header pinned to the top of the scrolling pane on the canvas and over
+ * a 1px rule (`Workspace.dc.html`:387, :483, :890, :1746), so Save and Publish are in reach at
+ * the foot of the longest of them. The shop's four setup pages stick too, although the
+ * prototype draws them unpinned (:1893, :1993): their Save is in the header and Shop details
+ * runs to more than two screens. It is the create page's header mechanism, shared rather than
+ * restated (`lib/stickyHeader.ts`), and it holds only while its name and actions take a third
+ * of the pane or less. An index, the overview, the results and the lab's settings scroll their
+ * header away, as the prototype draws them — even the Products and Documents tables and the
+ * overview, which carry the shop draft's Save: they are lists and a summary, not an editor of
+ * one object (ADR 0066).
+ *
+ * `reasons` is what the header's actions say about themselves: why a press failed, what a
+ * publish froze, and `PublishReasons`' account of why Publish will not go. It is drawn under the
+ * actions, right-aligned, inside the header, so a press and its outcome are pinned together
+ * rather than the outcome being printed at the top of a page the operator has scrolled away from
+ * (ADR 0063, *says why in the place the press was refused*).
  */
 export function PageHeader({
   title,
   chips,
   actions,
+  reasons,
   description,
+  sticky = false,
 }: {
   title: string;
   chips?: ReactNode;
   actions?: ReactNode;
+  /** What the header's actions report — a failure, a publish, a refusal — beneath them. */
+  reasons?: ReactNode;
   description?: ReactNode;
+  /** Pin the header to the top of the scrolling pane: true on an editor. */
+  sticky?: boolean;
 }) {
   return (
-    <header className="mb-4 grid gap-[5px]">
+    <header
+      ref={sticky ? clearStickyHeader : undefined}
+      className={sticky ? `${stickyHeaderClasses} ${pageHeaderClasses}` : pageHeaderClasses}
+    >
       <div className="flex flex-wrap items-center gap-3">
         {/* The chain step of a tour lights the page's own name: it is the one element
             every surface has, and it is what the step is about — where you have arrived. */}
@@ -102,8 +135,51 @@ export function PageHeader({
         {chips}
         {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
       </div>
+      {reasons ? <HeaderReport>{reasons}</HeaderReport> : null}
       {description ? <p className="text-[13px] text-admin-muted">{description}</p> : null}
     </header>
+  );
+}
+
+const pageHeaderClasses = "mb-4 grid gap-[5px]";
+
+/**
+ * The row under a header's actions that holds what they report: why a press failed, the
+ * version a publish froze, `PublishReasons`. Right-aligned, under the buttons it is about.
+ *
+ * Three things about it are load-bearing:
+ *
+ * - **It is marked as a report** (`STICKY_REPORT_ATTRIBUTE`), so a pinned header decides
+ *   whether it holds without it: a failed press grows this row, and a header that unpinned
+ *   because of it would take the failure and the button off screen together (ADR 0066).
+ * - **It is bounded** at a quarter of the viewport and scrolls within that. Its lines are
+ *   few and short — at most one failure, one published version and four publish reasons — but
+ *   the failure is the lab's own sentence and has no length the client controls; a row that
+ *   grew without bound would be the letterbox the third-of-the-pane rule refuses, arrived at
+ *   through the one row that rule does not measure. A scrolling row is reachable from the
+ *   keyboard in the browsers this lab supports, which focus a scroll container that has no
+ *   focusable content of its own.
+ * - **It draws nothing while it holds nothing**, so an editor with nothing to report keeps
+ *   the prototype's 5px between its name and its description.
+ */
+export function HeaderReport({
+  className = "",
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    // A named region, because it can be a stop on the keyboard's way through the page:
+    // once its lines overflow the bound, the browser focuses it so they can be scrolled, and a
+    // focus stop with no role and no name tells a screen reader nothing about where it is.
+    <section
+      aria-label="What the actions report"
+      {...{ [STICKY_REPORT_ATTRIBUTE]: "" }}
+      className={`grid max-h-[25vh] justify-items-end gap-1 justify-self-end overflow-y-auto text-right empty:hidden ${className}`}
+    >
+      {children}
+    </section>
   );
 }
 
@@ -598,6 +674,12 @@ export function PublishReasons({
       </div>
     );
   }
+  const unchanged = !dirty && preview?.matches_latest_published === true;
+  if (!dirty && (preview === null || preview.publishable) && !unchanged && warnings.length === 0) {
+    // Nothing to say, so nothing drawn: an empty block would still take a row of the header it
+    // stands in, and its gap with it.
+    return null;
+  }
   return (
     <div id={id} className={className}>
       {/* The three reasons Publish is refused for, at the validation weight every refusal reads
@@ -607,7 +689,9 @@ export function PublishReasons({
       {preview && !preview.publishable ? (
         <p className={validationMessageClasses}>{publishErrorsReason(errors.length)}</p>
       ) : null}
-      {preview?.matches_latest_published ? (
+      {/* Not while the draft is dirty: "identical" would describe the saved draft, and the
+          operator is looking at edits that are not in it. */}
+      {unchanged && preview ? (
         <p className={validationMessageClasses}>
           {publishUnchangedReason(preview.latest_published_version)}
         </p>

@@ -88,6 +88,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Primary token | redefine `lab-accent` to pine | new `lab-primary`; the clay stays on trace bars, the review star, a ticket's emphasis and the armed seed | those four are not the refresh's to repaint |
 | Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px, and `CreatePage`'s own header at the same size | one size for the workspace, no variant yet; rule 3 |
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
+| Setup pages' header | *Shop details* and *Tone of voice* scroll their header away (:1893, :1993) | pinned like an editor's | each edits one object and carries Save; ADR 0066 |
 | Compact controls | 42/40px in sub-editors and filters | the one 44px control | no compact component exists to size |
 | Filter chips on Tickets and the block libraries | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked. Policies & FAQ left this row when its documents became a table with four chips (ADR 0057) |
 | Model on the connection, masked key | drawn | neither | ADR 0052 |
@@ -408,8 +409,15 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   shop's *Documents* table, whose chip is `?kind=`: the retired `/setup/support` redirects to it
   filtered to Guidelines (ADR 0054, ADR 0057), and a filter an address names has to be the
   filter that is pressed. Pressing one replaces the history entry rather than pushing one.
-- **Every header spans the content width** and holds the page's actions; sticky on a create
-  page, and on the editors with Slice 25.
+- **Every header spans the content width** and holds the page's actions. Every page that edits
+  or creates one object pins its header — the ticket editor's own header in its column included —
+  with what its actions report beneath them: the failure, the published version, the reasons
+  under Publish. Index and overview pages do not, even where they carry the shop draft's Save.
+  A pinned header keeps what the pane scrolls into view clear of it, and holds only where its
+  name and actions take a third of the pane or less — decided when the pane is sized, never on
+  what the operator does inside the page (ADR 0066). *Shop details* and *Tone of
+  voice* pin theirs although the prototype draws them unpinned (`Workspace.dc.html` :1893,
+  :1993): each edits one object and carries Save.
 
 ## Proposals, not decisions
 

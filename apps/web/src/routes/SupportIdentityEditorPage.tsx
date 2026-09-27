@@ -181,25 +181,28 @@ export function SupportIdentityEditorPage() {
             />
           </>
         }
+        reasons={
+          <>
+            {editor.error ? (
+              <p role="alert" className="text-[13px] text-lab-error">
+                {editor.error}
+              </p>
+            ) : null}
+            {publishedVersion !== null ? (
+              <p role="status" className="text-[13px] text-lab-success">
+                Published version {publishedVersion}. Agent configurations pin an exact version.
+              </p>
+            ) : null}
+            <PublishReasons
+              id={publishReasonsId}
+              preview={preview}
+              dirty={editor.dirty}
+              checking={editor.checking}
+            />
+          </>
+        }
+        sticky
       />
-
-      {editor.error ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {editor.error}
-        </p>
-      ) : null}
-      <PublishReasons
-        id={publishReasonsId}
-        className="mb-4 grid gap-1"
-        preview={preview}
-        dirty={editor.dirty}
-        checking={editor.checking}
-      />
-      {publishedVersion !== null ? (
-        <p role="status" className="mb-4 text-[13px] text-lab-success">
-          Published version {publishedVersion}. Agent configurations pin an exact version.
-        </p>
-      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid content-start gap-4">

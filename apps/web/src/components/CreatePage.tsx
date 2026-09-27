@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { clearStickyHeader, stickyHeaderClasses } from "../lib/stickyHeader";
 import { focusRingClasses, validationMessageClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
 import { PrimaryAction, RefusalLine } from "./PrimaryAction";
+import { HeaderReport } from "./WorkspaceChrome";
 
 /**
  * Creating is a page, and this is the page (PLAN-UX Slice 12).
@@ -28,8 +30,9 @@ import { PrimaryAction, RefusalLine } from "./PrimaryAction";
  *   so it registers no unsaved work and Cancel is a plain link back to the index (ADR 0051,
  *   *Deliberately not here*). Nothing here calls `useRegisterUnsavedWork`, deliberately.
  *
- * The header is sticky on its own rather than through `PageHeader`, which PLAN-UX Slice 25
- * makes sticky for the editors. The title is drawn at `PageHeader`'s 24px rather than the
+ * The header is sticky through the same classes and the same focus clearance an editor's
+ * `PageHeader` is (`lib/stickyHeader.ts`), but it is not a `PageHeader`: it carries a back
+ * arrow, a breadcrumb and a refusal line that no other page header has. The title is drawn at `PageHeader`'s 24px rather than the
  * prototype's 22px for a bound name: the workspace has one page-title size and the departure
  * that flattened the prototype's two is already recorded in `docs/design-direction.md`.
  *
@@ -89,9 +92,10 @@ export function CreatePage({
 
   return (
     <>
-      {/* Pulled out to the scrolling pane's own edges, so the rule under it spans the width the
-          prototype draws it at rather than stopping inside the page's gutter. */}
-      <header className="sticky top-0 z-10 -mx-6 -mt-5 mb-4 flex flex-wrap items-center gap-3.5 border-b border-admin-border bg-admin-canvas px-6 py-4">
+      <header
+        ref={clearStickyHeader}
+        className={`${stickyHeaderClasses} mb-4 flex flex-wrap items-center gap-3.5`}
+      >
         <Link
           to={backTo}
           aria-label={`Back to ${backLabel}`}
@@ -138,17 +142,24 @@ export function CreatePage({
           </PrimaryAction>
         </div>
         {/* Under the button, spanning the row, so a reason and a refusal are read in the place
-            the press was refused rather than hunted for down the form. */}
-        {blocked ? (
-          <RefusalLine id={reasonId} className="w-full text-right">
-            {blockedBy}
-          </RefusalLine>
-        ) : null}
-        {error ? (
-          <p id={errorId} role="alert" className={`w-full text-right ${validationMessageClasses}`}>
-            {error}
-          </p>
-        ) : null}
+            the press was refused rather than hunted for down the form. A report row, as an
+            editor's is: the header holds or not without it (ADR 0066). */}
+        <HeaderReport className="w-full">
+          {blocked ? (
+            <RefusalLine id={reasonId} className="w-full text-right">
+              {blockedBy}
+            </RefusalLine>
+          ) : null}
+          {error ? (
+            <p
+              id={errorId}
+              role="alert"
+              className={`w-full text-right ${validationMessageClasses}`}
+            >
+              {error}
+            </p>
+          ) : null}
+        </HeaderReport>
       </header>
 
       {/* 790px, the measure `form-decisions.md` 1.5 asks for and the prototype's own column. */}

@@ -19,6 +19,13 @@ export interface BuiltLab {
   shopId: string;
   scenarioId: string;
   experimentId: string;
+  /** Every other object the chain writes, for a spec that opens one of their editors. */
+  profileId: string;
+  orderId: string;
+  objectiveId: string;
+  mutationId: string;
+  identityId: string;
+  configurationId: string;
 }
 
 async function json(
@@ -428,5 +435,15 @@ export async function buildLab(request: APIRequestContext): Promise<BuiltLab> {
     ).experiment_id,
   );
 
-  return { shopId, scenarioId, experimentId };
+  return {
+    shopId,
+    scenarioId,
+    experimentId,
+    profileId,
+    orderId,
+    objectiveId,
+    mutationId,
+    identityId,
+    configurationId: arms[0].configuration_id,
+  };
 }

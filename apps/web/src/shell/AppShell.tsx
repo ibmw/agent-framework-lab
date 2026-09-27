@@ -620,7 +620,12 @@ export function AppShell({
           </nav>
         ) : null}
 
-        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-5">{children}</main>
+        {/* `relative`, so the pane is the containing block of what it positions absolutely —
+            every `sr-only` line is — and a line near the foot of a long page is laid out inside
+            the pane that scrolls rather than against the document, which it would otherwise
+            make taller than the window: the whole shell, top bar and pinned header with it,
+            then slid up whenever anything was scrolled into view (ADR 0066). */}
+        <main className="relative min-w-0 flex-1 overflow-y-auto px-6 py-5">{children}</main>
       </div>
     </div>
   );
