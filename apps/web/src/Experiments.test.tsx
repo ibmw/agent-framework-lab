@@ -1604,8 +1604,10 @@ describe("experiment setup's defaults", () => {
         "1",
       ),
     );
-    expect(scenarioRow).toHaveAccessibleDescription(
-      /This one is the only published scenario in the shop, so it is already chosen\./,
+    await waitFor(() =>
+      expect(scenarioRow).toHaveAccessibleDescription(
+        /This one is the only published scenario in the shop, so it is already chosen\./,
+      ),
     );
     expect(
       await within(scenarioRow).findByText(
@@ -1627,8 +1629,10 @@ describe("experiment setup's defaults", () => {
       expect(within(armB).getByRole("combobox", { name: "Published version" })).toHaveValue("2");
     });
     expect(within(armA).getByRole("option", { name: "v2 (newest published)" })).toBeInTheDocument();
-    expect(armB).toHaveAccessibleDescription(
-      /These two are the only published agent configurations in the lab, so both arms are already chosen\./,
+    await waitFor(() =>
+      expect(armB).toHaveAccessibleDescription(
+        /These two are the only published agent configurations in the lab, so both arms are already chosen\./,
+      ),
     );
 
     // A name proposed from them.
@@ -1692,7 +1696,9 @@ describe("experiment setup's defaults", () => {
     // An unpublished scenario is offered as unavailable, and is not a second candidate.
     await scenarioChosen();
     expect(screen.getByRole("option", { name: "Damaged on arrival (unpublished)" })).toBeDisabled();
-    expect(row("Scenario")).toHaveAccessibleDescription(/so it is already chosen/);
+    await waitFor(() =>
+      expect(row("Scenario")).toHaveAccessibleDescription(/so it is already chosen/),
+    );
   });
 
   it("chooses nothing where there is a choice to make", async () => {
@@ -1741,8 +1747,10 @@ describe("experiment setup's defaults", () => {
     expect(within(armA).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
       ATLAS_ID,
     );
-    expect(armA).toHaveAccessibleDescription(
-      /This one is the only published agent configuration in the lab, so it is already chosen\./,
+    await waitFor(() =>
+      expect(armA).toHaveAccessibleDescription(
+        /This one is the only published agent configuration in the lab, so it is already chosen\./,
+      ),
     );
     // Two arms running one configuration compare nothing, so arm B is left for the operator.
     expect(within(row("Arm B")).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
@@ -2603,8 +2611,10 @@ describe("live bench", () => {
     const objectives = await screen.findByRole("region", { name: "Objectives" });
     // The lab's one published judge is already the one chosen, and says so.
     await waitFor(() => expect(within(objectives).getByLabelText("Judge")).toHaveValue(JUDGE_ID));
-    expect(within(objectives).getByLabelText("Judge")).toHaveAccessibleDescription(
-      "This one is the only published judge in the lab, so it is already chosen.",
+    await waitFor(() =>
+      expect(within(objectives).getByLabelText("Judge")).toHaveAccessibleDescription(
+        "This one is the only published judge in the lab, so it is already chosen.",
+      ),
     );
     await user.selectOptions(
       within(objectives).getByLabelText("Judge"),

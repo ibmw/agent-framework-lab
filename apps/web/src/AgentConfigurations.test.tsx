@@ -1139,8 +1139,10 @@ describe("the new-configuration page", () => {
 
     const identity = await screen.findByLabelText("Adopted identity");
     await waitFor(() => expect(identity).not.toHaveValue(""));
-    expect(identity).toHaveAccessibleDescription(
-      /This one is the only support identity in the lab, so it is already chosen\./,
+    await waitFor(() =>
+      expect(identity).toHaveAccessibleDescription(
+        /This one is the only support identity in the lab, so it is already chosen\./,
+      ),
     );
   });
 

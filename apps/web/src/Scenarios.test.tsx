@@ -647,8 +647,10 @@ describe("the new-scenario page", () => {
 
     const ticket = await screen.findByLabelText("Ticket");
     await waitFor(() => expect(ticket).not.toHaveValue(""));
-    expect(ticket).toHaveAccessibleDescription(
-      /This one is the only ticket in the shop, so it is already chosen\./,
+    await waitFor(() =>
+      expect(ticket).toHaveAccessibleDescription(
+        /This one is the only ticket in the shop, so it is already chosen\./,
+      ),
     );
   });
 
@@ -1423,8 +1425,10 @@ describe("the scenario's caps, each read on its own card", () => {
     // One mutation template is not.
     const mutations = screen.getByLabelText("Add mutation block");
     await waitFor(() => expect(mutations).toHaveValue(MUTATION_BLOCK_ID));
-    expect(mutations).toHaveAccessibleDescription(
-      "This one is the only template in the library, so it is already chosen.",
+    await waitFor(() =>
+      expect(mutations).toHaveAccessibleDescription(
+        "This one is the only template in the library, so it is already chosen.",
+      ),
     );
     await user.click(
       within(screen.getByRole("region", { name: "Mutations" })).getByRole("button", {

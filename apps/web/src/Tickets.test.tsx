@@ -711,8 +711,10 @@ describe("ticket list", () => {
     const list = within(await screen.findByRole("region", { name: "Tickets" }));
     const customer = list.getByLabelText("Customer");
     await waitFor(() => expect(customer).toHaveValue(PROFILE_ID));
-    expect(customer).toHaveAccessibleDescription(
-      /This one is the only customer attached to this shop, so it is already chosen\./,
+    await waitFor(() =>
+      expect(customer).toHaveAccessibleDescription(
+        /This one is the only customer attached to this shop, so it is already chosen\./,
+      ),
     );
   });
 

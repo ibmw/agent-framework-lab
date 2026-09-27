@@ -907,8 +907,10 @@ describe("the safe address change", () => {
     const actor = within(console).getByLabelText("Acting support identity");
     expect(actor).toHaveValue(IDENTITY_ID);
     expect(within(actor).queryByRole("option", { name: "Choose…" })).toBeNull();
-    expect(actor).toHaveAccessibleDescription(
-      /This one is the only published support identity in the lab, so it is already chosen\./,
+    await waitFor(() =>
+      expect(actor).toHaveAccessibleDescription(
+        /This one is the only published support identity in the lab, so it is already chosen\./,
+      ),
     );
 
     await user.type(within(console).getByLabelText("Address ID (required)"), "home");

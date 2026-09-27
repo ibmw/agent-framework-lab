@@ -422,8 +422,10 @@ describe("customer workspace", () => {
     await user.click(screen.getByRole("button", { name: "Attach existing" }));
     const picker = await screen.findByLabelText("Profile to attach");
     await waitFor(() => expect(picker).toHaveValue(UNATTACHED.profile_id));
-    expect(picker).toHaveAccessibleDescription(
-      "This one is the only profile in the lab not yet attached to this shop, so it is already chosen.",
+    await waitFor(() =>
+      expect(picker).toHaveAccessibleDescription(
+        "This one is the only profile in the lab not yet attached to this shop, so it is already chosen.",
+      ),
     );
     expectNotRefused(screen.getByRole("button", { name: "Attach to this shop" }));
   });

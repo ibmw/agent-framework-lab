@@ -665,13 +665,17 @@ describe("the new-order page", () => {
 
     const customer = screen.getByLabelText("Customer");
     await waitFor(() => expect(customer).toHaveValue(PROFILE_ID));
-    expect(customer).toHaveAccessibleDescription(
-      /This one is the only customer attached to this shop, so it is already chosen\./,
+    await waitFor(() =>
+      expect(customer).toHaveAccessibleDescription(
+        /This one is the only customer attached to this shop, so it is already chosen\./,
+      ),
     );
     const variant = screen.getByLabelText("Variant");
     expect(variant).toHaveValue("NS-ASJ-OB-M");
-    expect(variant).toHaveAccessibleDescription(
-      /This one is the only priced variant in the catalog, so it is already chosen\./,
+    await waitFor(() =>
+      expect(variant).toHaveAccessibleDescription(
+        /This one is the only priced variant in the catalog, so it is already chosen\./,
+      ),
     );
     await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483"));
     expectNotRefused(screen.getByRole("button", { name: "Create order" }));
@@ -1956,8 +1960,10 @@ describe("order editor", () => {
     await user.click(screen.getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
     await user.click(screen.getByRole("button", { name: "Remove it" }));
     await waitFor(() => expect(picker).toHaveValue("NS-ASJ-OB-M"));
-    expect(picker).toHaveAccessibleDescription(
-      "This one is the only priced variant not yet on this order, so it is already chosen.",
+    await waitFor(() =>
+      expect(picker).toHaveAccessibleDescription(
+        "This one is the only priced variant not yet on this order, so it is already chosen.",
+      ),
     );
     await user.click(within(lines).getByRole("button", { name: "Add line" }));
     expect(within(lines).getByText("Alpine Shell Jacket")).toBeVisible();
