@@ -129,9 +129,9 @@ describe("button variants", () => {
 describe("the blocked primary action", () => {
   it("is dashed, quiet, and says a press will not work", () => {
     expect(blockedButtonClasses).toContain("border-dashed");
-    expect(blockedButtonClasses).toContain("border-[#d4d8db]");
+    expect(blockedButtonClasses).toContain("border-admin-quiet-border");
     expect(blockedButtonClasses).toContain("bg-[#fafbfb]");
-    expect(blockedButtonClasses).toContain("text-[#9aa2a8]");
+    expect(blockedButtonClasses).toContain("text-admin-faint");
     expect(blockedButtonClasses).toContain("cursor-not-allowed");
   });
 

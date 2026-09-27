@@ -329,3 +329,56 @@ async def test_unknown_payload_fields_are_rejected(client: AsyncClient) -> None:
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+
+
+async def test_a_logo_is_optional_on_every_write_and_always_answered(client: AsyncClient) -> None:
+    """ADR 0070: an additive field — a writer that never heard of it is still a valid writer."""
+    shop_id = await create_shop(client)
+    assert (await client.get(f"/api/v1/shops/{shop_id}/draft")).json()["content"]["logo"] is None
+
+    logo = {"mark": "anchor", "background": "indigo"}
+    saved = await client.put(
+        f"/api/v1/shops/{shop_id}/draft", json={"payload": {**PAYLOAD, "logo": logo}}
+    )
+    assert saved.status_code == 200
+    assert saved.json()["content"]["logo"] == logo
+    listed = (await client.get("/api/v1/shops")).json()["shops"]
+    assert [shop["logo"] for shop in listed] == [logo]
+
+    preview = (await client.get(f"/api/v1/shops/{shop_id}/draft/preview")).json()
+    assert preview["content"]["logo"] == logo
+    published = await client.post(f"/api/v1/shops/{shop_id}/versions")
+    assert published.json()["content"]["logo"] == logo
+
+    # A whole-payload write without the key is a draft without a logo.
+    cleared = await client.put(f"/api/v1/shops/{shop_id}/draft", json={"payload": PAYLOAD})
+    assert cleared.json()["content"]["logo"] is None
+    changes = (await client.get(f"/api/v1/shops/{shop_id}/draft/preview")).json()["changes"]
+    assert {"kind": "removed", "path": "logo", "description": "Removed shop logo"} in changes
+
+
+async def test_a_shop_is_created_with_its_logo(client: AsyncClient) -> None:
+    logo = {"mark": "storefront", "background": "pine"}
+    response = await client.post("/api/v1/shops", json={"identity": IDENTITY, "logo": logo})
+
+    assert response.status_code == 201
+    assert response.json()["content"]["logo"] == logo
+
+
+@pytest.mark.parametrize(
+    "logo",
+    [
+        {"mark": "rocket", "background": "pine"},
+        {"mark": "anchor", "background": "brick"},
+        {"mark": "anchor", "background": "#1d6241"},
+        {"mark": "anchor", "background": "pine", "mark_colour": "white"},
+        {"mark": "anchor"},
+    ],
+)
+async def test_a_logo_outside_the_closed_sets_is_refused_by_the_contract(
+    client: AsyncClient, logo: dict[str, str]
+) -> None:
+    response = await client.post("/api/v1/shops", json={"identity": IDENTITY, "logo": logo})
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"

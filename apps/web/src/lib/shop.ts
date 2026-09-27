@@ -55,6 +55,7 @@ export function toPayload(content: ShopContentSchema | ShopDraft): ShopPayloadSc
     fulfilment_methods: content.fulfilment_methods,
     support_guidelines: content.support_guidelines,
     tone_of_voice_guidelines: content.tone_of_voice_guidelines,
+    logo: content.logo,
   };
 }
 

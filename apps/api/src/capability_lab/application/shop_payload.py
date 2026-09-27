@@ -4,6 +4,10 @@ ADR 0012 fixes the definition lifecycle and leaves each payload schema to the sl
 introduces it. `shop-payload-v1` is the shop's schema: a lossless canonical document under
 the ADR 0007 serialization rules, so a published version's content fingerprint is stable
 and a stored version round-trips back into the typed domain aggregate.
+
+`shop-payload-v2` is v1 plus a required `logo` (ADR 0070), and it is written only for a shop
+that has one. A shop without a logo is still written as v1, key for key, so no document
+stored before the logo existed renders to different bytes — and no recorded fingerprint moves.
 """
 
 from __future__ import annotations
@@ -37,6 +41,9 @@ from capability_lab.domain.shop import (
     ProductStatus,
     ProductVariant,
     ShopIdentity,
+    ShopLogo,
+    ShopLogoBackground,
+    ShopMark,
     ShopPayload,
     SupportChannel,
     SupportGuideline,
@@ -46,6 +53,7 @@ from capability_lab.domain.shop import (
 )
 
 SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION = "shop-payload-v1"
+SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION = "shop-payload-v2"
 
 
 def _money_document(price: Money) -> dict[str, CanonicalValue]:
@@ -103,8 +111,8 @@ def _product_document(product: Product) -> dict[str, CanonicalValue]:
 
 
 def shop_payload_document(payload: ShopPayload) -> dict[str, CanonicalValue]:
-    """Render one shop payload as its canonical `shop-payload-v1` document."""
-    return {
+    """Render one shop payload as its canonical document: v1 without a logo, v2 with one."""
+    document: dict[str, CanonicalValue] = {
         "canonical_schema_version": SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION,
         "faq": [
             {"answer": entry.answer, "id": entry.id, "question": entry.question}
@@ -160,6 +168,15 @@ def shop_payload_document(payload: ShopPayload) -> dict[str, CanonicalValue]:
             for guideline in payload.tone_of_voice_guidelines
         ],
     }
+    # Absent means unwritten: a `"logo": null` would move the bytes, and so the fingerprint,
+    # of every shop stored before the logo existed.
+    if payload.logo is not None:
+        document["canonical_schema_version"] = SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION
+        document["logo"] = {
+            "background": payload.logo.background.value,
+            "mark": payload.logo.mark.value,
+        }
+    return document
 
 
 def shop_payload_canonical_json(payload: ShopPayload) -> bytes:
@@ -238,10 +255,31 @@ def _read_product(reader: DocumentReader) -> Product:
     )
 
 
+def _read_logo(root: DocumentReader) -> ShopLogo | None:
+    """The logo the schema token says the document holds: none under v1, one under v2.
+
+    A v1 document carrying `logo` — even `null` — is refused rather than read: no writer
+    produces one, and re-rendering it would not give back the bytes that were stored.
+    """
+    if root.text("canonical_schema_version") == SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION:
+        logo = root.reader("logo")
+        return ShopLogo(
+            mark=logo.enum(ShopMark, "mark"),
+            background=logo.enum(ShopLogoBackground, "background"),
+        )
+    require_schema_version(root, SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION, "shop payload")
+    if root.has("logo"):
+        raise CanonicalSerializationError(
+            f"{root.path}.logo is written only under "
+            f"{SHOP_PAYLOAD_WITH_LOGO_CANONICAL_SCHEMA_VERSION}"
+        )
+    return None
+
+
 def shop_payload_from_document(document: object) -> ShopPayload:
     """Rebuild the typed aggregate from a stored canonical document."""
     root = DocumentReader(document, "shop payload")
-    require_schema_version(root, SHOP_PAYLOAD_CANONICAL_SCHEMA_VERSION, "shop payload")
+    logo = _read_logo(root)
     identity = root.reader("identity")
     return ShopPayload(
         identity=ShopIdentity(
@@ -301,4 +339,5 @@ def shop_payload_from_document(document: object) -> ShopPayload:
             )
             for entry in root.readers("tone_of_voice_guidelines")
         ),
+        logo=logo,
     )

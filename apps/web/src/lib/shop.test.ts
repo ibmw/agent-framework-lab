@@ -70,6 +70,7 @@ const content: ShopContentSchema = {
   support_guidelines: [],
   tone_of_voice_guidelines: [],
   default_tone_of_voice_id: null,
+  logo: null,
 };
 
 /** The same content as the workspace holds it, each product keyed (ADR 0061). */
@@ -101,6 +102,13 @@ describe("toPayload", () => {
     expect(payload).not.toHaveProperty("default_tone_of_voice_id");
     expect(payload.products[0].variants).toHaveLength(2);
     expect(payload.identity).toEqual(content.identity);
+  });
+
+  it("carries the logo, and a shop without one as null (ADR 0070)", () => {
+    const logo = { mark: "leaf", background: "plum" } as const;
+
+    expect(toPayload({ ...content, logo }).logo).toEqual(logo);
+    expect(toPayload(content).logo).toBeNull();
   });
 
   it("strips the key the workspace gave each product, so the write is the contract's", () => {

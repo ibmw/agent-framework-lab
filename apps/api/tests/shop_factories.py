@@ -114,3 +114,20 @@ def publishable_shop(**overrides: object) -> ShopPayload:
     }
     fields.update(overrides)
     return ShopPayload(**fields)  # type: ignore[arg-type]
+
+
+# ADR 0070. Both constants were taken from the codec as it stood before the logo existed
+# (commit 8105c27): a shop without a logo must still render to these exact bytes, or every
+# published shop version would stop matching the fingerprint recorded when it was frozen.
+PRE_LOGO_IDENTITY_ONLY_DOCUMENT = (
+    b'{"canonical_schema_version":"shop-payload-v1","faq":[],"fulfilment_methods":[],'
+    b'"identity":{"channels":["chat"],"currencies":["EUR"],"locale":"en-GB",'
+    b'"name":"Northstar Outfitters","slug":"northstar"},"payment_methods":[],"policies":[],'
+    b'"products":[],"support_guidelines":[],"tone_of_voice_guidelines":[]}'
+)
+PRE_LOGO_IDENTITY_ONLY_FINGERPRINT = (
+    "230a96f8afb86dd7f7aa61683da3c22ebff11156e6a815dad3bdebce00855d49"
+)
+PRE_LOGO_PUBLISHABLE_FINGERPRINT = (
+    "6f39c79ee7d9a4da9fac8451cda142799d1d99bb6a8222a8b3a941dd2c55cf38"
+)

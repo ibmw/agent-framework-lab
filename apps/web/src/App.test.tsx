@@ -57,6 +57,7 @@ const EMPTY_CONTENT: ShopDraftResponse["content"] = {
   support_guidelines: [],
   tone_of_voice_guidelines: [],
   default_tone_of_voice_id: null,
+  logo: null,
 };
 
 const READY_CONTENT: ShopDraftResponse["content"] = {
@@ -188,6 +189,7 @@ const shops: ShopListResponse = {
       updated_at: "2026-08-23T12:05:00+00:00",
       latest_published_version: null,
       published_version_count: 0,
+      logo: null,
     },
   ],
 };
@@ -1837,6 +1839,59 @@ describe("every enum has a name", () => {
 
     expect(await screen.findByRole("checkbox", { name: "Chat" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Email" })).toBeInTheDocument();
+  });
+});
+
+describe("a shop's logo, on Shop details", () => {
+  it("opens on the initials, takes a mark and a background, and saves both", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const logo = within(await screen.findByRole("region", { name: "Logo" }));
+    const marks = within(logo.getByRole("group", { name: "Mark" }));
+    expect(marks.getByRole("radio", { name: "None — initials" })).toBeChecked();
+    // No mark, no background to choose: the initials are drawn on the lab's own ground.
+    expect(logo.queryByRole("group", { name: "Background" })).toBeNull();
+
+    await user.click(marks.getByRole("radio", { name: "Compass" }));
+    const backgrounds = within(logo.getByRole("group", { name: "Background" }));
+    // A mark lands on the prototype's Pine, and the lab draws it in white there.
+    expect(backgrounds.getByRole("radio", { name: "Pine" })).toBeChecked();
+    expect(marks.getByRole("radio", { name: "Compass" })).toHaveAccessibleDescription(
+      /draws the mark in white on Pine, the higher contrast of the two at 7\.3:1/,
+    );
+
+    await user.click(backgrounds.getByRole("radio", { name: "Stone" }));
+    expect(marks.getByRole("radio", { name: "Compass" })).toHaveAccessibleDescription(
+      /draws the mark in ink on Stone, the higher contrast of the two at 11\.7:1/,
+    );
+    // There is no mark colour to choose: it follows the background.
+    expect(logo.queryByRole("group", { name: "Mark colour" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().logo).toEqual({ mark: "compass", background: "stone" });
+  });
+
+  it("gives the logo back to the initials by choosing None", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...currentContent, logo: { mark: "anchor", background: "indigo" } };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const logo = within(await screen.findByRole("region", { name: "Logo" }));
+    expect(logo.getByRole("radio", { name: "Anchor" })).toBeChecked();
+    expect(logo.getByRole("radio", { name: "Indigo" })).toBeChecked();
+
+    await user.click(logo.getByRole("radio", { name: "None — initials" }));
+    expect(logo.queryByRole("group", { name: "Background" })).toBeNull();
+    // A mark chosen again lands on the background the shop had, not on Pine.
+    await user.click(logo.getByRole("radio", { name: "Gem" }));
+    expect(logo.getByRole("radio", { name: "Indigo" })).toBeChecked();
+
+    await user.click(logo.getByRole("radio", { name: "None — initials" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().logo).toBeNull();
   });
 });
 
@@ -3730,6 +3785,7 @@ describe("index filter chips", () => {
               updated_at: "2026-08-20T09:00:00+00:00",
               latest_published_version: 3,
               published_version_count: 3,
+              logo: null,
             },
           ],
         } satisfies ShopListResponse),

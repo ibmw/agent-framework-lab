@@ -391,7 +391,7 @@ function PreferencesZone({ surface }: { surface: LabSurfaceValue }) {
 const presetChipClasses =
   "flex min-h-[38px] cursor-pointer items-center gap-[7px] rounded-lg border px-[13px] text-[13px] transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-lab-primary";
 
-const chosenPresetChipClasses = `${presetChipClasses} border-[#b6d9c4] bg-[#eaf5ed] font-bold text-lab-primary hover:bg-[#ddeee3]`;
+const chosenPresetChipClasses = `${presetChipClasses} border-admin-chip-border bg-admin-chip font-bold text-lab-primary hover:bg-admin-chip-hover`;
 
 const offeredPresetChipClasses = `${presetChipClasses} border-admin-field-border bg-admin-surface font-semibold text-admin-ink-soft hover:bg-admin-canvas`;
 
@@ -842,7 +842,7 @@ function ConnectionCard({
                   <span
                     className={`${probeChipClasses} ${
                       answered.tone === "good"
-                        ? "bg-[#eaf5ed] text-lab-primary"
+                        ? "bg-admin-chip text-lab-primary"
                         : "bg-lab-error-tint text-lab-error"
                     }`}
                   >

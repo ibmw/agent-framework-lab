@@ -32,6 +32,7 @@ from capability_lab.application.shop_payload import (
 from capability_lab.domain.definitions import DefinitionId, DefinitionType
 from capability_lab.domain.shop import (
     ShopIdentity,
+    ShopLogo,
     ShopPayload,
     summarize_shop_changes,
     validate_shop,
@@ -77,6 +78,7 @@ class ShopSummary:
     updated_at: datetime
     latest_published_version: int | None
     published_version_count: int
+    logo: ShopLogo | None
 
 
 def shop_definition_id(shop_id: UUID) -> DefinitionId:
@@ -106,10 +108,11 @@ class ShopService(DefinitionAuthoringService[ShopPayload]):
                 updated_at=listing.updated_at,
                 latest_published_version=listing.latest_published_version,
                 published_version_count=listing.published_version_count,
+                logo=listing.payload.logo,
             )
             for listing in self.list_definitions()
         )
 
-    def create_shop(self, identity: ShopIdentity) -> ShopDraftRecord:
+    def create_shop(self, identity: ShopIdentity, logo: ShopLogo | None = None) -> ShopDraftRecord:
         """Create a shop's stable identity and its first, deliberately incomplete draft."""
-        return self.create(ShopPayload(identity=identity))
+        return self.create(ShopPayload(identity=identity, logo=logo))

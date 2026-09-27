@@ -6667,6 +6667,11 @@ components:
       properties:
         identity:
           $ref: '#/components/schemas/ShopIdentitySchema'
+        logo:
+          anyOf:
+          - $ref: '#/components/schemas/ShopLogoSchema'
+          - type: 'null'
+          description: The new shop's logo; absent or null means it has none.
       additionalProperties: false
       type: object
       required:
@@ -12348,6 +12353,10 @@ components:
           - type: string
           - type: 'null'
           title: Default Tone Of Voice Id
+        logo:
+          anyOf:
+          - $ref: '#/components/schemas/ShopLogoSchema'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -12360,6 +12369,7 @@ components:
       - support_guidelines
       - tone_of_voice_guidelines
       - default_tone_of_voice_id
+      - logo
       title: ShopContentSchema
       description: A shop payload as the API returns it, with derived read-only evidence.
     ShopDocumentKind:
@@ -12460,6 +12470,67 @@ components:
       required:
       - shops
       title: ShopListResponse
+    ShopLogoBackground:
+      type: string
+      enum:
+      - clay
+      - pine
+      - indigo
+      - plum
+      - forest
+      - ochre
+      - stone
+      title: ShopLogoBackground
+      description: The named backgrounds a logo can sit on; a token's hex never moves
+        once published.
+    ShopLogoSchema:
+      properties:
+        mark:
+          $ref: '#/components/schemas/ShopMark'
+        background:
+          $ref: '#/components/schemas/ShopLogoBackground'
+      additionalProperties: false
+      type: object
+      required:
+      - mark
+      - background
+      title: ShopLogoSchema
+      description: A mark on a named background; the lab derives the mark's colour
+        from the background.
+    ShopMark:
+      type: string
+      enum:
+      - storefront
+      - compass
+      - anchor
+      - mountain
+      - leaf
+      - wave
+      - spark
+      - bolt
+      - cube
+      - bag
+      - tag
+      - shirt
+      - shoe
+      - gem
+      - cup
+      - bread
+      - bottle
+      - pill
+      - heart
+      - scissors
+      - tools
+      - book
+      - ticket
+      - camera
+      - paw
+      - home
+      - truck
+      - globe
+      title: ShopMark
+      description: The twenty-eight marks a logo can draw; extend deliberately, never
+        from input.
     ShopOrderResponse:
       properties:
         order_id:
@@ -12559,6 +12630,11 @@ components:
             $ref: '#/components/schemas/ToneOfVoiceSchema'
           type: array
           title: Tone Of Voice Guidelines
+        logo:
+          anyOf:
+          - $ref: '#/components/schemas/ShopLogoSchema'
+          - type: 'null'
+          description: The shop's logo; absent or null means the shop has none.
       additionalProperties: false
       type: object
       required:
@@ -12645,6 +12721,10 @@ components:
         published_version_count:
           type: integer
           title: Published Version Count
+        logo:
+          anyOf:
+          - $ref: '#/components/schemas/ShopLogoSchema'
+          - type: 'null'
       additionalProperties: false
       type: object
       required:
@@ -12654,6 +12734,7 @@ components:
       - updated_at
       - latest_published_version
       - published_version_count
+      - logo
       title: ShopSummarySchema
     ShopVersionListResponse:
       properties:

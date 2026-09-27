@@ -101,6 +101,7 @@ const SHOP_CONTENT: ShopDraftResponse["content"] = {
   support_guidelines: [],
   tone_of_voice_guidelines: [],
   default_tone_of_voice_id: null,
+  logo: null,
 };
 
 const SCENARIOS: ScenarioListResponse = {
@@ -932,6 +933,7 @@ const server = setupServer(
           updated_at: "2026-08-25T12:05:00+00:00",
           latest_published_version: 1,
           published_version_count: 1,
+          logo: null,
         },
       ],
     } satisfies ShopListResponse),

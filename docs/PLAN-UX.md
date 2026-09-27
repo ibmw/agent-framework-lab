@@ -58,10 +58,10 @@ Three things the prototype draws are decided outside this plan, so that no slice
   `docs/design-direction.md`, *Navigation and chrome*. Built with the overview.
 - **A rail entry's count comes from the listing its index renders**, held by the workspace —
   ADR 0056, which also measured and refused the additive counts read. Landed.
-- **Three of the five proposed preferences earn a consumer**, and the logo is the optional last
-  slice — `docs/design-direction.md`, *Proposals, not decisions*. Two landed with the settings
-  zones, and how a timestamp is written and what a reset puts back are ADR 0058;
-  confirm-before-delete landed with the confirm it governs (ADR 0060).
+- **Three of the five proposed preferences earn a consumer**, and the logo was built as a shop
+  customization — `docs/design-direction.md`, *Proposals, not decisions*. Two landed with the
+  settings zones, and how a timestamp is written and what a reset puts back are ADR 0058;
+  confirm-before-delete landed with the confirm it governs (ADR 0060); the logo is ADR 0070.
 
 The assessment that produced this plan — the prototype read screen by screen against the
 application, and the verdict on each slice of the 13 September plan — is
@@ -71,7 +71,7 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). Group C's remaining slice, 28, is optional.
+connection leaves unreachable (ADR 0053). Group C is delivered, the shop logo last (ADR 0070).
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -83,19 +83,6 @@ that lands in the editor, an overview built around the version timeline and the 
 settings page whose three zones say what may be touched, and a lab-wide model connection that a
 run pins. Everything the September plans delivered — hints, derived identifiers, labels, chips,
 edit-in-place, the guard, pine, the field row — is still there underneath.
-
-### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 28 — The shop logo (optional)
-
-- [ ] Icon from the twenty-eight marks, background and mark colour on the shop payload, a
-  contrast check in the editor, drawn on the switcher's badge and the shops index. A
-  canonical-document change (ADR 0013's payload schema), so it carries its migration behaviour
-  and its fingerprint consequence, and it is dropped if the badge reads well on initials.
-
-Frames: `Workspace.dc.html` :153, :212, :4933.
-
-Branch: `feat/shop-logo`. Checks: contract and schema tests; `Shops.test.tsx`.
 
 ### Acceptance criteria
 

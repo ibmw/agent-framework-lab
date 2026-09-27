@@ -91,6 +91,7 @@ const CONTENT: ShopDraftResponse["content"] = {
   support_guidelines: [],
   tone_of_voice_guidelines: [],
   default_tone_of_voice_id: null,
+  logo: null,
 };
 
 /** Three changes standing against v3, which is the slice's own stated evidence. */
@@ -161,6 +162,7 @@ const SHOPS: ShopListResponse = {
       updated_at: "2026-08-23T12:05:00+00:00",
       latest_published_version: 3,
       published_version_count: 3,
+      logo: null,
     },
   ],
 };

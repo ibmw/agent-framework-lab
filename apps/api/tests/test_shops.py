@@ -19,7 +19,7 @@ from capability_lab.application.shops import (
     shop_definition_id,
 )
 from capability_lab.domain.definitions import DefinitionType
-from capability_lab.domain.shop import ShopPayload
+from capability_lab.domain.shop import ShopLogo, ShopLogoBackground, ShopMark, ShopPayload
 from capability_lab.infrastructure.database import (
     Base,
     create_database_engine,
@@ -30,7 +30,14 @@ from capability_lab.infrastructure.repositories import (
     PersistedDefinitionIntegrityError,
     shop_repository,
 )
-from shop_factories import identity, product, publishable_shop, variant
+from shop_factories import (
+    PRE_LOGO_IDENTITY_ONLY_DOCUMENT,
+    PRE_LOGO_IDENTITY_ONLY_FINGERPRINT,
+    identity,
+    product,
+    publishable_shop,
+    variant,
+)
 
 
 @dataclass(slots=True)
@@ -279,3 +286,72 @@ def test_published_content_survives_a_new_repository_and_session(tmp_path: Path)
     assert reloaded.payload == payload
     assert reloaded.published.definition == shop_definition_id(shop_id)
     assert reloaded.published.content_fingerprint == shop_content_fingerprint(payload)
+
+
+def test_a_version_published_before_logos_existed_still_reads(tmp_path: Path) -> None:
+    """A row holding the exact document and fingerprint the pre-logo codec wrote (ADR 0070)."""
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'pre-logo.db'}")
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    with session_scope(factory) as writing:
+        service = ShopService(shop_repository(writing), AdvancingClock())
+        record = service.create_shop(identity())
+        service.replace_draft(record.definition.id, publishable_shop())
+        service.publish(record.definition.id)
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE definition_versions SET payload = json(:payload), "
+                "content_fingerprint = :fingerprint WHERE version = 1"
+            ),
+            {
+                "payload": PRE_LOGO_IDENTITY_ONLY_DOCUMENT.decode(),
+                "fingerprint": PRE_LOGO_IDENTITY_ONLY_FINGERPRINT,
+            },
+        )
+
+    with session_scope(factory) as reading:
+        stored = ShopService(shop_repository(reading), AdvancingClock()).get_version(
+            record.definition.id, 1
+        )
+
+    assert stored.payload == ShopPayload(identity=identity())
+    assert stored.payload.logo is None
+    assert stored.published.content_fingerprint == PRE_LOGO_IDENTITY_ONLY_FINGERPRINT
+
+
+def test_a_logo_edit_mints_a_new_version_that_reads_back(tmp_path: Path) -> None:
+    engine = create_database_engine(f"sqlite:///{tmp_path / 'logo.db'}")
+    Base.metadata.create_all(engine)
+    factory = create_session_factory(engine)
+    logo = ShopLogo(mark=ShopMark.TRUCK, background=ShopLogoBackground.OCHRE)
+    with session_scope(factory) as writing:
+        service = ShopService(shop_repository(writing), AdvancingClock())
+        record = service.create_shop(identity())
+        service.replace_draft(record.definition.id, publishable_shop())
+        first = service.publish(record.definition.id)
+
+        service.replace_draft(record.definition.id, replace(publishable_shop(), logo=logo))
+        preview = service.preview_draft(record.definition.id)
+        assert not preview.matches_latest_published
+        assert [change.description for change in preview.changes] == ["Added shop logo"]
+        second = service.publish(record.definition.id)
+
+    with session_scope(factory) as reading:
+        reader = ShopService(shop_repository(reading), AdvancingClock())
+        stored = reader.get_version(record.definition.id, 2)
+        listed = reader.list_shops()
+
+    assert second.published.version == 2
+    assert stored.payload.logo == logo
+    assert stored.published.content_fingerprint == shop_content_fingerprint(stored.payload)
+    assert stored.published.content_fingerprint != first.published.content_fingerprint
+    assert [summary.logo for summary in listed] == [logo]
+
+
+def test_a_shop_can_be_created_with_its_logo(service: ShopService) -> None:
+    logo = ShopLogo(mark=ShopMark.STOREFRONT, background=ShopLogoBackground.PINE)
+    record = service.create_shop(identity(), logo)
+
+    assert service.get_draft(record.definition.id).payload.logo == logo

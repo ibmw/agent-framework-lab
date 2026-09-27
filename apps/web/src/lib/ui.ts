@@ -385,7 +385,7 @@ export const destructiveSubtleButtonClasses = buttonVariants.destructiveSubtle;
  *
  * Drawn only by `PrimaryAction` (`components/PrimaryAction.tsx`), which also swallows the press.
  */
-export const blockedButtonClasses = `${buttonShapeClasses} ${focusRingClasses} cursor-not-allowed border border-dashed border-[#d4d8db] bg-[#fafbfb] text-[#9aa2a8]`;
+export const blockedButtonClasses = `${buttonShapeClasses} ${focusRingClasses} cursor-not-allowed border border-dashed border-admin-quiet-border bg-[#fafbfb] text-admin-faint`;
 
 /**
  * The handoff's validation message — "Validation messages sit under the control: 13px 600

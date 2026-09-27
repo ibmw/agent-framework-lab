@@ -11,6 +11,7 @@ import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { PrimaryAction, type Refusal, RefusalLine } from "../components/PrimaryAction";
+import { ShopLogoCard } from "../components/ShopLogoCard";
 import {
   Card,
   DefaultToneChip,
@@ -452,6 +453,12 @@ export function ShopIdentityPage() {
           </FieldGroup>
         </FieldRows>
       </Card>
+
+      <ShopLogoCard
+        name={identity.name}
+        logo={content.logo}
+        onChange={(logo) => edit({ ...content, logo })}
+      />
 
       <PaymentAndFulfilmentCards />
     </SetupPage>

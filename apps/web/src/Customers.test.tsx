@@ -41,6 +41,7 @@ const SHOP_CONTENT: ShopDraftResponse["content"] = {
   support_guidelines: [],
   tone_of_voice_guidelines: [],
   default_tone_of_voice_id: null,
+  logo: null,
 };
 
 const shops: ShopListResponse = {
@@ -52,6 +53,7 @@ const shops: ShopListResponse = {
       updated_at: "2026-08-23T12:05:00+00:00",
       latest_published_version: null,
       published_version_count: 0,
+      logo: null,
     },
     {
       shop_id: OTHER_SHOP_ID,
@@ -60,6 +62,7 @@ const shops: ShopListResponse = {
       updated_at: "2026-08-23T12:05:00+00:00",
       latest_published_version: null,
       published_version_count: 0,
+      logo: null,
     },
   ],
 };

@@ -2528,6 +2528,8 @@ export interface components {
     /** CreateShopRequest */
     CreateShopRequest: {
       identity: components["schemas"]["ShopIdentitySchema"];
+      /** @description The new shop's logo; absent or null means it has none. */
+      logo?: components["schemas"]["ShopLogoSchema"] | null;
     };
     /** CreateSupportIdentityRequest */
     CreateSupportIdentityRequest: {
@@ -5564,6 +5566,7 @@ export interface components {
       tone_of_voice_guidelines: components["schemas"]["ToneOfVoiceSchema"][];
       /** Default Tone Of Voice Id */
       default_tone_of_voice_id: string | null;
+      logo: components["schemas"]["ShopLogoSchema"] | null;
     };
     /**
      * ShopDocumentKind
@@ -5613,6 +5616,54 @@ export interface components {
       /** Shops */
       shops: components["schemas"]["ShopSummarySchema"][];
     };
+    /**
+     * ShopLogoBackground
+     * @description The named backgrounds a logo can sit on; a token's hex never moves once published.
+     * @enum {string}
+     */
+    ShopLogoBackground: "clay" | "pine" | "indigo" | "plum" | "forest" | "ochre" | "stone";
+    /**
+     * ShopLogoSchema
+     * @description A mark on a named background; the lab derives the mark's colour from the background.
+     */
+    ShopLogoSchema: {
+      mark: components["schemas"]["ShopMark"];
+      background: components["schemas"]["ShopLogoBackground"];
+    };
+    /**
+     * ShopMark
+     * @description The twenty-eight marks a logo can draw; extend deliberately, never from input.
+     * @enum {string}
+     */
+    ShopMark:
+      | "storefront"
+      | "compass"
+      | "anchor"
+      | "mountain"
+      | "leaf"
+      | "wave"
+      | "spark"
+      | "bolt"
+      | "cube"
+      | "bag"
+      | "tag"
+      | "shirt"
+      | "shoe"
+      | "gem"
+      | "cup"
+      | "bread"
+      | "bottle"
+      | "pill"
+      | "heart"
+      | "scissors"
+      | "tools"
+      | "book"
+      | "ticket"
+      | "camera"
+      | "paw"
+      | "home"
+      | "truck"
+      | "globe";
     /**
      * ShopOrderResponse
      * @description One authored order, its findings, and the statuses it may still move to.
@@ -5666,6 +5717,8 @@ export interface components {
       support_guidelines: components["schemas"]["SupportGuidelineSchema"][];
       /** Tone Of Voice Guidelines */
       tone_of_voice_guidelines: components["schemas"]["ToneOfVoiceSchema"][];
+      /** @description The shop's logo; absent or null means the shop has none. */
+      logo?: components["schemas"]["ShopLogoSchema"] | null;
     };
     /**
      * ShopPreviewResponse
@@ -5710,6 +5763,7 @@ export interface components {
       latest_published_version: number | null;
       /** Published Version Count */
       published_version_count: number;
+      logo: components["schemas"]["ShopLogoSchema"] | null;
     };
     /** ShopVersionListResponse */
     ShopVersionListResponse: {

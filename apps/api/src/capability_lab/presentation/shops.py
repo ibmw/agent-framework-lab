@@ -32,6 +32,9 @@ from capability_lab.domain.shop import (
     ProductStatus,
     ProductVariant,
     ShopIdentity,
+    ShopLogo,
+    ShopLogoBackground,
+    ShopMark,
     ShopPayload,
     SupportChannel,
     SupportGuideline,
@@ -390,6 +393,20 @@ class ShopIdentitySchema(StrictApiModel):
         )
 
 
+class ShopLogoSchema(StrictApiModel):
+    """A mark on a named background; the lab derives the mark's colour from the background."""
+
+    mark: ShopMark
+    background: ShopLogoBackground
+
+    @classmethod
+    def from_domain(cls, logo: ShopLogo) -> Self:
+        return cls(mark=logo.mark, background=logo.background)
+
+    def to_domain(self) -> ShopLogo:
+        return ShopLogo(mark=self.mark, background=self.background)
+
+
 class ShopPayloadSchema(StrictApiModel):
     """The whole authored content of a shop draft or published version."""
 
@@ -401,6 +418,9 @@ class ShopPayloadSchema(StrictApiModel):
     fulfilment_methods: list[FulfilmentMethodSchema]
     support_guidelines: list[SupportGuidelineSchema]
     tone_of_voice_guidelines: list[ToneOfVoiceSchema]
+    logo: ShopLogoSchema | None = Field(
+        default=None, description="The shop's logo; absent or null means the shop has none."
+    )
 
     def to_domain(self) -> ShopPayload:
         return ShopPayload(
@@ -416,6 +436,7 @@ class ShopPayloadSchema(StrictApiModel):
             tone_of_voice_guidelines=tuple(
                 guideline.to_domain() for guideline in self.tone_of_voice_guidelines
             ),
+            logo=None if self.logo is None else self.logo.to_domain(),
         )
 
 
@@ -431,6 +452,7 @@ class ShopContentSchema(StrictApiModel):
     support_guidelines: list[SupportGuidelineSchema]
     tone_of_voice_guidelines: list[ToneOfVoiceSchema]
     default_tone_of_voice_id: str | None
+    logo: ShopLogoSchema | None
 
     @classmethod
     def from_domain(cls, payload: ShopPayload) -> Self:
@@ -455,11 +477,15 @@ class ShopContentSchema(StrictApiModel):
                 for guideline in payload.tone_of_voice_guidelines
             ],
             default_tone_of_voice_id=None if default_tone is None else default_tone.id,
+            logo=None if payload.logo is None else ShopLogoSchema.from_domain(payload.logo),
         )
 
 
 class CreateShopRequest(StrictApiModel):
     identity: ShopIdentitySchema
+    logo: ShopLogoSchema | None = Field(
+        default=None, description="The new shop's logo; absent or null means it has none."
+    )
 
 
 class ReplaceShopDraftRequest(StrictApiModel):
@@ -513,6 +539,7 @@ class ShopSummarySchema(StrictApiModel):
     updated_at: str
     latest_published_version: int | None
     published_version_count: int
+    logo: ShopLogoSchema | None
 
     @classmethod
     def from_domain(cls, summary: ShopSummary) -> Self:
@@ -523,6 +550,7 @@ class ShopSummarySchema(StrictApiModel):
             updated_at=summary.updated_at.isoformat(),
             latest_published_version=summary.latest_published_version,
             published_version_count=summary.published_version_count,
+            logo=None if summary.logo is None else ShopLogoSchema.from_domain(summary.logo),
         )
 
 
@@ -578,7 +606,12 @@ class ShopRoutes:
             command: CreateShopRequest,
             service: Annotated[ShopService, dependency],
         ) -> ShopDraftResponse:
-            return ShopDraftResponse.from_record(service.create_shop(command.identity.to_domain()))
+            return ShopDraftResponse.from_record(
+                service.create_shop(
+                    command.identity.to_domain(),
+                    None if command.logo is None else command.logo.to_domain(),
+                )
+            )
 
         def get_shop_draft(
             shop_id: ShopIdPath,

@@ -35,6 +35,10 @@ class DocumentReader:
     def path(self) -> str:
         return self._path
 
+    def has(self, key: str) -> bool:
+        """Whether the key is present at all, `null` included."""
+        return key in self._document
+
     def text(self, key: str) -> str:
         value = self._document.get(key)
         if not isinstance(value, str):

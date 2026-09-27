@@ -37,6 +37,7 @@ const SHOPS: ShopSummarySchema[] = [
     updated_at: "2026-09-19T09:00:00+00:00",
     latest_published_version: null,
     published_version_count: 0,
+    logo: null,
   },
   {
     shop_id: OTHER_SHOP_ID,
@@ -45,6 +46,7 @@ const SHOPS: ShopSummarySchema[] = [
     updated_at: "2026-09-18T09:00:00+00:00",
     latest_published_version: 3,
     published_version_count: 3,
+    logo: null,
   },
 ];
 
@@ -604,9 +606,37 @@ describe("the shop switcher", () => {
     expect(switcher()).toHaveAccessibleName("Switch shop, current: Northstar Outfitters");
     expect(switcher()).toHaveAttribute("aria-haspopup", "menu");
     expect(switcher()).toHaveAttribute("aria-expanded", "false");
-    // The badge is the shop's initials until Slice 28 gives it a logo, and it says nothing a
-    // reader has to hear: the name is beside it.
+    // A shop without a logo is its initials, and the badge says nothing a reader has to hear:
+    // the name is beside it.
     expect(within(switcher()).getByText("NO")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("draws a logo in the bar and the panel, and names neither mark nor colour", async () => {
+    renderShell("shop", {
+      shops: [
+        { ...SHOPS[0], logo: { mark: "compass", background: "clay" } },
+        { ...SHOPS[1], logo: { mark: "mountain", background: "stone" } },
+      ] as ShopSummarySchema[],
+    });
+
+    // The badge adds nothing to the button's name: the mark is not "compass" to a reader.
+    expect(switcher()).toHaveAccessibleName("Switch shop, current: Northstar Outfitters");
+    const bar = switcher().querySelector("[data-shop-badge]") as HTMLElement;
+    expect(bar).toHaveAttribute("aria-hidden", "true");
+    expect(bar.className).toContain("h-[30px]");
+    expect(bar).toHaveStyle({ backgroundColor: "#c2532d", color: "#ffffff" });
+    expect(bar.querySelector("svg")).toHaveAttribute("data-mark", "compass");
+    expect(bar).not.toHaveTextContent("NO");
+
+    await userEvent.click(switcher());
+
+    const other = screen.getByRole("menuitem", { name: "Alpenglow Supplyv3" });
+    const badge = other.querySelector("[data-shop-badge]") as HTMLElement;
+    expect(badge).toHaveAttribute("aria-hidden", "true");
+    expect(badge.className).toContain("h-[26px]");
+    // Stone is light, so the lab draws the mark in ink.
+    expect(badge).toHaveStyle({ backgroundColor: "#eceef0", color: "#16332d" });
+    expect(badge.querySelector("svg")).toHaveAttribute("data-mark", "mountain");
   });
 
   it("opens a menu holding the current shop, the others with their version, and All shops", async () => {
@@ -640,6 +670,7 @@ describe("the shop switcher", () => {
           updated_at: "2026-09-17T09:00:00+00:00",
           latest_published_version: null,
           published_version_count: 0,
+          logo: null,
         },
       ],
     });

@@ -271,6 +271,7 @@ describe("the slug a name suggests", () => {
               updated_at: "2026-08-23T12:05:00+00:00",
               latest_published_version: null,
               published_version_count: 0,
+              logo: null,
             },
           ],
         } satisfies ShopListResponse),
@@ -490,5 +491,117 @@ describe("create-form guidance", () => {
     const create = card.getByRole("button", { name: "Create shop" });
     expect(create).toHaveAccessibleDescription(/slug already exists/i);
     expect(create.compareDocumentPosition(refusal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("the shop logo (ADR 0070)", () => {
+  const listed: ShopListResponse = {
+    shops: [
+      {
+        shop_id: SHOP_ID,
+        name: "Northstar Outfitters",
+        slug: "northstar",
+        updated_at: "2026-08-23T12:05:00+00:00",
+        latest_published_version: 1,
+        published_version_count: 1,
+        logo: { mark: "compass", background: "ochre" },
+      },
+      {
+        shop_id: "1b2c3d4e-5f60-4718-9a0b-c1d2e3f4a5b6",
+        name: "Northstar Outfitters FR",
+        slug: "northstar-fr",
+        updated_at: "2026-08-22T12:05:00+00:00",
+        latest_published_version: null,
+        published_version_count: 0,
+        logo: null,
+      },
+    ],
+  };
+
+  function rowOf(name: string): HTMLElement {
+    const link = screen.getByRole("link", { name });
+    return link.closest("tr") as HTMLElement;
+  }
+
+  it("draws each index row's badge: the mark in its derived colour, or the initials", async () => {
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json(listed)));
+    renderShops();
+    await screen.findByRole("link", { name: "Northstar Outfitters" });
+
+    const logod = rowOf("Northstar Outfitters").querySelector("[data-shop-badge]") as HTMLElement;
+    expect(logod).toHaveAttribute("aria-hidden", "true");
+    expect(logod.className).toContain("h-[30px]");
+    // Ochre passes 3:1 with both; the lab draws the higher of the two, which is ink.
+    expect(logod).toHaveStyle({ backgroundColor: "#a8802a", color: "#16332d" });
+    expect(logod.querySelector("svg")).toHaveAttribute("data-mark", "compass");
+    expect(logod).not.toHaveTextContent("NO");
+
+    const initials = rowOf("Northstar Outfitters FR").querySelector(
+      "[data-shop-badge]",
+    ) as HTMLElement;
+    expect(initials).toHaveAttribute("aria-hidden", "true");
+    expect(initials).toHaveTextContent(/^NO$/);
+    expect(initials.querySelector("svg")).toBeNull();
+    expect(initials).toHaveStyle({ color: "#ffffff" });
+
+    // The badge adds nothing to what the row's link is called.
+    expect(screen.getByRole("link", { name: "Northstar Outfitters FR" })).toBeVisible();
+  });
+
+  it("opens the create page on no logo and creates without one", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const page = await createShopPage();
+
+    const logo = within(page.getByRole("region", { name: "Logo" }));
+    expect(logo.getByRole("radio", { name: "None — initials" })).toBeChecked();
+    expect(logo.getAllByRole("radio")).toHaveLength(29);
+
+    await user.type(page.getByLabelText("Name"), "Harbour Lane Supply");
+    // The preview is the initials of the name as typed.
+    expect(logo.getByText("HL")).toHaveAttribute("aria-hidden", "true");
+    await user.click(page.getByRole("button", { name: "Create shop" }));
+
+    await waitFor(() => expect(created).not.toBeNull());
+    expect(created).not.toHaveProperty("logo");
+  });
+
+  it("creates a shop with the logo chosen on the page", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const page = await createShopPage();
+
+    await user.type(page.getByLabelText("Name"), "Harbour Lane Supply");
+    const logo = within(page.getByRole("region", { name: "Logo" }));
+    await user.click(logo.getByRole("radio", { name: "Anchor" }));
+    await user.click(logo.getByRole("radio", { name: "Clay" }));
+    await user.click(page.getByRole("button", { name: "Create shop" }));
+
+    await waitFor(() => expect(created).not.toBeNull());
+    expect(created?.logo).toEqual({ mark: "anchor", background: "clay" });
+  });
+});
+
+describe("the logo card's background (ADR 0070)", () => {
+  it("keeps the background chosen before None when a mark is chosen again", async () => {
+    const user = userEvent.setup();
+    renderNewShop();
+    const page = await createShopPage();
+    const logo = within(page.getByRole("region", { name: "Logo" }));
+
+    await user.click(logo.getByRole("radio", { name: "Compass" }));
+    expect(logo.getByRole("radio", { name: "Pine" })).toBeChecked();
+    await user.click(logo.getByRole("radio", { name: "Indigo" }));
+    await user.click(logo.getByRole("radio", { name: "None — initials" }));
+    expect(logo.queryByRole("radio", { name: "Indigo" })).toBeNull();
+
+    await user.click(logo.getByRole("radio", { name: "Anchor" }));
+    expect(logo.getByRole("radio", { name: "Indigo" })).toBeChecked();
+    expect(logo.getByRole("radio", { name: "Pine" })).not.toBeChecked();
+
+    await user.type(page.getByLabelText("Name"), "Harbour Lane Supply");
+    await user.click(page.getByRole("button", { name: "Create shop" }));
+    await waitFor(() => expect(created).not.toBeNull());
+    expect(created?.logo).toEqual({ mark: "anchor", background: "indigo" });
   });
 });

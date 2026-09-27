@@ -2,6 +2,7 @@ import type { ShopSummarySchema } from "@agent-lab/contracts";
 import { ArrowLeft, Check, ChevronsUpDown } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { ShopBadge } from "../components/ShopBadge";
 import { focusRingClasses, topBarFocusRingClasses } from "../lib/ui";
 
 /**
@@ -18,41 +19,11 @@ import { focusRingClasses, topBarFocusRingClasses } from "../lib/ui";
  * the decision as a callback and knows neither.
  */
 
-/** The badge until Slice 28 gives a shop a logo: the first letters of its first two words. */
-function shopInitials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((word) => word.charAt(0))
-    .join("")
-    .toUpperCase();
-}
-
 /** What a shop is at, for the reader choosing between them: its latest published version. */
 function versionLabel(shop: ShopSummarySchema): string {
   return shop.latest_published_version === null
     ? "Never published"
     : `v${shop.latest_published_version}`;
-}
-
-/**
- * The initials block, on `lab-ink` in both places it is drawn — 30px in the bar, 26px in the
- * panel. Hidden from a reader: the shop's name is beside it in both, and a badge that announced
- * itself would say the name twice, once spelled out and once as two letters.
- */
-function ShopBadge({ name, size }: { name: string; size: 30 | 26 }) {
-  const metrics =
-    size === 30
-      ? "h-[30px] w-[30px] rounded-lg text-[11.5px]"
-      : "h-[26px] w-[26px] rounded-[7px] text-[10.5px]";
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex flex-none items-center justify-center bg-lab-ink font-bold tracking-[0.02em] text-white ${metrics}`}
-    >
-      {shopInitials(name)}
-    </span>
-  );
 }
 
 const rowBaseClasses = `flex w-full items-center gap-2.5 rounded-[9px] px-3 py-[9px] text-left text-sm ${focusRingClasses}`;
@@ -192,7 +163,7 @@ export function ShopSwitcher({ shops, current, onChoose }: ShopSwitcherProps) {
           }
         }}
       >
-        {current ? <ShopBadge name={current.name} size={30} /> : null}
+        {current ? <ShopBadge name={current.name} logo={current.logo} size={30} /> : null}
         <span className="font-display text-base font-bold tracking-[-0.01em] whitespace-nowrap text-white">
           {name}
         </span>
@@ -236,7 +207,7 @@ export function ShopSwitcher({ shops, current, onChoose }: ShopSwitcherProps) {
                 onClick={() => choose(shop)}
                 onFocus={() => setActiveIndex(index)}
               >
-                <ShopBadge name={shop.name} size={26} />
+                <ShopBadge name={shop.name} logo={shop.logo} size={26} />
                 <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
                   {shop.name}
                 </span>

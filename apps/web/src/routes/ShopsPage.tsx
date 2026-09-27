@@ -1,4 +1,4 @@
-import type { ShopSummarySchema } from "@agent-lab/contracts";
+import type { ShopLogoSchema, ShopSummarySchema } from "@agent-lab/contracts";
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
@@ -10,6 +10,8 @@ import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { LocaleField } from "../components/LocaleField";
 import { SearchField, SearchRow } from "../components/SearchField";
+import { ShopBadge } from "../components/ShopBadge";
+import { ShopLogoCard } from "../components/ShopLogoCard";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
 import { uniqueSuggestion } from "../lib/entryIds";
@@ -179,13 +181,21 @@ export function ShopsPage() {
               {visible.map((shop) => (
                 <tr key={shop.shop_id}>
                   <td className={tableCellClasses}>
-                    <Link
-                      className="font-semibold text-lab-ink underline-offset-2 hover:underline"
-                      to={`/shops/${shop.shop_id}`}
-                    >
-                      {shop.name}
-                    </Link>
-                    <div className="text-admin-muted">{shop.slug}</div>
+                    {/* The frame's row (`Workspace.dc.html`:179): the badge, then the name
+                        over the slug. The badge is drawn for every shop — its logo, or its
+                        initials — so the names start on one line down the column. */}
+                    <div className="flex min-w-0 items-center gap-[11px]">
+                      <ShopBadge name={shop.name} logo={shop.logo} size={30} />
+                      <div className="min-w-0">
+                        <Link
+                          className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                          to={`/shops/${shop.shop_id}`}
+                        >
+                          {shop.name}
+                        </Link>
+                        <div className="text-admin-muted">{shop.slug}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className={tableCellClasses}>
                     {shop.latest_published_version === null
@@ -211,8 +221,8 @@ export function ShopsPage() {
  * shop's workspace, which reads the shop list itself, so there is no rail figure here to move:
  * `/shops` draws no rail at all.
  *
- * The Logo card the prototype draws between Identity and Commerce is PLAN-UX Slice 28's, and
- * the payload carries nothing to draw it from.
+ * The Logo card sits between Identity and Commerce, where the prototype draws it, and opens on
+ * no logo: a mark nobody picked is not a choice the lab can make for the operator (ADR 0070).
  */
 export function NewShopPage() {
   const navigate = useNavigate();
@@ -223,6 +233,7 @@ export function NewShopPage() {
   const [slug, setSlug] = useState("");
   const [locale, setLocale] = useState(DEFAULT_LOCALE.tag);
   const [currencies, setCurrencies] = useState<Currency[]>([DEFAULT_LOCALE.currency]);
+  const [logo, setLogo] = useState<ShopLogoSchema | null>(null);
   const [creating, setCreating] = useState(false);
   const [filled, setFilled] = useState(false);
   // One token for both derived fields: the example answers a name and a locale, and both the
@@ -268,13 +279,16 @@ export function NewShopPage() {
     setCreating(true);
     setFormError(null);
     try {
-      const created = await createShop({
-        name,
-        slug,
-        locale,
-        currencies,
-        channels: ["chat"],
-      });
+      const created = await createShop(
+        {
+          name,
+          slug,
+          locale,
+          currencies,
+          channels: ["chat"],
+        },
+        logo,
+      );
       navigate(`/shops/${created.shop_id}`);
     } catch (cause: unknown) {
       setFormError(cause instanceof LabApiError ? cause.message : "The shop could not be created.");
@@ -332,6 +346,8 @@ export function NewShopPage() {
               />
             </FieldRows>
           </Card>
+
+          <ShopLogoCard name={name} logo={logo} onChange={setLogo} />
 
           <Card title="Commerce">
             <FieldRows>

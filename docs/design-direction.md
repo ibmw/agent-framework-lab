@@ -107,7 +107,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | *Reset to defaults* | also re-points the remembered shop at the first shop in the list | leaves the remembered shop and the settings-return location alone | that is a fixture's way of saying *undo*; there is no shop a real reset could pick, and neither value was chosen by anybody (ADR 0058) |
 | Support identities in shop scope | drawn on both rails, filed under Shop scope | one lab address on both rails | there is one library; two routes rendering one list would make the mode depend on which door was used (ADR 0054) |
 | Mode tabs on Settings | drawn — the prototype's settings is an overlay on a mode | absent | `/settings` is a route in neither mode, and tabs there would be the one place the mode is not the branch of the tree you stand in (ADR 0054); rule 5 |
-| Shop badge | a per-shop ground and ink, or a logo | initials on `lab-ink` | the payload carries no logo and no colour pair to draw; Slice 28 is where a shop gets one |
+| Shop logo's *Mark colour* row and its contrast warning | a choice of White or Ink, and "Hard to read against that background" under it | not drawn: the lab draws the mark in whichever of the two is higher in contrast against the background, at 3:1 or more for every background in the palette; the palette drops Brick | a choice with one readable answer per background (Ochre alone passes with both) is a choice the lab can make; the warm red is destructive and nothing else (ADR 0070) |
 | Count on the bench entry | "1 live" | nothing | a tally of running arms in one shop, not the length of any listing the shell reads; a figure the payload lacks is not faked (ADR 0056) |
 | Focus ring on the bar | `2px solid #1d6241` offset outward, as everywhere else | the bar's paper, inset on the two controls that are the bar's full height | pine on `#16332d` is 1.86:1, under WCAG 2.2's 3:1 for a focus indicator, and an outward offset puts half the ring off the bar; *Principles* outrank a measurement (ADR 0055) |
 | The create page's side column | 312px of notes beside the form — *What happens next*, *In a hurry?*, *Summary*, *Soundness* | the one 790px column; the notes that carry a rule are cards in it, the rest are not drawn | `form-decisions.md`'s layout 2b sizes the *form*, and a second column of prose beside a create form that asks four questions is a column that mostly repeats the hints under them; a note computed from a form nothing has written yet (*Summary*, *Soundness*) is a figure the page lacks |
@@ -199,10 +199,10 @@ The values are in `shell/AppShell.tsx`; the rules are these.
   the left is the shop switcher wherever there is a shop to name and the app title otherwise,
   never both; the title returns to the shops index. The **switcher is a button opening a
   `menu`** — not a select — with roving focus, `Escape`, an outside press and a navigation all
-  dismissing it, and the shop's badge is its initials until Slice 28 gives it a logo. The **mode
-  tabs** are drawn in a mode and absent outside one. At the right, **one** *Show me around*
-  mount resolves the surface's tour from the location and is absent where no tour exists, and
-  **Settings** is a toggle: lit with a close glyph while its page is open, returning to the last
+  dismissing it, and the shop's badge is its logo, or its initials without one (ADR 0070).
+  The **mode tabs** are drawn in a mode and absent outside one. At the right, **one** *Show me
+  around* mount resolves the surface's tour from the location and is absent where no tour exists,
+  and **Settings** is a toggle: lit with a close glyph while its page is open, returning to the last
   location that was not `/settings` — a browser preference, never a row (ADR 0044) — and to the
   shops index when a browser remembers none.
 - **Settings is its zones told apart by surface**, in a column capped at 1024px, under a
@@ -465,5 +465,5 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 The prototype proposes five browser preferences and a shop logo. Where the app opens and the
 timestamp format earned a consumer and landed with the settings zones (ADR 0058);
 confirm-before-delete landed with the confirm (ADR 0060); auto-offered tours and table density
-are cut; the logo is the optional last slice. The reasoning for what is cut is in `docs/PLAN-UX.md`,
-*Deliberately not here*.
+are cut; the logo landed as a shop customization (ADR 0070). The reasoning for what is cut is
+in `docs/PLAN-UX.md`, *Deliberately not here*.

@@ -72,6 +72,14 @@
   --color-admin-ink-soft: #42474c;
   --color-admin-muted: #6d7175;
   /*
+   * The quiet greys of a control that is not a field: `#d4d8db` edges it at rest and `#9aa2a8`
+   * is the stronger grey it moves to. Minted with their second consumer — the refused action
+   * (`blockedButtonClasses`, a dashed `#d4d8db` edge around a `#9aa2a8` label) and the shop logo
+   * card's tiles, which rest on the first and hover to the second (ADR 0070).
+   */
+  --color-admin-quiet-border: #d4d8db;
+  --color-admin-faint: #9aa2a8;
+  /*
    * The selected filter chip, the third of the handoff's token additions (design-direction,
    * "the workspace refresh"): `#eaf5ed` on `#b6d9c4`, hovering to `#ddeee3`. Its ink is
    * `--color-lab-primary`, which the refresh already added, so the trio needs three names and

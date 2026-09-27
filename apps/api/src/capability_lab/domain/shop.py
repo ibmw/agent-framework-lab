@@ -461,6 +461,129 @@ class ShopIdentity:
         return self.currencies[0]
 
 
+# A shop's logo (ADR 0070): one of twenty-eight marks on one of seven named backgrounds. It is
+# authored content of the payload and nothing an agent reads. Both axes are closed; a
+# background token's hex is frozen once published, so a different colour is a new token.
+#
+# The mark's colour is not authored. The lab draws it in White or Ink, whichever is higher in
+# contrast against the background, and every background in the palette gives that choice at
+# least the 3:1 of WCAG 2.2 SC 1.4.11 — so no logo the payload can hold is unreadable, and
+# there is nothing to refuse.
+class ShopMark(StrEnum):
+    """The twenty-eight marks a logo can draw; extend deliberately, never from input."""
+
+    STOREFRONT = "storefront"
+    COMPASS = "compass"
+    ANCHOR = "anchor"
+    MOUNTAIN = "mountain"
+    LEAF = "leaf"
+    WAVE = "wave"
+    SPARK = "spark"
+    BOLT = "bolt"
+    CUBE = "cube"
+    BAG = "bag"
+    TAG = "tag"
+    SHIRT = "shirt"
+    SHOE = "shoe"
+    GEM = "gem"
+    CUP = "cup"
+    BREAD = "bread"
+    BOTTLE = "bottle"
+    PILL = "pill"
+    HEART = "heart"
+    SCISSORS = "scissors"
+    TOOLS = "tools"
+    BOOK = "book"
+    TICKET = "ticket"
+    CAMERA = "camera"
+    PAW = "paw"
+    HOME = "home"
+    TRUCK = "truck"
+    GLOBE = "globe"
+
+
+class ShopLogoBackground(StrEnum):
+    """The named backgrounds a logo can sit on; a token's hex never moves once published."""
+
+    CLAY = "clay"
+    PINE = "pine"
+    INDIGO = "indigo"
+    PLUM = "plum"
+    FOREST = "forest"
+    OCHRE = "ochre"
+    STONE = "stone"
+
+
+class ShopMarkColour(StrEnum):
+    """What the lab draws a mark in; derived from the background, never authored."""
+
+    WHITE = "white"
+    INK = "ink"
+
+
+SHOP_LOGO_BACKGROUND_HEX: dict[ShopLogoBackground, str] = {
+    ShopLogoBackground.CLAY: "#c2532d",
+    ShopLogoBackground.PINE: "#1d6241",
+    ShopLogoBackground.INDIGO: "#2f4a7a",
+    ShopLogoBackground.PLUM: "#6b3f8c",
+    ShopLogoBackground.FOREST: "#16332d",
+    ShopLogoBackground.OCHRE: "#a8802a",
+    ShopLogoBackground.STONE: "#eceef0",
+}
+
+SHOP_MARK_COLOUR_HEX: dict[ShopMarkColour, str] = {
+    ShopMarkColour.WHITE: "#ffffff",
+    ShopMarkColour.INK: "#16332d",
+}
+
+MIN_MARK_CONTRAST = 3.0
+"""WCAG 2.2 SC 1.4.11: a graphical object against its adjacent colour."""
+
+
+def _channel(value: int) -> float:
+    c = value / 255
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def relative_luminance(hex_colour: str) -> float:
+    """WCAG relative luminance of a `#rrggbb` colour."""
+    red, green, blue = (int(hex_colour[index : index + 2], 16) for index in (1, 3, 5))
+    return 0.2126 * _channel(red) + 0.7152 * _channel(green) + 0.0722 * _channel(blue)
+
+
+def contrast_ratio(first: str, second: str) -> float:
+    """WCAG contrast ratio between two `#rrggbb` colours, from 1 to 21."""
+    lighter, darker = sorted((relative_luminance(first), relative_luminance(second)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def mark_colour_for(background: ShopLogoBackground) -> ShopMarkColour:
+    """The mark colour of the higher contrast against `background`."""
+    ground = SHOP_LOGO_BACKGROUND_HEX[background]
+    return max(
+        ShopMarkColour,
+        key=lambda colour: contrast_ratio(ground, SHOP_MARK_COLOUR_HEX[colour]),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ShopLogo:
+    """A mark on a background; the mark's colour follows from the background."""
+
+    mark: ShopMark
+    background: ShopLogoBackground
+
+    def __post_init__(self) -> None:
+        _require_instance(self.mark, ShopMark, "a shop logo must use one of the lab's marks")
+        _require_instance(
+            self.background, ShopLogoBackground, "a shop logo must use one of the lab's backgrounds"
+        )
+
+    @property
+    def mark_colour(self) -> ShopMarkColour:
+        return mark_colour_for(self.background)
+
+
 @dataclass(frozen=True, slots=True)
 class ShopPayload:
     """The complete authored content of one shop draft or published version."""
@@ -473,8 +596,11 @@ class ShopPayload:
     fulfilment_methods: tuple[FulfilmentMethod, ...] = ()
     support_guidelines: tuple[SupportGuideline, ...] = ()
     tone_of_voice_guidelines: tuple[ToneOfVoiceGuideline, ...] = ()
+    logo: ShopLogo | None = None
 
     def __post_init__(self) -> None:
+        if self.logo is not None:
+            _require_instance(self.logo, ShopLogo, "a shop logo must be a mark on a background")
         _require_instance(self.identity, ShopIdentity, "a shop payload must declare its identity")
         _require_unique(tuple(product.handle for product in self.products), "product handles")
         _require_unique(tuple(entry.id for entry in self.faq), "FAQ entry IDs")
@@ -761,6 +887,15 @@ def _diff_product(previous: Product, current: Product) -> list[ShopChange]:
     return changes
 
 
+def _logo_change(previous: ShopLogo | None, current: ShopLogo | None) -> ShopChange:
+    """A logo is one field: set, replaced or taken away, and reported once (ADR 0070)."""
+    if previous is None:
+        return ShopChange(kind=ShopChangeKind.ADDED, path="logo", description="Added shop logo")
+    if current is None:
+        return ShopChange(kind=ShopChangeKind.REMOVED, path="logo", description="Removed shop logo")
+    return ShopChange(kind=ShopChangeKind.UPDATED, path="logo", description="Updated shop logo")
+
+
 def summarize_shop_changes(
     previous: ShopPayload | None, current: ShopPayload
 ) -> tuple[ShopChange, ...]:
@@ -783,6 +918,8 @@ def summarize_shop_changes(
                 description="Updated shop identity",
             )
         )
+    if previous.logo != current.logo:
+        changes.append(_logo_change(previous.logo, current.logo))
 
     before_products = _keyed(previous.products, lambda product: product.handle)
     after_products = _keyed(current.products, lambda product: product.handle)

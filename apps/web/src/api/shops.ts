@@ -3,6 +3,7 @@ import type {
   ShopDraftResponse,
   ShopIdentitySchema,
   ShopListResponse,
+  ShopLogoSchema,
   ShopPayloadSchema,
   ShopPreviewResponse,
   ShopVersionListResponse,
@@ -18,8 +19,12 @@ export async function listShops(signal?: AbortSignal): Promise<ShopListResponse>
   return read<ShopListResponse>(await fetch(shopsPath(), { signal }));
 }
 
-export async function createShop(identity: ShopIdentitySchema): Promise<ShopDraftResponse> {
-  const command: CreateShopRequest = { identity };
+export async function createShop(
+  identity: ShopIdentitySchema,
+  logo: ShopLogoSchema | null = null,
+): Promise<ShopDraftResponse> {
+  // No logo is no key: the lab reads an absent logo as none (ADR 0070).
+  const command: CreateShopRequest = logo === null ? { identity } : { identity, logo };
   return read<ShopDraftResponse>(
     await fetch(shopsPath(), {
       method: "POST",

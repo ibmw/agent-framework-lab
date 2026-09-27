@@ -39,6 +39,7 @@ const SHOP_CONTENT: ShopDraftResponse["content"] = {
   support_guidelines: [],
   tone_of_voice_guidelines: [],
   default_tone_of_voice_id: null,
+  logo: null,
 };
 
 const JUDGE: JudgeConfigurationDraftResponse["content"] = {

@@ -45,6 +45,7 @@ const CONTENT: ShopContentSchema = {
   ],
   tone_of_voice_guidelines: [],
   default_tone_of_voice_id: null,
+  logo: null,
 };
 
 /**
