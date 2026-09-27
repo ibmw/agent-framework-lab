@@ -86,7 +86,7 @@ export function AgentConfigurationsPage() {
   return (
     <>
       <PageHeader
-        title="Agent configurations"
+        title="Agent configs"
         description="What runs the support agent: framework, architecture, model, prompt, tools, and the support identity it adopts. Configurations are cross-shop — prompt variables resolve at experiment start and the resolved configuration is pinned to the run."
         actions={
           <Link className={accentButtonClasses} to="new">
@@ -293,7 +293,7 @@ export function NewAgentConfigurationPage() {
   return (
     <CreatePage
       backTo="/lab/agent-configurations"
-      backLabel="Agent configurations"
+      backLabel="Agent configs"
       breadcrumb="creating a configuration"
       title={name}
       untitled="New agent configuration"

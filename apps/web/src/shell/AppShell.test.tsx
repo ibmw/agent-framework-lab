@@ -278,7 +278,7 @@ describe("the two rails", () => {
   const LAB_RAIL = [
     "Bench",
     "History",
-    "Agent configurations",
+    "Agent configs",
     "Judges",
     "Support identities",
     "Objective blocks",
@@ -438,7 +438,7 @@ describe("the counts on a rail entry", () => {
     const lab = "Experiment lab workspace";
     for (const [label, figure, described] of [
       ["History", "7", "7 experiments"],
-      ["Agent configurations", "6", "6 configurations"],
+      ["Agent configs", "6", "6 configurations"],
       ["Judges", "3", "3 judges"],
       ["Support identities", "2", "2 support identities"],
       ["Objective blocks", "5", "5 blocks"],

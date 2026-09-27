@@ -15,7 +15,7 @@ import { expect, type Page } from "@playwright/test";
 const LAB_SECTIONS = new Set([
   "Bench",
   "History",
-  "Agent configurations",
+  "Agent configs",
   "Judges",
   "Support identities",
   "Objective blocks",

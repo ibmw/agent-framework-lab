@@ -113,9 +113,9 @@ export const SETUP_CHAIN = [
   },
   {
     id: "agent-configurations",
-    label: "Agent configurations",
+    label: "Agent configuration",
     route: "/lab/agent-configurations",
-    linkLabel: "Open agent configurations",
+    linkLabel: "Open agent configs",
     publishes: true,
     terms: ["agent-configuration", "support-identity", "run"],
   },

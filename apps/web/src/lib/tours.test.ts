@@ -192,6 +192,15 @@ describe("the chain a tour opens with", () => {
     }
   });
 
+  // The step names the record kind, as its neighbours do; the index is *Agent configs*, and the
+  // link to it says so (design-direction, *Names*).
+  it("names the agent-configuration step by its record, in its own tour and its neighbour's", () => {
+    expect(tourSteps("agent-configurations")[0].title).toMatch(
+      /^Step \d+ of \d+ · Agent configuration$/,
+    );
+    expect(tourSteps("judges")[0].body[0]).toContain("after Agent configuration,");
+  });
+
   it("names the neighbours the chain puts either side, and invents none at the ends", () => {
     const first = chainPlacement(SETUP_CHAIN[0].id);
     const last = chainPlacement(SETUP_CHAIN[SETUP_CHAIN.length - 1].id);

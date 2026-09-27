@@ -614,7 +614,7 @@ function surfaces(lab: BuiltLab & { judgeId: string }): [string, string, Held | 
     ["live bench", `/lab/bench/${lab.shopId}/${lab.experimentId}`, null],
     ["results", `/lab/bench/${lab.shopId}/${lab.experimentId}/results`, null],
     ["history", "/lab/history", null],
-    ["agent configurations", "/lab/agent-configurations", null],
+    ["agent configs", "/lab/agent-configurations", null],
     ["judges", "/lab/judges", null],
     ["support identities", "/lab/support-identities", null],
     ["objective blocks", "/lab/objective-blocks", null],

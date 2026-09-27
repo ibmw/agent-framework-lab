@@ -369,7 +369,7 @@ export const TOURS: Record<TourId, Tour> = {
   },
 
   "agent-configurations": {
-    surface: "agent configurations",
+    surface: "agent configs",
     route: "/lab/agent-configurations",
     chain: { step: "agent-configurations", anchor: PAGE_NAME },
     steps: [],

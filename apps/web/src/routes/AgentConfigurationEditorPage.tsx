@@ -339,7 +339,7 @@ export function AgentConfigurationEditorPage() {
         description={
           <>
             <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Agent configurations
+              Agent configs
             </Link>{" "}
             · Shop-independent — variables resolve at experiment start, and the resolved
             configuration is pinned to the run.

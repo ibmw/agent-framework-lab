@@ -504,7 +504,7 @@ describe("agent configuration workspace", () => {
   it("lists configurations with their framework, model, and publication state", async () => {
     renderAt("/lab/agent-configurations");
 
-    expect(await screen.findByRole("heading", { name: "Agent configurations" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Agent configs" })).toBeVisible();
     expect(await screen.findByRole("link", { name: "Frontline single agent" })).toBeVisible();
     const table = within(screen.getByRole("table"));
     expect(table.getByText("Pydantic AI")).toBeVisible();
@@ -1280,6 +1280,53 @@ describe("the new-configuration page", () => {
 });
 
 /**
+ * The index has one name on every surface that names it — its rail entry, its page title and
+ * the links back to it — and that name is short enough to sit beside its count on one line of
+ * the rail (design-direction, *Names*). The record keeps its own name, "agent configuration".
+ */
+describe("the index's one name", () => {
+  it("is Agent configs on the rail entry and the page title", async () => {
+    renderAt("/lab/agent-configurations");
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Agent configs" })).toBeVisible();
+    expect(railEntry("Agent configs", "Experiment lab workspace")).toHaveAttribute(
+      "href",
+      "/lab/agent-configurations",
+    );
+  });
+
+  it("is agent configs on the index's tour", async () => {
+    renderAt("/lab/agent-configurations");
+
+    await screen.findByRole("heading", { level: 1, name: "Agent configs" });
+    expect(
+      await screen.findByRole("button", { name: "Show me around agent configs" }),
+    ).toBeVisible();
+  });
+
+  it("is Agent configs on the create page's way back", async () => {
+    renderAt("/lab/agent-configurations/new");
+
+    await screen.findByRole("heading", { level: 1, name: "New agent configuration" });
+    expect(screen.getByRole("link", { name: "Back to Agent configs" })).toHaveAttribute(
+      "href",
+      "/lab/agent-configurations",
+    );
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: "Agent configs" }),
+    ).toHaveAttribute("href", "/lab/agent-configurations");
+  });
+
+  it("is Agent configs on the editor's link back to the index", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    const main = await screen.findByRole("main");
+    const back = await within(main).findByRole("link", { name: "Agent configs" });
+    expect(back).toHaveAttribute("href", "/lab/agent-configurations");
+  });
+});
+
+/**
  * The rail's figure and this index are one listing, read once by the shell and handed to
  * both, so they cannot come to disagree (ADR 0056).
  */
@@ -1288,7 +1335,7 @@ describe("the rail's figure and this index", () => {
     renderAt("/lab/agent-configurations");
 
     const rows = bodyRows(await screen.findByRole("table"));
-    const entry = railEntry("Agent configurations", "Experiment lab workspace");
+    const entry = railEntry("Agent configs", "Experiment lab workspace");
     expect(within(entry).getByText(String(rows))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${rows} configuration${rows === 1 ? "" : "s"}`);
   });
@@ -1300,7 +1347,7 @@ describe("the rail's figure and this index", () => {
     const user = userEvent.setup();
     renderAt("/lab/agent-configurations/new");
 
-    const entry = railEntry("Agent configurations", "Experiment lab workspace");
+    const entry = railEntry("Agent configs", "Experiment lab workspace");
     await waitFor(() => expect(within(entry).getByText("1")).toBeVisible());
 
     await user.type(await screen.findByLabelText("Name"), "Frontline B");
@@ -1308,7 +1355,7 @@ describe("the rail's figure and this index", () => {
 
     await waitFor(() =>
       expect(
-        within(railEntry("Agent configurations", "Experiment lab workspace")).getByText("2"),
+        within(railEntry("Agent configs", "Experiment lab workspace")).getByText("2"),
       ).toBeVisible(),
     );
   });

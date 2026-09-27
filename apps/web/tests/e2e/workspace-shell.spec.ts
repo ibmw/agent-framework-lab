@@ -316,3 +316,39 @@ test("a timestamp preference set in Settings reaches a listing Settings never dr
   await expect(row.getByText(/^\d{1,2} \w{3,4} \d{4}, \d{2}:\d{2}$/)).toBeVisible();
   await expect(row.getByText(/ago$/)).toHaveCount(0);
 });
+
+/**
+ * "Agent configurations" wrapped onto two lines beside its count in the lab's 216px rail, which
+ * is why the index is named *Agent configs* (design-direction, *Names*). The entry is measured
+ * while it is the active one, bold by its computed weight, which is its widest state: its label's
+ * text makes one line.
+ */
+test("the Agent configs entry, active and bold, sits on one line beside its count", async ({
+  page,
+}) => {
+  await page.setViewportSize(VIEWPORT);
+
+  await page.goto("/lab/agent-configurations");
+  await expect(page.getByRole("heading", { level: 1, name: "Agent configs" })).toBeVisible();
+  const entry = page
+    .getByLabel("Experiment lab workspace")
+    .getByRole("link", { name: "Agent configs" });
+  await expect(entry).toHaveAttribute("aria-current", "page");
+  // The figure is drawn once the listing is read; the measure is of the row as it settles.
+  const figure = entry.locator('span[aria-hidden="true"]').filter({ hasText: /^\d+$/ });
+  await expect(figure).toBeVisible();
+
+  const measure = await entry.evaluate((element) => {
+    const label = document.getElementById(element.getAttribute("aria-labelledby") ?? "");
+    if (label === null) {
+      throw new Error("the entry has no label to measure");
+    }
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+    return { weight: Number(getComputedStyle(label).fontWeight), lines: lines.size };
+  });
+
+  expect(measure.weight, "the active entry is measured in bold").toBeGreaterThanOrEqual(700);
+  expect(measure.lines, `Agent configs wraps onto ${measure.lines} lines`).toBe(1);
+});

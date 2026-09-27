@@ -220,7 +220,7 @@ function labSections(counts: RailCounts): NavSection[] {
       title: "Library",
       entries: [
         {
-          label: "Agent configurations",
+          label: "Agent configs",
           to: "/lab/agent-configurations",
           icon: Bot,
           count: counts.agentConfigurations,

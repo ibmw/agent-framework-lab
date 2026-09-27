@@ -169,7 +169,7 @@ export async function createConfiguration(
   page: Page,
   configuration: { name: string; identity: string; framework?: string },
 ) {
-  await openSection(page, "Agent configurations", "Agent configurations");
+  await openSection(page, "Agent configs", "Agent configs");
   await page.getByRole("link", { name: "New configuration" }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: "New agent configuration" }),
