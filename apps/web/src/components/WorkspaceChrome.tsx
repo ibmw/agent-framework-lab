@@ -171,18 +171,32 @@ export function EditorSaveActions({
 export function Card({
   title,
   label,
+  busy = false,
+  ref,
   children,
   footer,
 }: {
   title?: ReactNode;
   /** Accessible name when the visible title is not a plain string. */
   label?: string;
+  /**
+   * What this card shows is about to change, because an action in flight is changing it
+   * (ADR 0065). Never set on a card that holds the action's own status, which a busy region
+   * would keep from being announced.
+   */
+  busy?: boolean;
+  ref?: Ref<HTMLElement>;
   children: ReactNode;
   footer?: ReactNode;
 }) {
   const accessibleName = label ?? (typeof title === "string" ? title : undefined);
   return (
-    <section aria-label={accessibleName} className={`${surfaceClasses} overflow-hidden`}>
+    <section
+      ref={ref}
+      aria-label={accessibleName}
+      aria-busy={busy || undefined}
+      className={`${surfaceClasses} overflow-hidden`}
+    >
       {title ? (
         <h2 className={`border-b border-admin-border px-4 py-3 ${cardTitleClasses}`}>{title}</h2>
       ) : null}
@@ -548,25 +562,42 @@ export interface PublishGate extends VersionProvenance {
   issues: DefinitionIssueSchema[];
 }
 
+/** What the gate says while it has not answered for the draft the server holds. */
+const CHECKING_THE_DRAFT = "Checking the draft…";
+
 /**
  * Why the publish button is refused, in the order an author can act on.
  *
  * `id` is what the button's `aria-describedby` names (`PublishButton`'s `reasonsId`), so every
  * line here is read to a keyboard reader who lands on a refused Publish.
+ *
+ * While the gate is `checking` it says so and nothing else: the reasons it last gave were
+ * about a draft the server no longer holds, and a Publish drawn as a press in flight beside
+ * no words at all reads as a button that is broken rather than one that is waiting (ADR 0065).
  */
 export function PublishReasons({
   id,
   className = "grid gap-1",
   preview,
   dirty,
+  checking,
 }: {
   id: string;
   className?: string;
   preview: PublishGate | null;
   dirty: boolean;
+  /** The gate has not answered for the saved draft yet (`DefinitionEditor.checking`). */
+  checking: boolean;
 }) {
   const errors = preview?.issues.filter((issue) => issue.severity === "error") ?? [];
   const warnings = preview?.issues.filter((issue) => issue.severity === "warning") ?? [];
+  if (checking && !dirty) {
+    return (
+      <div id={id} className={className}>
+        <p className="text-xs text-admin-muted">{CHECKING_THE_DRAFT}</p>
+      </div>
+    );
+  }
   return (
     <div id={id} className={className}>
       {/* The three reasons Publish is refused for, at the validation weight every refusal reads
@@ -595,12 +626,14 @@ export function PublishReasons({
  *
  * One button for every definition editor and the overview, so the refusal, its `title`, and the
  * `PublishReasons` block it is described by cannot drift apart between them. Publishing — and a
- * gate that has not answered — is a press in flight.
+ * gate that has not answered — is a press in flight; while the gate is checking, the button is
+ * described by the reasons block, which then says "Checking the draft…".
  */
 export function PublishButton({
   preview,
   dirty,
   publishing,
+  checking,
   reasonsId,
   onPublish,
   variant = "accent",
@@ -611,6 +644,8 @@ export function PublishButton({
   preview: PublishGate | null;
   dirty: boolean;
   publishing: boolean;
+  /** The gate has not answered for the saved draft yet (`DefinitionEditor.checking`). */
+  checking: boolean;
   /** The `id` given to this page's `PublishReasons`. */
   reasonsId: string;
   onPublish: () => void;
@@ -621,6 +656,7 @@ export function PublishButton({
   children?: ReactNode;
 }) {
   const reason = publishRefusalReason(preview, dirty);
+  const waiting = !publishing && !dirty && (checking || preview === null);
   return (
     <PrimaryAction
       ref={ref}
@@ -628,7 +664,8 @@ export function PublishButton({
       type="button"
       className={className}
       refusal={reason === null ? null : { id: reasonsId, reason }}
-      busy={publishing || preview === null}
+      busy={publishing || waiting}
+      aria-describedby={waiting ? reasonsId : undefined}
       onClick={onPublish}
     >
       {children ?? (

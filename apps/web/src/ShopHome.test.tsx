@@ -14,7 +14,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 /**
@@ -448,6 +448,55 @@ describe("publishing in two steps", () => {
     await waitFor(() =>
       expect(screen.getByRole("link", { name: /Point a scenario at v4/ })).toHaveFocus(),
     );
+  });
+
+  it("says it is checking the draft while the gate has not answered for what was saved", async () => {
+    // A save lands and the gate is asked again about what it wrote. Until it answers, the
+    // reasons it gave were about the draft before, so Publish waits and says what for.
+    let previews = 0;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, async () => {
+        previews += 1;
+        if (previews > 1) {
+          await held;
+        }
+        return HttpResponse.json(currentPreview);
+      }),
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: ShopDraftResponse["content"] };
+        return HttpResponse.json({
+          shop_id: SHOP_ID,
+          lifecycle_state: "draft",
+          content: body.payload,
+          created_at: "2026-08-23T12:00:00+00:00",
+          updated_at: "2026-08-23T12:06:00+00:00",
+        } satisfies ShopDraftResponse);
+      }),
+    );
+    await openOverview();
+    expect(within(card("Versions of this shop")).queryByText("Checking the draft…")).toBeNull();
+
+    // An unsaved edit made elsewhere in the shop, saved from the overview's own header.
+    await userEvent.click(await screen.findByRole("link", { name: "Open catalog" }));
+    await userEvent.click(await screen.findByRole("button", { name: "New product" }));
+    await userEvent.click(screen.getByRole("link", { name: "Overview" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(previews).toBe(2));
+    // The overview was drawn again on the way back, so its card is read again here.
+    const versions = within(card("Versions of this shop"));
+    const review = await versions.findByRole("button", { name: "Review 3 changes & publish" });
+    await waitFor(() => expect(versions.getByText("Checking the draft…")).toBeVisible());
+    expectBusy(review);
+    expect(review).toHaveAccessibleDescription("Checking the draft…");
+
+    release();
+    await waitFor(() => expect(versions.queryByText("Checking the draft…")).toBeNull());
+    expectNotRefused(review);
   });
 
   it("refuses the review while the gate refuses, and says why", async () => {

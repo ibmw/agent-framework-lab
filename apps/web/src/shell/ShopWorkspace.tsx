@@ -32,6 +32,8 @@ export interface ShopWorkspaceValue {
   saving: boolean;
   discarding: boolean;
   publishing: boolean;
+  /** The gate has not answered for the saved draft yet (`DefinitionEditor.checking`). */
+  checking: boolean;
   error: string | null;
   edit: (next: ShopDraft) => void;
   /** A key for a product about to be appended to the draft (ADR 0061). */
@@ -196,6 +198,7 @@ export function ShopWorkspace() {
           saving: editor.saving,
           discarding: editor.discarding,
           publishing: editor.publishing,
+          checking: editor.checking,
           error: editor.error ?? shopsError,
           edit: editor.edit,
           save: editor.save,

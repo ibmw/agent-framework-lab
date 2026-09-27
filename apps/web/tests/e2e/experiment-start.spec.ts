@@ -517,6 +517,13 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // on: arm A has answered and owes nothing, arm B has never been run.
   await expect(armA.getByText("Waiting for the customer · turn 0")).toBeVisible();
   await expect(armB.getByText("Waiting for the agent · turn 0")).toBeVisible();
+  // The run reported itself under the composer as it went, and says where both arms now stand.
+  const queue = card(page, "Customer composer").getByRole("status", {
+    name: "Where each arm stands",
+  });
+  await expect(queue).toContainText(
+    "Arm A is waiting for the customer · Arm B is waiting for the agent",
+  );
 
   // And what that turn cost: the control arm calls no provider, so it reports zero tokens
   // and a cost of nothing rather than an empty column. The arm that has not run shows no
@@ -563,6 +570,15 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // Sending advances the arms it reached, so arm B — which was never run on the trigger —
   // answers the conversation as it now stands, with the trigger behind it.
   await expect(armB.getByText(/I found order NS-10482/)).toBeVisible();
+  // Both arms were run, one after the other, and the queue says when both are done.
+  const turnQueue = composer.getByRole("status", { name: "Where each arm stands" });
+  await expect(turnQueue).toContainText(
+    "Arm A is waiting for the customer · Arm B is waiting for the customer",
+  );
+  await expect(composer.getByRole("button", { name: "Send as the customer" })).toBeEnabled();
+  // The press held focus while it ran and still has it: a browser drops focus from a button
+  // that becomes disabled under it, and this one never is (ADR 0065).
+  await expect(composer.getByRole("button", { name: "Send as the customer" })).toBeFocused();
 
   // One composition, one arm: divergence, and the record says which arm heard it.
   await composer.getByRole("checkbox", { name: "Arm B" }).uncheck();
@@ -576,6 +592,8 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // nothing offers to run or message it again, and what it never did is now a miss rather
   // than something it might still do.
   await expect(armA.getByText(/Completed — this arm has answered every turn/)).toBeVisible();
+  // The arm the turn did not reach was not run, and the queue says so beside the one it did.
+  await expect(turnQueue).toContainText("Arm A has completed · Arm B is waiting for the customer");
   await expect(
     objectivesMatrix.getByText(/ missed — support\.read_document never answered/),
   ).toHaveCount(1);
@@ -589,6 +607,9 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
     .getByRole("combobox", { name: "Judge" })
     .selectOption({ label: `experiment-resolution-quality-${unique} · v1 · deterministic` });
   await objectivesMatrix.getByRole("button", { name: /Score 1 judged objective/ }).click();
+  await expect(
+    objectivesMatrix.getByRole("status", { name: "Where each arm's scoring stands" }),
+  ).toContainText("Arm A has been scored · Arm B has been scored");
   await expect(objectivesMatrix.getByText(/a judge scores this dimension; none has/)).toHaveCount(
     0,
   );

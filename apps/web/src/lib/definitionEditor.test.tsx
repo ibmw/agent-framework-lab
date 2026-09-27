@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Link, RouterProvider, useParams } from "react-router-dom";
 import { beforeEach, describe, expect, it } from "vitest";
 import { LabApiError } from "../api/client";
 import { EditorSaveActions } from "../components/WorkspaceChrome";
 import { UnsavedChangesGuard } from "../shell/UnsavedChangesGuard";
+import { expectBusy } from "../test/refused";
 import {
   type DefinitionClient,
   type DefinitionGuard,
@@ -34,6 +35,10 @@ let reads: number;
  */
 let held: { id: string; release: () => void }[] = [];
 let holdReads = false;
+/** Every write the lab was sent, and a way to hold them open until the test lets them land. */
+let writes = 0;
+let heldWrites: (() => void)[] = [];
+let holdWrites = false;
 
 function releaseRead(id: string) {
   const index = held.findIndex((read) => read.id === id);
@@ -57,6 +62,10 @@ const CLIENT: DefinitionClient<Content, Content, typeof PREVIEW> = {
   },
   previewDraft: async () => PREVIEW,
   replaceDraft: async (id, payload) => {
+    writes += 1;
+    if (holdWrites) {
+      await new Promise<void>((resolve) => heldWrites.push(resolve));
+    }
     if (refuseSave !== null) {
       throw new LabApiError(refuseSave, 409);
     }
@@ -129,6 +138,9 @@ beforeEach(() => {
   reads = 0;
   held = [];
   holdReads = false;
+  writes = 0;
+  heldWrites = [];
+  holdWrites = false;
 });
 
 describe("the navigation guard", () => {
@@ -169,6 +181,29 @@ describe("the navigation guard", () => {
 
     expect(await screen.findByRole("heading", { name: "Elsewhere" })).toBeInTheDocument();
     expect(stored.a.text).toBe("two");
+  });
+
+  it("sends one save for a Save and leave pressed again while the first is in flight", async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await editTo(user, "two");
+    await user.click(screen.getByRole("link", { name: "Elsewhere" }));
+    holdWrites = true;
+
+    const prompt = within(await screen.findByRole("dialog", { name: "Unsaved changes" }));
+    const save = prompt.getByRole("button", { name: "Save and leave" });
+    await user.click(save);
+    await waitFor(() => expect(writes).toBe(1));
+    const saving = prompt.getByRole("button", { name: "Saving…" });
+    expect(saving).toBe(save);
+    expectBusy(saving);
+    await user.click(saving);
+    await user.keyboard("{Enter}");
+    expect(writes).toBe(1);
+
+    await act(async () => heldWrites.shift()?.());
+    expect(await screen.findByRole("heading", { name: "Elsewhere" })).toBeInTheDocument();
+    expect(writes).toBe(1);
   });
 
   it("keeps the navigation pending and says why when the save is refused", async () => {
@@ -355,5 +390,138 @@ describe("discarding from the editor's own header", () => {
 
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+  });
+});
+
+/**
+ * Whether the gate on screen is the answer for the draft the lab holds (ADR 0065): every
+ * moment it is not, enumerated — before the first answer, between a save landing and the gate
+ * answering for it, and while a discard reads both back — and the moments it is.
+ */
+describe("whether the gate is still checking the draft", () => {
+  function heldClient() {
+    const previews: (() => void)[] = [];
+    const writes: (() => void)[] = [];
+    let failLoad = false;
+    let failSave = false;
+    let holdWrites = false;
+    const client: DefinitionClient<Content, Content, typeof PREVIEW> = {
+      ...CLIENT,
+      getDraft: async () => {
+        if (failLoad) {
+          throw new LabApiError("unavailable", 503);
+        }
+        return { content: { text: "one" } };
+      },
+      previewDraft: () =>
+        new Promise((resolve) => {
+          previews.push(() => resolve(PREVIEW));
+        }),
+      replaceDraft: async (_id, payload) => {
+        if (holdWrites) {
+          await new Promise<void>((resolve) => writes.push(resolve));
+        }
+        if (failSave) {
+          throw new LabApiError("refused", 409);
+        }
+        return { content: { ...payload } };
+      },
+    };
+    return {
+      client,
+      answer: () => act(async () => previews.shift()?.()),
+      pending: () => previews.length,
+      failLoad: () => {
+        failLoad = true;
+      },
+      failSave: () => {
+        failSave = true;
+      },
+      holdWrites: () => {
+        holdWrites = true;
+      },
+      land: () => act(async () => writes.shift()?.()),
+      writing: () => writes.length,
+    };
+  }
+
+  it("is checking until the first answer, and not once it has one", async () => {
+    const gate = heldClient();
+    const { result } = renderHook(() => useDefinitionEditor("draft-1", gate.client));
+    expect(result.current.checking).toBe(true);
+    await gate.answer();
+    await waitFor(() => expect(result.current.preview).not.toBeNull());
+    expect(result.current.checking).toBe(false);
+  });
+
+  it("is not checking a draft it could not read", async () => {
+    const gate = heldClient();
+    gate.failLoad();
+    const { result } = renderHook(() => useDefinitionEditor("draft-1", gate.client));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).not.toBeNull();
+    expect(result.current.checking).toBe(false);
+  });
+
+  it("is checking from a save landing until the gate answers for what it wrote", async () => {
+    const gate = heldClient();
+    const { result } = renderHook(() => useDefinitionEditor("draft-1", gate.client));
+    await gate.answer();
+    await waitFor(() => expect(result.current.content).not.toBeNull());
+    act(() => result.current.edit({ text: "two" }));
+    expect(result.current.checking).toBe(false);
+
+    gate.holdWrites();
+    let saved: Promise<string | null> = Promise.resolve(null);
+    act(() => {
+      saved = result.current.save();
+    });
+    // While the write is in flight the lab still holds what the gate answered for.
+    await waitFor(() => expect(gate.writing()).toBe(1));
+    expect(result.current.checking).toBe(false);
+
+    await gate.land();
+    await waitFor(() => expect(gate.pending()).toBe(1));
+    expect(result.current.dirty).toBe(false);
+    expect(result.current.checking).toBe(true);
+
+    await gate.answer();
+    await act(async () => {
+      await saved;
+    });
+    expect(result.current.checking).toBe(false);
+  });
+
+  it("is not checking after a save the lab refused, which wrote nothing to check", async () => {
+    const gate = heldClient();
+    const { result } = renderHook(() => useDefinitionEditor("draft-1", gate.client));
+    await gate.answer();
+    await waitFor(() => expect(result.current.content).not.toBeNull());
+    act(() => result.current.edit({ text: "two" }));
+    gate.failSave();
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(result.current.checking).toBe(false);
+    expect(gate.pending()).toBe(0);
+  });
+
+  it("is checking while a discard reads the draft and its gate back", async () => {
+    const gate = heldClient();
+    const { result } = renderHook(() => useDefinitionEditor("draft-1", gate.client));
+    await gate.answer();
+    await waitFor(() => expect(result.current.content).not.toBeNull());
+    act(() => result.current.edit({ text: "two" }));
+
+    let discarded: Promise<void> = Promise.resolve();
+    act(() => {
+      discarded = result.current.discard();
+    });
+    expect(result.current.checking).toBe(true);
+    await gate.answer();
+    await act(async () => {
+      await discarded;
+    });
+    expect(result.current.checking).toBe(false);
   });
 });

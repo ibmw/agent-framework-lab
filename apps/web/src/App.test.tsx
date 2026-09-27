@@ -2932,7 +2932,7 @@ describe("the route tree under the data router", () => {
       ["/lab", "LabWorkspace"],
       ["/lab [index]", "Navigate"],
       ["/lab/bench", "ExperimentSetupPage"],
-      ["/lab/bench/:shopId/:experimentId", "ExperimentBenchPage"],
+      ["/lab/bench/:shopId/:experimentId", "ExperimentBenchRoute"],
       ["/lab/bench/:shopId/:experimentId/results", "ExperimentResultsLayout"],
       ["/lab/bench/:shopId/:experimentId/results [index]", "ExperimentResultsPage"],
       ["/lab/bench/:shopId/:experimentId/results/timeline", "ExperimentTimelinePage"],

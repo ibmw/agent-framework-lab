@@ -294,9 +294,18 @@ export const inactiveModeTabClasses = `${modeTabClasses} border-transparent font
 const buttonShapeClasses =
   "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition";
 
-const buttonBaseClasses = `${buttonShapeClasses} ${focusRingClasses} disabled:cursor-not-allowed disabled:opacity-55`;
+/**
+ * A control that is temporarily unavailable fades, whichever way it says so: natively
+ * `disabled` — a secondary control refused for a reason (ADR 0063) — or `aria-disabled`, which
+ * is how a press in flight keeps focus (ADR 0065). A refused primary action wears the blocked
+ * weight instead, which is never read off this table.
+ */
+const unavailableClasses =
+  "disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:cursor-not-allowed aria-disabled:opacity-55";
 
-const smallButtonBaseClasses = `inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition ${focusRingClasses} disabled:cursor-not-allowed disabled:opacity-55`;
+const buttonBaseClasses = `${buttonShapeClasses} ${focusRingClasses} ${unavailableClasses}`;
+
+const smallButtonBaseClasses = `inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition ${focusRingClasses} ${unavailableClasses}`;
 
 /**
  * Every button the workspace draws, in one table.

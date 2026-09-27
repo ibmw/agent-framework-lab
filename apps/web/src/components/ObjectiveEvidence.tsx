@@ -15,6 +15,7 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
+import { BusyButton } from "./PrimaryAction";
 
 /**
  * One row per objective, one column per arm — the bench's matrix and the results screen's,
@@ -130,6 +131,7 @@ export function JudgePicker({
   judgeId,
   action,
   scoring,
+  noteId: scoreNoteId,
   onSelectJudge,
   onScore,
 }: {
@@ -137,6 +139,8 @@ export function JudgePicker({
   judgeId: string;
   action: string;
   scoring: boolean;
+  /** The scoring queue's note, which says the pass cannot be cancelled. */
+  noteId: string;
   onSelectJudge: (judgeId: string) => void;
   onScore: () => void;
 }) {
@@ -166,14 +170,16 @@ export function JudgePicker({
           </span>
         ) : null}
       </label>
-      <button
+      <BusyButton
         className={outlineButtonClasses}
         type="button"
-        disabled={scoring || judgeId === ""}
+        busy={scoring}
+        disabled={judgeId === ""}
+        aria-describedby={scoreNoteId}
         onClick={onScore}
       >
         {scoring ? "Scoring…" : action}
-      </button>
+      </BusyButton>
     </>
   );
 }

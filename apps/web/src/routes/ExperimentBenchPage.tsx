@@ -10,7 +10,7 @@ import type {
   ParticipantTurnSchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
@@ -20,10 +20,18 @@ import {
   getExperimentEvaluation,
   scoreExperiment,
 } from "../api/experiments";
+import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Card, Fingerprint, PageHeader } from "../components/WorkspaceChrome";
+import {
+  ARM_PROGRESS,
+  type BenchAction,
+  benchReport,
+  scoreReport,
+  TAKES_A_MINUTE,
+} from "../lib/actionStatus";
 import {
   COMPARISON_DIMENSION,
   DEFINITION_TYPE,
@@ -65,12 +73,32 @@ const UNAVAILABLE = "This experiment is unavailable.";
  * again without re-sending the customer's words, and an arm the operator wants to hold back
  * simply is not advanced.
  *
+ * While that loop runs, the queue under the composer says which arm is running and which are
+ * waiting, and each arm's card is read again the moment its arm ends — so the page shows an
+ * arm's answer while the next one runs, rather than only a button that says "Running…" until
+ * the last has finished (`form-decisions.md` 10.2, ADR 0065).
+ *
  * Nothing about that loop lives in this page. An experiment is entirely in the record, so
  * reopening one is a plain read: every thread comes back, and each arm says what it is
  * waiting for because the backend computed it from the same rule the runner obeys
  * (ADR 0029). An operator who left mid-incident finds the arm that never answered, not a
  * bench that has forgotten it.
  */
+/**
+ * The live bench, mounted afresh for every experiment.
+ *
+ * A move from one bench to another is otherwise the same page with a new parameter, and what
+ * the page holds for the run it was opened on — the queue of an action still in flight, the
+ * record each arm reads back as it ends — would land on the next one: a turn still running on
+ * bench A would read A's record into bench B and show A's queue there. Keyed by the
+ * experiment, the old page unmounts and its late answers go nowhere, as `CustomerEditorRoute`
+ * does for a profile.
+ */
+export function ExperimentBenchRoute() {
+  const { shopId = "", experimentId = "" } = useParams();
+  return <ExperimentBenchPage key={`${shopId}/${experimentId}`} />;
+}
+
 export function ExperimentBenchPage() {
   // Both identifiers come from the address: an experiment belongs to the shop it was started
   // in for good, and the API addresses it under that shop (ADR 0054).
@@ -79,11 +107,17 @@ export function ExperimentBenchPage() {
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
   const { judges, judgeId, setJudgeId } = usePublishedJudges();
   const [scoring, setScoring] = useState(false);
+  // What the last scoring pass answered, for the queue's settled rows; null before one.
+  const [scored, setScored] = useState<ExperimentEvaluationResponse | null>(null);
   const [message, setMessage] = useState("");
   const [targets, setTargets] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [working, setWorking] = useState<string | null>(null);
+  // The one bench action in flight, or the last one, settled; null before the first press.
+  const [action, setAction] = useState<BenchAction | null>(null);
+  const running = action !== null && !action.settled;
   const sendReasonId = useId();
+  const runNoteId = useId();
+  const scoreNoteId = useId();
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -117,21 +151,42 @@ export function ExperimentBenchPage() {
   /**
    * Run each named arm, one after another, and report the first arm that could not run.
    *
-   * One at a time because two arms writing into their own sandboxes cannot collide but a
-   * reply arriving while the operator reads the other thread would move the page under them.
+   * One at a time, so the queue is a fact rather than a guess: the arm being advanced is the
+   * one running, and the rest wait. Each arm's record is read again as soon as it ends, so its
+   * card shows what it answered while the next arm runs and its row says where it now stands.
    * Every arm is attempted even when one fails: the arms run different configurations, so an
    * arm this lab cannot run says nothing about the arm beside it.
    */
   const runAgents = async (runIds: string[]) => {
     let failure: unknown = null;
+    const done: string[] = [];
+    const failed: string[] = [];
     for (const runId of runIds) {
-      setWorking(runId);
+      setAction({
+        targets: runIds,
+        delivering: false,
+        current: runId,
+        done: [...done],
+        failed: [...failed],
+        settled: false,
+      });
       try {
         await advanceExperimentRun(shopId, experimentId, runId);
       } catch (cause: unknown) {
         failure = failure ?? cause;
+        failed.push(runId);
       }
+      await load().catch(() => setError(UNAVAILABLE));
+      done.push(runId);
     }
+    setAction({
+      targets: runIds,
+      delivering: false,
+      current: null,
+      done: [...done],
+      failed: [...failed],
+      settled: true,
+    });
     if (failure !== null) {
       throw failure;
     }
@@ -139,6 +194,10 @@ export function ExperimentBenchPage() {
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
+    // One bench action at a time: the press is held while one runs, and so is its form.
+    if (running) {
+      return;
+    }
     if (message.trim() === "") {
       setError("Write the customer's next message before sending it.");
       return;
@@ -147,20 +206,37 @@ export function ExperimentBenchPage() {
       setError("Choose at least one arm to send this message to.");
       return;
     }
-    setWorking(targets[0]);
+    // In the order the arms are drawn, whatever order they were ticked in.
+    const reached = (experiment?.runs ?? [])
+      .map((run) => run.run_id)
+      .filter((runId) => targets.includes(runId));
+    setAction({
+      targets: reached,
+      delivering: true,
+      current: null,
+      done: [],
+      failed: [],
+      settled: false,
+    });
     setError(null);
+    let delivered = false;
     try {
       await deliverParticipantTurn(shopId, experimentId, {
-        run_ids: targets,
+        run_ids: reached,
         message: message.trim(),
       });
+      delivered = true;
       setMessage("");
-      await runAgents(targets);
+      // The message is in both threads before either arm answers it.
+      await load().catch(() => setError(UNAVAILABLE));
+      await runAgents(reached);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This message could not be delivered."));
-    } finally {
-      setWorking(null);
-      await load().catch(() => setError(UNAVAILABLE));
+      if (!delivered) {
+        // Nothing reached an arm, so there is nothing to report but the alert.
+        setAction(null);
+        await load().catch(() => setError(UNAVAILABLE));
+      }
     }
   };
 
@@ -169,9 +245,12 @@ export function ExperimentBenchPage() {
       return;
     }
     setScoring(true);
+    setScored(null);
     setError(null);
     try {
-      setEvaluation(await scoreExperiment(shopId, experimentId, { judge_id: judgeId }));
+      const judged = await scoreExperiment(shopId, experimentId, { judge_id: judgeId });
+      setEvaluation(judged);
+      setScored(judged);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This experiment could not be scored."));
     } finally {
@@ -179,16 +258,42 @@ export function ExperimentBenchPage() {
     }
   };
 
+  /**
+   * Where focus goes when a Run is pressed and its arm answers: the button is only offered
+   * while the arm waits for an agent, so it leaves the page the moment the arm has answered,
+   * taking focus with it. The reader is put on the arm's card instead — the answer they
+   * pressed for — rather than on the page's body. A Run that fails comes back as *Try again*
+   * and never lost focus: it is `aria-disabled` while it runs (ADR 0065).
+   *
+   * The card is made focusable for that hand-off only, and stops being so once focus leaves
+   * it: a card that stayed `tabindex="-1"` would take focus from any click inside it.
+   */
+  const armCards = useRef(new Map<string, HTMLElement>());
+  const returnFocusTo = useRef<string | null>(null);
+  useEffect(() => {
+    const runId = returnFocusTo.current;
+    if (runId === null || running) {
+      return;
+    }
+    returnFocusTo.current = null;
+    const card = armCards.current.get(runId);
+    if (
+      card !== undefined &&
+      (document.activeElement === null || document.activeElement === document.body)
+    ) {
+      card.tabIndex = -1;
+      card.addEventListener("blur", () => card.removeAttribute("tabindex"), { once: true });
+      card.focus();
+    }
+  }, [running]);
+
   const advance = async (runId: string) => {
-    setWorking(runId);
+    returnFocusTo.current = runId;
     setError(null);
     try {
       await runAgents([runId]);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This arm could not be run."));
-    } finally {
-      setWorking(null);
-      await load().catch(() => setError(UNAVAILABLE));
     }
   };
 
@@ -209,6 +314,11 @@ export function ExperimentBenchPage() {
 
   const differences = experiment.comparison.filter((variable) => variable.differs);
   const divergent = divergentTurnIds(experiment);
+  const queue = benchReport(experiment.runs, action);
+  // An arm whose row is still to change is the card that is about to change.
+  const busyArms = new Set(
+    queue.rows.filter((row) => ARM_PROGRESS[row.progress].busy).map((row) => row.key),
+  );
 
   return (
     <>
@@ -245,7 +355,18 @@ export function ExperimentBenchPage() {
           {/* The pair of arms is what a tour points at, and the pair has no name of its own. */}
           <div data-tour="bench-arms" className="grid gap-4 lg:grid-cols-2">
             {experiment.runs.map((run) => (
-              <Card key={run.run_id} title={run.label}>
+              <Card
+                key={run.run_id}
+                title={run.label}
+                busy={busyArms.has(run.run_id)}
+                ref={(node) => {
+                  if (node === null) {
+                    armCards.current.delete(run.run_id);
+                  } else {
+                    armCards.current.set(run.run_id, node);
+                  }
+                }}
+              >
                 <p className="text-xs text-admin-muted">
                   {run.framework_id} · {run.model_id}
                 </p>
@@ -258,8 +379,10 @@ export function ExperimentBenchPage() {
                 <RunCost metrics={run.metrics} />
                 <AdvanceControl
                   run={run}
-                  working={working === run.run_id}
-                  onAdvance={() => advance(run.run_id)}
+                  busy={running}
+                  running={running && action?.current === run.run_id}
+                  noteId={runNoteId}
+                  onAdvance={() => void advance(run.run_id)}
                 />
               </Card>
             ))}
@@ -274,6 +397,14 @@ export function ExperimentBenchPage() {
               </p>
             }
           >
+            {/* Above the composer, where the prototype draws the queue: the arms a send reached,
+                or the one arm a Run pressed on its card, each saying where it stands. */}
+            <ActionStatus
+              label="Where each arm stands"
+              report={queue}
+              note={TAKES_A_MINUTE}
+              noteId={runNoteId}
+            />
             {experiment.participant_driver === "human" ? null : (
               // The recorded driver is what produced this run's turns, and a run half typed
               // by a person would carry one label for two things (ADR 0025). So the composer
@@ -333,9 +464,10 @@ export function ExperimentBenchPage() {
                     ? null
                     : { id: sendReasonId, reason: EVERY_ARM_COMPLETED }
                 }
-                busy={working !== null}
+                busy={running}
+                aria-describedby={runNoteId}
               >
-                {working !== null ? "Running…" : "Send as the customer"}
+                {running ? "Running…" : "Send as the customer"}
               </PrimaryAction>
               {experiment.runs.some(driveable) ? null : (
                 <RefusalLine id={sendReasonId}>{EVERY_ARM_COMPLETED}</RefusalLine>
@@ -378,6 +510,8 @@ export function ExperimentBenchPage() {
             judges={judges}
             judgeId={judgeId}
             scoring={scoring}
+            scored={scored}
+            noteId={scoreNoteId}
             onSelectJudge={setJudgeId}
             onScore={() => void runJudge()}
           />
@@ -606,28 +740,36 @@ function Attempt({
  */
 function AdvanceControl({
   run,
-  working,
+  busy,
+  running,
+  noteId,
   onAdvance,
 }: {
   run: ExperimentRunSchema;
-  working: boolean;
+  /** A bench action is in flight, on this arm or another: no second one starts meanwhile. */
+  busy: boolean;
+  /** This arm is the one being advanced. */
+  running: boolean;
+  /** The queue's note, which says the run cannot be cancelled. */
+  noteId: string;
   onAdvance: () => void;
 }) {
   const { awaiting, attempts } = run.standing;
-  if (awaiting !== "agent") {
+  if (awaiting !== "agent" && !running) {
     return null;
   }
   return (
-    <button
+    <BusyButton
       className={outlineButtonClasses}
       type="button"
-      disabled={working}
+      busy={busy}
       onClick={onAdvance}
       aria-label={attempts === 0 ? `Run ${run.label}'s agent` : `Try ${run.label}'s agent again`}
+      aria-describedby={noteId}
     >
       <ButtonIcon verb={attempts === 0 ? "start" : "rerun"} />
-      {working ? "Running…" : attempts === 0 ? "Run the agent" : "Try again"}
-    </button>
+      {running ? "Running…" : attempts === 0 ? "Run the agent" : "Try again"}
+    </BusyButton>
   );
 }
 
@@ -701,6 +843,8 @@ function Objectives({
   judges,
   judgeId,
   scoring,
+  scored,
+  noteId,
   onSelectJudge,
   onScore,
 }: {
@@ -709,6 +853,9 @@ function Objectives({
   judges: JudgeConfigurationSummarySchema[];
   judgeId: string;
   scoring: boolean;
+  /** What the last scoring pass on this page answered, or null before one. */
+  scored: ExperimentEvaluationResponse | null;
+  noteId: string;
   onSelectJudge: (judgeId: string) => void;
   onScore: () => void;
 }) {
@@ -728,7 +875,11 @@ function Objectives({
       {rows.length === 0 ? (
         <p className="text-[13px] text-admin-muted">This scenario composes no objectives.</p>
       ) : (
-        <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={rows} compact />
+        // Busy while a judge scores it, and only the matrix: the card also holds the scoring
+        // queue, which a busy card would keep from being announced (ADR 0065).
+        <div aria-busy={scoring || undefined}>
+          <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={rows} compact />
+        </div>
       )}
 
       {judgeRows.length > 0 ? (
@@ -744,8 +895,15 @@ function Objectives({
                 judgeId={judgeId}
                 action={`Score ${judgeRows.length} judged objective(s)`}
                 scoring={scoring}
+                noteId={noteId}
                 onSelectJudge={onSelectJudge}
                 onScore={onScore}
+              />
+              <ActionStatus
+                label="Where each arm's scoring stands"
+                report={scoreReport(experiment.runs, scoring, scored?.arms ?? null)}
+                note={TAKES_A_MINUTE}
+                noteId={noteId}
               />
               <p className="text-xs text-admin-muted">
                 Each arm is scored on its own record, and the judge is told nothing about what ran

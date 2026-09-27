@@ -80,6 +80,15 @@ describe("button variants", () => {
     expect(classes).toContain("disabled:cursor-not-allowed");
   });
 
+  // A press in flight is `aria-disabled`, not `disabled`, so it keeps focus (ADR 0065); it
+  // must still look unavailable, exactly as a natively disabled one does.
+  it.each(variants)("%s fades a press in flight as it fades a disabled one", (_name, classes) => {
+    for (const state of ["disabled", "aria-disabled"]) {
+      expect(classes).toMatch(new RegExp(`(^|\\s)${state}:opacity-55(\\s|$)`));
+      expect(classes).toMatch(new RegExp(`(^|\\s)${state}:cursor-not-allowed(\\s|$)`));
+    }
+  });
+
   it.each(variants)("%s leaves room beside the label for a glyph", (_name, classes) => {
     expect(classes).toMatch(/(^|\s)gap-/);
   });

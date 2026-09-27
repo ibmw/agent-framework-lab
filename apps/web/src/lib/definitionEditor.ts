@@ -63,6 +63,13 @@ export interface DefinitionEditor<ContentT, PreviewT> {
   saving: boolean;
   discarding: boolean;
   publishing: boolean;
+  /**
+   * The gate is being asked about the draft the server now holds, so the preview on screen is
+   * not the answer for it: before the first answer, and between a save or a discard landing
+   * and the gate answering for what it wrote. Publish is a press in flight meanwhile, and the
+   * gate says "Checking the draft…" rather than its previous reasons (ADR 0063, ADR 0065).
+   */
+  checking: boolean;
   error: string | null;
   edit: (next: ContentT) => void;
   /** The refusal the lab answered with, or null when the draft reached it. */
@@ -84,6 +91,7 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
   const [saving, setSaving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Counts local edits. A save applies the server's echo only when nothing was typed while
   // the request was in flight; otherwise the response is stale and would discard the edit.
@@ -136,6 +144,7 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
         setContent(saved.content);
         setDirty(false);
       }
+      setPreviewing(true);
       setPreview(await client.previewDraft(id));
     } catch (cause: unknown) {
       const message = describeApiError(cause, client.unavailable);
@@ -143,6 +152,7 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
       return message;
     } finally {
       setSaving(false);
+      setPreviewing(false);
     }
     try {
       await guard.afterSave?.();
@@ -173,6 +183,7 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
   const discard = useCallback(async () => {
     const sentAt = edits.current;
     setDiscarding(true);
+    setPreviewing(true);
     setError(null);
     setDirty(false);
     try {
@@ -197,6 +208,7 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
       // than content, and leaving it set would disable the Save and Discard of a draft that
       // has nothing to do with this request.
       setDiscarding(false);
+      setPreviewing(false);
     }
   }, [id, client]);
 
@@ -243,6 +255,8 @@ export function useDefinitionEditor<ContentT, PayloadT, PreviewT extends Version
     saving,
     discarding,
     publishing,
+    // Before the first answer only while it is being read: a load that failed is not checking.
+    checking: previewing || (preview === null && loading),
     error,
     edit,
     save,
@@ -276,9 +290,9 @@ export function publishUnchangedReason(version: number | null): string {
  * Why Publish is refused, in one sentence — the first of `PublishReasons`' lines, which is what
  * the button's `title` carries — or null where it is not refused.
  *
- * A preview that has not answered is not a refusal: there is nothing to say yet, and the gate
- * ends on its own, so the button is drawn as a press in flight (ADR 0063), with no line of its
- * own for that state.
+ * A preview that has not answered is not a refusal: there is nothing to refuse for yet, and the
+ * gate ends on its own, so the button is drawn as a press in flight (ADR 0063) and the reasons
+ * block says "Checking the draft…" instead (ADR 0065).
  */
 export function publishRefusalReason(preview: PublishGate | null, dirty: boolean): string | null {
   if (dirty) {

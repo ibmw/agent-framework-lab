@@ -236,6 +236,7 @@ export function ShopHomePage() {
     preview,
     publish,
     publishing,
+    checking,
     save,
     saving,
     discard,
@@ -446,6 +447,7 @@ export function ShopHomePage() {
                       preview={preview}
                       dirty={dirty}
                       publishing={publishing}
+                      checking={checking}
                       reasonsId={publishReasonsId}
                       onPublish={() => void onPublish()}
                     >
@@ -470,7 +472,12 @@ export function ShopHomePage() {
                       </p>
                     )}
                   </div>
-                  <PublishReasons id={publishReasonsId} preview={preview} dirty={dirty} />
+                  <PublishReasons
+                    id={publishReasonsId}
+                    preview={preview}
+                    dirty={dirty}
+                    checking={checking}
+                  />
                 </div>
               ) : (
                 <div className="grid gap-2">
@@ -488,6 +495,7 @@ export function ShopHomePage() {
                       preview={preview}
                       dirty={dirty}
                       publishing={false}
+                      checking={checking}
                       reasonsId={publishReasonsId}
                       onPublish={() => {
                         pressed.current = true;
@@ -500,7 +508,12 @@ export function ShopHomePage() {
                         : `Review ${plural(changes.length, "change")} & publish`}
                     </PublishButton>
                   </div>
-                  <PublishReasons id={publishReasonsId} preview={preview} dirty={dirty} />
+                  <PublishReasons
+                    id={publishReasonsId}
+                    preview={preview}
+                    dirty={dirty}
+                    checking={checking}
+                  />
                 </div>
               )
             }

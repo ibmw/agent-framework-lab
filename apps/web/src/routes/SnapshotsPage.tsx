@@ -5,7 +5,7 @@ import type {
   SandboxSnapshotSummarySchema,
   SandboxSummarySchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { describeApiError, LabApiError } from "../api/client";
 import { cloneSandbox, listSandboxes } from "../api/sandboxes";
@@ -15,8 +15,10 @@ import {
   listSandboxSnapshots,
   materializeSandboxSnapshot,
 } from "../api/snapshots";
+import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { FieldHint } from "../components/FieldHint";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { SandboxToolConsole } from "../components/SandboxToolConsole";
 import {
   Card,
@@ -25,12 +27,12 @@ import {
   PageHeader,
   StatusPill,
 } from "../components/WorkspaceChrome";
+import { FREEZE_NOTE, freezeReport } from "../lib/actionStatus";
 import { DEFINITION_TYPE, labelOf } from "../lib/enumLabels";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel } from "../lib/orders";
 import { channelLabel, originLabel } from "../lib/tickets";
 import {
-  accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
@@ -43,6 +45,10 @@ import { useShopWorkspace } from "../shell/useShopWorkspace";
 const UNAVAILABLE = "The starting states of this scenario are unavailable.";
 const ARMS_UNAVAILABLE = "The arms cloned from this snapshot are unavailable.";
 const DEFAULT_SEED = 20260825;
+/** Why *Materialize snapshot* is refused: `Number("")` is 0, a seed nobody chose. */
+const SEED_MISSING = "Enter the seed this starting state should be fingerprinted with.";
+/** Why *Clone sandbox* is refused: an arm is told from the one beside it by its label. */
+const LABEL_MISSING = "Name the arm so it can be told from the one beside it.";
 
 /**
  * The starting states one scenario has been frozen into.
@@ -64,7 +70,16 @@ export function SnapshotsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [issues, setIssues] = useState<DefinitionIssueSchema[]>([]);
-  const [working, setWorking] = useState(false);
+  // What is being frozen, and — once it has been — the fingerprint it was frozen as.
+  const [freezing, setFreezing] = useState<{
+    version: string;
+    seed: string;
+    fingerprint: string | null;
+  } | null>(null);
+  const working = freezing !== null && freezing.fingerprint === null;
+  const seedReasonId = useId();
+  const freezeNoteId = useId();
+  const seedRefusal = seed.trim() === "" ? { id: seedReasonId, reason: SEED_MISSING } : null;
 
   const reload = useCallback(
     async (signal?: AbortSignal) => {
@@ -106,11 +121,13 @@ export function SnapshotsPage() {
     event.preventDefault();
     // `Number("")` is 0, so a cleared field would quietly freeze against a seed the author
     // never chose. The seed is a behavioral input; it has to be said out loud.
+    // Refused before the press too (ADR 0063); this is the handler's own check.
     if (seed.trim() === "") {
-      setError("Enter the seed this starting state should be fingerprinted with.");
+      setError(SEED_MISSING);
       return;
     }
-    setWorking(true);
+    const frozen = { version, seed: seed.trim() };
+    setFreezing({ ...frozen, fingerprint: null });
     setError(null);
     setIssues([]);
     try {
@@ -119,11 +136,11 @@ export function SnapshotsPage() {
       });
       setSelected(record);
       await reload();
+      setFreezing({ ...frozen, fingerprint: record.sandbox_fingerprint });
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This version could not be frozen."));
       setIssues(cause instanceof LabApiError ? cause.issues : []);
-    } finally {
-      setWorking(false);
+      setFreezing(null);
     }
   };
 
@@ -212,15 +229,33 @@ export function SnapshotsPage() {
                     onChange={(event) => setSeed(event.target.value)}
                   />
                 </FieldHint>
-                <button className={accentButtonClasses} type="submit" disabled={working}>
-                  <ButtonIcon verb="save" />
-                  {working ? "Freezing…" : "Materialize snapshot"}
-                </button>
+                <div className="grid gap-1">
+                  <PrimaryAction
+                    variant="accent"
+                    type="submit"
+                    refusal={seedRefusal}
+                    busy={working}
+                    aria-describedby={freezeNoteId}
+                  >
+                    <ButtonIcon verb="save" />
+                    {working ? "Freezing…" : "Materialize snapshot"}
+                  </PrimaryAction>
+                  {seedRefusal === null ? null : (
+                    <RefusalLine id={seedReasonId}>{SEED_MISSING}</RefusalLine>
+                  )}
+                </div>
               </form>
             )}
+            <ActionStatus
+              label="What is being frozen"
+              report={freezeReport(freezing)}
+              note={FREEZE_NOTE}
+              noteId={freezeNoteId}
+            />
           </Card>
 
-          <Card title="Snapshots">
+          {/* Busy while a version is frozen: the snapshot it makes is about to join this list. */}
+          <Card title="Snapshots" busy={working}>
             {snapshots.length === 0 ? (
               <p className="text-[13px] text-admin-muted">
                 {loading ? "Loading snapshots…" : "No starting state has been frozen yet."}
@@ -392,6 +427,8 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
   const [inspected, setInspected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const labelReasonId = useId();
+  const labelRefusal = label.trim() === "" ? { id: labelReasonId, reason: LABEL_MISSING } : null;
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -413,8 +450,9 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
 
   const clone = async (event: FormEvent) => {
     event.preventDefault();
+    // Refused before the press too (ADR 0063); this is the handler's own check.
     if (label.trim() === "") {
-      setError("Name the arm so it can be told from the one beside it.");
+      setError(LABEL_MISSING);
       return;
     }
     setWorking(true);
@@ -459,10 +497,15 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
               onChange={(event) => setLabel(event.target.value)}
             />
           </label>
-          <button className={accentButtonClasses} type="submit" disabled={working}>
-            <ButtonIcon verb="save" />
-            {working ? "Cloning…" : "Clone sandbox"}
-          </button>
+          <div className="grid gap-1">
+            <PrimaryAction variant="accent" type="submit" refusal={labelRefusal} busy={working}>
+              <ButtonIcon verb="save" />
+              {working ? "Cloning…" : "Clone sandbox"}
+            </PrimaryAction>
+            {labelRefusal === null ? null : (
+              <RefusalLine id={labelReasonId}>{LABEL_MISSING}</RefusalLine>
+            )}
+          </div>
         </form>
 
         {arms.length === 0 ? (

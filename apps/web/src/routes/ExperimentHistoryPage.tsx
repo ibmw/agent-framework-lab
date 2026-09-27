@@ -1,10 +1,13 @@
 import type { ExperimentHistoryEntrySchema, ExperimentHistoryResponse } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { forkExperiment, listExperimentHistory, replayExperiment } from "../api/experiments";
+import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { BusyButton } from "../components/PrimaryAction";
 import { PageHeader } from "../components/WorkspaceChrome";
+import { type ActionStatusRow, DERIVATION_NOTE, derivationReport } from "../lib/actionStatus";
 import { OUTCOMES } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
@@ -73,6 +76,23 @@ function forkTarget(arm: ExperimentHistoryEntrySchema["arms"][number]): Pin {
   };
 }
 
+/** A row's arms as a derivation's queue names them, at the version each will run. */
+function armRows(
+  experiment: ExperimentHistoryEntrySchema,
+  pinOf: (arm: ExperimentHistoryEntrySchema["arms"][number]) => Pin,
+): ActionStatusRow[] {
+  return experiment.arms.map((arm) => ({
+    key: arm.run_id,
+    label: arm.label,
+    detail: `${arm.agent_configuration_name} v${pinOf(arm).version}`,
+    progress: "running",
+  }));
+}
+
+/** A row's two derivations are drawn as links in the actions column, and fade while unavailable. */
+const derivationLinkClasses =
+  "flex items-start gap-1.5 text-left text-lab-ink underline-offset-2 hover:underline aria-disabled:cursor-not-allowed aria-disabled:opacity-55";
+
 /** The version a row's arm ran, which is what its replay runs again. */
 function recordedPin(arm: ExperimentHistoryEntrySchema["arms"][number]): Pin {
   return { configurationId: arm.agent_configuration_id, version: arm.agent_configuration_version };
@@ -103,7 +123,14 @@ export function ExperimentHistoryPage() {
   const [listing, setListing] = useState<ExperimentHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deriving, setDeriving] = useState<string | null>(null);
+  // The row being derived from, which derivation, and the arms it runs; or null.
+  const [deriving, setDeriving] = useState<{
+    experimentId: string;
+    kind: "replay" | "fork";
+    subject: string;
+    arms: ActionStatusRow[];
+  } | null>(null);
+  const derivingNoteId = useId();
   const navigate = useNavigate();
   // History is cross-shop by design (ADR 0034) and stays so: the lab's current shop narrows
   // nothing here, and the filter below is URL-backed rather than seeded from a preference (ADR
@@ -134,7 +161,12 @@ export function ExperimentHistoryPage() {
    */
   const replay = useCallback(
     async (experiment: ExperimentHistoryEntrySchema) => {
-      setDeriving(experiment.experiment_id);
+      setDeriving({
+        experimentId: experiment.experiment_id,
+        kind: "replay",
+        subject: experiment.label,
+        arms: armRows(experiment, recordedPin),
+      });
       setError(null);
       try {
         const derived = await replayExperiment(experiment.shop_id, experiment.experiment_id);
@@ -164,7 +196,12 @@ export function ExperimentHistoryPage() {
    */
   const fork = useCallback(
     async (experiment: ExperimentHistoryEntrySchema) => {
-      setDeriving(experiment.experiment_id);
+      setDeriving({
+        experimentId: experiment.experiment_id,
+        kind: "fork",
+        subject: experiment.label,
+        arms: armRows(experiment, forkTarget),
+      });
       setError(null);
       try {
         const derived = await forkExperiment(experiment.shop_id, experiment.experiment_id, {
@@ -443,6 +480,16 @@ export function ExperimentHistoryPage() {
         </label>
       </form>
 
+      {/* Outside the table, which is busy while it is read again and would silence it. */}
+      <div className={deriving === null ? undefined : "mb-4"}>
+        <ActionStatus
+          label="Where each derived arm stands"
+          report={derivationReport(deriving)}
+          note={DERIVATION_NOTE}
+          noteId={derivingNoteId}
+        />
+      </div>
+
       <section
         aria-label="Experiment history"
         // The rows of the previous narrowing stay on screen while the next one is read, so
@@ -478,7 +525,11 @@ export function ExperimentHistoryPage() {
                     experiment={experiment}
                     onReplay={replay}
                     onFork={fork}
-                    deriving={deriving === experiment.experiment_id}
+                    deriving={
+                      deriving?.experimentId === experiment.experiment_id ? deriving.kind : null
+                    }
+                    busy={deriving !== null}
+                    noteId={derivingNoteId}
                     replayBlocked={unreachableArmsNote(
                       experiment.arms.map((arm) => providers.get(pinKey(recordedPin(arm))) ?? null),
                       unreachable,
@@ -531,13 +582,20 @@ function HistoryRow({
   onReplay,
   onFork,
   deriving,
+  busy,
+  noteId,
   replayBlocked,
   forkBlocked,
 }: {
   experiment: ExperimentHistoryEntrySchema;
   onReplay: (experiment: ExperimentHistoryEntrySchema) => void;
   onFork: (experiment: ExperimentHistoryEntrySchema) => void;
-  deriving: boolean;
+  /** The derivation this row started, while it runs. */
+  deriving: "replay" | "fork" | null;
+  /** A derivation is running, from this row or another: no second one starts meanwhile. */
+  busy: boolean;
+  /** The derivation's note, which says it cannot be cancelled. */
+  noteId: string;
   /** Why this row's replay would be refused here, or `""` (ADR 0053). */
   replayBlocked: string;
   /** Why this row's fork would be refused here, or `""` (ADR 0053). */
@@ -668,31 +726,42 @@ function HistoryRow({
           <Link className="text-lab-ink underline-offset-2 hover:underline" to={bench}>
             Open live bench
           </Link>
-          <button
-            className="flex items-start gap-1.5 text-left text-lab-ink underline-offset-2 hover:underline"
+          {/* The pressed control is busy while its derivation runs, which keeps focus on it
+              (ADR 0065); every other row's pair is disabled natively meanwhile, as one
+              refused for a reason is, since none of them was pressed. */}
+          <BusyButton
+            className={`${derivationLinkClasses} disabled:text-admin-muted disabled:no-underline`}
             type="button"
-            disabled={deriving || replayBlocked !== ""}
+            busy={deriving === "replay"}
+            disabled={busy || replayBlocked !== ""}
             title={replayBlocked === "" ? undefined : replayBlocked}
-            aria-describedby={replayBlocked === "" ? undefined : replayNoteId}
+            aria-describedby={
+              [replayBlocked === "" ? null : replayNoteId, noteId].filter(Boolean).join(" ") ||
+              undefined
+            }
             onClick={() => onReplay(experiment)}
           >
             <ButtonIcon verb="rerun" />
-            {deriving ? "Deriving…" : "Replay recorded versions"}
-          </button>
-          <button
-            className="flex items-start gap-1.5 text-left text-lab-ink underline-offset-2 hover:underline disabled:text-admin-muted disabled:no-underline"
+            {deriving === "replay" ? "Replaying…" : "Replay recorded versions"}
+          </BusyButton>
+          <BusyButton
+            className={`${derivationLinkClasses} disabled:text-admin-muted disabled:no-underline`}
             type="button"
-            disabled={deriving || !newer || forkReach !== ""}
+            busy={deriving === "fork"}
+            disabled={busy || !newer || forkReach !== ""}
             // Described rather than titled: a browser does not reliably show a `title` on a
             // disabled control, so the reason a row cannot be forked is real text that a
             // screen reader announces with the button. The reach line is both, as Start's is.
             title={forkReach === "" ? undefined : forkReach}
-            aria-describedby={forkDescribedBy === "" ? undefined : forkDescribedBy}
+            aria-describedby={
+              [forkDescribedBy === "" ? null : forkDescribedBy, noteId].filter(Boolean).join(" ") ||
+              undefined
+            }
             onClick={() => onFork(experiment)}
           >
             <ButtonIcon verb="fork" />
-            {deriving ? "Deriving…" : "Fork with newer versions"}
-          </button>
+            {deriving === "fork" ? "Forking…" : "Fork with newer versions"}
+          </BusyButton>
           {newer ? null : (
             <span id={`${experiment.experiment_id}-fork-reason`} className="sr-only">
               Every arm already runs the newest published version of its configuration, and a

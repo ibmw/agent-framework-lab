@@ -17,7 +17,7 @@ import { toProfilePayload } from "./api/customerProfiles";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
-import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -380,6 +380,37 @@ describe("customer workspace", () => {
     await waitFor(() => expect(attachedProfileIds).toEqual([UNATTACHED.profile_id]));
   });
 
+  it("sends one attach for a press made again while the first is in flight", async () => {
+    const user = userEvent.setup();
+    let attaches = 0;
+    let answer: () => void = () => {};
+    server.use(
+      http.post(`*/api/v1/customer-profiles/${UNATTACHED_ID}/shops`, async () => {
+        attaches += 1;
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers`);
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    const picker = await screen.findByLabelText("Profile to attach");
+    await user.selectOptions(picker, UNATTACHED.profile_id);
+    const attach = screen.getByRole("button", { name: "Attach to this shop" });
+    await user.click(attach);
+    await waitFor(() => expect(attaches).toBe(1));
+
+    await waitFor(() => expectBusy(attach));
+    await user.click(attach);
+    await user.keyboard("{Enter}");
+    expect(attaches).toBe(1);
+
+    answer();
+    await waitFor(() => expect(attachedProfileIds).toEqual([UNATTACHED.profile_id]));
+    expect(attaches).toBe(1);
+  });
+
   it("opens on the one profile left to attach, and says so", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/customers`);
@@ -616,6 +647,39 @@ describe("the new-customer page", () => {
       expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`),
     );
     expect(command).toMatchObject({ shop_id: SHOP_ID });
+  });
+
+  it("sends one create for a press made again while the first is in flight", async () => {
+    const user = userEvent.setup();
+    let creates = 0;
+    let answer: () => void = () => {};
+    server.use(
+      http.post("*/api/v1/customer-profiles", async () => {
+        creates += 1;
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
+      }),
+    );
+    const { router } = await newCustomer();
+    await fillProfile(user);
+    const create = screen.getByRole("button", { name: "Create profile" });
+    await user.click(create);
+    await waitFor(() => expect(creates).toBe(1));
+
+    // Held, with focus, and a second press, a key and Enter in a field go nowhere (ADR 0065).
+    expectBusy(create);
+    await user.click(create);
+    await user.keyboard("{Enter}");
+    await user.type(screen.getByLabelText("Email"), "{Enter}");
+    expect(creates).toBe(1);
+
+    answer();
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`),
+    );
+    expect(creates).toBe(1);
   });
 
   it("moves the rail's figure with the index when a profile is created", async () => {

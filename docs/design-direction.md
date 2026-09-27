@@ -136,6 +136,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | A header's Delete | a confirm in place of the row | on the order editor, the confirm under the header, full width, while the Delete is withdrawn | a header has no row for the confirm to take the place of, and a panel stating a whole consequence does not fit between the header's other actions |
 | Delete and Duplicate on the product editor | frame 2c draws both on the header, Duplicate with a copy mark | both, on the header and as a catalog row action, Duplicate without the mark; Delete's confirm under the header, naming the orders whose lines name one of the product's variants | the product key holds a confirm to its product across renames and discards (ADR 0061). The orders are read once, when the confirm opens — never per render or per row, which is what *Required by a scenario* is refused for — because it is paid by the operator who asked, at the moment the answer changes what they do; the mark is outside the verb vocabulary (ADR 0062) |
 | A guideline's delete | *Delete guideline* (:1969) | *Remove*, named "Remove {name}", and a confirm asking to remove it | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
+| The queue under the composer | a coloured letter badge per arm and the configuration beside it; the queue drawn only for the bench's send | the arm's name and what it runs, in words, and the same queue for a Run on an arm's card, a scoring pass, a replay, a fork and — without arms — a freeze | the workspace has no per-arm colour to paint a badge with, and the arm's name is what its card is titled; `form-decisions.md` 10.2 is the rule for every long action, and the prototype draws the one it had room for (ADR 0065) |
+| A line beside Replay and Fork | "Same seed, same starting snapshot. Replay reproduces this exactly." in the finding's card | "Replay runs this incident again as it was recorded; Fork runs it again with the arms you choose." under the header, describing both buttons | a replay runs its arms against their models again, and a model arm does not reproduce its answer exactly; the line says what each derivation is, beside the reach line that says why one cannot run (ADR 0053, ADR 0065) |
 | New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 
 One item the handoff names is not built and not refused: Georgia on the results' stat
@@ -354,9 +356,11 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   (a transit window the lab refuses, said under Max days), the scenario editor's *Add* at the
   objective and mutation caps (the lab's sentence, under the picker) and the add forms refused
   for a reason no field states wear it. Start is refused until it can work, and says every cause
-  it waits for at once. A press in flight is not a refusal: it keeps native `disabled` and says nothing, and so does a
-  Publish whose gate has not answered; while a press is in flight it wins over a refusal that
-  arrives meanwhile. Every submit handler also checks the refusal itself, so a submission that
+  it waits for at once. A press in flight is not a refusal: it says nothing, and is `aria-disabled`
+  rather than `disabled` so the reader who pressed keeps focus while it runs and after (ADR
+  0065); a Publish whose gate has not answered for the saved draft is one too, and the gate says
+  "Checking the draft…" in place of its last reasons. While a press is in flight it wins over a
+  refusal that arrives meanwhile. Every submit handler also checks the refusal itself, so a submission that
   reaches the form without the press is refused too. A `type="button"` action has no route but
   the press: the connection's Save and Test, Publish and the variant row's Save rely on the
   swallow alone, and *Fork this run* and *Save and leave* keep a check of their own besides.
@@ -367,6 +371,18 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   guideline with no name can neither be saved nor be made the shop default, and its Save and its
   default radio point at the row's single line; a media reference another entry holds is said
   on the field, and the row's Save names that line.
+- **A long-running action reports itself** (`form-decisions.md` 10.2, ADR 0065). Sending a
+  turn, running an arm, scoring, replaying, forking and freezing draw `ActionStatus`: the arms as
+  a queue, each row saying where it stands in the prototype's words ("running…", "completed
+  earlier", "waiting for the customer"), and one sentence under it — "1 of 2 running.", then,
+  settled, "Arm A is waiting for the customer · Arm B has completed". The queue is one polite,
+  atomic live region mounted before anything runs, and speaks only when an arm moves. "This can
+  take a minute and cannot be cancelled." stands outside it while the action runs, named by the
+  pressed control; no Cancel is drawn, because nothing can be cancelled. An action the lab
+  answers about all arms at once says every arm is running until it answers. `aria-busy` is on
+  what is about to change — an arm's card, a matrix, a list — and never on what holds the queue.
+  The pressed control holds focus while it runs; where it leaves because it succeeded, focus goes
+  to what changed.
 - **A refusal that has a way out names the way out, where the control would have stood.** The
   shop's default tone-of-voice guideline carries no Remove at all — deleting it would leave
   the draft owing `tone_of_voice_without_default` with no control on that page to pay it — and

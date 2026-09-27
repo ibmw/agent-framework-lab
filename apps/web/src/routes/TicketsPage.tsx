@@ -546,6 +546,7 @@ function TicketWorkspace({
               <PublishButton
                 preview={preview}
                 dirty={editor.dirty}
+                checking={editor.checking}
                 publishing={editor.publishing}
                 reasonsId={publishReasonsId}
                 onPublish={() => {
@@ -576,6 +577,7 @@ function TicketWorkspace({
           className="grid gap-1"
           preview={preview}
           dirty={editor.dirty}
+          checking={editor.checking}
         />
         {publishedVersion !== null ? (
           <p role="status" className="text-[13px] text-lab-success">

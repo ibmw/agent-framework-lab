@@ -13,7 +13,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -360,6 +360,37 @@ describe("support identity workspace", () => {
     expect(savedPayloads[0].escalation).toMatchObject({
       conditions: ["a refund above 200 EUR"],
     });
+  });
+
+  it("sends one publish for a press made again while the first is in flight", async () => {
+    const user = userEvent.setup();
+    currentPreview = identityPreview({ publishable: true, issues: [] });
+    let publishes = 0;
+    let answer: () => void = () => {};
+    server.use(
+      http.post(`*/api/v1/support-identities/${IDENTITY_ID}/versions`, async () => {
+        publishes += 1;
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+      }),
+    );
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+    await screen.findByRole("heading", { name: "Northstar tier 1" });
+    const publish = screen.getByRole("button", { name: "Publish v1" });
+    await user.click(publish);
+    await waitFor(() => expect(publishes).toBe(1));
+
+    const publishing = screen.getByRole("button", { name: "Publishing…" });
+    expect(publishing).toBe(publish);
+    expectBusy(publishing);
+    await user.click(publishing);
+    await user.keyboard("{Enter}");
+    expect(publishes).toBe(1);
+
+    answer();
+    expect(await screen.findByText(/Published version 1/)).toBeVisible();
+    expect(publishes).toBe(1);
   });
 
   it("publishes a clean draft and reports the frozen version", async () => {

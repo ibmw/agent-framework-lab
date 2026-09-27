@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { PrimaryAction, RefusalLine } from "./components/PrimaryAction";
+import { BusyButton, PrimaryAction, RefusalLine } from "./components/PrimaryAction";
 import { blockedButtonClasses, buttonVariantClasses } from "./lib/ui";
-import { expectRefused } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 
 const REASON = "Name the thing first.";
 const refusal = { id: "why", reason: REASON };
@@ -162,11 +162,11 @@ describe("PrimaryAction, refused and busy at once", () => {
     );
     // The name was cleared while "Creating…" ran: the button says it is busy, and nothing else.
     const button = screen.getByRole("button", { name: "Creating…" });
-    expect(button).toBeDisabled();
-    expect(button).not.toHaveAttribute("aria-disabled");
-    expect(button).not.toHaveAttribute("title");
+    expectBusy(button);
     expect(button).not.toHaveAttribute("aria-describedby");
     expect(button.className).toBe(buttonVariantClasses.accent);
+    button.click();
+    expect(onClick).not.toHaveBeenCalled();
 
     rerender(
       <>
@@ -201,21 +201,115 @@ describe("PrimaryAction, free to proceed", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it("is natively disabled while a press is in flight, with nothing to explain", async () => {
+  it("is unavailable while a press is in flight, with nothing to explain", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
+    const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
     render(
-      <PrimaryAction variant="accent" type="button" busy onClick={onClick}>
-        Saving…
-      </PrimaryAction>,
+      <form aria-label="Saving" onSubmit={(event) => onSubmit(event.nativeEvent as SubmitEvent)}>
+        <PrimaryAction variant="accent" type="submit" busy onClick={onClick}>
+          Saving…
+        </PrimaryAction>
+      </form>,
     );
     const button = screen.getByRole("button", { name: "Saving…" });
-    expect(button).toBeDisabled();
-    expect(button).not.toHaveAttribute("aria-disabled");
-    expect(button).not.toHaveAttribute("title");
+    expectBusy(button);
     expect(button).not.toHaveAccessibleDescription(/./);
     expect(button.className).toBe(buttonVariantClasses.accent);
     await user.click(button);
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    submitImplicitly(screen.getByRole("form", { name: "Saving" }) as HTMLFormElement, button);
     expect(onClick).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps the focus of the reader who pressed it, while it runs and after (ADR 0065)", () => {
+    const { rerender } = render(
+      <PrimaryAction variant="accent" type="button">
+        Send
+      </PrimaryAction>,
+    );
+    const button = screen.getByRole("button", { name: "Send" });
+    button.focus();
+    rerender(
+      <PrimaryAction variant="accent" type="button" busy>
+        Running…
+      </PrimaryAction>,
+    );
+    // A browser drops focus from a button that becomes natively disabled; this one never is.
+    expect(button).not.toHaveAttribute("disabled");
+    expect(button).toHaveFocus();
+    rerender(
+      <PrimaryAction variant="accent" type="button">
+        Send
+      </PrimaryAction>,
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBe(button);
+    expect(button).toHaveFocus();
+    expectNotRefused(button);
+  });
+});
+
+/**
+ * A secondary control whose press runs long (ADR 0065): busy, it holds focus as a primary one
+ * does, and busy wins over the native `disabled` a secondary control is refused with.
+ */
+describe("BusyButton", () => {
+  it("runs its handler when it is neither busy nor disabled", async () => {
+    const onClick = vi.fn();
+    render(
+      <BusyButton type="button" busy={false} onClick={onClick}>
+        Replay
+      </BusyButton>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Replay" }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds focus while it runs, swallows every press, and comes back with focus", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const { rerender } = render(
+      <BusyButton type="button" busy={false} onClick={onClick}>
+        Replay
+      </BusyButton>,
+    );
+    const button = screen.getByRole("button", { name: "Replay" });
+    button.focus();
+    rerender(
+      <BusyButton type="button" busy onClick={onClick}>
+        Replaying…
+      </BusyButton>,
+    );
+    expectBusy(button);
+    await user.click(button);
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    expect(onClick).not.toHaveBeenCalled();
+    rerender(
+      <BusyButton type="button" busy={false} onClick={onClick}>
+        Replay
+      </BusyButton>,
+    );
+    expect(button).toHaveFocus();
+    expectNotRefused(button);
+  });
+
+  it("lets busy win over a native refusal that arrives meanwhile, and keeps that refusal after", () => {
+    const { rerender } = render(
+      <BusyButton type="button" busy disabled>
+        Replaying…
+      </BusyButton>,
+    );
+    const button = screen.getByRole("button", { name: "Replaying…" });
+    expectBusy(button);
+    rerender(
+      <BusyButton type="button" busy={false} disabled>
+        Replay
+      </BusyButton>,
+    );
+    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute("aria-disabled");
   });
 });

@@ -71,7 +71,7 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). In Group C, slices 24 and 25 can start now. Slices 26
+connection leaves unreachable (ADR 0053). In Group C, slice 25 can start now. Slices 26
 and 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
@@ -86,22 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 24 — Long-running actions report themselves
-
-- [ ] `ActionStatus` under the bench composer and on advance, score, replay, fork and freeze: the
-  arms as a queue, each row saying where it stands (`form-decisions.md` 10.2; the bench's "Arm A
-  is waiting for the customer · Arm B has completed", :2396), with `aria-busy` on the affected
-  card, no cancel stated as such, and a one-line description beside Replay and Fork.
-- [ ] Home's publish gate shows "Checking the draft…" where `PublishReasons` renders nothing.
-
-Frames: `Workspace.dc.html` :2396–:2560; DEPRECADED frames 8, 9.
-
-Branch: `feat/action-status`. Checks: `Experiments.test.tsx` for the status while an arm runs
-and after; Playwright `experiment-start` if it waits on a run.
-
-Slice evidence: an operator sends a turn to two arms and watches which arm is running and when
-both are done, without the page changing only a button label.
 
 #### Slice 25 — Save stays in reach
 

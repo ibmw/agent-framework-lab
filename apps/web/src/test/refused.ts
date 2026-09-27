@@ -85,6 +85,22 @@ export function expectRefused(button: HTMLElement, reason: string | RegExp) {
   expect(button).toHaveFocus();
 }
 
+/**
+ * A press in flight, as ADR 0065 draws it: unavailable and saying nothing — no reason in `title`
+ * — but `aria-disabled` rather than natively `disabled`, so it still takes focus and keeps it.
+ *
+ * `toBeDisabled` cannot say this either, for the reason `expectRefused` gives; and a busy
+ * control that was natively disabled would pass it while dropping the focus of the reader who
+ * pressed it, which is the defect this helper is here to catch.
+ */
+export function expectBusy(button: HTMLElement) {
+  expect(button).toHaveAttribute("aria-disabled", "true");
+  expect(button).not.toHaveAttribute("disabled");
+  expect(button).not.toHaveAttribute("title");
+  button.focus();
+  expect(button).toHaveFocus();
+}
+
 /** The same action, free to proceed: neither refused nor natively disabled. */
 export function expectNotRefused(button: HTMLElement) {
   expect(button).not.toHaveAttribute("aria-disabled");

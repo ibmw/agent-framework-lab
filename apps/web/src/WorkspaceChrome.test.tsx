@@ -9,7 +9,7 @@ import {
   PublishReasons,
 } from "./components/WorkspaceChrome";
 import { PUBLISH_UNSAVED_REASON } from "./lib/definitionEditor";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 
 /**
  * The workspace's display type, measured.
@@ -84,11 +84,13 @@ describe("PublishButton", () => {
     preview,
     dirty = false,
     publishing = false,
+    checking = preview === null,
     onPublish = () => {},
   }: {
     preview: PublishGate | null;
     dirty?: boolean;
     publishing?: boolean;
+    checking?: boolean;
     onPublish?: () => void;
   }) {
     return (
@@ -97,10 +99,11 @@ describe("PublishButton", () => {
           preview={preview}
           dirty={dirty}
           publishing={publishing}
+          checking={checking}
           reasonsId="reasons"
           onPublish={onPublish}
         />
-        <PublishReasons id="reasons" preview={preview} dirty={dirty} />
+        <PublishReasons id="reasons" preview={preview} dirty={dirty} checking={checking} />
       </>
     );
   }
@@ -172,21 +175,49 @@ describe("PublishButton", () => {
   it("is a press in flight, not a refusal, while publishing and while the gate has not answered", () => {
     const { rerender } = render(<Publish preview={GATE} publishing />);
     const publishing = screen.getByRole("button", { name: "Publishing…" });
-    expect(publishing).toBeDisabled();
-    expect(publishing).not.toHaveAttribute("aria-disabled");
-    expect(publishing).not.toHaveAttribute("title");
+    expectBusy(publishing);
+    expect(screen.queryByText("Checking the draft…")).toBeNull();
 
     // Busy wins over a refusal: an edit made while publishing does not dress the pressed
     // button as refused or hand it a reason (ADR 0063).
     rerender(<Publish preview={GATE} dirty publishing />);
-    expect(publishing).toBeDisabled();
-    expect(publishing).not.toHaveAttribute("aria-disabled");
-    expect(publishing).not.toHaveAttribute("title");
+    expectBusy(publishing);
+    expect(publishing.className).not.toContain("border-dashed");
 
     rerender(<Publish preview={null} />);
     const waiting = screen.getByRole("button", { name: "Publish v1" });
-    expect(waiting).toBeDisabled();
-    expect(waiting).not.toHaveAttribute("aria-disabled");
-    expect(waiting).not.toHaveAttribute("title");
+    expectBusy(waiting);
+  });
+
+  it("says it is checking the draft where it would otherwise say nothing, and until it answers", () => {
+    // The first answer has not arrived.
+    const { rerender } = render(<Publish preview={null} checking />);
+    const publish = screen.getByRole("button", { name: "Publish v1" });
+    expectBusy(publish);
+    expect(screen.getByText("Checking the draft…")).toBeVisible();
+    expect(publish).toHaveAccessibleDescription("Checking the draft…");
+
+    // A save landed and the gate is being asked about what it wrote: the answer on screen was
+    // for the draft before, so its reason is not repeated as though it were this one's.
+    rerender(
+      <Publish
+        preview={{
+          ...GATE,
+          publishable: false,
+          issues: [{ severity: "error", code: "x", message: "x", path: "x" }],
+        }}
+        checking
+      />,
+    );
+    expectBusy(publish);
+    expect(screen.getByText("Checking the draft…")).toBeVisible();
+    expect(screen.queryByText("Resolve 1 error(s) to publish.")).toBeNull();
+    expect(publish).not.toHaveAttribute("title");
+
+    // Answered: the line gives way to what the gate said.
+    rerender(<Publish preview={GATE} checking={false} />);
+    expect(screen.queryByText("Checking the draft…")).toBeNull();
+    expectNotRefused(publish);
+    expect(publish).not.toHaveAccessibleDescription(/./);
   });
 });

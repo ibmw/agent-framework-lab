@@ -20,6 +20,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { expectBusy, expectRefused, submitWithoutPressing } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -516,16 +517,74 @@ describe("starting states", () => {
     expect(seed).toHaveAccessibleDescription(/replays the same run/);
   });
 
-  it("refuses to freeze against a seed the author cleared", async () => {
+  it("refuses to freeze against a seed the author cleared, before the press and at it", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByRole("button", { name: "Materialize snapshot" });
 
     await user.clear(screen.getByLabelText("Seed"));
-    await user.click(screen.getByRole("button", { name: "Materialize snapshot" }));
-
+    const materialize = screen.getByRole("button", { name: "Materialize snapshot" });
+    // Said before the press, where the press is (ADR 0063).
+    expectRefused(materialize, "Enter the seed this starting state should be fingerprinted with.");
+    await user.click(materialize);
+    expect(materialized).toHaveLength(0);
+    // And by the form's own handler, for a submission that arrives without the press.
+    await submitWithoutPressing(materialize);
     expect(await screen.findByRole("alert")).toHaveTextContent(/Enter the seed/);
     expect(materialized).toHaveLength(0);
+  });
+
+  it("says what it is freezing while it runs, holds the press, and says what it froze", async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.post(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version/snapshots`,
+        async ({ request }) => {
+          await held;
+          materialized.push((await request.json()) as { seed: number });
+          stored = { snapshots: [SNAPSHOT] };
+          return HttpResponse.json(SNAPSHOT, { status: 201 });
+        },
+      ),
+    );
+    renderPage();
+    const materialize = await screen.findByRole("button", { name: "Materialize snapshot" });
+    const status = screen.getByRole("status", { name: "What is being frozen" });
+    expect(status).toHaveTextContent("");
+
+    await user.click(materialize);
+
+    const freezing = screen.getByRole("button", { name: "Freezing…" });
+    expect(freezing).toBe(materialize);
+    expectBusy(freezing);
+    // A press made again meanwhile — a click, a key, Enter in the seed — freezes nothing more.
+    await user.click(freezing);
+    await user.keyboard("{Enter}");
+    await user.type(screen.getByLabelText("Seed"), "{Enter}");
+    expect(status).toHaveTextContent("Freezing v2 at seed 20260825.");
+    // Back on the press, where the reader who made it is.
+    freezing.focus();
+    expect(freezing).toHaveAccessibleDescription("This cannot be cancelled.");
+    expect(screen.getByRole("region", { name: "Snapshots" })).toHaveAttribute("aria-busy", "true");
+    // Nothing is offered to stop it, because nothing can.
+    expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
+
+    release();
+    await waitFor(() => expect(materialized).toHaveLength(1));
+    await waitFor(() =>
+      expect(status).toHaveTextContent(
+        `Froze v2 at seed 20260825 as ${FINGERPRINT.slice(0, 12)}….`,
+      ),
+    );
+    expect(materialize).toHaveFocus();
+    expect(screen.getByRole("region", { name: "Snapshots" })).not.toHaveAttribute("aria-busy");
+    // Drawn no longer, and still what the press is described by before the next one.
+    expect(screen.getByText("This cannot be cancelled.")).toHaveClass("sr-only");
+    expect(materialize).toHaveAccessibleDescription("This cannot be cancelled.");
   });
 });
 
@@ -597,6 +656,37 @@ describe("sandbox arms", () => {
     expect(within(panel).queryByRole("alert")).toBeNull();
   });
 
+  it("sends one clone for a press made again while the first is in flight", async () => {
+    const user = userEvent.setup();
+    stored = { snapshots: [SNAPSHOT] };
+    let clones = 0;
+    let answer: () => void = () => {};
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/snapshots/${SNAPSHOT_ID}/sandboxes`, async () => {
+        clones += 1;
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+      }),
+    );
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
+    const panel = await screen.findByRole("region", { name: "Sandbox arms" });
+    await user.type(within(panel).getByLabelText("Arm label"), "Arm A");
+    const clone = within(panel).getByRole("button", { name: "Clone sandbox" });
+    await user.click(clone);
+    await waitFor(() => expect(clones).toBe(1));
+
+    expectBusy(clone);
+    await user.click(clone);
+    await user.type(within(panel).getByLabelText("Arm label"), "{Enter}");
+    expect(clones).toBe(1);
+
+    answer();
+    await waitFor(() => expect(cloned).toHaveLength(1));
+    expect(clones).toBe(1);
+  });
+
   it("refuses to clone an arm with no label", async () => {
     const user = userEvent.setup();
     stored = { snapshots: [SNAPSHOT] };
@@ -604,11 +694,14 @@ describe("sandbox arms", () => {
     await user.click(await screen.findByRole("button", { name: /^[a-f0-9]{12}…$/ }));
 
     const panel = await screen.findByRole("region", { name: "Sandbox arms" });
-    await user.click(within(panel).getByRole("button", { name: "Clone sandbox" }));
-
-    expect(
-      await within(panel).findByText("Name the arm so it can be told from the one beside it."),
-    ).toBeVisible();
+    const clone = within(panel).getByRole("button", { name: "Clone sandbox" });
+    // Said before the press, where the press is (ADR 0063).
+    expectRefused(clone, "Name the arm so it can be told from the one beside it.");
+    await user.click(clone);
+    expect(cloned).toHaveLength(0);
+    // And by the form's own handler, for a submission that arrives without the press.
+    await submitWithoutPressing(clone);
+    expect(await within(panel).findByRole("alert")).toHaveTextContent(/Name the arm/);
     expect(cloned).toHaveLength(0);
   });
 });

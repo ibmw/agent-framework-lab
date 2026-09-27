@@ -48,7 +48,7 @@ import {
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
-import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1408,8 +1408,7 @@ describe("experiment setup", () => {
     const arm = screen.getByRole("group", { name: "Arm A" });
     await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
     expect(startReasons(start)).toEqual([]);
-    expect(start).toBeDisabled();
-    expect(start).not.toHaveAttribute("aria-disabled");
+    expectBusy(start);
     await user.click(start);
     expect(started).toHaveLength(0);
 
@@ -1968,7 +1967,7 @@ describe("experiment setup's defaults", () => {
     // Nor refused for it: the version is being read, which is a wait.
     const start = screen.getByRole("button", { name: "Start experiment" });
     expect(startReasons(start)).toEqual([]);
-    expect(start).toBeDisabled();
+    expectBusy(start);
 
     release();
     await waitFor(() => expect(version).toHaveValue("5"));
@@ -2104,8 +2103,7 @@ describe("experiment setup and the provider the lab can reach", () => {
 
     // Not read is not reachable: a press in flight, never free.
     const start = screen.getByRole("button", { name: "Start experiment" });
-    expect(start).toBeDisabled();
-    expect(start).not.toHaveAttribute("aria-disabled");
+    expectBusy(start);
     await user.click(start);
     expect(started).toHaveLength(0);
 
@@ -2144,8 +2142,7 @@ describe("experiment setup and the provider the lab can reach", () => {
     });
 
     const start = screen.getByRole("button", { name: "Start experiment" });
-    expect(start).toBeDisabled();
-    expect(start).not.toHaveAttribute("aria-disabled");
+    expectBusy(start);
     await user.click(start);
     expect(started).toHaveLength(0);
 
@@ -2691,6 +2688,585 @@ describe("live bench", () => {
   });
 });
 
+/**
+ * Holds every request to one route until the test lets it go, in the order they arrived, and
+ * then lets it through to the suite's own handler — which records it and answers as usual.
+ */
+function holdEach(path: string) {
+  const arrived: string[] = [];
+  const waiting: (() => void)[] = [];
+  server.use(
+    http.post(path, async ({ params }) => {
+      arrived.push(String(params.runId ?? ""));
+      await new Promise<void>((resolve) => waiting.push(resolve));
+      // Returning nothing hands the request on to the next handler for the route.
+    }),
+  );
+  return {
+    arrived,
+    release: () => waiting.shift()?.(),
+  };
+}
+
+const AGENT_TURNS = `*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/runs/:runId/agent-turns`;
+const MINUTE = "This can take a minute and cannot be cancelled.";
+const DERIVING = `${MINUTE} If you are still here when its arms are done, the new run opens; History lists it either way.`;
+
+/** The queue's rows, one string per arm: its name, what it runs, and where it stands. */
+function queueRows(region: HTMLElement): string[] {
+  return Array.from(region.querySelectorAll("li"), (row) =>
+    Array.from(row.children, (cell) => cell.textContent).join(" | "),
+  );
+}
+
+describe("a long-running action on the bench reports itself", () => {
+  it("shows which arm is running and when both are done, not only a button label", async () => {
+    // The slice's evidence: an operator sends a turn to two arms and watches which arm is
+    // running and when both are done.
+    const user = userEvent.setup();
+    const agents = holdEach(AGENT_TURNS);
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    const armB = screen.getByRole("region", { name: "Arm B" });
+    const composer = screen.getByRole("region", { name: "Customer composer" });
+    const queue = within(composer).getByRole("status", { name: "Where each arm stands" });
+    // Present before anything runs, so it is already being watched when something does.
+    expect(queue).toHaveTextContent("");
+
+    await user.type(within(composer).getByLabelText("Message"), "Any update?");
+    const send = within(composer).getByRole("button", { name: "Send as the customer" });
+    // What the press will be is heard on reaching it, before it is pressed.
+    expect(send).toHaveAccessibleDescription(MINUTE);
+    await user.click(send);
+
+    // Arm A is being run and arm B waits its turn; both cards are about to change.
+    await waitFor(() => expect(agents.arrived).toEqual([ARM_A]));
+    await waitFor(() =>
+      expect(queueRows(queue)).toEqual([
+        "Arm A | Atlas v1 | running…",
+        "Arm B | Beacon v1 | waiting to run",
+      ]),
+    );
+    expect(queue).toHaveTextContent("1 of 2 running.");
+    expect(armA).toHaveAttribute("aria-busy", "true");
+    expect(armB).toHaveAttribute("aria-busy", "true");
+    // The card holding the queue is never busy: that would keep the queue from being read.
+    expect(composer).not.toHaveAttribute("aria-busy");
+    // The message is already in both threads, before either arm answers it.
+    expect(within(armA).getByText("Any update?")).toBeVisible();
+    expect(within(armB).getByText("Any update?")).toBeVisible();
+    // The press is held, with focus, and says it cannot be cancelled; nothing offers to.
+    expect(send).toHaveTextContent("Running…");
+    expectBusy(send);
+    expect(send).toHaveAccessibleDescription(MINUTE);
+    expect(within(composer).getByText(MINUTE)).toBeVisible();
+    expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
+    // A second turn typed meanwhile is not sent by any route while this one runs.
+    await user.type(within(composer).getByLabelText("Message"), "And another thing");
+    await submitWithoutPressing(send);
+    expect(delivered).toHaveLength(1);
+    await user.clear(within(composer).getByLabelText("Message"));
+    send.focus();
+
+    // Arm A answers: its card shows the reply while arm B runs, and its row where it stands.
+    agents.release();
+    await waitFor(() => expect(agents.arrived).toEqual([ARM_A, ARM_B]));
+    await waitFor(() =>
+      expect(queueRows(queue)).toEqual([
+        "Arm A | Atlas v1 | waiting for the customer",
+        "Arm B | Beacon v1 | running…",
+      ]),
+    );
+    expect(await within(armA).findByText(ANSWER)).toBeVisible();
+    expect(armA).not.toHaveAttribute("aria-busy");
+    expect(armB).toHaveAttribute("aria-busy", "true");
+    expect(queue).toHaveTextContent("1 of 2 running.");
+
+    // Both are done: the queue says where each now stands, in one sentence.
+    agents.release();
+    await waitFor(() =>
+      expect(queue).toHaveTextContent(
+        "Arm A is waiting for the customer · Arm B is waiting for the customer",
+      ),
+    );
+    expect(queueRows(queue)).toEqual([
+      "Arm A | Atlas v1 | waiting for the customer",
+      "Arm B | Beacon v1 | waiting for the customer",
+    ]);
+    expect(within(armB).getByText(ANSWER)).toBeVisible();
+    expect(armA).not.toHaveAttribute("aria-busy");
+    expect(armB).not.toHaveAttribute("aria-busy");
+    // Still the button's description, but drawn only while something runs.
+    expect(within(composer).getByText(MINUTE)).toHaveClass("sr-only");
+    // And the press came back where it was, with focus still on it.
+    expect(send).toHaveTextContent("Send as the customer");
+    expect(send).toHaveFocus();
+    expectNotRefused(send);
+  });
+
+  it("leaves nothing of one bench on the next while its run is still held", async () => {
+    const user = userEvent.setup();
+    const agents = holdEach(AGENT_TURNS);
+    const { router } = renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    await user.click(within(armA).getByRole("button", { name: "Run Arm A's agent" }));
+    await waitFor(() => expect(agents.arrived).toEqual([ARM_A]));
+
+    // Straight to another bench, with the first one's arm still running.
+    await act(async () => {
+      await router.navigate(`/lab/bench/${SHOP_ID}/${REPLAY_ID}`);
+    });
+    const replayHeading = "Wrong address — framework comparison (replay)";
+    expect(await screen.findByRole("heading", { level: 1, name: replayHeading })).toBeVisible();
+    const queue = screen.getByRole("status", { name: "Where each arm stands" });
+    expect(queue).toHaveTextContent("");
+    expect(screen.getByRole("region", { name: "Arm A" })).not.toHaveAttribute("aria-busy");
+
+    // The first bench's run answers: its record and its queue go nowhere.
+    agents.release();
+    await waitFor(() => expect(advanced).toEqual([ARM_A]));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByRole("heading", { level: 1, name: replayHeading })).toBeVisible();
+    expect(screen.getByRole("status", { name: "Where each arm stands" })).toHaveTextContent("");
+  });
+
+  it("says an arm the send did not reach was not sent this turn, and one that has completed did", async () => {
+    const user = userEvent.setup();
+    const agents = holdEach(AGENT_TURNS);
+    renderBench();
+
+    const composer = await screen.findByRole("region", { name: "Customer composer" });
+    await user.click(within(composer).getByRole("checkbox", { name: "Arm B" }));
+    await user.type(within(composer).getByLabelText("Message"), "Only arm A hears this.");
+    await user.click(within(composer).getByRole("button", { name: "Send as the customer" }));
+
+    const queue = within(composer).getByRole("status", { name: "Where each arm stands" });
+    await waitFor(() =>
+      expect(queueRows(queue)).toEqual([
+        "Arm A | Atlas v1 | running…",
+        "Arm B | Beacon v1 | not sent this turn",
+      ]),
+    );
+    expect(queue).toHaveTextContent("1 of 1 running.");
+    expect(screen.getByRole("region", { name: "Arm B" })).not.toHaveAttribute("aria-busy");
+    agents.release();
+    await waitFor(() =>
+      expect(queue).toHaveTextContent(
+        "Arm A is waiting for the customer · Arm B is waiting for the agent",
+      ),
+    );
+  });
+
+  it("names a completed arm as completed earlier while another runs, and completed after", async () => {
+    const user = userEvent.setup();
+    maxTurns = 1;
+    turns = [...OPENED, turn(ARM_B, 1, "reply-1", "Any update?")];
+    agentTurns = [agentTurn(ARM_B, 1)];
+    const agents = holdEach(AGENT_TURNS);
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    await user.click(within(armA).getByRole("button", { name: "Run Arm A's agent" }));
+
+    const queue = screen.getByRole("status", { name: "Where each arm stands" });
+    await waitFor(() =>
+      expect(queueRows(queue)).toEqual([
+        "Arm A | Atlas v1 | running…",
+        "Arm B | Beacon v1 | completed earlier",
+      ]),
+    );
+    agents.release();
+    await waitFor(() =>
+      expect(queue).toHaveTextContent("Arm A is waiting for the customer · Arm B has completed"),
+    );
+  });
+
+  it("holds a Run with focus while it runs, and hands focus to the arm once it answers", async () => {
+    const user = userEvent.setup();
+    const agents = holdEach(AGENT_TURNS);
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    // Not a focus target of its own: a click inside the card leaves focus where it was.
+    expect(armA).not.toHaveAttribute("tabindex");
+    const run = within(armA).getByRole("button", { name: "Run Arm A's agent" });
+    await user.click(run);
+
+    await waitFor(() => expect(run).toHaveTextContent("Running…"));
+    expectBusy(run);
+    expect(run).toHaveAccessibleDescription(MINUTE);
+    expect(armA).toHaveAttribute("aria-busy", "true");
+    // The arm beside it cannot be run meanwhile, and its Run keeps its own name.
+    const other = within(screen.getByRole("region", { name: "Arm B" })).getByRole("button", {
+      name: "Run Arm B's agent",
+    });
+    expect(other).toHaveTextContent("Run the agent");
+    expectBusy(other);
+    await user.click(other);
+    expect(agents.arrived).toEqual([ARM_A]);
+    // Back on the Run that was pressed, where the reader is.
+    run.focus();
+
+    // Answered: nothing is left to run on this arm, so the control goes — and focus goes to
+    // the arm whose answer arrived rather than to the page's body.
+    agents.release();
+    await waitFor(() =>
+      expect(within(armA).queryByRole("button", { name: /Arm A's agent/ })).toBeNull(),
+    );
+    expect(armA).toHaveFocus();
+    expect(armA).not.toHaveAttribute("aria-busy");
+    // Focusable for the hand-off only: once focus moves on, the card is not a target again.
+    await user.click(
+      within(screen.getByRole("region", { name: "Customer composer" })).getByLabelText("Message"),
+    );
+    expect(armA).not.toHaveAttribute("tabindex");
+    await user.click(within(armA).getByText(TRIGGER));
+    expect(armA).not.toHaveFocus();
+  });
+
+  it("brings a Run the lab refused back where it was, with focus, and says it could not be run", async () => {
+    const user = userEvent.setup();
+    runtimeUnavailable = true;
+    renderBench();
+
+    const armA = await screen.findByRole("region", { name: "Arm A" });
+    const run = within(armA).getByRole("button", { name: "Run Arm A's agent" });
+    await user.click(run);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no pydantic-ai runtime/);
+    const queue = screen.getByRole("status", { name: "Where each arm stands" });
+    await waitFor(() =>
+      expect(queue).toHaveTextContent("Arm A could not be run · Arm B is waiting for the agent"),
+    );
+    expect(within(armA).getByRole("button", { name: "Run Arm A's agent" })).toBe(run);
+    expect(run).toHaveFocus();
+    expectNotRefused(run);
+  });
+
+  it("reports a scoring pass per arm, holds the Score press, and says what it answered", async () => {
+    const user = userEvent.setup();
+    const judging = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/judgements`);
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+    const score = within(objectives).getByRole("button", { name: /Score 1 judged/ });
+    const queue = within(objectives).getByRole("status", {
+      name: "Where each arm's scoring stands",
+    });
+    await user.click(score);
+
+    await waitFor(() => expect(score).toHaveTextContent("Scoring…"));
+    // A press made again meanwhile, by a click or a key, starts nothing more (ADR 0065).
+    await user.click(score);
+    await user.keyboard("{Enter}");
+    expect(judging.arrived).toHaveLength(1);
+    expectBusy(score);
+    expect(score).toHaveAccessibleDescription(MINUTE);
+    expect(queueRows(queue)).toEqual([
+      "Arm A | Atlas v1 | being scored…",
+      "Arm B | Beacon v1 | being scored…",
+    ]);
+    expect(queue).toHaveTextContent("2 of 2 being scored.");
+    // What is about to change is the matrix; the card also holds the queue, so it is not busy.
+    const matrix = within(objectives).getByRole("table").parentElement as HTMLElement;
+    expect(matrix).toHaveAttribute("aria-busy", "true");
+    expect(objectives).not.toHaveAttribute("aria-busy");
+
+    judging.release();
+    await waitFor(() =>
+      expect(queue).toHaveTextContent("Arm A has been scored · Arm B has been scored"),
+    );
+    expect(matrix).not.toHaveAttribute("aria-busy");
+    expect(score).toHaveFocus();
+    expect(score).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("says an arm the judge gave no verdict was not scored", async () => {
+    const user = userEvent.setup();
+    judgeFailed = true;
+    renderBench();
+
+    const objectives = await screen.findByRole("region", { name: "Objectives" });
+    await user.click(within(objectives).getByRole("button", { name: /Score 1 judged/ }));
+
+    const queue = within(objectives).getByRole("status", {
+      name: "Where each arm's scoring stands",
+    });
+    await waitFor(() =>
+      expect(queue).toHaveTextContent(
+        "Arm A has no verdict from the judge · Arm B has no verdict from the judge",
+      ),
+    );
+  });
+});
+
+describe("a long-running action on the results reports itself", () => {
+  it("reports a scoring pass per arm on the judge's card", async () => {
+    const user = userEvent.setup();
+    const judging = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/judgements`);
+    renderResults();
+
+    const card = await screen.findByRole("region", { name: "LLM judge evidence" });
+    const score = await within(card).findByRole("button", { name: /Score 1 judged/ });
+    await user.click(score);
+
+    const queue = within(card).getByRole("status", { name: "Where each arm's scoring stands" });
+    await waitFor(() => expect(queue).toHaveTextContent("2 of 2 being scored."));
+    // A press made again meanwhile, by a click or a key, starts nothing more (ADR 0065).
+    await user.click(score);
+    await user.keyboard("{Enter}");
+    expect(judging.arrived).toHaveLength(1);
+    expectBusy(score);
+    expect(card).not.toHaveAttribute("aria-busy");
+    expect(within(card).getAllByRole("table")[0].closest("[aria-busy]")).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+
+    judging.release();
+    await waitFor(() =>
+      expect(queue).toHaveTextContent("Arm A has been scored · Arm B has been scored"),
+    );
+    expect(score).toHaveFocus();
+  });
+
+  it("says what Replay and Fork are beside them", async () => {
+    renderResults();
+
+    const replay = await screen.findByRole("button", { name: "Replay" });
+    expect(screen.getByText(DERIVATIONS_ABOUT)).toBeVisible();
+    // And, before the press as while it runs, that it cannot be cancelled once pressed —
+    // heard on reaching the button, where a description added after the press would not be.
+    expect(replay).toHaveAccessibleDescription(`${DERIVATIONS_ABOUT} ${DERIVING}`);
+    expect(screen.getByRole("status", { name: "Where each derived arm stands" })).toHaveTextContent(
+      "",
+    );
+    expect(screen.getByText(DERIVING)).toHaveClass("sr-only");
+    expect(screen.getByRole("button", { name: "Fork…" })).toHaveAccessibleDescription(
+      DERIVATIONS_ABOUT,
+    );
+  });
+
+  it("reports a replay's arms while it runs, holds the press with focus, then opens the new run", async () => {
+    const user = userEvent.setup();
+    const replays = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/replays`);
+    renderResults();
+
+    const replay = await screen.findByRole("button", { name: "Replay" });
+    await user.click(replay);
+
+    await waitFor(() => expect(replays.arrived).toHaveLength(1));
+    const queue = screen.getByRole("status", { name: "Where each derived arm stands" });
+    expect(queueRows(queue)).toEqual([
+      "Arm A | Atlas v1 | running…",
+      "Arm B | Beacon v1 | running…",
+    ]);
+    expect(queue).toHaveTextContent("Replaying this run: 2 of 2 running.");
+    expect(replay).toHaveTextContent("Replaying…");
+    expectBusy(replay);
+    // A press made again meanwhile, by a click or a key, starts nothing more (ADR 0065).
+    await user.click(replay);
+    await user.keyboard("{Enter}");
+    expect(replays.arrived).toHaveLength(1);
+    expect(replay).toHaveAccessibleDescription(
+      `${DERIVATIONS_ABOUT} ${MINUTE} If you are still here when its arms are done, the new run opens; History lists it either way.`,
+    );
+    expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
+
+    replays.release();
+    expect(
+      await screen.findByRole("heading", {
+        name: "Wrong address — framework comparison (replay)",
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole("status", { name: "Where each derived arm stands" })).toHaveTextContent(
+      "",
+    );
+  });
+
+  it("reports a fork's arms at the versions chosen, and brings a refused one back with focus", async () => {
+    const user = userEvent.setup();
+    const forks = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/forks`);
+    renderResults();
+
+    await user.click(await screen.findByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+    const [, armB] = within(panel).getAllByLabelText("Published version");
+    await user.selectOptions(armB, "2");
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    await user.click(fork);
+
+    await waitFor(() => expect(forks.arrived).toHaveLength(1));
+    const queue = screen.getByRole("status", { name: "Where each derived arm stands" });
+    // Named as the lab lists each configuration, at the version the fork moves it to.
+    expect(queueRows(queue)).toEqual([
+      "Arm A | cfg-atlas v1 | running…",
+      "Arm B | cfg-beacon v2 | running…",
+    ]);
+    expect(queue).toHaveTextContent("Forking this run: 2 of 2 running.");
+    expect(fork).toHaveTextContent("Forking…");
+    expectBusy(fork);
+    // A press made again meanwhile starts no second fork.
+    await user.click(fork);
+    await user.keyboard("{Enter}");
+    expect(forks.arrived).toHaveLength(1);
+    expect(fork).toHaveAccessibleDescription(
+      `${MINUTE} If you are still here when its arms are done, the new run opens; History lists it either way.`,
+    );
+
+    forks.release();
+    expect(await screen.findByRole("heading", { name: /\(fork\)$/ })).toBeVisible();
+  });
+
+  it("holds Replay and Fork on every run while a derivation runs, and never opens its answer over another run", async () => {
+    // A replay pressed on a derived run, then the operator follows its provenance to the run
+    // it came from while the lab is still running the first.
+    const user = userEvent.setup();
+    let answer: (() => void) | null = null;
+    const pressed: string[] = [];
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${REPLAY_ID}/replays`, async () => {
+        pressed.push(REPLAY_ID);
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json(
+          { ...forkedExperiment(), label: "Replay of the replay" },
+          { status: 201 },
+        );
+      }),
+    );
+    const { router } = renderApp(`/lab/bench/${SHOP_ID}/${REPLAY_ID}/results`);
+    const derivedName = "Wrong address — framework comparison (replay)";
+    const sourceName = "Wrong address — framework comparison";
+    await screen.findByRole("heading", { level: 1, name: derivedName });
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+    await waitFor(() => expect(pressed).toEqual([REPLAY_ID]));
+
+    await user.click(screen.getByRole("link", { name: sourceName }));
+    expect(await screen.findByRole("heading", { level: 1, name: sourceName })).toBeVisible();
+    // Still running, and said so here, naming the run it was pressed on.
+    const queue = screen.getByRole("status", { name: "Where each derived arm stands" });
+    expect(queue).toHaveTextContent(`Replaying ${derivedName}: 2 of 2 running.`);
+    // Neither derivation is free on this run meanwhile: no second one reaches the lab.
+    const replay = screen.getByRole("button", { name: "Replay" });
+    expect(replay).toBeDisabled();
+    await user.click(replay);
+    await user.click(screen.getByRole("button", { name: "Fork…" }));
+    const panel = await screen.findByRole("region", { name: "Fork this experiment" });
+    const [, armB] = within(panel).getAllByLabelText("Published version");
+    await user.selectOptions(armB, "2");
+    const fork = within(panel).getByRole("button", { name: "Fork this run" });
+    expectBusy(fork);
+    await user.click(fork);
+    expect(replayed).toEqual([]);
+    expect(forked).toEqual([]);
+
+    // Back on the run it was pressed on, the press is still the one in flight.
+    await act(async () => {
+      await router.navigate(`/lab/bench/${SHOP_ID}/${REPLAY_ID}/results`);
+    });
+    await screen.findByRole("heading", { level: 1, name: derivedName });
+    const again = screen.getByRole("button", { name: "Replaying…" });
+    expectBusy(again);
+    await user.click(again);
+    expect(pressed).toEqual([REPLAY_ID]);
+
+    // And away again when the lab answers: the operator stays on the page they chose, and the
+    // queue says what came back, with the way to it.
+    await user.click(screen.getByRole("link", { name: sourceName }));
+    await screen.findByRole("heading", { level: 1, name: sourceName });
+    await act(async () => {
+      answer?.();
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", { name: "Where each derived arm stands" }),
+      ).toHaveTextContent(`The replay of ${derivedName} is ready: Replay of the replay.`),
+    );
+    expect(screen.getByRole("heading", { level: 1, name: sourceName })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open the new run" })).toHaveAttribute(
+      "href",
+      `/lab/bench/${SHOP_ID}/${FORK_ID}/results`,
+    );
+    // Answered, so this run's own derivations are free again.
+    expect(screen.getByRole("button", { name: "Replay" })).toBeEnabled();
+  });
+
+  it("does not follow the operator out of the results with a derivation's answer", async () => {
+    const user = userEvent.setup();
+    const replays = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/replays`);
+    const { router } = renderResults();
+    await user.click(await screen.findByRole("button", { name: "Replay" }));
+    await waitFor(() => expect(replays.arrived).toHaveLength(1));
+
+    // Off to the bench, which is not a results page: the answer has nowhere to be said.
+    await user.click(screen.getByRole("link", { name: "Back to the live bench" }));
+    await screen.findByRole("region", { name: "Customer composer" });
+    replays.release();
+    await waitFor(() => expect(replayed).toEqual([EXPERIMENT_ID]));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(router.state.location.pathname).toBe(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}`);
+  });
+
+  it("says a derivation the lab refused where the operator is reading another run, not in its alert", async () => {
+    const user = userEvent.setup();
+    let answer: (() => void) | null = null;
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${REPLAY_ID}/replays`, async () => {
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+        return HttpResponse.json(
+          { code: "agent_runtime_unavailable", message: "no runtime here", request_id: "r" },
+          { status: 422 },
+        );
+      }),
+    );
+    renderApp(`/lab/bench/${SHOP_ID}/${REPLAY_ID}/results`);
+    const sourceName = "Wrong address — framework comparison";
+    await screen.findByRole("heading", { level: 1, name: /\(replay\)$/ });
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+    await user.click(screen.getByRole("link", { name: sourceName }));
+    await screen.findByRole("heading", { level: 1, name: sourceName });
+    await waitFor(() => expect(answer).not.toBeNull());
+
+    await act(async () => {
+      answer?.();
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("status", { name: "Where each derived arm stands" }),
+      ).toHaveTextContent(/could not be run: no runtime here/),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: sourceName })).toBeVisible();
+  });
+
+  it("brings a refused replay back where it was, with focus, and clears its queue", async () => {
+    const user = userEvent.setup();
+    replayFails = true;
+    renderResults();
+
+    const replay = await screen.findByRole("button", { name: "Replay" });
+    await user.click(replay);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no runtime for this arm/);
+    expect(replay).toHaveTextContent("Replay");
+    expect(replay).toHaveFocus();
+    expect(replay).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByRole("status", { name: "Where each derived arm stands" })).toHaveTextContent(
+      "",
+    );
+  });
+});
+
 describe("experiment results", () => {
   it("reads every objective the scenario composed with one column per arm", async () => {
     toolEvents = [toolEvent(ARM_A, 0, "support.read_document")];
@@ -3192,6 +3768,67 @@ describe("notes and tags", () => {
     expectNotRefused(addNote);
   });
 
+  it("sends one note for a press made again while the first is in flight", async () => {
+    const user = userEvent.setup();
+    let notes = 0;
+    let answer: () => void = () => {};
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/notes`, async () => {
+        notes += 1;
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+      }),
+    );
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    await user.type(within(strip).getByLabelText("Add a note"), "Once only.");
+    const add = within(strip).getByRole("button", { name: "Add note" });
+    await user.click(add);
+    await waitFor(() => expect(notes).toBe(1));
+
+    await waitFor(() => expectBusy(add));
+    await user.click(add);
+    await user.keyboard("{Enter}");
+    await submitWithoutPressing(add);
+    expect(notes).toBe(1);
+
+    answer();
+    expect(await within(strip).findByText("Once only.")).toBeVisible();
+    expect(notes).toBe(1);
+  });
+
+  it("sends one tag write for a press made again while the first is in flight", async () => {
+    const user = userEvent.setup();
+    let writes = 0;
+    let answer: () => void = () => {};
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}/tags`, async () => {
+        writes += 1;
+        await new Promise<void>((resolve) => {
+          answer = resolve;
+        });
+      }),
+    );
+    renderResults();
+    const strip = await screen.findByRole("region", { name: "Notes & tags" });
+    await user.type(within(strip).getByLabelText("Add a tag"), "two-arm");
+    const add = within(strip).getByRole("button", { name: "Add tag" });
+    await user.click(add);
+    await waitFor(() => expect(writes).toBe(1));
+
+    await waitFor(() => expectBusy(add));
+    await user.click(add);
+    await user.keyboard("{Enter}");
+    // And a submission that reaches the form without the press: its own handler holds too.
+    await submitWithoutPressing(add);
+    expect(writes).toBe(1);
+
+    answer();
+    expect(await within(strip).findByText("two-arm")).toBeVisible();
+    expect(writes).toBe(1);
+  });
+
   it("keeps a note as written and answers with everything on the run", async () => {
     const user = userEvent.setup();
     renderResults();
@@ -3286,6 +3923,10 @@ describe("notes and tags", () => {
     expect(within(strip).getByLabelText("Add a note")).toHaveValue("Worth rerunning.");
   });
 });
+
+/** The one line beside Replay and Fork on the results header, which both are described by. */
+const DERIVATIONS_ABOUT =
+  "Replay runs this incident again as it was recorded; Fork runs it again with the arms you choose.";
 
 describe("replay", () => {
   it("derives a new experiment from the results screen and opens what it produced", async () => {
@@ -3543,9 +4184,10 @@ describe("replay, fork and the provider the lab can reach", () => {
       const replay = await screen.findByRole("button", { name: "Replay" });
       await waitFor(() => expect(replay).toBeDisabled());
       // A secondary control, so natively disabled (ADR 0063): the reason in `title`, and in
-      // one muted line the button's description names. Two arms on one provider are one reason.
+      // one muted line the button's description names, after the line saying what Replay
+      // is. Two arms on one provider are one reason.
       expect(replay).toHaveAttribute("title", NOTE);
-      expect(replay).toHaveAccessibleDescription(NOTE);
+      expect(replay).toHaveAccessibleDescription(`${DERIVATIONS_ABOUT} ${NOTE} ${DERIVING}`);
       expect(screen.getAllByText(NOTE)).toHaveLength(1);
       expect(screen.getByText(NOTE)).toBeVisible();
 
@@ -3617,7 +4259,7 @@ describe("replay, fork and the provider the lab can reach", () => {
 
       await waitFor(() => expectRefused(fork, NOTE));
       expect(fork).toHaveAttribute("title", NOTE);
-      expect(fork).toHaveAccessibleDescription(NOTE);
+      expect(fork).toHaveAccessibleDescription(`${NOTE} ${DERIVING}`);
       expect(within(panel).getAllByText(NOTE)).toHaveLength(1);
       expect(within(panel).getByText(NOTE)).toBeVisible();
 
@@ -3637,7 +4279,7 @@ describe("replay, fork and the provider the lab can reach", () => {
     // Arm B onto a configuration whose newest version names OpenAI: blocked.
     await forkArmOnto(user, panel, 1, "cfg-atlas");
     await waitFor(() => expectRefused(fork, NOTE));
-    expect(fork).toHaveAccessibleDescription(NOTE);
+    expect(fork).toHaveAccessibleDescription(`${NOTE} ${DERIVING}`);
 
     // Arm B onto the declared control's newest version instead: released.
     await forkArmOnto(user, panel, 1, "cfg-beacon");
@@ -3675,7 +4317,7 @@ describe("replay, fork and the provider the lab can reach", () => {
     const fork = within(panel).getByRole("button", { name: "Fork this run" });
     expectRefused(fork, NOTE);
     expect(fork).toHaveAttribute("title", NOTE);
-    expect(fork).toHaveAccessibleDescription(NOTE);
+    expect(fork).toHaveAccessibleDescription(`${NOTE} ${DERIVING}`);
     await user.click(fork);
     expect(forked).toEqual([]);
   });

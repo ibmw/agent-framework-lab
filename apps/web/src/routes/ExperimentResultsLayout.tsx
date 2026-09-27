@@ -8,7 +8,7 @@ import type {
   ExperimentResponse,
   ExperimentRunSchema,
 } from "@agent-lab/contracts";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import {
   listAgentConfigurations,
@@ -22,9 +22,17 @@ import {
   getExperimentEvaluation,
   replayExperiment,
 } from "../api/experiments";
+import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { BusyButton, PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Fingerprint, PageHeader } from "../components/WorkspaceChrome";
+import {
+  type ActionStatusRow,
+  DERIVATION_NOTE,
+  type Derivation,
+  derivationReport,
+  derivedRows,
+} from "../lib/actionStatus";
 import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
@@ -81,7 +89,24 @@ export function ExperimentResultsLayout() {
   const [evaluation, setEvaluation] = useState<ExperimentEvaluationResponse | null>(null);
   const [annotations, setAnnotations] = useState<ExperimentAnnotationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deriving, setDeriving] = useState(false);
+  // The derivation in flight — or answered while the operator read another run — with the run
+  // it was pressed on. It outlives a move between runs, because this element does (below).
+  const [deriving, setDeriving] = useState<
+    (Derivation & { sourceId: string; sourceLabel: string; derivedId?: string }) | null
+  >(null);
+  const inFlight = deriving !== null && deriving.answer === undefined;
+  // The run the operator is reading now, or null once they have left the results altogether:
+  // what a derivation's answer is read against when it arrives.
+  const here = useRef<string | null>(experimentId);
+  useEffect(() => {
+    here.current = experimentId;
+  }, [experimentId]);
+  useEffect(
+    () => () => {
+      here.current = null;
+    },
+    [],
+  );
   const [forking, setForking] = useState(false);
   const navigate = useNavigate();
   // Replay and Fork both run their arms before they answer, so an arm naming a provider this
@@ -89,47 +114,84 @@ export function ExperimentResultsLayout() {
   // (ADR 0053). Read before the early return below, so the hooks keep their order.
   const unreachable = useUnreachableProviders();
   const replayNoteId = useId();
+  const aboutId = useId();
+  const derivingNoteId = useId();
 
   /**
-   * Derive a new experiment from this one and open its results.
+   * What a derivation's answer does, read against where the operator is when it arrives.
    *
-   * It navigates rather than staying here, because a replay does not change this run: what
-   * came back is a different experiment, and leaving the operator on the old one with a
-   * success message would hide the only thing that happened.
+   * Still on the run it was pressed on, it opens the new run — a replay does not change this
+   * run, and leaving the operator on it with a success message would hide the only thing that
+   * happened — or says in the page's alert why it was refused, as before. Reading another run
+   * by then (this layout stays mounted across the move, so the answer still arrives here), it
+   * never takes them off the page they chose: the queue says what came back, with a link to it.
+   * Gone from the results altogether (`here` is then null), it opens nothing either.
    */
-  const replay = useCallback(async () => {
-    setDeriving(true);
-    setError(null);
-    try {
-      const derived = await replayExperiment(shopId, experimentId);
-      navigate(`/lab/bench/${shopId}/${derived.experiment_id}/results`);
-    } catch (cause: unknown) {
-      setError(describeApiError(cause, "This experiment could not be replayed."));
-    } finally {
-      setDeriving(false);
-    }
-  }, [shopId, experimentId, navigate]);
+  const answered = useCallback(
+    (sourceId: string, outcome: { experimentId: string; label: string } | { error: string }) => {
+      if (here.current === sourceId) {
+        setDeriving(null);
+        if ("error" in outcome) {
+          setError(outcome.error);
+        } else {
+          navigate(`/lab/bench/${shopId}/${outcome.experimentId}/results`);
+        }
+        return;
+      }
+      setDeriving((current) =>
+        current === null || current.sourceId !== sourceId
+          ? current
+          : {
+              ...current,
+              answer: "error" in outcome ? outcome : { label: outcome.label },
+              derivedId: "error" in outcome ? undefined : outcome.experimentId,
+            },
+      );
+    },
+    [shopId, navigate],
+  );
 
-  /**
-   * Derive a new experiment that runs this incident with the arms the operator chose.
-   *
-   * Navigates for the reason the replay does: what came back is a different run, and the
-   * reason to fork one is to read what the arms did instead.
-   */
-  const fork = useCallback(
-    async (arms: { configuration_id: string; version: number }[]) => {
-      setDeriving(true);
+  /** Derive a new experiment from this one; its answer is `answered`'s to deliver. */
+  const replay = useCallback(
+    async (arms: ActionStatusRow[], sourceLabel: string) => {
+      const sourceId = experimentId;
+      setDeriving({ kind: "replay", arms, sourceId, sourceLabel });
       setError(null);
       try {
-        const derived = await forkExperiment(shopId, experimentId, { arms });
-        navigate(`/lab/bench/${shopId}/${derived.experiment_id}/results`);
+        const derived = await replayExperiment(shopId, sourceId);
+        answered(sourceId, { experimentId: derived.experiment_id, label: derived.label });
       } catch (cause: unknown) {
-        setError(describeApiError(cause, "This experiment could not be forked."));
-      } finally {
-        setDeriving(false);
+        answered(sourceId, {
+          error: describeApiError(cause, "This experiment could not be replayed."),
+        });
       }
     },
-    [shopId, experimentId, navigate],
+    [shopId, experimentId, answered],
+  );
+
+  /**
+   * Derive a new experiment that runs this incident with the arms the operator chose, for the
+   * reason the replay does: the reason to fork one is to read what the arms did instead.
+   */
+  const fork = useCallback(
+    async (
+      arms: { configuration_id: string; version: number }[],
+      rows: ActionStatusRow[],
+      sourceLabel: string,
+    ) => {
+      const sourceId = experimentId;
+      setDeriving({ kind: "fork", arms: rows, sourceId, sourceLabel });
+      setError(null);
+      try {
+        const derived = await forkExperiment(shopId, sourceId, { arms });
+        answered(sourceId, { experimentId: derived.experiment_id, label: derived.label });
+      } catch (cause: unknown) {
+        answered(sourceId, {
+          error: describeApiError(cause, "This experiment could not be forked."),
+        });
+      }
+    },
+    [shopId, experimentId, answered],
   );
 
   const load = useCallback(
@@ -162,6 +224,10 @@ export function ExperimentResultsLayout() {
     setEvaluation(null);
     setAnnotations(null);
     setForking(false);
+    // A derivation still in flight is kept: it holds Replay and Fork on whichever run is read,
+    // so a move cannot free them for a second one while the lab is running the first. One
+    // already answered and said here is dropped with the page it was said on.
+    setDeriving((current) => (current !== null && current.answer === undefined ? current : null));
     setError(null);
     load(controller.signal).catch((cause: unknown) => {
       if (!controller.signal.aborted) {
@@ -186,6 +252,18 @@ export function ExperimentResultsLayout() {
     );
   }
 
+  // The pressed control is the one on the run the derivation started from; on any other run
+  // both are held natively, as a history row's are while another row's derivation runs.
+  const pressedHere = inFlight && deriving.sourceId === experimentId ? deriving.kind : null;
+  const report = derivationReport(
+    deriving === null
+      ? null
+      : {
+          ...deriving,
+          subject: deriving.sourceId === experimentId ? undefined : deriving.sourceLabel,
+        },
+  );
+
   // A replay runs exactly what this run pinned, and each arm already says which provider its
   // pinned version names, so nothing has to be read to know.
   const replayBlocked = unreachableArmsNote(
@@ -209,19 +287,30 @@ export function ExperimentResultsLayout() {
         title={experiment.label}
         actions={
           <div className="flex items-center gap-2">
-            <button
+            <BusyButton
               className={subtleButtonClasses}
               type="button"
-              onClick={replay}
+              onClick={() => void replay(derivedRows(experiment.runs), experiment.label)}
               // A secondary control keeps native `disabled` (ADR 0063): the reason in `title`,
-              // and in one muted line the button's `aria-describedby` names.
-              disabled={deriving || replayBlocked !== ""}
+              // and in one muted line the button's `aria-describedby` names. The replay in
+              // flight is busy instead, which keeps focus on it (ADR 0065); any other
+              // derivation in flight disables it natively, since it is not the control that
+              // was pressed. It is described by the note before the press too, which is true
+              // then as well, so a reader hears it on reaching the button.
+              busy={pressedHere === "replay"}
+              disabled={inFlight || replayBlocked !== ""}
               title={replayBlocked === "" ? undefined : replayBlocked}
-              aria-describedby={replayBlocked === "" ? undefined : replayNoteId}
+              aria-describedby={[
+                aboutId,
+                replayBlocked === "" ? null : replayNoteId,
+                derivingNoteId,
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               <ButtonIcon verb="rerun" />
-              {deriving ? "Deriving…" : "Replay"}
-            </button>
+              {pressedHere === "replay" ? "Replaying…" : "Replay"}
+            </BusyButton>
             {/* The frame's ellipsis is doing real work: a replay asks nothing because
                 everything it needs is in the record, and a fork asks which versions to
                 take. The panel opens below the header rather than over it — this shell has
@@ -231,6 +320,7 @@ export function ExperimentResultsLayout() {
               type="button"
               aria-expanded={forking}
               aria-controls={FORK_PANEL_ID}
+              aria-describedby={aboutId}
               onClick={() => setForking((open) => !open)}
             >
               <ButtonIcon verb="fork" />
@@ -264,11 +354,35 @@ export function ExperimentResultsLayout() {
         }
       />
 
+      {/* What the two derivations are, beside them: neither changes this run, and each opens
+          a new one once its arms are done. */}
+      <p id={aboutId} className="mb-3 text-xs text-admin-muted">
+        Replay runs this incident again as it was recorded; Fork runs it again with the arms you
+        choose.
+      </p>
+
       {replayBlocked === "" ? null : (
         <p id={replayNoteId} className="mb-3 text-xs text-admin-muted">
           {replayBlocked}
         </p>
       )}
+
+      <div className={deriving === null ? undefined : "mb-3 grid gap-1"}>
+        <ActionStatus
+          label="Where each derived arm stands"
+          report={report}
+          note={DERIVATION_NOTE}
+          noteId={derivingNoteId}
+        />
+        {deriving?.derivedId === undefined ? null : (
+          <Link
+            className="text-xs font-semibold text-lab-ink"
+            to={`/lab/bench/${shopId}/${deriving.derivedId}/results`}
+          >
+            Open the new run
+          </Link>
+        )}
+      </div>
 
       {error ? (
         <p role="alert" className="mb-3 text-[13px] text-lab-error">
@@ -279,7 +393,9 @@ export function ExperimentResultsLayout() {
       {forking ? (
         <ForkPanel
           experiment={experiment}
-          deriving={deriving}
+          deriving={pressedHere}
+          held={inFlight}
+          noteId={derivingNoteId}
           unreachable={unreachable}
           onFork={fork}
         />
@@ -347,14 +463,25 @@ function describeChange(changed: ComparisonDimension[]) {
 function ForkPanel({
   experiment,
   deriving,
+  held,
+  noteId,
   unreachable,
   onFork,
 }: {
   experiment: ExperimentResponse;
-  deriving: boolean;
+  /** The derivation in flight from this run, whichever button started it. */
+  deriving: "replay" | "fork" | null;
+  /** Any derivation is in flight, from this run or the one the operator came from. */
+  held: boolean;
+  /** The derivation's note, which says it cannot be cancelled. */
+  noteId: string;
   /** The providers this lab cannot reach, or null while that is not known. */
   unreachable: ReadonlySet<string> | null;
-  onFork: (arms: { configuration_id: string; version: number }[]) => void;
+  onFork: (
+    arms: { configuration_id: string; version: number }[],
+    rows: ActionStatusRow[],
+    sourceLabel: string,
+  ) => void;
 }) {
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
   // What the panel could not read. Reported rather than swallowed, as the setup screen
@@ -443,7 +570,9 @@ function ForkPanel({
           variant="ink"
           type="button"
           refusal={forkRefusal === null ? null : { id: forkNoteId, reason: forkRefusal }}
-          busy={deriving}
+          busy={held}
+          // The note is true before the press as well, so a reader hears it on reaching it.
+          aria-describedby={noteId}
           onClick={() => {
             // The button swallows a refused press itself; this is the handler's own check.
             if (forkRefusal !== null) {
@@ -454,11 +583,21 @@ function ForkPanel({
                 configuration_id: arm.configurationId,
                 version: arm.version,
               })),
+              chosen.map((arm, position) => ({
+                key: experiment.runs[position].run_id,
+                label: experiment.runs[position].label,
+                detail: `${
+                  configurations.find((entry) => entry.configuration_id === arm.configurationId)
+                    ?.name ?? experiment.runs[position].agent_configuration_name
+                } v${arm.version}`,
+                progress: "running",
+              })),
+              experiment.label,
             );
           }}
         >
           <ButtonIcon verb="fork" />
-          {deriving ? "Deriving…" : "Fork this run"}
+          {deriving === "fork" ? "Forking…" : "Fork this run"}
         </PrimaryAction>
         {forkRefusal === null ? null : (
           <RefusalLine id={forkNoteId} className="mt-1">

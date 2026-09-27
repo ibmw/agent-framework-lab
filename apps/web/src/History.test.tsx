@@ -16,7 +16,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { HISTORY_TOTAL_PAGE_SIZE } from "./shell/listings";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
-import { expectNotRefused } from "./test/refused";
+import { expectBusy, expectNotRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -781,6 +781,114 @@ describe("experiment history", () => {
  * page on screen — the rule the chip row observes and the reason the shell asks for the
  * total rather than holding the rows (ADR 0056).
  */
+/** What a row's Replay and Fork are described by as well, before the press as after (ADR 0065). */
+const DERIVING =
+  "This can take a minute and cannot be cancelled. If you are still here when its arms are done, the new run opens; History lists it either way.";
+
+/** Holds every request to one route until released, then hands it to the suite's handler. */
+function holdEach(path: string) {
+  let arrived = 0;
+  const waiting: (() => void)[] = [];
+  server.use(
+    http.post(path, async () => {
+      arrived += 1;
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }),
+  );
+  return { arrived: () => arrived, release: () => waiting.shift()?.() };
+}
+
+describe("a row's replay and fork report themselves", () => {
+  const MINUTE = "This can take a minute and cannot be cancelled.";
+
+  function queueRows(region: HTMLElement): string[] {
+    return Array.from(region.querySelectorAll("li"), (row) =>
+      Array.from(row.children, (cell) => cell.textContent).join(" | "),
+    );
+  }
+
+  it("names the run and its arms while a replay runs, and holds the press with focus", async () => {
+    const user = userEvent.setup();
+    const replays = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${FINISHED_ID}/replays`);
+    renderHistory();
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+    const queue = screen.getByRole("status", { name: "Where each derived arm stands" });
+    expect(queue).toHaveTextContent("");
+
+    const replay = within(row).getByRole("button", { name: "Replay recorded versions" });
+    await user.click(replay);
+
+    await waitFor(() => expect(replays.arrived()).toBe(1));
+    // A press made again meanwhile, by a click or a key, starts nothing more (ADR 0065).
+    await user.click(replay);
+    await user.keyboard("{Enter}");
+    expect(replays.arrived()).toBe(1);
+    expect(queueRows(queue)).toEqual([
+      "Arm A | cfg-atlas v4 | running…",
+      "Arm B | cfg-beacon v4 | running…",
+    ]);
+    expect(queue).toHaveTextContent("Replaying Prompt A against prompt B: 2 of 2 running.");
+    expect(replay).toHaveTextContent("Replaying…");
+    expectBusy(replay);
+    expect(replay).toHaveAccessibleDescription(
+      `${MINUTE} If you are still here when its arms are done, the new run opens; History lists it either way.`,
+    );
+    // Outside the table, which is busy only while it is read again.
+    expect(screen.getByRole("region", { name: "Experiment history" })).not.toContainElement(queue);
+    // No second derivation starts meanwhile, from this row or another.
+    const others = within(table)
+      .getAllByRole("button", { name: /Replay recorded versions|Fork with newer versions/ })
+      .filter((button) => button !== replay);
+    expect(others.length).toBeGreaterThan(0);
+    for (const other of others) {
+      expect(other).toBeDisabled();
+    }
+
+    replays.release();
+    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+    expect(replayed).toEqual([FINISHED_ID]);
+  });
+
+  it("names the versions a fork moves onto while it runs", async () => {
+    const user = userEvent.setup();
+    rows = [
+      {
+        ...FINISHED,
+        arms: FINISHED.arms.map((entry, position) =>
+          position === 0 ? { ...entry, agent_configuration_latest_version: 7 } : entry,
+        ),
+      },
+    ];
+    const forks = holdEach(`*/api/v1/shops/${SHOP_ID}/experiments/${FINISHED_ID}/forks`);
+    renderHistory();
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+
+    const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
+    await user.click(fork);
+
+    await waitFor(() => expect(forks.arrived()).toBe(1));
+    // A press made again meanwhile, by a click or a key, starts nothing more (ADR 0065).
+    await user.click(fork);
+    await user.keyboard("{Enter}");
+    expect(forks.arrived()).toBe(1);
+    const queue = screen.getByRole("status", { name: "Where each derived arm stands" });
+    expect(queueRows(queue)).toEqual([
+      "Arm A | cfg-atlas v7 | running…",
+      "Arm B | cfg-beacon v4 | running…",
+    ]);
+    expect(queue).toHaveTextContent("Forking Prompt A against prompt B: 2 of 2 running.");
+    expect(fork).toHaveTextContent("Forking…");
+    expectBusy(fork);
+    // The replay beside it was not pressed, so it keeps its own name.
+    expect(within(row).getByRole("button", { name: "Replay recorded versions" })).toBeDisabled();
+
+    forks.release();
+    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+  });
+});
+
 describe("the rail's figure and this index", () => {
   const LAB = "Experiment lab workspace";
 
@@ -902,7 +1010,7 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
       await versionRead(2);
       for (const control of [replay, fork]) {
         expect(control).toHaveAttribute("title", NOTE);
-        expect(control).toHaveAccessibleDescription(NOTE);
+        expect(control).toHaveAccessibleDescription(`${NOTE} ${DERIVING}`);
       }
       // Two arms on one provider, and two refusals with one cause: one sentence.
       expect(within(row).getAllByText(NOTE)).toHaveLength(1);
@@ -935,7 +1043,7 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
     await versionRead(2);
     expectNotRefused(fork);
     expect(fork).not.toHaveAttribute("title");
-    expect(replay).toHaveAccessibleDescription(NOTE);
+    expect(replay).toHaveAccessibleDescription(`${NOTE} ${DERIVING}`);
     expect(within(row).getAllByText(NOTE)).toHaveLength(1);
   });
 
@@ -956,7 +1064,7 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
     const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
     await waitFor(() => expect(fork).toBeDisabled());
     expect(fork).toHaveAttribute("title", NOTE);
-    expect(fork).toHaveAccessibleDescription(NOTE);
+    expect(fork).toHaveAccessibleDescription(`${NOTE} ${DERIVING}`);
     expect(replay).toBeEnabled();
     expect(replay).not.toHaveAttribute("title");
     expect(within(row).getAllByText(NOTE)).toHaveLength(1);
@@ -1031,11 +1139,11 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
     const fork = within(row).getByRole("button", { name: "Fork with newer versions" });
     await waitFor(() => expect(replay).toBeDisabled());
     await versionRead(1);
-    expect(replay).toHaveAccessibleDescription(NOTE);
+    expect(replay).toHaveAccessibleDescription(`${NOTE} ${DERIVING}`);
     // The fork cannot move anything, which is its reason; the lab's reach is not a second one.
     expect(fork).toBeDisabled();
     expect(fork).toHaveAccessibleDescription(
-      "Every arm already runs the newest published version of its configuration, and a derivation that changes nothing is a replay.",
+      `Every arm already runs the newest published version of its configuration, and a derivation that changes nothing is a replay. ${DERIVING}`,
     );
     expect(fork).not.toHaveAttribute("title");
     expect(within(row).getAllByText(NOTE)).toHaveLength(1);

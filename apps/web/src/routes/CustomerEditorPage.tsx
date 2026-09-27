@@ -492,6 +492,7 @@ export function CustomerEditorPage() {
             <PublishButton
               preview={preview}
               dirty={editor.dirty}
+              checking={editor.checking}
               publishing={editor.publishing}
               reasonsId={publishReasonsId}
               onPublish={() => {
@@ -519,6 +520,7 @@ export function CustomerEditorPage() {
         className="mb-4 grid gap-1"
         preview={preview}
         dirty={editor.dirty}
+        checking={editor.checking}
       />
       {publishedVersion !== null ? (
         <p role="status" className="mb-4 text-[13px] text-lab-success">

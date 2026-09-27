@@ -31,9 +31,12 @@ export type PrimaryWeight = "accent" | "ink" | "outline";
  * button. The caller's handler is not called.
  *
  * `busy` is a different state: a press in flight has no reason to give and ends on its own, so it
- * keeps native `disabled` and the button table's faded weight — and it wins over a refusal that
- * arrives meanwhile, which takes over once the press has ended. `disabled` itself is not a prop,
- * so no caller can refuse an action the old way by accident.
+ * wears the button table's faded weight and says nothing — and it wins over a refusal that
+ * arrives meanwhile, which takes over once the press has ended. It is `aria-disabled` too, never
+ * natively `disabled`, because a browser drops focus from a control that becomes disabled under
+ * it: the reader who pressed would be left on the page's body for as long as the action runs,
+ * and put back nowhere when it ends (ADR 0065). It swallows its activation as a refusal does.
+ * `disabled` itself is not a prop, so no caller can refuse an action the old way by accident.
  *
  * The line is the surface's to place — under a create header, under Start in its card, beside a
  * row's Save — and `RefusalLine` below is that line where a surface has one sentence to give.
@@ -52,7 +55,7 @@ export function PrimaryAction({
   variant: PrimaryWeight;
   /** Why the action is refused. Absent or null when it can proceed. */
   refusal?: Refusal | null;
-  /** A press is in flight: natively disabled, with nothing to explain. */
+  /** A press is in flight: unavailable, with nothing to explain, and still holding focus. */
   busy?: boolean;
   ref?: Ref<HTMLButtonElement>;
   children: ReactNode;
@@ -68,12 +71,11 @@ export function PrimaryAction({
       {...rest}
       ref={ref}
       className={className ? `${weight} ${className}` : weight}
-      disabled={busy}
-      aria-disabled={refused ? true : undefined}
+      aria-disabled={refused || busy ? true : undefined}
       title={refused ? refusal.reason : undefined}
       aria-describedby={describedByIds === "" ? undefined : describedByIds}
       onClick={(event: MouseEvent<HTMLButtonElement>) => {
-        if (refused) {
+        if (refused || busy) {
           event.preventDefault();
           return;
         }
@@ -105,5 +107,48 @@ export function RefusalLine({
     >
       {children}
     </p>
+  );
+}
+
+/**
+ * A secondary control whose press runs long — *Run the agent*, *Score*, *Replay*, *Materialize
+ * snapshot* — held in place while it runs.
+ *
+ * `busy` is a press in flight, and is `aria-disabled` rather than `disabled` for the reason
+ * `PrimaryAction`'s is: the reader who pressed keeps focus on the control for the minute it runs
+ * and is still on it when it comes back (ADR 0065). The activation is swallowed meanwhile.
+ * `disabled` keeps its native meaning — a secondary control refused for a reason stays natively
+ * disabled with that reason beside it (ADR 0063) — and busy wins over it, as it does over a
+ * primary action's refusal, so a refusal arriving during the press cannot take focus away.
+ */
+export function BusyButton({
+  busy,
+  disabled = false,
+  onClick,
+  ref,
+  children,
+  ...rest
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "aria-disabled"> & {
+  /** A press is in flight. */
+  busy: boolean;
+  ref?: Ref<HTMLButtonElement>;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      {...rest}
+      ref={ref}
+      disabled={!busy && disabled}
+      aria-disabled={busy ? true : undefined}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        if (busy) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
+    >
+      {children}
+    </button>
   );
 }

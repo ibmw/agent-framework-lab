@@ -18,7 +18,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./shell/AppShell";
 import { renderApp, wholeDescription } from "./test/app";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -759,7 +759,7 @@ describe("the model provider zone", () => {
     const card = await openZone();
 
     await user.click(card.getByRole("button", { name: "Test connection" }));
-    expect(await card.findByRole("button", { name: "Reaching the endpoint…" })).toBeDisabled();
+    expectBusy(await card.findByRole("button", { name: "Reaching the endpoint…" }));
 
     answer({ outcome: "reachable", latency_ms: 900, status_class: "2xx" });
     expect(await card.findByText(/900 ms/)).toBeVisible();

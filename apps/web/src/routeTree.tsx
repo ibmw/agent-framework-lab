@@ -15,7 +15,7 @@ import { CustomerEditorRoute } from "./routes/CustomerEditorPage";
 import { CustomersPage, NewCustomerPage } from "./routes/CustomersPage";
 import { DocumentEditorPage } from "./routes/DocumentEditorPage";
 import { DocumentsPage, NewDocumentPage } from "./routes/DocumentsPage";
-import { ExperimentBenchPage } from "./routes/ExperimentBenchPage";
+import { ExperimentBenchRoute } from "./routes/ExperimentBenchPage";
 import { ExperimentHistoryPage } from "./routes/ExperimentHistoryPage";
 import { ExperimentResultsLayout } from "./routes/ExperimentResultsLayout";
 import { ExperimentResultsPage } from "./routes/ExperimentResultsPage";
@@ -125,7 +125,7 @@ export const routeTree = createRoutesFromElements(
     <Route path="/lab" element={<LabWorkspace />}>
       <Route index element={<Navigate to="/lab/bench" replace />} />
       <Route path="bench" element={<ExperimentSetupPage />} />
-      <Route path="bench/:shopId/:experimentId" element={<ExperimentBenchPage />} />
+      <Route path="bench/:shopId/:experimentId" element={<ExperimentBenchRoute />} />
       <Route path="bench/:shopId/:experimentId/results" element={<ExperimentResultsLayout />}>
         <Route index element={<ExperimentResultsPage />} />
         <Route path="timeline" element={<ExperimentTimelinePage />} />

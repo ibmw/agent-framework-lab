@@ -11,10 +11,12 @@ import type {
 import { type FormEvent, useId, useState } from "react";
 import { describeApiError } from "../api/client";
 import { addExperimentNote, scoreExperiment, setExperimentTags } from "../api/experiments";
+import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { JudgePicker, ObjectiveMatrix } from "../components/ObjectiveEvidence";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { Card, Fingerprint } from "../components/WorkspaceChrome";
+import { scoreReport, TAKES_A_MINUTE } from "../lib/actionStatus";
 import {
   changeValue,
   describeFailure,
@@ -78,13 +80,19 @@ export function ExperimentResultsPage() {
     useExperimentResults();
   const { judges, judgeId, setJudgeId } = usePublishedJudges();
   const [scoring, setScoring] = useState(false);
+  // What the last scoring pass on this page answered, for the queue's settled rows.
+  const [scored, setScored] = useState<ArmEvaluationSchema[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const scoreNoteId = useId();
 
   const score = async () => {
     setScoring(true);
+    setScored(null);
     setError(null);
     try {
-      onEvaluated(await scoreExperiment(shopId, experimentId, { judge_id: judgeId }));
+      const judged = await scoreExperiment(shopId, experimentId, { judge_id: judgeId });
+      onEvaluated(judged);
+      setScored(judged.arms);
     } catch (cause: unknown) {
       setError(describeApiError(cause, "This experiment could not be scored."));
     } finally {
@@ -165,8 +173,12 @@ export function ExperimentResultsPage() {
               </p>
             ) : (
               <>
-                <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={judged} />
-                <Verdicts runs={experiment.runs} arms={arms} rows={judged} />
+                {/* Busy while a judge scores them, and only these: the card also holds the
+                    scoring queue, which a busy card would keep from being announced. */}
+                <div aria-busy={scoring || undefined} className="grid gap-3">
+                  <ObjectiveMatrix runs={experiment.runs} arms={arms} rows={judged} />
+                  <Verdicts runs={experiment.runs} arms={arms} rows={judged} />
+                </div>
                 {judges.length === 0 ? (
                   <p className="text-[13px] text-admin-muted">
                     Publish a judge to score {judged.length} row(s) no rule decides.
@@ -184,8 +196,15 @@ export function ExperimentResultsPage() {
                           : `Score ${judged.length} judged objective(s)`
                       }
                       scoring={scoring}
+                      noteId={scoreNoteId}
                       onSelectJudge={setJudgeId}
                       onScore={() => void score()}
+                    />
+                    <ActionStatus
+                      label="Where each arm's scoring stands"
+                      report={scoreReport(experiment.runs, scoring, scored)}
+                      note={TAKES_A_MINUTE}
+                      noteId={scoreNoteId}
                     />
                   </div>
                 )}
@@ -294,9 +313,10 @@ function NotesAndTags({
 
   const submitNote = (event: FormEvent) => {
     event.preventDefault();
-    // The button refuses an empty note itself (ADR 0063); a submission that arrives some
-    // other way is refused here too, rather than sent for the lab to refuse.
-    if (noteEmpty) {
+    // The button refuses an empty note itself (ADR 0063), and holds while a write is in flight
+    // (ADR 0065); a submission that arrives some other way is refused here too, rather than
+    // sent for the lab to refuse or sent twice.
+    if (noteEmpty || busy) {
       return;
     }
     void write(
@@ -318,7 +338,8 @@ function NotesAndTags({
 
   const submitTag = (event: FormEvent) => {
     event.preventDefault();
-    if (tagEmpty) {
+    // As the note's: an empty tag and a second write while one is in flight go nowhere.
+    if (tagEmpty || busy) {
       return;
     }
     // The whole set every time, because that is what the contract takes: the backend folds

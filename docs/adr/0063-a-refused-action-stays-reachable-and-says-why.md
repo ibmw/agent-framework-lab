@@ -345,3 +345,13 @@ case classes over every cased one — which `test_rubric_mentions.py` writes and
 backend; `fieldRules.test.ts` reads the six sentences and the three caps out of the Python, and
 `test_scenario_domain.py`, `test_block_domain.py` and `test_judge_domain.py` assert them from
 the other end.
+
+## Amendment — 2026-09-27: a press in flight keeps focus
+
+*A press in flight is not a refusal* stands, and its attribute moves: ADR 0065 makes a busy
+`PrimaryAction` `aria-disabled` rather than natively `disabled`, swallowing its activation as a
+refused one does, because a browser drops focus from a control that becomes disabled under it —
+the question this ADR left open under *Deliberately not here*. Busy still wins over a refusal,
+still says nothing and still wears the faded weight. ADR 0065 also writes "Checking the draft…"
+for a Publish whose gate has not answered, and closes the deferral of *Materialize snapshot* and
+*Clone sandbox*: both are refused before the press.
