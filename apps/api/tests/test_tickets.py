@@ -12,17 +12,19 @@ from capability_lab.application.customer_profiles import CustomerProfileService
 from capability_lab.application.order_fixtures import (
     OrderFixtureService,
 )
+from capability_lab.application.shop_documents import ShopDocumentOption
 from capability_lab.application.shops import ShopNotFoundError, ShopService
 from capability_lab.application.tickets import (
     TicketCustomerChangeError,
     TicketCustomerNotInShopError,
     TicketNotFoundError,
     TicketNotPublishableError,
+    TicketProductOption,
     TicketReferenceExistsError,
     TicketService,
 )
 from capability_lab.domain.definitions import DefinitionType, DefinitionValidation
-from capability_lab.domain.shop import SupportChannel
+from capability_lab.domain.shop import FaqEntry, ShopDocumentKind, SupportChannel
 from capability_lab.domain.ticket import (
     SuggestedDocument,
     SuggestedDocumentKind,
@@ -41,7 +43,7 @@ from capability_lab.infrastructure.repositories import (
     shop_repository,
 )
 from definition_factories import customer_identity
-from shop_factories import identity, publishable_shop
+from shop_factories import identity, product, publishable_shop
 from ticket_factories import message, prior_history
 from workspace_factories import (
     AdvancingClock,
@@ -444,9 +446,83 @@ def test_the_context_carries_the_customer_the_linked_orders_and_the_pickers(
     assert context.customer.order_count == 1
     assert [order.reference for order in context.linked_orders] == ["NS-10482"]
     assert context.linked_orders[0].shipping_label == "Bordeaux — previous flat"
-    assert context.resources.product_handles == ("alpine-shell-jacket",)
-    assert context.resources.policy_ids == ("shipping",)
+    assert context.resources.products == (
+        TicketProductOption(handle="alpine-shell-jacket", title="Alpine Shell Jacket"),
+    )
     assert context.resources.channels == (SupportChannel.CHAT,)
+
+
+def test_the_context_names_every_document_by_its_title_and_an_faq_entry_by_its_question(
+    workspace: Workspace,
+) -> None:
+    ticket_id = create_ticket(workspace)
+
+    context = workspace.tickets.ticket_context(workspace.shop_id, ticket_id)
+
+    assert context.resources.documents == (
+        ShopDocumentOption(ShopDocumentKind.POLICY, "shipping", "Shipping policy"),
+        ShopDocumentOption(ShopDocumentKind.SUPPORT_GUIDELINE, "escalation", "Escalation"),
+        ShopDocumentOption(ShopDocumentKind.FAQ_ENTRY, "delivery", "When does it ship?"),
+    )
+
+
+def test_the_titles_are_the_shop_drafts_not_its_published_version(
+    workspace: Workspace,
+) -> None:
+    # The pickers offer what the publish gate accepts, and the gate reads the shop draft; a
+    # title from the published version would name a product the draft has since renamed.
+    publish_shop_and_customer(workspace)
+    workspace.shops.replace_draft(
+        workspace.shop_id,
+        publishable_shop(
+            products=(product(title="Alpine Shell Jacket II"),),
+            faq=(FaqEntry(id="delivery", question="How fast is delivery?", answer="Two days."),),
+        ),
+    )
+    ticket_id = create_ticket(workspace)
+
+    resources = workspace.tickets.ticket_context(workspace.shop_id, ticket_id).resources
+
+    assert [option.title for option in resources.products] == ["Alpine Shell Jacket II"]
+    assert resources.documents[-1].title == "How fast is delivery?"
+
+
+def test_a_reference_the_shop_draft_no_longer_holds_is_absent_from_the_titled_lists(
+    workspace: Workspace,
+) -> None:
+    # The ticket keeps its reference — it is the author's to remove — and the context offers
+    # no title for it, which is how the editor tells a resolved reference from a stale one.
+    ticket_id = create_ticket(workspace)
+    workspace.tickets.replace_ticket(
+        workspace.shop_id,
+        ticket_id,
+        wrong_address_ticket(
+            workspace,
+            origin=TicketOrigin(
+                kind=TicketOriginKind.PRODUCT_PAGE, product_handle="alpine-shell-jacket"
+            ),
+            suggested_documents=(
+                SuggestedDocument(kind=SuggestedDocumentKind.POLICY, document_id="shipping"),
+                SuggestedDocument(kind=SuggestedDocumentKind.FAQ_ENTRY, document_id="delivery"),
+            ),
+        ),
+    )
+    workspace.shops.replace_draft(
+        workspace.shop_id,
+        publishable_shop(
+            products=(product(handle="trailhead-cap", title="Trailhead Cap"),), faq=()
+        ),
+    )
+
+    context = workspace.tickets.ticket_context(workspace.shop_id, ticket_id)
+    ticket = workspace.tickets.get_ticket(workspace.shop_id, ticket_id).payload
+
+    assert ticket.origin.product_handle == "alpine-shell-jacket"
+    assert [option.handle for option in context.resources.products] == ["trailhead-cap"]
+    assert [(entry.kind, entry.document_id) for entry in context.resources.documents] == [
+        (ShopDocumentKind.POLICY, "shipping"),
+        (ShopDocumentKind.SUPPORT_GUIDELINE, "escalation"),
+    ]
 
 
 def test_the_pickers_only_offer_this_customers_orders(

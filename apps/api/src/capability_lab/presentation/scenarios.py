@@ -30,7 +30,6 @@ from capability_lab.application.scenarios import (
     ResolvedTemplate,
     ScenarioBlockOption,
     ScenarioCustomerOption,
-    ScenarioDocumentOption,
     ScenarioDraftRecord,
     ScenarioOrderOption,
     ScenarioPreview,
@@ -40,6 +39,7 @@ from capability_lab.application.scenarios import (
     ScenarioSummary,
     ScenarioVersionRecord,
 )
+from capability_lab.application.shop_documents import ShopDocumentOption
 from capability_lab.domain.blocks import ObjectiveSeverity
 from capability_lab.domain.definitions import DefinitionType, PublishedDefinitionVersion
 from capability_lab.domain.order_fixture import FulfilmentStatus, PaymentStatus
@@ -284,7 +284,7 @@ class ScenarioDocumentOptionSchema(StrictApiModel):
     )
 
     @classmethod
-    def from_domain(cls, option: ScenarioDocumentOption) -> Self:
+    def from_domain(cls, option: ShopDocumentOption) -> Self:
         return cls(
             kind=option.kind,
             document_id=option.document_id,

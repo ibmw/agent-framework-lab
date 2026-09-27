@@ -2,11 +2,12 @@ import type { TicketContentSchema, TicketShopResourcesSchema } from "@agent-lab/
 import { describe, expect, it } from "vitest";
 import {
   appendMessage,
-  documentOptions,
   initials,
+  productTitle,
   removeMessage,
   retargetOrigin,
   toTicketRequest,
+  unresolvedDocuments,
 } from "./tickets";
 
 const ORDER_ID = "9f8e7d6c-5b4a-4938-8271-6a5b4c3d2e1f";
@@ -191,21 +192,43 @@ describe("removeMessage", () => {
   });
 });
 
-describe("documentOptions", () => {
-  it("flattens the shop's three document collections into one picker list", () => {
-    const resources: TicketShopResourcesSchema = {
-      channels: ["chat"],
-      product_handles: [],
-      orders: [],
-      policy_ids: ["address-change"],
-      support_guideline_ids: ["escalation"],
-      faq_entry_ids: ["delivery"],
-    };
+const RESOURCES: TicketShopResourcesSchema = {
+  channels: ["chat"],
+  product_handles: ["alpine-shell-jacket"],
+  products: [{ handle: "alpine-shell-jacket", title: "Alpine Shell Jacket" }],
+  orders: [],
+  policy_ids: ["shipping"],
+  support_guideline_ids: [],
+  faq_entry_ids: ["delivery"],
+  documents: [
+    { kind: "policy", document_id: "shipping", title: "Shipping policy" },
+    { kind: "faq_entry", document_id: "delivery", title: "When does it ship?" },
+  ],
+};
 
-    expect(documentOptions(resources)).toEqual([
-      { kind: "policy", document_id: "address-change" },
-      { kind: "support_guideline", document_id: "escalation" },
+describe("productTitle", () => {
+  it("names a product by the title the shop draft gives it", () => {
+    expect(productTitle(RESOURCES, "alpine-shell-jacket")).toBe("Alpine Shell Jacket");
+  });
+
+  it("has no title for a handle the shop no longer holds", () => {
+    expect(productTitle(RESOURCES, "trailhead-cap")).toBeNull();
+  });
+});
+
+describe("unresolvedDocuments", () => {
+  it("keeps the suggestions the shop no longer holds, by kind and slug together", () => {
+    // `shipping` is still a policy, but no longer an FAQ entry: the pair is the identity.
+    const suggested = [
+      { kind: "policy", document_id: "shipping" },
+      { kind: "faq_entry", document_id: "shipping" },
       { kind: "faq_entry", document_id: "delivery" },
+      { kind: "support_guideline", document_id: "escalation" },
+    ] as const;
+
+    expect(unresolvedDocuments(suggested, RESOURCES)).toEqual([
+      { kind: "faq_entry", document_id: "shipping" },
+      { kind: "support_guideline", document_id: "escalation" },
     ]);
   });
 });

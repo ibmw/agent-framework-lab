@@ -204,7 +204,7 @@ async function buildIncident(page: Page, unique: string) {
   await card(page, "Linked objects").getByLabel("NS-10482").check();
   // The suggestion is what pre-fills the scenario's context documents.
   await card(page, "Suggested documents")
-    .getByLabel(/address-change/)
+    .getByLabel(/^Address-change policy/)
     .check();
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();

@@ -19,12 +19,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Path
 from pydantic import Field
 
+from capability_lab.application.shop_documents import ShopDocumentOption
 from capability_lab.application.tickets import (
     TicketContext,
     TicketCustomerSummary,
     TicketDraftPreview,
     TicketDraftRecord,
     TicketOrderOption,
+    TicketProductOption,
     TicketReferenceSummary,
     TicketService,
     TicketShopResources,
@@ -32,7 +34,7 @@ from capability_lab.application.tickets import (
     TicketVersionRecord,
 )
 from capability_lab.domain.order_fixture import FulfilmentStatus, PaymentStatus
-from capability_lab.domain.shop import SupportChannel
+from capability_lab.domain.shop import ShopDocumentKind, SupportChannel
 from capability_lab.domain.ticket import (
     SuggestedDocument,
     SuggestedDocumentKind,
@@ -246,25 +248,68 @@ class TicketOrderSchema(StrictApiModel):
         )
 
 
+class TicketProductOptionSchema(StrictApiModel):
+    """One product of the shop's catalog, as the origin picker offers it."""
+
+    handle: str
+    title: str
+
+    @classmethod
+    def from_domain(cls, option: TicketProductOption) -> Self:
+        return cls(handle=option.handle, title=option.title)
+
+
+class TicketDocumentOptionSchema(StrictApiModel):
+    """One shop document a suggestion may name, with the title an author reads it by."""
+
+    kind: ShopDocumentKind
+    document_id: str
+    title: str
+
+    @classmethod
+    def from_domain(cls, option: ShopDocumentOption) -> Self:
+        return cls(kind=option.kind, document_id=option.document_id, title=option.title)
+
+
 class TicketShopResourcesSchema(StrictApiModel):
     """Exactly what this ticket may name, so a picker cannot offer a publish-gate error."""
 
     channels: list[SupportChannel]
     product_handles: list[str]
+    products: list[TicketProductOptionSchema] = Field(
+        description=(
+            "The catalog with each product's title, in `product_handles` order. An origin "
+            "handle absent from it is one the shop no longer resolves."
+        )
+    )
     orders: list[TicketOrderSchema]
     policy_ids: list[str]
     support_guideline_ids: list[str]
     faq_entry_ids: list[str]
+    documents: list[TicketDocumentOptionSchema] = Field(
+        description=(
+            "Every policy, support guideline and FAQ entry with its title, an FAQ entry's "
+            "being its question. A suggested document absent from it is one the shop no "
+            "longer resolves."
+        )
+    )
 
     @classmethod
     def from_domain(cls, resources: TicketShopResources) -> Self:
+        def ids(kind: ShopDocumentKind) -> list[str]:
+            return [entry.document_id for entry in resources.documents if entry.kind is kind]
+
         return cls(
             channels=list(resources.channels),
-            product_handles=list(resources.product_handles),
+            product_handles=[product.handle for product in resources.products],
+            products=[TicketProductOptionSchema.from_domain(p) for p in resources.products],
             orders=[TicketOrderSchema.from_domain(order) for order in resources.orders],
-            policy_ids=list(resources.policy_ids),
-            support_guideline_ids=list(resources.support_guideline_ids),
-            faq_entry_ids=list(resources.faq_entry_ids),
+            policy_ids=ids(ShopDocumentKind.POLICY),
+            support_guideline_ids=ids(ShopDocumentKind.SUPPORT_GUIDELINE),
+            faq_entry_ids=ids(ShopDocumentKind.FAQ_ENTRY),
+            documents=[
+                TicketDocumentOptionSchema.from_domain(entry) for entry in resources.documents
+            ],
         )
 
 

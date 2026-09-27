@@ -40,6 +40,7 @@ from capability_lab.application.definition_authoring import (
 from capability_lab.application.definition_resolution import DefinitionResolutionError
 from capability_lab.application.order_fixtures import OrderFixtureRecord, OrderFixtureRepository
 from capability_lab.application.ports import Clock
+from capability_lab.application.shop_documents import ShopDocumentOption, shop_document_options
 from capability_lab.application.shops import ShopNotFoundError
 from capability_lab.application.ticket_payload import (
     ticket_content_fingerprint,
@@ -161,6 +162,14 @@ class TicketOrderOption:
 
 
 @dataclass(frozen=True, slots=True)
+class TicketProductOption:
+    """One product of the shop's catalog, as the origin picker offers it."""
+
+    handle: str
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
 class TicketShopResources:
     """The same-shop resources a ticket may name, for the editor's pickers.
 
@@ -168,14 +177,16 @@ class TicketShopResources:
     an order response carries the statuses that order may still move to. Orders are already
     filtered to this ticket's customer: a picker that offered somebody else's order would be
     offering a publish-gate error.
+
+    Products and documents carry their titles, so the editor names what the ticket points at
+    by what an author calls it. A reference the ticket holds that is missing from these lists
+    is one the shop no longer resolves, which is how the editor tells it apart.
     """
 
     channels: tuple[SupportChannel, ...]
-    product_handles: tuple[str, ...]
+    products: tuple[TicketProductOption, ...]
     orders: tuple[TicketOrderOption, ...]
-    policy_ids: tuple[str, ...]
-    support_guideline_ids: tuple[str, ...]
-    faq_entry_ids: tuple[str, ...]
+    documents: tuple[ShopDocumentOption, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,11 +374,12 @@ class TicketService(DefinitionAuthoringService[TicketPayload]):
             ),
             resources=TicketShopResources(
                 channels=shop.identity.channels,
-                product_handles=tuple(product.handle for product in shop.products),
+                products=tuple(
+                    TicketProductOption(handle=product.handle, title=product.title)
+                    for product in shop.products
+                ),
                 orders=tuple(customer_orders.values()),
-                policy_ids=tuple(policy.id for policy in shop.policies),
-                support_guideline_ids=tuple(entry.id for entry in shop.support_guidelines),
-                faq_entry_ids=tuple(entry.id for entry in shop.faq),
+                documents=shop_document_options(shop),
             ),
         )
 

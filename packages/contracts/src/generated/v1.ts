@@ -6077,6 +6077,17 @@ export interface components {
       /** Order Count */
       order_count: number;
     };
+    /**
+     * TicketDocumentOptionSchema
+     * @description One shop document a suggestion may name, with the title an author reads it by.
+     */
+    TicketDocumentOptionSchema: {
+      kind: components["schemas"]["ShopDocumentKind"];
+      /** Document Id */
+      document_id: string;
+      /** Title */
+      title: string;
+    };
     /** TicketDraftResponse */
     TicketDraftResponse: {
       /**
@@ -6221,6 +6232,16 @@ export interface components {
       matches_latest_published: boolean;
       content: components["schemas"]["TicketContentSchema"];
     };
+    /**
+     * TicketProductOptionSchema
+     * @description One product of the shop's catalog, as the origin picker offers it.
+     */
+    TicketProductOptionSchema: {
+      /** Handle */
+      handle: string;
+      /** Title */
+      title: string;
+    };
     /** TicketReferenceSchema */
     TicketReferenceSchema: {
       /**
@@ -6243,6 +6264,11 @@ export interface components {
       channels: components["schemas"]["SupportChannel"][];
       /** Product Handles */
       product_handles: string[];
+      /**
+       * Products
+       * @description The catalog with each product's title, in `product_handles` order. An origin handle absent from it is one the shop no longer resolves.
+       */
+      products: components["schemas"]["TicketProductOptionSchema"][];
       /** Orders */
       orders: components["schemas"]["TicketOrderSchema"][];
       /** Policy Ids */
@@ -6251,6 +6277,11 @@ export interface components {
       support_guideline_ids: string[];
       /** Faq Entry Ids */
       faq_entry_ids: string[];
+      /**
+       * Documents
+       * @description Every policy, support guideline and FAQ entry with its title, an FAQ entry's being its question. A suggested document absent from it is one the shop no longer resolves.
+       */
+      documents: components["schemas"]["TicketDocumentOptionSchema"][];
     };
     /**
      * TicketStatus

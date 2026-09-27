@@ -2,10 +2,16 @@
 
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
+import yaml
 from httpx import AsyncClient
+from jsonschema import Draft202012Validator, ValidationError
+from jsonschema.protocols import Validator
+from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT202012
 
 from api_factories import (
     PROFILE,
@@ -18,6 +24,8 @@ from api_factories import (
     publish_prerequisites,
     ticket_body,
 )
+
+CONTRACT_URI = "urn:agent-lab:openapi:v1"
 
 
 @pytest.fixture
@@ -184,6 +192,65 @@ async def test_the_context_answers_the_customer_the_orders_and_the_pickers(
     assert context["linked_orders"][0]["shipping_label"] == "Bordeaux — previous flat"
     assert context["resources"]["policy_ids"] == ["address-change"]
     assert context["resources"]["channels"] == ["chat"]
+
+
+def _published_schema(name: str) -> Validator:
+    """A validator for one response schema, read off the published contract a client uses."""
+    path = Path(__file__).parents[3] / "packages" / "contracts" / "openapi" / "v1" / "openapi.yaml"
+    contract = cast(dict[str, Any], yaml.safe_load(path.read_text()))
+    resource: Resource[Any] = DRAFT202012.create_resource(contract)
+    registry = Registry[Any]().with_resource(CONTRACT_URI, resource)
+    return Draft202012Validator(
+        {"$ref": f"{CONTRACT_URI}#/components/schemas/{name}"}, registry=registry
+    )
+
+
+async def test_the_context_payload_names_products_and_documents_by_their_titles(
+    client: AsyncClient, workspace: tuple[str, str, str, str]
+) -> None:
+    shop_id, _, order_id, ticket_id = workspace
+    await client.put(
+        f"/api/v1/shops/{shop_id}/tickets/{ticket_id}/draft",
+        json={"payload": ticket_body(order_id)},
+    )
+
+    response = await client.get(f"/api/v1/shops/{shop_id}/tickets/{ticket_id}/context")
+
+    assert response.status_code == 200, response.text
+    context = response.json()
+    _published_schema("TicketContextSchema").validate(context)
+    resources = context["resources"]
+    assert resources["products"] == [
+        {"handle": "alpine-shell-jacket", "title": "Alpine Shell Jacket"}
+    ]
+    assert resources["documents"] == [
+        {"kind": "policy", "document_id": "address-change", "title": "Address-change policy"},
+        {"kind": "support_guideline", "document_id": "escalation", "title": "Escalation"},
+        {"kind": "faq_entry", "document_id": "delivery", "title": "When does my order ship?"},
+    ]
+    # The untitled lists stay, for a client that reads them, and cannot disagree with these.
+    assert resources["product_handles"] == ["alpine-shell-jacket"]
+    assert resources["policy_ids"] == ["address-change"]
+    assert resources["support_guideline_ids"] == ["escalation"]
+    assert resources["faq_entry_ids"] == ["delivery"]
+
+
+def test_the_published_context_schema_refuses_a_document_without_its_title() -> None:
+    """The validator above is not vacuous: the contract requires the titles it checks."""
+    validator = _published_schema("TicketShopResourcesSchema")
+    untitled = {
+        "channels": ["chat"],
+        "product_handles": [],
+        "products": [],
+        "orders": [],
+        "policy_ids": ["address-change"],
+        "support_guideline_ids": [],
+        "faq_entry_ids": [],
+        "documents": [{"kind": "policy", "document_id": "address-change"}],
+    }
+
+    with pytest.raises(ValidationError, match="'title' is a required property"):
+        validator.validate(untitled)
 
 
 async def test_publishing_freezes_the_ticket_and_names_what_it_pinned(

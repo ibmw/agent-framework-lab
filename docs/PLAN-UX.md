@@ -99,8 +99,6 @@ edit-in-place, the guard, pine, the field row — is still there underneath.
   title; the filter select stays, as UI-4 decided.
 - [ ] A non-interactive `chipClasses` for the tool-call, attempt and fault chips on the bench and
   the timeline, which wear button classes today.
-- [ ] Ticket origin products and suggested documents show titles: the context payload carries
-  them — the one additive contract change in this slice, shipped with its backend.
 
 Frames: `Workspace.dc.html` :2174, :2566, :2673; DEPRECADED frames 3, 9, 10.
 

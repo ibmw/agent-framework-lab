@@ -186,7 +186,7 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await details.getByLabel("Order", { exact: true }).selectOption({ label: "NS-10482" });
   await card(page, "Linked objects").getByLabel("NS-10482").check();
   await card(page, "Suggested documents")
-    .getByLabel(/address-change/)
+    .getByLabel(/^Address-change policy/)
     .check();
 
   await saveDraft(page);

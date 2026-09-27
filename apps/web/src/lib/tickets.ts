@@ -1,6 +1,7 @@
 import type {
   ReplaceTicketDraftRequest,
   ShopDocumentKind,
+  SuggestedDocumentSchema,
   SupportChannel,
   TicketAuthor,
   TicketContentSchema,
@@ -113,18 +114,33 @@ export function normalizeTag(tag: string): string {
   return slugify(tag, "");
 }
 
-/** Every document a shop currently offers, as one flat list for the suggestion picker. */
-export function documentOptions(
+/**
+ * The title the shop draft gives a product, or `null` when the draft no longer holds the handle.
+ *
+ * `null` is the honest answer rather than the handle standing in for a title: a handle the shop
+ * cannot resolve is a publish-gate error, and the editor says so instead of naming it as if it
+ * were still in the catalog.
+ */
+export function productTitle(resources: TicketShopResourcesSchema, handle: string): string | null {
+  return resources.products.find((product) => product.handle === handle)?.title ?? null;
+}
+
+/**
+ * The suggestions the shop draft no longer holds, in the order the ticket keeps them.
+ *
+ * A document is named by its kind and its slug together (ADR 0057), so a policy and an FAQ
+ * entry sharing a slug are two documents, and removing one resolves nothing about the other.
+ */
+export function unresolvedDocuments(
+  suggested: readonly SuggestedDocumentSchema[],
   resources: TicketShopResourcesSchema,
-): { kind: ShopDocumentKind; document_id: string }[] {
-  return [
-    ...resources.policy_ids.map((id) => ({ kind: "policy" as const, document_id: id })),
-    ...resources.support_guideline_ids.map((id) => ({
-      kind: "support_guideline" as const,
-      document_id: id,
-    })),
-    ...resources.faq_entry_ids.map((id) => ({ kind: "faq_entry" as const, document_id: id })),
-  ];
+): SuggestedDocumentSchema[] {
+  return suggested.filter(
+    (entry) =>
+      !resources.documents.some(
+        (document) => document.kind === entry.kind && document.document_id === entry.document_id,
+      ),
+  );
 }
 
 /**

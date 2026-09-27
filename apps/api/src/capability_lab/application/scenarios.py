@@ -56,6 +56,7 @@ from capability_lab.application.scenario_payload import (
     scenario_document,
     scenario_from_document,
 )
+from capability_lab.application.shop_documents import ShopDocumentOption, shop_document_options
 from capability_lab.application.shops import ShopNotFoundError
 from capability_lab.application.tickets import (
     TicketRepository,
@@ -178,15 +179,6 @@ class ScenarioOrderOption:
 
 
 @dataclass(frozen=True, slots=True)
-class ScenarioDocumentOption:
-    """One shop document a context entry or a read-check may name."""
-
-    kind: ShopDocumentKind
-    document_id: str
-    title: str
-
-
-@dataclass(frozen=True, slots=True)
 class ScenarioBlockOption:
     """One library template, with everything the editor needs to bind it.
 
@@ -214,7 +206,7 @@ class ScenarioCustomerOption:
 class ScenarioResources:
     """Exactly what this scenario may name, so a picker cannot offer a publish-gate error."""
 
-    documents: tuple[ScenarioDocumentOption, ...]
+    documents: tuple[ShopDocumentOption, ...]
     orders: tuple[ScenarioOrderOption, ...]
     product_handles: tuple[str, ...]
     customers: tuple[ScenarioCustomerOption, ...]
@@ -464,7 +456,7 @@ class ScenarioService(DefinitionAuthoringService[ScenarioPayload]):
         customer_id = None if ticket is None else ticket.customer_profile_id
         names = self._customer_names()
         return ScenarioResources(
-            documents=_document_options(shop),
+            documents=shop_document_options(shop),
             # Only this customer's orders: a picker offering somebody else's would be
             # offering a publish-gate error.
             orders=tuple(
@@ -696,35 +688,10 @@ def shop_document_ids(shop: ShopPayload) -> dict[ShopDocumentKind, frozenset[str
     }
 
 
-def _document_options(shop: ShopPayload) -> tuple[ScenarioDocumentOption, ...]:
-    return (
-        *(
-            ScenarioDocumentOption(
-                kind=ShopDocumentKind.POLICY, document_id=policy.id, title=policy.title
-            )
-            for policy in shop.policies
-        ),
-        *(
-            ScenarioDocumentOption(
-                kind=ShopDocumentKind.SUPPORT_GUIDELINE,
-                document_id=guideline.id,
-                title=guideline.title,
-            )
-            for guideline in shop.support_guidelines
-        ),
-        *(
-            ScenarioDocumentOption(
-                kind=ShopDocumentKind.FAQ_ENTRY, document_id=entry.id, title=entry.question
-            )
-            for entry in shop.faq
-        ),
-    )
-
-
 def _document_titles(shop: ShopPayload) -> dict[str, str]:
     return {
         f"{option.kind.value}:{option.document_id}": option.title
-        for option in _document_options(shop)
+        for option in shop_document_options(shop)
     }
 
 

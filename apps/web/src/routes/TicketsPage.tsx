@@ -57,7 +57,6 @@ import {
   authorLabel,
   channelLabel,
   documentKindLabel,
-  documentOptions,
   initials,
   messageDay,
   messageTime,
@@ -65,10 +64,12 @@ import {
   originLabel,
   originNeedsOrder,
   originNeedsProduct,
+  productTitle,
   removeMessage,
   retargetOrigin,
   statusLabel,
   toTicketRequest,
+  unresolvedDocuments,
 } from "../lib/tickets";
 import {
   accentButtonClasses,
@@ -582,7 +583,12 @@ function TicketWorkspace({
           </HeaderReport>
           <p className="text-[13px] text-admin-muted">
             {channelLabel(content.channel)} · from {originLabel(content.origin.kind)}
-            {content.origin.product_handle ? ` ${content.origin.product_handle}` : ""}
+            {content.origin.product_handle ? (
+              <>
+                {" "}
+                <OriginProduct handle={content.origin.product_handle} context={context} />
+              </>
+            ) : null}
             {preview ? (
               <>
                 {" "}
@@ -863,6 +869,33 @@ function Bubble({
   );
 }
 
+/**
+ * The product a product-page origin names, by its title once the context says what it is.
+ *
+ * Until the context arrives the handle is all there is, and it is the truth. After, a handle
+ * the shop draft no longer holds is named as unresolved rather than passed off as a title.
+ */
+function OriginProduct({
+  handle,
+  context,
+}: {
+  handle: string;
+  context: TicketContextSchema | null;
+}) {
+  if (context === null) {
+    return <>{handle}</>;
+  }
+  const title = productTitle(context.resources, handle);
+  if (title !== null) {
+    return <>{title}</>;
+  }
+  return (
+    <>
+      <code>{handle}</code> <span className="text-lab-error">(unresolved)</span>
+    </>
+  );
+}
+
 function ContextPanel({
   shopId,
   content,
@@ -875,9 +908,18 @@ function ContextPanel({
   context: TicketContextSchema | null;
   onEdit: (next: TicketContentSchema) => void;
 }) {
-  const documents = context ? documentOptions(context.resources) : [];
   const resolvable = new Set((context?.resources.orders ?? []).map((order) => order.order_id));
   const unresolvable = content.linked_order_ids.filter((orderId) => !resolvable.has(orderId));
+  const staleDocuments = context
+    ? unresolvedDocuments(content.suggested_documents, context.resources)
+    : [];
+  const originHandle = content.origin.product_handle;
+  // A handle the shop no longer holds stays selected and says so; without an option of its
+  // own the select would show "Select a product" over a value the draft still carries.
+  const staleOriginHandle =
+    context && originHandle !== null && productTitle(context.resources, originHandle) === null
+      ? originHandle
+      : null;
 
   function toggleDocument(kind: ShopDocumentKind, documentId: string) {
     const present = content.suggested_documents.some(
@@ -980,11 +1022,14 @@ function ContextPanel({
               }
             >
               <option value="">Select a product</option>
-              {(context?.resources.product_handles ?? []).map((handle) => (
-                <option key={handle} value={handle}>
-                  {handle}
+              {(context?.resources.products ?? []).map((product) => (
+                <option key={product.handle} value={product.handle}>
+                  {product.title}
                 </option>
               ))}
+              {staleOriginHandle !== null ? (
+                <option value={staleOriginHandle}>{staleOriginHandle} (unresolved)</option>
+              ) : null}
             </select>
           </label>
         ) : null}
@@ -1126,13 +1171,13 @@ function ContextPanel({
 
       {context ? (
         <Card title="Suggested documents">
-          {documents.length === 0 ? (
+          {context.resources.documents.length === 0 ? (
             <p className="text-[13px] text-admin-muted">
               This shop has no policy, guideline, or FAQ entry yet.
             </p>
           ) : (
             <ul className="grid gap-1.5 text-[12px]">
-              {documents.map((document) => (
+              {context.resources.documents.map((document) => (
                 <li key={`${document.kind}:${document.document_id}`}>
                   <label className="flex items-center gap-2">
                     <input
@@ -1144,13 +1189,38 @@ function ContextPanel({
                       )}
                       onChange={() => toggleDocument(document.kind, document.document_id)}
                     />
-                    <span className="font-semibold">{document.document_id}</span>
+                    <span className="font-semibold">{document.title}</span>
                     <span className="text-admin-muted">{documentKindLabel(document.kind)}</span>
                   </label>
                 </li>
               ))}
             </ul>
           )}
+          {/*
+            A suggestion the shop no longer holds blocks publication, as an unresolved order
+            does, and it has no title to be named by — so it keeps a row of its own, named by
+            its kind and slug, with the one action that resolves it.
+          */}
+          {staleDocuments.length > 0 ? (
+            <ul className="grid gap-1.5 text-[12px]">
+              {staleDocuments.map((entry) => (
+                <li key={`${entry.kind}:${entry.document_id}`} className="flex items-center gap-2">
+                  <span className="text-lab-error">Unresolved document</span>
+                  <code className="truncate text-admin-muted">
+                    {documentKindLabel(entry.kind)} · {entry.document_id}
+                  </code>
+                  <button
+                    className={`${subtleButtonClasses} ml-auto`}
+                    type="button"
+                    aria-label={`Remove suggested ${documentKindLabel(entry.kind)} ${entry.document_id}`}
+                    onClick={() => toggleDocument(entry.kind, entry.document_id)}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <p className="text-xs text-admin-muted">
             Pre-fills a scenario's context documents when one is built on this ticket. The agent
             still has to reach them through a tool.

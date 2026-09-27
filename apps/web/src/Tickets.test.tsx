@@ -117,6 +117,7 @@ const CONTEXT: TicketContextSchema = {
   resources: {
     channels: ["chat", "email"],
     product_handles: ["alpine-shell-jacket"],
+    products: [{ handle: "alpine-shell-jacket", title: "Alpine Shell Jacket" }],
     orders: [
       {
         order_id: ORDER_ID,
@@ -132,6 +133,11 @@ const CONTEXT: TicketContextSchema = {
     policy_ids: ["address-change"],
     support_guideline_ids: ["escalation"],
     faq_entry_ids: ["delivery"],
+    documents: [
+      { kind: "policy", document_id: "address-change", title: "Address-change policy" },
+      { kind: "support_guideline", document_id: "escalation", title: "Escalating a refund" },
+      { kind: "faq_entry", document_id: "delivery", title: "When will my order arrive?" },
+    ],
   },
 };
 
@@ -994,9 +1000,77 @@ describe("ticket context panel", () => {
     expect(within(linked).queryByText(/unfulfilled/)).toBeNull();
     expect(within(linked).getByText(/ship-to: Bordeaux — previous flat/)).toBeVisible();
 
+    // Each document is named by its title and its kind, an FAQ entry by its question; the
+    // slug is how the ticket refers to it, not how an author reads it.
     const documents = card("Suggested documents");
-    expect(within(documents).getByLabelText(/address-change/)).toBeChecked();
-    expect(within(documents).getByLabelText(/escalation/)).not.toBeChecked();
+    expect(within(documents).getByLabelText(/^Address-change policy/)).toBeChecked();
+    expect(within(documents).getByLabelText(/^Escalating a refund/)).not.toBeChecked();
+    expect(within(documents).getByLabelText(/^When will my order arrive\?/)).not.toBeChecked();
+    expect(within(documents).queryByText("address-change")).toBeNull();
+    expect(within(documents).queryByText("Unresolved document")).toBeNull();
+  });
+
+  it("names a product-page origin by the product's title, in the header and the picker", async () => {
+    currentContent = {
+      ...DRAFT_CONTENT,
+      origin: { kind: "product_page", product_handle: "alpine-shell-jacket", order_id: null },
+    };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Ticket thread" });
+
+    expect(await screen.findByText(/from product page Alpine Shell Jacket/)).toBeVisible();
+    const picker = within(card("Ticket details")).getByLabelText("Product");
+    expect(picker).toHaveValue("alpine-shell-jacket");
+    expect(within(picker).getByRole("option", { selected: true })).toHaveTextContent(
+      "Alpine Shell Jacket",
+    );
+    expect(screen.queryByText(/unresolved/i)).toBeNull();
+  });
+
+  it("says a product origin the shop no longer holds is unresolved, and keeps it selected", async () => {
+    currentContent = {
+      ...DRAFT_CONTENT,
+      origin: { kind: "product_page", product_handle: "trailhead-cap", order_id: null },
+    };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Ticket thread" });
+
+    const header = (await screen.findByText(/from product page/)).closest("p");
+    await waitFor(() => expect(header).toHaveTextContent(/trailhead-cap \(unresolved\)/));
+    const picker = within(card("Ticket details")).getByLabelText("Product");
+    expect(picker).toHaveValue("trailhead-cap");
+    expect(within(picker).getByRole("option", { selected: true })).toHaveTextContent(
+      "trailhead-cap (unresolved)",
+    );
+  });
+
+  it("keeps a suggestion the shop no longer holds removable, named by its kind and slug", async () => {
+    // Named by the pair: the shop holds an FAQ entry called `delivery`, and this suggestion is
+    // a policy by that slug, which it does not hold.
+    const user = userEvent.setup();
+    currentContent = {
+      ...DRAFT_CONTENT,
+      suggested_documents: [
+        { kind: "policy", document_id: "address-change" },
+        { kind: "policy", document_id: "delivery" },
+      ],
+    };
+    currentPreview = preview({ content: currentContent });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Ticket thread" });
+    const documents = card("Suggested documents");
+
+    expect(await within(documents).findByText("Unresolved document")).toBeVisible();
+    expect(within(documents).getByText("policy · delivery")).toBeVisible();
+    expect(within(documents).getByLabelText(/^When will my order arrive\?/)).not.toBeChecked();
+    await user.click(
+      within(documents).getByRole("button", { name: "Remove suggested policy delivery" }),
+    );
+
+    expect(within(documents).queryByText("Unresolved document")).toBeNull();
+    expect(within(documents).getByLabelText(/^Address-change policy/)).toBeChecked();
   });
 
   it("keeps a link the shop can no longer resolve removable", async () => {

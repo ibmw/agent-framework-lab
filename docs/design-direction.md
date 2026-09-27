@@ -262,6 +262,10 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   edited, resumes when emptied, previews as "Saved as `…`", refuses a taken value audibly, and
   stays closed while the list it derives from is loading. A saved entry's identifier is displayed
   and never asked; a SKU and a media reference are their own keys and say so.
+- **A reference reads as what it points at.** A ticket's origin product and its suggested
+  documents are named by the title the shop draft gives them, a document with its kind beside
+  it. One the shop no longer resolves is named by its identifier, marked unresolved, and keeps
+  the control that removes it — as an unresolved linked order does (ADR 0067).
 - **No contract union reaches a reader in its wire spelling.** One table per union in
   `lib/enumLabels.ts`, keyed to the generated type and swept; free strings through
   `describeValue`. An explanation only where an operator could choose wrong, and only saying what

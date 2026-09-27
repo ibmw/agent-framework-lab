@@ -13351,6 +13351,25 @@ components:
       - latest_published_version
       - order_count
       title: TicketCustomerSchema
+    TicketDocumentOptionSchema:
+      properties:
+        kind:
+          $ref: '#/components/schemas/ShopDocumentKind'
+        document_id:
+          type: string
+          title: Document Id
+        title:
+          type: string
+          title: Title
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - document_id
+      - title
+      title: TicketDocumentOptionSchema
+      description: One shop document a suggestion may name, with the title an author
+        reads it by.
     TicketDraftResponse:
       properties:
         ticket_id:
@@ -13621,6 +13640,22 @@ components:
       title: TicketPreviewResponse
       description: 'The publish gate: what blocks publication and what a publish would
         freeze.'
+    TicketProductOptionSchema:
+      properties:
+        handle:
+          type: string
+          title: Handle
+        title:
+          type: string
+          title: Title
+      additionalProperties: false
+      type: object
+      required:
+      - handle
+      - title
+      title: TicketProductOptionSchema
+      description: One product of the shop's catalog, as the origin picker offers
+        it.
     TicketReferenceSchema:
       properties:
         ticket_id:
@@ -13655,6 +13690,13 @@ components:
             type: string
           type: array
           title: Product Handles
+        products:
+          items:
+            $ref: '#/components/schemas/TicketProductOptionSchema'
+          type: array
+          title: Products
+          description: The catalog with each product's title, in `product_handles`
+            order. An origin handle absent from it is one the shop no longer resolves.
         orders:
           items:
             $ref: '#/components/schemas/TicketOrderSchema'
@@ -13675,15 +13717,25 @@ components:
             type: string
           type: array
           title: Faq Entry Ids
+        documents:
+          items:
+            $ref: '#/components/schemas/TicketDocumentOptionSchema'
+          type: array
+          title: Documents
+          description: Every policy, support guideline and FAQ entry with its title,
+            an FAQ entry's being its question. A suggested document absent from it
+            is one the shop no longer resolves.
       additionalProperties: false
       type: object
       required:
       - channels
       - product_handles
+      - products
       - orders
       - policy_ids
       - support_guideline_ids
       - faq_entry_ids
+      - documents
       title: TicketShopResourcesSchema
       description: Exactly what this ticket may name, so a picker cannot offer a publish-gate
         error.
