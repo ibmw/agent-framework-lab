@@ -71,8 +71,8 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). In Group C, slices 23–25 can start now. Slices 26 and
-27 close the milestone, and 28 is optional.
+connection leaves unreachable (ADR 0053). In Group C, slices 24 and 25 can start now. Slices 26
+and 27 close the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -86,23 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 23 — Defaults, and the experiment setup as a sequence
-
-- [ ] One rule for versions: newest published, on arm configurations as elsewhere. One rule for
-  single choices: a select with one candidate opens on it, and its hint says so in the
-  prototype's words.
-- [ ] Experiment setup in the prototype's order: Scenario with what it resolves against, Arm A,
-  Arm B, name with a default derived from them, seed under the scenario with its meaning.
-- [ ] Customers: locale defaults from the shop; "customer since" defaults to today.
-
-Frames: `Workspace.dc.html` :2327; DEPRECADED frame 7.
-
-Branch: `feat/sensible-defaults`. Checks: `ExperimentSetup` and `Customers` tests; Playwright
-`experiment-start` with the default arm version.
-
-Slice evidence: an operator with one published scenario and two published configurations finds
-all three chosen at their newest version, a name proposed, and only Start left.
 
 #### Slice 24 — Long-running actions report themselves
 

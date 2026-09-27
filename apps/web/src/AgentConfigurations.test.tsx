@@ -1131,6 +1131,16 @@ describe("the new-configuration page", () => {
     );
   });
 
+  it("opens on the lab's one support identity, and says so", async () => {
+    renderAt("/lab/agent-configurations/new");
+
+    const identity = await screen.findByLabelText("Adopted identity");
+    await waitFor(() => expect(identity).not.toHaveValue(""));
+    expect(identity).toHaveAccessibleDescription(
+      /This one is the only support identity in the lab, so it is already chosen\./,
+    );
+  });
+
   it("says why it cannot go while the lab has no identity to adopt", async () => {
     server.use(
       http.get("*/api/v1/agent-configurations/resources", () =>

@@ -6,11 +6,12 @@ import type {
   ToolCallResponse,
   ToolContractSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { describeApiError } from "../api/client";
 import { listSupportIdentities } from "../api/supportIdentities";
 import { callSandboxTool, listToolContracts } from "../api/tools";
 import { labelOf, TOOL_OUTCOME } from "../lib/enumLabels";
+import { onlyChoiceNote } from "../lib/singleChoice";
 import { argumentControl, argumentInputProps, argumentLabel } from "../lib/tools";
 import {
   accentButtonClasses,
@@ -63,6 +64,7 @@ export function SandboxToolConsole({
   const [identityError, setIdentityError] = useState<string | null>(null);
   const [selected, setSelected] = useState("");
   const [acting, setActing] = useState("");
+  const actingNoteId = useId();
   const [values, setValues] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ToolCallResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -248,6 +250,7 @@ export function SandboxToolConsole({
             <label htmlFor="tool-actor">Acting support identity</label>
             <select
               id="tool-actor"
+              aria-describedby={actingNoteId}
               className={fieldControlClasses}
               value={acting}
               onChange={(event) => setActing(event.target.value)}
@@ -260,10 +263,13 @@ export function SandboxToolConsole({
                 </option>
               ))}
             </select>
-            <span className="font-normal text-admin-muted">
+            <span id={actingNoteId} className="font-normal text-admin-muted">
               A write is authorized against this identity's permissions. It sits beside the tool
               rather than among its arguments, because an agent that could name its own actor would
               be choosing its own permissions.
+              {identities.length === 1 && acting === identities[0].identity_id
+                ? ` ${onlyChoiceNote("published support identity in the lab")}`
+                : null}
             </span>
             {identityError === null ? null : (
               <span role="alert" className="font-normal text-lab-error">

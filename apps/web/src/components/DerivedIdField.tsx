@@ -41,6 +41,8 @@ export function DerivedIdField({
   normalize,
   follows = true,
   refusal,
+  maxLength,
+  preview = true,
   onChange,
 }: {
   label: string;
@@ -78,6 +80,14 @@ export function DerivedIdField({
    * says so, and never previews the value as what will be saved.
    */
   refusal?: string;
+  /** Where the lab caps the value's length, so the field stops where the lab would refuse. */
+  maxLength?: number;
+  /**
+   * Whether the second line previews the value as "Saved as `…`". An identifier is read back
+   * because its shape is the point; a display name derived the same way — an experiment's —
+   * is already legible in its own field, and would only be said twice.
+   */
+  preview?: boolean;
   onChange: (value: string) => void;
 }) {
   const generatedId = useId();
@@ -182,9 +192,9 @@ export function DerivedIdField({
     collisionMessage
   ) : refused ? (
     refusal
-  ) : value || whyTaken ? (
+  ) : (preview && value) || whyTaken ? (
     <>
-      {value ? savedAsPreview(value) : null}
+      {preview && value ? savedAsPreview(value) : null}
       {whyTaken ? ` ${whyTaken}` : null}
     </>
   ) : undefined;
@@ -206,6 +216,7 @@ export function DerivedIdField({
         pattern={pattern}
         title={title}
         placeholder={placeholder}
+        maxLength={maxLength}
         // Closed until the field knows what it is going to suggest — and `shown` above means
         // the suggestion is already in it in the very commit that opens it, every time it
         // opens, so there is no moment in which this input is both open and empty.

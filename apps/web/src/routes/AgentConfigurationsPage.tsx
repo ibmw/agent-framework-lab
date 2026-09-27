@@ -22,6 +22,7 @@ import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { onlyChoiceNote, soleCandidate } from "../lib/singleChoice";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -364,7 +365,11 @@ export function NewAgentConfigurationPage() {
                   ? `The configuration adopts this identity now: it is what the create request carried, and the write that follows cannot move one. ${SUPPORT_IDENTITY_PIN_RULE}`
                   : identities.length === 0
                     ? `No identity is adoptable yet, and a configuration adopts exactly one. ${SUPPORT_IDENTITY_PIN_RULE}`
-                    : SUPPORT_IDENTITY_PIN_RULE
+                    : identityId !== "" &&
+                        soleCandidate(identities.map((identity) => identity.identity_id)) ===
+                          identityId
+                      ? `${SUPPORT_IDENTITY_PIN_RULE} ${onlyChoiceNote("support identity in the lab")}`
+                      : SUPPORT_IDENTITY_PIN_RULE
               }
             >
               <select

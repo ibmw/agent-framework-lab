@@ -136,6 +136,7 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | A header's Delete | a confirm in place of the row | on the order editor, the confirm under the header, full width, while the Delete is withdrawn | a header has no row for the confirm to take the place of, and a panel stating a whole consequence does not fit between the header's other actions |
 | Delete and Duplicate on the product editor | frame 2c draws both on the header, Duplicate with a copy mark | both, on the header and as a catalog row action, Duplicate without the mark; Delete's confirm under the header, naming the orders whose lines name one of the product's variants | the product key holds a confirm to its product across renames and discards (ADR 0061). The orders are read once, when the confirm opens — never per render or per row, which is what *Required by a scenario* is refused for — because it is paid by the operator who asked, at the moment the answer changes what they do; the mark is outside the verb vocabulary (ADR 0062) |
 | A guideline's delete | *Delete guideline* (:1969) | *Remove*, named "Remove {name}", and a confirm asking to remove it | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
+| New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 
 One item the handoff names is not built and not refused: Georgia on the results' stat
 numerals. It lands with the surface that first draws it, which is what the `open` button verb
@@ -268,6 +269,15 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   *published* guidelines. A select still offers whatever the payload carries. The provider resets
   when it leaves its set; the model resets only when the provider moved; all else stands and is
   flagged. A choice of one is not a choice.
+- **A choice the lab can make without guessing is already made** (ADR 0064). A version select
+  opens on the newest published version and marks it "(newest published)". A select that picks a
+  record from a listing — a scenario, a configuration, a customer, a template — opens on it when
+  the listing holds one it could pick (a placeholder and a disabled option are not candidates),
+  and its hint says so in the prototype's words: "This one is the only published scenario in
+  the shop, so it is already chosen." A default is written only into an empty value, so no later
+  load replaces a choice; a vocabulary of one is still drawn as a value, and a select bound to
+  saved content holds what was saved. A name derived from other fields is a `DerivedIdField`
+  without the "Saved as" preview; a date defaults to the operator's own today.
 - **A list entered one value at a time is one control** (`ChipListField`): named remove
   buttons, duplicates refused and said, respelling previewed to the shape the gate wants.
 - **A number field says what it accepts** and refuses at the save what a pattern cannot. A

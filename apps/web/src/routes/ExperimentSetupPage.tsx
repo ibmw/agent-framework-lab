@@ -17,29 +17,50 @@ import {
 } from "../api/agentConfigurations";
 import { describeApiError, LabApiError } from "../api/client";
 import { listExperiments, previewExperiment, startExperiment } from "../api/experiments";
-import { listScenarios, listScenarioVersions } from "../api/scenarios";
+import { getScenarioVersion, listScenarios, listScenarioVersions } from "../api/scenarios";
+import { getTicketVersion } from "../api/tickets";
 import { ButtonIcon } from "../components/ButtonIcon";
-import { FieldHint } from "../components/FieldHint";
+import { DerivedIdField } from "../components/DerivedIdField";
+import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { PrimaryAction } from "../components/PrimaryAction";
 import { Card, Fingerprint, IssueList, PageHeader } from "../components/WorkspaceChrome";
 import { COMPARISON_DIMENSION, labelOf } from "../lib/enumLabels";
-import { EXPERIMENT_LABEL_MAX_LENGTH, isSeed, startRefusals } from "../lib/experimentStart";
+import {
+  type ArmChoice,
+  armLetter,
+  EXPERIMENT_LABEL_MAX_LENGTH,
+  isSeed,
+  proposedExperimentName,
+  setupOf,
+  startRefusals,
+} from "../lib/experimentStart";
 import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { unreachableArmsNote } from "../lib/modelConnections";
+import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
   fieldControlClasses,
-  fieldLabelClasses,
   formatTimestamp,
   tableCellClasses,
   tableHeadClasses,
   validationMessageClasses,
 } from "../lib/ui";
 import { useReachability } from "../lib/useUnreachableProviders";
+import { newestVersion, versionOptionLabel } from "../lib/versions";
 import { NoCurrentShop } from "../shell/LabWorkspace";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const UNAVAILABLE = "The experiment bench is unavailable.";
 const DEFAULT_SEED = 20260828;
+
+/** The prototype's hint beside Arm A (`Workspace.dc.html`, the setup's Arm A row). */
+const ARM_A_HINT = "Defaults to the newest published version of the configuration.";
+/** The prototype's hint beside Arm B, which says why a second arm is worth adding. */
+const ARM_B_HINT =
+  "A comparison is only attributable if the arms differ along one dimension. Leave it empty to run arm A alone.";
+/** The prototype's hint beside Name. */
+const NAME_HINT =
+  "How this run is named in History. Derived from the scenario and the arms until you edit it.";
+const SCENARIO_HINT = "Only published scenarios can run.";
 
 /**
  * One arm as the form holds it: a published configuration and the version to pin.
@@ -48,60 +69,16 @@ const DEFAULT_SEED = 20260828;
  * meaning is its position — "arm A" is where it sits, not what it runs — so the identity
  * cannot be derived from the configuration, which two arms are allowed to share.
  */
-interface ArmDraft {
+interface ArmDraft extends ArmChoice {
   id: string;
-  configurationId: string;
-  version: string;
 }
 
 function emptyArm(): ArmDraft {
   return { id: crypto.randomUUID(), configurationId: "", version: "" };
 }
 
-function newestVersion(versions: DefinitionVersionSummarySchema[]): number | null {
-  return versions.reduce<number | null>(
-    (newest, published) =>
-      newest === null || published.version > newest ? published.version : newest,
-    null,
-  );
-}
-
 function dimensionLabel(dimension: ComparisonDimension): string {
   return labelOf(COMPARISON_DIMENSION, dimension);
-}
-
-/** The request a start would make, or null while the operator has not chosen enough for one. */
-function setupOf({
-  scenarioId,
-  scenarioVersion,
-  arms,
-  label,
-  seed,
-}: {
-  scenarioId: string;
-  scenarioVersion: string;
-  arms: ArmDraft[];
-  label: string;
-  seed: string;
-}): StartExperimentRequest | null {
-  const chosen = arms.filter((arm) => arm.configurationId !== "" && arm.version !== "");
-  if (scenarioId === "" || scenarioVersion === "" || chosen.length === 0) {
-    return null;
-  }
-  return {
-    label: label.trim(),
-    scenario_id: scenarioId,
-    scenario_version: Number(scenarioVersion),
-    seed: Number(seed),
-    arms: chosen.map((arm) => ({
-      configuration_id: arm.configurationId,
-      version: Number(arm.version),
-      label: "",
-    })),
-    // The only driver implemented, and stated rather than defaulted: which participant drove
-    // a run is recorded evidence, not a fallback the operator never chose.
-    participant_driver: "human",
-  };
 }
 
 /**
@@ -138,6 +115,12 @@ export function ExperimentSetupPage() {
 /**
  * Frame 7 — new experiment: one scenario, one or two agent configurations, isolated arms.
  *
+ * Asked in the prototype's order (`Workspace.dc.html`, the setup card): the scenario and what
+ * it resolves against, arm A, arm B, the name derived from them, and the seed. Every choice
+ * the lab can make without guessing is already made when the page opens (ADR 0064): a version
+ * opens on the newest published one, a select with one candidate opens on it, two published
+ * configurations become the two arms, and the name follows them until the operator types one.
+ *
  * The page's job is to make the comparison legible *before* anything is frozen. The matrix
  * is the server's answer rather than a local diff of two payloads, so what the operator
  * reads here is exactly what the gate will judge — including the warning that arms differing
@@ -153,14 +136,25 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const [scenarios, setScenarios] = useState<ScenarioSummarySchema[]>([]);
   const [configurations, setConfigurations] = useState<AgentConfigurationSummarySchema[]>([]);
   const [experiments, setExperiments] = useState<ExperimentSummarySchema[]>([]);
-  // Deliberately empty. A seeded name is a name every experiment would quietly carry,
-  // whichever scenario it actually ran.
+  // Empty until the field proposes one: the name is derived from what is chosen, and a seeded
+  // constant would be a name every experiment quietly carried whichever scenario it ran.
   const [label, setLabel] = useState("");
   const [scenarioId, setScenarioId] = useState("");
   const [scenarioVersion, setScenarioVersion] = useState("");
-  const [scenarioVersions, setScenarioVersions] = useState<DefinitionVersionSummarySchema[]>([]);
+  // `null` while the chosen scenario's versions are being read — or while none is chosen.
+  const [scenarioVersions, setScenarioVersions] = useState<DefinitionVersionSummarySchema[] | null>(
+    null,
+  );
+  // What the chosen scenario version resolves against, once it has been read.
+  const [resolves, setResolves] = useState<string | null>(null);
   const [seed, setSeed] = useState(String(DEFAULT_SEED));
-  const [arms, setArms] = useState<ArmDraft[]>(() => [emptyArm()]);
+  // Arm A and arm B, always both: arm B left empty is a one-arm run.
+  const [arms, setArms] = useState<ArmDraft[]>(() => [emptyArm(), emptyArm()]);
+  // Each chosen configuration's published versions, by configuration, once read. A read that
+  // failed is an empty list: the arm then has no version to default to, and Start says so.
+  const [armVersions, setArmVersions] = useState<Record<string, DefinitionVersionSummarySchema[]>>(
+    {},
+  );
   const [preview, setPreview] = useState<ExperimentPreviewResponse | null>(null);
   // Which setup the gate last answered for, and whether it refused to judge it at all. Start
   // reads the gate's errors only once they are the answer for the setup on screen.
@@ -192,6 +186,23 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
         setScenarios(scenarioList.scenarios);
         setConfigurations(configurationList.configurations);
         setExperiments(experimentList.experiments);
+        // One published configuration is arm A; two are the only comparison there is to make,
+        // so they are the two arms, in the order the lab lists them. Three or more is a choice
+        // the lab does not make. Written only into arms nobody has touched.
+        const published = configurationList.configurations.filter(
+          (configuration) => configuration.latest_published_version !== null,
+        );
+        if (published.length === 1 || published.length === 2) {
+          setArms((current) =>
+            current.every((arm) => arm.configurationId === "")
+              ? current.map((arm, position) => ({
+                  ...arm,
+                  configurationId: published[position]?.configuration_id ?? "",
+                  version: "",
+                }))
+              : current,
+          );
+        }
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
@@ -206,26 +217,157 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     return () => controller.abort();
   }, [shopId]);
 
+  // Choosing a scenario clears its version in the same update, so no (new scenario, old
+  // version) pair is ever on screen — or sent to the gate, which would refuse it for a
+  // version the new scenario never published. The version returns when the new list answers.
+  const chooseScenario = (next: string) => {
+    setScenarioId(next);
+    setScenarioVersion("");
+    setScenarioVersions(null);
+    setResolves(null);
+  };
+
+  const publishedScenarios = scenarios.filter(
+    (scenario) => scenario.latest_published_version !== null,
+  );
+  const onlyScenario = useSingleChoice(
+    publishedScenarios.map((scenario) => scenario.scenario_id),
+    scenarioId,
+    chooseScenario,
+  );
+
   // Only a published version can be frozen, so choosing a scenario means choosing which of
-  // its versions to run — never the draft the author is still editing.
+  // its versions to run — never the draft the author is still editing. It opens on the newest,
+  // and a version the operator has chosen is never replaced by a list that answers later.
   useEffect(() => {
     if (scenarioId === "") {
-      setScenarioVersions([]);
       return;
     }
     const controller = new AbortController();
     listScenarioVersions(shopId, scenarioId, controller.signal)
       .then((listed) => {
         setScenarioVersions(listed.versions);
-        setScenarioVersion(String(newestVersion(listed.versions) ?? ""));
+        const newest = newestVersion(listed.versions);
+        setScenarioVersion((current) =>
+          current === "" && newest !== null ? String(newest) : current,
+        );
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
+          setScenarioVersions([]);
           setError(describeApiError(cause, UNAVAILABLE));
         }
       });
     return () => controller.abort();
   }, [shopId, scenarioId]);
+
+  const scenario = scenarios.find((entry) => entry.scenario_id === scenarioId);
+
+  // What the chosen version resolves against: the shop and ticket versions it pinned, and the
+  // customer version that ticket version pinned in turn. A read that fails says nothing.
+  useEffect(() => {
+    setResolves(null);
+    if (scenario === undefined || scenarioVersion === "") {
+      return;
+    }
+    const controller = new AbortController();
+    const { scenario_id, ticket_id, ticket_reference, customer_display_name } = scenario;
+    getScenarioVersion(shopId, scenario_id, Number(scenarioVersion), controller.signal)
+      .then(async (pinned) => {
+        const againstTicket = `shop v${pinned.shop_version}, ticket ${ticket_reference} v${pinned.ticket_version}`;
+        try {
+          const ticket = await getTicketVersion(
+            shopId,
+            ticket_id,
+            pinned.ticket_version,
+            controller.signal,
+          );
+          setResolves(
+            `Resolves against ${againstTicket}, customer ${customer_display_name} v${ticket.customer_profile_version}.`,
+          );
+        } catch {
+          if (!controller.signal.aborted) {
+            setResolves(`Resolves against ${againstTicket}.`);
+          }
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setResolves(null);
+        }
+      });
+    return () => controller.abort();
+  }, [shopId, scenario, scenarioVersion]);
+
+  // Each configuration an arm names has its published versions read once, and an arm waiting
+  // on one opens on the newest when it answers. Only an arm with no version is written: an
+  // operator's choice is never replaced by a list arriving after it.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const requested = useRef(new Set<string>());
+  useEffect(() => {
+    const receive = (configurationId: string, versions: DefinitionVersionSummarySchema[]) => {
+      setArmVersions((current) => ({ ...current, [configurationId]: versions }));
+      const newest = newestVersion(versions);
+      if (newest === null) {
+        return;
+      }
+      // The same array where no arm waits on this list: a new one would be a new setup, and
+      // the gate would be asked again about a setup that has not changed.
+      setArms((current) =>
+        current.some((arm) => arm.configurationId === configurationId && arm.version === "")
+          ? current.map((arm) =>
+              arm.configurationId === configurationId && arm.version === ""
+                ? { ...arm, version: String(newest) }
+                : arm,
+            )
+          : current,
+      );
+    };
+    for (const { configurationId } of arms) {
+      if (configurationId === "" || requested.current.has(configurationId)) {
+        continue;
+      }
+      requested.current.add(configurationId);
+      listAgentConfigurationVersions(configurationId)
+        .then((listed) => {
+          if (mounted.current) {
+            receive(configurationId, listed.versions);
+          }
+        })
+        .catch((cause: unknown) => {
+          if (mounted.current) {
+            receive(configurationId, []);
+            setError(describeApiError(cause, "This configuration's versions are unavailable."));
+          }
+        });
+    }
+  }, [arms]);
+
+  const chooseConfiguration = (position: number, configurationId: string) => {
+    // A configuration whose versions are already read opens on its newest at once; one being
+    // read waits for its list, which fills it in.
+    const listed = armVersions[configurationId];
+    const newest = listed === undefined ? null : newestVersion(listed);
+    setArms((current) =>
+      current.map((arm, index) =>
+        index === position
+          ? { ...arm, configurationId, version: newest === null ? "" : String(newest) }
+          : arm,
+      ),
+    );
+  };
+
+  const chooseVersion = (position: number, version: string) => {
+    setArms((current) =>
+      current.map((arm, index) => (index === position ? { ...arm, version } : arm)),
+    );
+  };
 
   // What the operator calls the experiment and which starting state it freezes. The gate
   // reads the scenario version and the arms and judges neither of these, so they travel in a
@@ -272,6 +414,13 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     return () => controller.abort();
   }, [shopId, setup]);
 
+  const configurationOf = (arm: ArmChoice) =>
+    configurations.find((configuration) => configuration.configuration_id === arm.configurationId);
+  const proposedName = proposedExperimentName(
+    scenario?.name ?? "",
+    arms.map((arm) => ({ configuration: configurationOf(arm)?.name ?? "", version: arm.version })),
+  );
+
   // Why Start will not start: a chosen arm pins a version naming a provider this lab cannot
   // reach, which the advance would refuse with 422 and no recorded turn (ADR 0053). One
   // sentence per provider, so two arms on one unreachable provider are one reason, not two.
@@ -281,6 +430,13 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     arms.map((arm) => armProviders[arm.id] ?? null),
     unreachable,
   );
+  // A version being read is not chosen *yet*: a wait, like the gate's, rather than a refusal.
+  const scenarioVersionPending = scenarioId !== "" && scenarioVersions === null;
+  const armStates = arms.map((arm) => ({
+    ...arm,
+    versionPending: arm.configurationId !== "" && armVersions[arm.configurationId] === undefined,
+  }));
+  const versionsPending = scenarioVersionPending || armStates.some((arm) => arm.versionPending);
   // The gate has not answered for the setup on screen yet. Start is then a press in flight
   // rather than a refusal (ADR 0063) — unless something else already refuses it, which is said
   // meanwhile, and the gate's own errors join it when it answers.
@@ -289,9 +445,10 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   const reasons = startRefusals({
     scenarioId,
     scenarioVersion,
+    scenarioVersionPending,
     seed,
     label,
-    chosenArms: arms.filter((arm) => arm.configurationId !== "" && arm.version !== "").length,
+    arms: armStates,
     gateIssues: answered ? (preview?.issues ?? []) : [],
     previewRefusal: answered ? (judged?.refusal ?? null) : null,
     unreachable: startBlocked,
@@ -299,12 +456,12 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   // Nor can it be free while the lab has not yet said which providers it reaches, or an arm's
   // provider has not been read: "not read yet" is not "reachable", and an experiment started in
   // that moment would find its arm refused at the first advance.
-  const chosenArms = arms.filter((arm) => arm.configurationId !== "" && arm.version !== "");
+  const wholeArms = arms.filter((arm) => arm.configurationId !== "" && arm.version !== "");
   const reachPending =
-    chosenArms.length > 0 &&
+    wholeArms.length > 0 &&
     (reachability.status === "loading" ||
-      chosenArms.some((arm) => armProviders[arm.id] === undefined));
-  const checking = (gatePending || reachPending) && reasons.length === 0;
+      wholeArms.some((arm) => armProviders[arm.id] === undefined));
+  const checking = (gatePending || reachPending || versionsPending) && reasons.length === 0;
 
   const start = async (event: FormEvent) => {
     event.preventDefault();
@@ -335,9 +492,18 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
     }
   };
 
-  const editArm = (index: number, next: ArmDraft) => {
-    setArms((current) => current.map((arm, position) => (position === index ? next : arm)));
-  };
+  // Which arms the lab chose because nothing else could be chosen, so their hints can say so.
+  const publishedConfigurations = configurations.filter(
+    (configuration) => configuration.latest_published_version !== null,
+  );
+  const onlyConfiguration =
+    publishedConfigurations.length === 1 &&
+    arms[0].configurationId === publishedConfigurations[0].configuration_id;
+  const onlyPair =
+    publishedConfigurations.length === 2 &&
+    arms[0].configurationId === publishedConfigurations[0].configuration_id &&
+    arms[1].configurationId === publishedConfigurations[1].configuration_id;
+  const scenarioVersionNewest = newestVersion(scenarioVersions ?? []);
 
   return (
     <>
@@ -354,106 +520,119 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
 
       <form className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]" onSubmit={start}>
         <div className="grid min-w-0 content-start gap-4">
-          <Card title="Scenario">
-            {scenarios.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">
-                {loading
-                  ? "Loading scenarios…"
-                  : "This shop has no scenario yet. Author and publish one first."}
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-end gap-3">
-                <label className={fieldLabelClasses}>
-                  Recipe
+          <Card label="Experiment setup">
+            <FieldRows>
+              <FieldGroup
+                label="Scenario"
+                hint={
+                  onlyScenario
+                    ? `${SCENARIO_HINT} ${onlyChoiceNote("published scenario in the shop")}`
+                    : SCENARIO_HINT
+                }
+                extra={
+                  scenarios.length === 0
+                    ? loading
+                      ? "Loading scenarios…"
+                      : "This shop has no scenario yet. Author and publish one first."
+                    : (resolves ?? undefined)
+                }
+              >
+                <div className="flex flex-wrap gap-3">
                   <select
-                    className={fieldControlClasses}
+                    aria-label="Scenario"
+                    className={`${fieldControlClasses} min-w-56 flex-[2]`}
                     value={scenarioId}
-                    onChange={(event) => setScenarioId(event.target.value)}
+                    onChange={(event) => chooseScenario(event.target.value)}
                   >
                     <option value="">Choose a scenario…</option>
-                    {scenarios.map((scenario) => (
-                      <option key={scenario.scenario_id} value={scenario.scenario_id}>
-                        {scenario.name}
+                    {scenarios.map((entry) => (
+                      <option
+                        key={entry.scenario_id}
+                        value={entry.scenario_id}
+                        // Offered as unavailable rather than hidden, as an unpublished
+                        // configuration is: only a published scenario can run.
+                        disabled={entry.latest_published_version === null}
+                      >
+                        {entry.name}
+                        {entry.latest_published_version === null ? " (unpublished)" : ""}
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className={fieldLabelClasses}>
-                  Published version
                   <select
-                    className={fieldControlClasses}
+                    aria-label="Published version"
+                    className={`${fieldControlClasses} min-w-40 flex-1`}
                     value={scenarioVersion}
                     onChange={(event) => setScenarioVersion(event.target.value)}
-                    disabled={scenarioVersions.length === 0}
+                    disabled={scenarioVersion === ""}
                   >
-                    {scenarioVersions.length === 0 ? (
-                      <option value="">No published version</option>
+                    {scenarioVersion === "" ? (
+                      <option value="">
+                        {scenarioVersionPending
+                          ? "Reading published versions…"
+                          : "No published version"}
+                      </option>
                     ) : null}
-                    {[...scenarioVersions]
+                    {[...(scenarioVersions ?? [])]
                       .sort((left, right) => right.version - left.version)
                       .map((published) => (
                         <option key={published.version} value={String(published.version)}>
-                          v{published.version}
+                          {versionOptionLabel(published.version, scenarioVersionNewest)}
                         </option>
                       ))}
                   </select>
-                </label>
-                <FieldHint label="Seed" hint={SEED_RULE}>
-                  <input
-                    className={fieldControlClasses}
-                    type="number"
-                    min={0}
-                    max={MAX_SEED}
-                    step={1}
-                    value={seed}
-                    title={SEED_RULE}
-                    onChange={(event) => setSeed(event.target.value)}
-                  />
-                </FieldHint>
-              </div>
-            )}
-          </Card>
+                </div>
+              </FieldGroup>
 
-          <Card
-            title="Arms"
-            footer={
-              <p className="text-xs text-admin-muted">
-                Each arm gets its own clone of one snapshot. A change made inside one arm never
-                reaches the other, and both start from the same fingerprint.
-              </p>
-            }
-          >
-            <label className={fieldLabelClasses}>
-              Experiment name
-              <input
-                className={fieldControlClasses}
+              {arms.map((arm, position) => (
+                <ArmPicker
+                  key={arm.id}
+                  position={position}
+                  arm={arm}
+                  configurations={configurations}
+                  versions={arm.configurationId === "" ? [] : armVersions[arm.configurationId]}
+                  hint={
+                    position === 0
+                      ? onlyConfiguration
+                        ? `${ARM_A_HINT} ${onlyChoiceNote("published agent configuration in the lab")}`
+                        : ARM_A_HINT
+                      : onlyPair
+                        ? `${ARM_B_HINT} ${ONLY_PAIR_NOTE}`
+                        : ARM_B_HINT
+                  }
+                  onConfiguration={(configurationId) =>
+                    chooseConfiguration(position, configurationId)
+                  }
+                  onVersion={(version) => chooseVersion(position, version)}
+                  onProvider={(provider) =>
+                    setArmProviders((current) => ({ ...current, [arm.id]: provider }))
+                  }
+                />
+              ))}
+
+              <DerivedIdField
+                label="Name"
+                hint={NAME_HINT}
+                arrangement="row"
                 value={label}
+                suggested={proposedName}
                 maxLength={EXPERIMENT_LABEL_MAX_LENGTH}
-                onChange={(event) => setLabel(event.target.value)}
+                preview={false}
+                onChange={setLabel}
               />
-            </label>
-            {arms.map((arm, index) => (
-              <ArmPicker
-                key={arm.id}
-                position={index}
-                arm={arm}
-                configurations={configurations}
-                onChange={(next) => editArm(index, next)}
-                onProvider={(provider) =>
-                  setArmProviders((current) => ({ ...current, [arm.id]: provider }))
-                }
-              />
-            ))}
-            {arms.length < 2 ? (
-              <button
-                className="inline-flex items-center gap-1.5 justify-self-start text-[13px] font-semibold text-lab-ink underline-offset-2 hover:underline"
-                type="button"
-                onClick={() => setArms((current) => [...current, emptyArm()])}
-              >
-                <ButtonIcon verb="create" />
-                Add a second arm
-              </button>
-            ) : null}
+
+              <Field label="Seed" hint={SEED_RULE}>
+                <input
+                  className={`${fieldControlClasses} max-w-[200px] text-right font-mono`}
+                  type="number"
+                  min={0}
+                  max={MAX_SEED}
+                  step={1}
+                  value={seed}
+                  title={SEED_RULE}
+                  onChange={(event) => setSeed(event.target.value)}
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           <Card
@@ -522,6 +701,10 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
               <IssueList issues={preview.issues} />
             )}
             <p className="text-xs text-admin-muted">
+              Each arm gets its own clone of one snapshot. A change made inside one arm never
+              reaches the other, and both start from the same fingerprint.
+            </p>
+            <p className="text-xs text-admin-muted">
               Participant: human operator — you play the customer in both arms.
             </p>
             {/* Refused until it can work, reachable and titled, with every reason at once
@@ -579,40 +762,45 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   );
 }
 
+/** Arm B's hint when the lab's two published configurations are the two arms. */
+const ONLY_PAIR_NOTE =
+  "These two are the only published agent configurations in the lab, so both arms are already chosen.";
+
+/**
+ * One arm, as a row: which configuration it runs, and which published version of it.
+ *
+ * The versions are the page's, read once per configuration: `undefined` while they are being
+ * read, a list once they are. The version select has no empty option once there is a version
+ * to hold, so a chosen arm always names one.
+ */
 function ArmPicker({
   position,
   arm,
   configurations,
-  onChange,
+  versions,
+  hint,
+  onConfiguration,
+  onVersion,
   onProvider,
 }: {
   position: number;
   arm: ArmDraft;
   configurations: AgentConfigurationSummarySchema[];
-  onChange: (next: ArmDraft) => void;
+  versions: DefinitionVersionSummarySchema[] | undefined;
+  hint: string;
+  onConfiguration: (configurationId: string) => void;
+  onVersion: (version: string) => void;
   /**
    * The provider the pinned version names; `undefined` while it is being read; `null` where no
    * version is chosen or the read failed.
    */
   onProvider: (provider: string | null | undefined) => void;
 }) {
-  const [versions, setVersions] = useState<DefinitionVersionSummarySchema[]>([]);
-  const name = String.fromCharCode(65 + position);
+  const name = armLetter(position);
   const selected = configurations.find(
     (configuration) => configuration.configuration_id === arm.configurationId,
   );
-
-  useEffect(() => {
-    if (arm.configurationId === "") {
-      setVersions([]);
-      return;
-    }
-    const controller = new AbortController();
-    listAgentConfigurationVersions(arm.configurationId, controller.signal)
-      .then((listed) => setVersions(listed.versions))
-      .catch(() => setVersions([]));
-    return () => controller.abort();
-  }, [arm.configurationId]);
+  const newest = newestVersion(versions ?? []);
 
   // The version is what the arm runs, so the provider is read off the version rather than the
   // draft, which may since have moved on. A failed read says nothing rather than something.
@@ -639,58 +827,62 @@ function ArmPicker({
   }, [arm.configurationId, arm.version]);
 
   return (
-    <fieldset className="grid gap-2 rounded-lg border border-admin-border p-3">
-      <legend className="px-1 text-xs font-semibold text-admin-muted">Arm {name}</legend>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className={fieldLabelClasses}>
-          Agent configuration
-          <select
-            className={fieldControlClasses}
-            value={arm.configurationId}
-            onChange={(event) =>
-              onChange({ ...arm, configurationId: event.target.value, version: "" })
-            }
-          >
-            <option value="">Choose a configuration…</option>
-            {configurations.map((configuration) => (
-              <option
-                key={configuration.configuration_id}
-                value={configuration.configuration_id}
-                // A configuration with no published version cannot be pinned, so it is
-                // offered as unavailable rather than hidden: an author looking for the one
-                // they just wrote has to see why it is not selectable.
-                disabled={configuration.latest_published_version === null}
-              >
-                {configuration.name}
-                {configuration.latest_published_version === null ? " (unpublished)" : ""}
+    <FieldGroup
+      label={`Arm ${name}`}
+      hint={hint}
+      extra={
+        selected
+          ? `${selected.framework_label} · ${selected.model_id} · ${selected.tool_count} tool(s)`
+          : undefined
+      }
+    >
+      <div className="flex flex-wrap gap-3">
+        <select
+          aria-label="Agent configuration"
+          className={`${fieldControlClasses} min-w-56 flex-[2]`}
+          value={arm.configurationId}
+          onChange={(event) => onConfiguration(event.target.value)}
+        >
+          <option value="">{position === 0 ? "Choose a configuration…" : "No second arm"}</option>
+          {configurations.map((configuration) => (
+            <option
+              key={configuration.configuration_id}
+              value={configuration.configuration_id}
+              // A configuration with no published version cannot be pinned, so it is
+              // offered as unavailable rather than hidden: an author looking for the one
+              // they just wrote has to see why it is not selectable.
+              disabled={configuration.latest_published_version === null}
+            >
+              {configuration.name}
+              {configuration.latest_published_version === null ? " (unpublished)" : ""}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Published version"
+          className={`${fieldControlClasses} min-w-40 flex-1`}
+          value={arm.version}
+          onChange={(event) => onVersion(event.target.value)}
+          disabled={arm.version === ""}
+        >
+          {arm.version === "" ? (
+            <option value="">
+              {arm.configurationId === ""
+                ? "—"
+                : versions === undefined
+                  ? "Reading published versions…"
+                  : "No published version"}
+            </option>
+          ) : null}
+          {[...(versions ?? [])]
+            .sort((left, right) => right.version - left.version)
+            .map((published) => (
+              <option key={published.version} value={String(published.version)}>
+                {versionOptionLabel(published.version, newest)}
               </option>
             ))}
-          </select>
-        </label>
-        <label className={fieldLabelClasses}>
-          Published version
-          <select
-            className={fieldControlClasses}
-            value={arm.version}
-            onChange={(event) => onChange({ ...arm, version: event.target.value })}
-            disabled={versions.length === 0}
-          >
-            <option value="">{versions.length === 0 ? "No published version" : "Choose…"}</option>
-            {[...versions]
-              .sort((left, right) => right.version - left.version)
-              .map((published) => (
-                <option key={published.version} value={String(published.version)}>
-                  v{published.version}
-                </option>
-              ))}
-          </select>
-        </label>
+        </select>
       </div>
-      {selected ? (
-        <p className="text-xs text-admin-muted">
-          {selected.framework_label} · {selected.model_id} · {selected.tool_count} tool(s)
-        </p>
-      ) : null}
-    </fieldset>
+    </FieldGroup>
   );
 }

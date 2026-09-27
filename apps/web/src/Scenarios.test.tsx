@@ -635,6 +635,16 @@ describe("the new-scenario page", () => {
     expect(screen.queryByText(unscored)).toBeNull();
   });
 
+  it("opens on the shop's one ticket, and says so", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/new`);
+
+    const ticket = await screen.findByLabelText("Ticket");
+    await waitFor(() => expect(ticket).not.toHaveValue(""));
+    expect(ticket).toHaveAccessibleDescription(
+      /This one is the only ticket in the shop, so it is already chosen\./,
+    );
+  });
+
   it("refuses a name this shop already answers to, until the scenario exists", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/scenarios/new`);
@@ -1375,6 +1385,31 @@ describe("the scenario's caps, each read on its own card", () => {
     });
   }
 
+  it("opens a picker on the library's one template, and on it again after an add", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    await screen.findByRole("heading", { name: /^Wrong shipping address/ });
+    // Three objective templates are a choice: nothing is chosen, and nothing says otherwise.
+    const objectives = screen.getByLabelText("Add objective block");
+    expect(objectives).toHaveValue("");
+    expect(objectives).not.toHaveAccessibleDescription(/already chosen/);
+
+    // One mutation template is not.
+    const mutations = screen.getByLabelText("Add mutation block");
+    await waitFor(() => expect(mutations).toHaveValue(MUTATION_BLOCK_ID));
+    expect(mutations).toHaveAccessibleDescription(
+      "This one is the only template in the library, so it is already chosen.",
+    );
+    await user.click(
+      within(screen.getByRole("region", { name: "Mutations" })).getByRole("button", {
+        name: "Add",
+      }),
+    );
+    expect(capOf("Mutations")).toMatch(/1 of \d+$/);
+    expect(mutations).toHaveValue(MUTATION_BLOCK_ID);
+  });
+
   it("leaves an unchosen template to its own field to say, and adds nothing for it", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
@@ -1385,8 +1420,10 @@ describe("the scenario's caps, each read on its own card", () => {
       ["Mutations", "Add mutation block"],
     ] as const) {
       // Natively required, so the browser says it on the select; Add is not refused for it.
+      // The library's one template is already chosen, so the operator takes it back off.
       const select = screen.getByLabelText(picker);
       expect(select).toBeRequired();
+      await user.selectOptions(select, "");
       expect(select).toHaveValue("");
       const add = within(screen.getByRole("region", { name: card })).getByRole("button", {
         name: "Add",

@@ -4,8 +4,10 @@ import type {
   JudgeConfigurationSummarySchema,
   ObjectiveResultSchema,
 } from "@agent-lab/contracts";
+import { useId } from "react";
 import { labelOf, OBJECTIVE_SEVERITY } from "../lib/enumLabels";
 import { describeJudgement, OUTCOMES } from "../lib/evidence";
+import { onlyChoiceNote } from "../lib/singleChoice";
 import {
   fieldControlClasses,
   fieldLabelClasses,
@@ -138,12 +140,16 @@ export function JudgePicker({
   onSelectJudge: (judgeId: string) => void;
   onScore: () => void;
 }) {
+  const noteId = useId();
+  // One published judge is not a choice (ADR 0064): it is already the one chosen.
+  const onlyJudge = judges.length === 1 && judgeId === judges[0].judge_id;
   return (
     <>
       <label className={fieldLabelClasses}>
         Judge
         <select
           aria-label="Judge"
+          aria-describedby={onlyJudge ? noteId : undefined}
           className={fieldControlClasses}
           value={judgeId}
           onChange={(event) => onSelectJudge(event.target.value)}
@@ -154,6 +160,11 @@ export function JudgePicker({
             </option>
           ))}
         </select>
+        {onlyJudge ? (
+          <span id={noteId} className="text-xs font-normal text-admin-muted">
+            {onlyChoiceNote("published judge in the lab")}
+          </span>
+        ) : null}
       </label>
       <button
         className={outlineButtonClasses}

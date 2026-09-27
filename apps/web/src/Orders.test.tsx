@@ -641,6 +641,11 @@ describe("the new-order page", () => {
     await screen.findByRole("option", { name: "Maya Laurent" });
     await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
     await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483"));
+    // The only priced variant is already chosen; the operator takes it back off, and the page
+    // does not put it back behind them.
+    await waitFor(() => expect(screen.getByLabelText("Variant")).toHaveValue("NS-ASJ-OB-M"));
+    await user.selectOptions(screen.getByLabelText("Variant"), "");
+    expect(screen.getByLabelText("Variant")).toHaveValue("");
 
     const create = screen.getByRole("button", { name: "Create order" });
     expectRefused(create, /at least one line/i);
@@ -653,10 +658,30 @@ describe("the new-order page", () => {
     expectNotRefused(screen.getByRole("button", { name: "Create order" }));
   });
 
+  it("opens on the one attached customer and the one priced variant, and says so", async () => {
+    await newOrder();
+
+    const customer = screen.getByLabelText("Customer");
+    await waitFor(() => expect(customer).toHaveValue(PROFILE_ID));
+    expect(customer).toHaveAccessibleDescription(
+      /This one is the only customer attached to this shop, so it is already chosen\./,
+    );
+    const variant = screen.getByLabelText("Variant");
+    expect(variant).toHaveValue("NS-ASJ-OB-M");
+    expect(variant).toHaveAccessibleDescription(
+      /This one is the only priced variant in the catalog, so it is already chosen\./,
+    );
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("NS-10483"));
+    expectNotRefused(screen.getByRole("button", { name: "Create order" }));
+  });
+
   it("asks for the customer before it will take one", async () => {
+    const user = userEvent.setup();
     await newOrder();
 
     await screen.findByRole("option", { name: "Maya Laurent" });
+    await waitFor(() => expect(screen.getByLabelText("Customer")).toHaveValue(PROFILE_ID));
+    await user.selectOptions(screen.getByLabelText("Customer"), "");
     const create = screen.getByRole("button", { name: "Create order" });
     expectRefused(create, /needs the customer it belongs to/i);
     expect(create).toHaveAccessibleDescription(/needs the customer it belongs to/i);
@@ -1913,6 +1938,27 @@ describe("order editor", () => {
 
     expect(within(lines).getByText("Alpine Shell Jacket")).toBeVisible();
     expect(within(lines).getByText("Ocean Blue")).toBeVisible();
+  });
+
+  it("opens Add product on the one variant the order does not hold yet, and says so", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    const lines = card("Line items & payment");
+    const picker = within(lines).getByLabelText("Add product");
+    // The catalog's one priced variant is on the order: nothing to offer, nothing chosen.
+    expect(picker).toHaveValue("");
+    expect(picker).not.toHaveAccessibleDescription(/already chosen/);
+
+    // Taking the line off leaves one candidate, and the form opens on it.
+    await user.click(screen.getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
+    await user.click(screen.getByRole("button", { name: "Remove it" }));
+    await waitFor(() => expect(picker).toHaveValue("NS-ASJ-OB-M"));
+    expect(picker).toHaveAccessibleDescription(
+      "This one is the only priced variant not yet on this order, so it is already chosen.",
+    );
+    await user.click(within(lines).getByRole("button", { name: "Add line" }));
+    expect(within(lines).getByText("Alpine Shell Jacket")).toBeVisible();
   });
 
   it("keeps a quantity the contract could not carry out of the editor", async () => {

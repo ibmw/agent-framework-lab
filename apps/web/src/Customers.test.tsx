@@ -12,7 +12,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { toProfilePayload } from "./api/customerProfiles";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
@@ -160,6 +160,14 @@ const UNATTACHED: CustomerProfileListResponse["profiles"][number] = {
   latest_published_version: null,
   published_version_count: 0,
   attached_shop_count: 0,
+};
+
+/** A second profile no shop uses, so attaching one is a choice. */
+const SECOND_UNATTACHED: CustomerProfileListResponse["profiles"][number] = {
+  ...UNATTACHED,
+  profile_id: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+  display_name: "Ines Moreau",
+  email: "ines.moreau@example.org",
 };
 
 let currentProfile = PROFILE_CONTENT;
@@ -372,11 +380,32 @@ describe("customer workspace", () => {
     await waitFor(() => expect(attachedProfileIds).toEqual([UNATTACHED.profile_id]));
   });
 
+  it("opens on the one profile left to attach, and says so", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    await screen.findByRole("link", { name: "Maya Laurent" });
+    await user.click(screen.getByRole("button", { name: "Attach existing" }));
+    const picker = await screen.findByLabelText("Profile to attach");
+    await waitFor(() => expect(picker).toHaveValue(UNATTACHED.profile_id));
+    expect(picker).toHaveAccessibleDescription(
+      "This one is the only profile in the lab not yet attached to this shop, so it is already chosen.",
+    );
+    expectNotRefused(screen.getByRole("button", { name: "Attach to this shop" }));
+  });
+
   it("refuses the attach until a profile is chosen, and says so; a press or Enter attaches nothing", async () => {
     const user = userEvent.setup();
     // Every attach request, whatever profile it names — an unchosen one names none.
     let attachRequests = 0;
     server.use(
+      // Two profiles to attach, so which one is a choice the page leaves to the operator.
+      http.get("*/api/v1/customer-profiles", ({ request }) => {
+        const scoped = new URL(request.url).searchParams.get("shop_id") !== null;
+        return HttpResponse.json({
+          profiles: scoped ? [MAYA] : [MAYA, UNATTACHED, SECOND_UNATTACHED],
+        } satisfies CustomerProfileListResponse);
+      }),
       http.post("*/api/v1/customer-profiles/*", () => {
         attachRequests += 1;
         return HttpResponse.json({}, { status: 500 });
@@ -494,6 +523,79 @@ describe("the new-customer page", () => {
     expect(screen.getByLabelText("Customer since")).toHaveAccessibleDescription(
       wholeDescription(CUSTOMER_SINCE_RULE),
     );
+  });
+
+  describe("what it opens on", () => {
+    let zone: string | undefined;
+    beforeEach(() => {
+      zone = process.env.TZ;
+      // Tokyo is already on the 28th when UTC is still on the 27th: whose today is asked.
+      process.env.TZ = "Asia/Tokyo";
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-27T20:00:00Z"));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      process.env.TZ = zone;
+    });
+
+    it("opens on the shop's locale and the operator's today, and creates with them", async () => {
+      const user = userEvent.setup();
+      const french = { ...SHOP_CONTENT, identity: { ...SHOP_CONTENT.identity, locale: "fr-FR" } };
+      let command: { identity?: { locale?: string }; customer_since?: string } | null = null;
+      server.use(
+        http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
+          HttpResponse.json({
+            shop_id: SHOP_ID,
+            lifecycle_state: "draft",
+            content: french,
+            created_at: "2026-08-23T12:00:00+00:00",
+            updated_at: "2026-08-23T12:05:00+00:00",
+          } satisfies ShopDraftResponse),
+        ),
+        http.post("*/api/v1/customer-profiles", async ({ request }) => {
+          command = (await request.json()) as typeof command;
+          return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
+        }),
+      );
+      await newCustomer();
+
+      expect(screen.getByLabelText("Locale")).toHaveValue("fr-FR");
+      expect(screen.getByLabelText("Customer since")).toHaveValue("2026-09-28");
+
+      await fillProfile(user);
+      await user.click(screen.getByRole("button", { name: "Create profile" }));
+      await waitFor(() => expect(command).not.toBeNull());
+      expect(command).toMatchObject({
+        identity: { locale: "fr-FR" },
+        customer_since: "2026-09-28",
+      });
+    });
+
+    it("creates with the locale and the day the operator chose instead", async () => {
+      const user = userEvent.setup();
+      let command: { identity?: { locale?: string }; customer_since?: string } | null = null;
+      server.use(
+        http.post("*/api/v1/customer-profiles", async ({ request }) => {
+          command = (await request.json()) as typeof command;
+          return HttpResponse.json(profileDraft(PROFILE_CONTENT), { status: 201 });
+        }),
+      );
+      await newCustomer();
+
+      await fillProfile(user);
+      await user.clear(screen.getByLabelText("Locale"));
+      await user.type(screen.getByLabelText("Locale"), "de-CH");
+      fireEvent.change(screen.getByLabelText("Customer since"), {
+        target: { value: "2024-03-01" },
+      });
+      await user.click(screen.getByRole("button", { name: "Create profile" }));
+      await waitFor(() => expect(command).not.toBeNull());
+      expect(command).toMatchObject({
+        identity: { locale: "de-CH" },
+        customer_since: "2024-03-01",
+      });
+    });
   });
 
   it("creates the profile attached to this shop and lands in its editor", async () => {

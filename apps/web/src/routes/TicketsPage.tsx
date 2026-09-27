@@ -49,6 +49,7 @@ import {
 } from "../lib/fieldRules";
 import { fromLocalInput, fulfilmentLabel, paymentLabel, toLocalInput } from "../lib/orders";
 import { consequenceOf, REMOVAL_FINDINGS, type Removal, useRemoval } from "../lib/removal";
+import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
   appendMessage,
   authorLabel,
@@ -301,7 +302,13 @@ function NewTicketForm({
   const customers = listings.customers.rows.map((profile) => ({
     id: profile.profile_id,
     name: profile.display_name,
-  }));
+  })); // One attached customer is not a choice (ADR 0064).
+  const onlyCustomer = useSingleChoice(
+    customers.map((customer) => customer.id),
+    customerId,
+    setCustomerId,
+  );
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A create in flight is about to change the list, so which reference is free is unknown
@@ -376,7 +383,7 @@ function NewTicketForm({
       </FieldHint>
       <FieldHint
         label="Customer"
-        hint="Only customers attached to this shop can raise a ticket here."
+        hint={`Only customers attached to this shop can raise a ticket here.${onlyCustomer ? ` ${onlyChoiceNote("customer attached to this shop")}` : ""}`}
       >
         <select
           className={fieldControlClasses}

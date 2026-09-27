@@ -55,6 +55,7 @@ import {
   removedState,
   useRemoval,
 } from "../lib/removal";
+import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
   destructiveOutlineButtonClasses,
   destructiveSubtleButtonClasses,
@@ -225,6 +226,23 @@ export function OrderEditorPage() {
         }
       : null,
   );
+
+  // The priced variants not yet on the order: what *Add product* offers. One of them is not a
+  // choice (ADR 0064), and when adding a line leaves one, the form opens on it again. Declared
+  // before the early returns below, as every hook here is.
+  const addableSkus =
+    content === null
+      ? []
+      : shop.products.flatMap((product) =>
+          product.variants
+            .filter(
+              (variant) =>
+                variant.price !== null && !content.lines.some((line) => line.sku === variant.sku),
+            )
+            .map((variant) => variant.sku),
+        );
+  const onlyAddable = useSingleChoice(addableSkus, newSku, setNewSku);
+  const addNoteId = useId();
 
   if (loading) {
     return <p className="text-sm text-admin-muted">Loading order…</p>;
@@ -537,6 +555,7 @@ export function OrderEditorPage() {
                 Add product
                 <select
                   aria-label="Add product"
+                  aria-describedby={onlyAddable ? addNoteId : undefined}
                   className={fieldControlClasses}
                   value={newSku}
                   required
@@ -551,6 +570,11 @@ export function OrderEditorPage() {
                       </option>
                     ))}
                 </select>
+                {onlyAddable ? (
+                  <span id={addNoteId} className="text-xs font-normal text-admin-muted">
+                    {onlyChoiceNote("priced variant not yet on this order")}
+                  </span>
+                ) : null}
               </label>
               <button className={outlineButtonClasses} type="submit">
                 <ButtonIcon verb="create" />

@@ -413,7 +413,7 @@ describe("starting states", () => {
       within(screen.getByLabelText("Scenario version"))
         .getAllByRole("option")
         .map((option) => option.textContent),
-    ).toEqual(["v2", "v1"]);
+    ).toEqual(["v2 (newest published)", "v1"]);
 
     await user.click(screen.getByRole("button", { name: "Materialize snapshot" }));
 
@@ -813,6 +813,9 @@ describe("the safe address change", () => {
     const actor = within(console).getByLabelText("Acting support identity");
     expect(actor).toHaveValue(IDENTITY_ID);
     expect(within(actor).queryByRole("option", { name: "Choose…" })).toBeNull();
+    expect(actor).toHaveAccessibleDescription(
+      /This one is the only published support identity in the lab, so it is already chosen\./,
+    );
 
     await user.type(within(console).getByLabelText("Address ID (required)"), "home");
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
@@ -851,6 +854,9 @@ describe("the safe address change", () => {
     // Two identities grant different things, so the lab must not pick one: a write is
     // authorized against whichever this names.
     expect(within(console).getByLabelText("Acting support identity")).toHaveValue("");
+    expect(
+      within(console).getByLabelText("Acting support identity"),
+    ).not.toHaveAccessibleDescription(/already chosen/);
     await user.type(within(console).getByLabelText("Address ID (required)"), "home");
     await user.click(within(console).getByRole("button", { name: "Run tool" }));
 

@@ -1,5 +1,5 @@
 import type { FulfilmentStatus, OrderContentSchema, PaymentStatus } from "@agent-lab/contracts";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FULFILMENT_STATUS, labelOf, membersOf, PAYMENT_STATUS } from "./enumLabels";
 import { PAID_AT_RULE, SHIPPED_AT_RULE } from "./fieldRules";
 import {
@@ -145,6 +145,31 @@ describe("today's date", () => {
   it("answers a date input value in the author's own zone", () => {
     expect(todayInput()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(todayInput()).toBe(toLocalInput(new Date().toISOString()).slice(0, 10));
+  });
+  describe("whose today it is", () => {
+    let zone: string | undefined;
+    beforeEach(() => {
+      zone = process.env.TZ;
+      vi.useFakeTimers({ toFake: ["Date"] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      process.env.TZ = zone;
+    });
+
+    it.each([
+      // East of UTC, already tomorrow there.
+      ["Asia/Tokyo", "2026-09-27T20:00:00Z", "2026-09-28"],
+      // West of UTC, still yesterday there.
+      ["America/Los_Angeles", "2026-09-28T03:00:00Z", "2026-09-27"],
+      ["UTC", "2026-09-27T20:00:00Z", "2026-09-27"],
+      // New Year's Eve in Auckland is already the next year.
+      ["Pacific/Auckland", "2026-12-31T12:30:00Z", "2027-01-01"],
+    ])("in %s at %s is %s: the operator's calendar day, never UTC's", (tz, instant, expected) => {
+      process.env.TZ = tz;
+      vi.setSystemTime(new Date(instant));
+      expect(todayInput()).toBe(expected);
+    });
   });
 });
 

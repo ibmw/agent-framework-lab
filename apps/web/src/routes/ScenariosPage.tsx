@@ -28,6 +28,7 @@ import {
   MAX_OBJECTIVES,
   toScenarioRequest,
 } from "../lib/scenarios";
+import { onlyChoiceNote, soleCandidate } from "../lib/singleChoice";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -626,7 +627,12 @@ export function NewScenarioPage() {
               // published version, and `publish_scenario` is what pins it. A hint names the
               // code that makes it true (`docs/design-direction.md`, *The form language*), so
               // it says which of the two happens when.
-              hint="Fixed by creating: a scenario never moves off its ticket, and the documents this ticket suggests are copied into it now. Publishing the scenario is what pins the ticket version — whichever is published then."
+              hint={`Fixed by creating: a scenario never moves off its ticket, and the documents this ticket suggests are copied into it now. Publishing the scenario is what pins the ticket version — whichever is published then.${
+                ticketId !== "" &&
+                soleCandidate(tickets.map((entry) => entry.ticket_id)) === ticketId
+                  ? ` ${onlyChoiceNote("ticket in the shop")}`
+                  : ""
+              }`}
               // The option is the bare reference and the composed label is here, under the
               // control, where the prototype draws it (`Workspace.dc.html`:2956).
               extra={ticket ? `${ticket.subject} · ${ticket.customer_display_name}` : undefined}

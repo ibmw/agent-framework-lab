@@ -30,6 +30,7 @@ import {
   toOrderRequest,
 } from "../lib/orders";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
+import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -304,6 +305,18 @@ export function NewOrderPage() {
     ),
   );
 
+  // One attached customer, or one priced variant, is not a choice (ADR 0064).
+  const onlyCustomer = useSingleChoice(
+    customers.map((customer) => customer.profile_id),
+    customerId,
+    setCustomerId,
+  );
+  const onlyVariant = useSingleChoice(
+    catalog.map((variant) => variant.sku),
+    sku,
+    setSku,
+  );
+
   const creating = useCreateThenComplete<ReplaceOrderRequest>(
     {
       create: async () => {
@@ -396,7 +409,7 @@ export function NewOrderPage() {
               label="Customer"
               hint={
                 creating.made === null
-                  ? "Only customers attached to this shop can hold one of its orders. Their address book is what the shipping address is chosen from."
+                  ? `Only customers attached to this shop can hold one of its orders. Their address book is what the shipping address is chosen from.${onlyCustomer ? ` ${onlyChoiceNote("customer attached to this shop")}` : ""}`
                   : "The order belongs to this customer now. A customer is fixed at creation — the write that saves the line cannot move one, and the lab refuses a shipping address from anybody else's book — so changing it means deleting this order and making another."
               }
             >
@@ -452,7 +465,7 @@ export function NewOrderPage() {
           <FieldRows>
             <Field
               label="Variant"
-              hint="A line names a variant, so a later price change in the catalog never rewrites what this order charged. Further lines are added in the editor."
+              hint={`A line names a variant, so a later price change in the catalog never rewrites what this order charged. Further lines are added in the editor.${onlyVariant ? ` ${onlyChoiceNote("priced variant in the catalog")}` : ""}`}
             >
               <select
                 className={fieldControlClasses}

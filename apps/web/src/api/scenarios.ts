@@ -100,3 +100,14 @@ export async function listScenarioVersions(
     await fetch(scenarioPath(shopId, scenarioId, "/versions"), { signal }),
   );
 }
+
+export async function getScenarioVersion(
+  shopId: string,
+  scenarioId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<ScenarioVersionResponse> {
+  return read<ScenarioVersionResponse>(
+    await fetch(scenarioPath(shopId, scenarioId, `/versions/${version}`), { signal }),
+  );
+}

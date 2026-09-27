@@ -663,6 +663,17 @@ describe("ticket list", () => {
     ).toEqual(["Chat", "Email"]);
   });
 
+  it("opens the new ticket on the one attached customer, and says so", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+    const customer = list.getByLabelText("Customer");
+    await waitFor(() => expect(customer).toHaveValue(PROFILE_ID));
+    expect(customer).toHaveAccessibleDescription(
+      /This one is the only customer attached to this shop, so it is already chosen\./,
+    );
+  });
+
   it("puts each new-ticket field's hint in that control's accessible description", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets`);
 

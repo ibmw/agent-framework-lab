@@ -10,8 +10,11 @@ import {
   NO_SCENARIO,
   NO_SCENARIO_VERSION,
   NO_SEED,
+  noArmVersion,
+  proposedExperimentName,
   SEED_OUT_OF_RANGE,
   type StartState,
+  setupOf,
   startRefusals,
 } from "./experimentStart";
 import { MAX_SEED } from "./fieldRules";
@@ -36,25 +39,56 @@ const UNREACHABLE = "Published configurations naming OpenAI cannot be advanced h
 /** One axis of the setup: each of its states, and the reason that state gives, if any. */
 type Axis = readonly (readonly [Partial<StartState>, string[]])[];
 
+/** An arm left empty, being read, half-chosen with nothing being read, and whole. */
+const EMPTY = { configurationId: "", version: "", versionPending: false };
+const READING = { configurationId: "c", version: "", versionPending: true };
+const HALF = { configurationId: "c", version: "", versionPending: false };
+const WHOLE = { configurationId: "c", version: "1", versionPending: false };
+
+/**
+ * Arm A and arm B, every pair of those four states, each with the reasons written out rather
+ * than computed: a half-chosen arm is refused by its letter, never dropped from the request.
+ */
+const ARM_AXIS: Axis = [
+  [{ arms: [EMPTY, EMPTY] }, [NO_ARM]],
+  [{ arms: [EMPTY, READING] }, []],
+  [{ arms: [EMPTY, HALF] }, [noArmVersion(1)]],
+  [{ arms: [EMPTY, WHOLE] }, []],
+  [{ arms: [READING, EMPTY] }, []],
+  [{ arms: [READING, READING] }, []],
+  [{ arms: [READING, HALF] }, [noArmVersion(1)]],
+  [{ arms: [READING, WHOLE] }, []],
+  [{ arms: [HALF, EMPTY] }, [noArmVersion(0)]],
+  [{ arms: [HALF, READING] }, [noArmVersion(0)]],
+  [{ arms: [HALF, HALF] }, [noArmVersion(0), noArmVersion(1)]],
+  [{ arms: [HALF, WHOLE] }, [noArmVersion(0)]],
+  [{ arms: [WHOLE, EMPTY] }, []],
+  [{ arms: [WHOLE, READING] }, []],
+  [{ arms: [WHOLE, HALF] }, [noArmVersion(1)]],
+  [{ arms: [WHOLE, WHOLE] }, []],
+];
+
 const AXES: readonly Axis[] = [
   [
-    [{ scenarioId: "", scenarioVersion: "" }, [NO_SCENARIO]],
-    [{ scenarioId: "s", scenarioVersion: "" }, [NO_SCENARIO_VERSION]],
-    [{ scenarioId: "s", scenarioVersion: "1" }, []],
+    [{ scenarioId: "", scenarioVersion: "", scenarioVersionPending: false }, [NO_SCENARIO]],
+    // Its versions are being read: not chosen *yet*, which is a wait and refuses nothing.
+    [{ scenarioId: "s", scenarioVersion: "", scenarioVersionPending: true }, []],
+    [
+      { scenarioId: "s", scenarioVersion: "", scenarioVersionPending: false },
+      [NO_SCENARIO_VERSION],
+    ],
+    [{ scenarioId: "s", scenarioVersion: "1", scenarioVersionPending: false }, []],
   ],
-  [
-    [{ seed: "" }, [NO_SEED]],
-    [{ seed: "-1" }, [SEED_OUT_OF_RANGE]],
-    [{ seed: "42" }, []],
-  ],
+  // The form's order (ADR 0064): scenario, arm A, arm B, name, seed.
+  ARM_AXIS,
   [
     [{ label: "  " }, [NO_NAME]],
     [{ label: "Prompt comparison" }, []],
   ],
   [
-    [{ chosenArms: 0 }, [NO_ARM]],
-    [{ chosenArms: 1 }, []],
-    [{ chosenArms: 2 }, []],
+    [{ seed: "" }, [NO_SEED]],
+    [{ seed: "-1" }, [SEED_OUT_OF_RANGE]],
+    [{ seed: "42" }, []],
   ],
   [
     [{ gateIssues: [] }, []],
@@ -91,8 +125,8 @@ describe("what Start waits for", () => {
       expect(startRefusals(state as StartState), JSON.stringify(state)).toEqual(reasons);
       swept += 1;
     }
-    // 3 · 3 · 2 · 3 · 3 · 2 · 2: a sweep that silently shrank would pass on nothing.
-    expect(swept).toBe(648);
+    // 4 · 3 · 2 · 16 · 3 · 2 · 2: a sweep that silently shrank would pass on nothing.
+    expect(swept).toBe(4608);
   });
 
   it("waits for nothing once each cause is answered", () => {
@@ -100,14 +134,97 @@ describe("what Start waits for", () => {
       startRefusals({
         scenarioId: "s",
         scenarioVersion: "1",
+        scenarioVersionPending: false,
         seed: "0",
         label: "x",
-        chosenArms: 1,
+        arms: [WHOLE, EMPTY],
         gateIssues: [GATE_WARNING],
         previewRefusal: null,
         unreachable: "",
       }),
     ).toEqual([]);
+  });
+});
+
+describe("the request a start makes", () => {
+  const base = { scenarioId: "s", scenarioVersion: "3", label: " Named ", seed: "42" };
+  const arm = (configurationId: string, version: string) => ({ configurationId, version });
+
+  it("carries every whole arm, in order, and leaves an empty arm B out", () => {
+    expect(setupOf({ ...base, arms: [arm("a", "2"), arm("", "")] })).toEqual({
+      label: "Named",
+      scenario_id: "s",
+      scenario_version: 3,
+      seed: 42,
+      arms: [{ configuration_id: "a", version: 2, label: "" }],
+      participant_driver: "human",
+    });
+    expect(setupOf({ ...base, arms: [arm("a", "2"), arm("b", "1")] })?.arms).toEqual([
+      { configuration_id: "a", version: 2, label: "" },
+      { configuration_id: "b", version: 1, label: "" },
+    ]);
+  });
+
+  it.each([
+    ["arm A half-chosen", [arm("a", ""), arm("b", "1")]],
+    ["arm B half-chosen", [arm("a", "2"), arm("b", "")]],
+    ["both half-chosen", [arm("a", ""), arm("b", "")]],
+    ["no arm", [arm("", ""), arm("", "")]],
+  ])("makes no request with %s, rather than one without it", (_, arms) => {
+    expect(setupOf({ ...base, arms })).toBeNull();
+  });
+
+  it.each([
+    ["no scenario", { scenarioId: "" }],
+    ["no scenario version", { scenarioVersion: "" }],
+  ])("makes no request with %s", (_, change) => {
+    expect(setupOf({ ...base, ...change, arms: [arm("a", "2"), arm("", "")] })).toBeNull();
+  });
+});
+
+describe("the name an experiment is proposed under", () => {
+  const atlas = { configuration: "cfg-atlas", version: "4" };
+  const beacon = { configuration: "cfg-beacon", version: "2" };
+  const unversioned = { configuration: "cfg-beacon", version: "" };
+  const none = { configuration: "", version: "" };
+
+  it.each([
+    [
+      "Wrong shipping address",
+      [atlas, beacon],
+      "Wrong shipping address — cfg-atlas v4 vs cfg-beacon v2",
+    ],
+    ["Wrong shipping address", [atlas, none], "Wrong shipping address — cfg-atlas v4"],
+    ["Wrong shipping address", [none, beacon], "Wrong shipping address — cfg-beacon v2"],
+    ["Wrong shipping address", [atlas, unversioned], "Wrong shipping address — cfg-atlas v4"],
+    ["Wrong shipping address", [none, none], "Wrong shipping address"],
+    ["", [atlas, beacon], "cfg-atlas v4 vs cfg-beacon v2"],
+    ["", [none, none], ""],
+  ])("from %j and %j is %j", (scenario, arms, expected) => {
+    expect(proposedExperimentName(scenario, arms)).toBe(expected);
+  });
+
+  it("never splits a character where it is cut", () => {
+    // Units 199 and 200 are the emoji's two halves: it goes whole, or not at all.
+    const cut = proposedExperimentName(`${"x".repeat(199)}😀`, [atlas, beacon]);
+    expect(cut).toBe("x".repeat(199));
+    expect(cut.length).toBeLessThanOrEqual(EXPERIMENT_LABEL_MAX_LENGTH);
+    expect(proposedExperimentName(`${"x".repeat(198)}😀`, [atlas, beacon])).toBe(
+      `${"x".repeat(198)}😀`,
+    );
+  });
+
+  it("never ends on a separator where it is cut", () => {
+    // The cut lands just after "—".
+    expect(proposedExperimentName("x".repeat(197), [atlas, beacon])).toBe("x".repeat(197));
+    // And just after "vs".
+    const scenario = "x".repeat(200 - " — cfg-atlas v4 vs".length);
+    expect(proposedExperimentName(scenario, [atlas, beacon])).toBe(`${scenario} — cfg-atlas v4`);
+  });
+
+  it("is never longer than the lab stores", () => {
+    const long = proposedExperimentName("x".repeat(190), [atlas, beacon]);
+    expect(long).toHaveLength(EXPERIMENT_LABEL_MAX_LENGTH);
   });
 });
 

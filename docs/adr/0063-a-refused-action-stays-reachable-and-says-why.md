@@ -315,9 +315,10 @@ applied, or the shop amendment's.
   Unicode version the lab runs on moves, the fixture is regenerated on that Python, and the web
   suite re-proves the mirror against the new tables.
 - **Start lists what it waits for, all of it.** Start is refused until it can work, and its
-  reason is a list, one line per cause, in the order the form asks: a scenario, then a published
-  version of it; a seed, then one inside 0..`MAX_SCENARIO_SEED`; a name that is not empty once
-  trimmed; one arm with a configuration and a version; every **error** the setup gate raises,
+  reason is a list, one line per cause, in the order the form asks — since ADR 0064 a scenario,
+  then a published version of it; one arm with a configuration and a version, and each arm's
+  missing version by its letter; a name that is not empty once trimmed; a seed, then one inside
+  0..`MAX_SCENARIO_SEED`; every **error** the setup gate raises,
   in its words; the preview's own refusal of the setup (a `4xx`, which the start would answer
   identically); and the provider this lab cannot reach. The request's conditions are said in
   the page's words, because the lab's there are the contract's generic validation messages or

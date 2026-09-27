@@ -37,19 +37,12 @@ import {
   tableCellClasses,
   tableHeadClasses,
 } from "../lib/ui";
+import { newestVersion, versionOptionLabel } from "../lib/versions";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The starting states of this scenario are unavailable.";
 const ARMS_UNAVAILABLE = "The arms cloned from this snapshot are unavailable.";
 const DEFAULT_SEED = 20260825;
-
-function newestVersion(versions: DefinitionVersionSummarySchema[]): number | null {
-  return versions.reduce<number | null>(
-    (newest, published) =>
-      newest === null || published.version > newest ? published.version : newest,
-    null,
-  );
-}
 
 /**
  * The starting states one scenario has been frozen into.
@@ -83,9 +76,8 @@ export function SnapshotsPage() {
       setName(draft.content.name);
       setVersions(versionList.versions);
       setSnapshots(snapshotList.snapshots);
-      // The newest published version is the one an operator means by default. Computed
-      // rather than read off an end of the list: the contract does not promise an order,
-      // and the server happens to send newest-first, which `at(-1)` would read as oldest.
+      // The newest published version is the one an operator means by default (ADR 0064), and
+      // a version already chosen stays chosen when the list is read again.
       setVersion((current) =>
         current === "" ? String(newestVersion(versionList.versions) ?? "") : current,
       );
@@ -203,7 +195,7 @@ export function SnapshotsPage() {
                       .sort((left, right) => right.version - left.version)
                       .map((published) => (
                         <option key={published.version} value={String(published.version)}>
-                          v{published.version}
+                          {versionOptionLabel(published.version, newestVersion(versions))}
                         </option>
                       ))}
                   </select>

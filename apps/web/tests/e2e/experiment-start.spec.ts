@@ -392,12 +392,14 @@ async function publishScenario(page: Page, objective: string, judged: string, mu
 
 async function chooseArm(page: Page, position: number, configuration: string) {
   const arm = page.getByRole("group", { name: `Arm ${String.fromCharCode(65 + position)}` });
-  // Addressed by role and accessible name: every picker on this page is a select inside a
-  // wrapping label, and "Published version" names one per arm plus the scenario's.
+  // Addressed by role and accessible name within the arm's row: "Published version" names one
+  // per arm plus the scenario's.
   await arm
     .getByRole("combobox", { name: "Agent configuration" })
     .selectOption({ label: configuration });
-  await arm.getByRole("combobox", { name: "Published version" }).selectOption("1");
+  // The version is not picked by hand: an arm opens on its configuration's newest published
+  // version, which for a configuration published once is v1 (ADR 0064).
+  await expect(arm.getByRole("combobox", { name: "Published version" })).toHaveValue("1");
 }
 
 test("an operator starts a paired experiment, drives both arms, and comes back to it", async ({
@@ -433,12 +435,20 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   );
 
   await openSection(page, "Bench", "New experiment");
-  const scenarioCard = card(page, "Scenario");
-  await scenarioCard
-    .getByRole("combobox", { name: "Recipe" })
-    .selectOption({ label: "Wrong shipping address" });
-  await expect(scenarioCard.getByRole("combobox", { name: "Published version" })).toHaveValue("1");
+  // The shop's one published scenario is already chosen, at its newest version.
+  const scenarioRow = page.getByRole("group", { name: "Scenario" });
+  await expect(scenarioRow.getByRole("combobox", { name: "Scenario" })).toHaveValue(/.+/);
+  await expect(
+    scenarioRow.getByRole("combobox", { name: "Scenario" }).locator("option:checked"),
+  ).toHaveText("Wrong shipping address");
+  await expect(scenarioRow.getByRole("combobox", { name: "Published version" })).toHaveValue("1");
   await chooseArm(page, 0, atlas);
+  // Arm B left empty is a one-arm run. The lab this journey shares may hold exactly two
+  // published configurations, in which case the setup opened with both arms chosen.
+  await page
+    .getByRole("group", { name: "Arm B" })
+    .getByRole("combobox", { name: "Agent configuration" })
+    .selectOption({ label: "No second arm" });
 
   // One arm has nothing to differ from, so every dimension reads the same. Addressed as
   // cells: `getByText` is a case-insensitive substring match, and the card's own footer
@@ -449,7 +459,6 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
 
   // A second arm that differs only in its prompt: exactly one comparison variable, which is
   // what makes the result attributable.
-  await page.getByRole("button", { name: "Add a second arm" }).click();
   await chooseArm(page, 1, beacon);
   const promptRow = matrix.getByRole("row", { name: /prompt/ });
   await expect(promptRow.getByRole("cell", { name: "Difference", exact: true })).toBeVisible();
@@ -458,7 +467,10 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   ).toBeVisible();
   await expect(differences).toHaveCount(1);
 
-  await page.getByRole("textbox", { name: "Experiment name" }).fill(`Prompt comparison ${unique}`);
+  // The name the setup proposes follows the arms; the operator names this run themselves.
+  const name = page.getByRole("textbox", { name: "Name" });
+  await expect(name).toHaveValue(`Wrong shipping address — ${atlas} v1 vs ${beacon} v1`);
+  await name.fill(`Prompt comparison ${unique}`);
   await page.getByRole("button", { name: "Start experiment" }).click();
 
   // Both arms open on the ticket's triggering message, from one frozen starting state.

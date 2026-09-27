@@ -87,3 +87,14 @@ export async function publishTicket(
     await fetch(ticketPath(shopId, ticketId, "/versions"), { method: "POST" }),
   );
 }
+
+export async function getTicketVersion(
+  shopId: string,
+  ticketId: string,
+  version: number,
+  signal?: AbortSignal,
+): Promise<TicketVersionResponse> {
+  return read<TicketVersionResponse>(
+    await fetch(ticketPath(shopId, ticketId, `/versions/${version}`), { signal }),
+  );
+}

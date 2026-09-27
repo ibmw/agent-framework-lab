@@ -23,9 +23,11 @@ import type {
   RunTraceSpanSchema,
   ScenarioListResponse,
   ScenarioVersionListResponse,
+  ScenarioVersionResponse,
   ShopDraftResponse,
   ShopListResponse,
   ShopPreviewResponse,
+  TicketVersionResponse,
   TimelineEntrySchema,
   ToolEventSchema,
 } from "@agent-lab/contracts";
@@ -40,6 +42,7 @@ import {
   NO_SCENARIO,
   NO_SCENARIO_VERSION,
   NO_SEED,
+  noArmVersion,
   SEED_OUT_OF_RANGE,
 } from "./lib/experimentStart";
 import { TOURS } from "./lib/tours";
@@ -50,6 +53,7 @@ import { shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const SCENARIO_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
+const TICKET_ID = "6b0f9c1e-49d1-4c9f-8b0c-1f6d1c2f9a01";
 const ATLAS_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const BEACON_ID = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 const EXPERIMENT_ID = "9f8e7d6c-5b4a-4392-8817-6f5e4d3c2b1a";
@@ -104,7 +108,7 @@ const SCENARIOS: ScenarioListResponse = {
     {
       scenario_id: SCENARIO_ID,
       name: "Wrong shipping address",
-      ticket_id: "6b0f9c1e-49d1-4c9f-8b0c-1f6d1c2f9a01",
+      ticket_id: TICKET_ID,
       ticket_reference: "T-204",
       ticket_subject: "Wrong address concern",
       customer_display_name: "Maya Laurent",
@@ -118,6 +122,38 @@ const SCENARIOS: ScenarioListResponse = {
     },
   ],
 };
+
+/** One published scenario version, pinned to shop v3 and ticket v1 as the prototype's is. */
+function scenarioVersion(version: number): ScenarioVersionResponse {
+  return {
+    scenario_id: SCENARIO_ID,
+    shop_id: SHOP_ID,
+    lifecycle_state: "published",
+    version,
+    content_fingerprint: "d".repeat(64),
+    published_at: "2026-08-28T09:05:00+00:00",
+    shop_version: 3,
+    ticket_version: 1,
+    templates: [],
+    // The page reads only the pins; the content is the contract's, and nothing here reads it.
+    content: {} as ScenarioVersionResponse["content"],
+  };
+}
+
+/** The ticket version the scenario pinned, which pins the customer at v2. */
+function ticketVersion(version: number): TicketVersionResponse {
+  return {
+    ticket_id: TICKET_ID,
+    shop_id: SHOP_ID,
+    lifecycle_state: "published",
+    version,
+    content_fingerprint: "e".repeat(64),
+    published_at: "2026-08-28T09:00:00+00:00",
+    shop_version: 3,
+    customer_profile_version: 2,
+    content: {} as TicketVersionResponse["content"],
+  };
+}
 
 const SCENARIO_VERSIONS: ScenarioVersionListResponse = {
   versions: [
@@ -151,6 +187,21 @@ const CONFIGURATIONS: AgentConfigurationListResponse = {
     configuration(BEACON_ID, "cfg-beacon", "Deterministic fake", 2),
     configuration("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f", "cfg-unpublished", "Pydantic AI", null),
   ],
+};
+
+/** A third published configuration: with it, which two the arms run is a choice. */
+const CANARY = configuration(
+  "4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7b",
+  "cfg-canary",
+  "Pydantic AI",
+  1,
+);
+
+/** A second published scenario: with it, which one runs is a choice. */
+const OTHER_SCENARIO: ScenarioListResponse["scenarios"][number] = {
+  ...SCENARIOS.scenarios[0],
+  scenario_id: "6d7e8f9a-0b1c-4d2e-8f3a-4b5c6d7e8f9a",
+  name: "Damaged on arrival",
 };
 
 const CONFIGURATION_VERSIONS: AgentConfigurationVersionListResponse = {
@@ -911,6 +962,12 @@ const server = setupServer(
   http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions`, () =>
     HttpResponse.json(SCENARIO_VERSIONS),
   ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/versions/:version`, ({ params }) =>
+    HttpResponse.json(scenarioVersion(Number(params.version))),
+  ),
+  http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/versions/:version`, ({ params }) =>
+    HttpResponse.json(ticketVersion(Number(params.version))),
+  ),
   http.get("*/api/v1/agent-configurations", () => HttpResponse.json(CONFIGURATIONS)),
   http.get("*/api/v1/agent-configurations/:configurationId/versions", () =>
     HttpResponse.json(CONFIGURATION_VERSIONS),
@@ -1149,6 +1206,20 @@ function startReasons(start: HTMLElement): string[] {
   return Array.from(list?.querySelectorAll("li") ?? [], (item) => item.textContent ?? "");
 }
 
+/** The scenario the setup opened on: the fixture's only published one, chosen for the operator. */
+async function scenarioChosen() {
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "Scenario" })).toHaveValue(SCENARIO_ID),
+  );
+}
+
+/** Types over the proposed name, as an operator naming the run themselves does. */
+async function nameAs(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const field = screen.getByLabelText("Name");
+  await user.clear(field);
+  await user.type(field, name);
+}
+
 async function chooseArm(user: ReturnType<typeof userEvent.setup>, position: number, name: string) {
   const arm = screen.getByRole("group", { name: `Arm ${String.fromCharCode(65 + position)}` });
   await user.selectOptions(within(arm).getByLabelText("Agent configuration"), name);
@@ -1160,9 +1231,8 @@ describe("experiment setup", () => {
     const user = userEvent.setup();
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
-    await user.click(screen.getByRole("button", { name: "Add a second arm" }));
     await chooseArm(user, 1, "cfg-beacon");
 
     const matrix = await screen.findByRole("table");
@@ -1173,10 +1243,9 @@ describe("experiment setup", () => {
   });
 
   it("says what a seed is and what it may be, under the field", async () => {
-    const user = userEvent.setup();
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
 
     const seed = screen.getByLabelText("Seed");
     expect(seed).toHaveAttribute("step", "1");
@@ -1188,7 +1257,7 @@ describe("experiment setup", () => {
     const user = userEvent.setup();
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
 
     expect(await screen.findByText(/cannot be attributed to any one of them/)).toBeVisible();
@@ -1209,8 +1278,12 @@ describe("experiment setup", () => {
     const user = userEvent.setup();
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
+    // The proposed name, typed over with padding: the lab trims a name and refuses what is
+    // left. (Emptied, the field hands the proposal back when it is left, so an empty name is
+    // never what is sent.)
+    await nameAs(user, "   ");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expect(startReasons(start)).toEqual([NO_NAME]));
     expectRefused(start, NO_NAME);
@@ -1221,11 +1294,9 @@ describe("experiment setup", () => {
     await user.keyboard(" ");
     await submitWithoutPressing(start);
     expect(started).toHaveLength(0);
-    // A name that is only padding is no name: the lab trims it and refuses what is left.
-    await user.type(screen.getByLabelText("Experiment name"), "   ");
     expect(startReasons(start)).toEqual([NO_NAME]);
     // And the field stops where the lab would refuse a longer one.
-    expect(screen.getByLabelText("Experiment name")).toHaveAttribute("maxlength", "200");
+    expect(screen.getByLabelText("Name")).toHaveAttribute("maxlength", "200");
   });
 
   it("is dashed until it can work, and says everything it still waits for", async () => {
@@ -1243,51 +1314,62 @@ describe("experiment setup", () => {
         const beacon = body.arms.some((arm) => arm.configuration_id === BEACON_ID);
         return HttpResponse.json({ ...PREVIEW, issues: beacon ? [toneError] : PREVIEW.issues });
       }),
+      // Two published scenarios and three published configurations: choices the lab does not
+      // make, so the setup opens with nothing chosen.
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: [...SCENARIOS.scenarios, OTHER_SCENARIO] }),
+      ),
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({ configurations: [...CONFIGURATIONS.configurations, CANARY] }),
+      ),
     );
     renderSetup();
 
     // Nothing chosen, and a seed the contract would refuse: every reason at once, in the
     // order the form asks for them.
     const seed = await screen.findByLabelText("Seed");
+    await screen.findByRole("option", { name: "Wrong shipping address" });
     await user.clear(seed);
     await user.type(seed, "-1");
     const start = screen.getByRole("button", { name: "Start experiment" });
-    expect(startReasons(start)).toEqual([NO_SCENARIO, SEED_OUT_OF_RANGE, NO_NAME, NO_ARM]);
-    for (const reason of [NO_SCENARIO, SEED_OUT_OF_RANGE, NO_NAME, NO_ARM]) {
+    expect(startReasons(start)).toEqual([NO_SCENARIO, NO_ARM, NO_NAME, SEED_OUT_OF_RANGE]);
+    for (const reason of [NO_SCENARIO, NO_ARM, NO_NAME, SEED_OUT_OF_RANGE]) {
       expectRefused(start, reason);
     }
 
-    await user.selectOptions(screen.getByLabelText("Recipe"), "Wrong shipping address");
-    await waitFor(() => expect(startReasons(start)).toEqual([SEED_OUT_OF_RANGE, NO_NAME, NO_ARM]));
+    // The scenario opens on its newest version, and names the experiment.
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Scenario" }),
+      "Wrong shipping address",
+    );
+    await waitFor(() => expect(startReasons(start)).toEqual([NO_ARM, SEED_OUT_OF_RANGE]));
 
     await user.clear(seed);
     await user.type(seed, "42");
-    expect(startReasons(start)).toEqual([NO_NAME, NO_ARM]);
-
-    await user.type(screen.getByLabelText("Experiment name"), "Tone comparison");
     expect(startReasons(start)).toEqual([NO_ARM]);
 
-    // A configuration without its version is not an arm yet.
+    // The configuration opens on its newest version, is judged, and the gate's error is what
+    // is left — in its words.
     const arm = screen.getByRole("group", { name: "Arm A" });
     await user.selectOptions(within(arm).getByLabelText("Agent configuration"), "cfg-beacon");
-    expect(startReasons(start)).toEqual([NO_ARM]);
-
-    // Chosen whole, the arm is judged, and the gate's error is what is left — in its words.
-    await user.selectOptions(within(arm).getByLabelText("Published version"), "1");
     await waitFor(() => expect(startReasons(start)).toEqual([toneError.message]));
     expectRefused(start, toneError.message);
     await user.click(start);
     expect(started).toHaveLength(0);
 
     // A warning is not a refusal: the gate's warning stays in the card, and Start is free.
-    await chooseArm(user, 0, "cfg-atlas");
+    await user.selectOptions(within(arm).getByLabelText("Agent configuration"), "cfg-atlas");
     await waitFor(() => expectNotRefused(start));
     expect(start).not.toHaveAttribute("title");
     expect(screen.getByText(/differ in 2 dimensions/)).toBeVisible();
 
     await user.click(start);
     await waitFor(() => expect(started).toHaveLength(1));
-    expect(started[0]).toMatchObject({ label: "Tone comparison", seed: 42 });
+    expect(started[0]).toMatchObject({
+      label: "Wrong shipping address — cfg-atlas v2",
+      seed: 42,
+      arms: [{ configuration_id: ATLAS_ID, version: 2 }],
+    });
   });
 
   it("holds a setup to the gate's answer for it, never to the answer for the one before", async () => {
@@ -1314,8 +1396,8 @@ describe("experiment setup", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
-    await user.type(screen.getByLabelText("Experiment name"), "Tone comparison");
+    await scenarioChosen();
+    await nameAs(user, "Tone comparison");
     await chooseArm(user, 0, "cfg-beacon");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expect(startReasons(start)).toEqual([toneError.message]));
@@ -1349,8 +1431,8 @@ describe("experiment setup", () => {
     const seed = await screen.findByLabelText("Seed");
     await user.clear(seed);
     await user.type(seed, "-1");
-    await user.selectOptions(screen.getByLabelText("Recipe"), "Wrong shipping address");
-    await user.type(screen.getByLabelText("Experiment name"), "Seeded");
+    await scenarioChosen();
+    await nameAs(user, "Seeded");
     await chooseArm(user, 0, "cfg-atlas");
 
     // The gate never reads the seed, and the contract would refuse the whole preview for it.
@@ -1366,9 +1448,9 @@ describe("experiment setup", () => {
     renderSetup();
 
     const seed = await screen.findByLabelText("Seed");
-    await user.selectOptions(screen.getByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
-    await user.type(screen.getByLabelText("Experiment name"), "Seeded");
+    await nameAs(user, "Seeded");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expectNotRefused(start));
 
@@ -1390,8 +1472,8 @@ describe("experiment setup", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
-    await user.type(screen.getByLabelText("Experiment name"), "Unpublished");
+    await scenarioChosen();
+    await nameAs(user, "Unpublished");
     await chooseArm(user, 0, "cfg-atlas");
 
     const start = screen.getByRole("button", { name: "Start experiment" });
@@ -1411,8 +1493,8 @@ describe("experiment setup", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
-    await user.type(screen.getByLabelText("Experiment name"), "Gone");
+    await scenarioChosen();
+    await nameAs(user, "Gone");
     await chooseArm(user, 0, "cfg-atlas");
 
     const start = screen.getByRole("button", { name: "Start experiment" });
@@ -1433,8 +1515,8 @@ describe("experiment setup", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
-    await user.type(screen.getByLabelText("Experiment name"), "Unjudged");
+    await scenarioChosen();
+    await nameAs(user, "Unjudged");
     await chooseArm(user, 0, "cfg-atlas");
 
     const start = screen.getByRole("button", { name: "Start experiment" });
@@ -1447,9 +1529,9 @@ describe("experiment setup", () => {
     const user = userEvent.setup();
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await user.click(screen.getByRole("button", { name: "Start experiment" }));
 
     await waitFor(() => expect(started).toHaveLength(1));
@@ -1458,7 +1540,11 @@ describe("experiment setup", () => {
       scenario_id: SCENARIO_ID,
       scenario_version: 1,
       participant_driver: "human",
-      arms: [{ configuration_id: ATLAS_ID, version: 1 }],
+      // Arm A as chosen; arm B as the setup opened it, on cfg-beacon's newest version.
+      arms: [
+        { configuration_id: ATLAS_ID, version: 1 },
+        { configuration_id: BEACON_ID, version: 2 },
+      ],
     });
     expect(
       await screen.findByRole("heading", { name: "Wrong address — framework comparison" }),
@@ -1470,9 +1556,9 @@ describe("experiment setup", () => {
     startFails = true;
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     await chooseArm(user, 0, "cfg-atlas");
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await user.click(screen.getByRole("button", { name: "Start experiment" }));
 
     expect(
@@ -1480,6 +1566,446 @@ describe("experiment setup", () => {
     ).toBeVisible();
     // The setup is still on screen: a refusal must not discard what the operator chose.
     expect(screen.getByRole("button", { name: "Start experiment" })).toBeVisible();
+  });
+});
+
+/**
+ * What the setup has already chosen when it opens, and what it never chooses (ADR 0064).
+ */
+describe("experiment setup's defaults", () => {
+  function row(name: string) {
+    return screen.getByRole("group", { name });
+  }
+
+  it("opens on one published scenario and two published configurations at their newest, named, with only Start left", async () => {
+    const user = userEvent.setup();
+    renderSetup();
+
+    // The scenario: the only published one, at its newest version, and what it resolves against.
+    await scenarioChosen();
+    const scenarioRow = row("Scenario");
+    await waitFor(() =>
+      expect(within(scenarioRow).getByRole("combobox", { name: "Published version" })).toHaveValue(
+        "1",
+      ),
+    );
+    expect(scenarioRow).toHaveAccessibleDescription(
+      /This one is the only published scenario in the shop, so it is already chosen\./,
+    );
+    expect(
+      await within(scenarioRow).findByText(
+        "Resolves against shop v3, ticket T-204 v1, customer Maya Laurent v2.",
+      ),
+    ).toBeVisible();
+
+    // The two published configurations are the two arms, each at its newest version.
+    const armA = row("Arm A");
+    const armB = row("Arm B");
+    expect(within(armA).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
+      ATLAS_ID,
+    );
+    expect(within(armB).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
+      BEACON_ID,
+    );
+    await waitFor(() => {
+      expect(within(armA).getByRole("combobox", { name: "Published version" })).toHaveValue("2");
+      expect(within(armB).getByRole("combobox", { name: "Published version" })).toHaveValue("2");
+    });
+    expect(within(armA).getByRole("option", { name: "v2 (newest published)" })).toBeInTheDocument();
+    expect(armB).toHaveAccessibleDescription(
+      /These two are the only published agent configurations in the lab, so both arms are already chosen\./,
+    );
+
+    // A name proposed from them.
+    expect(screen.getByLabelText("Name")).toHaveValue(
+      "Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2",
+    );
+    // A display name, not an identifier: it is not read back as "Saved as …".
+    expect(screen.queryByText(/Saved as/)).toBeNull();
+
+    // And Start is free once the gate has answered: nothing is left but pressing it.
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await reachabilityRead();
+    await waitFor(() => expectNotRefused(start));
+    expect(startReasons(start)).toEqual([]);
+    await user.click(start);
+    await waitFor(() => expect(started).toHaveLength(1));
+    expect(started[0]).toMatchObject({
+      label: "Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2",
+      scenario_id: SCENARIO_ID,
+      scenario_version: 1,
+      arms: [
+        { configuration_id: ATLAS_ID, version: 2 },
+        { configuration_id: BEACON_ID, version: 2 },
+      ],
+    });
+  });
+
+  it("asks in the prototype's order: scenario, arm A, arm B, name, seed", async () => {
+    renderSetup();
+    await scenarioChosen();
+
+    const setup = screen.getByRole("region", { name: "Experiment setup" });
+    const rows = Array.from(setup.querySelectorAll<HTMLElement>("fieldset, label"), (element) =>
+      element.tagName === "FIELDSET"
+        ? (element.getAttribute("aria-labelledby") ?? "")
+            .split(" ")
+            .map((id) => document.getElementById(id)?.textContent ?? "")
+            .join("")
+        : (element.textContent ?? ""),
+    );
+    expect(rows).toEqual(["Scenario", "Arm A", "Arm B", "Name", "Seed"]);
+    // The seed with its meaning.
+    expect(screen.getByLabelText("Seed")).toHaveAccessibleDescription(
+      /The same seed over the same starting state replays the same run\./,
+    );
+  });
+
+  it("counts only a scenario that could run as a candidate", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({
+          scenarios: [
+            { ...OTHER_SCENARIO, latest_published_version: null, published_version_count: 0 },
+            ...SCENARIOS.scenarios,
+          ],
+        }),
+      ),
+    );
+    renderSetup();
+
+    // An unpublished scenario is offered as unavailable, and is not a second candidate.
+    await scenarioChosen();
+    expect(screen.getByRole("option", { name: "Damaged on arrival (unpublished)" })).toBeDisabled();
+    expect(row("Scenario")).toHaveAccessibleDescription(/so it is already chosen/);
+  });
+
+  it("chooses nothing where there is a choice to make", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: [...SCENARIOS.scenarios, OTHER_SCENARIO] }),
+      ),
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({ configurations: [...CONFIGURATIONS.configurations, CANARY] }),
+      ),
+    );
+    renderSetup();
+
+    await screen.findAllByRole("option", { name: "cfg-canary" });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByRole("combobox", { name: "Scenario" })).toHaveValue("");
+    expect(row("Scenario")).not.toHaveAccessibleDescription(/already chosen/);
+    for (const name of ["Arm A", "Arm B"]) {
+      expect(within(row(name)).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
+        "",
+      );
+      expect(row(name)).not.toHaveAccessibleDescription(/already chosen/);
+    }
+    expect(screen.getByLabelText("Name")).toHaveValue("");
+  });
+
+  it("opens arm A on the one published configuration and leaves arm B empty", async () => {
+    server.use(
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({
+          configurations: CONFIGURATIONS.configurations.filter(
+            (entry) => entry.configuration_id !== BEACON_ID,
+          ),
+        }),
+      ),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    const armA = row("Arm A");
+    await waitFor(() =>
+      expect(within(armA).getByRole("combobox", { name: "Published version" })).toHaveValue("2"),
+    );
+    expect(within(armA).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
+      ATLAS_ID,
+    );
+    expect(armA).toHaveAccessibleDescription(
+      /This one is the only published agent configuration in the lab, so it is already chosen\./,
+    );
+    // Two arms running one configuration compare nothing, so arm B is left for the operator.
+    expect(within(row("Arm B")).getByRole("combobox", { name: "Agent configuration" })).toHaveValue(
+      "",
+    );
+    expect(screen.getByLabelText("Name")).toHaveValue("Wrong shipping address — cfg-atlas v2");
+  });
+
+  it("follows the arms with the proposed name until the operator types one", async () => {
+    const user = userEvent.setup();
+    renderSetup();
+
+    await scenarioChosen();
+    const name = screen.getByLabelText("Name");
+    await waitFor(() =>
+      expect(name).toHaveValue("Wrong shipping address — cfg-atlas v2 vs cfg-beacon v2"),
+    );
+    await user.selectOptions(
+      within(row("Arm B")).getByRole("combobox", { name: "Agent configuration" }),
+      "No second arm",
+    );
+    expect(name).toHaveValue("Wrong shipping address — cfg-atlas v2");
+
+    await nameAs(user, "Mine");
+    await user.selectOptions(
+      within(row("Arm A")).getByRole("combobox", { name: "Published version" }),
+      "1",
+    );
+    expect(name).toHaveValue("Mine");
+
+    // Emptied and left, it is handed the proposal back, which it then follows again.
+    await user.clear(name);
+    await user.tab();
+    expect(name).toHaveValue("Wrong shipping address — cfg-atlas v1");
+    await user.selectOptions(
+      within(row("Arm A")).getByRole("combobox", { name: "Published version" }),
+      "2",
+    );
+    expect(name).toHaveValue("Wrong shipping address — cfg-atlas v2");
+  });
+
+  it("opens an arm on the newest version of a configuration whose versions are already read", async () => {
+    const user = userEvent.setup();
+    renderSetup();
+
+    await scenarioChosen();
+    const armA = row("Arm A");
+    const version = within(armA).getByRole("combobox", { name: "Published version" });
+    await waitFor(() => expect(version).toHaveValue("2"));
+    await user.selectOptions(version, "1");
+    // cfg-beacon's versions were read for arm B; arm A moved onto it opens on its newest at
+    // once, rather than on an operator's choice it no longer holds or on nothing.
+    await user.selectOptions(
+      within(armA).getByRole("combobox", { name: "Agent configuration" }),
+      "cfg-beacon",
+    );
+    expect(version).toHaveValue("2");
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await reachabilityRead();
+    await waitFor(() => expectNotRefused(start));
+  });
+
+  it("asks the gate nothing again when a list answers that no arm waits on", async () => {
+    const user = userEvent.setup();
+    let previews = 0;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`*/api/v1/agent-configurations/${BEACON_ID}/versions`, async () => {
+        await held;
+        return HttpResponse.json(CONFIGURATION_VERSIONS);
+      }),
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, () => {
+        previews += 1;
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    // Arm B waits on cfg-beacon's list; the operator empties it before the list answers.
+    await user.selectOptions(
+      within(row("Arm B")).getByRole("combobox", { name: "Agent configuration" }),
+      "No second arm",
+    );
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await reachabilityRead();
+    await waitFor(() => expectNotRefused(start));
+    const asked = previews;
+
+    release();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(previews).toBe(asked);
+    expectNotRefused(start);
+    expect(start).not.toBeDisabled();
+  });
+
+  it("says nothing about a scenario it has moved off, even when its last read fails late", async () => {
+    const user = userEvent.setup();
+    let ticketAsked = false;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: [...SCENARIOS.scenarios, OTHER_SCENARIO] }),
+      ),
+      // The first scenario's ticket read never answers; it fails when the page abandons it.
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets/${TICKET_ID}/versions/:version`, async () => {
+        ticketAsked = true;
+        await new Promise(() => {});
+        return HttpResponse.json({});
+      }),
+      // And the next scenario's versions are still being read.
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${OTHER_SCENARIO.scenario_id}/versions`,
+        async () => {
+          await new Promise(() => {});
+          return HttpResponse.json({ versions: [] });
+        },
+      ),
+    );
+    renderSetup();
+
+    const scenario = await screen.findByRole("combobox", { name: "Scenario" });
+    await screen.findByRole("option", { name: "Damaged on arrival" });
+    await user.selectOptions(scenario, "Wrong shipping address");
+    await waitFor(() => expect(ticketAsked).toBe(true));
+
+    await user.selectOptions(scenario, "Damaged on arrival");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(within(row("Scenario")).queryByText(/Resolves against/)).toBeNull();
+  });
+
+  it("gives a list that answers late only to the arm still waiting on it", async () => {
+    const user = userEvent.setup();
+    const releases: Record<string, () => void> = {};
+    const held = (configurationId: string, versions: number[]) =>
+      http.get(`*/api/v1/agent-configurations/${configurationId}/versions`, async () => {
+        await new Promise<void>((resolve) => {
+          releases[configurationId] = resolve;
+        });
+        return HttpResponse.json({
+          versions: versions.map((version) => ({
+            version,
+            content_fingerprint: "a".repeat(64),
+            published_at: "2026-09-02T08:00:00+00:00",
+          })),
+        });
+      });
+    server.use(
+      // Three published configurations, so the arms open empty and are chosen by hand.
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({ configurations: [...CONFIGURATIONS.configurations, CANARY] }),
+      ),
+      held(ATLAS_ID, [1, 2, 3]),
+      held(CANARY.configuration_id, [1]),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    const armA = row("Arm A");
+    const configuration = within(armA).getByRole("combobox", { name: "Agent configuration" });
+    const version = within(armA).getByRole("combobox", { name: "Published version" });
+    // Arm A waits on cfg-atlas's list; the operator moves it to cfg-canary before it answers.
+    await user.selectOptions(configuration, "cfg-atlas");
+    await waitFor(() => expect(releases[ATLAS_ID]).toBeDefined());
+    await user.selectOptions(configuration, "cfg-canary");
+    await waitFor(() => expect(releases[CANARY.configuration_id]).toBeDefined());
+
+    // cfg-atlas's list arrives now, and is nobody's answer any more.
+    releases[ATLAS_ID]();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(version).toHaveValue("");
+    expect(version).toHaveDisplayValue("Reading published versions…");
+
+    // cfg-canary's is arm A's.
+    releases[CANARY.configuration_id]();
+    await waitFor(() => expect(version).toHaveValue("1"));
+  });
+
+  it("clears the scenario version on a switch, and opens on the new scenario's newest", async () => {
+    const user = userEvent.setup();
+    const previewed: { scenario_id: string; scenario_version: number }[] = [];
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: [...SCENARIOS.scenarios, OTHER_SCENARIO] }),
+      ),
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${OTHER_SCENARIO.scenario_id}/versions`,
+        async () => {
+          await held;
+          return HttpResponse.json({
+            versions: [4, 5].map((version) => ({
+              version,
+              content_fingerprint: "d".repeat(64),
+              published_at: "2026-09-01T09:05:00+00:00",
+            })),
+          } satisfies ScenarioVersionListResponse);
+        },
+      ),
+      http.get(
+        `*/api/v1/shops/${SHOP_ID}/scenarios/${OTHER_SCENARIO.scenario_id}/versions/:version`,
+        () => HttpResponse.json({ ...scenarioVersion(5), scenario_id: OTHER_SCENARIO.scenario_id }),
+      ),
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+        previewed.push((await request.json()) as (typeof previewed)[number]);
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    const scenario = await screen.findByRole("combobox", { name: "Scenario" });
+    await screen.findByRole("option", { name: "Damaged on arrival" });
+    await user.selectOptions(scenario, "Wrong shipping address");
+    await waitFor(() =>
+      expect(previewed.some((body) => body.scenario_id === SCENARIO_ID)).toBe(true),
+    );
+
+    await user.selectOptions(scenario, "Damaged on arrival");
+    const version = within(row("Scenario")).getByRole("combobox", { name: "Published version" });
+    expect(version).toHaveValue("");
+    expect(version).toHaveDisplayValue("Reading published versions…");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    // No (new scenario, old version) pair was ever put to the gate.
+    expect(previewed.filter((body) => body.scenario_id === OTHER_SCENARIO.scenario_id)).toEqual([]);
+    // Nor refused for it: the version is being read, which is a wait.
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    expect(startReasons(start)).toEqual([]);
+    expect(start).toBeDisabled();
+
+    release();
+    await waitFor(() => expect(version).toHaveValue("5"));
+    await waitFor(() =>
+      expect(
+        previewed
+          .filter((body) => body.scenario_id === OTHER_SCENARIO.scenario_id)
+          .map((body) => body.scenario_version),
+      ).toEqual([5]),
+    );
+  });
+
+  it("refuses an arm whose version could not be read, by its letter, and never runs without it", async () => {
+    const previewed: { arms: unknown[] }[] = [];
+    server.use(
+      http.get(`*/api/v1/agent-configurations/${BEACON_ID}/versions`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The lab could not complete it.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+        previewed.push((await request.json()) as { arms: unknown[] });
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    const start = screen.getByRole("button", { name: "Start experiment" });
+    await waitFor(() => expect(startReasons(start)).toEqual([noArmVersion(1)]));
+    expectRefused(start, noArmVersion(1));
+    expect(
+      within(row("Arm B")).getByRole("combobox", { name: "Published version" }),
+    ).toHaveDisplayValue("No published version");
+    // Arm A alone was never put to the gate as though it were the whole experiment.
+    expect(previewed).toEqual([]);
   });
 });
 
@@ -1497,9 +2023,9 @@ describe("experiment setup and the provider the lab can reach", () => {
       connectionSource = source;
       renderSetup();
 
-      await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      await scenarioChosen();
       // Named first, so the provider is the only thing Start could still be waiting for.
-      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+      await nameAs(user, "Prompt comparison");
       await chooseArm(user, 0, "cfg-atlas");
 
       const start = screen.getByRole("button", { name: "Start experiment" });
@@ -1518,7 +2044,7 @@ describe("experiment setup and the provider the lab can reach", () => {
       start.focus();
       await user.keyboard("{Enter}");
       await user.keyboard(" ");
-      await user.type(screen.getByLabelText("Experiment name"), "{Enter}");
+      await nameAs(user, "{Enter}");
       expect(started).toHaveLength(0);
     });
   }
@@ -1528,9 +2054,9 @@ describe("experiment setup and the provider the lab can reach", () => {
     connectionSource = "none";
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     // Named first, so the provider is the only thing Start could still be waiting for.
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expectRefused(start, NOTE));
@@ -1565,8 +2091,8 @@ describe("experiment setup and the provider the lab can reach", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await scenarioChosen();
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     // The gate has answered and the lab's reach is known; only the arm's provider is not.
     await screen.findByText(/differ in 2 dimensions/);
@@ -1608,8 +2134,8 @@ describe("experiment setup and the provider the lab can reach", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await scenarioChosen();
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     await screen.findByText(/differ in 2 dimensions/);
     await waitFor(() => expect(versionReads).toBeGreaterThanOrEqual(1));
@@ -1632,11 +2158,10 @@ describe("experiment setup and the provider the lab can reach", () => {
     connectionSource = "none";
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     // Named first, so the provider is the only thing Start could still be waiting for.
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
-    await user.click(screen.getByRole("button", { name: "Add a second arm" }));
     await chooseArm(user, 1, "cfg-atlas");
 
     const start = screen.getByRole("button", { name: "Start experiment" });
@@ -1649,9 +2174,9 @@ describe("experiment setup and the provider the lab can reach", () => {
     connectionSource = "none";
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     // Named first, so the provider is the only thing Start could still be waiting for.
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-beacon");
     await reachabilityRead();
     expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
@@ -1666,11 +2191,10 @@ describe("experiment setup and the provider the lab can reach", () => {
     connectionSource = "none";
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     // Named first, so the provider is the only thing Start could still be waiting for.
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-beacon");
-    await user.click(screen.getByRole("button", { name: "Add a second arm" }));
     await chooseArm(user, 1, "cfg-atlas");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expectRefused(start, NOTE));
@@ -1705,9 +2229,9 @@ describe("experiment setup and the provider the lab can reach", () => {
       );
       renderSetup();
 
-      await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      await scenarioChosen();
       // Named first, so the provider is the only thing Start could still be waiting for.
-      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+      await nameAs(user, "Prompt comparison");
       await chooseArm(user, 0, "cfg-atlas");
       await reachabilityRead();
 
@@ -1729,9 +2253,9 @@ describe("experiment setup and the provider the lab can reach", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     // Named first, so the provider is the only thing Start could still be waiting for.
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     await reachabilityRead();
 
@@ -1752,9 +2276,9 @@ describe("experiment setup and the provider the lab can reach", () => {
     );
     renderSetup();
 
-    await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+    await scenarioChosen();
     // Named first, so the provider is the only thing Start could still be waiting for.
-    await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+    await nameAs(user, "Prompt comparison");
     await chooseArm(user, 0, "cfg-atlas");
     const start = screen.getByRole("button", { name: "Start experiment" });
     await waitFor(() => expectRefused(start, NOTE));
@@ -1778,9 +2302,9 @@ describe("experiment setup and the provider the lab can reach", () => {
       connectionSource = source;
       renderSetup();
 
-      await user.selectOptions(await screen.findByLabelText("Recipe"), "Wrong shipping address");
+      await scenarioChosen();
       // Named first, so the provider is the only thing Start could still be waiting for.
-      await user.type(screen.getByLabelText("Experiment name"), "Prompt comparison");
+      await nameAs(user, "Prompt comparison");
       await chooseArm(user, 0, "cfg-atlas");
       await reachabilityRead();
       expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
@@ -2058,6 +2582,11 @@ describe("live bench", () => {
     renderBench();
 
     const objectives = await screen.findByRole("region", { name: "Objectives" });
+    // The lab's one published judge is already the one chosen, and says so.
+    await waitFor(() => expect(within(objectives).getByLabelText("Judge")).toHaveValue(JUDGE_ID));
+    expect(within(objectives).getByLabelText("Judge")).toHaveAccessibleDescription(
+      "This one is the only published judge in the lab, so it is already chosen.",
+    );
     await user.selectOptions(
       within(objectives).getByLabelText("Judge"),
       "Resolution quality · v2 · gpt-5-mini",

@@ -81,6 +81,7 @@ import {
   withBinding,
   withCurrentChoice,
 } from "../lib/scenarios";
+import { onlyChoiceNote, soleCandidate, useSingleChoice } from "../lib/singleChoice";
 import {
   destructiveSubtleButtonClasses,
   fieldControlClasses,
@@ -997,6 +998,11 @@ function TemplatePicker({
 }) {
   const [blockId, setBlockId] = useState("");
   const capId = useId();
+  const noteId = useId();
+  // One template in the library is not a choice (ADR 0064): the form opens on it, and goes
+  // back to it after each add, since composing one leaves the library as it was.
+  const candidates = options.map((option) => option.block_id);
+  const onlyTemplate = useSingleChoice(candidates, blockId, setBlockId);
 
   if (pending) {
     return <p className="text-[13px] text-admin-muted">Loading the library…</p>;
@@ -1021,7 +1027,7 @@ function TemplatePicker({
       return;
     }
     onAdd(option);
-    setBlockId("");
+    setBlockId(soleCandidate(candidates) ?? "");
   }
 
   return (
@@ -1030,6 +1036,7 @@ function TemplatePicker({
         {label}
         <select
           aria-label={label}
+          aria-describedby={onlyTemplate ? noteId : undefined}
           className={fieldControlClasses}
           value={blockId}
           required
@@ -1045,6 +1052,11 @@ function TemplatePicker({
             </option>
           ))}
         </select>
+        {onlyTemplate ? (
+          <span id={noteId} className="text-xs font-normal text-admin-muted">
+            {onlyChoiceNote("template in the library")}
+          </span>
+        ) : null}
       </label>
       <PrimaryAction
         variant="outline"

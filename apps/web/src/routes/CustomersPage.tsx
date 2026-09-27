@@ -12,12 +12,15 @@ import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
+import { LocaleField } from "../components/LocaleField";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
+import { todayInput } from "../lib/orders";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
+import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -165,6 +168,13 @@ export function CustomersPage() {
   const attachable = everything.filter(
     (profile) => !attached.some((row) => row.profile_id === profile.profile_id),
   );
+  // One profile left to attach is not a choice (ADR 0064).
+  const onlyAttachable = useSingleChoice(
+    attachable.map((profile) => profile.profile_id),
+    attachId,
+    setAttachId,
+  );
+  const attachNoteId = useId();
   // Why *Attach to this shop* will not go (ADR 0063): there is nothing left to attach, or
   // nothing has been chosen yet.
   const attachRefusal =
@@ -216,6 +226,7 @@ export function CustomersPage() {
                 <select
                   className={fieldControlClasses}
                   aria-label="Profile to attach"
+                  aria-describedby={onlyAttachable ? attachNoteId : undefined}
                   value={attachId}
                   required
                   onChange={(event) => setAttachId(event.target.value)}
@@ -227,6 +238,11 @@ export function CustomersPage() {
                     </option>
                   ))}
                 </select>
+                {onlyAttachable ? (
+                  <span id={attachNoteId} className="text-xs font-normal text-admin-muted">
+                    {onlyChoiceNote("profile in the lab not yet attached to this shop")}
+                  </span>
+                ) : null}
               </label>
               <PrimaryAction
                 variant="outline"
@@ -344,7 +360,7 @@ export function CustomersPage() {
  * operator arrives there.
  */
 export function NewCustomerPage() {
-  const { shopId, listings } = useShopWorkspace();
+  const { shopId, listings, content } = useShopWorkspace();
   const navigate = useNavigate();
   const formId = useId();
   const [createError, setCreateError] = useState<string | null>(null);
@@ -352,7 +368,11 @@ export function NewCustomerPage() {
   const [givenName, setGivenName] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [email, setEmail] = useState("");
-  const [customerSince, setCustomerSince] = useState("2024-01-01");
+  // The shop's own locale: a customer of a shop writes in its language until they are said to
+  // write in another (ADR 0064).
+  const [locale, setLocale] = useState(content.identity.locale);
+  // Today on the operator's own calendar, which a date field shows and takes (ADR 0064).
+  const [customerSince, setCustomerSince] = useState(todayInput);
 
   const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
   const blockedBy =
@@ -376,7 +396,7 @@ export function NewCustomerPage() {
           given_name: givenName,
           family_name: familyName,
           email,
-          locale: "en-GB",
+          locale,
           phone: null,
         },
         customer_since: customerSince,
@@ -448,6 +468,7 @@ export function NewCustomerPage() {
                 onChange={(event) => setCustomerSince(event.target.value)}
               />
             </Field>
+            <LocaleField arrangement="row" value={locale} required onChange={setLocale} />
           </FieldRows>
         </Card>
 
