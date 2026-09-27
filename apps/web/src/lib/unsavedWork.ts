@@ -33,9 +33,24 @@ export interface UnsavedWork {
    * would show the previous attempt's message or none at all.
    */
   save?: () => Promise<string | null>;
+  /**
+   * Why this work cannot be saved from the prompt, which *Save and leave* is refused with and
+   * the prompt says beside it. Only for work with no `save`. Omitted is the open row's reason,
+   * the first kind of work that had none; a value held on a field (`HELD_VALUE_REASON`) is the
+   * other, and saying the open row's words over it would send the operator looking for a row.
+   */
+  unsavable?: string;
   /** Throws it away: a draft re-fetches what the server holds, an open row closes. */
   discard: () => void;
 }
+
+/**
+ * Why a value held on a field cannot be saved from the prompt: the field refused it — a handle
+ * the lab would not store or another product holds, a slug another shop uses — so it never
+ * reached the draft, and no Save carries it.
+ */
+export const HELD_VALUE_REASON =
+  "A field holding a value the draft would not take cannot be saved from here: the value never reached the draft. Stay and change it, or discard it and leave.";
 
 /**
  * One registration, as the guard reads it. Every field is read through the registering hook's

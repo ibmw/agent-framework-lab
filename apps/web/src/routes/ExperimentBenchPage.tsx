@@ -427,7 +427,7 @@ export function ExperimentBenchPage() {
               <label className={fieldLabelClasses}>
                 Message
                 <textarea
-                  className={textAreaClasses}
+                  className={`${textAreaClasses} w-full`}
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                 />

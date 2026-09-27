@@ -97,6 +97,34 @@ export function removeProduct(content: ShopDraft, key: string): ShopDraft {
   return { ...content, products: content.products.filter((product) => product.key !== key) };
 }
 
+/**
+ * The category spellings the draft's *other* products use, for the product editor's list.
+ *
+ * What the lab stores is the whole of the rule (`require_label` in `domain/content.py`,
+ * applied to `Product.category` in `domain/shop.py`): non-empty text without padding, at most
+ * 200 characters, and nothing else — no vocabulary, and no case folding. So:
+ *
+ * - **Case is kept.** `Jackets` and `jackets` are two categories to the lab and to every tool
+ *   that answers with one, and both are offered: seeing the two side by side is how an operator
+ *   correcting a category finds out which spelling the catalog already settled on. Folding
+ *   them would pick one silently and hide the fragmentation the list is here to prevent.
+ * - **Padding is trimmed**, and spellings that differ only by it are one. The lab refuses a
+ *   padded category, so a padded spelling can only be an unsaved edit, and the spelling it
+ *   offers is the one that edit would have to become to be saved.
+ * - **An empty or blank category offers nothing.** A new product arrives with none.
+ * - **Inner whitespace is kept**, as the lab keeps it: `Base layers` is a spelling.
+ *
+ * Sorted, so the list reads as a vocabulary rather than as the order products were added in.
+ * The product under `exceptKey` is left out: its own category is in its field already.
+ */
+export function draftCategories(content: ShopDraft, exceptKey: string): string[] {
+  const spellings = content.products
+    .filter((product) => product.key !== exceptKey)
+    .map((product) => product.category.trim())
+    .filter((category) => category !== "");
+  return [...new Set(spellings)].sort((left, right) => left.localeCompare(right));
+}
+
 /** What a copy's handle adds to its source's (ADR 0062). */
 export const COPY_SUFFIX = "-copy";
 

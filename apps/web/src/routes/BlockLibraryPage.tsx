@@ -317,7 +317,7 @@ function NewBlockPage<PayloadT extends BlockPayload>({
               extra={label && name !== label ? savedAsPreview(name) : undefined}
             >
               <input
-                className={`${fieldControlClasses} font-mono`}
+                className={`${fieldControlClasses} w-full font-mono`}
                 value={label}
                 required
                 disabled={creating.made !== null}
@@ -426,7 +426,7 @@ export function NewObjectiveBlockPage() {
               hint="How the objective is decided. A rule reads the arm's own record; a judge reads an anonymised brief and scores a rubric dimension."
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={assessment}
                 onChange={(event) => setAssessment(event.target.value as ObjectiveAssessment)}
               >
@@ -443,7 +443,7 @@ export function NewObjectiveBlockPage() {
                 hint="What the objective is decided from. Objective order in a scenario is priority rather than a script, so an objective never says when it applies."
               >
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={evidence}
                   onChange={(event) => setEvidence(event.target.value as ObjectiveEvidence)}
                 >
@@ -489,7 +489,7 @@ export function NewMutationBlockPage() {
               hint="What the runtime does to the sandbox. The agent never sees the injection — only its consequences — and both arms receive the identical schedule."
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={effect}
                 onChange={(event) => setEffect(event.target.value as MutationEffect)}
               >

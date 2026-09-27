@@ -558,7 +558,7 @@ export function OrderEditorPage() {
                 <select
                   aria-label="Add product"
                   aria-describedby={onlyAddable ? addNoteId : undefined}
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={newSku}
                   required
                   onChange={(event) => setNewSku(event.target.value)}
@@ -590,7 +590,7 @@ export function OrderEditorPage() {
             <FieldRows>
               <Field label="Payment status" hint={PAYMENT_STATUS_RULE}>
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.payment.status}
                   onChange={(event) =>
                     edit(
@@ -610,7 +610,7 @@ export function OrderEditorPage() {
               </Field>
               <Field label="Payment method" hint={ORDER_METHOD_RULE}>
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.payment.method_id ?? ""}
                   onChange={(event) =>
                     edit({
@@ -629,7 +629,7 @@ export function OrderEditorPage() {
               </Field>
               <Field label="Paid at" hint={PAID_AT_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   type="datetime-local"
                   value={content.payment.paid_at ? toLocalInput(content.payment.paid_at) : ""}
                   onChange={(event) =>
@@ -704,7 +704,7 @@ export function OrderEditorPage() {
             <FieldRows>
               <Field label="Fulfilment status" hint={FULFILMENT_STATUS_RULE}>
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.fulfilment.status}
                   onChange={(event) =>
                     edit(
@@ -724,7 +724,7 @@ export function OrderEditorPage() {
               </Field>
               <Field label="Fulfilment method" hint={ORDER_METHOD_RULE}>
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.fulfilment.method_id ?? ""}
                   onChange={(event) =>
                     edit({
@@ -746,7 +746,7 @@ export function OrderEditorPage() {
               </Field>
               <Field label="Shipped at" hint={SHIPPED_AT_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   type="datetime-local"
                   value={
                     content.fulfilment.shipped_at ? toLocalInput(content.fulfilment.shipped_at) : ""
@@ -790,7 +790,7 @@ export function OrderEditorPage() {
                 }
               >
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={addressId ?? ""}
                   onChange={(event) => selectAddress(event.target.value || null)}
                 >
@@ -881,7 +881,7 @@ export function OrderEditorPage() {
                       <label className={fieldLabelClasses}>
                         Kind
                         <select
-                          className={fieldControlClasses}
+                          className={`${fieldControlClasses} w-full`}
                           value={entry.kind}
                           aria-label={`Kind for ${entry.id}`}
                           onChange={(event) =>
@@ -905,7 +905,7 @@ export function OrderEditorPage() {
                       <label className={fieldLabelClasses}>
                         Occurred at
                         <input
-                          className={fieldControlClasses}
+                          className={`${fieldControlClasses} w-full`}
                           type="datetime-local"
                           aria-label={`Time for ${entry.id}`}
                           value={toLocalInput(entry.occurred_at)}
@@ -929,7 +929,7 @@ export function OrderEditorPage() {
                     <label className={fieldLabelClasses}>
                       Summary
                       <textarea
-                        className={textAreaClasses}
+                        className={`${textAreaClasses} w-full`}
                         aria-label={`Summary for ${entry.id}`}
                         value={entry.summary}
                         onChange={(event) =>

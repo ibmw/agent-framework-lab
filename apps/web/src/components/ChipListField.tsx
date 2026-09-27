@@ -204,7 +204,7 @@ export function ChipListField({
             extraTone={colliding ? "error" : "muted"}
           >
             <input
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={typed}
               placeholder={placeholder}
               maxLength={maxLength}

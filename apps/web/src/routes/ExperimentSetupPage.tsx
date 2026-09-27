@@ -540,7 +540,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
                 <div className="flex flex-wrap gap-3">
                   <select
                     aria-label="Scenario"
-                    className={`${fieldControlClasses} min-w-56 flex-[2]`}
+                    className={`${fieldControlClasses} w-full min-w-56 flex-[2]`}
                     value={scenarioId}
                     onChange={(event) => chooseScenario(event.target.value)}
                   >
@@ -560,7 +560,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
                   </select>
                   <select
                     aria-label="Published version"
-                    className={`${fieldControlClasses} min-w-40 flex-1`}
+                    className={`${fieldControlClasses} w-full min-w-40 flex-1`}
                     value={scenarioVersion}
                     onChange={(event) => setScenarioVersion(event.target.value)}
                     disabled={scenarioVersion === ""}
@@ -622,7 +622,7 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
 
               <Field label="Seed" hint={SEED_RULE}>
                 <input
-                  className={`${fieldControlClasses} max-w-[200px] text-right font-mono`}
+                  className={`${fieldControlClasses} w-full max-w-[200px] text-right font-mono`}
                   type="number"
                   min={0}
                   max={MAX_SEED}
@@ -839,7 +839,7 @@ function ArmPicker({
       <div className="flex flex-wrap gap-3">
         <select
           aria-label="Agent configuration"
-          className={`${fieldControlClasses} min-w-56 flex-[2]`}
+          className={`${fieldControlClasses} w-full min-w-56 flex-[2]`}
           value={arm.configurationId}
           onChange={(event) => onConfiguration(event.target.value)}
         >
@@ -860,7 +860,7 @@ function ArmPicker({
         </select>
         <select
           aria-label="Published version"
-          className={`${fieldControlClasses} min-w-40 flex-1`}
+          className={`${fieldControlClasses} w-full min-w-40 flex-1`}
           value={arm.version}
           onChange={(event) => onVersion(event.target.value)}
           disabled={arm.version === ""}

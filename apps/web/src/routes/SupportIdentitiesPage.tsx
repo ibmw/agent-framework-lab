@@ -222,7 +222,7 @@ export function NewSupportIdentityPage() {
               hint="How the identity is listed. Agent configurations adopt a published identity by this name."
             >
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={name}
                 required
                 placeholder="Northstar tier 1"
@@ -234,7 +234,7 @@ export function NewSupportIdentityPage() {
               hint="The role the support agent presents as. A customer may see it, so it is part of the fiction."
             >
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={title}
                 required
                 placeholder="Customer support representative"
@@ -248,7 +248,7 @@ export function NewSupportIdentityPage() {
               extra="Tone of voice is not authored here: it belongs to the shop, and an agent configuration selects the shop default or a named override."
             >
               <textarea
-                className={textAreaClasses}
+                className={`${textAreaClasses} w-full`}
                 value={remit}
                 placeholder="First contact for delivery, returns and payment questions."
                 onChange={(event) => setRemit(event.target.value)}

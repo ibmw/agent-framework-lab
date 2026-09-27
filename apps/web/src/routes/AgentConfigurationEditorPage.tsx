@@ -401,7 +401,7 @@ export function AgentConfigurationEditorPage() {
             <label className={fieldLabelClasses}>
               Name
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.name}
                 onChange={(event) => edit({ ...content, name: event.target.value })}
               />
@@ -410,7 +410,7 @@ export function AgentConfigurationEditorPage() {
               Framework
               <select
                 aria-label="Framework"
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.framework_id}
                 onChange={(event) => chooseFramework(event.target.value)}
               >
@@ -425,7 +425,7 @@ export function AgentConfigurationEditorPage() {
               Architecture
               <select
                 aria-label="Architecture"
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.architecture}
                 onChange={(event) =>
                   edit({
@@ -445,7 +445,7 @@ export function AgentConfigurationEditorPage() {
               Support identity
               <select
                 aria-label="Support identity"
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.support_identity_id}
                 onChange={(event) => edit({ ...content, support_identity_id: event.target.value })}
               >
@@ -462,7 +462,7 @@ export function AgentConfigurationEditorPage() {
             <label className={fieldLabelClasses}>
               Description
               <textarea
-                className={textAreaClasses}
+                className={`${textAreaClasses} w-full`}
                 value={content.description}
                 onChange={(event) => edit({ ...content, description: event.target.value })}
               />
@@ -483,7 +483,7 @@ export function AgentConfigurationEditorPage() {
               <label className={fieldLabelClasses}>
                 Preview context
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   aria-label="Preview context"
                   value={previewShopId}
                   onChange={(event) => setChosenShopId(event.target.value)}
@@ -540,7 +540,7 @@ export function AgentConfigurationEditorPage() {
               // here would lose to the shared string and silently enlarge the template editor.
               // Lexical, not numeric: the built sheet emits `.text-[14.5px]` *before*
               // `.text-[14px]`, so an override is not safe merely because its number is smaller.
-              className={`${textAreaClasses} min-h-56 font-mono text-[12.5px]!`}
+              className={`${textAreaClasses} w-full min-h-56 font-mono text-[12.5px]!`}
               value={content.prompt}
               onChange={(event) => edit({ ...content, prompt: event.target.value })}
             />
@@ -557,7 +557,7 @@ export function AgentConfigurationEditorPage() {
               Source
               <select
                 aria-label="Tone of voice source"
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.tone_of_voice.source}
                 onChange={(event) =>
                   edit({
@@ -591,7 +591,7 @@ export function AgentConfigurationEditorPage() {
                   extra={overrideEcho(content.tone_of_voice.guideline_id, guidelines, previewShop)}
                 >
                   <input
-                    className={fieldControlClasses}
+                    className={`${fieldControlClasses} w-full`}
                     list="tone-of-voice-guidelines"
                     value={content.tone_of_voice.guideline_id}
                     autoComplete="off"
@@ -682,7 +682,7 @@ export function AgentConfigurationEditorPage() {
                 extraTone={unprovenProvider ? "error" : "muted"}
               >
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.model.provider}
                   onChange={(event) =>
                     edit({
@@ -714,7 +714,7 @@ export function AgentConfigurationEditorPage() {
               />
               <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.model.temperature}
                   inputMode="decimal"
                   pattern={TEMPERATURE_PATTERN}
@@ -859,7 +859,7 @@ function ToolRoundsField({
     <label className={fieldLabelClasses}>
       Max tool rounds
       <input
-        className={fieldControlClasses}
+        className={`${fieldControlClasses} w-full`}
         type="number"
         min={1}
         max={50}

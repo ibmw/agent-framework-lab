@@ -378,7 +378,7 @@ function NewTicketForm({
       <h2 className="text-xs font-bold tracking-wide text-admin-muted uppercase">New ticket</h2>
       <FieldHint label="Subject" hint="The incident as the customer would describe it.">
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={subject}
           required
           placeholder="Wrong address concern"
@@ -390,7 +390,7 @@ function NewTicketForm({
         hint={`Only customers attached to this shop can raise a ticket here.${onlyCustomer ? ` ${onlyChoiceNote("customer attached to this shop")}` : ""}`}
       >
         <select
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={customerId}
           required
           onChange={(event) => setCustomerId(event.target.value)}
@@ -408,7 +408,7 @@ function NewTicketForm({
         hint="The channel the incident arrived on. Must be one the shop accepts."
       >
         <select
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={channel}
           onChange={(event) => setChannel(event.target.value as SupportChannel)}
         >
@@ -760,7 +760,7 @@ function Thread({
         </div>
         <textarea
           aria-label="Add a history message"
-          className={textAreaClasses}
+          className={`${textAreaClasses} w-full`}
           placeholder="Add a history message…"
           value={body}
           onChange={(event) => setBody(event.target.value)}
@@ -951,7 +951,7 @@ function ContextPanel({
         <label className={fieldLabelClasses}>
           Subject
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={content.subject}
             onChange={(event) => onEdit({ ...content, subject: event.target.value })}
           />
@@ -960,7 +960,7 @@ function ContextPanel({
           Status
           <select
             aria-label="Status"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={content.status}
             onChange={(event) => onEdit({ ...content, status: event.target.value as TicketStatus })}
           >
@@ -975,7 +975,7 @@ function ContextPanel({
           Channel
           <select
             aria-label="Channel"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={content.channel}
             onChange={(event) =>
               onEdit({ ...content, channel: event.target.value as SupportChannel })
@@ -992,7 +992,7 @@ function ContextPanel({
           Opened from
           <select
             aria-label="Opened from"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={content.origin.kind}
             onChange={(event) =>
               onEdit({
@@ -1013,7 +1013,7 @@ function ContextPanel({
             Product
             <select
               aria-label="Product"
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={content.origin.product_handle ?? ""}
               onChange={(event) =>
                 onEdit({
@@ -1039,7 +1039,7 @@ function ContextPanel({
             Order
             <select
               aria-label="Order"
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={content.origin.order_id ?? ""}
               onChange={(event) =>
                 onEdit({

@@ -43,7 +43,9 @@ export function DerivedIdField({
   refusal,
   maxLength,
   preview = true,
+  extraId,
   onChange,
+  onLeave,
 }: {
   label: string;
   hint: ReactNode;
@@ -88,7 +90,17 @@ export function DerivedIdField({
    * is already legible in its own field, and would only be said twice.
    */
   preview?: boolean;
+  /**
+   * The id of the second line, for a page whose action is refused by what this field refuses
+   * and names the field's line rather than writing the sentence twice (ADR 0063).
+   */
+  extraId?: string;
   onChange: (value: string) => void;
+  /**
+   * The field was left, after an empty one has had its suggestion handed back. For a parent
+   * that keeps something about the operator's current run of typing and ends it here.
+   */
+  onLeave?: () => void;
 }) {
   const generatedId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -205,12 +217,13 @@ export function DerivedIdField({
       hint={hint}
       extra={extra}
       extraTone={colliding || refused ? "error" : "muted"}
+      extraId={extraId}
       arrangement={arrangement}
     >
       <input
         ref={inputRef}
         id={generatedId}
-        className={fieldControlClasses}
+        className={`${fieldControlClasses} w-full`}
         value={shown}
         required={required}
         pattern={pattern}
@@ -224,7 +237,10 @@ export function DerivedIdField({
         aria-busy={pending || undefined}
         aria-invalid={colliding || refused || undefined}
         onChange={(event) => change(event.target.value)}
-        onBlur={restoreIfEmpty}
+        onBlur={() => {
+          restoreIfEmpty();
+          onLeave?.();
+        }}
       />
     </FieldHint>
   );

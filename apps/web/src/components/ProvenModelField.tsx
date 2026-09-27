@@ -47,7 +47,7 @@ export function ProvenModelField({
         extraTone="warning"
       >
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           list={listId}
           value={value}
           autoComplete="off"

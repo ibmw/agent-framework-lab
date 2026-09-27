@@ -56,6 +56,7 @@ import {
   MONEY_PATTERN,
   MONEY_RULE,
   OPTION_VALUES_RULE,
+  PRODUCT_CATEGORY_RULE,
   PRODUCT_DESCRIPTION_RULE,
   PRODUCT_HANDLE_RULE,
   PRODUCT_STATUS_RULE,
@@ -77,6 +78,7 @@ import {
   useRemoval,
 } from "../lib/removal";
 import {
+  draftCategories,
   findProduct,
   findProductByHandle,
   isPlaceholderHandle,
@@ -105,7 +107,7 @@ import {
   textAreaClasses,
   validationMessageClasses,
 } from "../lib/ui";
-import { useRegisterUnsavedWork } from "../lib/unsavedWork";
+import { HELD_VALUE_REASON, useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 import { useDuplicateProduct } from "./useDuplicateProduct";
 
@@ -238,6 +240,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
    * suggestion on blur, exactly as it does on every other surface.
    */
   const [typedHandle, setTypedHandle] = useState<string | null>(null);
+  const categoryListId = useId();
   /**
    * The handle as it stood after the last title edit on this page, if it was then the title's;
    * `null` if it was not; `undefined` if no title has been edited here yet.
@@ -286,6 +289,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
       ? null
       : {
           label: `The Handle field holds “${heldHandle}”, which the draft could not take; the product is still ${product?.handle ?? ""}.`,
+          unsavable: HELD_VALUE_REASON,
           discard: () => setTypedHandle(null),
         },
   );
@@ -444,7 +448,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
             <FieldRows>
               <Field label="Title" hint={PRODUCT_TITLE_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={product.title}
                   onChange={(event) => retitle(event.target.value)}
                 />
@@ -495,7 +499,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
               />
               <Field label="Status" hint={PRODUCT_STATUS_RULE}>
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={product.status}
                   onChange={(event) =>
                     update({
@@ -511,26 +515,30 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
                   ))}
                 </select>
               </Field>
-              {/* Still no hint, and now the only row in this card without one.
-                  `PRODUCT_CATEGORY_RULE`'s second sentence — "Pick one the draft already
-                  uses" — promises a pick list, and this row renders none. It was true on the
-                  create form, which rendered a `<datalist>` of the draft's categories; PLAN-UX
-                  Slice 12 removed that form, so the promise is now unbacked everywhere rather
-                  than on one surface of two. The anti-fragmentation rule *is* the useful thing
-                  to say about a category, so any other sentence written here would satisfy the
-                  sweep, silence this reminder, and still not tell the reader the one thing they
-                  need. The datalist is behaviour and this row stays bare until it lands — see
-                  `docs/decisions-and-next-step.md`, and PLAN-UX Slice 27. */}
-              <Field label="Category">
+              {/*
+               * A datalist rather than a select: a catalog's first product has no category to
+               * pick from and the second is often a new one, so the list suggests and never
+               * refuses. What it offers is the spellings the draft's other products already use
+               * (`draftCategories`), because correcting "jackets" into a second spelling of
+               * "Jackets" is how one catalog ends up with two of everything.
+               */}
+              <Field label="Category" hint={PRODUCT_CATEGORY_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
+                  list={categoryListId}
+                  autoComplete="off"
                   value={product.category}
                   onChange={(event) => update({ ...product, category: event.target.value })}
                 />
               </Field>
+              <datalist id={categoryListId}>
+                {draftCategories(content, productKey).map((category) => (
+                  <option key={category} value={category} />
+                ))}
+              </datalist>
               <Field label="Description" hint={PRODUCT_DESCRIPTION_RULE}>
                 <textarea
-                  className={textAreaClasses}
+                  className={`${textAreaClasses} w-full`}
                   value={product.description}
                   onChange={(event) => update({ ...product, description: event.target.value })}
                 />
@@ -822,7 +830,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
                     <label className={fieldLabelClasses}>
                       Option name
                       <input
-                        className={fieldControlClasses}
+                        className={`${fieldControlClasses} w-full`}
                         value={value.name}
                         required
                         onChange={(event) => change({ ...value, name: event.target.value })}
@@ -869,7 +877,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
           <label className={fieldLabelClasses}>
             Option name
             <input
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={name}
               required
               onChange={(event) => setName(event.target.value)}
@@ -1065,7 +1073,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         </label>
                         <input
                           id={`sku-${variant.sku}`}
-                          className={`${fieldControlClasses} max-w-44`}
+                          className={`${fieldControlClasses} w-full max-w-44`}
                           value={rowEdit.fields.sku}
                           pattern={REFERENCE_PATTERN}
                           title={VARIANT_SKU_RENAME_RULE}
@@ -1111,7 +1119,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                               </label>
                               <select
                                 id={`option-${variant.sku}-${chosen.key}`}
-                                className={`${fieldControlClasses} max-w-36`}
+                                className={`${fieldControlClasses} w-full max-w-36`}
                                 value={chosen.value}
                                 onChange={(event) =>
                                   editor.change({
@@ -1151,7 +1159,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                     <span className="flex items-center gap-1.5">
                       <input
                         id={`price-${variant.sku}`}
-                        className={`${fieldControlClasses} max-w-28`}
+                        className={`${fieldControlClasses} w-full max-w-28`}
                         value={variant.price?.amount ?? ""}
                         inputMode="decimal"
                         pattern={MONEY_PATTERN}
@@ -1185,7 +1193,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                     </label>
                     <select
                       id={`availability-${variant.sku}`}
-                      className={`${fieldControlClasses} max-w-36`}
+                      className={`${fieldControlClasses} w-full max-w-36`}
                       aria-describedby={emptyInStock ? emptyInStockId : undefined}
                       value={variant.availability}
                       onChange={(event) =>
@@ -1210,7 +1218,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                       id={`stock-${variant.sku}`}
                       type="number"
                       min={0}
-                      className={`${fieldControlClasses} max-w-24`}
+                      className={`${fieldControlClasses} w-full max-w-24`}
                       aria-describedby={emptyInStock ? emptyInStockId : undefined}
                       aria-invalid={emptyInStock || undefined}
                       value={variant.stock_quantity}
@@ -1305,7 +1313,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
             <label htmlFor={`new-variant-${option.key}`}>{option.name}</label>
             <select
               id={`new-variant-${option.key}`}
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={optionValues[option.key] ?? option.values[0]}
               onChange={(event) =>
                 setOptionValues({ ...optionValues, [option.key]: event.target.value })
@@ -1329,7 +1337,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
           optional
         >
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={amount}
             inputMode="decimal"
             pattern={MONEY_PATTERN}
@@ -1342,7 +1350,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
           <label className={fieldLabelClasses}>
             Currency
             <select
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={currency}
               onChange={(event) => setCurrency(event.target.value as Currency)}
             >
@@ -1411,7 +1419,7 @@ function MediaFieldset({
         extraId={collisionId}
       >
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.reference}
           required
           placeholder="media/alpine-shell.jpg"
@@ -1422,7 +1430,7 @@ function MediaFieldset({
       <label className={fieldLabelClasses}>
         Alt text
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.altText}
           required
           onChange={(event) => onChange({ ...value, altText: event.target.value })}
@@ -1594,7 +1602,7 @@ function AttributeFieldset({
       <label className={fieldLabelClasses}>
         Label
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.label}
           required
           onChange={(event) => onChange({ ...value, label: event.target.value })}
@@ -1604,7 +1612,7 @@ function AttributeFieldset({
       <label className={fieldLabelClasses}>
         Type
         <select
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.attributeType}
           onChange={(event) =>
             onChange({
@@ -1623,7 +1631,7 @@ function AttributeFieldset({
       <label className={fieldLabelClasses}>
         Value
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.value}
           required
           onChange={(event) => onChange({ ...value, value: event.target.value })}
@@ -1633,7 +1641,7 @@ function AttributeFieldset({
         <label className={fieldLabelClasses}>
           Unit
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={value.unit}
             required
             onChange={(event) => onChange({ ...value, unit: event.target.value })}
@@ -1829,7 +1837,7 @@ function ReviewFieldset({
       <label className={fieldLabelClasses}>
         Author
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.author}
           required
           onChange={(event) => onChange({ ...value, author: event.target.value })}
@@ -1839,7 +1847,7 @@ function ReviewFieldset({
       <label className={`${fieldLabelClasses} sm:col-span-3`}>
         Body
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.body}
           required
           onChange={(event) => onChange({ ...value, body: event.target.value })}

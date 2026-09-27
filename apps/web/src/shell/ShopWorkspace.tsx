@@ -21,6 +21,13 @@ export interface ShopWorkspaceValue {
   shopId: string;
   shops: ShopSummarySchema[];
   /**
+   * The shop list has not answered yet, for the first time. Shop details reads which slugs the
+   * other shops hold off `shops`, and an empty list that is still loading is not a list with
+   * nothing taken in it. A failed read ends it too: the failure is in `error`, as it is on the
+   * create page that reads the same list.
+   */
+  shopsPending: boolean;
+  /**
    * The shop's four listings, read once here and handed to the rail and to the index that
    * renders each of them, so a count and a table cannot disagree (ADR 0056). An index that
    * changes what it lists calls that listing's `refresh`.
@@ -55,13 +62,19 @@ export function ShopWorkspace() {
   const { shopId = "" } = useParams();
   const [shops, setShops] = useState<ShopSummarySchema[]>([]);
   const [shopsError, setShopsError] = useState<string | null>(null);
+  const [shopsPending, setShopsPending] = useState(true);
 
   const refreshShops = useCallback(async (signal?: AbortSignal) => {
     try {
       setShops((await listShops(signal)).shops);
+      setShopsError(null);
     } catch (cause: unknown) {
       if (!signal?.aborted) {
         setShopsError(describeApiError(cause, "The lab is unavailable."));
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setShopsPending(false);
       }
     }
   }, []);
@@ -191,6 +204,7 @@ export function ShopWorkspace() {
         value={{
           shopId,
           shops,
+          shopsPending,
           listings,
           content: editor.content,
           preview: editor.preview,

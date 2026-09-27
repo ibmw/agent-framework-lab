@@ -23,7 +23,7 @@ import {
   validationMessageClasses,
 } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
-import { PrimaryAction } from "./PrimaryAction";
+import { PrimaryAction, type Refusal } from "./PrimaryAction";
 
 /**
  * Draft and published state is never carried by colour alone: every chip pairs its colour
@@ -201,6 +201,7 @@ export function EditorSaveActions({
   onSave,
   onDiscard,
   tone = "outline",
+  refusal = null,
 }: {
   saveLabel?: string;
   dirty: boolean;
@@ -210,6 +211,12 @@ export function EditorSaveActions({
   onDiscard: () => void;
   /** Accent where Save is the page's primary action, outline where Publish is. */
   tone?: "accent" | "outline";
+  /**
+   * Why Save is refused, naming the line that says so (ADR 0063) — a field on the page holds a
+   * value the draft cannot take, and saving around it would drop what was typed there.
+   * Discard stays: it is how that value is let go.
+   */
+  refusal?: Refusal | null;
 }) {
   return (
     <>
@@ -229,15 +236,22 @@ export function EditorSaveActions({
             <ButtonIcon verb="discard" />
             {discarding ? "Discarding…" : "Discard changes"}
           </button>
-          <button
-            className={tone === "accent" ? accentButtonClasses : outlineButtonClasses}
-            type="button"
-            onClick={onSave}
-            disabled={saving || discarding}
-          >
-            <ButtonIcon verb="save" />
-            {saving ? "Saving…" : saveLabel}
-          </button>
+          {refusal !== null && !saving && !discarding ? (
+            <PrimaryAction variant={tone} type="button" refusal={refusal} onClick={onSave}>
+              <ButtonIcon verb="save" />
+              {saveLabel}
+            </PrimaryAction>
+          ) : (
+            <button
+              className={tone === "accent" ? accentButtonClasses : outlineButtonClasses}
+              type="button"
+              onClick={onSave}
+              disabled={saving || discarding}
+            >
+              <ButtonIcon verb="save" />
+              {saving ? "Saving…" : saveLabel}
+            </button>
+          )}
         </>
       ) : null}
     </>

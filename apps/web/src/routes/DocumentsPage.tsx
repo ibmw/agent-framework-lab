@@ -302,7 +302,7 @@ export function NewDocumentPage() {
           <FieldRows>
             <Field label="Title" hint={DOCUMENT_TITLE_RULE}>
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={title}
                 required
                 placeholder="Returns policy"
@@ -313,7 +313,7 @@ export function NewDocumentPage() {
                 it is half of the address this document answers at from now on. */}
             <Field label="Kind" hint={DOCUMENT_KIND_RULE}>
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={kind}
                 onChange={(event) => setKind(event.target.value as ShopDocumentKind)}
               >

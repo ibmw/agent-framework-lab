@@ -184,7 +184,7 @@ export function DocumentEditorPage() {
           <FieldRows>
             <Field label="Title" hint={DOCUMENT_TITLE_RULE}>
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={document.title}
                 required
                 onChange={(event) => update({ ...document, title: event.target.value })}
@@ -204,7 +204,7 @@ export function DocumentEditorPage() {
             {document.policyKind === null ? null : (
               <Field label="Policy kind">
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={document.policyKind}
                   onChange={(event) =>
                     update({
@@ -234,7 +234,7 @@ export function DocumentEditorPage() {
               extra={`${words} word${words === 1 ? "" : "s"}`}
             >
               <textarea
-                className={textAreaClasses}
+                className={`${textAreaClasses} w-full`}
                 rows={9}
                 value={document.body}
                 required

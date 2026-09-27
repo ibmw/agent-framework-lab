@@ -154,6 +154,14 @@ function UnsavedChangesPrompt({
   // An open row carries no `save`: its typing is outside the draft by design, so no page-level
   // Save has ever written it and this one does not pretend to.
   const savableHere = works.length > 0 && works.every((work) => work.save !== undefined);
+  // What stops *Save and leave*, in the words of each kind of work that stops it, once each.
+  const unsavableReason = [
+    ...new Set(
+      works
+        .filter((work) => work.save === undefined)
+        .map((work) => work.unsavable ?? OPEN_ROW_REASON),
+    ),
+  ].join(" ");
 
   useEffect(() => {
     const previous = document.activeElement;
@@ -256,7 +264,7 @@ function UnsavedChangesPrompt({
             ))}
           </div>
         ) : null}
-        {savableHere ? null : <RefusalLine id={reasonId}>{OPEN_ROW_REASON}</RefusalLine>}
+        {savableHere ? null : <RefusalLine id={reasonId}>{unsavableReason}</RefusalLine>}
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button className={outlineButtonClasses} type="button" onClick={onStay} disabled={busy}>
             Stay on this page
@@ -274,7 +282,7 @@ function UnsavedChangesPrompt({
             variant="accent"
             type="button"
             onClick={() => void saveAndLeave()}
-            refusal={savableHere ? null : { id: reasonId, reason: OPEN_ROW_REASON }}
+            refusal={savableHere ? null : { id: reasonId, reason: unsavableReason }}
             busy={busy}
           >
             <ButtonIcon verb="save" />

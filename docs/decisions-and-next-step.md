@@ -1,6 +1,6 @@
 # Decisions, superseded scope, and next step
 
-Status: current — 2026-09-21
+Status: current — 2026-09-27
 
 ## Authoritative direction
 
@@ -98,9 +98,9 @@ instruction to add Vercel AI SDK immediately.
 
 ## Known application defects, found but not fixed
 
-Six entries. The first two are backend defects, unscheduled, and each wants an ADR as its entry
-says. The three workspace defects after them are scheduled: `docs/PLAN-UX.md` Slice 27 owns them.
-The last is an accepted ADR's obligation that no slice carries, unscheduled.
+Four entries. The first two are backend defects, unscheduled, and each wants an ADR as its entry
+says. The third is an accepted ADR's obligation that no slice carries, unscheduled. The last is a
+workspace defect, unscheduled.
 
 The first two were found on 15 September 2026 while making the Playwright suite trustworthy in parallel
 (`fix(test): give every Playwright worker its own stack`). Neither is a test defect and neither was
@@ -128,73 +128,6 @@ lab scale now that the suite no longer provokes them, and both want their own sl
   infrastructure fault from a framework fault is the fix, and it is a change to what a run record
   means, so it belongs with ADR 0026's failure taxonomy.
 
-Found on 19 September 2026 while putting the editors' fields on one row
-(`feat(web): put every field on one row, label and rule beside the control`). Reported rather than
-fixed for the same reason as the two above, one layer up: a layout slice that starts adding
-behaviour stops being reviewable as a layout slice.
-
-- **The product editor's category offers no list of the draft's categories.**
-  `docs/history/PLAN-UX-2026-09-13.md` Slice 6 records "Products: category offers a datalist of categories already in
-  the draft" as delivered, and half of it was: the products create card gave the create form
-  `list="product-categories"` and a `<datalist>` built from the draft's own categories, while the
-  editor's own category input at `apps/web/src/routes/ProductEditorPage.tsx` had neither. So the
-  same field offered the draft's existing categories when a product was created and nothing when
-  it was edited, which is where a category is most likely to be corrected into a second spelling
-  of one that already exists — the exact fragmentation the datalist was added to prevent.
-  **PLAN-UX Slice 12 removed that create card** — creating is a page now, and a product is made by
-  appending an empty one to the draft and opening its editor — so the editor's Category row is the
-  only surface that asks for a category at all, the half that worked is gone with the card, and
-  the fix belongs there alone.
-  The consequence is already visible in the copy: `PRODUCT_CATEGORY_RULE` in `lib/fieldRules.ts`
-  reads "Pick one the draft already uses, or type a new one", and that row therefore ships with no
-  hint at all, because a rule that promises a pick list the surface does not render is worse than
-  a rule withheld. A test on the editor asserts the row has no `list` attribute and an empty
-  accessible description, so whoever adds the datalist is sent to the hint in the same change.
-  The fix is small — the editor already holds every product in `content` — and it is behaviour, so
-  it is `docs/PLAN-UX.md` Slice 27's rather than a drive-by.
-
-Found on 20 September 2026 while giving the shared field control the handoff's metrics
-(`feat(web): give every field the handoff's own metrics and border`). Reported rather than fixed
-for a reason of its own: the slice that found it moves metrics on one shared string, and
-narrowing three fields that have drawn full width for as long as they have existed is a visual
-change to three editors that its brief does not cover and its reviewer could not check against a
-design.
-
-- **Three fields are full width and have never been anything else.**
-  `fieldSurfaceClasses` in `apps/web/src/lib/ui.ts` has carried `w-full` since before the field
-  slice, and three call sites compose a narrower width onto it: `OrderEditorPage.tsx:432` (`w-20`,
-  a line-item quantity), `OrderEditorPage.tsx:576` (`w-32`, a total) and
-  `ExperimentResultsPage.tsx:364` (`w-48`, the tag box). None of the three has any effect.
-  Tailwind emits its utilities in a fixed order rather than the order a caller writes them, and in
-  the built stylesheet `.w-20` (byte 13079), `.w-32` (13155) and `.w-48` (13193) all come *before*
-  `.w-full` (13326), so the shared width wins every time. The source reads as though three fields
-  are narrow and the screen has always drawn them full width, which is the worst of both: nobody
-  reviewing the call site sees a bug, and nobody looking at the screen sees the intent.
-  The `max-w-*` sites — five in `ProductEditorPage` and one in `CustomerEditorPage` — are
-  unaffected, because a maximum and a width do not compete.
-  The fix is a decision rather than a deletion: either the three widths are wanted, in which case
-  the shared string stops declaring `w-full` and every consumer that relies on it says so, or they
-  are not, in which case they go. Both are layout changes across the editors, which is why a slice
-  that only moves a metric reports this and leaves it.
-
-Found on 20 September 2026 while writing the editor rows' hints (`feat(web): give every editor
-row the rule its control obeys`). Reported rather than fixed because the fix is a refusal — a
-control that stops accepting a value it accepts today — and a copy slice that starts refusing
-input is no longer reviewable as a copy slice.
-
-- **Shop details will save a slug another shop already has.**
-  The create form refuses one: `ShopsPage.tsx` holds `takenSlugs` off the listing and
-  `DerivedIdField` reports the collision before submit. Shop details is a plain input over
-  `identity.slug`, and there is no check on the way out either — `require_slug` in
-  `domain/content.py` checks the shape and the length, and no repository or service compares a
-  draft's slug against the other shops'. So the one rule the create form enforces about a slug
-  is lost the moment the shop exists, and two shops can carry the same one; nothing downstream
-  reads the slug to resolve a shop (routes address it by UUID), so the damage is that the shops
-  index lists and searches two rows that answer to the same word.
-  The hint on that row deliberately says nothing about it, because a field may not describe a
-  refusal the surface does not make. The fix wants the editor to read the listing the create
-  form already reads, which is a fetch this page does not make today.
-
 Found on 23 September 2026 while landing the *Model provider* zone (PLAN-UX Slice 19, unit C).
 Recorded rather than built because it is a contract change and a results-surface change, and
 the unit that found it is a settings zone. Slice 26 was considered and rejected: its *Results:
@@ -214,14 +147,26 @@ payload, on a branch of its own, and serving `model_base_url` would be a second.
   render a null as *endpoint not recorded*. It is a public contract change, so it ships with its
   backend, its consumer and its tests together.
 
+Found on 27 September 2026 while fixing the same defect on Shop details' slug (ADR 0069).
+Reported rather than fixed because the handle is the product's address, and the fix is one more
+address move under ADR 0061's title-follow and keyring rules.
+
+- **A taken product handle typed key by key leaves its prefix in the draft.**
+  `ProductEditorPage.tsx` writes every free handle as it is typed and holds only a refused or
+  taken one, so typing another product's handle — `storm-parka` onto Alpine — writes
+  `storm-park` on the way, and the page's address follows it. Holding `storm-parka` leaves
+  `storm-park` in the draft: *Discard and leave* onto the catalog and its Save stores it. Shop
+  details' slug has the fix — while the field holds something it will not write, the draft goes
+  back to what it held when the run of typing began (ADR 0069) — and the Handle wants the same
+  rule, with the address following the handle back.
+
 ## Figures the prototype draws that no payload carries
 
 `docs/design-direction.md`'s *Departures from the handoff, in force* records each of these as
 refused, under the rule *Lists and counts* states: a figure the payload lacks is not faked. That
 table says what was decided and why; this says what the product would have to buy to decide
 otherwise, because two of the three are questions it may one day reopen and the third is a
-question worth not reopening in the form it was asked. None of this is `docs/PLAN-UX.md` Slice
-27's work and nothing here is added to it: that slice's last bullet settles the same question for
+question worth not reopening in the form it was asked. ADR 0069 settles the same question for
 the six chips UI-4 could not compute — they stay uncomputed unless a listing gains the figure for
 a reason of its own — and these three are the same kind of figure, held to the same rule.
 

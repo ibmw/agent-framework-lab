@@ -210,7 +210,7 @@ export function SupportIdentityEditorPage() {
             <label className={fieldLabelClasses}>
               Name
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.role.name}
                 onChange={(event) =>
                   edit({ ...content, role: { ...content.role, name: event.target.value } })
@@ -220,7 +220,7 @@ export function SupportIdentityEditorPage() {
             <label className={fieldLabelClasses}>
               Title
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.role.title}
                 onChange={(event) =>
                   edit({ ...content, role: { ...content.role, title: event.target.value } })
@@ -230,7 +230,7 @@ export function SupportIdentityEditorPage() {
             <label className={fieldLabelClasses}>
               Remit
               <textarea
-                className={textAreaClasses}
+                className={`${textAreaClasses} w-full`}
                 value={content.role.description}
                 onChange={(event) =>
                   edit({
@@ -369,7 +369,7 @@ export function SupportIdentityEditorPage() {
             <label className={fieldLabelClasses}>
               Escalate to
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.escalation.escalate_to}
                 onChange={(event) =>
                   edit({
@@ -463,7 +463,7 @@ function GuidanceFieldset({
       <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
         Title
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.title}
           required
           onChange={(event) => onChange({ ...value, title: event.target.value })}
@@ -472,7 +472,7 @@ function GuidanceFieldset({
       <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
         Guidance
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.body}
           required
           onChange={(event) => onChange({ ...value, body: event.target.value })}

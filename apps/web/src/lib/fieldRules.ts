@@ -13,6 +13,12 @@ export const KEBAB_PATTERN = "[a-z0-9]+(-[a-z0-9]+)*";
 export const SHOP_SLUG_RULE =
   "Lowercase with hyphens. Follows the name until you edit it; empty it to follow the name again.";
 
+/**
+ * Where a shop slug is taken, completing `alreadyTakenMessage`: the create page and Shop details
+ * refuse the same slugs off the same listing, so they say it in the same words.
+ */
+export const SHOP_SLUG_TAKEN_PLACE = "used by another shop";
+
 export const PRODUCT_HANDLE_RULE =
   "Lowercase with hyphens. Tools address the product by this handle. Follows the title until you edit it; empty it to follow the title again.";
 
@@ -379,13 +385,14 @@ export const PRODUCT_DESCRIPTION_RULE =
 /**
  * The shop slug where it is edited rather than derived.
  *
- * `SHOP_SLUG_RULE` above cannot serve this row: its second clause is `DerivedIdField`'s
- * follow-until-edited behaviour, and Shop details renders a plain input. What is left that is
- * true here is the shape `require_slug` enforces at save (the control enforces none) and the
- * one place the value is read — `ShopsPage` searches `[shop.name, shop.slug]`.
+ * `SHOP_SLUG_RULE` above cannot serve this row: its second clause is the create page's
+ * follow-until-edited behaviour, and Shop details' slug follows nothing. What is true here is
+ * the shape `require_slug` enforces at save, the refusal the field makes — a slug another shop
+ * already uses, read off the listing the create page reads (ADR 0069) — and the one place the
+ * value is read: `ShopsPage` searches `[shop.name, shop.slug]`.
  */
 export const SHOP_SLUG_DETAIL_RULE =
-  "Lowercase with hyphens. The shops index searches it beside the name.";
+  "Lowercase with hyphens, and not one another shop already uses. The shops index searches it beside the name.";
 
 /**
  * The six rules a shop document's create page and its editor carry (PLAN-UX Slice 16).

@@ -610,7 +610,7 @@ export function NewScenarioPage() {
               hint="What the bench and every report will call it. A shop answers to one scenario of each name, so this one has to be free."
             >
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={name}
                 required
                 placeholder="Wrong shipping address"
@@ -638,7 +638,7 @@ export function NewScenarioPage() {
               extra={ticket ? `${ticket.subject} · ${ticket.customer_display_name}` : undefined}
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={ticketId}
                 required
                 disabled={creating.made !== null}

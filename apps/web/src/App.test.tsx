@@ -14,9 +14,11 @@ import { isValidElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  PRODUCT_CATEGORY_RULE,
   PRODUCT_TITLE_RULE,
   productWithoutVariantRule,
   SHOP_NAME_RULE,
+  SHOP_SLUG_DETAIL_RULE,
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_NAME_RULE,
   TRANSIT_WINDOW_RULE,
@@ -26,6 +28,7 @@ import {
 } from "./lib/fieldRules";
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { CREATE_ROUTES, tourAt } from "./lib/tours";
+import { HELD_VALUE_REASON } from "./lib/unsavedWork";
 import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
@@ -358,8 +361,6 @@ describe("the product editor's identity rows", () => {
       /lowercase with hyphens.*tools address the product/i,
     );
     expect(precedes(card.getByLabelText("Title"), card.getByLabelText("Handle"))).toBe(true);
-    // Category is deliberately bare and stays Slice 27's; the case under "the field pattern
-    // on the shop editors" is what pins it.
   });
 
   it("derives the handle from the title, previews it, and moves the page onto it", async () => {
@@ -3060,6 +3061,22 @@ describe("unsaved work is protected", () => {
     );
   });
 
+  it("gives a handle held on its field its own reason, not an open row's", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    // Never a handle the lab would store, so nothing of it reaches the draft.
+    const handle = await screen.findByLabelText("Handle");
+    await user.clear(handle);
+    await user.type(handle, "Bad Value");
+    await user.click(rail().getByRole("link", { name: "Orders" }));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent("The Handle field holds “Bad Value”");
+    expect(prompt).toHaveTextContent(HELD_VALUE_REASON);
+    expect(prompt).not.toHaveTextContent(/open for editing|row's own Save/);
+  });
+
   it("says nothing when the surface being opened can save the same draft", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
@@ -3266,16 +3283,57 @@ describe("the field pattern on the shop editors", () => {
     expect(details.getByLabelText("Title")).toHaveValue("Alpine Shell Jacket");
   });
 
-  it("promises no pick list on the editor's Category, which renders none", async () => {
+  it("offers the spellings the draft already uses on the editor's Category, and says so", async () => {
+    const user = userEvent.setup();
+    const [jacket] = READY_CONTENT.products;
+    // The jacket was filed under a second spelling of a category the catalog already uses,
+    // which is the correction this list exists for.
+    currentContent = {
+      ...READY_CONTENT,
+      products: [
+        { ...jacket, category: "jackets" },
+        { ...jacket, handle: "storm-parka", title: "Storm Parka", category: "Jackets" },
+        { ...jacket, handle: "day-pack", title: "Day Pack", category: "Packs" },
+        { ...jacket, handle: "summit-pack", title: "Summit Pack", category: "Packs" },
+      ],
+    };
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
     await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
 
-    // `PRODUCT_CATEGORY_RULE` says "pick one the draft already uses", which the create form
-    // backs with a `<datalist>` and this surface does not. A hint that is false where it is
-    // shown is worse than a row with none, so this row carries none until the list exists.
     const details = within(screen.getByRole("region", { name: "Details" }));
-    expect(details.getByLabelText("Category")).toHaveAccessibleDescription("");
-    expect(details.getByLabelText("Category")).not.toHaveAttribute("list");
+    const category = details.getByLabelText("Category");
+    const offered = () =>
+      [
+        ...document.querySelectorAll(`#${CSS.escape(category.getAttribute("list") ?? "")} option`),
+      ].map((option) => option.getAttribute("value"));
+    // The other products' spellings, once each; the jacket's own is already in its field.
+    expect(offered()).toEqual(["Jackets", "Packs"]);
+    expect(category).toHaveAccessibleDescription(wholeDescription(PRODUCT_CATEGORY_RULE));
+
+    await user.clear(category);
+    await user.type(category, "Jackets");
+    expect(category).toHaveValue("Jackets");
+    // A list suggests and never refuses: a spelling nobody uses yet is still a category.
+    await user.clear(category);
+    await user.type(category, "Trousers");
+    expect(category).toHaveValue("Trousers");
+    expect(category).toBeValid();
+    expect(offered()).toEqual(["Jackets", "Packs"]);
+  });
+
+  it("offers no category when no other product has one", async () => {
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+    await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+
+    // The draft's only product is the one being edited: there is nothing else to offer, and
+    // the row still says what a category is for.
+    const category = within(screen.getByRole("region", { name: "Details" })).getByLabelText(
+      "Category",
+    );
+    expect(
+      document.querySelectorAll(`#${CSS.escape(category.getAttribute("list") ?? "")} option`),
+    ).toHaveLength(0);
+    expect(category).toHaveAccessibleDescription(wholeDescription(PRODUCT_CATEGORY_RULE));
   });
 
   it("states the rest of the Details card's rules, Title in the create form's own words", async () => {
@@ -3334,7 +3392,11 @@ describe("the field pattern on the shop editors", () => {
     );
     // Not `SHOP_SLUG_RULE`: this input follows nothing, so it may not say that it does.
     expect(identity.getByLabelText("Slug")).toHaveAccessibleDescription(
-      /lowercase with hyphens\. the shops index searches it beside the name/i,
+      wholeDescription(SHOP_SLUG_DETAIL_RULE),
+    );
+    // And it says the refusal the field makes, now that the field makes one.
+    expect(identity.getByLabelText("Slug")).toHaveAccessibleDescription(
+      /not one another shop already uses/i,
     );
     expect(identity.getByLabelText("Slug")).not.toHaveAccessibleDescription(/follows the name/i);
     // And neither shared field lost the rule it carries itself.
@@ -3342,6 +3404,309 @@ describe("the field pattern on the shop editors", () => {
     expect(identity.getByRole("group", { name: "Currencies" })).toHaveAccessibleDescription(
       /variants may only be priced in these; the first is the default/i,
     );
+  });
+});
+
+/**
+ * Shop details refuses a slug another shop already uses, off the listing the create page reads
+ * (ADR 0069). The lab would take it — ADR 0013 leaves the slug unconstrained across shops — so
+ * this is the create page's rule kept once the shop exists, and what has to be proven is that
+ * the taken slug never reaches a write.
+ */
+describe("a shop's slug on Shop details", () => {
+  const NORTHSTAR_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+  const alpenglow: ShopDraftResponse["content"] = {
+    ...READY_CONTENT,
+    identity: { ...READY_CONTENT.identity, name: "Alpenglow Gear", slug: "alpenglow" },
+  };
+  const bothShops: ShopListResponse = {
+    shops: [
+      { ...shops.shops[0], name: "Alpenglow Gear", slug: "alpenglow" },
+      { ...shops.shops[0], shop_id: NORTHSTAR_ID, name: "Northstar Outfitters", slug: "northstar" },
+    ],
+  };
+
+  async function openAlpenglowDetails() {
+    currentContent = alpenglow;
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json(bothShops)));
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const slug = identity.getByLabelText("Slug");
+    await waitFor(() => expect(slug).toBeEnabled());
+    return slug;
+  }
+
+  it("cannot save Northstar's slug onto Alpenglow, and says why on the field and on Save", async () => {
+    const user = userEvent.setup();
+    const slug = await openAlpenglowDetails();
+    // Its own slug is not taken from it: the listing names this shop too, by its id.
+    expect(slug).toHaveValue("alpenglow");
+    expect(slug).not.toHaveAttribute("aria-invalid");
+
+    await user.clear(slug);
+    await user.type(slug, "northstar");
+
+    const reason = "northstar is already used by another shop.";
+    expect(slug).toHaveValue("northstar");
+    expect(slug).toHaveAttribute("aria-invalid", "true");
+    expect(slug).toHaveAccessibleDescription(new RegExp(reason.replaceAll(".", "\\.")));
+    const save = screen.getByRole("button", { name: "Save draft" });
+    expectRefused(save, reason);
+    await user.click(save);
+    expect(savedDrafts).toEqual([]);
+
+    // A free slug is taken as it is typed, and Save writes it.
+    await user.type(slug, "-alps");
+    expect(slug).not.toHaveAttribute("aria-invalid");
+    expectNotRefused(screen.getByRole("button", { name: "Save draft" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity.slug).toBe("northstar-alps");
+  });
+
+  it("keeps a taken slug out of the draft, so no other page's Save can write it", async () => {
+    const user = userEvent.setup();
+    const slug = await openAlpenglowDetails();
+
+    // Pasted, so no prefix of it — each free, and each written as it is typed — reaches the
+    // draft on the way: the draft's slug is Alpenglow's until the end.
+    await user.clear(slug);
+    await user.paste("northstar");
+    // Held on the field and not written. The draft is exactly as it was loaded, and the page
+    // still counts the field as unsaved work: Save is there to be refused, and leaving asks.
+    expectRefused(screen.getByRole("button", { name: "Save draft" }), "northstar is already");
+    await user.click(
+      within(screen.getByLabelText("Shop workspace")).getByRole("link", { name: "Orders" }),
+    );
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Slug field holds “northstar”, which another shop already uses; this shop is still alpenglow.",
+    );
+    // The held value's own reason, not an open row's: there is no row here to Save or Cancel.
+    expect(prompt).toHaveTextContent(HELD_VALUE_REASON);
+    expect(prompt).not.toHaveTextContent(/open for editing|row's own Save/);
+    expectRefused(
+      within(prompt).getByRole("button", { name: "Save and leave" }),
+      HELD_VALUE_REASON,
+    );
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+
+    // The name, edited beside it, is what a save from anywhere in the workspace would carry.
+    const identity = within(screen.getByRole("region", { name: "Shop identity" }));
+    await user.type(identity.getByLabelText("Name"), " Co");
+    expectRefused(screen.getByRole("button", { name: "Save draft" }), "northstar is already");
+
+    // Emptying and leaving hands back the slug the shop has.
+    await user.clear(slug);
+    await user.tab();
+    expect(slug).toHaveValue("alpenglow");
+    expectNotRefused(screen.getByRole("button", { name: "Save draft" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity).toMatchObject({ name: "Alpenglow Gear Co", slug: "alpenglow" });
+  });
+
+  it("stores nothing the operator never meant when a taken slug is typed key by key", async () => {
+    const user = userEvent.setup();
+    const slug = await openAlpenglowDetails();
+    const rail = within(screen.getByLabelText("Shop workspace"));
+
+    // Every prefix of `northstar` is free and is written as it is typed; the last key makes it
+    // Northstar's, and the draft goes back to the slug it had before the typing began.
+    await user.clear(slug);
+    await user.type(slug, "northstar");
+    expect(slug).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeVisible();
+
+    // The catalog can save the shop draft, so only the held slug is stranded by going there.
+    await user.click(rail.getByRole("link", { name: "Products" }));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent("this shop is still alpenglow.");
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+
+    // Save from there writes the slug the shop had, never `northsta`.
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity.slug).toBe("alpenglow");
+  });
+
+  it("hands back the slug the typing began from when the field is emptied, not the last prefix", async () => {
+    const user = userEvent.setup();
+    const slug = await openAlpenglowDetails();
+
+    await user.clear(slug);
+    await user.type(slug, "nor");
+    await user.clear(slug);
+    await user.tab();
+
+    expect(slug).toHaveValue("alpenglow");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity.slug).toBe("alpenglow");
+  });
+
+  it("keeps a slug typed and left as meant, and goes back only to it", async () => {
+    const user = userEvent.setup();
+    const slug = await openAlpenglowDetails();
+
+    // A free slug typed and left is the operator's: the next run of typing starts from it.
+    await user.clear(slug);
+    await user.type(slug, "outdoor");
+    await user.tab();
+    await user.clear(slug);
+    await user.type(slug, "northstar");
+    expect(slug).toHaveAttribute("aria-invalid", "true");
+    await user.clear(slug);
+    await user.tab();
+
+    expect(slug).toHaveValue("outdoor");
+  });
+
+  it("puts back the shop's slug when the header's Discard lands over a held one", async () => {
+    const user = userEvent.setup();
+    const slug = await openAlpenglowDetails();
+
+    await user.clear(slug);
+    await user.paste("northstar");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await waitFor(() => expect(slug).toHaveValue("alpenglow"));
+    expect(slug).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+  });
+
+  it("saves a shop that already shares its slug, since the rule refuses only a change to one", async () => {
+    const user = userEvent.setup();
+    // Written before this rule, or by a direct write: the lab holds it, and this page is not a
+    // second, stricter gate over the Name edited beside it.
+    currentContent = {
+      ...alpenglow,
+      identity: { ...alpenglow.identity, slug: "northstar" },
+    };
+    server.use(
+      http.get("*/api/v1/shops", () =>
+        HttpResponse.json({
+          shops: [{ ...bothShops.shops[0], slug: "northstar" }, bothShops.shops[1]],
+        }),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const slug = identity.getByLabelText("Slug");
+    await waitFor(() => expect(slug).toBeEnabled());
+    expect(slug).not.toHaveAttribute("aria-invalid");
+
+    await user.type(identity.getByLabelText("Name"), " Co");
+    const save = screen.getByRole("button", { name: "Save draft" });
+    expectNotRefused(save);
+    await user.click(save);
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity).toMatchObject({ name: "Alpenglow Gear Co", slug: "northstar" });
+  });
+
+  /**
+   * A shop that shares `northstar` with Northstar, against a lab that keeps what is saved: the
+   * draft write stores the payload, and the listing reports this shop's saved slug, as
+   * `GET /shops` reads it off the saved draft.
+   */
+  async function openSharedShopDetails() {
+    currentContent = { ...alpenglow, identity: { ...alpenglow.identity, slug: "northstar" } };
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/draft`, async ({ request }) => {
+        const body = (await request.json()) as { payload: ShopPayloadSchema };
+        savedDrafts.push(body.payload);
+        currentContent = { ...currentContent, identity: body.payload.identity };
+        return HttpResponse.json(draft(currentContent));
+      }),
+      http.get("*/api/v1/shops", () =>
+        HttpResponse.json({
+          shops: [
+            { ...bothShops.shops[0], slug: currentContent.identity.slug },
+            bothShops.shops[1],
+          ],
+        }),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const slug = identity.getByLabelText("Slug");
+    await waitFor(() => expect(slug).toBeEnabled());
+    return slug;
+  }
+
+  it("refuses the shared slug back once the shop has saved its way off it", async () => {
+    const user = userEvent.setup();
+    const slug = await openSharedShopDetails();
+
+    await user.clear(slug);
+    await user.paste("outdoor");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().identity.slug).toBe("outdoor");
+
+    // The lab now holds `outdoor` for this shop, so `northstar` is a change to Northstar's.
+    await user.clear(slug);
+    await user.paste("northstar");
+    await waitFor(() => expect(slug).toHaveAttribute("aria-invalid", "true"));
+    expectRefused(screen.getByRole("button", { name: "Save draft" }), "northstar is already");
+  });
+
+  it("takes the shared slug back while the lab still holds it, whatever the page last read", async () => {
+    const user = userEvent.setup();
+    const slug = await openSharedShopDetails();
+    const rail = within(screen.getByLabelText("Shop workspace"));
+
+    // Typed, left, and not saved: the draft holds `outdoor`, the lab still `northstar`.
+    await user.clear(slug);
+    await user.type(slug, "outdoor");
+    await user.tab();
+    await user.click(rail.getByRole("link", { name: "Products" }));
+    await screen.findByRole("heading", { level: 1, name: "Products" });
+    await user.click(rail.getByRole("link", { name: "Shop details" }));
+    const back = within(
+      await screen.findByRole("region", { name: "Shop identity" }),
+    ).getByLabelText("Slug");
+    expect(back).toHaveValue("outdoor");
+
+    await user.clear(back);
+    await user.paste("northstar");
+    expect(back).not.toHaveAttribute("aria-invalid");
+    expectNotRefused(screen.getByRole("button", { name: "Save draft" }));
+  });
+
+  it("takes nothing while the listing is still being read, and says what it is waiting for", async () => {
+    currentContent = alpenglow;
+    server.use(http.get("*/api/v1/shops", () => new Promise<never>(() => {})));
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+
+    const slug = identity.getByLabelText("Slug");
+    expect(slug).toBeDisabled();
+    expect(slug).toHaveAccessibleDescription(/reading what is already used by another shop/i);
+  });
+
+  it("takes any slug when the listing failed, as the create page does, and says the read failed", async () => {
+    const user = userEvent.setup();
+    currentContent = alpenglow;
+    server.use(
+      http.get("*/api/v1/shops", () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The shop list is unavailable.", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const identity = within(await screen.findByRole("region", { name: "Shop identity" }));
+    const slug = identity.getByLabelText("Slug");
+    await waitFor(() => expect(slug).toBeEnabled());
+
+    await user.clear(slug);
+    await user.type(slug, "northstar");
+    expect(slug).not.toHaveAttribute("aria-invalid");
+    expect(await screen.findByRole("alert")).toHaveTextContent("The shop list is unavailable.");
+    expectNotRefused(screen.getByRole("button", { name: "Save draft" }));
   });
 });
 

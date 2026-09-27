@@ -253,7 +253,7 @@ export function JudgeConfigurationEditorPage() {
             <label className={fieldLabelClasses}>
               Name
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.name}
                 onChange={(event) => edit({ ...content, name: event.target.value })}
               />
@@ -261,7 +261,7 @@ export function JudgeConfigurationEditorPage() {
             <label className={fieldLabelClasses}>
               Description
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.description}
                 onChange={(event) => edit({ ...content, description: event.target.value })}
               />
@@ -270,7 +270,7 @@ export function JudgeConfigurationEditorPage() {
               <label className={fieldLabelClasses}>
                 How this judge scores
                 <textarea
-                  className={`${textAreaClasses} min-h-56 font-mono`}
+                  className={`${textAreaClasses} w-full min-h-56 font-mono`}
                   value={content.rubric}
                   aria-required
                   aria-describedby={
@@ -341,7 +341,7 @@ export function JudgeConfigurationEditorPage() {
               extraTone={unprovenProvider ? "error" : "muted"}
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.model.provider}
                 onChange={(event) => chooseProvider(event.target.value)}
               >
@@ -370,7 +370,7 @@ export function JudgeConfigurationEditorPage() {
             />
             <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.model.temperature}
                 inputMode="decimal"
                 pattern={TEMPERATURE_PATTERN}

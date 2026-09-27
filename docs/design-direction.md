@@ -289,7 +289,14 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **Identifiers are derived, never asked first.** `DerivedIdField` follows its source until
   edited, resumes when emptied, previews as "Saved as `…`", refuses a taken value audibly, and
   stays closed while the list it derives from is loading. A saved entry's identifier is displayed
-  and never asked; a SKU and a media reference are their own keys and say so.
+  and never asked; a SKU and a media reference are their own keys and say so. A value that is
+  taken is held on its field and never written, and the page's Save names the field's line; the
+  shop slug is refused on Shop details off the listing the create page reads, and only when the
+  operator changes it (ADR 0069).
+- **A field states its own width.** The shared control declares none; every call site composes
+  one — `w-full` almost everywhere — so a narrow field is narrow on screen (ADR 0069).
+- **A free-text field over a set the draft already uses offers it** as a `<datalist>`, spelled as
+  the lab keeps it: the product category offers the other products' categories (ADR 0069).
 - **A reference reads as what it points at.** A ticket's origin product and its suggested
   documents are named by the title the shop draft gives them, a document with its kind beside
   it. One the shop no longer resolves is named by its identifier, marked unresolved, and keeps

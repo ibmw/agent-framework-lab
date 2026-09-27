@@ -224,7 +224,7 @@ export function CustomersPage() {
               <label className={`${fieldLabelClasses} min-w-[260px] flex-1`}>
                 Profile
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   aria-label="Profile to attach"
                   aria-describedby={onlyAttachable ? attachNoteId : undefined}
                   value={attachId}
@@ -433,7 +433,7 @@ export function NewCustomerPage() {
           <FieldRows>
             <Field label="Given name" hint={CUSTOMER_NAME_RULE}>
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={givenName}
                 required
                 placeholder="Maya"
@@ -442,7 +442,7 @@ export function NewCustomerPage() {
             </Field>
             <Field label="Family name" hint={CUSTOMER_NAME_RULE}>
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={familyName}
                 required
                 placeholder="Laurent"
@@ -451,7 +451,7 @@ export function NewCustomerPage() {
             </Field>
             <Field label="Email" hint={CUSTOMER_EMAIL_RULE}>
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 type="email"
                 value={email}
                 required
@@ -461,7 +461,7 @@ export function NewCustomerPage() {
             </Field>
             <Field label="Customer since" hint={CUSTOMER_SINCE_RULE}>
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 type="date"
                 value={customerSince}
                 required

@@ -126,9 +126,16 @@ export const cardTitleClasses = "font-display text-[17px] font-bold tracking-[-0
  * on the rest) where `fieldControlClasses` gives `py-2.5`. It changes nothing — `min-height`
  * governs a select's height and the text centres in it either way — and one padding for every
  * control is worth more than matching a value that has no effect.
+ *
+ * **The surface carries no width; every consumer states its own** (ADR 0069). Tailwind emits
+ * its utilities in one fixed order whatever order a caller writes them in, so a width on this
+ * string beats any width a call site composes after it — `w-full` here made the order line's
+ * quantity and the shipping fee fill their cell for as long as they existed, with `w-20` and
+ * `w-32` at their call sites doing nothing. With none here, the call site's width is the only
+ * one and it is the one drawn: `w-full` almost everywhere, and those two saying otherwise.
  */
 const fieldSurfaceClasses =
-  "w-full rounded-[9px] border border-admin-field-border bg-admin-surface px-3.5 text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65";
+  "rounded-[9px] border border-admin-field-border bg-admin-surface px-3.5 text-admin-ink outline-none transition focus:border-lab-primary focus:ring-[3px] focus:ring-lab-primary/20 aria-invalid:border-lab-error disabled:cursor-not-allowed disabled:opacity-65";
 
 /**
  * The single-line control: the handoff's `min-height:44px`, `10px 14px` and `14.5px`.

@@ -403,9 +403,8 @@ describe("the unreachable-provider note, which is not a gate sentence", () => {
  * applied to copy: it reads the sources rather than the values, because a rule's consumers
  * are a fact about the repository and not about any one render.
  *
- * It counts an **import**, not an occurrence. `PRODUCT_CATEGORY_RULE` is named in a comment
- * in `ProductEditorPage.tsx` explaining why that row does *not* show it, and a text search
- * would read the explanation as the consumer.
+ * It counts an **import**, not an occurrence: a rule named in a comment explaining why a row
+ * does *not* show it would otherwise read as that row's consumer.
  *
  * What it proves is exactly that: imported by a shipping module. It does not prove the value
  * reaches a render, and an import nobody uses would satisfy it — that half is Biome's
@@ -470,14 +469,6 @@ describe("every rule this module publishes is imported by a module that ships", 
     expect(names).toContain("ORDER_METHOD_RULE");
   });
 
-  it("counts an import and not a mention in a comment", () => {
-    const editor = sources["../routes/ProductEditorPage.tsx"];
-    expect(editor).toBeDefined();
-    // The row that deliberately shows no category rule still explains itself in prose.
-    expect(editor).toContain("PRODUCT_CATEGORY_RULE");
-    expect(importedFromFieldRules(editor)).not.toContain("PRODUCT_CATEGORY_RULE");
-  });
-
   it("counts a value import and neither spelling of a type-only one", () => {
     // Synthetic, because nothing this module publishes is a type, so neither type form
     // compiles anywhere in the workspace and the rule could not otherwise be exercised.
@@ -490,30 +481,14 @@ describe("every rule this module publishes is imported by a module that ships", 
     expect(importedFromFieldRules("// A_RULE is deliberately not shown here.")).toEqual([]);
   });
 
-  /**
-   * The one rule this workspace publishes and shows nowhere, and the reason it is allowed to.
-   *
-   * `PRODUCT_CATEGORY_RULE` promises a pick list — "Pick one the draft already uses" — and
-   * the only surface that rendered one was the products create card, which PLAN-UX Slice 12
-   * removed when creation became a page. The product editor's category row is the last place
-   * that asks for a category and it deliberately shows no hint, because a rule promising a
-   * list the surface does not draw is worse than a rule withheld; that is a defect
-   * `docs/decisions-and-next-step.md` records and PLAN-UX Slice 27 owns.
-   *
-   * Written as a named list of one rather than as a softer sweep, so it is a single visible
-   * debt with an owner, and as an *equality* rather than an exclusion: the day Slice 27 adds
-   * the datalist the rule stops being an orphan, the list stops matching, and this case
-   * fails until the constant is deleted with it. The allowance cannot outlive the debt.
-   */
-  const AWAITING_ITS_SURFACE = ["PRODUCT_CATEGORY_RULE"];
-
-  it("leaves no export unconsumed but the one a slice owes a surface", () => {
+  it("leaves no export unconsumed", () => {
+    // No allowance: the last orphan, the product category's rule, reached its row with the
+    // list of the draft's categories that makes it true, and an export nothing renders is a
+    // promise without its surface.
     const consumed = new Set(
       consumers.flatMap(([, source]) => importedFromFieldRules(source as string)),
     );
     const orphans = exportedNames(fieldRulesSource).filter((name) => !consumed.has(name));
-    expect(orphans, "exported by lib/fieldRules.ts and imported by nothing").toEqual(
-      AWAITING_ITS_SURFACE,
-    );
+    expect(orphans, "exported by lib/fieldRules.ts and imported by nothing").toEqual([]);
   });
 });

@@ -313,7 +313,7 @@ export function NewAgentConfigurationPage() {
               hint="How this configuration is listed on the bench and in history."
             >
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={name}
                 required
                 placeholder="Frontline single agent"
@@ -325,7 +325,7 @@ export function NewAgentConfigurationPage() {
               hint="What drives the agent loop. Only frameworks this build has proven end to end are offered, and the deterministic fake replays a fixed script — which is what makes it an honest control arm."
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={frameworkId}
                 onChange={(event) => chooseFramework(event.target.value)}
               >
@@ -373,7 +373,7 @@ export function NewAgentConfigurationPage() {
               }
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={identityId}
                 disabled={creating.made !== null}
                 onChange={(event) => setIdentityId(event.target.value)}

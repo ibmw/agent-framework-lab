@@ -403,7 +403,7 @@ export function ExperimentHistoryPage() {
           <input
             ref={searchBox}
             aria-label="Search"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             placeholder="Name, scenario, shop, configuration, tag, or note…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -413,7 +413,7 @@ export function ExperimentHistoryPage() {
           Shop
           <select
             aria-label="Shop"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={shopId}
             onChange={(event) => narrow("shop", event.target.value)}
           >
@@ -434,7 +434,7 @@ export function ExperimentHistoryPage() {
           Scenario
           <select
             aria-label="Scenario"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={scenarioId}
             onChange={(event) => narrow("scenario", event.target.value)}
           >
@@ -450,7 +450,7 @@ export function ExperimentHistoryPage() {
           Framework
           <select
             aria-label="Framework"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={frameworkId}
             onChange={(event) => narrow("framework", event.target.value)}
           >
@@ -466,7 +466,7 @@ export function ExperimentHistoryPage() {
           Tag
           <select
             aria-label="Tag"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={tag}
             onChange={(event) => narrow("tag", event.target.value)}
           >
@@ -482,7 +482,7 @@ export function ExperimentHistoryPage() {
           Status
           <select
             aria-label="Status"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={status}
             onChange={(event) => narrow("status", event.target.value)}
           >
@@ -498,7 +498,7 @@ export function ExperimentHistoryPage() {
           Objective outcome
           <select
             aria-label="Objective outcome"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={outcome}
             onChange={(event) => narrow("outcome", event.target.value)}
           >
@@ -514,7 +514,7 @@ export function ExperimentHistoryPage() {
           Started
           <select
             aria-label="Started"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={span}
             onChange={(event) => narrow("span", event.target.value)}
           >

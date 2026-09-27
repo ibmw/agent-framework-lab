@@ -399,8 +399,10 @@ function NotesAndTags({
             id="experiment-tag"
             // `h-8` used to shrink this to the small button beside it; the shared control is a
             // 44px floor now (UI-7) and a fixed height under a floor is dead code, so it is
-            // gone rather than left to read as a metric this field still has.
-            className={`${fieldControlClasses} w-48`}
+            // gone rather than left to read as a metric this field still has. The width is the
+            // prototype's for the tag input (`Workspace.dc.html`:2650): the rest of the row at a
+            // 130px floor, so it sits beside Add tag rather than above it (ADR 0069).
+            className={`${fieldControlClasses} w-auto min-w-[130px] flex-1`}
             placeholder="read-check-gap"
             value={tag}
             onChange={(event) => setTag(event.target.value)}
@@ -441,7 +443,7 @@ function NotesAndTags({
         </label>
         <textarea
           id="experiment-note"
-          className={textAreaClasses}
+          className={`${textAreaClasses} w-full`}
           placeholder="What this run showed, in your own words…"
           value={note}
           onChange={(event) => setNote(event.target.value)}

@@ -57,7 +57,7 @@ export function ParameterForm({
           extra={label ? savedAsPreview(identifier) : undefined}
         >
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={label}
             required
             placeholder="Document"
@@ -71,7 +71,7 @@ export function ParameterForm({
             its own text content, so the control needs its own name to be addressable. */}
         <select
           aria-label="Kind"
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={kind}
           onChange={(event) => setKind(event.target.value as BlockParameterKind)}
         >

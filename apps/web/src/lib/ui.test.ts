@@ -328,6 +328,116 @@ describe("field controls", () => {
 });
 
 /**
+ * Who decides how wide a field is (ADR 0069).
+ *
+ * The shared surface declares no width and every consumer states one. Tailwind emits its
+ * utilities in a fixed order rather than the order a caller writes them, so a width on the
+ * shared string and a width at the call site do not compose: whichever the stylesheet emits
+ * later wins, and `w-full` is emitted after `w-20`, `w-32` and `w-48`. The order line's
+ * quantity and the shipping fee said `w-20` and `w-32` and filled their cell for as long as they
+ * existed. Pinned from both sides: the shared strings carry no width, and no consumer is left
+ * without one — which is what stops the lifted `w-full` from reappearing as a field that
+ * silently shrinks to its intrinsic size.
+ */
+const WIDTH = /(^|\s)w-\S+/;
+const CONTROLS = ["fieldControlClasses", "textAreaClasses"] as const;
+
+const sources = import.meta.glob("../**/*.{ts,tsx}", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+/** A source with its comments and its import clauses removed, so only expressions remain. */
+function codeOf(source: string): string {
+  return source
+    .replaceAll(/\/\*[\s\S]*?\*\//g, "")
+    .replaceAll(/^\s*\/\/.*$/gm, "")
+    .replaceAll(/import\s+(?:type\s+)?\{[^}]*\}\s*from\s*"[^"]*";/g, "");
+}
+
+/**
+ * Every place a module composes one of the two controls into a class, as `file: classes`, and
+ * every place it uses one bare — which a width cannot be added to without composing it.
+ */
+function consumersOf(files: Record<string, string>) {
+  const composed: string[] = [];
+  const bare: string[] = [];
+  for (const [path, source] of Object.entries(files)) {
+    const code = codeOf(source);
+    for (const name of CONTROLS) {
+      for (const match of code.matchAll(new RegExp(`\\$\\{${name}\\}([^\`]*)\``, "g"))) {
+        composed.push(`${path}: ${match[1].trim()}`);
+      }
+      const uses = code.match(new RegExp(`\\b${name}\\b`, "g"))?.length ?? 0;
+      const templated = code.match(new RegExp(`\\$\\{${name}\\}`, "g"))?.length ?? 0;
+      for (let index = templated; index < uses; index += 1) {
+        bare.push(path);
+      }
+    }
+  }
+  return { composed, bare };
+}
+
+describe("the width of a field", () => {
+  const consumers = Object.fromEntries(
+    Object.entries(sources).filter(([path]) => !path.includes(".test.") && path !== "./ui.ts"),
+  );
+  const { composed, bare } = consumersOf(consumers);
+
+  it("found the workspace's field consumers to sweep", () => {
+    // Asserted first: a glob or a pattern that matched nothing would make the cases below pass.
+    expect(Object.keys(consumers).length).toBeGreaterThan(50);
+    expect(composed.length).toBeGreaterThan(150);
+    expect(composed.some((entry) => entry.includes("OrderEditorPage.tsx: w-20"))).toBe(true);
+  });
+
+  it("is declared by neither shared control", () => {
+    for (const classes of [fieldControlClasses, textAreaClasses]) {
+      expect(classes).not.toMatch(WIDTH);
+    }
+  });
+
+  it("is stated by every consumer that composes one", () => {
+    expect(composed.filter((entry) => !WIDTH.test(entry.split(": ")[1] ?? ""))).toEqual([]);
+  });
+
+  it("is never left to a control used bare", () => {
+    expect(bare).toEqual([]);
+  });
+
+  it("reads a bare use and a composed one apart, and ignores a comment or an import", () => {
+    // Synthetic, because every consumer in the workspace is already composed: the sweep has to
+    // be shown catching the two ways a width goes missing before its silence means anything.
+    // A consumer's placeholder, built rather than written so this file holds no literal one.
+    const slot = (name: string) => ["$", "{", name, "}"].join("");
+    const { composed: found, bare: loose } = consumersOf({
+      "a.tsx": [
+        'import { fieldControlClasses, textAreaClasses } from "../lib/ui";',
+        "// `fieldControlClasses` is explained here and consumed nowhere on this line.",
+        `const one = <input className={\`${slot("fieldControlClasses")} w-20\`} />;`,
+        `const two = <input className={\`${slot("fieldControlClasses")} font-mono\`} />;`,
+        "const three = <textarea className={textAreaClasses} />;",
+      ].join("\n"),
+    });
+    expect(found).toEqual(["a.tsx: w-20", "a.tsx: font-mono"]);
+    expect(found.filter((entry) => !WIDTH.test(entry.split(": ")[1] ?? ""))).toEqual([
+      "a.tsx: font-mono",
+    ]);
+    expect(loose).toEqual(["a.tsx"]);
+  });
+
+  it("is narrow where the prototype draws it narrow", () => {
+    // `Workspace.dc.html`:2705's order and the old order frame draw the quantity in a narrow
+    // column and the money as a figure; :2650 draws the tag input as the rest of its strip at a
+    // 130px floor. These are the three widths the call sites always said and never drew.
+    expect(composed).toContain("../routes/OrderEditorPage.tsx: w-20");
+    expect(composed).toContain("../routes/OrderEditorPage.tsx: w-32");
+    expect(composed).toContain("../routes/ExperimentResultsPage.tsx: w-auto min-w-[130px] flex-1");
+  });
+});
+
+/**
  * The vocabulary is closed: a page names a verb and the table names the drawing, so the
  * pairing cannot drift per page. This asserts the set itself, in the spirit of
  * `enumLabels.test.ts` — the table is the specification, and a verb removed from it breaks

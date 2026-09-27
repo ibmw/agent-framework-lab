@@ -1,10 +1,13 @@
 import type { DefinitionIssueSchema, ShopContentSchema } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
+import contentDomain from "../../../../apps/api/src/capability_lab/domain/content.py?raw";
+import shopDomain from "../../../../apps/api/src/capability_lab/domain/shop.py?raw";
 import openapi from "../../../../packages/contracts/openapi/v1/openapi.yaml?raw";
 import { SLUG_MAX_LENGTH } from "./entryIds";
 import type { DraftProduct, ShopDraft } from "./productKeys";
 import {
   COPY_SUFFIX,
+  draftCategories,
   duplicateProduct,
   groupIssues,
   issuesForProduct,
@@ -341,6 +344,59 @@ describe("removeProduct", () => {
     expect(removeProduct(renamed, "alpine").products.map((product) => product.key)).toEqual(["x"]);
     expect(removeProduct(renamed, "gone").products).toHaveLength(2);
     expect(renamed.products).toHaveLength(2);
+  });
+});
+
+describe("draftCategories", () => {
+  const [jacket] = keyed.products;
+  const draftOf = (...categories: string[]): ShopDraft => ({
+    ...keyed,
+    products: categories.map((category, index) => ({
+      ...jacket,
+      key: `k${index}`,
+      handle: `p-${index}`,
+      category,
+    })),
+  });
+
+  it("offers each spelling the other products use once, sorted", () => {
+    expect(draftCategories(draftOf("Packs", "Jackets", "Base layers", "Jackets"), "none")).toEqual([
+      "Base layers",
+      "Jackets",
+      "Packs",
+    ]);
+  });
+
+  it("leaves out the product being edited", () => {
+    expect(draftCategories(draftOf("Jackets", "Packs"), "k1")).toEqual(["Jackets"]);
+    expect(draftCategories(draftOf("Jackets"), "k0")).toEqual([]);
+  });
+
+  it("keeps two spellings that differ by case, because the lab keeps both", () => {
+    expect(draftCategories(draftOf("jackets", "Jackets"), "none")).toEqual(["jackets", "Jackets"]);
+  });
+
+  it("offers a padded spelling trimmed, as one with the spelling it pads", () => {
+    expect(draftCategories(draftOf(" Jackets", "Jackets  ", "Jackets"), "none")).toEqual([
+      "Jackets",
+    ]);
+  });
+
+  it("offers nothing for a product with no category yet, blank or empty", () => {
+    expect(draftCategories(draftOf("", "   ", "Packs"), "none")).toEqual(["Packs"]);
+  });
+
+  it("mirrors the one rule the lab holds a category to", () => {
+    // `Product` checks its category with `_require_label` and nothing else, and that check is
+    // non-empty, unpadded text: no vocabulary and no case folding for the list to mirror.
+    const product = shopDomain.slice(shopDomain.indexOf("class Product:"));
+    const body = product.slice(0, product.indexOf("\nclass "));
+    expect(body.match(/self\.category/g)).toEqual(["self.category"]);
+    expect(body).toContain('_require_label(self.category, "product category")');
+    expect(contentDomain).toMatch(
+      /def require_label\([^)]*\)[^:]*:\s*if not isinstance\(value, str\) or not value\.strip\(\) or value != value\.strip\(\):/,
+    );
+    expect(contentDomain).not.toMatch(/casefold|\.lower\(\)/);
   });
 });
 

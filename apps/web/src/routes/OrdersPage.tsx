@@ -414,7 +414,7 @@ export function NewOrderPage() {
               }
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={customerId}
                 required
                 disabled={creating.made !== null}
@@ -451,7 +451,7 @@ export function NewOrderPage() {
               hint="The calendar day the fixture was placed, in your timezone. Returns windows and delivery promises are measured from it."
             >
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 type="date"
                 value={placedOn}
                 required
@@ -468,7 +468,7 @@ export function NewOrderPage() {
               hint={`A line names a variant, so a later price change in the catalog never rewrites what this order charged. Further lines are added in the editor.${onlyVariant ? ` ${onlyChoiceNote("priced variant in the catalog")}` : ""}`}
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={sku}
                 required
                 onChange={(event) => setSku(event.target.value)}
@@ -486,7 +486,7 @@ export function NewOrderPage() {
               hint="How many of that variant. The lab prices the line from the catalog when the order is saved."
             >
               <input
-                className={`${fieldControlClasses} max-w-[140px]`}
+                className={`${fieldControlClasses} w-full max-w-[140px]`}
                 type="number"
                 min={MIN_LINE_QUANTITY}
                 max={MAX_LINE_QUANTITY}

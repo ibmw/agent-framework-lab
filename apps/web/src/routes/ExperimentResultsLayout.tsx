@@ -662,7 +662,7 @@ function ForkArmPicker({
         <label className={fieldLabelClasses}>
           Agent configuration
           <select
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={arm.configurationId}
             onChange={(event) => {
               const configurationId = event.target.value;
@@ -691,7 +691,7 @@ function ForkArmPicker({
         <label className={fieldLabelClasses}>
           Published version
           <select
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={String(arm.version)}
             disabled={versions.length === 0}
             onChange={(event) => onChange({ ...arm, version: Number(event.target.value) })}

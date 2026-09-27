@@ -38,7 +38,7 @@ export function CountryField({
     <div>
       <FieldHint label="Country" hint={COUNTRY_RULE} extra={named}>
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           list={listId}
           value={value}
           required={required}

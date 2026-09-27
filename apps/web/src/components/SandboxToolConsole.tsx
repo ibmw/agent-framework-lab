@@ -230,7 +230,7 @@ export function SandboxToolConsole({
             // The label wraps the control, so its text picks up every option; the explicit
             // name is what keeps the select addressable by "Tool" alone.
             aria-label="Tool"
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={selected}
             onChange={(event) => choose(event.target.value)}
           >
@@ -251,7 +251,7 @@ export function SandboxToolConsole({
             <select
               id="tool-actor"
               aria-describedby={actingNoteId}
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={acting}
               onChange={(event) => setActing(event.target.value)}
             >
@@ -341,7 +341,7 @@ function ArgumentField({
       {argumentControl(argument.kind) === "select" ? (
         <select
           id={id}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value}
           required={props.required}
           onChange={(event) => onChange(event.target.value)}
@@ -359,7 +359,9 @@ function ArgumentField({
         <input
           id={id}
           className={
-            argument.kind === "uuid" ? `${fieldControlClasses} font-mono` : fieldControlClasses
+            argument.kind === "uuid"
+              ? `${fieldControlClasses} w-full font-mono`
+              : `${fieldControlClasses} w-full`
           }
           value={value}
           onChange={(event) => onChange(event.target.value)}

@@ -660,7 +660,7 @@ function ConnectionCard({
         type="password"
         autoComplete="new-password"
         aria-label={saved?.key_configured === true ? "New API key" : undefined}
-        className={`${fieldControlClasses} font-mono text-[13px] ${width}`}
+        className={`${fieldControlClasses} w-full font-mono text-[13px] ${width}`}
         placeholder="sk-…"
         value={typed ?? ""}
         disabled={saving}
@@ -739,7 +739,7 @@ function ConnectionCard({
           >
             <input
               type="url"
-              className={`${fieldControlClasses} font-mono text-[13px]`}
+              className={`${fieldControlClasses} w-full font-mono text-[13px]`}
               placeholder="http://localhost:11434/v1"
               value={baseUrl}
               disabled={saving}

@@ -39,7 +39,7 @@ export function LocaleField({
     <div>
       <FieldHint label="Locale" hint={LOCALE_RULE} extra={named?.label} arrangement={arrangement}>
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           list={listId}
           value={value}
           required={required}

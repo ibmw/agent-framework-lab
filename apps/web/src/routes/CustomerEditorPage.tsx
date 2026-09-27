@@ -139,7 +139,7 @@ function BackgroundFieldset({
       <label className={fieldLabelClasses}>
         Kind
         <select
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.kind}
           onChange={(event) => onChange({ ...value, kind: event.target.value as BackgroundKind })}
         >
@@ -153,7 +153,7 @@ function BackgroundFieldset({
       <label className={fieldLabelClasses}>
         Date
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           type="date"
           value={value.occurredOn}
           onChange={(event) => onChange({ ...value, occurredOn: event.target.value })}
@@ -162,7 +162,7 @@ function BackgroundFieldset({
       <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
         Note
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.note}
           required
           onChange={(event) => onChange({ ...value, note: event.target.value })}
@@ -185,7 +185,7 @@ function HiddenFactFieldset({
       <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
         Hidden fact
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.note}
           required
           onChange={(event) => onChange({ ...value, note: event.target.value })}
@@ -194,7 +194,7 @@ function HiddenFactFieldset({
       <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
         Revealed when
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           placeholder="Revealed when…"
           value={value.revealedWhen}
           onChange={(event) => onChange({ ...value, revealedWhen: event.target.value })}
@@ -538,7 +538,7 @@ export function CustomerEditorPage() {
             <FieldRows>
               <Field label="Given name" hint={CUSTOMER_NAME_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.identity.given_name}
                   onChange={(event) =>
                     edit({
@@ -550,7 +550,7 @@ export function CustomerEditorPage() {
               </Field>
               <Field label="Family name" hint={CUSTOMER_NAME_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.identity.family_name}
                   onChange={(event) =>
                     edit({
@@ -562,7 +562,7 @@ export function CustomerEditorPage() {
               </Field>
               <Field label="Email" hint={CUSTOMER_EMAIL_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   type="email"
                   value={content.identity.email}
                   onChange={(event) =>
@@ -575,7 +575,7 @@ export function CustomerEditorPage() {
               </Field>
               <Field label="Phone" hint={CUSTOMER_PHONE_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   type="tel"
                   value={content.identity.phone ?? ""}
                   onChange={(event) =>
@@ -606,7 +606,7 @@ export function CustomerEditorPage() {
             <FieldRows>
               <Field label="Customer since" hint={CUSTOMER_SINCE_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   type="date"
                   value={content.account.customer_since}
                   onChange={(event) => editAccount({ customer_since: event.target.value })}
@@ -614,7 +614,7 @@ export function CustomerEditorPage() {
               </Field>
               <Field label="Status" hint={ACCOUNT_STATUS_RULE}>
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.account.status}
                   onChange={(event) => editAccount({ status: event.target.value as AccountStatus })}
                 >
@@ -625,7 +625,7 @@ export function CustomerEditorPage() {
               </Field>
               <Field label="Loyalty tier" hint={LOYALTY_TIER_RULE}>
                 <select
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={content.account.loyalty_tier}
                   onChange={(event) =>
                     editAccount({ loyalty_tier: event.target.value as LoyaltyTier })
@@ -651,7 +651,7 @@ export function CustomerEditorPage() {
             <FieldRows>
               <Field label="Account notes" hint={ACCOUNT_NOTES_RULE}>
                 <textarea
-                  className={textAreaClasses}
+                  className={`${textAreaClasses} w-full`}
                   value={content.account.notes}
                   onChange={(event) => editAccount({ notes: event.target.value })}
                 />
@@ -700,7 +700,7 @@ export function CustomerEditorPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <input
                           aria-label={`Label for ${entry.id}`}
-                          className={`${fieldControlClasses} max-w-56`}
+                          className={`${fieldControlClasses} w-full max-w-56`}
                           value={entry.label}
                           onChange={(event) =>
                             updateAddress(entry.id, { label: event.target.value })
@@ -740,7 +740,7 @@ export function CustomerEditorPage() {
                         <label className={fieldLabelClasses}>
                           Recipient
                           <input
-                            className={fieldControlClasses}
+                            className={`${fieldControlClasses} w-full`}
                             value={entry.recipient}
                             onChange={(event) =>
                               updateAddress(entry.id, { recipient: event.target.value })
@@ -750,7 +750,7 @@ export function CustomerEditorPage() {
                         <label className={fieldLabelClasses}>
                           Street
                           <input
-                            className={fieldControlClasses}
+                            className={`${fieldControlClasses} w-full`}
                             value={entry.line1}
                             onChange={(event) =>
                               updateAddress(entry.id, { line1: event.target.value })
@@ -760,7 +760,7 @@ export function CustomerEditorPage() {
                         <label className={fieldLabelClasses}>
                           Postal code
                           <input
-                            className={fieldControlClasses}
+                            className={`${fieldControlClasses} w-full`}
                             value={entry.postal_code}
                             onChange={(event) =>
                               updateAddress(entry.id, { postal_code: event.target.value })
@@ -770,7 +770,7 @@ export function CustomerEditorPage() {
                         <label className={fieldLabelClasses}>
                           Street line 2
                           <input
-                            className={fieldControlClasses}
+                            className={`${fieldControlClasses} w-full`}
                             value={entry.line2 ?? ""}
                             onChange={(event) =>
                               updateAddress(entry.id, {
@@ -782,7 +782,7 @@ export function CustomerEditorPage() {
                         <label className={fieldLabelClasses}>
                           City
                           <input
-                            className={fieldControlClasses}
+                            className={`${fieldControlClasses} w-full`}
                             value={entry.city}
                             onChange={(event) =>
                               updateAddress(entry.id, { city: event.target.value })
@@ -792,7 +792,7 @@ export function CustomerEditorPage() {
                         <label className={fieldLabelClasses}>
                           Region
                           <input
-                            className={fieldControlClasses}
+                            className={`${fieldControlClasses} w-full`}
                             value={entry.region ?? ""}
                             onChange={(event) =>
                               updateAddress(entry.id, {
@@ -830,7 +830,7 @@ export function CustomerEditorPage() {
             <FieldRows>
               <Field label="Summary" hint={PERSONA_SUMMARY_RULE}>
                 <textarea
-                  className={textAreaClasses}
+                  className={`${textAreaClasses} w-full`}
                   value={content.persona.summary}
                   onChange={(event) =>
                     edit({
@@ -1190,7 +1190,7 @@ function AddressForm({
         <label className={fieldLabelClasses}>
           Label
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={label}
             required
             placeholder="Home, Office, Parent's house…"
@@ -1200,7 +1200,7 @@ function AddressForm({
         <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
           Street
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={line1}
             required
             onChange={(event) => setLine1(event.target.value)}
@@ -1209,7 +1209,7 @@ function AddressForm({
         <label className={fieldLabelClasses}>
           Postal code
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={postalCode}
             required
             onChange={(event) => setPostalCode(event.target.value)}
@@ -1218,7 +1218,7 @@ function AddressForm({
         <label className={fieldLabelClasses}>
           City
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={city}
             required
             onChange={(event) => setCity(event.target.value)}

@@ -18,6 +18,7 @@ import {
   KEBAB_PATTERN,
   SHOP_NAME_RULE,
   SHOP_SLUG_RULE,
+  SHOP_SLUG_TAKEN_PLACE,
 } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
@@ -256,7 +257,7 @@ export function NewShopPage() {
         : slug === ""
           ? "The shop needs a slug before it can be created."
           : takenSlugs.includes(slug)
-            ? alreadyTakenMessage(slug, "used by another shop")
+            ? alreadyTakenMessage(slug, SHOP_SLUG_TAKEN_PLACE)
             : undefined;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -301,7 +302,7 @@ export function NewShopPage() {
             <FieldRows>
               <Field label="Name" hint={SHOP_NAME_RULE}>
                 <input
-                  className={fieldControlClasses}
+                  className={`${fieldControlClasses} w-full`}
                   value={name}
                   required
                   maxLength={200}
@@ -322,7 +323,7 @@ export function NewShopPage() {
                 pending={loading}
                 taken={takenSlugs}
                 takenBase={takenSlugBase}
-                takenPlace="used by another shop"
+                takenPlace={SHOP_SLUG_TAKEN_PLACE}
                 pattern={KEBAB_PATTERN}
                 title={SHOP_SLUG_RULE}
                 placeholder="harbour-lane-supply"

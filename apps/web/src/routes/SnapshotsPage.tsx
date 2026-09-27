@@ -204,7 +204,7 @@ export function SnapshotsPage() {
                 <label className={fieldLabelClasses}>
                   Scenario version
                   <select
-                    className={fieldControlClasses}
+                    className={`${fieldControlClasses} w-full`}
                     value={version}
                     onChange={(event) => setVersion(event.target.value)}
                   >
@@ -219,7 +219,7 @@ export function SnapshotsPage() {
                 </label>
                 <FieldHint label="Seed" hint={SEED_RULE}>
                   <input
-                    className={fieldControlClasses}
+                    className={`${fieldControlClasses} w-full`}
                     type="number"
                     min={0}
                     max={MAX_SEED}
@@ -492,7 +492,7 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
           <label className={fieldLabelClasses}>
             Arm label
             <input
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={label}
               onChange={(event) => setLabel(event.target.value)}
             />

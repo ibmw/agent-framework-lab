@@ -154,7 +154,7 @@ export function JudgePicker({
         <select
           aria-label="Judge"
           aria-describedby={onlyJudge ? noteId : undefined}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={judgeId}
           onChange={(event) => onSelectJudge(event.target.value)}
         >

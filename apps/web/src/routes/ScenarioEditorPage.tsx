@@ -308,7 +308,7 @@ export function ScenarioEditorPage() {
             <label className={fieldLabelClasses}>
               Name
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.name}
                 onChange={(event) => edit({ ...content, name: event.target.value })}
               />
@@ -471,7 +471,7 @@ export function ScenarioEditorPage() {
                       Severity
                       <select
                         aria-label={`Severity of ${objective.id}`}
-                        className={fieldControlClasses}
+                        className={`${fieldControlClasses} w-full`}
                         value={objective.severity}
                         onChange={(event) =>
                           edit(
@@ -565,7 +565,7 @@ export function ScenarioEditorPage() {
           <Card title="Hidden facts — operator only">
             <textarea
               aria-label="Hidden facts"
-              className={textAreaClasses}
+              className={`${textAreaClasses} w-full`}
               value={content.hidden_facts}
               placeholder="What the customer knows, will confirm if asked, and never volunteers."
               onChange={(event) => edit({ ...content, hidden_facts: event.target.value })}
@@ -580,7 +580,7 @@ export function ScenarioEditorPage() {
             <label className={fieldLabelClasses}>
               A resolved incident looks like
               <textarea
-                className={textAreaClasses}
+                className={`${textAreaClasses} w-full`}
                 value={content.completion.statement}
                 placeholder="The order ships to the confirmed address and the customer acknowledges it."
                 onChange={(event) =>
@@ -712,7 +712,7 @@ function TurnCapField({ value, onCommit }: { value: number; onCommit: (turns: nu
         type="number"
         min={MIN_TURN_CAP}
         max={MAX_TURN_CAP}
-        className={fieldControlClasses}
+        className={`${fieldControlClasses} w-full`}
         value={typed ?? String(value)}
         onChange={(event) => {
           setTyped(event.target.value);
@@ -886,7 +886,7 @@ function BindingField({
         <div className="flex flex-wrap gap-2">
           <select
             aria-label={name}
-            className={`${fieldControlClasses} min-w-40 flex-1`}
+            className={`${fieldControlClasses} w-full min-w-40 flex-1`}
             value={entity}
             onChange={(event) =>
               // Clearing the object clears the whole reference, and a field the new object has
@@ -904,7 +904,7 @@ function BindingField({
           </select>
           <select
             aria-label={`Field of ${name}`}
-            className={`${fieldControlClasses} min-w-40 flex-1`}
+            className={`${fieldControlClasses} w-full min-w-40 flex-1`}
             value={field}
             onChange={(event) =>
               onBind(parameter.name, retargetDataReference(entity, event.target.value))
@@ -944,7 +944,7 @@ function BindingField({
         {parameter.name}
         <select
           aria-label={name}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value}
           onChange={(event) => onBind(parameter.name, event.target.value)}
         >
@@ -965,7 +965,7 @@ function BindingField({
       {parameter.name}
       <input
         aria-label={name}
-        className={fieldControlClasses}
+        className={`${fieldControlClasses} w-full`}
         value={value}
         placeholder={parameter.default ?? ""}
         onChange={(event) => onBind(parameter.name, event.target.value)}
@@ -1043,7 +1043,7 @@ function TemplatePicker({
         <select
           aria-label={label}
           aria-describedby={onlyTemplate ? noteId : undefined}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={blockId}
           required
           onChange={(event) => setBlockId(event.target.value)}

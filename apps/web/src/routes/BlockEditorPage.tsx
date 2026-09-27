@@ -209,7 +209,7 @@ function BlockEditor<
             <label className={fieldLabelClasses}>
               Name
               <input
-                className={`${fieldControlClasses} font-mono`}
+                className={`${fieldControlClasses} w-full font-mono`}
                 value={content.name}
                 onChange={(event) => edit({ ...content, name: event.target.value })}
               />
@@ -217,7 +217,7 @@ function BlockEditor<
             <label className={fieldLabelClasses}>
               Statement
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.statement}
                 placeholder="Read document"
                 onChange={(event) => edit({ ...content, statement: event.target.value })}
@@ -230,7 +230,7 @@ function BlockEditor<
             <label className={fieldLabelClasses}>
               Description
               <textarea
-                className={textAreaClasses}
+                className={`${textAreaClasses} w-full`}
                 value={content.description}
                 onChange={(event) => edit({ ...content, description: event.target.value })}
               />
@@ -414,7 +414,7 @@ function ParameterRow({
         Kind
         <select
           aria-label={`Kind of ${parameter.name}`}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={parameter.kind}
           onChange={(event) => onRetype(event.target.value as BlockParameterKind)}
         >
@@ -430,7 +430,7 @@ function ParameterRow({
         Description
         <input
           aria-label={`Description of ${parameter.name}`}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={parameter.description}
           onChange={(event) => onUpdate({ description: event.target.value })}
         />
@@ -446,7 +446,7 @@ function ParameterRow({
               <select
                 aria-label={`Default of ${parameter.name}`}
                 aria-describedby={optionalWithoutDefault ? findingId : undefined}
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={parameter.default ?? ""}
                 onChange={(event) => onUpdate({ default: event.target.value || null })}
               >
@@ -461,7 +461,7 @@ function ParameterRow({
               <input
                 aria-label={`Default of ${parameter.name}`}
                 aria-describedby={optionalWithoutDefault ? findingId : undefined}
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={parameter.default ?? ""}
                 placeholder={parameter.kind === "timing" ? "after_first_read" : "PT30S"}
                 onChange={(event) => onUpdate({ default: event.target.value || null })}
@@ -515,7 +515,7 @@ export function ObjectiveBlockEditorPage() {
             Assessed by
             <select
               aria-label="Assessed by"
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={content.assessment}
               onChange={(event) => {
                 const assessment = event.target.value as ObjectiveAssessment;
@@ -545,7 +545,7 @@ export function ObjectiveBlockEditorPage() {
               Evidence
               <select
                 aria-label="Evidence"
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={content.evidence}
                 onChange={(event) =>
                   edit({ ...content, evidence: event.target.value as ObjectiveEvidence })
@@ -586,7 +586,7 @@ export function MutationBlockEditorPage() {
             Perturbs
             <select
               aria-label="Perturbs"
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={content.effect}
               onChange={(event) =>
                 edit({ ...content, effect: event.target.value as MutationEffect })

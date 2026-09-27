@@ -3,14 +3,14 @@ import type {
   PaymentMethodSchema,
   ToneOfVoiceSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { PrimaryAction, type Refusal, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   DefaultToneChip,
@@ -28,10 +28,12 @@ import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
 import { labelOf, optionsOf, PAYMENT_METHOD_KIND, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
+  alreadyTakenMessage,
   DERIVED_KEBAB_RULE,
   KEBAB_PATTERN,
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
+  SHOP_SLUG_TAKEN_PLACE,
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_NAME_RULE,
   TRANSIT_WINDOW_RULE,
@@ -44,6 +46,7 @@ import {
   fieldLabelClasses,
   textAreaClasses,
 } from "../lib/ui";
+import { HELD_VALUE_REASON, useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const PAYMENT_KINDS = optionsOf(PAYMENT_METHOD_KIND);
@@ -54,7 +57,19 @@ const CHANNELS = optionsOf(SUPPORT_CHANNEL);
  * The pages that edit one shop draft between them. Their header is an editor's and pinned like
  * one: Save is in it, and Shop details runs to more than two screens (ADR 0066).
  */
-function SetupPage({ title, children }: { title: string; children: ReactNode }) {
+function SetupPage({
+  title,
+  held = false,
+  saveRefusal = null,
+  children,
+}: {
+  title: string;
+  /** A field on the page holds a value the draft does not, which is unsaved work too. */
+  held?: boolean;
+  /** Why Save is refused, naming the field line that says so (ADR 0063). */
+  saveRefusal?: Refusal | null;
+  children: ReactNode;
+}) {
   const { preview, save, saving, discard, discarding, dirty, error } = useShopWorkspace();
   return (
     <>
@@ -64,9 +79,10 @@ function SetupPage({ title, children }: { title: string; children: ReactNode }) 
         actions={
           <EditorSaveActions
             tone="accent"
-            dirty={dirty}
+            dirty={dirty || held}
             saving={saving}
             discarding={discarding}
+            refusal={saveRefusal}
             onSave={() => void save()}
             onDiscard={() => void discard()}
           />
@@ -229,7 +245,7 @@ function ProseFieldset({
         <label className={fieldLabelClasses}>
           {nameLabel}
           <input
-            className={fieldControlClasses}
+            className={`${fieldControlClasses} w-full`}
             value={value.name}
             required
             onChange={(event) => onChange({ ...value, name: event.target.value })}
@@ -240,7 +256,7 @@ function ProseFieldset({
       <label className={fieldLabelClasses}>
         {textLabel}
         <textarea
-          className={textAreaClasses}
+          className={`${textAreaClasses} w-full`}
           value={value.text}
           required
           onChange={(event) => onChange({ ...value, text: event.target.value })}
@@ -251,8 +267,92 @@ function ProseFieldset({
 }
 
 export function ShopIdentityPage() {
-  const { content, edit } = useShopWorkspace();
+  const { shopId, shops, shopsPending, content, edit, discarding } = useShopWorkspace();
   const identity = content.identity;
+  const slugLineId = useId();
+
+  /**
+   * What is in the Slug field, while it differs from the slug the draft holds: one another shop
+   * already uses, or nothing while it is being retyped.
+   *
+   * A taken slug is refused where the create page refuses it — on the field, off the same
+   * listing (`GET /shops`) — and it never reaches the draft, so no Save anywhere in the
+   * workspace can write it. The lab would take it: shops are addressed by their id and ADR 0013
+   * leaves the slug unconstrained across shops, so this is the workspace's own rule, the one
+   * the create page already applies, kept once the shop exists and applied only to a slug the
+   * operator changes to (ADR 0069).
+   */
+  const [typedSlug, setTypedSlug] = useState<string | null>(null);
+  /**
+   * The slug the draft held when this run of typing began, until the field is left. Every free
+   * value is written as it is typed, so typing a taken slug key by key passes through prefixes
+   * the operator never meant — `northsta` on the way to `northstar`. When the field holds a
+   * value it will not write — a taken slug, or nothing — the draft goes back to this, so a held
+   * value never leaves a prefix behind for a Save elsewhere to store, and an emptied field hands
+   * this back on leaving rather than the last prefix.
+   */
+  const [slugOrigin, setSlugOrigin] = useState<string | null>(null);
+  /**
+   * The slug the lab holds for this shop: the listing's own row for it, which `GET /shops`
+   * reads off the saved draft and the workspace reads again after every save. A shop that
+   * already shares that slug with another — written before this rule, or by a direct write —
+   * is not refused for keeping it: the rule is about a change, and refusing what the lab
+   * already holds would be a second, stricter gate over every other edit on the page.
+   */
+  const savedSlug = shops.find((shop) => shop.shop_id === shopId)?.slug;
+  // This shop's own row is never counted: the other shops are told apart by id, not spelling.
+  const takenSlugs = shops
+    .filter((shop) => shop.shop_id !== shopId)
+    .map((shop) => shop.slug)
+    .filter((slug) => slug !== savedSlug);
+  const shownSlug = typedSlug ?? identity.slug;
+  const slugTaken = shownSlug !== "" && takenSlugs.includes(shownSlug);
+  const heldSlug =
+    typedSlug !== null && typedSlug !== "" && typedSlug !== identity.slug ? typedSlug : null;
+
+  // A discard that lands puts back the slug the lab holds, so what was typed over it is no
+  // longer about the draft under it.
+  const wasDiscarding = useRef(discarding);
+  useEffect(() => {
+    if (wasDiscarding.current && !discarding) {
+      setTypedSlug(null);
+      setSlugOrigin(null);
+    }
+    wasDiscarding.current = discarding;
+  }, [discarding]);
+
+  useRegisterUnsavedWork(
+    heldSlug === null
+      ? null
+      : {
+          label: `The Slug field holds “${heldSlug}”, which another shop already uses; this shop is still ${identity.slug}.`,
+          unsavable: HELD_VALUE_REASON,
+          discard: () => {
+            setTypedSlug(null);
+            setSlugOrigin(null);
+          },
+        },
+  );
+
+  function changeSlug(next: string) {
+    const origin = slugOrigin ?? identity.slug;
+    if (slugOrigin === null) {
+      setSlugOrigin(identity.slug);
+    }
+    if (next === identity.slug) {
+      setTypedSlug(null);
+      return;
+    }
+    if (next !== "" && !takenSlugs.includes(next)) {
+      setTypedSlug(null);
+      edit({ ...content, identity: { ...identity, slug: next } });
+      return;
+    }
+    setTypedSlug(next);
+    if (identity.slug !== origin) {
+      edit({ ...content, identity: { ...identity, slug: origin } });
+    }
+  }
 
   // A shop must always answer on at least one channel, so the last checked box stays checked
   // instead of failing at save. `CurrencyField` holds the same rule for the currencies.
@@ -268,27 +368,44 @@ export function ShopIdentityPage() {
   }
 
   return (
-    <SetupPage title="Shop details">
+    <SetupPage
+      title="Shop details"
+      held={heldSlug !== null}
+      saveRefusal={
+        slugTaken
+          ? { id: slugLineId, reason: alreadyTakenMessage(shownSlug, SHOP_SLUG_TAKEN_PLACE) }
+          : null
+      }
+    >
       <Card title="Shop identity">
         <FieldRows>
           <Field label="Name" hint={SHOP_NAME_RULE}>
             <input
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={identity.name}
               onChange={(event) =>
                 edit({ ...content, identity: { ...identity, name: event.target.value } })
               }
             />
           </Field>
-          <Field label="Slug" hint={SHOP_SLUG_DETAIL_RULE}>
-            <input
-              className={fieldControlClasses}
-              value={identity.slug}
-              onChange={(event) =>
-                edit({ ...content, identity: { ...identity, slug: event.target.value } })
-              }
-            />
-          </Field>
+          {/* The create page's field, minus the follow: here the slug is the shop's, not the
+              name's, so emptying it hands back the slug the shop already has rather than one
+              derived from anything. */}
+          <DerivedIdField
+            arrangement="row"
+            label="Slug"
+            hint={SHOP_SLUG_DETAIL_RULE}
+            value={shownSlug}
+            suggested={identity.slug}
+            follows={false}
+            preview={false}
+            pending={shopsPending}
+            taken={takenSlugs}
+            takenPlace={SHOP_SLUG_TAKEN_PLACE}
+            extraId={slugLineId}
+            onChange={changeSlug}
+            onLeave={() => setSlugOrigin(null)}
+          />
           {/* `LocaleField` and `CurrencyField` each carry their own label and their own rule,
               so neither is wrapped in a row that would name it a second time. They are asked
               to draw themselves as rows instead, which is what keeps one card to one label
@@ -353,7 +470,7 @@ function PaymentKindField({
     <label className={fieldLabelClasses}>
       Kind
       <select
-        className={fieldControlClasses}
+        className={`${fieldControlClasses} w-full`}
         value={value}
         onChange={(event) => onChange(event.target.value as PaymentMethodSchema["kind"])}
       >
@@ -403,7 +520,7 @@ function FulfilmentFieldset({
       <label className={fieldLabelClasses}>
         Carrier
         <input
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.carrier}
           required
           onChange={(event) => onChange({ ...value, carrier: event.target.value })}
@@ -414,7 +531,7 @@ function FulfilmentFieldset({
         <input
           type="number"
           min={0}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.min}
           onChange={(event) => onChange({ ...value, min: Number(event.target.value) })}
         />
@@ -428,7 +545,7 @@ function FulfilmentFieldset({
         <input
           type="number"
           min={0}
-          className={fieldControlClasses}
+          className={`${fieldControlClasses} w-full`}
           value={value.max}
           onChange={(event) => onChange({ ...value, max: Number(event.target.value) })}
         />
@@ -605,7 +722,7 @@ function PaymentAndFulfilmentCards() {
                       <label className={fieldLabelClasses}>
                         Name
                         <input
-                          className={fieldControlClasses}
+                          className={`${fieldControlClasses} w-full`}
                           value={value.name}
                           required
                           onChange={(event) => onChange({ ...value, name: event.target.value })}
@@ -640,7 +757,7 @@ function PaymentAndFulfilmentCards() {
           <label className={fieldLabelClasses}>
             Name
             <input
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={payment.name}
               required
               onChange={(event) => setPayment({ ...payment, name: event.target.value })}
@@ -716,7 +833,7 @@ function PaymentAndFulfilmentCards() {
                       <label className={fieldLabelClasses}>
                         Name
                         <input
-                          className={fieldControlClasses}
+                          className={`${fieldControlClasses} w-full`}
                           value={value.name}
                           required
                           onChange={(event) => onChange({ ...value, name: event.target.value })}
@@ -759,7 +876,7 @@ function PaymentAndFulfilmentCards() {
           <label className={fieldLabelClasses}>
             Name
             <input
-              className={fieldControlClasses}
+              className={`${fieldControlClasses} w-full`}
               value={fulfilment.name}
               required
               onChange={(event) => setFulfilment({ ...fulfilment, name: event.target.value })}

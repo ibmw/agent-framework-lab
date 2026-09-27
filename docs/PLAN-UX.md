@@ -71,8 +71,7 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). In Group C, slice 27 closes
-the milestone, and 28 is optional.
+connection leaves unreachable (ADR 0053). Group C's remaining slice, 28, is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -86,31 +85,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 27 — Debts the pattern slices reported
-
-The three workspace defects `docs/decisions-and-next-step.md` lists — the product editor's
-category, the shop slug, and the three widths — each behaviour a layout or copy slice was right to
-leave and a plan is wrong to leave longer.
-
-- [ ] The product editor's category offers the draft's categories, and `PRODUCT_CATEGORY_RULE`
-  lands on the row (the test that pins the row bare is inverted, and the rule leaves
-  `fieldRules.test.ts`'s one allowed orphan).
-- [ ] Shop details refuses a slug another shop already has, reading the listing the create form
-  reads; the row's hint then says so.
-- [ ] The three narrow widths: decide whether they are wanted — the prototype draws the quantity
-  and the total narrow (:2705) and the tag box in a chip strip (:2650) — and either lift `w-full`
-  off the shared surface with every consumer saying so, or remove the three overrides.
-- [ ] The six chips UI-4 could not compute stay uncomputed unless a listing gains the figure for
-  its own reason; this slice does not add payloads for them.
-
-Frames: DEPRECADED frame 2c; `Workspace.dc.html` :2705, :2650.
-
-Branch: `feat/pattern-debts`. Checks: `App.test.tsx` for the datalist and the slug refusal;
-`lib/ui.test.ts` for whichever width rule is chosen.
-
-Slice evidence: an operator correcting a category is offered the spellings the draft already
-uses, and cannot save Northstar's slug onto Alpenglow.
 
 #### Slice 28 — The shop logo (optional)
 

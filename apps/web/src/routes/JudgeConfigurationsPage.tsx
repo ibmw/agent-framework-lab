@@ -275,7 +275,7 @@ export function NewJudgePage() {
               hint="How this judge is listed. An objective names the judge that scores it."
             >
               <input
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={name}
                 required
                 placeholder="Resolution quality"
@@ -287,7 +287,7 @@ export function NewJudgePage() {
               hint="The lab's own word for the provider, so no two screens spell it differently. Only providers the lab has proven it can judge with are offered."
             >
               <select
-                className={fieldControlClasses}
+                className={`${fieldControlClasses} w-full`}
                 value={provider}
                 onChange={(event) => {
                   setProvider(event.target.value);
@@ -321,7 +321,7 @@ export function NewJudgePage() {
               hint="Write what a met objective looks like, not what a good agent looks like. The judge scores one arm's record at a time, and it is the whole of what this judge is — a judge with no rubric cannot be created here and could not be published either."
             >
               <textarea
-                className={textAreaClasses}
+                className={`${textAreaClasses} w-full`}
                 value={rubric}
                 rows={7}
                 required
