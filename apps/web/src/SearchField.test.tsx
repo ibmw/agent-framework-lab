@@ -2,7 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { SearchField } from "./components/SearchField";
+import { SearchField, SearchRow } from "./components/SearchField";
+import { cardTitleClasses } from "./lib/ui";
 
 /** The shape every index draws: the field, holding the page's own state. */
 function Index({ label = "Search shops" }: { label?: string }) {
@@ -100,5 +101,52 @@ describe("the search field", () => {
     const { container } = render(<Index />);
 
     expect(container.querySelector("form")).toBeNull();
+  });
+});
+
+describe("the index card's header line", () => {
+  /**
+   * The prototype's header line: the card's title on the left and the search box opposite it,
+   * in one row. Asserted as a heading one level under the page's `h1`, sharing its row with
+   * the searchbox, and ahead of it in the document — so a title drawn elsewhere in the card,
+   * or after the field, fails here.
+   */
+  it("draws the title as a heading beside the search box, before it", () => {
+    render(
+      <SearchRow title="Catalog">
+        <Index label="Search products" />
+      </SearchRow>,
+    );
+
+    const title = screen.getByRole("heading", { level: 2, name: "Catalog" });
+    const box = screen.getByRole("searchbox", { name: "Search products" });
+    const row = title.parentElement as HTMLElement;
+
+    expect(row).toContainElement(box);
+    expect(title.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row).toHaveClass("flex-wrap");
+  });
+
+  /**
+   * Every card title in the workspace is the one `Card` spells, so the row is held to that
+   * spelling rather than to a repeat of its numbers — and to no sans size beside it, which is
+   * how a copy half-reverts.
+   */
+  it("titles the card the way every other card in the workspace is titled", () => {
+    render(<SearchRow title="Order fixtures" />);
+
+    const title = screen.getByRole("heading", { level: 2, name: "Order fixtures" });
+    for (const className of cardTitleClasses.split(" ")) {
+      expect(title).toHaveClass(className);
+    }
+    expect(title.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/);
+  });
+
+  /** A card is titled while its rows load: the title needs no field to stand beside. */
+  it("keeps the title when there is no search box yet", () => {
+    render(<SearchRow title="Built on this shop">{null}</SearchRow>);
+
+    expect(screen.getByRole("heading", { level: 2, name: "Built on this shop" })).toBeVisible();
+    expect(screen.queryByRole("searchbox")).toBeNull();
   });
 });

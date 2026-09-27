@@ -205,7 +205,7 @@ export function ProductsPage() {
       <section className={`${surfaceClasses} overflow-hidden`} data-tour="product-index">
         {/* Not gated on a load, as the chip row beside it is not: this catalog is the shop
               draft, already in hand when the route renders. */}
-        <SearchRow>
+        <SearchRow title="Catalog">
           <SearchField label="Search products" onChange={setQuery} value={query} />
         </SearchRow>
         <FilterChips

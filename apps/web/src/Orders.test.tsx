@@ -363,6 +363,15 @@ function card(name: string) {
 }
 
 describe("order index", () => {
+  // The card's title says what the list is (the fixtures it lists are authored state, not live orders), on the header line opposite the search.
+  it("titles its card Order fixtures, opposite the search box", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    const box = await screen.findByRole("searchbox", { name: "Search by reference or customer" });
+    const title = screen.getByRole("heading", { level: 2, name: "Order fixtures" });
+    expect(title.parentElement).toContainElement(box);
+  });
+
   it("lists the shop's fixtures with their two status axes", async () => {
     renderAt(`/shops/${SHOP_ID}/orders`);
 

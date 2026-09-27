@@ -130,23 +130,23 @@ export function OrdersPage() {
             answers nothing; it is the stat band this slice exists to avoid, drawn at its
             least useful moment. The search box keeps the same company: a box that can only
             narrow nothing is a control that does nothing. Both arrive with the table they
-            belong to. */}
-        {loading || loadError ? null : (
-          <>
-            <SearchRow>
-              <SearchField
-                label="Search by reference or customer"
-                onChange={setQuery}
-                value={query}
-              />
-            </SearchRow>
-            <FilterChips
-              legend="Filter orders"
-              chips={chips}
-              selected={filter}
-              onSelect={setFilter}
+            belong to; the title beside the box is the card's, drawn in every state. */}
+        <SearchRow title="Order fixtures">
+          {loading || loadError ? null : (
+            <SearchField
+              label="Search by reference or customer"
+              onChange={setQuery}
+              value={query}
             />
-          </>
+          )}
+        </SearchRow>
+        {loading || loadError ? null : (
+          <FilterChips
+            legend="Filter orders"
+            chips={chips}
+            selected={filter}
+            onSelect={setFilter}
+          />
         )}
 
         {loading ? (

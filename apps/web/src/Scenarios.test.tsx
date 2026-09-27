@@ -534,6 +534,15 @@ function renderAt(path: string) {
 }
 
 describe("scenario index", () => {
+  // The card's title says what the list is (every scenario here is built on this shop and never moves off it), on the header line opposite the search.
+  it("titles its card Built on this shop, opposite the search box", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+
+    const box = await screen.findByRole("searchbox", { name: "Search scenarios" });
+    const title = screen.getByRole("heading", { level: 2, name: "Built on this shop" });
+    expect(title.parentElement).toContainElement(box);
+  });
+
   it("shows the incident and the customer each scenario was built on", async () => {
     renderAt(`/shops/${SHOP_ID}/scenarios`);
 

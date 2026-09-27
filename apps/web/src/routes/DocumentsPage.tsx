@@ -38,7 +38,6 @@ import { filterList } from "../lib/filters";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import {
   accentButtonClasses,
-  cardTitleClasses,
   fieldControlClasses,
   surfaceClasses,
   tableCellClasses,
@@ -161,8 +160,7 @@ export function DocumentsPage() {
         {/* The prototype puts *New document* on the card's header line beside the search
             rather than in the page header, which this page's own Save and Discard fill
             (`Workspace.dc.html`:1531–1536). */}
-        <SearchRow>
-          <h2 className={cardTitleClasses}>Documents</h2>
+        <SearchRow title="What the agent can consult">
           <SearchField label="Search documents" onChange={setQuery} value={query} />
           <Link className={accentButtonClasses} to={newDocumentAt(shopId)}>
             New document

@@ -394,6 +394,46 @@ function heldOpen() {
 }
 
 describe("block libraries", () => {
+  // The card's title says what the list is (an objective block is what a scenario composes to assert), on the header line opposite the search.
+  it("titles its card What a scenario can assert, opposite the search box", async () => {
+    renderAt("/lab/objective-blocks");
+
+    const box = await screen.findByRole("searchbox", { name: "Search the library" });
+    const title = screen.getByRole("heading", { level: 2, name: "What a scenario can assert" });
+    expect(title.parentElement).toContainElement(box);
+  });
+
+  // The title is the card's, not the rows': it is drawn while the listing is still on its way,
+  // and only the search box, which could narrow nothing yet, waits for the rows.
+  it("titles the card before the listing arrives, and holds the search box until it has", async () => {
+    const { held, release } = heldOpen();
+    server.use(
+      http.get("*/api/v1/objective-blocks", async () => {
+        await held;
+        return HttpResponse.json(objectiveListing);
+      }),
+    );
+    renderAt("/lab/objective-blocks");
+
+    expect(await screen.findByText("Loading blocks…")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "What a scenario can assert" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+
+    release();
+    expect(await screen.findByRole("searchbox", { name: "Search the library" })).toBeVisible();
+  });
+
+  it("titles the mutation library's card Faults a scenario can inject", async () => {
+    renderAt("/lab/mutation-blocks");
+
+    const box = await screen.findByRole("searchbox", { name: "Search the library" });
+    const title = screen.getByRole("heading", { level: 2, name: "Faults a scenario can inject" });
+    expect(title.parentElement).toContainElement(box);
+    expect(screen.queryByRole("heading", { name: "What a scenario can assert" })).toBeNull();
+  });
+
   it("lists objective blocks with their type axis and publication state", async () => {
     renderAt("/lab/objective-blocks");
 

@@ -492,6 +492,15 @@ function renderAt(path: string) {
 }
 
 describe("agent configuration workspace", () => {
+  // The card's title says what the list is (each configuration is an agent an experiment can put under test), on the header line opposite the search.
+  it("titles its card Agents under test, opposite the search box", async () => {
+    renderAt("/lab/agent-configurations");
+
+    const box = await screen.findByRole("searchbox", { name: "Search configurations" });
+    const title = screen.getByRole("heading", { level: 2, name: "Agents under test" });
+    expect(title.parentElement).toContainElement(box);
+  });
+
   it("lists configurations with their framework, model, and publication state", async () => {
     renderAt("/lab/agent-configurations");
 

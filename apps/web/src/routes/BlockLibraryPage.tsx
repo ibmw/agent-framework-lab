@@ -46,6 +46,11 @@ interface LibraryCopy {
   description: string;
   /** What the library is, shown above the index the way frames 4a and 4b state it. */
   premise: string;
+  /**
+   * The index card's title, which says what the library holds. The prototype writes *Library*
+   * on both (:3569, :3713), which repeats the page title and says nothing the page has not.
+   */
+  indexTitle: string;
   emptyState: string;
   /** What the card says when the library holds blocks but the search left none of them. */
   noMatch: string;
@@ -68,6 +73,7 @@ const OBJECTIVE_COPY: LibraryCopy = {
     "What an experiment asserts, authored once and composed by any scenario. A scenario binds a template's parameters to its own shop's objects.",
   premise:
     "Blocks are shop-independent templates with typed parameters. A scenario binds those parameters to its own shop's objects — a binding can never point outside the scenario's shop.",
+  indexTitle: "What a scenario can assert",
   emptyState: "No objective block yet. Create one to define what a scenario can assert.",
   noMatch: "No objective block matches this view.",
   createLabel: "New objective block",
@@ -85,6 +91,7 @@ const MUTATION_COPY: LibraryCopy = {
     "What the scenario runtime injects into a run's sandbox. A scenario binds a template's parameters and its trigger time.",
   premise:
     "Mutations are injected into a run's sandbox at a bound trigger time. They are never exposed as agent tools — an arm only ever observes their consequences, and both arms receive the identical schedule.",
+  indexTitle: "Faults a scenario can inject",
   emptyState: "No mutation block yet. Create one to define a fault a scenario can inject.",
   noMatch: "No mutation block matches this view.",
   createLabel: "New mutation block",
@@ -146,16 +153,16 @@ function BlockLibrary({
 
       <p className="mb-4 max-w-3xl text-[13px] text-admin-ink-soft">{copy.premise}</p>
 
-      {/* The index has no name of its own, so it carries the tour's anchor (ADR 0045). */}
+      {/* The index is not a named region, so it carries the tour's anchor (ADR 0045). */}
       <section data-tour="block-index" className={`${surfaceClasses} overflow-hidden`}>
         {/* Only once there is a library to search: a box that can only narrow nothing is a
             control that does nothing, which is the rule the chip rows on the eight indexes
             with filters already follow. */}
-        {loading || loadError ? null : (
-          <SearchRow>
+        <SearchRow title={copy.indexTitle}>
+          {loading || loadError ? null : (
             <SearchField label="Search the library" onChange={setQuery} value={query} />
-          </SearchRow>
-        )}
+          )}
+        </SearchRow>
         {loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading blocks…</p>
         ) : blocks.length === 0 ? (

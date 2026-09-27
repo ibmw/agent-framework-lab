@@ -183,6 +183,15 @@ function renderAt(path: string) {
 }
 
 describe("support identity workspace", () => {
+  // The card's title says what the list is (identities are one lab library, whichever rail opened it (ADR 0054)), on the header line opposite the search.
+  it("titles its card Shared by every shop, opposite the search box", async () => {
+    renderAt("/lab/support-identities");
+
+    const box = await screen.findByRole("searchbox", { name: "Search identities" });
+    const title = screen.getByRole("heading", { level: 2, name: "Shared by every shop" });
+    expect(title.parentElement).toContainElement(box);
+  });
+
   it("lists identities with their permission and publication state", async () => {
     renderAt("/lab/support-identities");
 

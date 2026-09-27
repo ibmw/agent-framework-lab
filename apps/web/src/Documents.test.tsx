@@ -170,6 +170,20 @@ async function openTable(at = `/shops/${SHOP_ID}/setup/policies`) {
 }
 
 describe("the Documents table", () => {
+  // The card's title says what the table is — every kind in it is reachable through the
+  // agent's document tools — while the region keeps the name the specs and the tour reach it by.
+  it("titles its card What the agent can consult, opposite the search box", async () => {
+    await openTable();
+
+    const title = within(table()).getByRole("heading", {
+      level: 2,
+      name: "What the agent can consult",
+    });
+    expect(title.parentElement).toContainElement(
+      within(table()).getByRole("searchbox", { name: "Search documents" }),
+    );
+  });
+
   it("draws the three lists as one table, with each document's kind beside it", async () => {
     await openTable();
 

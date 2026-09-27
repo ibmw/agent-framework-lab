@@ -4123,6 +4123,16 @@ describe("a shop's slug on Shop details", () => {
  * pressing it leaves exactly the rows it claimed.
  */
 describe("index filter chips", () => {
+  // Not a chip, but the header line the chips sit under: the catalog card's title, opposite
+  // its search, drawn from the shop draft the route already holds.
+  it("titles the product index's card Catalog, opposite the search box", async () => {
+    renderAt(`/shops/${SHOP_ID}/products`);
+
+    const box = await screen.findByRole("searchbox", { name: "Search products" });
+    const title = screen.getByRole("heading", { level: 2, name: "Catalog" });
+    expect(title.parentElement).toContainElement(box);
+  });
+
   it("counts the shops by publication and narrows the table to the pressed one", async () => {
     const user = userEvent.setup();
     server.use(

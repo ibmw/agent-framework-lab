@@ -289,6 +289,15 @@ function renderAt(path: string) {
 }
 
 describe("customer workspace", () => {
+  // The card's title says what the list is (a profile is reusable across shops, and this list is the ones attached here), on the header line opposite the search.
+  it("titles its card Attached to this shop, opposite the search box", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    const box = await screen.findByRole("searchbox", { name: "Search by name or email" });
+    const title = screen.getByRole("heading", { level: 2, name: "Attached to this shop" });
+    expect(title.parentElement).toContainElement(box);
+  });
+
   it("lists the profiles attached to this shop with their provenance", async () => {
     renderAt(`/shops/${SHOP_ID}/customers`);
 

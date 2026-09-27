@@ -116,19 +116,19 @@ export function ScenariosPage() {
             answers nothing; it is the stat band this slice exists to avoid, drawn at its
             least useful moment. The search box keeps the same company: a box that can only
             narrow nothing is a control that does nothing. Both arrive with the table they
-            belong to. */}
+            belong to; the title beside the box is the card's, drawn in every state. */}
+        <SearchRow title="Built on this shop">
+          {loading || loadError ? null : (
+            <SearchField label="Search scenarios" onChange={setQuery} value={query} />
+          )}
+        </SearchRow>
         {loading || loadError ? null : (
-          <>
-            <SearchRow>
-              <SearchField label="Search scenarios" onChange={setQuery} value={query} />
-            </SearchRow>
-            <FilterChips
-              legend="Filter scenarios"
-              chips={chips}
-              selected={filter}
-              onSelect={setFilter}
-            />
-          </>
+          <FilterChips
+            legend="Filter scenarios"
+            chips={chips}
+            selected={filter}
+            onSelect={setFilter}
+          />
         )}
         {loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading scenarios…</p>

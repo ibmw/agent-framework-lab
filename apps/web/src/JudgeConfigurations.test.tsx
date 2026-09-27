@@ -311,6 +311,18 @@ async function everyRemainingTurn() {
 }
 
 describe("judge workspace", () => {
+  // The card's title says what the list is (a judge scores the objectives a scenario leaves to a judge), on the header line opposite the search.
+  it("titles its card What a scenario leaves to a judge, opposite the search box", async () => {
+    renderAt("/lab/judges");
+
+    const box = await screen.findByRole("searchbox", { name: "Search judges" });
+    const title = screen.getByRole("heading", {
+      level: 2,
+      name: "What a scenario leaves to a judge",
+    });
+    expect(title.parentElement).toContainElement(box);
+  });
+
   it("lists judges with the model that scores and their publication state", async () => {
     renderAt("/lab/judges");
 

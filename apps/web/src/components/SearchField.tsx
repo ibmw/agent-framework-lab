@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import {
+  cardTitleClasses,
   searchFieldClasses,
   searchFieldIconClasses,
   searchFieldRowClasses,
@@ -79,19 +80,31 @@ export function SearchField({
 }
 
 /**
- * The row the search box sits in, at the top of the card and above the filter chips.
+ * The card's header line: the index's title, and the search box opposite it.
  *
- * The prototype puts it in the card's **header line**, right-aligned opposite the card's
- * title, with the chip row directly beneath — all eleven of them, without exception. Only one
- * index in this workspace has a title to sit opposite: the shops table, which passes its `h2`
- * in here as a child and gets the prototype's line exactly. The other nine pass the field
- * alone, and the row is then the same corner of the same card, in the same order relative to
- * the chips, ruled off from them the way a header is.
+ * The prototype draws every index card this way — a Georgia title on the left, the search box
+ * pushed right by its own `margin-left:auto`, the chip row directly beneath — all eleven of
+ * them, without exception. So the title is a prop of the row rather than a child a page may
+ * forget: every index that draws this line draws it with a title, in the one card-title
+ * style (`cardTitleClasses`, the `Card` header's), and the drift `ui/display-type` spent a
+ * round removing from card titles cannot come back through here.
  *
- * It takes children rather than a field, so the one card with a title and the nine without
- * draw one row and not two spellings of it — the drift `ui/display-type` spent a round
- * removing from card titles.
+ * The title is an `h2` because the page header holds the `h1` and every card title in this
+ * workspace is the level under it. It says what the list *is* rather than repeating the page
+ * title — *Catalog* under Products, *Order fixtures* under Orders — and it is drawn whatever
+ * the listing's state: a card is titled while it loads and when it fails, and only the search
+ * box, which can narrow nothing then, waits for the rows. That is why the field is `children`
+ * and may be absent, and why a consumer that also draws an action on the line (Documents'
+ * *New document*) passes it here too.
+ *
+ * The row wraps: at a narrow width the search box drops under the title, keeping the 180px
+ * floor its own classes give it.
  */
-export function SearchRow({ children }: { children: ReactNode }) {
-  return <div className={searchFieldRowClasses}>{children}</div>;
+export function SearchRow({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className={searchFieldRowClasses}>
+      <h2 className={cardTitleClasses}>{title}</h2>
+      {children}
+    </div>
+  );
 }

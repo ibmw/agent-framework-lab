@@ -62,14 +62,15 @@ async function createShopPage(): Promise<Scope> {
 }
 
 describe("the shops table", () => {
-  // The one card header on this page is drawn in open code, because the filter row has to sit
-  // between the title and the table. A copy is a thing that drifts, so it is held to the
-  // spelling `Card` uses rather than to a repeat of the numbers.
-  it("titles itself the way every other card in the workspace does", async () => {
+  // The card's title says what the list is — every shop in the lab — and it sits opposite the
+  // search box on the card's header line.
+  it("titles its card In this lab, opposite the search box, as every card is titled", async () => {
     renderShops();
 
-    const title = await screen.findByRole("heading", { level: 2, name: "All shops" });
+    const box = await screen.findByRole("searchbox", { name: "Search shops" });
+    const title = screen.getByRole("heading", { level: 2, name: "In this lab" });
 
+    expect(title.parentElement).toContainElement(box);
     for (const className of cardTitleClasses.split(" ")) {
       expect(title.className).toContain(className);
     }
@@ -83,7 +84,7 @@ describe("the shops index and its create page", () => {
   it("offers a New shop button rather than a form beside the table", async () => {
     renderShops();
 
-    await screen.findByRole("heading", { level: 2, name: "All shops" });
+    await screen.findByRole("heading", { level: 2, name: "In this lab" });
     // The side card is gone: creating is a page (PLAN-UX Slice 12).
     expect(screen.queryByRole("heading", { name: "Create a shop" })).toBeNull();
     expect(screen.getByRole("link", { name: "New shop" })).toHaveAttribute("href", "/shops/new");

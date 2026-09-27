@@ -29,7 +29,6 @@ import { currencyForLocale, DEFAULT_LOCALE } from "../lib/locales";
 import { shopSlugFromName } from "../lib/shop";
 import {
   accentButtonClasses,
-  cardTitleClasses,
   fieldControlClasses,
   formatTimestamp,
   outlineButtonClasses,
@@ -146,13 +145,7 @@ export function ShopsPage() {
       ) : null}
 
       <section className={`${surfaceClasses} overflow-hidden`}>
-        {/* The card header `Card` draws, open-coded because the filter row has to sit
-            between the title and the table. The title itself is the shared one, and so is
-            the row: this is the one card in this workspace with a title for the search box
-            to sit opposite, which is where the prototype puts it, so the title goes into
-            `SearchRow` rather than the row being spelled a second time here. */}
-        <SearchRow>
-          <h2 className={cardTitleClasses}>All shops</h2>
+        <SearchRow title="In this lab">
           {loading || loadError ? null : (
             <SearchField label="Search shops" onChange={setQuery} value={query} />
           )}
