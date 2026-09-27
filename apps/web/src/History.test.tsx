@@ -185,6 +185,11 @@ const SHOP_LISTING: ShopListResponse = {
 };
 
 /** The page's own Shop filter, which the notice sends no reader to. */
+/** The line beside *Clear filters*: why it is disabled, or what its press did. */
+function clearLine(): HTMLElement {
+  return within(screen.getByRole("form", { name: "Narrow history" })).getByRole("status");
+}
+
 function shopFilter(): HTMLElement {
   return within(screen.getByRole("form", { name: "Narrow history" })).getByRole("combobox", {
     name: "Shop",
@@ -398,7 +403,7 @@ describe("experiment history", () => {
     expect(within(row).queryByText(/1\/2 decided/)).toBeNull();
   });
 
-  it("says a run's recipe has moved on without pretending the run did", async () => {
+  it("says a run's scenario has moved on without pretending the run did", async () => {
     renderHistory();
 
     const table = await screen.findByRole("table");
@@ -424,7 +429,7 @@ describe("experiment history", () => {
     const table = await screen.findByRole("table");
     const row = within(table).getByText("Control policy alone").closest("tr") as HTMLElement;
 
-    expect(within(row).getByRole("link", { name: "View evidence" })).toHaveAttribute(
+    expect(within(row).getByRole("link", { name: "Open results" })).toHaveAttribute(
       "href",
       `/lab/bench/${OTHER_SHOP_ID}/${RUNNING_ID}/results`,
     );
@@ -466,7 +471,7 @@ describe("experiment history", () => {
     expect(replayed).toEqual([FINISHED_ID]);
     // What came back is a different experiment, so the operator is taken to it rather than
     // left on a listing that now has one more row than it shows.
-    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Results" })).toBeVisible();
   });
 
   it("forks a row onto the newest published version of every arm it ran", async () => {
@@ -496,7 +501,7 @@ describe("experiment history", () => {
         },
       ],
     ]);
-    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Results" })).toBeVisible();
   });
 
   it("offers no fork on a row whose arms already run the newest versions", async () => {
@@ -572,6 +577,101 @@ describe("experiment history", () => {
     await user.click(screen.getByRole("button", { name: "Search" }));
 
     await waitFor(() => expect(lastAsked().get("q")).toBe("beacon"));
+  });
+
+  it("ends the form on Clear filters and then Search, as the frame draws it", async () => {
+    renderHistory();
+    await screen.findByRole("table");
+
+    const form = screen.getByRole("form", { name: "Narrow history" });
+    const controls = Array.from(form.querySelectorAll("input, select, button")).map(
+      (control) => control.getAttribute("aria-label") ?? control.textContent,
+    );
+
+    expect(controls.slice(-2)).toEqual(["Clear filters", "Search"]);
+    // The search box still opens the form: only its button moved.
+    expect(controls[0]).toBe("Search");
+  });
+
+  it("offers nothing to clear on an unnarrowed list, and says why", async () => {
+    renderHistory();
+    await screen.findByRole("table");
+
+    const clear = screen.getByRole("button", { name: "Clear filters" });
+
+    expect(clear).toBeDisabled();
+    expect(clear).toHaveAttribute("title", "No filter is set, so every run is shown.");
+    expect(clear).toHaveAccessibleDescription("No filter is set, so every run is shown.");
+  });
+
+  it("clears every filter and the query at once, and says so", async () => {
+    const user = userEvent.setup();
+    renderHistory(
+      `?shop=${OTHER_SHOP_ID}&scenario=${SCENARIO_ID}&framework=pydantic-ai&tag=two-arm&status=failed&outcome=missed&span=30&q=beacon&page=2`,
+    );
+    await screen.findByRole("table");
+    await waitFor(() => expect(lastAsked().get("q")).toBe("beacon"));
+    const reads = asked.length;
+
+    const clear = screen.getByRole("button", { name: "Clear filters" });
+    expect(clear).toBeEnabled();
+    expect(clear).not.toHaveAccessibleDescription();
+    await user.click(clear);
+
+    await waitFor(() => expect(asked.length).toBeGreaterThan(reads));
+    const unnarrowed = lastAsked();
+    for (const key of [
+      "shop_id",
+      "scenario_id",
+      "framework_id",
+      "tag",
+      "status",
+      "outcome",
+      "started_after",
+      "q",
+    ]) {
+      expect(unnarrowed.get(key) ?? "", key).toBe("");
+    }
+    expect(unnarrowed.get("page")).toBe("1");
+    const form = within(screen.getByRole("form", { name: "Narrow history" }));
+    expect(form.getByLabelText("Search")).toHaveValue("");
+    expect(shopFilter()).toHaveValue("");
+    expect(form.getByLabelText("Status")).toHaveValue("");
+    expect(form.getByLabelText("Started")).toHaveValue("");
+    // It says what it did where it will be heard, and hands focus to the form it emptied
+    // rather than dropping it with the button it disabled.
+    expect(clearLine()).toHaveTextContent("Filters cleared. Every run is shown.");
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeDisabled();
+    expect(form.getByLabelText("Search")).toHaveFocus();
+  });
+
+  it("clears words typed into the search box and not yet searched for", async () => {
+    const user = userEvent.setup();
+    renderHistory();
+    await screen.findByRole("table");
+
+    await user.type(screen.getByLabelText("Search"), "beacon");
+    const clear = screen.getByRole("button", { name: "Clear filters" });
+    expect(clear).toBeEnabled();
+
+    await user.click(clear);
+
+    expect(screen.getByLabelText("Search")).toHaveValue("");
+    expect(clearLine()).toHaveTextContent("Filters cleared. Every run is shown.");
+  });
+
+  it("stops saying the filters were cleared once one is set again", async () => {
+    const user = userEvent.setup();
+    renderHistory("?status=failed");
+    await screen.findByRole("table");
+
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(clearLine()).toHaveTextContent("Filters cleared.");
+
+    await user.selectOptions(screen.getByLabelText("Status"), "Completed");
+
+    await waitFor(() => expect(clearLine()).toHaveTextContent(""));
+    expect(clearLine()).toBeEmptyDOMElement();
   });
 
   it("keeps a narrowing in the URL so a finding can be shared as it was found", async () => {
@@ -846,7 +946,7 @@ describe("a row's replay and fork report themselves", () => {
     }
 
     replays.release();
-    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Results" })).toBeVisible();
     expect(replayed).toEqual([FINISHED_ID]);
   });
 
@@ -885,7 +985,7 @@ describe("a row's replay and fork report themselves", () => {
     expect(within(row).getByRole("button", { name: "Replay recorded versions" })).toBeDisabled();
 
     forks.release();
-    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Results" })).toBeVisible();
   });
 });
 
@@ -1073,7 +1173,7 @@ describe("a row's replay, fork and the provider the lab can reach", () => {
     expect(replayed).toEqual([FINISHED_ID]);
     // The replay lands on the derived run's results, which reads the lab's reach for itself.
     // Waited for here, so none of its reads is counted against the case after this one.
-    expect(await screen.findByRole("heading", { name: "Experiment results" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Results" })).toBeVisible();
     await waitFor(() => {
       expect(connectionServed.statuses).toBe(2);
       expect(connectionServed.listings).toBe(2);

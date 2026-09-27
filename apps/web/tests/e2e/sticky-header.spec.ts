@@ -270,23 +270,23 @@ test("the tour brings a step clear of the pinned header rather than lighting it 
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`/shops/${lab.shopId}/scenarios/${lab.scenarioId}`);
-  const recipe = page.locator('[aria-label="Recipe"]');
-  await expect(recipe).toBeVisible();
+  const builtOn = page.locator('[aria-label="Built on"]');
+  await expect(builtOn).toBeVisible();
   const header = pageHeader(page);
   const headerBottom = async () => {
     const found = await box(header);
     return found.y + found.height;
   };
 
-  // The Recipe card's top 40px under the header: inside the window, hidden all the same.
-  const shift = (await box(recipe)).y - ((await headerBottom()) - 40);
+  // The Built on card's top 40px under the header: inside the window, hidden all the same.
+  const shift = (await box(builtOn)).y - ((await headerBottom()) - 40);
   await page.locator("main").evaluate((pane, by) => pane.scrollBy(0, by), shift);
-  expect((await box(recipe)).y).toBeLessThan(await headerBottom());
+  expect((await box(builtOn)).y).toBeLessThan(await headerBottom());
 
   await page.getByRole("button", { name: "Show me around the scenario editor" }).click();
   await expect(page.locator(".driver-popover")).toBeVisible();
-  await expect(page.locator(".driver-popover-title")).toHaveText("A recipe, not a script");
-  expect((await box(recipe)).y).toBeGreaterThanOrEqual(await headerBottom());
+  await expect(page.locator(".driver-popover-title")).toHaveText("Composed, not scripted");
+  expect((await box(builtOn)).y).toBeGreaterThanOrEqual(await headerBottom());
   await page.keyboard.press("Escape");
 });
 

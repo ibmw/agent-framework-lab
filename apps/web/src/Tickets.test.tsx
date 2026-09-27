@@ -16,7 +16,6 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS, tourAt } from "./lib/tours";
-import { cardTitleClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { railEntry, shellListings } from "./test/shell";
@@ -365,21 +364,56 @@ function otherTicketHandlers() {
 }
 
 describe("ticket list", () => {
-  // Two headings on this screen are drawn in open code rather than by `Card` or `PageHeader`:
-  // the list panel's own title, and the thread's subject line. Neither can be seen to lose its
-  // face, so both are measured — the panel against the shared card-title spelling, the subject
-  // against the one size the prototype draws between a page title and a card title.
-  it("titles its panel the way every other card in the workspace is titled", async () => {
+  // The thread's subject line is drawn in open code rather than by `Card` or `PageHeader`, so
+  // it is measured against the one size the prototype draws between a page title and a card
+  // title.
+  it("names the page once, over the list and the ticket, with what the shop holds under it", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets`);
 
-    const title = await screen.findByRole("heading", { level: 2, name: "Tickets" });
+    const title = await screen.findByRole("heading", { level: 1, name: "Tickets" });
+    const header = title.closest("header") as HTMLElement;
 
-    for (const className of cardTitleClasses.split(" ")) {
-      expect(title.className).toContain(className);
-    }
-    // Presence alone would pass a header that kept a sans size beside the shared one, which is
-    // exactly how a copy half-reverts.
-    expect(title.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/);
+    // The whole listing, as the rail counts it — not the rows the filter leaves.
+    expect(await within(header).findByText("2 in this shop")).toBeVisible();
+    // The header is above both columns rather than inside the list, and the list no longer
+    // titles itself a second time.
+    const list = screen.getByRole("region", { name: "Tickets" });
+    expect(header.contains(list)).toBe(false);
+    expect(list.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(within(list).queryByRole("heading", { name: "Tickets" })).toBeNull();
+    expect(within(list).getByLabelText("Filter tickets")).toBeVisible();
+  });
+
+  it("keeps counting the whole shop while the filter narrows the list", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const header = (await screen.findByRole("heading", { level: 1, name: "Tickets" })).closest(
+      "header",
+    ) as HTMLElement;
+    await within(header).findByText("2 in this shop");
+
+    await user.selectOptions(screen.getByLabelText("Filter tickets"), "open");
+
+    expect(within(header).getByText("2 in this shop")).toBeVisible();
+  });
+
+  it("says no count while the listing cannot be read", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "down", request_id: "req-1" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    const header = (await screen.findByRole("heading", { level: 1, name: "Tickets" })).closest(
+      "header",
+    ) as HTMLElement;
+    await screen.findByRole("alert");
+
+    expect(within(header).queryByText(/in this shop/)).toBeNull();
   });
 
   it("draws the thread's subject in the display face at the prototype's 19px", async () => {
@@ -883,7 +917,7 @@ describe("ticket thread", () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 
     const thread = await screen.findByRole("region", { name: "Ticket thread" });
-    expect(within(thread).getByText(/Replies happen on the Bench, per run/)).toBeVisible();
+    expect(within(thread).getByText(/Replies happen on the live bench, per run/)).toBeVisible();
     expect(within(thread).getByRole("button", { name: "as Maya Laurent" })).toBeVisible();
     expect(within(thread).getByRole("button", { name: "as past support" })).toBeVisible();
   });

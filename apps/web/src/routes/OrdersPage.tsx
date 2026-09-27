@@ -110,7 +110,7 @@ export function OrdersPage() {
     <>
       <PageHeader
         title="Orders"
-        description="Orders are authored fixture state for this shop. Starting an experiment snapshots them into each arm's sandbox — live runs mutate isolated clones, never this data."
+        description="Orders are authored fixture state for this shop. Starting an experiment freezes them into the snapshot each arm's sandbox is cloned from — live runs mutate isolated clones, never this data."
         actions={
           <Link className={accentButtonClasses} to="new">
             New order

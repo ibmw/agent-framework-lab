@@ -59,7 +59,7 @@ export const SETUP_CHAIN = [
     id: "shop",
     label: "Shop",
     route: "/shops/:shopId",
-    linkLabel: "Open the shop's home",
+    linkLabel: "Open the overview",
     publishes: true,
     terms: ["shop", "definition"],
   },
@@ -201,7 +201,7 @@ export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
   shop: {
     body: [
       "A [[shop]] is the synthetic commerce platform an incident happens inside: the catalog, the policies and FAQ the agent reaches through tools, the payment and fulfilment methods an order can use, and the named tone-of-voice guidelines it answers in. Nothing else in this chain exists outside one — every later step is either authored in a shop or published against one.",
-      "The shop's home lists whatever its publish gate is still refusing, and those words are the gate's own rather than a second opinion. Publishing freezes the draft as version 1; the draft stays yours to keep editing, and nothing that pinned v1 moves when you do.",
+      "The shop's overview lists whatever its publish gate is still refusing, and those words are the gate's own rather than a second opinion. Publishing freezes the draft as version 1; the draft stays yours to keep editing, and nothing that pinned v1 moves when you do.",
       "If you have no name in mind, the create form offers “Use an example shop”, which fills its four fields with a ready-made identity you can edit before creating. It is a convenience on the first step only: the shop it makes is the same empty draft as one you typed, and every gate below applies to it unchanged.",
     ],
     gate: "Until a shop has one published version, a ticket cannot be published against it.",
@@ -216,9 +216,9 @@ export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
   order: {
     body: [
       "The [[order|order fixture]] is the commerce state the incident is about: line items, payment and fulfilment status, the authored events that got it there, and a shipping address selected from the customer's address book and stored as a frozen copy labelled with where it came from.",
-      "It is the only definition in this chain with no version of its own. A recipe names the order rather than freezing it, and the copy is taken later, when a [[sandbox-snapshot|snapshot]] is materialized — so an order edited after the recipe is published changes the starting state of the next run.",
+      "It is the only definition in this chain with no version of its own. A scenario names the order rather than freezing it, and the copy is taken later, when a [[sandbox-snapshot|snapshot]] is frozen — so an order edited after the scenario is published changes the starting state of the next run.",
     ],
-    gate: "A scenario binds its objectives to this shop's own orders, and a starting state copies the one the recipe named.",
+    gate: "A scenario binds its objectives to this shop's own orders, and a starting state copies the one the scenario named.",
   },
   ticket: {
     body: [
@@ -230,14 +230,14 @@ export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
   blocks: {
     body: [
       "Two libraries, shared across every shop rather than owned by this one. [[objective-block|Objective blocks]] are what an experiment asserts; [[mutation-block|mutation blocks]] are what goes wrong in the middle of it. Both are parameterized templates rather than statements about your shop — a [[scenario]] binds their parameters to its own shop's objects and pins the template version it composed.",
-      "Publish at least one objective: a recipe with nothing to decide decides nothing. A fault is optional, and a recipe with none is simply an incident where nothing interrupts.",
+      "Publish at least one objective: a scenario with nothing to decide decides nothing. A fault is optional, and a scenario with none is simply an incident where nothing interrupts.",
     ],
     gate: "A scenario can only bind a template that has a published version.",
   },
   scenario: {
     body: [
-      "The [[scenario]] is the experiment recipe, and it is deliberately not a conversation script. Composed on the published ticket, it adds the hidden facts only you can see, the context documents the agent may find through tools, the objective and mutation bindings, and the conditions — including a turn cap — that end a run.",
-      "Publishing it freezes the recipe and pins every version it reaches: the ticket, the shop, each block template. Its starting-states page then materializes a [[sandbox-snapshot|snapshot]], which is the world both arms will begin in.",
+      "The [[scenario]] is what an experiment runs, and it is deliberately not a conversation script. Composed on the published ticket, it adds the hidden facts only you can see, the context documents the agent may find through tools, the objective and mutation bindings, and the conditions — including a turn cap — that end a run.",
+      "Publishing it freezes the scenario and pins every version it reaches: the ticket, the shop, each block template. Its starting-states page then freezes a [[sandbox-snapshot|snapshot]], which is the world both arms will begin in.",
     ],
     gate: "An experiment pins one published scenario version; a draft cannot be run.",
   },
@@ -260,11 +260,11 @@ export const SETUP_GUIDE_STEPS: Record<SetupStepId, StepCopy> = {
       "A [[judge-configuration|judge configuration]] is the versioned rubric, the model that reads it, and the declared list of what that model is shown. It fills the rows no rule can decide — whether the explanation was correct, clear, and actually resolved the request.",
       "It reads one arm at a time, from an anonymized brief that names no framework, provider or model, and it never overwrites the [[evaluation|deterministic evidence]] standing beside it.",
     ],
-    gate: "Objectives a scenario left to a judge stay deferred until a scoring pass is run from the bench with a published judge.",
+    gate: "Objectives a scenario left to a judge stay deferred until a scoring pass is run from the live bench or the results with a published judge.",
   },
   experiment: {
     body: [
-      "Start the [[experiment]] from the bench. Starting one freezes a [[sandbox-snapshot|starting state]] from the recipe version and the seed it is given, clones that into one arm per configuration, opens both threads on the ticket's triggering message, and hands you the composer — you are the [[participant-driver|participant driver]], so the customer's later turns are yours.",
+      "Start the [[experiment]] from the bench. Starting one freezes a [[sandbox-snapshot|starting state]] from the scenario version and the seed it is given, clones that into one arm per configuration, opens both threads on the ticket's triggering message, and hands you the composer — you are the [[participant-driver|participant driver]], so the customer's later turns are yours.",
       "Advance each arm, answer as the customer, and let any bound fault fire. When both arms have finished, the results screen reads them objective by objective, arm beside arm, with no aggregate score anywhere.",
     ],
     gate: "The setup gate refuses an experiment whose inputs are not all published, and warns when its two arms differ in more than one dimension.",

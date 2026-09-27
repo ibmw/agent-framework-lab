@@ -1,5 +1,5 @@
 import type { ExperimentHistoryEntrySchema, ExperimentHistoryResponse } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { forkExperiment, listExperimentHistory, replayExperiment } from "../api/experiments";
@@ -14,6 +14,8 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
+  inkButtonClasses,
+  outlineButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
   tableCellClasses,
@@ -47,6 +49,20 @@ const SPANS: { value: string; label: string; days: number | null }[] = [
   { value: "30", label: "Last 30 days", days: 30 },
   { value: "90", label: "Last 90 days", days: 90 },
 ];
+
+/**
+ * Every URL key that narrows the listing, the query included: what *Clear filters* removes.
+ *
+ * The page is not among them, because it is not a filter — but clearing drops it too, since
+ * page 4 of a narrowing is not a page of the whole list.
+ */
+const FILTER_KEYS = ["shop", "scenario", "framework", "tag", "status", "outcome", "span", "q"];
+
+/** What the line beside *Clear filters* says while there is nothing to clear, and why it is disabled. */
+const NOTHING_TO_CLEAR = "No filter is set, so every run is shown.";
+
+/** What the same line says once a press has cleared them. */
+const FILTERS_CLEARED = "Filters cleared. Every run is shown.";
 
 /** A URL value if the contract publishes it, and nothing if it does not. */
 function oneOf<Value extends string>(value: string | null, allowed: readonly Value[]): Value | "" {
@@ -237,6 +253,20 @@ export function ExperimentHistoryPage() {
   const query = params.get("q") ?? "";
   const page = pageIn(params.get("page"));
   const [search, setSearch] = useState(query);
+  // Whether the last thing done to the filters was *Clear filters*: what the line beside it
+  // says, until a filter is set again.
+  const [cleared, setCleared] = useState(false);
+  const searchBox = useRef<HTMLInputElement>(null);
+  const clearNoteId = useId();
+  // Something to clear: a narrowing the URL holds, or words typed into the box and not yet
+  // searched for — both are what the operator would have to undo by hand.
+  const filtered =
+    FILTER_KEYS.some((key) => (params.get(key) ?? "") !== "") || search.trim() !== "";
+  useEffect(() => {
+    if (filtered) {
+      setCleared(false);
+    }
+  }, [filtered]);
 
   // The text box is the one filter that is not applied as it is typed: a request per
   // keystroke would read the whole lab on the way to a word nobody finished.
@@ -306,6 +336,25 @@ export function ExperimentHistoryPage() {
     narrow("q", search.trim());
   }
 
+  /**
+   * Drop every filter and the query at once, and say so.
+   *
+   * The press disables the button it came from, so focus goes to the search box — the first
+   * control of the form it just emptied — rather than to the page's body.
+   */
+  function clearFilters() {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      for (const key of [...FILTER_KEYS, "page"]) {
+        next.delete(key);
+      }
+      return next;
+    });
+    setSearch("");
+    setCleared(true);
+    searchBox.current?.focus();
+  }
+
   // The footer counts the page the *answer* is of, never the one the URL asked for: the
   // backend clamps what it was sent, and a range read off an unclamped number would describe
   // a page nobody was served.
@@ -352,6 +401,7 @@ export function ExperimentHistoryPage() {
         <label className={`${fieldLabelClasses} min-w-64 flex-1`}>
           Search
           <input
+            ref={searchBox}
             aria-label="Search"
             className={fieldControlClasses}
             placeholder="Name, scenario, shop, configuration, tag, or note…"
@@ -359,9 +409,6 @@ export function ExperimentHistoryPage() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
-        <button className={subtleButtonClasses} type="submit">
-          Search
-        </button>
         <label className={fieldLabelClasses}>
           Shop
           <select
@@ -478,6 +525,28 @@ export function ExperimentHistoryPage() {
             ))}
           </select>
         </label>
+        {/* The form ends on its two actions, as the frame draws them: undo every narrowing,
+            then search. Clear filters is secondary, so it keeps native `disabled` while there
+            is nothing to clear, with the reason in `title` and in the line it names (ADR 0063). */}
+        <div className="flex items-end gap-2">
+          <button
+            className={outlineButtonClasses}
+            type="button"
+            disabled={!filtered}
+            title={filtered ? undefined : NOTHING_TO_CLEAR}
+            aria-describedby={filtered ? undefined : clearNoteId}
+            onClick={clearFilters}
+          >
+            Clear filters
+          </button>
+          <button className={inkButtonClasses} type="submit">
+            Search
+          </button>
+        </div>
+        {/* Mounted before anything is cleared, so the sentence a press writes is announced. */}
+        <p id={clearNoteId} role="status" className="basis-full text-xs text-admin-muted">
+          {filtered ? "" : cleared ? FILTERS_CLEARED : NOTHING_TO_CLEAR}
+        </p>
       </form>
 
       {/* Outside the table, which is busy while it is read again and would silence it. */}
@@ -721,7 +790,7 @@ function HistoryRow({
       <td className={tableCellClasses}>
         <div className="grid gap-1">
           <Link className="text-lab-ink underline-offset-2 hover:underline" to={`${bench}/results`}>
-            View evidence
+            Open results
           </Link>
           <Link className="text-lab-ink underline-offset-2 hover:underline" to={bench}>
             Open live bench

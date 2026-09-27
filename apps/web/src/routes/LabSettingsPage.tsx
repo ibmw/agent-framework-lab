@@ -981,20 +981,20 @@ function FastPathZone({ shops, onSeeded }: { shops: ShopSummarySchema[]; onSeede
             ) : (
               <div className="grid gap-1.5">
                 <p className="text-[13px] text-admin-ink-soft">
-                  Written. The comparison is on the history screen.
+                  Written. Its results are listed in History.
                 </p>
                 <p className="flex flex-wrap gap-3 text-[13px]">
                   <Link
                     className="font-semibold text-lab-ink underline-offset-2 hover:underline"
                     to={`/shops/${seeded.shop_id}`}
                   >
-                    Open the shop
+                    Open the shop's overview
                   </Link>
                   <Link
                     className="font-semibold text-lab-ink underline-offset-2 hover:underline"
                     to={`/lab/bench/${seeded.shop_id}/${seeded.experiment_id}/results`}
                   >
-                    Read the comparison
+                    Open the results
                   </Link>
                 </p>
               </div>

@@ -34,15 +34,19 @@ import {
   derivedRows,
 } from "../lib/actionStatus";
 import { COMPARISON_DIMENSION, DEFINITION_TYPE, describeValue, labelOf } from "../lib/enumLabels";
+import { armFigures } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
   fieldControlClasses,
   fieldLabelClasses,
+  focusRingClasses,
   formatTimestamp,
+  outlineButtonClasses,
   subtleButtonClasses,
 } from "../lib/ui";
 import { pinKey, usePinnedProviders } from "../lib/usePinnedProviders";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
+import { definitionPath, versionPath } from "../lib/versionLinks";
 
 const UNAVAILABLE = "This experiment's results are unavailable.";
 
@@ -240,7 +244,7 @@ export function ExperimentResultsLayout() {
   if (experiment === null || evaluation === null || annotations === null) {
     return (
       <>
-        <PageHeader title="Experiment results" />
+        <PageHeader title="Results" />
         {error ? (
           <p role="alert" className="text-[13px] text-lab-error">
             {error}
@@ -288,7 +292,7 @@ export function ExperimentResultsLayout() {
         actions={
           <div className="flex items-center gap-2">
             <BusyButton
-              className={subtleButtonClasses}
+              className={outlineButtonClasses}
               type="button"
               onClick={() => void replay(derivedRows(experiment.runs), experiment.label)}
               // A secondary control keeps native `disabled` (ADR 0063): the reason in `title`,
@@ -316,7 +320,7 @@ export function ExperimentResultsLayout() {
                 take. The panel opens below the header rather than over it — this shell has
                 no modal, and a derivation is read beside the run it derives from. */}
             <button
-              className={subtleButtonClasses}
+              className={outlineButtonClasses}
               type="button"
               aria-expanded={forking}
               aria-controls={FORK_PANEL_ID}
@@ -406,12 +410,13 @@ export function ExperimentResultsLayout() {
           {experiment.runs.map((run) => (
             <ArmSummary
               key={run.run_id}
+              shopId={shopId}
               run={run}
               arm={evaluation.arms.find((entry) => entry.run_id === run.run_id) ?? null}
             />
           ))}
         </div>
-        <Provenance experiment={experiment} />
+        <Provenance shopId={shopId} experiment={experiment} />
       </div>
 
       <nav aria-label="Results views" className="mb-4 flex flex-wrap items-center gap-1.5">
@@ -728,31 +733,63 @@ function Tab({ to, end, label }: { to: string; end?: boolean; label: string }) {
 }
 
 /**
- * One arm at the top of every tab: what ran, where it stands, and what it has met.
+ * One arm at the top of every tab: what ran, where it stands, what it has met, and what it
+ * spent (`Workspace.dc.html` :2566).
  *
  * The count is the arm's own — met out of the rows something actually decided — and it is
  * deliberately never put beside the other arm's as a verdict. Two arms driven to different
  * depths hold different denominators, and a screen that subtracted one from the other would
- * be reporting the operator's own pacing as a difference between frameworks.
+ * be reporting the operator's own pacing as a difference between frameworks. For the same
+ * reason it is drawn in one ink on both cards, where the frame paints one green and one amber.
+ *
+ * The configuration's version is a link to the editor of the draft it was published from
+ * (ADR 0068), so a reviewer reading a finished run reaches what the arm ran in one press.
  */
-function ArmSummary({ run, arm }: { run: ExperimentRunSchema; arm: ArmEvaluationSchema | null }) {
+function ArmSummary({
+  shopId,
+  run,
+  arm,
+}: {
+  shopId: string;
+  run: ExperimentRunSchema;
+  arm: ArmEvaluationSchema | null;
+}) {
   return (
     <section
       aria-label={`${run.label} summary`}
-      className="grid gap-1 rounded-lg border border-admin-border bg-admin-surface px-4 py-3"
+      className="grid gap-2 rounded-lg border border-admin-border bg-admin-surface px-4 py-3"
     >
-      <div className="flex flex-wrap items-baseline gap-2">
-        <h2 className="text-sm font-semibold text-lab-ink">{run.label}</h2>
-        <span className="text-xs text-admin-muted">
-          {run.framework_id} · {run.model_id} · configuration v{run.agent_configuration_version}
-        </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-lab-ink">{run.label}</h2>
+          <p className="flex flex-wrap items-center gap-1.5 text-xs text-admin-muted">
+            <Link
+              className={versionChipClasses}
+              to={definitionPath(
+                "agent_configuration",
+                run.agent_configuration_id,
+                run.agent_configuration_version,
+                shopId,
+              )}
+              title={`Open ${run.agent_configuration_name}, whose draft published v${run.agent_configuration_version}`}
+            >
+              {run.agent_configuration_name} v{run.agent_configuration_version}
+            </Link>
+            <span>
+              {run.framework_id} · {run.model_id}
+            </span>
+          </p>
+        </div>
         {arm ? (
-          <span
-            className="ml-auto text-sm font-semibold text-admin-ink"
+          <div
+            className="ml-auto text-right"
             title={`${arm.met} of the ${arm.decided} objective(s) something has decided for this arm`}
           >
-            {arm.met}/{arm.decided} decided
-          </span>
+            <p className="font-display text-[19px] font-bold leading-tight text-admin-ink">
+              {arm.met} of {arm.decided}
+            </p>
+            <p className="text-[11px] text-admin-muted">decided objectives met</p>
+          </div>
         ) : null}
       </div>
       <p className="text-xs text-admin-muted">
@@ -762,29 +799,69 @@ function ArmSummary({ run, arm }: { run: ExperimentRunSchema; arm: ArmEvaluation
             ? `Still running — waiting for the agent at turn ${run.standing.ordinal}`
             : `Still running — waiting for the customer at turn ${run.standing.ordinal}`}
       </p>
+      <ul
+        aria-label={`What ${run.label} spent`}
+        className="flex flex-wrap gap-x-3.5 gap-y-1 border-t border-admin-border/60 pt-2 text-[11.5px] text-admin-ink-soft"
+      >
+        {armFigures(run.metrics).map((figure) => (
+          <li key={figure.key} className={figure.warn ? "text-lab-error" : undefined}>
+            {figure.text}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
 
-/** The chip strip: the versions this run pinned, and the dimensions its arms differ along. */
-function Provenance({ experiment }: { experiment: ExperimentResponse }) {
+/**
+ * A version as a chip that opens what it pinned: the provenance strip's shape, with the link's
+ * underline on hover and the workspace's focus ring, because unlike the bench's chips it is a
+ * control (`chipClasses` is for the ones that are not).
+ */
+const versionChipClasses = `rounded-full bg-admin-border px-2.5 py-0.5 font-semibold text-admin-ink-soft no-underline underline-offset-2 hover:underline ${focusRingClasses}`;
+
+/**
+ * The chip strip: the versions this run pinned, each opening what it pinned (ADR 0068), and
+ * the dimensions its arms differ along.
+ */
+function Provenance({ shopId, experiment }: { shopId: string; experiment: ExperimentResponse }) {
   const differences = experiment.comparison.filter((variable) => variable.differs);
+  // The scenario is pinned by the run itself; a sandbox input may pin it again, and one chip
+  // per version is enough.
+  const inputs = experiment.sandbox_inputs.filter(
+    (pin) => !(pin.definition_type === "scenario" && pin.definition_id === experiment.scenario_id),
+  );
   return (
     <div
       data-tour="results-provenance"
       className="flex flex-wrap items-center gap-2 text-[11.5px] text-admin-ink-soft"
     >
-      <span className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold">
+      <Link
+        className={versionChipClasses}
+        to={definitionPath("scenario", experiment.scenario_id, experiment.scenario_version, shopId)}
+      >
         scenario v{experiment.scenario_version}
-      </span>
-      {experiment.sandbox_inputs.map((pin) => (
-        <span
-          key={`${pin.definition_type}:${pin.definition_id}`}
-          className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold"
-        >
-          {describeValue(DEFINITION_TYPE, pin.definition_type)} v{pin.version}
-        </span>
-      ))}
+      </Link>
+      {inputs.map((pin) => {
+        const to = versionPath(pin.definition_type, pin.definition_id, pin.version, shopId);
+        const label = `${describeValue(DEFINITION_TYPE, pin.definition_type)} v${pin.version}`;
+        return to === null ? (
+          <span
+            key={`${pin.definition_type}:${pin.definition_id}`}
+            className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold"
+          >
+            {label}
+          </span>
+        ) : (
+          <Link
+            key={`${pin.definition_type}:${pin.definition_id}`}
+            className={versionChipClasses}
+            to={to}
+          >
+            {label}
+          </Link>
+        );
+      })}
       <span className="rounded-full bg-admin-border px-2.5 py-0.5 font-semibold">
         starting state <Fingerprint value={experiment.sandbox_fingerprint} />
       </span>

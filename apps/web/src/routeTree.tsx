@@ -178,7 +178,7 @@ export const routeTree = createRoutesFromElements(
       <Route path="tickets/:ticketId" element={<TicketsPage />} />
       <Route path="customers/:profileId" element={<CustomerEditorRoute />} />
       <Route path="scenarios" element={<ScenariosPage />} />
-      {/* Creating the recipe is a page too (PLAN-UX Slice 14): `new` is a static segment and
+      {/* Creating the scenario is a page too: `new` is a static segment and
           outranks the identifier beside it. */}
       <Route path="scenarios/new" element={<NewScenarioPage />} />
       <Route path="scenarios/:scenarioId" element={<ScenarioEditorPage />} />

@@ -39,7 +39,7 @@ export const GLOSSARY_TERMS = [
     id: "order",
     term: "Order fixture",
     definition:
-      "Shop-scoped authored commerce state with no version of its own: line items, payment and fulfilment status, authored events, and a shipping address chosen from the customer's address book. A scenario names it without freezing it — the copy is taken later, when a snapshot is materialized for an experiment, so an order edited after the recipe is published changes the starting state of the next run.",
+      "Shop-scoped authored commerce state with no version of its own: line items, payment and fulfilment status, authored events, and a shipping address chosen from the customer's address book. A scenario names it without freezing it — the copy is taken later, when a snapshot is frozen for an experiment, so an order edited after the scenario is published changes the starting state of the next run.",
   },
   {
     id: "support-identity",
@@ -57,7 +57,7 @@ export const GLOSSARY_TERMS = [
     id: "scenario",
     term: "Scenario",
     definition:
-      "The versioned experiment recipe built on one ticket and its linked shop-scoped objects, adding hidden facts, context documents, bound objective and mutation blocks, and completion conditions. Publishing it pins every version it was authored against.",
+      "The versioned definition an experiment runs, built on one ticket and its linked shop-scoped objects, adding hidden facts, context documents, bound objective and mutation blocks, and completion conditions. Publishing it pins every version it was authored against.",
   },
   {
     id: "objective-block",

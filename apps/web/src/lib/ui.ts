@@ -50,10 +50,10 @@ export const surfaceClasses =
  * a departure from the prototype, recorded with the other two in
  * `docs/history/workspace-refresh-pattern-slices.md` UI-5.
  *
- * It lives here rather than inside `Card` because two surfaces draw a card header in open
- * code: the shops table, which needs a filter row between the title and the table, and the
- * tickets list panel, which carries its filter in the header line. A card title spelled three
- * times is a card title that ends up spelled three ways.
+ * It lives here rather than inside `Card` because some surfaces draw a card header in open
+ * code — the shops and documents tables, which need a filter row between the title and the
+ * table, and the settings zones. A card title spelled once per surface is a card title that
+ * ends up spelled several ways.
  */
 export const cardTitleClasses = "font-display text-[17px] font-bold tracking-[-0.01em]";
 
@@ -387,6 +387,33 @@ export const blockedButtonClasses = `${buttonShapeClasses} ${focusRingClasses} c
  * sentence is drawn. `lab-error` is `#9d3028`.
  */
 export const validationMessageClasses = "text-[13px] font-semibold text-lab-error";
+
+/**
+ * A chip that says what something is, and does nothing when pressed.
+ *
+ * The bench and the timeline mark a tool call, a retried attempt, a scenario fault and a turn
+ * only one arm heard with a small bordered label. Those labels used to wear the button classes,
+ * so each drew a hover and a focus ring and read as a control a reader could press — and none
+ * of them can be. A chip names a kind (*Tokens, type and glyphs*), and this is its weight: the
+ * README's "7px small chips" radius, the border of a secondary, and no hover, no pointer, no
+ * ring and no transition, because each of those promises a press. A chip is a `span` or an
+ * `li` and never takes a `tabIndex`; one that became interactive would be a button, and would
+ * take a row of `buttonVariants` instead.
+ *
+ * Two tones, for the two things the strips already told apart: `mark` for what happened to the
+ * arm (a fault, an attempt, a split turn), and `quiet` for what the agent did (a tool call).
+ */
+const chipBaseClasses =
+  "inline-flex cursor-default items-center rounded-[7px] border border-admin-border px-1.5 py-0.5 text-[10px] font-semibold";
+
+const chipTones = {
+  mark: `${chipBaseClasses} text-admin-ink`,
+  quiet: `${chipBaseClasses} text-admin-muted`,
+} as const;
+
+export type ChipTone = keyof typeof chipTones;
+
+export const chipClasses: Readonly<Record<ChipTone, string>> = chipTones;
 
 /**
  * The verbs a button's glyph may mean. The set is closed: what is fixed is which glyph means

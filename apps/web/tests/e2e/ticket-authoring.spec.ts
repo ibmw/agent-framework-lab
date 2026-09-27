@@ -149,7 +149,11 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   // The incident itself.
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
   const list = card(page, "Tickets");
-  await expect(list.getByRole("heading", { name: "Tickets" })).toBeVisible();
+  // One header over the list and the ticket, counting what the shop holds: nothing yet.
+  const pageHeader = page
+    .locator("header")
+    .filter({ has: page.getByRole("heading", { level: 1, name: "Tickets" }) });
+  await expect(pageHeader.getByText("0 in this shop")).toBeVisible();
   await expect(list.getByLabel("Reference", { exact: true })).toHaveValue("T-1");
   await list.getByLabel("Reference", { exact: true }).fill("T-204");
   await list.getByLabel("Subject", { exact: true }).fill("Wrong address concern");
@@ -157,6 +161,7 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await list.getByRole("button", { name: "Open ticket" }).click();
 
   await expect(page.getByRole("heading", { name: /T-204 · Wrong address concern/ })).toBeVisible();
+  await expect(pageHeader.getByText("1 in this shop")).toBeVisible();
   const thread = card(page, "Ticket thread");
   await expect(thread.getByText(/No first message yet/)).toBeVisible();
   await expect(

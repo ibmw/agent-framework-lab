@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { glossaryTerm, parseGlossaryProse, referencedTerms } from "./glossary";
+import { GLOSSARY_TERMS, glossaryTerm, parseGlossaryProse, referencedTerms } from "./glossary";
 import { chainPlacement, SETUP_CHAIN, SETUP_GUIDE_STEPS, stepHref } from "./setupPath";
 import { TOUR_IDS, TOURS, tourAt, tourHref, tourSteps } from "./tours";
 
@@ -144,10 +144,10 @@ describe("the tour table", () => {
 
 describe("guide copy", () => {
   it("splits a reference out of the prose around it", () => {
-    expect(parseGlossaryProse("A [[scenario]] is a recipe.")).toEqual([
+    expect(parseGlossaryProse("A [[scenario]] is a definition.")).toEqual([
       "A ",
       { id: "scenario", label: "scenario" },
-      " is a recipe.",
+      " is a definition.",
     ]);
   });
 
@@ -221,7 +221,7 @@ describe("the chain a tour opens with", () => {
  * browser.
  */
 describe("the tour a location is on", () => {
-  const IDS = { shopId: "shop-1", scenarioId: "recipe-1", experimentId: "run-1" };
+  const IDS = { shopId: "shop-1", scenarioId: "scenario-1", experimentId: "run-1" };
 
   it("resolves every surface at its own address, and only its own", () => {
     for (const id of TOUR_IDS) {
@@ -339,8 +339,33 @@ describe("the tour a location is on", () => {
     expect(tourAt("/shops/shop-1/products")).toBe("products");
   });
 
-  it("keeps the recipe and its starting states apart, which share a prefix", () => {
+  it("keeps the scenario and its starting states apart, which share a prefix", () => {
     expect(tourAt(tourHref("scenario", IDS))).toBe("scenario");
     expect(tourAt(tourHref("snapshots", IDS))).toBe("snapshots");
+  });
+});
+
+/**
+ * One name per thing (`docs/design-direction.md`, *Names*), swept over every sentence the
+ * tours, the glossary and the setup path hand a reader: a word the workspace retired cannot
+ * come back in prose that no page test reads.
+ */
+describe("the words the reader is handed", () => {
+  const prose = JSON.stringify([TOURS, GLOSSARY_TERMS, SETUP_CHAIN, SETUP_GUIDE_STEPS]);
+
+  it.each([
+    ["recipe", /\brecipes?\b/i],
+    ["materialize", /\bmateriali[sz]/i],
+    ["the shop's home", /shop's home/i],
+    ["this comparison, as the name of the results", /\bthis comparison\b/i],
+  ])("never says %s", (_, retired) => {
+    expect(prose).not.toMatch(retired);
+  });
+
+  it("names the shop's first page the overview and a run's page the live bench", () => {
+    expect(TOURS["shop-home"].surface).toBe("the overview");
+    expect(TOURS.bench.surface).toBe("the live bench");
+    expect(TOURS["bench-setup"].surface).toBe("the bench");
+    expect(TOURS.results.surface).toBe("the results");
   });
 });

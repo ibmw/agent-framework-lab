@@ -49,7 +49,7 @@ import { newestVersion, versionOptionLabel } from "../lib/versions";
 import { NoCurrentShop } from "../shell/LabWorkspace";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
-const UNAVAILABLE = "The experiment bench is unavailable.";
+const UNAVAILABLE = "The bench is unavailable.";
 const DEFAULT_SEED = 20260828;
 
 /** The prototype's hint beside Arm A (`Workspace.dc.html`, the setup's Arm A row). */

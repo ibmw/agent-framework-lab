@@ -6,6 +6,7 @@ import {
   blockedButtonClasses,
   buttonIcon,
   buttonVariantClasses,
+  chipClasses,
   type FilterChipKind,
   fieldControlClasses,
   fieldRowClasses,
@@ -152,6 +153,45 @@ describe("the blocked primary action", () => {
     expect(blockedButtonClasses).not.toMatch(/(^|\s)hover:/);
     // And it is not in the table, so the sweep above is not quietly passing over it.
     expect(Object.values(buttonVariantClasses)).not.toContain(blockedButtonClasses);
+  });
+});
+
+describe("the chip", () => {
+  const tones = Object.entries(chipClasses);
+
+  it("offers the two tones the bench and the timeline draw", () => {
+    expect(Object.keys(chipClasses).sort()).toEqual(["mark", "quiet"]);
+  });
+
+  it.each(tones)(
+    "%s promises no press: no hover, no pointer, no ring, no transition",
+    (_, classes) => {
+      expect(classes).not.toMatch(/(^|\s)hover:/);
+      expect(classes).not.toMatch(/(^|\s)focus(-visible)?:/);
+      expect(classes).not.toMatch(/(^|\s)(disabled|aria-disabled):/);
+      expect(classes).not.toContain("cursor-pointer");
+      expect(classes).not.toMatch(/(^|\s)transition/);
+      expect(classes).toContain("cursor-default");
+    },
+  );
+
+  it.each(tones)("%s is not a button weight wearing another name", (_, classes) => {
+    expect(Object.values(buttonVariantClasses)).not.toContain(classes);
+    for (const variant of Object.values(buttonVariantClasses)) {
+      expect(classes).not.toContain(variant);
+    }
+    // The ring every button carries is the part a chip must never borrow.
+    for (const utility of focusRingClasses.split(" ")) {
+      expect(classes.split(" "), utility).not.toContain(utility);
+    }
+  });
+
+  it("is a small bordered label at the handoff's 7px chip radius", () => {
+    for (const classes of Object.values(chipClasses)) {
+      expect(classes).toContain("rounded-[7px]");
+      expect(classes).toContain("border");
+      expect(classes).toContain("text-[10px]");
+    }
   });
 });
 

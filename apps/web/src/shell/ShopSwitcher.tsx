@@ -30,7 +30,9 @@ function shopInitials(name: string): string {
 
 /** What a shop is at, for the reader choosing between them: its latest published version. */
 function versionLabel(shop: ShopSummarySchema): string {
-  return shop.latest_published_version === null ? "Draft" : `v${shop.latest_published_version}`;
+  return shop.latest_published_version === null
+    ? "Never published"
+    : `v${shop.latest_published_version}`;
 }
 
 /**

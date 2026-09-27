@@ -49,10 +49,10 @@ import {
   writesOf,
 } from "../lib/evidence";
 import {
+  chipClasses,
   fieldLabelClasses,
   formatTimestamp,
   outlineButtonClasses,
-  subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { usePublishedJudges } from "../lib/usePublishedJudges";
@@ -651,11 +651,7 @@ function CustomerTurn({ turn, divergent }: { turn: ParticipantTurnSchema; diverg
     <div className="grid gap-1">
       <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
         {turn.source === "trigger" ? "Trigger" : "Customer"}
-        {divergent ? (
-          <span className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}>
-            this arm only
-          </span>
-        ) : null}
+        {divergent ? <span className={chipClasses.mark}>this arm only</span> : null}
       </p>
       <p className="rounded-lg bg-admin-canvas px-3 py-2 text-[13px] leading-relaxed text-admin-ink">
         {turn.body}
@@ -687,11 +683,7 @@ function Attempt({
     <div className="grid gap-1">
       <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
         Agent
-        {turn.attempt > 1 ? (
-          <span className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}>
-            attempt {turn.attempt}
-          </span>
-        ) : null}
+        {turn.attempt > 1 ? <span className={chipClasses.mark}>attempt {turn.attempt}</span> : null}
       </p>
       {events.length > 0 || faults.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5">
@@ -699,7 +691,7 @@ function Attempt({
             "tool" in entry ? (
               <li
                 key={`call:${entry.ordinal}:${entry.attempt}:${entry.sequence}`}
-                className={`${subtleButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}
+                className={chipClasses.quiet}
                 title={`${entry.tool} ${entry.version} → ${labelOf(TOOL_OUTCOME, entry.outcome)}`}
               >
                 {entry.tool} → {labelOf(TOOL_OUTCOME, entry.outcome)}
@@ -708,7 +700,7 @@ function Attempt({
             ) : (
               <li
                 key={`fault:${entry.mutation_id}`}
-                className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px]`}
+                className={chipClasses.mark}
                 title={`${entry.mutation_id} · ${entry.timing} · ${entry.target}`}
               >
                 scenario fault · moved this arm
@@ -930,7 +922,7 @@ function StateChanges({ experiment }: { experiment: ExperimentResponse }) {
       footer={
         <p className="text-xs text-admin-muted">
           A scenario fault is the incident working as authored, not the arm misbehaving: it moves
-          the world at the moment the recipe bound it to, and the agent is never told.
+          the world at the moment the scenario bound it to, and the agent is never told.
         </p>
       }
     >

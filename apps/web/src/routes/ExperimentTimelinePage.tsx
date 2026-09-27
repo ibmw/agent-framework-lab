@@ -12,7 +12,7 @@ import { getExperimentTimeline } from "../api/experiments";
 import { Card } from "../components/WorkspaceChrome";
 import { labelOf as enumLabel, TOOL_OUTCOME } from "../lib/enumLabels";
 import { describeFailure } from "../lib/evidence";
-import { outlineButtonClasses, subtleButtonClasses } from "../lib/ui";
+import { chipClasses, subtleButtonClasses } from "../lib/ui";
 import { useExperimentResults } from "./useExperimentResults";
 
 const UNAVAILABLE = "This experiment's timeline is unavailable.";
@@ -101,7 +101,7 @@ export function ExperimentTimelinePage() {
           footer={
             <p className="text-xs text-admin-muted">
               Normalized events: a framework's own payloads never enter this stream, and no message
-              body does either. What was said is on the bench; this is what happened.
+              body does either. What was said is on the live bench; this is what happened.
             </p>
           }
         >
@@ -202,15 +202,9 @@ function Row({
     <li className="grid gap-1 border-b border-admin-border/60 pb-2 last:border-b-0">
       <p className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
         <span>{arms.join(" · ")}</span>
-        {split ? (
-          <span className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px] normal-case`}>
-            this arm only
-          </span>
-        ) : null}
+        {split ? <span className={`${chipClasses.mark} normal-case`}>this arm only</span> : null}
         {entry.kind === "mutation" ? (
-          <span className={`${outlineButtonClasses} min-h-0 px-1.5 py-0.5 text-[10px] normal-case`}>
-            scenario fault
-          </span>
+          <span className={`${chipClasses.mark} normal-case`}>scenario fault</span>
         ) : null}
       </p>
       <p className="text-[13px] leading-relaxed text-admin-ink">{describe(entry)}</p>

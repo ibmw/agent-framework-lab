@@ -333,7 +333,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await page.getByRole("link", { name: "Freeze it into starting state" }).click();
   await expect(page.getByRole("heading", { level: 1, name: /starting states/ })).toBeVisible();
   await expect(page.getByLabel("Scenario version")).toHaveValue("1");
-  await page.getByRole("button", { name: "Materialize snapshot" }).click();
+  await page.getByRole("button", { name: "Freeze snapshot" }).click();
 
   const pins = card(page, "Pinned versions");
   await expect(pins.getByText("shop")).toBeVisible();
@@ -344,7 +344,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   await expect(copied.getByText(/Bordeaux/)).toBeVisible();
 
   // Freezing the same version, seed, and orders is the same starting state, not a second one.
-  await page.getByRole("button", { name: "Materialize snapshot" }).click();
+  await page.getByRole("button", { name: "Freeze snapshot" }).click();
   await expect(card(page, "Snapshots").getByRole("row")).toHaveCount(2);
 
   // A snapshot is shared starting state; an arm works in its own clone of it. Two arms of one
@@ -408,7 +408,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   );
 
   // The frozen version keeps what it froze while the draft moves on.
-  await page.getByRole("link", { name: "Back to the recipe" }).click();
+  await page.getByRole("link", { name: "Back to the scenario" }).click();
   const turnCap = card(page, "Completion").getByLabel("Turn cap", { exact: true });
   await turnCap.fill("20");
   await saveDraft(page);

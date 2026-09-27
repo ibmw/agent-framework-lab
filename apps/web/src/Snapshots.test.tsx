@@ -416,7 +416,7 @@ describe("starting states", () => {
         .map((option) => option.textContent),
     ).toEqual(["v2 (newest published)", "v1"]);
 
-    await user.click(screen.getByRole("button", { name: "Materialize snapshot" }));
+    await user.click(screen.getByRole("button", { name: "Freeze snapshot" }));
 
     await waitFor(() => expect(materialized).toHaveLength(1));
     expect(materialized[0]).toEqual({ seed: 20260825, version: "2" });
@@ -436,9 +436,9 @@ describe("starting states", () => {
   it("separates what the snapshot pinned from what it copied", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByRole("button", { name: "Materialize snapshot" });
+    await screen.findByRole("button", { name: "Freeze snapshot" });
 
-    await user.click(screen.getByRole("button", { name: "Materialize snapshot" }));
+    await user.click(screen.getByRole("button", { name: "Freeze snapshot" }));
 
     const pins = await screen.findByRole("region", { name: "Pinned versions" });
     expect(within(pins).getByText("Shop")).toBeVisible();
@@ -485,9 +485,9 @@ describe("starting states", () => {
       ),
     );
     renderPage();
-    await screen.findByRole("button", { name: "Materialize snapshot" });
+    await screen.findByRole("button", { name: "Freeze snapshot" });
 
-    await user.click(screen.getByRole("button", { name: "Materialize snapshot" }));
+    await user.click(screen.getByRole("button", { name: "Freeze snapshot" }));
 
     expect(await screen.findByText("This shop no longer holds that order.")).toBeVisible();
     expect(
@@ -504,12 +504,12 @@ describe("starting states", () => {
     renderPage();
 
     expect(await screen.findByText(/This scenario has no published version yet/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Materialize snapshot" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Freeze snapshot" })).toBeNull();
   });
 
   it("says what a seed is and what it may be, under the field", async () => {
     renderPage();
-    await screen.findByRole("button", { name: "Materialize snapshot" });
+    await screen.findByRole("button", { name: "Freeze snapshot" });
 
     const seed = screen.getByLabelText("Seed");
     expect(seed).toHaveAttribute("step", "1");
@@ -520,10 +520,10 @@ describe("starting states", () => {
   it("refuses to freeze against a seed the author cleared, before the press and at it", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByRole("button", { name: "Materialize snapshot" });
+    await screen.findByRole("button", { name: "Freeze snapshot" });
 
     await user.clear(screen.getByLabelText("Seed"));
-    const materialize = screen.getByRole("button", { name: "Materialize snapshot" });
+    const materialize = screen.getByRole("button", { name: "Freeze snapshot" });
     // Said before the press, where the press is (ADR 0063).
     expectRefused(materialize, "Enter the seed this starting state should be fingerprinted with.");
     await user.click(materialize);
@@ -552,7 +552,7 @@ describe("starting states", () => {
       ),
     );
     renderPage();
-    const materialize = await screen.findByRole("button", { name: "Materialize snapshot" });
+    const materialize = await screen.findByRole("button", { name: "Freeze snapshot" });
     const status = screen.getByRole("status", { name: "What is being frozen" });
     expect(status).toHaveTextContent("");
 

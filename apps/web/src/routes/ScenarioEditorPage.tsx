@@ -289,7 +289,7 @@ export function ScenarioEditorPage() {
       {state.status === "failed" ? (
         <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 text-[13px]">
           <span className="text-lab-error">
-            {state.message} The recipe is readable, but nothing can be bound until this shop's
+            {state.message} The scenario is readable, but nothing can be bound until this shop's
             objects and the block libraries load.
           </span>
           <button
@@ -304,7 +304,7 @@ export function ScenarioEditorPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid min-w-0 content-start gap-4">
-          <Card title="Recipe">
+          <Card title="Built on">
             <label className={fieldLabelClasses}>
               Name
               <input
@@ -314,7 +314,7 @@ export function ScenarioEditorPage() {
               />
             </label>
             <p className="text-[13px] text-admin-ink-soft">
-              Built on ticket{" "}
+              Ticket{" "}
               <span className="font-mono font-semibold">{resolution?.ticket_reference ?? "—"}</span>{" "}
               · {resolution?.ticket_subject ?? "…"} · {resolution?.customer_display_name ?? "…"}
               {resolution === null ? null : (
@@ -520,7 +520,7 @@ export function ScenarioEditorPage() {
             {content.mutations.length === 0 ? (
               <p className="text-[13px] text-admin-muted">
                 No mutation. The sandbox stays still for the whole run, which is a legitimate
-                recipe.
+                scenario.
               </p>
             ) : (
               <ol className="grid gap-3">

@@ -213,7 +213,7 @@ describe("what a picker may offer", () => {
   });
 });
 
-describe("the recipe itself", () => {
+describe("the scenario itself", () => {
   it("reports which objectives read each context document", () => {
     const composed = content({
       objectives: [
@@ -264,7 +264,7 @@ describe("the recipe itself", () => {
     expect(parseTurnCap("999")).toBe(100);
   });
 
-  it("sends the recipe without the ticket or the counts the response derives", () => {
+  it("sends the scenario without the ticket or the counts the response derives", () => {
     const request = toScenarioRequest(content({ objective_count: 3 }));
 
     expect(Object.keys(request.payload).sort()).toEqual([

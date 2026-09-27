@@ -45,7 +45,7 @@ import { useShopWorkspace } from "../shell/useShopWorkspace";
 const UNAVAILABLE = "The starting states of this scenario are unavailable.";
 const ARMS_UNAVAILABLE = "The arms cloned from this snapshot are unavailable.";
 const DEFAULT_SEED = 20260825;
-/** Why *Materialize snapshot* is refused: `Number("")` is 0, a seed nobody chose. */
+/** Why *Freeze snapshot* is refused: `Number("")` is 0, a seed nobody chose. */
 const SEED_MISSING = "Enter the seed this starting state should be fingerprinted with.";
 /** Why *Clone sandbox* is refused: an arm is told from the one beside it by its label. */
 const LABEL_MISSING = "Name the arm so it can be told from the one beside it.";
@@ -161,7 +161,7 @@ export function SnapshotsPage() {
         description={
           <>
             <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Back to the recipe
+              Back to the scenario
             </Link>{" "}
             · a snapshot pins every published version it reaches and copies the orders nothing
             pinned, then fingerprints the two together. Each arm of an experiment runs in its own
@@ -197,7 +197,7 @@ export function SnapshotsPage() {
               <p className="text-[13px] text-admin-muted">
                 {loading
                   ? "Loading published versions…"
-                  : "This scenario has no published version yet. Publish the recipe first."}
+                  : "This scenario has no published version yet. Publish the scenario first."}
               </p>
             ) : (
               <form className="flex flex-wrap items-end gap-3" onSubmit={materialize}>
@@ -238,7 +238,7 @@ export function SnapshotsPage() {
                     aria-describedby={freezeNoteId}
                   >
                     <ButtonIcon verb="save" />
-                    {working ? "Freezing…" : "Materialize snapshot"}
+                    {working ? "Freezing…" : "Freeze snapshot"}
                   </PrimaryAction>
                   {seedRefusal === null ? null : (
                     <RefusalLine id={seedReasonId}>{SEED_MISSING}</RefusalLine>

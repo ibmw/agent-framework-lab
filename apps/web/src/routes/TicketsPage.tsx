@@ -73,7 +73,6 @@ import {
 } from "../lib/tickets";
 import {
   accentButtonClasses,
-  cardTitleClasses,
   fieldControlClasses,
   fieldLabelClasses,
   subtleButtonClasses,
@@ -168,18 +167,20 @@ export function TicketsPage() {
 
   return (
     <>
-      {/* The page's own header, like every other surface in the workspace. This screen used to
-          put its name inside the list panel, which left it the one page whose title and tour
-          control sat somewhere different from everywhere else. */}
+      {/* The page's own header, spanning the list and the ticket beside it, with the count
+          the frame draws under the title (`Workspace.dc.html` :2174) — the whole listing, as
+          the rail counts it, and absent while that listing is in flight or failed (*Lists and
+          counts*). The frame puts the two lines at the head of the list column; here they are
+          the page header every other surface has, so the title and the tour control sit where
+          they sit everywhere else, and the list below it no longer names itself a second time. */}
       <PageHeader
         title="Tickets"
-        description="An incident as it arrived: the thread, the customer it is about, and the order it concerns. A scenario is composed on a published ticket."
+        description={loading || listError ? undefined : `${tickets.length} in this shop`}
       />
       <div className="grid min-h-0 gap-4 xl:grid-cols-[262px_minmax(0,1fr)]">
         <section className={`${surfaceClasses} overflow-hidden`} aria-label="Tickets">
           <div className="flex items-center gap-2 border-b border-admin-border px-3 py-2.5">
-            <h2 className={cardTitleClasses}>Tickets</h2>
-            <label className="ml-auto text-xs">
+            <label className="text-xs">
               <span className="sr-only">Filter tickets</span>
               <select
                 aria-label="Filter tickets"
@@ -725,7 +726,7 @@ function Thread({
         )}
         <RemovalNotice removal={removal} />
         <p className="text-xs text-admin-muted">
-          Replies happen on the Bench, per run — each arm answers this message independently.
+          Replies happen on the live bench, per run — each arm answers this message independently.
         </p>
       </div>
 

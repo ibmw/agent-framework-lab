@@ -1721,10 +1721,12 @@ describe("the fast path", () => {
     await user.click(card.getByRole("button", { name: "Press again to create it" }));
 
     expect(posted).toBe(1);
-    expect(await card.findByRole("link", { name: "Read the comparison" })).toHaveAttribute(
+    expect(await card.findByRole("link", { name: "Open the results" })).toHaveAttribute(
       "href",
       `/lab/bench/${SHOP_ID}/${SEEDED.experiment_id}/results`,
     );
+    // Where the run is listed, in the words the rail and the results use for it.
+    expect(card.getByText("Written. Its results are listed in History.")).toBeVisible();
   });
 
   it("reads back the refusal rather than reporting a failure of its own", async () => {

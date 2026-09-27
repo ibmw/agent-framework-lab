@@ -413,7 +413,7 @@ describe("block libraries", () => {
     );
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText("—")).toBeVisible();
-    expect(within(row as HTMLElement).getByText("Draft")).toBeVisible();
+    expect(within(row as HTMLElement).getByText("Never published")).toBeVisible();
   });
 
   /**

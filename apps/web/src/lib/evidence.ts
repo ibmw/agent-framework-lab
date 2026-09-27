@@ -1,5 +1,6 @@
 import type {
   AgentTurnSchema,
+  ArmMetricsSchema,
   EstimatedCostSchema,
   ExperimentResponse,
   ExperimentRunSchema,
@@ -160,4 +161,51 @@ export function writeLabel(event: ToolEventSchema | MutationEventSchema): string
  */
 export function changeValue(value: string | null): string {
   return value ?? "not set";
+}
+
+/** One figure on an arm's results card: its words, and whether it is the one the frame reds. */
+export interface ArmFigure {
+  key: "turns" | "tokens" | "tools" | "time" | "retries" | "cost";
+  text: string;
+  warn?: boolean;
+}
+
+/**
+ * The frame's figures for one arm, read off the metrics the Quantitative table reads.
+ *
+ * Four are always there to be drawn — turns, tokens, tool calls and time — and two only when
+ * they say something: the retries an arm needed, and its cost where the lab could price it.
+ * A figure the lab did not measure is left off rather than written as zero, because a null
+ * here means nobody took the measurement (*Lists and counts*: a figure the payload lacks is
+ * not faked); the table below the tabs still says "not reported" in its row. A total over
+ * fewer attempts than the arm made is a floor, and says so with "≥", as the table does.
+ */
+export function armFigures(metrics: ArmMetricsSchema): ArmFigure[] {
+  const floor = metrics.metered_attempts < metrics.attempts ? "≥" : "";
+  const figures: ArmFigure[] = [
+    { key: "turns", text: `${metrics.turns} ${metrics.turns === 1 ? "turn" : "turns"}` },
+  ];
+  if (metrics.usage !== null) {
+    const tokens = metrics.usage.input_tokens + metrics.usage.output_tokens;
+    figures.push({ key: "tokens", text: `${floor}${formatTokens(tokens)} tokens` });
+  }
+  figures.push({
+    key: "tools",
+    text: `${metrics.tool_calls} ${metrics.tool_calls === 1 ? "tool call" : "tool calls"}`,
+  });
+  if (metrics.duration_ms !== null) {
+    const partial = metrics.measured_attempts < metrics.attempts ? "≥" : "";
+    figures.push({ key: "time", text: `${partial}${formatDuration(metrics.duration_ms)}` });
+  }
+  if (metrics.retries > 0) {
+    figures.push({
+      key: "retries",
+      text: `${metrics.retries} ${metrics.retries === 1 ? "retry" : "retries"}`,
+      warn: true,
+    });
+  }
+  if (metrics.estimated_cost !== null) {
+    figures.push({ key: "cost", text: `${floor}${formatCost(metrics.estimated_cost)}` });
+  }
+  return figures;
 }

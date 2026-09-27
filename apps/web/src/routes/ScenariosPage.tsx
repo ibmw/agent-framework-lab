@@ -67,7 +67,7 @@ const FILTERS: FilterChipDefinition<Filter, ScenarioSummarySchema>[] = [
   },
   {
     id: "draft",
-    label: "Draft",
+    label: "Never published",
     kind: "draft",
     matches: (scenario) => scenario.latest_published_version === null,
   },
@@ -96,7 +96,7 @@ export function ScenariosPage() {
     <>
       <PageHeader
         title="Scenarios"
-        description="An experiment recipe: one ticket, the documents that matter for it, the objectives it is judged by, and the faults the runtime injects."
+        description="What an experiment runs: one ticket, the documents that matter for it, the objectives it is judged by, and the faults the runtime injects."
         actions={
           <Link className={accentButtonClasses} to="new">
             New scenario
@@ -177,7 +177,7 @@ export function ScenariosPage() {
                     </td>
                     <td className={tableCellClasses}>
                       {scenario.latest_published_version === null
-                        ? "Draft"
+                        ? "Never published"
                         : `v${scenario.latest_published_version} · ${scenario.published_version_count} version(s)`}
                     </td>
                     <td className={tableCellClasses}>{formatTimestamp(scenario.updated_at)}</td>
@@ -663,7 +663,7 @@ export function NewScenarioPage() {
             </Field>
             <Field
               label="Shop version"
-              hint="What this shop has published now. A run reads the shop the scenario's own published version pinned, so an unpublished shop is a recipe nothing can run yet."
+              hint="What this shop has published now. A run reads the shop the scenario's own published version pinned, so a scenario on a shop never published is one nothing can run yet."
             >
               <output className={readOnlyValueClasses}>{shopVersion}</output>
             </Field>

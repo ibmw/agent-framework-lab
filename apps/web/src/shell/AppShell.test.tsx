@@ -627,7 +627,7 @@ describe("the shop switcher", () => {
     expect(rows[0]).toHaveFocus();
   });
 
-  it("says Draft where a shop has published nothing", async () => {
+  it("says Never published where a shop has published nothing", async () => {
     // A version is what a reader chooses between, so a shop with none says so rather than
     // showing an empty column.
     renderShell("lab", {
@@ -646,7 +646,9 @@ describe("the shop switcher", () => {
 
     await userEvent.click(switcher());
 
-    expect(screen.getByRole("menuitem", { name: /Harbour Goods/ })).toHaveTextContent("Draft");
+    expect(screen.getByRole("menuitem", { name: /Harbour Goods/ })).toHaveTextContent(
+      "Never published",
+    );
   });
 
   it("navigates in shop mode and sets the lab's shop in lab mode", async () => {

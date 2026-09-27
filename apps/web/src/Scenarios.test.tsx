@@ -533,7 +533,7 @@ function renderAt(path: string) {
 }
 
 describe("scenario index", () => {
-  it("shows the incident and the customer each recipe was built on", async () => {
+  it("shows the incident and the customer each scenario was built on", async () => {
     renderAt(`/shops/${SHOP_ID}/scenarios`);
 
     expect(await screen.findByRole("heading", { name: "Scenarios" })).toBeVisible();
@@ -547,7 +547,7 @@ describe("scenario index", () => {
     expect(within(row as HTMLElement).getByText("v1 · 1 version(s)")).toBeVisible();
   });
 
-  it("counts the recipes an experiment could run, and filters to the drafts", async () => {
+  it("counts the scenarios an experiment could run, and filters to the ones never published", async () => {
     const user = userEvent.setup();
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
@@ -571,9 +571,15 @@ describe("scenario index", () => {
 
     expect(filters.getByRole("button", { name: "All 2" })).toBeVisible();
     expect(filters.getByRole("button", { name: "Runnable 1" })).toBeVisible();
-    expect(filters.getByRole("button", { name: "Draft 1" })).toBeVisible();
+    expect(filters.getByRole("button", { name: "Never published 1" })).toBeVisible();
+    // The index says it in the words every other index says it in, the row and the chip alike.
+    expect(
+      within(
+        screen.getByRole("link", { name: "Damaged delivery" }).closest("tr") as HTMLElement,
+      ).getByText("Never published"),
+    ).toBeVisible();
 
-    await user.click(filters.getByRole("button", { name: "Draft 1" }));
+    await user.click(filters.getByRole("button", { name: "Never published 1" }));
 
     expect(screen.getByRole("link", { name: "Damaged delivery" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Wrong shipping address" })).toBeNull();
@@ -1077,8 +1083,19 @@ describe("scenario editor", () => {
     ).toBeVisible();
   });
 
+  it("names its first card for what the scenario is built on, never a recipe", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    const builtOn = await screen.findByRole("region", { name: "Built on" });
+
+    expect(within(builtOn).getByLabelText("Name")).toHaveValue("Wrong shipping address");
+    expect(within(builtOn).getByText("T-204")).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Recipe" })).toBeNull();
+    expect(document.body).not.toHaveTextContent(/recipe/i);
+  });
+
   it("offers to show a reader around what it composes", async () => {
-    // "Recipe", "binding" and "hidden fact" are this lab's words, not a commerce admin's, so
+    // "Binding" and "hidden fact" are this lab's words, not a commerce admin's, so
     // the editor has a tour that says what they mean where they are used (ADR 0045).
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
 

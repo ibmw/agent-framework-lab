@@ -71,8 +71,8 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Group B is delivered: every screen it recomposes is built, the connection it runs through is
 saved from the settings page, and the editors and experiment setup say which providers that
-connection leaves unreachable (ADR 0053). In Group C, slices 26 and 27
-close the milestone, and 28 is optional.
+connection leaves unreachable (ADR 0053). In Group C, slice 27 closes
+the milestone, and 28 is optional.
 
 ## Milestone 8 — The workspace becomes the prototype
 
@@ -86,29 +86,6 @@ run pins. Everything the September plans delivered — hints, derived identifier
 edit-in-place, the guard, pine, the field row — is still there underneath.
 
 ### Group C — Behaviour the prototype specifies everywhere
-
-#### Slice 26 — Consistency sweep
-
-- [ ] One name per thing: "Scenario" not "Recipe"; "Bench" for the list and "Live bench" for a
-  run; "Results" across History, the layout and its tabs; "Freeze" for snapshots; "Never
-  published" on every index; "Overview" for the shop's first page.
-- [ ] History: *Clear filters*, and the *Search* button at the end of the form (:2673).
-- [ ] Results: the arm summary cards with their four figures and the Replay and Fork buttons in
-  the header (:2566), each version linked to its editor with the version chip.
-- [ ] Tickets: the header spans the list and the customer panel, "N in this shop" under the
-  title; the filter select stays, as UI-4 decided.
-- [ ] A non-interactive `chipClasses` for the tool-call, attempt and fault chips on the bench and
-  the timeline, which wear button classes today.
-
-Frames: `Workspace.dc.html` :2174, :2566, :2673; DEPRECADED frames 3, 9, 10.
-
-Branch: `feat/naming-and-chips`, the ticket contract change on its own branch. Checks: page
-tests per item; a contract test for the ticket context payload; Playwright `ticket-authoring`
-and `experiment-start` where copy they assert on changes.
-
-Slice evidence: the same word means the same thing on every surface, and a reviewer reading a
-finished experiment clicks the configuration version in an arm's summary and lands on the draft
-that produced it.
 
 #### Slice 27 — Debts the pattern slices reported
 
@@ -181,6 +158,6 @@ Branch: `feat/shop-logo`. Checks: contract and schema tests; `Shops.test.tsx`.
   the prototype does not draw.
 - **A component library or a new UI dependency.** The `CreatePage` layout, `ConfirmRemove` and
   `ActionStatus` are small components on the existing chrome, as the switcher's panel was.
-- **Read-only version pages for configurations and scenarios.** Slice 26 links to the editor
-  with the version chip; a frozen view per definition is worth its own slice in `docs/PLAN.md`
-  if a review journey needs it.
+- **Read-only version pages for configurations and scenarios.** The results link a pinned
+  version to its definition's editor (ADR 0068); a frozen view per definition is worth its own
+  slice in `docs/PLAN.md` if a review journey needs it.

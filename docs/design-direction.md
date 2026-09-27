@@ -139,13 +139,37 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | A guideline's delete | *Delete guideline* (:1969) | *Remove*, named "Remove {name}", and a confirm asking to remove it | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
 | The queue under the composer | a coloured letter badge per arm and the configuration beside it; the queue drawn only for the bench's send | the arm's name and what it runs, in words, and the same queue for a Run on an arm's card, a scoring pass, a replay, a fork and — without arms — a freeze | the workspace has no per-arm colour to paint a badge with, and the arm's name is what its card is titled; `form-decisions.md` 10.2 is the rule for every long action, and the prototype draws the one it had room for (ADR 0065) |
 | A line beside Replay and Fork | "Same seed, same starting snapshot. Replay reproduces this exactly." in the finding's card | "Replay runs this incident again as it was recorded; Fork runs it again with the arms you choose." under the header, describing both buttons | a replay runs its arms against their models again, and a model arm does not reproduce its answer exactly; the line says what each derivation is, beside the reach line that says why one cannot run (ADR 0053, ADR 0065) |
+| The Tickets page's title and count | "Tickets" and "4 in this shop" at the head of the list column (:2174), with no page header | the page header every surface has, spanning the list and the ticket beside it, with "N in this shop" as its description; the list keeps its filter select and no longer titles itself | the header holds the title and the tour anchor where every other page holds them, and the count is the whole listing the rail reads (ADR 0056). The ticket editor's own pinned header stays in its column under it (ADR 0066) |
+| The Scenarios index's last chip | "Draft" (:6864) | "Never published", as on every other index | one name per thing (*Names*): the chip counts the scenarios with no published version, which is what the Shops, Customers, Agent configurations and Support identities chips call "Never published" |
+| An arm's objectives figure | "5 of 6 objectives met", green on one arm and amber on the other (:2578, :2587) | "met of decided" over "decided objectives met", in one ink on both | two arms driven to different depths hold different denominators, and a colour between them is the verdict *Evidence before opinion* refuses (ADR 0068) |
+| The results header's Fork | "Fork" | "Fork…" | it opens the panel that asks which versions to run, where Replay asks nothing; rule 5, the name a spec presses |
+| *Clear filters* on History | drawn, pressable whatever is set (:2680) | disabled while nothing is set, with the reason in `title` and in the line beside it, which says "Filters cleared." once pressed | a secondary control that can do nothing keeps native `disabled` and says why (ADR 0063); the same line reports the press, so the reason and the outcome are one place |
 | New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 
-One item the handoff names is not built and not refused: Georgia on the results' stat
-numerals. It lands with the surface that first draws it, which is what the `open` button verb
-did — it landed with the overview's grouped findings, the first control in this workspace that
-leaves a surface for the entry it names — and what the `document` chip kind did with the
-Documents table.
+Georgia on the results' stat numerals landed with the surface that first draws it, the arm cards
+under the results header (ADR 0068) — as the `open` button verb landed with the overview's
+grouped findings and the `document` chip kind with the Documents table.
+
+## Names
+
+One thing has one name on every surface — its rail entry, its page title, the links that reach
+it, its tour and the words around it. A reader who meets two words assumes two things.
+
+- **Scenario**, never *recipe*. The scenario editor's first card is *Built on* — the name, and
+  the ticket, customer and shop the scenario never moves off — as the prototype titles it.
+- **Bench** is the lab's rail entry: the page that starts a run and lists the recent ones.
+  **Live bench** is one run in progress, and the link back to it from the results says so.
+- **Results** is where a run is read: the bench's *Results*, History's *Open results*, the
+  results page's own title while it loads, and its tour. Its tabs keep the prototype's names —
+  *General*, *Execution timeline*, *Traces* — because they name views of the results.
+- **Freeze** is the verb for a snapshot, as it is for a publish: *Freeze snapshot*, "frozen",
+  and never *materialize*, which is the API's word and stays there.
+- **Never published** is what every index says of a definition with no published version, on
+  the chip and in the row — and the shop switcher, which lists shops by what they have
+  published. *Draft* stays where it is a status rather than a version — a
+  product's.
+- **Overview** is the shop's first page: its heading, its rail entry, its tour (*Show me around
+  the overview*) and every link that opens it.
 
 ## Navigation and chrome
 
@@ -233,6 +257,10 @@ their metrics are `apps/web/src/lib/ui.ts`. Rules:
 - **Georgia for display** (page and card titles, the thread subject, the bar's title); sans for
   UI; monospace for slugs, ids, model names and env vars. Entry-row titles, the per-arm run
   label and dialog titles stay sans.
+- **A chip that names a kind is not a control** (`chipClasses`): the tool calls, attempts,
+  faults and split turns on the bench and the timeline are bordered labels with no hover, no
+  pointer, no ring and no tab stop. A chip that opens something — a pinned version on the
+  results — is a link, and draws the link's underline and the focus ring.
 - **A button names a verb and a chip names a kind, never an icon.** `buttonIcon` and
   `filterChipIcon` are two closed tables that stay apart: a chip's check means "the published
   ones", a button's means "save". Every glyph is `aria-hidden`; the word carries the meaning.
@@ -408,7 +436,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   reads the lab's total beside it, because the count is of the whole list and the page never is.
 - **Every index can be searched** (`SearchField`), in the card's header opposite the title with
   the chips beneath; a miss reads "No X matches this view". Experiment history keeps its
-  submitted, URL-backed form.
+  submitted, URL-backed form, which ends on *Clear filters* and then *Search* (:2673): Clear
+  drops every filter and the query at once, says so in the line beside it, and hands focus to
+  the search box.
 - **A chip lives in the component unless an address has to name it.** The one exception is the
   shop's *Documents* table, whose chip is `?kind=`: the retired `/setup/support` redirects to it
   filtered to Guidelines (ADR 0054, ADR 0057), and a filter an address names has to be the

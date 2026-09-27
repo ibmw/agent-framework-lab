@@ -111,7 +111,7 @@ export function RefusalLine({
 }
 
 /**
- * A secondary control whose press runs long — *Run the agent*, *Score*, *Replay*, *Materialize
+ * A secondary control whose press runs long — *Run the agent*, *Score*, *Replay*, *Freeze
  * snapshot* — held in place while it runs.
  *
  * `busy` is a press in flight, and is `aria-disabled` rather than `disabled` for the reason

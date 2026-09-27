@@ -167,7 +167,7 @@ test("the top bar switches shop, offers the tour, and closes Settings onto the p
   await expect(page.getByRole("menu", { name: "Shops" })).toHaveCount(0);
 
   // The tour of the screen the operator is standing on, from the same bar.
-  await page.getByRole("button", { name: "Show me around this shop" }).click();
+  await page.getByRole("button", { name: "Show me around the overview" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);

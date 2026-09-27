@@ -205,7 +205,7 @@ function BlockLibrary({
                     </td>
                     <td className={tableCellClasses}>
                       {block.latest_published_version === null
-                        ? "Draft"
+                        ? "Never published"
                         : `v${block.latest_published_version} · ${block.published_version_count} version(s)`}
                     </td>
                     <td className={tableCellClasses}>{formatTimestamp(block.updated_at)}</td>

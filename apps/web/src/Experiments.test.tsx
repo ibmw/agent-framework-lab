@@ -1183,6 +1183,20 @@ function renderSetup() {
   return renderApp("/lab/bench");
 }
 
+/**
+ * A chip on the bench or the timeline says what something is and cannot be pressed: no button
+ * role, not in the tab order, and none of the hover, pointer or ring a button promises a press
+ * with (`chipClasses`).
+ */
+function expectInertChip(chip: HTMLElement) {
+  expect(chip.closest("button, a, [role='button']")).toBeNull();
+  expect(chip).not.toHaveAttribute("tabindex");
+  expect(chip.tabIndex).toBe(-1);
+  expect(chip.className).not.toMatch(/(^|\s)(hover|focus-visible):/);
+  expect(chip.className).not.toContain("cursor-pointer");
+  expect(chip.className).toContain("cursor-default");
+}
+
 function renderTimeline() {
   return renderApp(`/lab/bench/${SHOP_ID}/${EXPERIMENT_ID}/results/timeline`);
 }
@@ -2359,6 +2373,7 @@ describe("live bench", () => {
     expect(delivered[0]).toEqual({ run_ids: [ARM_A], message: "Only arm A hears this." });
     const armA = await screen.findByRole("region", { name: "Arm A" });
     expect(await within(armA).findByText("this arm only")).toBeVisible();
+    expectInertChip(within(armA).getByText("this arm only"));
   });
 
   it("runs the agent of every arm the composition reached", async () => {
@@ -2401,6 +2416,7 @@ describe("live bench", () => {
     // The failure stays: it is evidence, and the retry sits beside it.
     expect(within(armA).getByText(/model provider rejected the request/)).toBeVisible();
     expect(await within(armA).findByText("attempt 2")).toBeVisible();
+    expectInertChip(within(armA).getByText("attempt 2"));
   });
 
   it("reports an arm this lab cannot run without recording a turn", async () => {
@@ -2433,6 +2449,10 @@ describe("live bench", () => {
       "scenario fault · moved this arm",
       "orders.propose_address_change → Success",
     ]);
+    // The calls and the fault are chips rather than controls: nothing in the strip is pressed.
+    for (const chip of strip) {
+      expectInertChip(chip);
+    }
   });
 
   it("names the fault as a writer beside the tools, so two revisions are explainable", async () => {
@@ -3294,9 +3314,178 @@ describe("experiment results", () => {
 
     // Arm A met the one row something decided; nothing has decided a row for arm B yet, so
     // its denominator is zero rather than a miss it has not made.
-    expect(within(armA).getByText("1/1 decided")).toBeVisible();
-    expect(within(armB).getByText("0/0 decided")).toBeVisible();
+    expect(within(armA).getByText("1 of 1")).toBeVisible();
+    expect(within(armB).getByText("0 of 0")).toBeVisible();
+    expect(within(armA).getByText("decided objectives met")).toBeVisible();
     expect(screen.getByText(/There is no aggregate score/)).toBeVisible();
+  });
+
+  it("puts each arm's four figures on its card, from the metrics the table reads", async () => {
+    turns = [...OPENED];
+    agentTurns = [agentTurn(ARM_A, 0)];
+    toolEvents = [
+      toolEvent(ARM_A, 0, "orders.read_order"),
+      toolEvent(ARM_A, 1, "support.read_document"),
+    ];
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const figures = within(within(armA).getByRole("list", { name: "What Arm A spent" }))
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+
+    expect(figures).toEqual(["1 turn", "0 tokens", "2 tool calls", "2.1s", "0.00 USD"]);
+  });
+
+  it("leaves off a figure nobody measured and says an arm needed a retry", async () => {
+    turns = [...OPENED];
+    agentTurns = [agentTurn(ARM_A, 0, 1, "model_provider"), agentTurn(ARM_A, 0, 2)];
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const armB = screen.getByRole("region", { name: "Arm B summary" });
+    const spent = (arm: HTMLElement, label: string) =>
+      within(within(arm).getByRole("list", { name: `What ${label} spent` }))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent);
+
+    // The failed attempt metered nothing, so the tokens are a floor; the retry is said.
+    expect(spent(armA, "Arm A")).toEqual([
+      "1 turn",
+      "≥0 tokens",
+      "0 tool calls",
+      "4.2s",
+      "1 retry",
+      "≥0.00 USD",
+    ]);
+    expect(within(armA).getByText("1 retry")).toHaveClass("text-lab-error");
+    // Arm B has not run: no tokens, no time and no cost were measured, so none is written as 0.
+    expect(spent(armB, "Arm B")).toEqual(["1 turn", "0 tool calls"]);
+  });
+
+  it("holds Replay and Fork in the header beside the run's name, as the frame draws them", async () => {
+    renderResults();
+
+    const title = await screen.findByRole("heading", {
+      level: 1,
+      name: "Wrong address — framework comparison",
+    });
+    const header = title.closest("header") as HTMLElement;
+
+    expect(within(header).getByRole("button", { name: "Replay" })).toBeVisible();
+    expect(within(header).getByRole("button", { name: "Fork…" })).toBeVisible();
+  });
+
+  it("sums an arm's input and output tokens, and marks a partly measured time as a floor", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        const [first, second] = record.runs;
+        return HttpResponse.json({
+          ...record,
+          runs: [
+            {
+              ...first,
+              metrics: {
+                ...first.metrics,
+                turns: 2,
+                attempts: 3,
+                retries: 1,
+                measured_attempts: 2,
+                metered_attempts: 3,
+                duration_ms: 8400,
+                usage: { input_tokens: 6200, output_tokens: 3000, model_requests: 3 },
+                estimated_cost: null,
+              },
+            },
+            second,
+          ],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const figures = within(within(armA).getByRole("list", { name: "What Arm A spent" }))
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+
+    // Every attempt metered, so 6.2k in and 3.0k out is a whole 9.2k; one attempt went
+    // untimed, so 8.4s is what the other two took and the arm took at least that.
+    expect(figures).toContain("9.2k tokens");
+    expect(figures).toContain("≥8.4s");
+  });
+
+  it("links each arm's configuration version to the draft that published it", async () => {
+    const user = userEvent.setup();
+    const { router } = renderResults();
+
+    const armA = await screen.findByRole("region", { name: "Arm A summary" });
+    const version = within(armA).getByRole("link", { name: "Atlas v1" });
+
+    expect(version).toHaveAttribute("href", `/lab/agent-configurations/${ATLAS_ID}`);
+    // The editor names only the latest published version, so the link carries the one pinned.
+    expect(version).toHaveAttribute("title", "Open Atlas, whose draft published v1");
+    expect(
+      within(screen.getByRole("region", { name: "Arm B summary" })).getByRole("link", {
+        name: "Beacon v1",
+      }),
+    ).toHaveAttribute("href", `/lab/agent-configurations/${BEACON_ID}`);
+
+    await user.click(version);
+
+    expect(router.state.location.pathname).toBe(`/lab/agent-configurations/${ATLAS_ID}`);
+  });
+
+  it("links every version the run pinned to what it pinned, the shop to its own version page", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/experiments/${EXPERIMENT_ID}`, () => {
+        const record = experiment(turns, agentTurns, toolEvents, mutationEvents);
+        return HttpResponse.json({
+          ...record,
+          sandbox_inputs: [
+            ...record.sandbox_inputs,
+            {
+              definition_type: "shop",
+              definition_id: SHOP_ID,
+              version: 3,
+              content_fingerprint: "e".repeat(64),
+            },
+            {
+              definition_type: "ticket",
+              definition_id: TICKET_ID,
+              version: 2,
+              content_fingerprint: "f".repeat(64),
+            },
+            {
+              definition_type: "warehouse",
+              definition_id: TICKET_ID,
+              version: 1,
+              content_fingerprint: "0".repeat(64),
+            },
+          ],
+        } satisfies ExperimentResponse);
+      }),
+    );
+    renderResults();
+
+    const strip = await screen.findByRole("link", { name: "scenario v1" });
+    const provenance = strip.parentElement as HTMLElement;
+
+    expect(strip).toHaveAttribute("href", `/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    expect(within(provenance).getByRole("link", { name: "Shop v3" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/versions/3`,
+    );
+    expect(within(provenance).getByRole("link", { name: "Ticket v2" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/tickets/${TICKET_ID}`,
+    );
+    // The scenario is pinned once, however many times the record lists it.
+    expect(within(provenance).getAllByText(/^scenario v1$/i)).toHaveLength(1);
+    // A type this build does not know stays the chip it was rather than a link to nowhere.
+    expect(within(provenance).getByText("warehouse v1")).not.toHaveAttribute("href");
+    expect(within(provenance).queryByRole("link", { name: "warehouse v1" })).toBeNull();
   });
 
   it("keeps the rows a judge owns out of the deterministic evidence", async () => {
@@ -3533,6 +3722,7 @@ describe("execution timeline", () => {
     expect(fault).toHaveTextContent(/moved the order it is bound to, out of band/);
     expect(fault).toHaveTextContent("moved this arm r1 → r2");
     expect(within(fault).getByText("scenario fault")).toBeVisible();
+    expectInertChip(within(fault).getByText("scenario fault"));
   });
 
   it("marks the composition only one arm received", async () => {
@@ -3543,6 +3733,7 @@ describe("execution timeline", () => {
     const split = within(stream).getAllByRole("listitem")[4];
     expect(split).toHaveTextContent("Arm B");
     expect(within(split).getByText("this arm only")).toBeVisible();
+    expectInertChip(within(split).getByText("this arm only"));
   });
 
   it("names the project-owned code each event ran through", async () => {

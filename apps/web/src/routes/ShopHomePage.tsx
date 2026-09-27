@@ -560,7 +560,7 @@ export function ShopHomePage() {
               <HoldsRow
                 count={listings.scenarios.count}
                 label="Scenarios"
-                note="The recipes an experiment runs."
+                note="The scenarios an experiment runs."
                 linkLabel="Open scenarios"
                 to="scenarios"
               />

@@ -153,7 +153,7 @@ export function tourSteps(id: TourId): readonly TourStep[] {
 
 export const TOURS: Record<TourId, Tour> = {
   "shop-home": {
-    surface: "this shop",
+    surface: "the overview",
     route: "/shops/:shopId",
     chain: { step: "shop", anchor: PAGE_NAME },
     steps: [
@@ -161,7 +161,7 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: 'nav[aria-label="Shop workspace"]',
         title: "Everything is authored inside a shop",
         body: [
-          "This rail is one [[shop]]'s workspace: its catalog and its policies, the customers and orders a sandbox is built from, the [[ticket|tickets]] an incident arrives on, and the recipes composed on them under Scenarios. Everything shared by every shop in this lab is the other mode in the bar above — the [[support-identity|support identities]], the [[agent-configuration|agent configurations]], the [[judge-configuration|judges]], the two block libraries, the bench and the history — which is why Experiment lab is a tab there rather than a section down here.",
+          "This rail is one [[shop]]'s workspace: its catalog and its policies, the customers and orders a sandbox is built from, the [[ticket|tickets]] an incident arrives on, and the scenarios composed on them. Everything shared by every shop in this lab is the other mode in the bar above — the [[support-identity|support identities]], the [[agent-configuration|agent configurations]], the [[judge-configuration|judges]], the two block libraries, the bench and the history — which is why Experiment lab is a tab there rather than a section down here.",
         ],
       },
       {
@@ -192,14 +192,14 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: '[aria-label="New objective block"]',
         title: "What you author here",
         body: [
-          "An [[objective-block|objective block]] is a question an experiment asks, kept apart from any one incident so that several recipes can ask the same one and be compared on it.",
+          "An [[objective-block|objective block]] is a question an experiment asks, kept apart from any one incident so that several scenarios can ask the same one and be compared on it.",
         ],
       },
       {
         anchor: '[data-tour="block-index"]',
         title: "What the library holds, and what decides it",
         body: [
-          "It asserts nothing on its own. A [[scenario]] binds it and gives the binding a severity, and where each [[run|arm]] stands on it is decided afterwards from that arm's own record, against the template version the recipe pinned. Editing a draft here never moves a recipe that has already been published.",
+          "It asserts nothing on its own. A [[scenario]] binds it and gives the binding a severity, and where each [[run|arm]] stands on it is decided afterwards from that arm's own record, against the template version the scenario pinned. Editing a draft here never moves a scenario that has already been published.",
         ],
       },
     ],
@@ -220,7 +220,7 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: '[aria-label="New mutation block"]',
         title: "Authoring is free; running is gated",
         body: [
-          "Authoring is free — a library may hold a template for an effect or a moment nothing yet performs — but an experiment whose recipe composed one is refused at setup rather than started and quietly never faulted. Like the objective library beside it, a [[scenario]] binds a template, chooses the moment, and pins the version it composed; a recipe with no fault bound is an incident where nothing interrupts, which is a legitimate recipe rather than an unfinished one.",
+          "Authoring is free — a library may hold a template for an effect or a moment nothing yet performs — but an experiment whose scenario composed one is refused at setup rather than started and quietly never faulted. Like the objective library beside it, a [[scenario]] binds a template, chooses the moment, and pins the version it composed; a scenario with no fault bound is an incident where nothing interrupts, which is a legitimate scenario rather than an unfinished one.",
         ],
       },
     ],
@@ -231,10 +231,10 @@ export const TOURS: Record<TourId, Tour> = {
     route: "/shops/:shopId/scenarios/:scenarioId",
     steps: [
       {
-        anchor: '[aria-label="Recipe"]',
-        title: "A recipe, not a script",
+        anchor: '[aria-label="Built on"]',
+        title: "Composed, not scripted",
         body: [
-          "A [[scenario]] is a recipe, not a conversation script. Nothing composed here tells the agent what to do or in what order — the order of the objectives is display priority.",
+          "A [[scenario]] is built on one ticket, and it is not a conversation script. Nothing composed here tells the agent what to do or in what order — the order of the objectives is display priority.",
         ],
       },
       {
@@ -248,7 +248,7 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: '[aria-label="Publish gate"]',
         title: "What publishing freezes",
         body: [
-          "What publishing does is freeze the whole composition and pin every version it reaches: the [[ticket]] it is built on, the shop behind that, and each [[objective-block|objective]] and [[mutation-block|mutation]] template it binds. An [[experiment]] runs a published version, so a recipe run next month runs what was composed today.",
+          "What publishing does is freeze the whole composition and pin every version it reaches: the [[ticket]] it is built on, the shop behind that, and each [[objective-block|objective]] and [[mutation-block|mutation]] template it binds. An [[experiment]] runs a published version, so a scenario run next month runs what was composed today.",
         ],
       },
     ],
@@ -262,7 +262,7 @@ export const TOURS: Record<TourId, Tour> = {
         anchor: '[aria-label="Freeze a published version"]',
         title: "What a starting state is",
         body: [
-          "This is where a recipe stops naming things and starts owning them. The orders it only named are copied as they stand the moment a [[sandbox-snapshot|snapshot]] is frozen, so an order edited afterwards changes the next snapshot rather than any that already exist.",
+          "This is where a scenario stops naming things and starts owning them. The orders it only named are copied as they stand the moment a [[sandbox-snapshot|snapshot]] is frozen, so an order edited afterwards changes the next snapshot rather than any that already exist.",
         ],
       },
       {
@@ -298,7 +298,7 @@ export const TOURS: Record<TourId, Tour> = {
   },
 
   results: {
-    surface: "this comparison",
+    surface: "the results",
     route: "/lab/bench/:shopId/:experimentId/results",
     // The three tabs are one surface: the header, the arm cards and the provenance row this
     // tour lights are the layout's, and all three are on screen whichever tab is open.
@@ -306,23 +306,23 @@ export const TOURS: Record<TourId, Tour> = {
     steps: [
       {
         anchor: '[data-tour="results-arms"]',
-        title: "How to read this comparison",
+        title: "How to read the results",
         body: [
           "Three kinds of evidence, deliberately kept apart. Deterministic rows are projected from each [[run|arm]]'s own record, so they report what happened rather than what was claimed. The rows no rule can decide are scored by the published [[judge-configuration|judge]], from an anonymized brief naming no framework, provider or model. The figures beside them are what the run measured.",
         ],
       },
       {
         anchor: '[data-tour="results-provenance"]',
-        title: "What this comparison pinned",
+        title: "What this run pinned",
         body: [
-          "Every chip here is something this run froze before it started — the recipe version, the starting state, and the published inputs behind them — followed by the dimensions its two arms actually differ along. Behaviour can be attributed to a dimension only while that last list holds exactly one: two differences and nothing here can say which of them moved the result.",
+          "Every chip here is something this run froze before it started — the scenario version, the starting state, and the published inputs behind them — followed by the dimensions its two arms actually differ along. Behaviour can be attributed to a dimension only while that last list holds exactly one: two differences and nothing here can say which of them moved the result.",
         ],
       },
       {
         anchor: 'nav[aria-label="Results views"]',
         title: "No aggregate, and nothing hidden",
         body: [
-          "Nothing rolls the three up into one number. Turns, calls, retries and cost are observations rather than scores — the model, the prompt and the operator's own replies move them as much as the framework does — and a cheaper arm that missed what the recipe required is not the better one.",
+          "Nothing rolls the three up into one number. Turns, calls, retries and cost are observations rather than scores — the model, the prompt and the operator's own replies move them as much as the framework does — and a cheaper arm that missed what the scenario required is not the better one.",
           "Each tab reads the same run at a different depth: the [[evaluation|evidence]] overview here, the normalized execution timeline both arms produced, and the sanitized traces underneath it.",
         ],
       },

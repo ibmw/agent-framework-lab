@@ -631,8 +631,12 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // missed process check weighs against a resolved incident.
   await page.getByRole("link", { name: "Results" }).click();
   await expect(page.getByText(/There is no aggregate score/)).toBeVisible();
-  await expect(card(page, "Arm A summary").getByText(/\d+\/\d+ decided/)).toBeVisible();
-  await expect(card(page, "Arm B summary").getByText(/\d+\/\d+ decided/)).toBeVisible();
+  await expect(card(page, "Arm A summary").getByText(/^\d+ of \d+$/)).toBeVisible();
+  await expect(card(page, "Arm B summary").getByText(/^\d+ of \d+$/)).toBeVisible();
+  // Each card carries what its arm spent, the four figures the frame draws.
+  await expect(
+    card(page, "Arm A summary").getByRole("list", { name: "What Arm A spent" }),
+  ).toContainText(/\d+ turns?.*\d+ tool calls?/);
 
   const deterministic = card(page, "Deterministic evidence");
   await expect(
@@ -773,7 +777,7 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await expect(row).toHaveCount(1);
 
   // And the row opens the evidence it summarizes.
-  await row.getByRole("link", { name: "View evidence" }).click();
+  await row.getByRole("link", { name: "Open results" }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
   ).toBeVisible();
@@ -839,5 +843,25 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await page.getByRole("link", { name: `Prompt comparison ${unique}` }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: `Prompt comparison ${unique}` }),
+  ).toBeVisible();
+
+  // A reviewer reading the finished run reaches what an arm ran in one press: the
+  // configuration's version on the arm's card opens the editor of the draft that published it,
+  // and the link says which version the run pinned — the editor itself names only the latest.
+  const pinned = card(page, "Arm A summary").getByRole("link", {
+    name: new RegExp(`^${atlas} v\\d+$`),
+  });
+  const pinnedVersion = ((await pinned.textContent()) ?? "").split(" ").at(-1) ?? "";
+  await expect(pinned).toHaveAttribute(
+    "title",
+    `Open ${atlas}, whose draft published ${pinnedVersion}`,
+  );
+  await pinned.click();
+  await expect(page).toHaveURL(/\/lab\/agent-configurations\/[0-9a-f-]+$/);
+  await expect(page.getByRole("heading", { level: 1, name: atlas })).toBeVisible();
+  // The header names the latest published version, which is the pinned one here only because
+  // nothing was published after this run started (ADR 0068).
+  await expect(
+    page.locator("header").getByText(`${pinnedVersion} published`).first(),
   ).toBeVisible();
 });
