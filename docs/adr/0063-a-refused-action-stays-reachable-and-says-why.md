@@ -247,7 +247,8 @@ applied, and the one exclusion they move is this ADR's.
   description, with Max days `aria-invalid` and Min days not; Add and Save name that line
   through `FieldHint`'s `extraId`, as the media row already does. Equal bounds are the lab's and
   are not refused. `FieldHint` takes no `hint` where a stacked field has only a refusal to say,
-  so both forms keep their stacked fields.
+  so both forms keep their stacked fields. (ADR 0072 moves the sentence to the method form's one line after
+  its buttons, with Max days still `aria-invalid` and described by it.)
 - **A publish-gate error is said on its control and refuses no write.** `variant_without_price`,
   `variant_in_stock_without_inventory` and `product_without_variant` are gate errors on a draft
   the lab stores, for every product status. The variant's row says the first under its price and

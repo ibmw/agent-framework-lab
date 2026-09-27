@@ -53,6 +53,13 @@ export const HELD_VALUE_REASON =
   "A field holding a value the draft would not take cannot be saved from here: the value never reached the draft. Stay and change it, or discard it and leave.";
 
 /**
+ * Why a method typed in Shop details' payment or fulfilment form cannot be saved from the
+ * prompt: the form adds to the draft, or saves an edit into it, only on its own press (ADR 0072).
+ */
+export const METHOD_FORM_REASON =
+  "A method typed in its form cannot be saved from here: nothing in the form has reached the draft yet. Stay, then press the form's Add or Save changes, or Cancel an edit.";
+
+/**
  * One registration, as the guard reads it. Every field is read through the registering hook's
  * own ref, so the guard always calls the current render's closures rather than the ones that
  * happened to be live when the work was first registered.

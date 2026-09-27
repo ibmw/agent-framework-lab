@@ -23,6 +23,7 @@ import {
   formatFixtureTimestamp,
   formatTimestamp,
   iconLeadingClasses,
+  idControlClasses,
   readOnlyValueClasses,
   searchFieldClasses,
   searchFieldIconClasses,
@@ -340,7 +341,7 @@ describe("field controls", () => {
  * silently shrinks to its intrinsic size.
  */
 const WIDTH = /(^|\s)w-\S+/;
-const CONTROLS = ["fieldControlClasses", "textAreaClasses"] as const;
+const CONTROLS = ["fieldControlClasses", "textAreaClasses", "idControlClasses"] as const;
 
 const sources = import.meta.glob("../**/*.{ts,tsx}", {
   query: "?raw",
@@ -393,9 +394,18 @@ describe("the width of a field", () => {
   });
 
   it("is declared by neither shared control", () => {
-    for (const classes of [fieldControlClasses, textAreaClasses]) {
+    for (const classes of [fieldControlClasses, textAreaClasses, idControlClasses]) {
       expect(classes).not.toMatch(WIDTH);
     }
+  });
+
+  it("gives an identifier the control's box in the monospace face, at one size", () => {
+    // One font size only: a second one composed after the control's would lose to it.
+    expect(idControlClasses.match(/\btext-\[[\d.]+px\]/g)).toEqual(["text-[13.5px]"]);
+    expect(idControlClasses).toContain("font-mono");
+    expect(idControlClasses.replace("font-mono text-[13.5px]", "text-[14.5px]")).toBe(
+      fieldControlClasses,
+    );
   });
 
   it("is stated by every consumer that composes one", () => {

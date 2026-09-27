@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { alreadyTakenMessage } from "../lib/fieldRules";
-import { fieldControlClasses } from "../lib/ui";
+import { fieldControlClasses, idControlClasses } from "../lib/ui";
 import { type Arrangement, FieldHint } from "./FieldHint";
 
 /**
@@ -44,6 +44,8 @@ export function DerivedIdField({
   maxLength,
   preview = true,
   extraId,
+  refusedBy,
+  monospace = false,
   onChange,
   onLeave,
 }: {
@@ -95,6 +97,14 @@ export function DerivedIdField({
    * and names the field's line rather than writing the sentence twice (ADR 0063).
    */
   extraId?: string;
+  /**
+   * The id of a line elsewhere on the form that says why the value in the field is refused —
+   * the method forms' one reason line after their buttons (ADR 0072). The field is marked
+   * invalid and described by that line, and says nothing of its own about it.
+   */
+  refusedBy?: string;
+  /** An identifier is read character by character, so it is drawn in the monospace face. */
+  monospace?: boolean;
   onChange: (value: string) => void;
   /**
    * The field was left, after an empty one has had its suggestion handed back. For a parent
@@ -223,7 +233,7 @@ export function DerivedIdField({
       <input
         ref={inputRef}
         id={generatedId}
-        className={`${fieldControlClasses} w-full`}
+        className={monospace ? `${idControlClasses} w-full` : `${fieldControlClasses} w-full`}
         value={shown}
         required={required}
         pattern={pattern}
@@ -235,7 +245,8 @@ export function DerivedIdField({
         // opens, so there is no moment in which this input is both open and empty.
         disabled={pending}
         aria-busy={pending || undefined}
-        aria-invalid={colliding || refused || undefined}
+        aria-invalid={colliding || refused || refusedBy !== undefined || undefined}
+        aria-describedby={refusedBy}
         onChange={(event) => change(event.target.value)}
         onBlur={() => {
           restoreIfEmpty();

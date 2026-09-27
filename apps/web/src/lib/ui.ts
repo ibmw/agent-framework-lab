@@ -149,6 +149,15 @@ const fieldSurfaceClasses =
 export const fieldControlClasses = `box-border min-h-[44px] py-2.5 text-[14.5px] ${fieldSurfaceClasses}`;
 
 /**
+ * The single-line control for an identifier a reader checks character by character: the same
+ * box in the monospace face at 13.5px, as the methods handoff draws a method's ID field
+ * (ADR 0072). Its own string rather than `font-mono text-[13.5px]` composed after the control's,
+ * because Tailwind emits one of two font sizes last whatever order a class string writes them
+ * in, and here that is the control's 14.5px.
+ */
+export const idControlClasses = `box-border min-h-[44px] py-2.5 font-mono text-[13.5px] ${fieldSurfaceClasses}`;
+
+/**
  * The multi-line control, at the prototype's own metrics rather than the input's: 14px on a
  * 1.6 leading, `11px 14px`, and a floor of its own in place of the 44px one.
  */

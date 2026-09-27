@@ -383,6 +383,12 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   for the add form and the open row; one row open per list, siblings' Edit disabled with a line
   saying why and that an open row is not in the draft until Save; Cancel writes nothing; the row
   is a named form; a refusal one path makes the other makes too.
+- **Shop details' two method lists are edited in their card's form** (ADR 0072): Edit loads the
+  method into the one form, highlights it and fixes its ID; *Save changes* writes it in place.
+  The last enabled payment method stays on and on the list, a workspace rule stricter than the
+  lab, which only refuses it at publication. Four of the handoff's hints on these cards claim behaviour the
+  lab does not have and are written as what it does instead (ADR 0072, *The hints say what the
+  lab does*).
 - **An editor says what is unsaved and asks before it is lost** (ADR 0051): *Discard changes*
   beside *Save draft* while dirty, "All changes saved" in a live region when not; one dialog
   with Save and leave, Discard and leave, Stay.
@@ -411,8 +417,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   submit of a form, a saved row's Save included; every create page (nine route files, ten
   surfaces), Publish everywhere (`PublishButton`, described by `PublishReasons`), Start, the
   connection's Save and Test, the bench's *Send as the customer*, *Attach to this shop*, *Fork
-  this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, *Add fulfilment method*
-  (a transit window the lab refuses, said under Max days), the scenario editor's *Add* at the
+  this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, Shop details' method forms
+  (*Add payment method*, *Add fulfilment method* and *Save changes*: the first rule broken, in
+  one line after the buttons, ADR 0072), the scenario editor's *Add* at the
   objective and mutation caps (the lab's sentence, under the picker) and the add forms refused
   for a reason no field states wear it. Start is refused until it can work, and says every cause
   it waits for at once. A press in flight is not a refusal: it says nothing, and is `aria-disabled`

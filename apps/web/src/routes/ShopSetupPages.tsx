@@ -1,14 +1,10 @@
-import type {
-  FulfilmentMethodSchema,
-  PaymentMethodSchema,
-  ToneOfVoiceSchema,
-} from "@agent-lab/contracts";
-import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import type { ToneOfVoiceSchema } from "@agent-lab/contracts";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
-import { Field, FieldHint, FieldRows } from "../components/FieldHint";
+import { Field, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
 import { PrimaryAction, type Refusal, RefusalLine } from "../components/PrimaryAction";
 import { SetupChecklist } from "../components/SetupChecklist";
@@ -21,14 +17,13 @@ import {
   EntryCard,
   EntryEditNotice,
   EntryId,
-  EntryKind,
   EntryText,
   PageHeader,
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueSuggestion } from "../lib/entryIds";
-import { labelOf, optionsOf, PAYMENT_METHOD_KIND, SUPPORT_CHANNEL } from "../lib/enumLabels";
+import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
   alreadyTakenMessage,
   DERIVED_KEBAB_RULE,
@@ -38,12 +33,10 @@ import {
   SHOP_SLUG_TAKEN_PLACE,
   TONE_DEFAULT_REMOVAL_RULE,
   TONE_NAME_RULE,
-  TRANSIT_WINDOW_RULE,
 } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import { unsoldCurrencyFindings } from "../lib/setupChecklist";
 import {
-  accentButtonClasses,
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
@@ -51,8 +44,7 @@ import {
 } from "../lib/ui";
 import { HELD_VALUE_REASON, useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
-
-const PAYMENT_KINDS = optionsOf(PAYMENT_METHOD_KIND);
+import { FulfilmentMethodsCard, PaymentMethodsCard } from "./ShopMethodCards";
 
 const CHANNELS = optionsOf(SUPPORT_CHANNEL);
 
@@ -159,8 +151,8 @@ function RemoveButton({
 const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
 
 /**
- * The authored fields of each of this page's six entry kinds, and the one function that turns
- * each set of them into the entry the draft stores.
+ * A tone of voice's authored fields, and the one function that turns them into the entry the
+ * draft stores.
  *
  * The add form holds the fields, the edit mode holds the fields, and both hand them to the
  * same builder with the entry's identifier beside them — which is what keeps the two paths
@@ -171,55 +163,6 @@ const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
 interface ProseFields {
   name: string;
   text: string;
-}
-
-/**
- * `enabled` is deliberately not here. It is the row's own chip-line toggle, which writes
- * straight to the draft and stays live while the row is open, so an edit must read it from
- * the entry as it stands at Save rather than from a copy taken when Edit was pressed — the
- * rule the variants table already follows, and the one a tone of voice follows for
- * `is_default`. Snapshotting it would silently revert a toggle made while the row was open.
- */
-interface PaymentFields {
-  name: string;
-  kind: PaymentMethodSchema["kind"];
-}
-
-interface FulfilmentFields {
-  name: string;
-  carrier: string;
-  min: number;
-  max: number;
-}
-
-function paymentEntry(
-  id: string,
-  fields: PaymentFields & { enabled: boolean },
-): PaymentMethodSchema {
-  return { id, name: fields.name, kind: fields.kind, enabled: fields.enabled };
-}
-
-function paymentFields(entry: PaymentMethodSchema): PaymentFields {
-  return { name: entry.name, kind: entry.kind };
-}
-
-function fulfilmentEntry(id: string, fields: FulfilmentFields): FulfilmentMethodSchema {
-  return {
-    id,
-    name: fields.name,
-    carrier: fields.carrier,
-    min_transit_days: fields.min,
-    max_transit_days: fields.max,
-  };
-}
-
-function fulfilmentFields(entry: FulfilmentMethodSchema): FulfilmentFields {
-  return {
-    name: entry.name,
-    carrier: entry.carrier,
-    min: entry.min_transit_days,
-    max: entry.max_transit_days,
-  };
 }
 
 function toneEntry(id: string, fields: ProseFields & { is_default: boolean }): ToneOfVoiceSchema {
@@ -457,467 +400,9 @@ export function ShopIdentityPage() {
         </FieldRows>
       </Card>
 
-      <PaymentAndFulfilmentCards />
+      <PaymentMethodsCard />
+      <FulfilmentMethodsCard />
     </SetupPage>
-  );
-}
-
-/** The Kind select a payment method wears, on the add form and in an open row alike. */
-function PaymentKindField({
-  value,
-  onChange,
-}: {
-  value: PaymentMethodSchema["kind"];
-  onChange: (kind: PaymentMethodSchema["kind"]) => void;
-}) {
-  return (
-    <label className={fieldLabelClasses}>
-      Kind
-      <select
-        className={`${fieldControlClasses} w-full`}
-        value={value}
-        onChange={(event) => onChange(event.target.value as PaymentMethodSchema["kind"])}
-      >
-        {PAYMENT_KINDS.map((entry) => (
-          <option key={entry.value} value={entry.value}>
-            {entry.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-/**
- * Whether a transit window is one the lab refuses to store: `FulfilmentMethod.__post_init__`
- * raises on a maximum shorter than the minimum, and on nothing else between the two.
- */
-function transitInverted(value: FulfilmentFields): boolean {
-  return value.max < value.min;
-}
-
-/**
- * Carrier and transit window, on the add form and in an open row alike — including the
- * refusal, which both paths therefore make in the same words and on the same control.
- *
- * The window is refused on **Max days**. The lab's sentence makes the maximum its subject, and
- * the maximum is the bound typed second, so the line appears under the control the operator
- * is in when the window turns over. It is the lab's own message (`TRANSIT_WINDOW_RULE`), at
- * the validation weight, in Max days' description, with Max days marked invalid; the add
- * form's Add and the open row's Save name this line rather than write the sentence twice
- * (ADR 0063, *Field's `extraId`*). Min days is not marked: the operator may mean either bound,
- * and the one line under the pair says which rule they broke.
- */
-function FulfilmentFieldset({
-  value,
-  onChange,
-  transitRefusalId,
-}: {
-  value: FulfilmentFields;
-  onChange: (next: FulfilmentFields) => void;
-  /** The id of the line that says the window is inverted, which the form's action names. */
-  transitRefusalId: string;
-}) {
-  const inverted = transitInverted(value);
-  return (
-    <>
-      <label className={fieldLabelClasses}>
-        Carrier
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.carrier}
-          required
-          onChange={(event) => onChange({ ...value, carrier: event.target.value })}
-        />
-      </label>
-      <label className={fieldLabelClasses}>
-        Min days
-        <input
-          type="number"
-          min={0}
-          className={`${fieldControlClasses} w-full`}
-          value={value.min}
-          onChange={(event) => onChange({ ...value, min: Number(event.target.value) })}
-        />
-      </label>
-      <FieldHint
-        label="Max days"
-        extra={inverted ? TRANSIT_WINDOW_RULE : undefined}
-        extraTone={inverted ? "error" : "muted"}
-        extraId={transitRefusalId}
-      >
-        <input
-          type="number"
-          min={0}
-          className={`${fieldControlClasses} w-full`}
-          value={value.max}
-          onChange={(event) => onChange({ ...value, max: Number(event.target.value) })}
-        />
-      </FieldHint>
-    </>
-  );
-}
-
-function PaymentAndFulfilmentCards() {
-  const { shopId, content, edit } = useShopWorkspace();
-  const [payment, setPayment] = useState<{ id: string } & PaymentFields>({
-    id: "",
-    name: "",
-    kind: "card",
-  });
-  const [fulfilment, setFulfilment] = useState<{ id: string } & FulfilmentFields>({
-    id: "",
-    name: "",
-    carrier: "",
-    min: 1,
-    max: 3,
-  });
-  const takenPaymentIds = content.payment_methods.map((method) => method.id);
-  const takenFulfilmentIds = content.fulfilment_methods.map((method) => method.id);
-  const paymentEditor = useEntryEdit<PaymentFields>(takenPaymentIds);
-  const fulfilmentEditor = useEntryEdit<FulfilmentFields>(takenFulfilmentIds);
-  const paymentNotice = useId();
-  const paymentRemoval = useRemoval(shopId);
-  const fulfilmentRemoval = useRemoval(shopId);
-  const fulfilmentNotice = useId();
-  // One line per window the page can hold open: the add form's, and the one open row's.
-  const addTransitRefusalId = useId();
-  const openTransitRefusalId = useId();
-  const addTransitInverted = transitInverted(fulfilment);
-
-  const paymentSuggested = uniqueSuggestion(slugify(payment.name, ""), takenPaymentIds);
-  const fulfilmentSuggested = uniqueSuggestion(slugify(fulfilment.name, ""), takenFulfilmentIds);
-
-  function addPayment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!payment.id || takenPaymentIds.includes(payment.id)) {
-      return;
-    }
-    edit({
-      ...content,
-      payment_methods: [
-        ...content.payment_methods,
-        // A rail is added enabled; nothing on the form asks, and a disabled new rail would be
-        // an answer the operator did not give.
-        paymentEntry(payment.id, { ...payment, enabled: true }),
-      ],
-    });
-    setPayment({ id: "", name: "", kind: "card" });
-  }
-
-  /**
-   * The saved entry is replaced where it stands, so the list's order never moves — and
-   * `enabled` is read off the entry as it stands rather than off the open fields, so a toggle
-   * made on the chip line while the row was open survives Save.
-   */
-  function savePayment(id: string, fields: PaymentFields) {
-    edit({
-      ...content,
-      payment_methods: content.payment_methods.map((entry) =>
-        entry.id === id ? paymentEntry(id, { ...fields, enabled: entry.enabled }) : entry,
-      ),
-    });
-  }
-
-  function addFulfilment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    // The refused Add swallows its press; this is what refuses a submission that arrives
-    // without one (ADR 0063).
-    if (!fulfilment.id || takenFulfilmentIds.includes(fulfilment.id) || addTransitInverted) {
-      return;
-    }
-    edit({
-      ...content,
-      fulfilment_methods: [
-        ...content.fulfilment_methods,
-        fulfilmentEntry(fulfilment.id, fulfilment),
-      ],
-    });
-    setFulfilment({ id: "", name: "", carrier: "", min: 1, max: 3 });
-  }
-
-  function dropPayment(id: string) {
-    edit({
-      ...content,
-      payment_methods: content.payment_methods.filter((entry) => entry.id !== id),
-    });
-  }
-
-  function dropFulfilment(id: string) {
-    edit({
-      ...content,
-      fulfilment_methods: content.fulfilment_methods.filter((entry) => entry.id !== id),
-    });
-  }
-
-  function saveFulfilment(id: string, fields: FulfilmentFields) {
-    edit({
-      ...content,
-      fulfilment_methods: content.fulfilment_methods.map((entry) =>
-        entry.id === id ? fulfilmentEntry(id, fields) : entry,
-      ),
-    });
-  }
-
-  return (
-    <>
-      <Card title="Payment methods">
-        <ul className="grid gap-2 text-[13px]">
-          {content.payment_methods.map((method) =>
-            paymentRemoval.isArmed(method.id) ? (
-              <ConfirmRemove
-                key={method.id}
-                as="li"
-                title={`Remove the payment method “${method.name}”?`}
-                consequence={consequenceOf(
-                  "The shop stops offering it once the draft is saved and published.",
-                  findingClauses(["payment_method_missing_from_shop"]),
-                  findingClauses([
-                    method.enabled &&
-                      !content.payment_methods.some(
-                        (other) => other.id !== method.id && other.enabled,
-                      ) &&
-                      "shop_without_payment_method",
-                  ]),
-                  "Nothing is written until you save the draft, and a published shop version keeps it.",
-                )}
-                onConfirm={paymentRemoval.confirm(
-                  () => dropPayment(method.id),
-                  `Removed the payment method “${method.name}” from the draft.`,
-                )}
-                onKeep={paymentRemoval.keep}
-              />
-            ) : (
-              <EntryCard
-                key={method.id}
-                title={method.name}
-                chips={
-                  <>
-                    <EntryKind value={labelOf(PAYMENT_METHOD_KIND, method.kind)} />
-                    <EntryId value={method.id} />
-                    <label className="flex items-center gap-1.5 text-[12px] text-admin-muted">
-                      <input
-                        type="checkbox"
-                        checked={method.enabled}
-                        onChange={() =>
-                          edit({
-                            ...content,
-                            payment_methods: content.payment_methods.map((entry) =>
-                              entry.id === method.id
-                                ? { ...entry, enabled: !entry.enabled }
-                                : entry,
-                            ),
-                          })
-                        }
-                      />
-                      enabled
-                    </label>
-                  </>
-                }
-                edit={entryEdit(
-                  paymentEditor,
-                  paymentNotice,
-                  method.id,
-                  method.name,
-                  () => paymentFields(method),
-                  (fields) => savePayment(method.id, fields),
-                  (value, onChange) => (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className={fieldLabelClasses}>
-                        Name
-                        <input
-                          className={`${fieldControlClasses} w-full`}
-                          value={value.name}
-                          required
-                          onChange={(event) => onChange({ ...value, name: event.target.value })}
-                        />
-                      </label>
-                      <PaymentKindField
-                        value={value.kind}
-                        onChange={(kind) => onChange({ ...value, kind })}
-                      />
-                    </div>
-                  ),
-                )}
-                actions={
-                  <RemoveButton
-                    label={method.name}
-                    removal={paymentRemoval}
-                    entryKey={method.id}
-                    notice={`Removed the payment method “${method.name}” from the draft.`}
-                    onRemove={() => dropPayment(method.id)}
-                  />
-                }
-              />
-            ),
-          )}
-          {content.payment_methods.length === 0 ? (
-            <li className="text-admin-muted">No payment method yet.</li>
-          ) : null}
-        </ul>
-        <EntryEditNotice id={paymentNotice} label={paymentEditor.open?.label ?? null} />
-        <RemovalNotice removal={paymentRemoval} />
-        <form className={`${addFormClasses} sm:grid-cols-4`} onSubmit={addPayment}>
-          <label className={fieldLabelClasses}>
-            Name
-            <input
-              className={`${fieldControlClasses} w-full`}
-              value={payment.name}
-              required
-              onChange={(event) => setPayment({ ...payment, name: event.target.value })}
-            />
-          </label>
-          <DerivedIdField
-            label="ID"
-            hint={DERIVED_KEBAB_RULE}
-            value={payment.id}
-            suggested={paymentSuggested.value}
-            taken={takenPaymentIds}
-            takenBase={paymentSuggested.takenBase}
-            takenPlace="in the draft"
-            pattern={KEBAB_PATTERN}
-            title={DERIVED_KEBAB_RULE}
-            required
-            onChange={(id) => setPayment({ ...payment, id })}
-          />
-          <PaymentKindField
-            value={payment.kind}
-            onChange={(kind) => setPayment({ ...payment, kind })}
-          />
-          <button className={`${accentButtonClasses} self-end`} type="submit">
-            <ButtonIcon verb="create" />
-            Add payment method
-          </button>
-        </form>
-      </Card>
-
-      <Card title="Fulfilment methods">
-        <ul className="grid gap-2 text-[13px]">
-          {content.fulfilment_methods.map((method) =>
-            fulfilmentRemoval.isArmed(method.id) ? (
-              <ConfirmRemove
-                key={method.id}
-                as="li"
-                title={`Remove the fulfilment method “${method.name}”?`}
-                consequence={consequenceOf(
-                  "The shop stops offering it once the draft is saved and published.",
-                  findingClauses(["fulfilment_method_missing_from_shop"]),
-                  findingClauses([
-                    content.fulfilment_methods.length === 1 && "shop_without_fulfilment_method",
-                  ]),
-                  "Nothing is written until you save the draft, and a published shop version keeps it.",
-                )}
-                onConfirm={fulfilmentRemoval.confirm(
-                  () => dropFulfilment(method.id),
-                  `Removed the fulfilment method “${method.name}” from the draft.`,
-                )}
-                onKeep={fulfilmentRemoval.keep}
-              />
-            ) : (
-              <EntryCard
-                key={method.id}
-                title={method.name}
-                chips={
-                  <>
-                    <span className="text-[12px] text-admin-muted">
-                      {method.carrier} · {method.min_transit_days}–{method.max_transit_days} days
-                    </span>
-                    <EntryId value={method.id} />
-                  </>
-                }
-                edit={entryEdit(
-                  fulfilmentEditor,
-                  fulfilmentNotice,
-                  method.id,
-                  method.name,
-                  () => fulfilmentFields(method),
-                  (fields) => saveFulfilment(method.id, fields),
-                  (value, onChange) => (
-                    <div className="grid items-start gap-2 sm:grid-cols-4">
-                      <label className={fieldLabelClasses}>
-                        Name
-                        <input
-                          className={`${fieldControlClasses} w-full`}
-                          value={value.name}
-                          required
-                          onChange={(event) => onChange({ ...value, name: event.target.value })}
-                        />
-                      </label>
-                      <FulfilmentFieldset
-                        value={value}
-                        onChange={onChange}
-                        transitRefusalId={openTransitRefusalId}
-                      />
-                    </div>
-                  ),
-                  (value) =>
-                    transitInverted(value)
-                      ? { id: openTransitRefusalId, reason: TRANSIT_WINDOW_RULE }
-                      : true,
-                )}
-                actions={
-                  <RemoveButton
-                    label={method.name}
-                    removal={fulfilmentRemoval}
-                    entryKey={method.id}
-                    notice={`Removed the fulfilment method “${method.name}” from the draft.`}
-                    onRemove={() => dropFulfilment(method.id)}
-                  />
-                }
-              />
-            ),
-          )}
-          {content.fulfilment_methods.length === 0 ? (
-            <li className="text-admin-muted">No fulfilment method yet.</li>
-          ) : null}
-        </ul>
-        <EntryEditNotice id={fulfilmentNotice} label={fulfilmentEditor.open?.label ?? null} />
-        <RemovalNotice removal={fulfilmentRemoval} />
-        {/* `items-start`: the transit sentence under Max days wraps in its narrow cell, and a
-            stretched row would grow every sibling control with it. The open row's grid does
-            the same. */}
-        <form className={`${addFormClasses} items-start sm:grid-cols-5`} onSubmit={addFulfilment}>
-          <label className={fieldLabelClasses}>
-            Name
-            <input
-              className={`${fieldControlClasses} w-full`}
-              value={fulfilment.name}
-              required
-              onChange={(event) => setFulfilment({ ...fulfilment, name: event.target.value })}
-            />
-          </label>
-          <DerivedIdField
-            label="ID"
-            hint={DERIVED_KEBAB_RULE}
-            value={fulfilment.id}
-            suggested={fulfilmentSuggested.value}
-            taken={takenFulfilmentIds}
-            takenBase={fulfilmentSuggested.takenBase}
-            takenPlace="in the draft"
-            pattern={KEBAB_PATTERN}
-            title={DERIVED_KEBAB_RULE}
-            required
-            onChange={(id) => setFulfilment({ ...fulfilment, id })}
-          />
-          <FulfilmentFieldset
-            value={fulfilment}
-            onChange={(next) => setFulfilment({ ...fulfilment, ...next })}
-            transitRefusalId={addTransitRefusalId}
-          />
-          <PrimaryAction
-            variant="accent"
-            className="self-end"
-            type="submit"
-            refusal={
-              addTransitInverted ? { id: addTransitRefusalId, reason: TRANSIT_WINDOW_RULE } : null
-            }
-          >
-            <ButtonIcon verb="create" />
-            Add fulfilment method
-          </PrimaryAction>
-        </form>
-      </Card>
-    </>
   );
 }
 

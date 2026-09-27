@@ -29,11 +29,16 @@ import {
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { markColourFor } from "./lib/shopLogo";
 import { CREATE_ROUTES, tourAt } from "./lib/tours";
-import { HELD_VALUE_REASON } from "./lib/unsavedWork";
+import { HELD_VALUE_REASON, METHOD_FORM_REASON } from "./lib/unsavedWork";
 import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
-import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import {
+  describedText,
+  expectNotRefused,
+  expectRefused,
+  submitWithoutPressing,
+} from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1435,7 +1440,7 @@ describe("shop workspace", () => {
     await user.type(payments.getByLabelText("Name"), "Visa");
     expect(payments.getByLabelText("ID")).toHaveValue("visa-2");
     expect(payments.getByLabelText("ID")).toHaveAccessibleDescription(
-      /visa is already in the draft/i,
+      /visa is already used by another method/i,
     );
 
     await user.clear(payments.getByLabelText("ID"));
@@ -1446,7 +1451,12 @@ describe("shop workspace", () => {
     await user.clear(payments.getByLabelText("ID"));
     await user.type(payments.getByLabelText("ID"), "visa");
     expect(payments.getByLabelText("ID")).toBeInvalid();
+    expectRefused(
+      payments.getByRole("button", { name: "Add payment method" }),
+      "visa is already used by another method.",
+    );
     await user.click(payments.getByRole("button", { name: "Add payment method" }));
+    await submitWithoutPressing(payments.getByRole("button", { name: "Add payment method" }));
     expect(payments.getAllByText("visa", { selector: "code" })).toHaveLength(1);
   });
 
@@ -2310,10 +2320,10 @@ describe("editing a saved entry in place", () => {
 
     const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
     await user.click(card.getByRole("button", { name: "Edit Standard" }));
-    const open = within(card.getByRole("form", { name: "Edit Standard" }));
-    await user.clear(open.getByLabelText("Name"));
-    await user.type(open.getByLabelText("Name"), "Standard delivery");
-    await user.click(open.getByRole("button", { name: "Save Standard" }));
+    const form = within(card.getByRole("group", { name: "Edit Standard" }));
+    await user.clear(form.getByLabelText("Name"));
+    await user.type(form.getByLabelText("Name"), "Standard delivery");
+    await user.click(form.getByRole("button", { name: "Save changes" }));
 
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedDrafts).toHaveLength(1));
@@ -2332,31 +2342,37 @@ describe("editing a saved entry in place", () => {
     });
   });
 
-  it("keeps a payment method's enabled toggle made while the row was open", async () => {
+  it("keeps a payment method's enabled switch turned while its edit was open", async () => {
     const user = userEvent.setup();
     currentContent = {
       ...READY_CONTENT,
-      payment_methods: [{ id: "visa", name: "Card", kind: "card", enabled: true }],
+      payment_methods: [
+        { id: "visa", name: "Card", kind: "card", enabled: true },
+        { id: "paypal", name: "PayPal", kind: "wallet", enabled: true },
+      ],
     };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
     const card = within(await screen.findByRole("region", { name: "Payment methods" }));
     await user.click(card.getByRole("button", { name: "Edit Card" }));
-    const open = within(card.getByRole("form", { name: "Edit Card" }));
-    await user.selectOptions(open.getByLabelText("Kind"), "wallet");
+    const form = within(card.getByRole("group", { name: "Edit Card" }));
+    await user.selectOptions(form.getByLabelText("Kind"), "wallet");
 
-    // The enabled box is on the row's chip line, outside the open form, and writes straight
-    // to the draft. Save must read it from the entry as it now stands: a snapshot taken when
-    // Edit was pressed would put the tick back and lose the operator's work in silence.
-    await user.click(card.getByRole("checkbox", { name: "enabled" }));
-    await user.click(open.getByRole("button", { name: "Save Card" }));
+    // The switch is on the list, outside the form, and writes straight to the draft. Save
+    // must read it from the entry as it now stands: a snapshot taken when Edit was pressed
+    // would turn it back on and lose the operator's work in silence.
+    await user.click(card.getByRole("switch", { name: "Card" }));
+    await user.click(form.getByRole("button", { name: "Save changes" }));
 
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedDrafts).toHaveLength(1));
 
     expect(lastSaved()).toStrictEqual({
       ...unchangedPayload(),
-      payment_methods: [{ id: "visa", name: "Card", kind: "wallet", enabled: false }],
+      payment_methods: [
+        { id: "visa", name: "Card", kind: "wallet", enabled: false },
+        { id: "paypal", name: "PayPal", kind: "wallet", enabled: true },
+      ],
     });
   });
 
@@ -3020,77 +3036,70 @@ describe("the shop draft's refusals, said under their controls", () => {
     await user.clear(fulfilment.getByLabelText("Max days"));
     await user.type(fulfilment.getByLabelText("Max days"), "3");
 
-    // The reason, under Max days, in its description, the control marked invalid.
+    // The lab's sentence, once, after the form's action where the handoff draws its error;
+    // Max days is marked invalid and described by it, Min days is not (ADR 0072).
     const max = fulfilment.getByLabelText("Max days");
-    expect(max).toHaveAccessibleDescription(TRANSIT_WINDOW_RULE);
-    expect(max).toHaveAttribute("aria-invalid", "true");
     const line = fulfilment.getByText(TRANSIT_WINDOW_RULE);
     expect(line).toBeVisible();
     expect(line).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
-    expect(precedes(max, line)).toBe(true);
+    expect(max).toHaveAttribute("aria-invalid", "true");
+    expect(max.getAttribute("aria-describedby")?.split(" ")).toContain(line.id);
     expect(fulfilment.getByLabelText("Min days")).not.toHaveAttribute("aria-invalid");
-    // The sentence wraps in Max days' narrow cell; the form's grid aligns its cells to the
-    // start, so that line never stretches the row and grows the controls beside it.
-    const addGrid = max.parentElement?.parentElement;
-    expect(addGrid?.tagName).toBe("FORM");
-    expect(addGrid).toHaveClass("grid", "items-start");
 
     // Add is refused for that reason, names that one line, and writes nothing when pressed,
     // nor when its form is submitted without the press.
     const add = fulfilment.getByRole("button", { name: "Add fulfilment method" });
+    expect(precedes(add, line)).toBe(true);
     expectRefused(add, TRANSIT_WINDOW_RULE);
     expect(add.getAttribute("aria-describedby")?.split(" ")[0]).toBe(line.id);
     await user.click(add);
     await submitWithoutPressing(add);
     expect(fulfilment.queryByText(/Nordic Post ·/)).toBeNull();
-    expect(fulfilment.getByText("No fulfilment method yet.")).toBeVisible();
+    expect(
+      fulfilment.getByText("No method offered, so no new order can be fulfilled."),
+    ).toBeVisible();
 
-    // A window of one day each way is the lab's, so equal bounds are not refused.
+    // Equal bounds are the lab's, so they are not refused, and read as one window.
     await user.clear(fulfilment.getByLabelText("Max days"));
     await user.type(fulfilment.getByLabelText("Max days"), "5");
     expect(fulfilment.getByLabelText("Max days")).not.toHaveAttribute("aria-invalid");
     expect(fulfilment.queryByText(TRANSIT_WINDOW_RULE)).toBeNull();
     expectNotRefused(add);
     await user.click(add);
-    expect(fulfilment.getByText("Nordic Post · 5–5 days")).toBeVisible();
-    expect(fulfilment.queryByText("No fulfilment method yet.")).toBeNull();
+    expect(fulfilment.getByText("Nordic Post · 5 days")).toBeVisible();
+    expect(
+      fulfilment.queryByText("No method offered, so no new order can be fulfilled."),
+    ).toBeNull();
   });
 
-  it("refuses an open row's Save while its window is inverted, and saves it once it is not", async () => {
+  it("refuses Save changes while the window is inverted, and saves it once it is not", async () => {
     const user = userEvent.setup();
     currentContent = { ...READY_CONTENT, fulfilment_methods: [STANDARD] };
     renderAt(`/shops/${SHOP_ID}/setup/identity`);
 
     const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
     await user.click(card.getByRole("button", { name: "Edit Standard" }));
-    const open = within(card.getByRole("form", { name: "Edit Standard" }));
-    await user.clear(open.getByLabelText("Min days"));
-    await user.type(open.getByLabelText("Min days"), "6");
+    const form = within(card.getByRole("group", { name: "Edit Standard" }));
+    await user.clear(form.getByLabelText("Min days"));
+    await user.type(form.getByLabelText("Min days"), "6");
 
-    // The row keeps its stacked fields; the line is under Max days, which it describes.
-    const max = open.getByLabelText("Max days");
-    expect(max).toHaveAccessibleDescription(TRANSIT_WINDOW_RULE);
-    // The row's grid holds Name and the fieldset's four cells, aligned to the start as the
-    // add form's are, so the line under Max days grows none of its neighbours.
-    const rowGrid = max.parentElement?.parentElement;
-    expect(rowGrid).toContainElement(open.getByLabelText("Name"));
-    expect(rowGrid).toHaveClass("grid", "items-start");
+    const max = form.getByLabelText("Max days");
     expect(max).toHaveAttribute("aria-invalid", "true");
-    const save = open.getByRole("button", { name: "Save Standard" });
+    const save = form.getByRole("button", { name: "Save changes" });
     expectRefused(save, TRANSIT_WINDOW_RULE);
     expect(save.getAttribute("aria-describedby")?.split(" ")[0]).toBe(
-      open.getByText(TRANSIT_WINDOW_RULE).id,
+      form.getByText(TRANSIT_WINDOW_RULE).id,
     );
     await user.click(save);
     await submitWithoutPressing(save);
-    // Still open, and nothing reached the draft.
-    expect(card.getByRole("form", { name: "Edit Standard" })).toBeVisible();
+    // Still editing, and nothing reached the draft.
+    expect(card.getByRole("group", { name: "Edit Standard" })).toBeVisible();
     expect(screen.getByText("All changes saved")).toBeVisible();
 
-    await user.clear(open.getByLabelText("Max days"));
-    await user.type(open.getByLabelText("Max days"), "8");
-    expectNotRefused(open.getByRole("button", { name: "Save Standard" }));
-    await user.click(open.getByRole("button", { name: "Save Standard" }));
+    await user.clear(form.getByLabelText("Max days"));
+    await user.type(form.getByLabelText("Max days"), "8");
+    expectNotRefused(form.getByRole("button", { name: "Save changes" }));
+    await user.click(form.getByRole("button", { name: "Save changes" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedDrafts).toHaveLength(1));
     expect(lastSaved().fulfilment_methods).toStrictEqual([
@@ -5737,5 +5746,451 @@ describe("deleting and duplicating a product", () => {
 
       await settledOn(router, "jk", "jk");
     });
+  });
+});
+
+/**
+ * ADR 0072: Shop details' two method cards, as the methods handoff draws them — a list and one
+ * form that adds a method or edits the one chosen, the payment switch that keeps one method on,
+ * and the form's one reason line after its buttons.
+ */
+describe("payment and fulfilment methods, as the handoff draws them", () => {
+  const CONFIRM_KEY = "agent-lab.confirm-before-delete";
+  const THREE_PAYMENTS: ShopDraftResponse["content"]["payment_methods"] = [
+    { id: "visa", name: "Visa", kind: "card", enabled: true },
+    { id: "paypal", name: "PayPal", kind: "wallet", enabled: true },
+    { id: "gift-card", name: "Northstar gift card", kind: "gift_card", enabled: false },
+  ];
+  const TWO_FULFILMENTS: ShopDraftResponse["content"]["fulfilment_methods"] = [
+    {
+      id: "standard",
+      name: "Standard delivery",
+      carrier: "Nordic Post",
+      min_transit_days: 2,
+      max_transit_days: 5,
+    },
+    {
+      id: "express",
+      name: "Express delivery",
+      carrier: "Nordic Post",
+      min_transit_days: 1,
+      max_transit_days: 1,
+    },
+  ];
+
+  afterEach(() => window.localStorage.removeItem(CONFIRM_KEY));
+
+  function rail() {
+    return within(screen.getByLabelText("Shop workspace"));
+  }
+
+  it("lists each method by name, ID and kind or carrier and window, under its row's label", async () => {
+    currentContent = {
+      ...READY_CONTENT,
+      payment_methods: THREE_PAYMENTS,
+      fulfilment_methods: TWO_FULFILMENTS,
+    };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const payments = within(await screen.findByRole("region", { name: "Payment methods" }));
+    const accepted = within(payments.getByRole("group", { name: "Accepted" }));
+    expect(
+      accepted.getByText(
+        "A disabled method stays on the orders that recorded it. At least one stays enabled: a shop with none is refused at publication.",
+      ),
+    ).toBeVisible();
+    const items = accepted.getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "VisavisaCardEnabled",
+      "PayPalpaypalWalletEnabled",
+      "Northstar gift cardgift-cardGift cardDisabled",
+    ]);
+    expect(within(items[0]).getByText("visa", { selector: "code" })).toBeVisible();
+    expect(accepted.getByRole("switch", { name: "Visa" })).toBeChecked();
+    // Named by the method, in both states; the visible word is the state, which the switch
+    // role and its checked state already carry (WCAG 2.5.3).
+    expect(accepted.getByRole("switch", { name: "Northstar gift card" })).toHaveAccessibleName(
+      "Northstar gift card",
+    );
+    expect(accepted.getByText("Disabled")).toHaveAttribute("aria-hidden", "true");
+    expect(accepted.getByRole("switch", { name: "Northstar gift card" })).not.toBeChecked();
+    expect(accepted.getByRole("button", { name: "Edit Visa" })).toBeVisible();
+    expect(accepted.getByRole("button", { name: "Remove Visa" })).toBeVisible();
+
+    const fulfilment = within(screen.getByRole("region", { name: "Fulfilment methods" }));
+    const offered = within(fulfilment.getByRole("group", { name: "Offered" }));
+    expect(offered.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Standard deliverystandardNordic Post · 2–5 days",
+      "Express deliveryexpressNordic Post · 1 day",
+    ]);
+    // Fulfilment has no switch: a method is offered while it is on the list.
+    expect(offered.queryByRole("switch")).toBeNull();
+    expect(
+      within(fulfilment.getByRole("group", { name: "Add a method" })).getByText(
+        "Min and max days are the method's delivery window, in whole days.",
+      ),
+    ).toBeVisible();
+    expect(
+      within(payments.getByRole("group", { name: "Add a method" })).getByText(
+        "The name and kind can change later; the ID is fixed once the method is added.",
+      ),
+    ).toBeVisible();
+    expect(
+      offered.getByText(
+        "An order keeps the name of the method it was placed with, even if you change it here.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("says the first rule the form breaks after its button, and marks the field that breaks it", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, fulfilment_methods: TWO_FULFILMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+    const add = card.getByRole("button", { name: "Add fulfilment method" });
+
+    // Blank, the name comes first; no field is marked wrong before anything is typed.
+    expectRefused(add, "Give the method a name.");
+    expect(card.getByLabelText("Name")).not.toHaveAttribute("aria-invalid");
+    await user.type(card.getByLabelText("Carrier"), "x");
+    expectRefused(add, "Give the method a name.");
+    expect(card.getByLabelText("Name")).toHaveAttribute("aria-invalid", "true");
+    expect(describedText(card.getByLabelText("Name")).trim()).toBe("Give the method a name.");
+    expect(card.getByLabelText("Carrier")).not.toHaveAttribute("aria-invalid");
+    await user.clear(card.getByLabelText("Carrier"));
+
+    await user.type(card.getByLabelText("Name"), "Click and collect");
+    expect(card.getByLabelText("ID")).toHaveValue("click-and-collect");
+    expect(card.getByLabelText("Name")).not.toHaveAttribute("aria-invalid");
+    expectRefused(add, "Name the carrier.");
+    expect(card.getByLabelText("Carrier")).toHaveAttribute("aria-invalid", "true");
+
+    // The ID's shape, then its uniqueness, come before the carrier.
+    await user.clear(card.getByLabelText("ID"));
+    await user.type(card.getByLabelText("ID"), "Click");
+    expectRefused(add, "The ID must be lowercase with hyphens.");
+    expect(card.getByLabelText("ID")).toHaveAttribute("aria-invalid", "true");
+    await user.clear(card.getByLabelText("ID"));
+    await user.type(card.getByLabelText("ID"), "express");
+    expectRefused(add, "express is already used by another method.");
+
+    await user.clear(card.getByLabelText("ID"));
+    await user.type(card.getByLabelText("ID"), "collect");
+    await user.type(card.getByLabelText("Carrier"), "In store");
+    await user.clear(card.getByLabelText("Min days"));
+    expectRefused(add, "Min days must be a whole number from 0 to 365.");
+    expect(card.getByLabelText("Min days")).toHaveAttribute("aria-invalid", "true");
+    await user.type(card.getByLabelText("Min days"), "0");
+    await user.clear(card.getByLabelText("Max days"));
+    await user.type(card.getByLabelText("Max days"), "400");
+    expectRefused(add, "Max days must be a whole number from 0 to 365.");
+    await user.clear(card.getByLabelText("Max days"));
+    await user.type(card.getByLabelText("Max days"), "0");
+    expectNotRefused(add);
+    expect(card.getByLabelText("Max days")).not.toHaveAttribute("aria-invalid");
+
+    await user.click(add);
+    expect(card.getByText("In store · 0 days")).toBeVisible();
+    // The form is blank again, on the handoff's defaults.
+    expect(card.getByLabelText("Name")).toHaveValue("");
+    expect(card.getByLabelText("Min days")).toHaveValue(1);
+    expect(card.getByLabelText("Max days")).toHaveValue(3);
+  });
+
+  it("loads a method into the form to edit it, highlights it, fixes its ID, and saves it in place", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, payment_methods: THREE_PAYMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    await user.click(card.getByRole("button", { name: "Edit PayPal" }));
+    const form = within(card.getByRole("group", { name: "Edit PayPal" }));
+    expect(form.getByLabelText("Name")).toHaveFocus();
+    expect(form.getByLabelText("Name")).toHaveValue("PayPal");
+    expect(form.getByLabelText("Kind")).toHaveValue("wallet");
+    const id = form.getByLabelText("ID");
+    expect(id).toHaveValue("paypal");
+    expect(id).toHaveAttribute("readonly");
+    expect(id).toHaveAccessibleDescription(/Orders name the method by it/);
+    const item = card.getByText("paypal", { selector: "code" }).closest("li");
+    expect(item).toHaveAttribute("aria-current", "true");
+    expect(item).toHaveClass("border-[#8fc3a5]", "bg-[#f1f8f3]");
+    expect(card.getByText("visa", { selector: "code" }).closest("li")).toHaveClass(
+      "border-admin-border",
+      "bg-[#fafbfb]",
+    );
+    expect(form.queryByRole("button", { name: "Add payment method" })).toBeNull();
+
+    // Cancel empties the form and hands focus back to the Edit that opened it.
+    await user.clear(form.getByLabelText("Name"));
+    await user.type(form.getByLabelText("Name"), "Pay later");
+    await user.click(form.getByRole("button", { name: "Cancel" }));
+    expect(card.getByRole("group", { name: "Add a method" })).toBeVisible();
+    expect(card.getByLabelText("Name")).toHaveValue("");
+    expect(card.getByRole("button", { name: "Edit PayPal" })).toHaveFocus();
+    expect(item).not.toHaveAttribute("aria-current");
+    expect(screen.getByText("All changes saved")).toBeVisible();
+
+    await user.click(card.getByRole("button", { name: "Edit PayPal" }));
+    const again = within(card.getByRole("group", { name: "Edit PayPal" }));
+    await user.clear(again.getByLabelText("Name"));
+    await user.type(again.getByLabelText("Name"), "PayPal wallet");
+    await user.click(again.getByRole("button", { name: "Save changes" }));
+    expect(card.getByRole("button", { name: "Edit PayPal wallet" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().payment_methods).toStrictEqual([
+      THREE_PAYMENTS[0],
+      { id: "paypal", name: "PayPal wallet", kind: "wallet", enabled: true },
+      THREE_PAYMENTS[2],
+    ]);
+  });
+
+  it("adds a new payment method enabled", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, payment_methods: THREE_PAYMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    // Blank, Add says why and no field is marked wrong yet.
+    expectRefused(
+      card.getByRole("button", { name: "Add payment method" }),
+      "Give the method a name.",
+    );
+    expect(card.getByLabelText("Name")).not.toHaveAttribute("aria-invalid");
+    await user.type(card.getByLabelText("Name"), "Apple Pay");
+    await user.selectOptions(card.getByLabelText("Kind"), "Wallet");
+    await user.click(card.getByRole("button", { name: "Add payment method" }));
+    expect(card.getByRole("switch", { name: "Apple Pay" })).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().payment_methods.at(-1)).toStrictEqual({
+      id: "apple-pay",
+      name: "Apple Pay",
+      kind: "wallet",
+      enabled: true,
+    });
+  });
+
+  it("keeps the last enabled method on and on the list, and says why", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, payment_methods: THREE_PAYMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    // Two enabled: either may go off, and nothing is held.
+    expect(card.getByRole("switch", { name: "Visa" })).toBeEnabled();
+    expect(card.queryByText(/The last enabled method stays on/)).toBeNull();
+
+    // By keyboard: Space on a focused switch turns it.
+    card.getByRole("switch", { name: "PayPal" }).focus();
+    await user.keyboard(" ");
+    expect(card.getByRole("switch", { name: "PayPal" })).not.toBeChecked();
+    expect(card.getByText("paypal", { selector: "code" }).closest("li")).toHaveTextContent(
+      /Disabled$/,
+    );
+
+    // Visa is now the last enabled method: its switch and its Remove are held, and say why.
+    const visa = card.getByRole("switch", { name: "Visa" });
+    const remove = card.getByRole("button", { name: "Remove Visa" });
+    const line = card.getByText(
+      "The last enabled method stays on. Enable another method before removing the last one.",
+    );
+    expect(visa).toBeChecked();
+    expect(visa).toBeDisabled();
+    expect(visa.closest("label")).toHaveAttribute("title", "The last enabled method stays on");
+    expect(visa).toHaveAccessibleDescription(line.textContent ?? "");
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAttribute("title", "Enable another method before removing the last one.");
+    expect(remove).toHaveAccessibleDescription(line.textContent ?? "");
+    // The others are not held.
+    expect(card.getByRole("button", { name: "Remove PayPal" })).toBeEnabled();
+
+    await user.click(visa);
+    expect(visa).toBeChecked();
+
+    // Enabling another frees it again.
+    await user.click(card.getByRole("switch", { name: "Northstar gift card" }));
+    expect(card.getByRole("switch", { name: "Visa" })).toBeEnabled();
+    expect(card.getByRole("button", { name: "Remove Visa" })).toBeEnabled();
+    expect(card.queryByText(/The last enabled method stays on/)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().payment_methods.map((method) => method.enabled)).toEqual([
+      true,
+      false,
+      true,
+    ]);
+  });
+
+  it("drops a confirm armed on a method that has since become the last enabled", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, payment_methods: THREE_PAYMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    await user.click(card.getByRole("button", { name: "Remove Visa" }));
+    expect(card.getByRole("group", { name: "Remove the payment method “Visa”?" })).toBeVisible();
+    await user.click(card.getByRole("switch", { name: "PayPal" }));
+
+    expect(card.queryByRole("group", { name: "Remove the payment method “Visa”?" })).toBeNull();
+    expect(card.getByRole("button", { name: "Remove Visa" })).toBeDisabled();
+  });
+
+  it("asks before removing a method, keeps the preference, and says what was removed", async () => {
+    const user = userEvent.setup();
+    currentContent = {
+      ...READY_CONTENT,
+      payment_methods: THREE_PAYMENTS,
+      fulfilment_methods: TWO_FULFILMENTS,
+    };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+
+    await user.click(card.getByRole("button", { name: "Remove Express delivery" }));
+    const confirm = card.getByRole("group", {
+      name: "Remove the fulfilment method “Express delivery”?",
+    });
+    expect(confirm).toHaveFocus();
+    await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
+    const notice = card.getByText(
+      "Removed the fulfilment method “Express delivery” from the draft.",
+    );
+    expect(notice).toHaveFocus();
+    expect(card.queryByText("express", { selector: "code" })).toBeNull();
+
+    // With the preference off, one press removes.
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    const payments = within(screen.getByRole("region", { name: "Payment methods" }));
+    await user.click(payments.getByRole("button", { name: "Remove Northstar gift card" }));
+    expect(payments.queryByText("gift-card", { selector: "code" })).toBeNull();
+    expect(
+      payments.getByText("Removed the payment method “Northstar gift card” from the draft."),
+    ).toHaveFocus();
+  });
+
+  it("empties the form when the method it edits is removed", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(CONFIRM_KEY, "false");
+    currentContent = { ...READY_CONTENT, fulfilment_methods: TWO_FULFILMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+
+    await user.click(card.getByRole("button", { name: "Edit Express delivery" }));
+    await user.click(card.getByRole("button", { name: "Remove Express delivery" }));
+
+    expect(card.getByRole("group", { name: "Add a method" })).toBeVisible();
+    expect(card.getByLabelText("Name")).toHaveValue("");
+    // Nothing the form held for Express can be added back by a press on Add, and what is typed
+    // next starts from a blank form.
+    expectRefused(
+      card.getByRole("button", { name: "Add fulfilment method" }),
+      "Give the method a name.",
+    );
+    await user.type(card.getByLabelText("Name"), "Click");
+    expect(card.getByLabelText("Name")).toHaveValue("Click");
+    expect(card.getByLabelText("ID")).toHaveValue("click");
+    expect(card.getByLabelText("Carrier")).toHaveValue("");
+  });
+
+  it("asks before leaving a method typed in its form, with the form's own reason", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    await user.type(card.getByLabelText("Name"), "Apple Pay");
+    await user.click(rail().getByRole("link", { name: "Orders" }));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Payment methods form holds “Apple Pay”, which has not been added to the draft.",
+    );
+    expect(prompt).toHaveTextContent(METHOD_FORM_REASON);
+    expect(prompt).not.toHaveTextContent(/row's own Save/);
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("asks before leaving an edit held in the form, and not once it is cancelled", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, fulfilment_methods: TWO_FULFILMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Fulfilment methods" }));
+
+    // Opened and unchanged, the form holds nothing the draft lacks.
+    await user.click(card.getByRole("button", { name: "Edit Standard delivery" }));
+    await user.type(card.getByLabelText("Carrier"), " Express");
+    await user.click(rail().getByRole("link", { name: "Orders" }));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Fulfilment methods form holds an edit to Standard delivery that has not reached the draft.",
+    );
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+
+    await user.click(card.getByRole("button", { name: "Cancel" }));
+    await user.click(rail().getByRole("link", { name: "Orders" }));
+    expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull();
+  });
+
+  it("marks the draft dirty on every change to a list, and Discard reads the saved draft again", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, payment_methods: THREE_PAYMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    await user.click(card.getByRole("switch", { name: "Northstar gift card" }));
+    expect(screen.getByRole("button", { name: "Discard changes" })).toBeVisible();
+    await user.type(card.getByLabelText("Name"), "Apple Pay");
+    await user.click(card.getByRole("button", { name: "Add payment method" }));
+    expect(card.getByText("apple-pay", { selector: "code" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(card.queryByText("apple-pay", { selector: "code" })).toBeNull());
+    expect(card.getByRole("switch", { name: "Northstar gift card" })).not.toBeChecked();
+    expect(screen.getByText("All changes saved")).toBeVisible();
+  });
+
+  it("reloads a clean edit from the draft a Discard put back", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, payment_methods: THREE_PAYMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    await user.click(card.getByRole("button", { name: "Edit Visa" }));
+    await user.clear(card.getByLabelText("Name"));
+    await user.type(card.getByLabelText("Name"), "Visa Renamed");
+    await user.click(card.getByRole("button", { name: "Save changes" }));
+    await user.click(card.getByRole("button", { name: "Edit Visa Renamed" }));
+    expect(card.getByLabelText("Name")).toHaveValue("Visa Renamed");
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(card.getByRole("group", { name: "Edit Visa" })).toBeVisible());
+    // The clean form follows the method the draft now holds, so Save cannot write the
+    // discarded name back.
+    expect(card.getByLabelText("Name")).toHaveValue("Visa");
+    await user.click(rail().getByRole("link", { name: "Orders" }));
+    expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull();
+  });
+
+  it("keeps a dirty edit's typing across a Discard that moves the method under it", async () => {
+    const user = userEvent.setup();
+    currentContent = { ...READY_CONTENT, payment_methods: THREE_PAYMENTS };
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+    const card = within(await screen.findByRole("region", { name: "Payment methods" }));
+
+    await user.click(card.getByRole("button", { name: "Edit Visa" }));
+    await user.clear(card.getByLabelText("Name"));
+    await user.type(card.getByLabelText("Name"), "Visa Renamed");
+    await user.click(card.getByRole("button", { name: "Save changes" }));
+    await user.click(card.getByRole("button", { name: "Edit Visa Renamed" }));
+    await user.type(card.getByLabelText("Name"), " Debit");
+
+    // The draft's Visa goes back to "Visa"; the operator's typing is theirs, and stays.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(card.getByRole("group", { name: "Edit Visa" })).toBeVisible());
+    expect(card.getByLabelText("Name")).toHaveValue("Visa Renamed Debit");
   });
 });
