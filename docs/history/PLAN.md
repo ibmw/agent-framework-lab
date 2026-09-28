@@ -1,11 +1,13 @@
 # Project plan — the record of what was delivered
 
-Status: history — closed 2026-09-20. **Read `docs/PLAN.md` for the delivery rules, the vocabulary
-and the open work.** This file holds what that document carried before it was compressed to open
-work only: the narrative of the implementation state as it stood, and Milestones 0 to 7 as they
-were planned and delivered, verbatim. The ADRs each milestone names are the authoritative record
-of the decisions; this is the roadmap's own account of them, kept because it says why the
-milestones came in this order. Nothing here is edited any more.
+Status: history — closed 2026-09-20; Milestone 8 appended 2026-09-28. **Read `docs/PLAN.md` for
+the delivery rules, the vocabulary and the open work.** This file holds what that document carried
+before it was compressed to open work only: the narrative of the implementation state as it stood,
+and Milestones 0 to 7 as they were planned and delivered, verbatim. The ADRs each milestone names
+are the authoritative record of the decisions; this is the roadmap's own account of them, kept
+because it says why the milestones came in this order. Nothing here is edited any more, save that
+a milestone delivered since is appended after Milestone 7, verbatim as `docs/PLAN.md` carried it:
+Milestone 8 on 2026-09-28, whose plan is `docs/history/PLAN-UX-2026-09-20.md`.
 
 The last section is the walk through delivered milestones that `docs/decisions-and-next-step.md`
 carried under *Recommended next steps* until the same date.
@@ -1161,6 +1163,17 @@ accepted because each of those steps already answers on the surface it names.
   about either secret.
 - Every element a tour points at is checked against the surface it describes, off the one table the
   tours are declared in, so a control that moves fails a test rather than a reader.
+
+## Milestone 8 — The workspace becomes the prototype
+
+Bring `apps/web` to the whole-workspace design handed over on 19 September 2026
+(`tmp/design-frames/Workspace.html`), on the primitives the workspace already has and without a
+new UI dependency. `docs/PLAN-UX.md` is the authority for its scope, order and checks. The
+lab-as-a-mode slice wrote its ADR before its code, because it moves every lab route out of shop
+scope: ADR 0054 is the route scheme every later slice is written against. Acceptance is that
+plan's, plus: nothing about progress is stored (ADR 0044, ADR 0045 stand), the connection never
+enters a fingerprint (ADR 0052), and the eleven Playwright journeys pass on the new routes
+without the application having been bent to them.
 
 ## Historical POC milestones
 
