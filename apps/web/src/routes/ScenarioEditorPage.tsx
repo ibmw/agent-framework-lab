@@ -215,13 +215,10 @@ export function ScenarioEditorPage() {
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
+        back={{ to: "..", label: "Scenarios", kind: "scenario" }}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Scenarios
-            </Link>{" "}
-            · built on ticket{" "}
-            <span className="font-mono">{resolution?.ticket_reference ?? "—"}</span>
+            Built on ticket <span className="font-mono">{resolution?.ticket_reference ?? "—"}</span>
             {preview ? (
               <>
                 {" "}
@@ -308,7 +305,15 @@ export function ScenarioEditorPage() {
 
       <div className={editorColumnsClasses}>
         <div className={editorMainClasses}>
-          <Card title="Built on">
+          <Card
+            title="Built on"
+            description={
+              <>
+                A scenario never moves off its ticket: the context, bindings, and hidden facts all
+                describe the incident it was built on.
+              </>
+            }
+          >
             <label className={fieldLabelClasses}>
               Name
               <input
@@ -329,10 +334,6 @@ export function ScenarioEditorPage() {
                 </span>
               )}
             </p>
-            <p className="text-xs text-admin-muted">
-              A scenario never moves off its ticket: the context, bindings, and hidden facts all
-              describe the incident it was built on.
-            </p>
           </Card>
 
           <Card
@@ -344,12 +345,12 @@ export function ScenarioEditorPage() {
               />
             }
             label="Context documents"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Readable by the agent through tools only. Listing a document here does not make the
                 agent read it — a read-check objective is what asserts that, and the read/no-read
                 event is recorded evidence either way.
-              </p>
+              </>
             }
           >
             {state.status === "loading" ? (
@@ -427,11 +428,11 @@ export function ScenarioEditorPage() {
               />
             }
             label="Objectives"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Order is priority, not a script: a scenario stays goal-based and never implies a
                 scripted conversation. Only mutations sit on the run timeline.
-              </p>
+              </>
             }
           >
             {content.objectives.length === 0 ? (
@@ -513,12 +514,12 @@ export function ScenarioEditorPage() {
               <CappedTitle title="Mutations" count={content.mutations.length} max={MAX_MUTATIONS} />
             }
             label="Mutations"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Injected into the run's sandbox at a bound moment and never exposed as an agent tool
                 — an arm observes the consequence, never the cause. Order is the run timeline, and
                 both arms receive the identical schedule.
-              </p>
+              </>
             }
           >
             {content.mutations.length === 0 ? (
@@ -566,7 +567,15 @@ export function ScenarioEditorPage() {
             />
           </Card>
 
-          <Card title="Hidden facts — operator only">
+          <Card
+            title="Hidden facts — operator only"
+            description={
+              <>
+                Never shown to the support agent, never logged, and never traced. It steers whoever
+                drives the customer.
+              </>
+            }
+          >
             <textarea
               aria-label="Hidden facts"
               className={`${textAreaClasses} w-full`}
@@ -574,13 +583,17 @@ export function ScenarioEditorPage() {
               placeholder="What the customer knows, will confirm if asked, and never volunteers."
               onChange={(event) => edit({ ...content, hidden_facts: event.target.value })}
             />
-            <p className="text-xs text-admin-muted">
-              Never shown to the support agent, never logged, and never traced. It steers whoever
-              drives the customer.
-            </p>
           </Card>
 
-          <Card title="Completion">
+          <Card
+            title="Completion"
+            description={
+              <>
+                The statement is what the operator and, later, the judge read. The cap is the hard
+                stop that guarantees a run terminates — both arms are bounded identically.
+              </>
+            }
+          >
             <label className={fieldLabelClasses}>
               A resolved incident looks like
               <textarea
@@ -601,10 +614,6 @@ export function ScenarioEditorPage() {
                 edit({ ...content, completion: { ...content.completion, max_turns } })
               }
             />
-            <p className="text-xs text-admin-muted">
-              The statement is what the operator and, later, the judge read. The cap is the hard
-              stop that guarantees a run terminates — both arms are bounded identically.
-            </p>
           </Card>
         </div>
 

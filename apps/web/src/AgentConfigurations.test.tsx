@@ -16,6 +16,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -1367,6 +1368,11 @@ describe("the rail's figure and this index", () => {
  * read with next, and what publishing freezes last — never a field of the draft.
  */
 describe("the agent configuration editor's side panel", () => {
+  it("goes back to Agent configs from the ← above its title", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+
+    await expectWayBack("Agent configs", "/lab/agent-configurations", "configuration");
+  });
   it("holds the gate, the variables, reproducibility and what publishing freezes, in that order, and no field", async () => {
     renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
 

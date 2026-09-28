@@ -520,10 +520,10 @@ export function PaymentMethodsCard() {
   }
 
   return (
-    <Card title="Payment methods">
-      <p className="text-[13px] text-admin-muted">
-        What a customer can pay with. An order records the method it was paid by.
-      </p>
+    <Card
+      title="Payment methods"
+      description="What a customer can pay with. An order records the method it was paid by."
+    >
       <FieldRows>
         <FieldGroup
           label="Accepted"
@@ -760,10 +760,10 @@ export function FulfilmentMethodsCard() {
   }
 
   return (
-    <Card title="Fulfilment methods">
-      <p className="text-[13px] text-admin-muted">
-        How an order reaches the customer. Delivery windows are what an agent promises.
-      </p>
+    <Card
+      title="Fulfilment methods"
+      description="How an order reaches the customer. Delivery windows are what an agent promises."
+    >
       <FieldRows>
         <FieldGroup
           label="Offered"

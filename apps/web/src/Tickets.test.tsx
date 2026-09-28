@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { stickyHeaderClasses } from "./lib/stickyHeader";
 import { TOURS, tourAt } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -939,6 +940,26 @@ describe("the create page", () => {
 });
 
 describe("the ticket editor", () => {
+  it("opens each card on what it is for, as the card's own first line", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+
+    const lines: [string, RegExp][] = [
+      ["Incident", /^What happened, where the customer was when they wrote/],
+      ["Conversation", /^The history every arm is handed with this ticket/],
+      ["Linked orders", /^The customer's orders in this shop that the incident is about/],
+      ["Suggested documents", /^Pre-fills a scenario's context documents/],
+    ];
+    for (const [name, line] of lines) {
+      const card = await screen.findByRole("region", { name });
+      expect(card, name).toHaveAccessibleDescription(line);
+    }
+  });
+
+  it("goes back to Tickets from the ← above the subject", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+
+    await expectWayBack("Tickets", `/shops/${SHOP_ID}/tickets`, "ticket");
+  });
   it("is its own page, under a pinned header holding the ticket and its actions", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 

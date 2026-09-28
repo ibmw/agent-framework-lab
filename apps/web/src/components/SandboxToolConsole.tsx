@@ -208,14 +208,7 @@ export function SandboxToolConsole({
   return (
     <Card
       title={`Tools · ${arm.label}`}
-      footer={
-        <p className="text-xs text-admin-muted">
-          Every tool here works on this arm's own state and the exact versions its snapshot pinned.
-          The customer's persona and hidden facts are never served: they drive the simulated
-          customer, not the support agent. A write changes this arm and no other, and only under an
-          identity permitted to make it.
-        </p>
-      }
+      description="Every tool here works on this arm's own state and the exact versions its snapshot pinned."
     >
       {error ? (
         <p role="alert" className="text-[13px] text-lab-error">
@@ -305,6 +298,13 @@ export function SandboxToolConsole({
       {result === null ? null : (
         <ToolResult result={result} onApply={working ? undefined : applyProposal} />
       )}
+      {/* What the console withholds and where a write lands: detail under the controls, not
+          the card's first line, which a reader landing in the region hears in full. */}
+      <p className="text-xs text-admin-muted">
+        The customer's persona and hidden facts are never served: they drive the simulated customer,
+        not the support agent. A write changes this arm and no other, and only under an identity
+        permitted to make it.
+      </p>
     </Card>
   );
 }

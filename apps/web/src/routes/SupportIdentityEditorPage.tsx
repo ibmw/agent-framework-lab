@@ -5,7 +5,7 @@ import type {
   SupportPermission,
 } from "@agent-lab/contracts";
 import { useId, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   getSupportIdentityDraft,
   previewSupportIdentityDraft,
@@ -143,19 +143,19 @@ export function SupportIdentityEditorPage() {
       <PageHeader
         title={content.role.name}
         chips={<VersionChips preview={preview} />}
+        // The prototype's line names the identity by its role's title (`Workspace.dc.html`
+        // :1749); an emptied title still leaves the line saying what the page is.
+        back={{
+          to: "..",
+          label: "Support identities",
+          kind: content.role.title.trim() === "" ? "identity" : content.role.title,
+        }}
         description={
-          <>
-            <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Support identities
-            </Link>{" "}
-            · {content.role.title}
-            {preview ? (
-              <>
-                {" "}
-                · draft fingerprint <Fingerprint value={preview.content_fingerprint} />
-              </>
-            ) : null}
-          </>
+          preview ? (
+            <>
+              Draft fingerprint <Fingerprint value={preview.content_fingerprint} />
+            </>
+          ) : null
         }
         actions={
           <>
@@ -244,13 +244,23 @@ export function SupportIdentityEditorPage() {
                 }
               />
             </label>
+            {/* A note on the field above — the prototype's Remit (:1808) — rather than what the
+                card is for, so it is not the card's first line. */}
             <p className="text-xs text-admin-muted">
               Tone of voice is not authored here: it belongs to the shop, and an agent configuration
               selects the shop default or a named override.
             </p>
           </Card>
 
-          <Card title="Permissions">
+          <Card
+            title="Permissions"
+            description={
+              <>
+                The tool layer authorizes against these exact permissions, so an identity that can
+                act on orders it cannot read is refused at publication.
+              </>
+            }
+          >
             <fieldset className="grid gap-2">
               <legend className="text-xs font-semibold text-admin-muted uppercase">Read</legend>
               {READ_PERMISSIONS.map((permission) => (
@@ -277,10 +287,6 @@ export function SupportIdentityEditorPage() {
                 </label>
               ))}
             </fieldset>
-            <p className="text-xs text-admin-muted">
-              The tool layer authorizes against these exact permissions, so an identity that can act
-              on orders it cannot read is refused at publication.
-            </p>
           </Card>
 
           <Card title="Guidance">

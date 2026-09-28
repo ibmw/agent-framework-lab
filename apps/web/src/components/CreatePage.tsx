@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { clearStickyHeader, stickyHeaderClasses } from "../lib/stickyHeader";
-import { focusRingClasses, validationMessageClasses } from "../lib/ui";
+import { neutralPillClasses, outlineButtonClasses, validationMessageClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
 import { PrimaryAction, RefusalLine } from "./PrimaryAction";
-import { HeaderReport } from "./WorkspaceChrome";
+import { HeaderBack, HeaderReport } from "./WorkspaceChrome";
 
 /**
  * Creating is a page, and this is the page (PLAN-UX Slice 12).
@@ -31,8 +31,12 @@ import { HeaderReport } from "./WorkspaceChrome";
  *   *Deliberately not here*). Nothing here calls `useRegisterUnsavedWork`, deliberately.
  *
  * The header is sticky through the same classes and the same focus clearance an editor's
- * `PageHeader` is (`lib/stickyHeader.ts`), but it is not a `PageHeader`: it carries a back
- * arrow, a breadcrumb and a refusal line that no other page header has. The title is drawn at `PageHeader`'s 24px rather than the
+ * `PageHeader` is (`lib/stickyHeader.ts`), and its way back is the editor's own piece,
+ * `HeaderBack` — the ←, named "Back to {index}", and the "Index · kind" line — so a create page
+ * and the editor it lands in are left the same way. It is not a `PageHeader`: its title reads
+ * back what is being typed and its Create carries a refusal line of its own. The chip is the
+ * neutral pill `VersionChips` draws its grey states with (`neutralPillClasses`), and Cancel is a
+ * row of the button table. The title is drawn at `PageHeader`'s 24px rather than the
  * prototype's 22px for a bound name: the workspace has one page-title size and the departure
  * that flattened the prototype's two is already recorded in `docs/design-direction.md`.
  *
@@ -96,37 +100,14 @@ export function CreatePage({
         ref={clearStickyHeader}
         className={`${stickyHeaderClasses} mb-4 flex flex-wrap items-center gap-3.5`}
       >
-        <Link
-          to={backTo}
-          aria-label={`Back to ${backLabel}`}
-          className={`flex h-9 w-9 flex-none items-center justify-center rounded-[9px] border border-admin-field-border bg-admin-surface text-[15px] text-admin-ink-soft hover:bg-[#f1f2f3] ${focusRingClasses}`}
-        >
-          <span aria-hidden>←</span>
-        </Link>
-        <div className="min-w-0">
-          <p className="text-xs text-admin-muted">
-            <Link to={backTo} className={`underline-offset-2 hover:underline ${focusRingClasses}`}>
-              {backLabel}
-            </Link>{" "}
-            · {breadcrumb}
-          </p>
-          <div className="mt-[3px] flex flex-wrap items-center gap-2.5">
-            <h1
-              className="font-display text-2xl font-bold tracking-[-0.015em]"
-              data-tour="page-name"
-            >
-              {title === "" ? untitled : title}
-            </h1>
-            <span className="rounded-full bg-[#f0f2f4] px-2.5 py-0.5 text-[11px] font-bold text-[#59636d]">
-              {standing ?? "nothing created yet"}
-            </span>
-          </div>
-        </div>
+        <HeaderBack to={backTo} label={backLabel} kind={breadcrumb}>
+          <h1 className="font-display text-2xl font-bold tracking-[-0.015em]" data-tour="page-name">
+            {title === "" ? untitled : title}
+          </h1>
+          <span className={neutralPillClasses}>{standing ?? "nothing created yet"}</span>
+        </HeaderBack>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5">
-          <Link
-            to={backTo}
-            className={`inline-flex min-h-10 items-center justify-center rounded-lg border border-admin-border bg-transparent px-4 text-sm font-semibold text-admin-ink no-underline transition hover:bg-admin-canvas ${focusRingClasses}`}
-          >
+          <Link to={backTo} className={`${outlineButtonClasses} no-underline`}>
             Cancel
           </Link>
           <PrimaryAction

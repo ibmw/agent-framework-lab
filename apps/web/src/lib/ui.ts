@@ -420,6 +420,21 @@ export const blockedButtonClasses = `${buttonShapeClasses} ${focusRingClasses} c
 export const validationMessageClasses = "text-[13px] font-semibold text-lab-error";
 
 /**
+ * The neutral pill: a standing fact about the page, in grey, beside its title.
+ *
+ * `VersionChips` draws its two grey states through it — *Never published* and *Draft matches
+ * vN* — and so does the create page's *nothing created yet* chip, which used to spell the
+ * prototype's `#f0f2f4` over `#59636d` at 11px 700 (`Workspace.dc.html` :211, :392) in raw
+ * values of its own. One pill that means "a fact, neither published nor in progress" is one
+ * value, and the value it takes is the one that is already a token (`admin-border` under
+ * `admin-ink-soft`, the Authority's rule 5): the create page's chip moved onto the version
+ * chips' weight rather than the other way round. The pill carries its glyph as a child, never
+ * as its only word (*Principles*, status is never colour alone).
+ */
+export const neutralPillClasses =
+  "inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft";
+
+/**
  * A chip that says what something is, and does nothing when pressed.
  *
  * The bench and the timeline mark a tool call, a retried attempt, a scenario fault and a turn

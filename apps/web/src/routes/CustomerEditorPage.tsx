@@ -10,7 +10,7 @@ import type {
   LoyaltyTier,
 } from "@agent-lab/contracts";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
   attachCustomerProfileToShop,
@@ -470,12 +470,10 @@ export function CustomerEditorPage() {
       <PageHeader
         title={content.display_name}
         chips={<VersionChips preview={preview} />}
+        back={{ to: "..", label: "Customers", kind: "profile" }}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Customers
-            </Link>{" "}
-            · synthetic profile · customer since {content.account.customer_since}
+            Synthetic profile · customer since {content.account.customer_since}
             {preview ? (
               <>
                 {" "}
@@ -665,11 +663,11 @@ export function CustomerEditorPage() {
 
           <Card
             title="Address book"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Orders select an entry and keep a frozen copy. Editing or removing an entry never
                 rewrites existing orders, published scenarios, or snapshots.
-              </p>
+              </>
             }
           >
             {content.addresses.length === 0 ? (
@@ -824,11 +822,11 @@ export function CustomerEditorPage() {
 
           <Card
             title="Behavioral persona"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Guides you and the future customer simulator. It is never injected into the support
                 agent's prompt.
-              </p>
+              </>
             }
           >
             <FieldRows>
@@ -863,11 +861,11 @@ export function CustomerEditorPage() {
 
           <Card
             title="Background"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Authored history that predates the sandbox. Orders and tickets belong to a shop and
                 arrive with the order and ticket editors.
-              </p>
+              </>
             }
           >
             {content.background.length === 0 ? (
@@ -961,11 +959,11 @@ export function CustomerEditorPage() {
 
           <Card
             title="Hidden simulator facts"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Known to the customer side of a simulation only. The support agent is never told
                 them.
-              </p>
+              </>
             }
           >
             {content.hidden_facts.length === 0 ? (
@@ -1055,7 +1053,15 @@ export function CustomerEditorPage() {
             <IssueList issues={preview?.issues ?? []} />
           </GateCard>
 
-          <Card title="Attached shops">
+          <Card
+            title="Attached shops"
+            description={
+              <>
+                Identity, persona, and the address book travel with the profile; each shop's history
+                stays its own.
+              </>
+            }
+          >
             {attachError ? (
               <p role="alert" className="text-[13px] text-lab-error">
                 {attachError}
@@ -1125,10 +1131,6 @@ export function CustomerEditorPage() {
                   Attach to {shop.name}
                 </button>
               ))}
-            <p className="text-xs text-admin-muted">
-              Identity, persona, and the address book travel with the profile; each shop's history
-              stays its own.
-            </p>
           </Card>
 
           <Card title="What publishing freezes">

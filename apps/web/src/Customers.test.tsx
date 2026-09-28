@@ -17,6 +17,7 @@ import { toProfilePayload } from "./api/customerProfiles";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -290,6 +291,28 @@ function renderAt(path: string) {
 }
 
 describe("customer workspace", () => {
+  it("opens its cards on what each is for, where the notes under them used to stand", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const lines: [string, RegExp][] = [
+      ["Address book", /^Orders select an entry and keep a frozen copy/],
+      ["Behavioral persona", /^Guides you and the future customer simulator/],
+      ["Background", /^Authored history that predates the sandbox/],
+      ["Hidden simulator facts", /^Known to the customer side of a simulation only/],
+    ];
+    for (const [name, line] of lines) {
+      const card = await screen.findByRole("region", { name });
+      expect(card, name).toHaveAccessibleDescription(line);
+      const first = within(card).getByText(line);
+      expect(first.parentElement?.firstElementChild, name).toBe(first);
+    }
+  });
+
+  it("goes back to Customers from the ← above the profile's name", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    await expectWayBack("Customers", `/shops/${SHOP_ID}/customers`, "profile");
+  });
   // The card's title says what the list is (a profile is reusable across shops, and this list is the ones attached here), on the header line opposite the search.
   it("titles its card Attached to this shop, opposite the search box", async () => {
     renderAt(`/shops/${SHOP_ID}/customers`);

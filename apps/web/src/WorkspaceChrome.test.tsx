@@ -1,5 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
   Card,
@@ -8,9 +10,11 @@ import {
   PublishButton,
   type PublishGate,
   PublishReasons,
+  VersionChips,
 } from "./components/WorkspaceChrome";
 import { PUBLISH_UNSAVED_REASON } from "./lib/definitionEditor";
 import { STICKY_REPORT_ATTRIBUTE, stickyHeaderClasses } from "./lib/stickyHeader";
+import { neutralPillClasses } from "./lib/ui";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 
 /**
@@ -128,6 +132,190 @@ describe("an editor's header", () => {
     const scrolling = screen.getByRole("heading", { level: 1 }).closest("header");
     expect(scrolling?.className).not.toMatch(/sticky/);
     expect(scrolling).not.toHaveClass("border-b");
+  });
+});
+
+/**
+ * The way back, in the one slot every editor keeps it (PLAN-UX Milestone 9): the ← and the
+ * "Index · kind" line above the title, as the create page draws them.
+ */
+describe("an editor's way back", () => {
+  function renderAtRecord(element: ReactElement) {
+    const router = createMemoryRouter(
+      [
+        { path: "/lab/judges/:judgeId", element },
+        { path: "/lab/judges", element: <h1>Judges index</h1> },
+      ],
+      { initialEntries: ["/lab/judges/j-1"] },
+    );
+    return { ...render(<RouterProvider router={router} />), router };
+  }
+
+  function JudgeHeader() {
+    return (
+      <PageHeader
+        title="Resolution quality"
+        chips={<span>Draft v2 in progress</span>}
+        back={{ to: "..", label: "Judges", kind: "judge" }}
+        actions={<button type="button">Save draft</button>}
+        description="gpt-5-mini"
+        sticky
+      />
+    );
+  }
+
+  it("is the ← named Back to the index, going to the index from the record's address", () => {
+    renderAtRecord(<JudgeHeader />);
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    const arrow = within(header).getByRole("link", { name: "Back to Judges" });
+    // `..` is the address's parent, not the route tree's: the lab's editors are siblings of
+    // their index in the tree, and a route-relative `..` would leave the lab altogether.
+    expect(arrow).toHaveAttribute("href", "/lab/judges");
+    expect(arrow).toHaveTextContent("←");
+  });
+
+  it("reads the index and the kind on the line above the title, the index a link to it", () => {
+    renderAtRecord(<JudgeHeader />);
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    const crumb = within(header).getByRole("link", { name: "Judges" });
+    expect(crumb).toHaveAttribute("href", "/lab/judges");
+    const line = crumb.parentElement as HTMLElement;
+    expect(line).toHaveTextContent("Judges · judge");
+    expect(line).toHaveClass("text-xs", "text-admin-muted");
+  });
+
+  it("stands before the title, with the chips beside the title and the actions after", () => {
+    renderAtRecord(<JudgeHeader />);
+
+    const inOrder = [
+      screen.getByRole("link", { name: "Back to Judges" }),
+      screen.getByRole("link", { name: "Judges" }),
+      screen.getByRole("heading", { level: 1, name: "Resolution quality" }),
+      screen.getByText("Draft v2 in progress"),
+      screen.getByRole("button", { name: "Save draft" }),
+      screen.getByText("gpt-5-mini"),
+    ];
+    for (const [earlier, later] of inOrder
+      .slice(1)
+      .map((element, index) => [inOrder[index], element])) {
+      expect(
+        earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    // The chips sit on the title's own row, under the line, not beside the arrow.
+    expect(screen.getByText("Draft v2 in progress").parentElement).toBe(
+      screen.getByRole("heading", { level: 1 }).parentElement,
+    );
+  });
+
+  it("goes back when pressed", async () => {
+    const user = userEvent.setup();
+    const { router } = renderAtRecord(<JudgeHeader />);
+
+    await user.click(screen.getByRole("link", { name: "Back to Judges" }));
+
+    expect(router.state.location.pathname).toBe("/lab/judges");
+    expect(screen.getByRole("heading", { level: 1, name: "Judges index" })).toBeVisible();
+  });
+
+  it("is drawn only where the page has somewhere to go back to", () => {
+    render(<PageHeader title="Shop details" description="The shop's one set of details." />);
+
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText("←")).toBeNull();
+  });
+});
+
+describe("a card's first line", () => {
+  it("is the first thing under the title, saying what the card is for, in 13px muted ink", () => {
+    render(
+      <Card title="Permissions" description="The tool layer authorizes against these exactly.">
+        <p>Read orders</p>
+      </Card>,
+    );
+
+    const card = screen.getByRole("region", { name: "Permissions" });
+    const line = within(card).getByText("The tool layer authorizes against these exactly.");
+    const title = within(card).getByRole("heading", { level: 2, name: "Permissions" });
+    // First under the title: the body's first child, ahead of everything the card holds.
+    expect(line.parentElement?.firstElementChild).toBe(line);
+    expect(title.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      line.compareDocumentPosition(within(card).getByText("Read orders")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(line).toHaveClass("text-[13px]", "text-admin-muted");
+  });
+
+  it("describes the card, so a reader landing in the region is told what it is for", () => {
+    render(
+      <Card title="Permissions" description="The tool layer authorizes against these exactly.">
+        <p>Read orders</p>
+      </Card>,
+    );
+
+    expect(screen.getByRole("region", { name: "Permissions" })).toHaveAccessibleDescription(
+      "The tool layer authorizes against these exactly.",
+    );
+  });
+
+  it("keeps the id a control inside the card is described by", () => {
+    render(
+      <Card
+        title="Rubric"
+        description="Write what the judge looks for."
+        descriptionId="rubric-rule"
+      >
+        <textarea aria-label="How this judge scores" aria-describedby="rubric-rule" />
+      </Card>,
+    );
+
+    expect(screen.getByText("Write what the judge looks for.")).toHaveAttribute(
+      "id",
+      "rubric-rule",
+    );
+    expect(screen.getByLabelText("How this judge scores")).toHaveAccessibleDescription(
+      "Write what the judge looks for.",
+    );
+    expect(screen.getByRole("region", { name: "Rubric" })).toHaveAccessibleDescription(
+      "Write what the judge looks for.",
+    );
+  });
+
+  it("is absent when the card is not given one, and describes nothing", () => {
+    render(
+      <Card title="Variables">
+        <p>Customer name</p>
+      </Card>,
+    );
+
+    const card = screen.getByRole("region", { name: "Variables" });
+    expect(card).not.toHaveAttribute("aria-describedby");
+    expect(within(card).getByText("Customer name").parentElement?.children).toHaveLength(1);
+  });
+});
+
+describe("the version chips' grey states", () => {
+  it("draw through the neutral pill the create page's chip draws through", () => {
+    render(
+      <>
+        <VersionChips
+          preview={{
+            latest_published_version: null,
+            next_version: 1,
+            matches_latest_published: false,
+          }}
+        />
+        <VersionChips
+          preview={{ latest_published_version: 2, next_version: 3, matches_latest_published: true }}
+        />
+      </>,
+    );
+
+    expect(screen.getByText(/Never published/).className).toBe(neutralPillClasses);
+    expect(screen.getByText(/Draft matches v2/).className).toBe(neutralPillClasses);
   });
 });
 

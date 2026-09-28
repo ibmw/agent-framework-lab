@@ -13,6 +13,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -631,6 +632,15 @@ describe("the rail's figure and this index", () => {
 });
 
 describe("the support identity editor's side panel", () => {
+  it("goes back to Support identities from the ← above its title, naming the role", async () => {
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+
+    await expectWayBack(
+      "Support identities",
+      "/lab/support-identities",
+      "Customer support representative",
+    );
+  });
   it("holds the gate and what publishing freezes, in that order, and no field", async () => {
     renderAt(`/lab/support-identities/${IDENTITY_ID}`);
 

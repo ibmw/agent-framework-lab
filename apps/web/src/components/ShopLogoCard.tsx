@@ -69,11 +69,15 @@ export function ShopLogoCard({
   const lowContrast = logo !== null && isLowContrast(logo.background, logo.mark_colour);
 
   return (
-    <Card title="Logo">
-      <p className="text-[13px] text-admin-muted">
-        How the shop is recognised in the switcher and the shop list. Publishing freezes it with the
-        rest of the shop.
-      </p>
+    <Card
+      title="Logo"
+      description={
+        <>
+          How the shop is recognised in the switcher and the shop list. Publishing freezes it with
+          the rest of the shop.
+        </>
+      }
+    >
       <FieldRows>
         <FieldGroup
           label="Mark"

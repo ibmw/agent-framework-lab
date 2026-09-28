@@ -335,7 +335,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   // A published version is a recipe, not starting state: freezing it settles the orders it
   // only names, and the snapshot separates what it pinned from what it had to copy.
   await page.getByRole("link", { name: "Freeze it into starting state" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: /starting states/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Starting states" })).toBeVisible();
   await expect(page.getByLabel("Scenario version")).toHaveValue("1");
   await page.getByRole("button", { name: "Freeze snapshot" }).click();
 
@@ -412,7 +412,7 @@ test("an author composes and publishes the wrong-address scenario", async ({ pag
   );
 
   // The frozen version keeps what it froze while the draft moves on.
-  await page.getByRole("link", { name: "Back to the scenario" }).click();
+  await page.getByRole("link", { name: "Back to Wrong shipping address" }).click();
   const turnCap = card(page, "Completion").getByLabel("Turn cap", { exact: true });
   await turnCap.fill("20");
   await saveDraft(page);

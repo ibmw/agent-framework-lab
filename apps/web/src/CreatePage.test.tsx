@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { CreatePage } from "./components/CreatePage";
 import { stickyHeaderClasses } from "./lib/stickyHeader";
-import { blockedButtonClasses } from "./lib/ui";
+import { blockedButtonClasses, neutralPillClasses, outlineButtonClasses } from "./lib/ui";
 import { expectNotRefused, expectRefused } from "./test/refused";
 
 /**
@@ -77,6 +77,22 @@ describe("the create page's header", () => {
     expect(bar.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/index");
     expect(bar.getByText(/creating a thing/)).toBeVisible();
     expect(bar.getByText("nothing created yet")).toBeVisible();
+  });
+
+  it("draws its way back with the editor's own piece, the chip as a neutral pill, Cancel from the button table", () => {
+    renderPage(<Harness />);
+
+    const bar = within(header());
+    const arrow = bar.getByRole("link", { name: "Back to Things" });
+    // The line above the title is the arrow's sibling, as it is on every editor's header.
+    expect(arrow.nextElementSibling).toContainElement(bar.getByRole("link", { name: "Things" }));
+    expect(arrow.nextElementSibling).toContainElement(
+      screen.getByRole("heading", { level: 1, name: "New thing" }),
+    );
+    expect(bar.getByText("nothing created yet").className).toBe(neutralPillClasses);
+    for (const utility of outlineButtonClasses.split(" ")) {
+      expect(bar.getByRole("link", { name: "Cancel" })).toHaveClass(utility);
+    }
   });
 
   it("is the name as it is typed, and its stand-in until there is one", async () => {

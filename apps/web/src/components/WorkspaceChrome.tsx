@@ -1,6 +1,6 @@
 import type { DefinitionIssueSchema } from "@agent-lab/contracts";
-import type { ReactNode, Ref } from "react";
-import { Link } from "react-router-dom";
+import { type ReactNode, type Ref, useId } from "react";
+import { Link, type To } from "react-router-dom";
 import {
   PUBLISH_UNSAVED_REASON,
   publishErrorsReason,
@@ -17,6 +17,8 @@ import {
 import {
   accentButtonClasses,
   cardTitleClasses,
+  focusRingClasses,
+  neutralPillClasses,
   outlineButtonClasses,
   subtleButtonClasses,
   surfaceClasses,
@@ -42,7 +44,7 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
   return (
     <div className="flex flex-wrap items-center gap-2">
       {preview.latest_published_version === null ? (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft">
+        <span className={neutralPillClasses}>
           <span aria-hidden>◦</span> Never published
         </span>
       ) : (
@@ -51,7 +53,7 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
         </span>
       )}
       {preview.matches_latest_published ? (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft">
+        <span className={neutralPillClasses}>
           <span aria-hidden>=</span> Draft matches v{preview.latest_published_version}
         </span>
       ) : (
@@ -103,6 +105,11 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
  * actions, right-aligned, inside the header, so a press and its outcome are pinned together
  * rather than the outcome being printed at the top of a page the operator has scrolled away from
  * (ADR 0063, *says why in the place the press was refused*).
+ *
+ * `back` is the way back, in the one place every editor keeps it (PLAN-UX Milestone 9): the ←
+ * and the "Index · kind" line above the title, which is `HeaderBack` — the create page's own
+ * piece — so an editor and the create page beside it are left the same way. The setup pages,
+ * the indexes and the lab's own surfaces have nowhere to go back to and take none.
  */
 export function PageHeader({
   title,
@@ -110,6 +117,7 @@ export function PageHeader({
   actions,
   reasons,
   description,
+  back,
   sticky = false,
 }: {
   title: string;
@@ -118,21 +126,35 @@ export function PageHeader({
   /** What the header's actions report — a failure, a publish, a refusal — beneath them. */
   reasons?: ReactNode;
   description?: ReactNode;
+  /** Where the ← and the line above the title go back to: the index this record is listed in. */
+  back?: HeaderBackTarget;
   /** Pin the header to the top of the scrolling pane: true on an editor. */
   sticky?: boolean;
 }) {
+  // The chain step of a tour lights the page's own name: it is the one element every surface
+  // has, and it is what the step is about — where you have arrived.
+  const name = (
+    <h1 className="font-display text-2xl font-bold tracking-[-0.015em]" data-tour="page-name">
+      {title}
+    </h1>
+  );
   return (
     <header
       ref={sticky ? clearStickyHeader : undefined}
       className={sticky ? `${stickyHeaderClasses} ${pageHeaderClasses}` : pageHeaderClasses}
     >
       <div className="flex flex-wrap items-center gap-3">
-        {/* The chain step of a tour lights the page's own name: it is the one element
-            every surface has, and it is what the step is about — where you have arrived. */}
-        <h1 className="font-display text-2xl font-bold tracking-[-0.015em]" data-tour="page-name">
-          {title}
-        </h1>
-        {chips}
+        {back ? (
+          <HeaderBack {...back}>
+            {name}
+            {chips}
+          </HeaderBack>
+        ) : (
+          <>
+            {name}
+            {chips}
+          </>
+        )}
         {actions ? <div className="ml-auto flex items-center gap-2">{actions}</div> : null}
       </div>
       {reasons ? <HeaderReport>{reasons}</HeaderReport> : null}
@@ -142,6 +164,74 @@ export function PageHeader({
 }
 
 const pageHeaderClasses = "mb-4 grid gap-[5px]";
+
+/** Where a header's way back goes, and the two words the line above its title reads. */
+export interface HeaderBackTarget {
+  /**
+   * The page it returns to. Resolved against the address rather than the route tree, so an
+   * editor's `..` is its index: the lab's editors are siblings of their index in the tree.
+   */
+  to: To;
+  /** That page's name, as its own heading and the rail say it: "Agent configs". */
+  label: string;
+  /**
+   * What this page is, in the prototype's words: "configuration", "creating an order fixture".
+   * A page under one record — a scenario's starting states — names that record in `label` and
+   * its kind here ("scenario"), since the page's own name is already its title.
+   */
+  kind: ReactNode;
+}
+
+/**
+ * The way back above a page's title: the ← and the "Index · kind" line, with the title and what
+ * stands beside it underneath (`Workspace.dc.html` :388–392, and :209–211 on a create page).
+ *
+ * One piece for the create page and every editor, so the way back is the same control in the
+ * same corner wherever an operator is inside a record. The arrow is named "Back to {index}",
+ * which is the name the create pages already answered to; the index's name in the line above
+ * the title is a second link to the same place, as the prototype draws it, named by the index
+ * alone. The audit that asked for this named it "‹ Index"; the prototype draws the ← and the
+ * line, and that is what is built.
+ */
+export function HeaderBack({
+  to,
+  label,
+  kind,
+  children,
+}: HeaderBackTarget & {
+  /** The title, and what stands beside it — the chips on an editor, the chip on a create page. */
+  children: ReactNode;
+}) {
+  return (
+    // One item of the header's row, so the ← never wraps away from the title it stands beside.
+    // It gives way before the actions do: from 16rem it takes what the row leaves it, and its
+    // chips wrap under the title rather than pushing Save onto a line of its own — a wrapped
+    // actions row costs a pinned header more height than a wrapped chip does (ADR 0066).
+    <div className="flex min-w-0 flex-[1_1_16rem] items-center gap-3.5">
+      <Link
+        to={to}
+        relative="path"
+        aria-label={`Back to ${label}`}
+        className={`flex h-9 w-9 flex-none items-center justify-center rounded-[9px] border border-admin-field-border bg-admin-surface text-[15px] text-admin-ink-soft hover:bg-[#f1f2f3] ${focusRingClasses}`}
+      >
+        <span aria-hidden>←</span>
+      </Link>
+      <div className="min-w-0">
+        <p className="text-xs text-admin-muted">
+          <Link
+            to={to}
+            relative="path"
+            className={`underline-offset-2 hover:underline ${focusRingClasses}`}
+          >
+            {label}
+          </Link>{" "}
+          · {kind}
+        </p>
+        <div className="mt-[3px] flex flex-wrap items-center gap-2.5">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The row under a header's actions that holds what they report: why a press failed, the
@@ -258,9 +348,24 @@ export function EditorSaveActions({
   );
 }
 
+/**
+ * A section of a page: its title in a header over a rule, then what it holds.
+ *
+ * `description` is the card's first line — the 13px muted sentence under the title that says
+ * what the card is for (`Workspace.dc.html` :407–408), which *Shop details* and *Tone of voice*
+ * used to draw by hand as their first child and every editor now hands over here. It is the
+ * section's accessible description, so a reader who lands in the region is told what it is for
+ * as well as what it is called. Where the sentence is also a control's description — the rule
+ * a field is written under — `descriptionId` keeps the `id` that control points at.
+ *
+ * `footer` is for what acts on the card as a whole — *Add event*, the document's Remove — and
+ * not for an explanation, which belongs on the first line.
+ */
 export function Card({
   title,
   label,
+  description,
+  descriptionId,
   busy = false,
   ref,
   children,
@@ -269,6 +374,10 @@ export function Card({
   title?: ReactNode;
   /** Accessible name when the visible title is not a plain string. */
   label?: string;
+  /** What the card is for, in one sentence: its first line. */
+  description?: ReactNode;
+  /** The first line's `id`, where a control inside the card is described by it too. */
+  descriptionId?: string;
   /**
    * What this card shows is about to change, because an action in flight is changing it
    * (ADR 0065). Never set on a card that holds the action's own status, which a busy region
@@ -280,21 +389,34 @@ export function Card({
   footer?: ReactNode;
 }) {
   const accessibleName = label ?? (typeof title === "string" ? title : undefined);
+  const generatedId = useId();
+  const lineId = description ? (descriptionId ?? generatedId) : undefined;
   return (
     <section
       ref={ref}
       aria-label={accessibleName}
+      aria-describedby={lineId}
       aria-busy={busy || undefined}
       className={`${surfaceClasses} overflow-hidden`}
     >
       {title ? (
         <h2 className={`border-b border-admin-border px-4 py-3 ${cardTitleClasses}`}>{title}</h2>
       ) : null}
-      <div className="grid gap-3 p-4">{children}</div>
+      <div className="grid gap-3 p-4">
+        {description ? (
+          <p id={lineId} className={cardDescriptionClasses}>
+            {description}
+          </p>
+        ) : null}
+        {children}
+      </div>
       {footer ? <div className="border-t border-admin-border px-4 py-3">{footer}</div> : null}
     </section>
   );
 }
+
+/** A card's first line: 13px in the muted ink, held to the prototype's 70ch measure (:408). */
+const cardDescriptionClasses = "max-w-[70ch] text-[13px] text-admin-muted";
 
 /** What a gate card says while the screen holds edits its findings were not read off. */
 function readOffTheSaved(record: string): string {

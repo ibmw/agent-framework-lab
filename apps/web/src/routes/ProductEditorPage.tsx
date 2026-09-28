@@ -395,7 +395,8 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
         // link uses the same stand-in, from the same place.
         title={productTitle(product)}
         chips={<VersionChips preview={preview} />}
-        description={`Editing the shop draft · ${ratingLabel(product)}`}
+        back={{ to: "..", label: "Products", kind: "editing the draft" }}
+        description={ratingLabel(product)}
         actions={
           <>
             {/* Frame 2c's pair, ahead of Save. The confirm stands under the header rather than
@@ -1474,7 +1475,10 @@ function MediaCard({ product, onChange }: EditorProps) {
     : undefined;
 
   return (
-    <Card title="Media references">
+    <Card
+      title="Media references"
+      description="URL or path metadata only — managed binary upload is deferred."
+    >
       <ul className="grid gap-2 text-[13px]">
         {product.media.map((entry) => {
           const drop = () =>
@@ -1582,9 +1586,6 @@ function MediaCard({ product, onChange }: EditorProps) {
           Add media
         </button>
       </form>
-      <p className="text-xs text-admin-muted">
-        URL or path metadata only — managed binary upload is deferred.
-      </p>
     </Card>
   );
 }
@@ -1707,7 +1708,10 @@ function AttributesCard({ product, onChange }: EditorProps) {
   }
 
   return (
-    <Card title="Custom attributes (typed)">
+    <Card
+      title="Custom attributes (typed)"
+      description="Discoverable by agents through catalog tools — never free-form JSON."
+    >
       <ul className="grid gap-2 text-[13px]">
         {product.attributes.map((attribute) => {
           const drop = () =>
@@ -1824,9 +1828,6 @@ function AttributesCard({ product, onChange }: EditorProps) {
           Add attribute
         </button>
       </form>
-      <p className="text-xs text-admin-muted">
-        Discoverable by agents through catalog tools — never free-form JSON.
-      </p>
     </Card>
   );
 }
@@ -1875,7 +1876,11 @@ function ReviewsCard({ product, onChange }: EditorProps) {
   const removal = useRemoval(product.key, discarding);
 
   return (
-    <Card title={`Ratings & reviews · ${ratingLabel(product)}`} label="Ratings and reviews">
+    <Card
+      title={`Ratings & reviews · ${ratingLabel(product)}`}
+      label="Ratings and reviews"
+      description="The rating summary is derived from these reviews; it is never authored directly."
+    >
       <ul className="grid gap-2 text-[13px]">
         {product.reviews.map((review) => {
           const drop = () =>
@@ -1969,9 +1974,6 @@ function ReviewsCard({ product, onChange }: EditorProps) {
           Add review
         </button>
       </form>
-      <p className="text-xs text-admin-muted">
-        The rating summary is derived from these reviews; it is never authored directly.
-      </p>
     </Card>
   );
 }

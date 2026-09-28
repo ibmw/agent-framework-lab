@@ -86,6 +86,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | What | Handoff | Built | Why |
 | --- | --- | --- | --- |
 | Primary token | redefine `lab-accent` to pine | new `lab-primary`; the clay stays on trace bars, the review star, a ticket's emphasis and the armed seed | those four are not the refresh's to repaint |
+| The create page's chip | *nothing created yet* in `#f0f2f4` under `#59636d`, 11px 700 (:211) | the neutral pill (`neutralPillClasses`), `admin-border` under `admin-ink-soft` at 11.5px 600, as `VersionChips` draws its grey states | one pill for a standing fact, in the value that is already a token; rule 5 |
+| A line under an editor's title | none: the header is the ←, the "Index · kind" line, the title and its chip, and the actions (:388–392, :485–487, :892–894, :1748–1750) | `PageHeader`'s `description` under the title — a fingerprint, a model, a statement, a date — beside the "Index · kind" line, which it partly repeats on Customers, Judges and the block editors | open: it predates the way back, and it is the growth that moved the sticky-header spec's short-pane case from 960×420 to 1100×420 (ADR 0066). Folding it into the kind line, as the prototype does, is a follow-up rather than this row's licence |
 | Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px, and `CreatePage`'s own header at the same size | one size for the workspace, no variant yet; rule 3 |
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
 | Setup pages' header | *Shop details* and *Tone of voice* scroll their header away (:1893, :1993) | pinned like an editor's | each edits one object and carries Save; ADR 0066 |
@@ -353,6 +355,17 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   answered for the saved draft and saying under its title that it reads the saved draft while
   the editor is dirty — holds read-only context next and "What publishing freezes" last, and
   never a field of the draft.
+- **Every editor keeps its way back in one slot** (`PageHeader`'s `back`, which is `HeaderBack`,
+  the create page's own piece): the ← named "Back to {index}" and the "Index · kind" line above
+  the title, the index's name a second link to the same place, so a record is left the way it
+  was made. The setup pages and the indexes have nowhere to go back to and draw none; the
+  starting states go back to their scenario, named on the line, and a shop version to the
+  overview its draft is published from.
+- **Every card says what it is for on its first line** (`Card`'s `description`): 13px muted
+  under the title, and the section's accessible description; a sentence that is also a
+  control's description keeps the id the control names. On an editor, a card's footer holds
+  what acts on the whole card — *Add event*, a document's Remove — and never an explanation,
+  and a note about one field is that field's hint rather than the card's line.
 - **A number field says what it accepts** and refuses at the save what a pattern cannot. A
   closed set of five is five named radios.
 - **A create form asks for what constrains the work that follows** and names where the rest

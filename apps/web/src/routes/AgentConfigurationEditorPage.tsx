@@ -10,7 +10,7 @@ import type {
   ToneOfVoiceSource,
 } from "@agent-lab/contracts";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   getAgentConfigurationDraft,
   previewAgentConfigurationDraft,
@@ -340,13 +340,11 @@ export function AgentConfigurationEditorPage() {
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
+        back={{ to: "..", label: "Agent configs", kind: "configuration" }}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Agent configs
-            </Link>{" "}
-            · Shop-independent — variables resolve at experiment start, and the resolved
-            configuration is pinned to the run.
+            Shop-independent — variables resolve at experiment start, and the resolved configuration
+            is pinned to the run.
             {preview ? (
               <>
                 {" "}
@@ -475,12 +473,12 @@ export function AgentConfigurationEditorPage() {
 
           <Card
             title="System prompt"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Type <code className="font-mono">{"{{"}</code> to add variables, or insert one from
                 the panel. The prompt stays a template: what you see resolved here comes from the
                 preview context, and a run resolves it again against its own shop.
-              </p>
+              </>
             }
           >
             {previewSettling || previewShops.length > 0 ? (
@@ -637,7 +635,15 @@ export function AgentConfigurationEditorPage() {
             </p>
           </Card>
 
-          <Card title={`Tool bindings · ${content.tools.length} enabled`}>
+          <Card
+            title={`Tool bindings · ${content.tools.length} enabled`}
+            description={
+              <>
+                A write an agent could never be authorized to make is refused at publication, not at
+                its first call.
+              </>
+            }
+          >
             <ul className="grid gap-2">
               {/*
                * The published set, not the resolution: whether a tool is enabled is the
@@ -667,10 +673,6 @@ export function AgentConfigurationEditorPage() {
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-admin-muted">
-              A write an agent could never be authorized to make is refused at publication, not at
-              its first call.
-            </p>
           </Card>
 
           <Card title="LLM and runtime">
@@ -765,8 +767,7 @@ export function AgentConfigurationEditorPage() {
             <IssueList issues={preview?.issues ?? []} />
           </GateCard>
 
-          <Card title="Variables" label="Variables">
-            <p className="text-xs text-admin-muted">Resolved at experiment start.</p>
+          <Card title="Variables" label="Variables" description="Resolved at experiment start.">
             {Object.entries(GROUP_LABELS).map(([group, label]) => (
               <VariableGroup
                 key={group}

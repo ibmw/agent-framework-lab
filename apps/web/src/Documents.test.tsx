@@ -12,6 +12,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { toPayload } from "./lib/shop";
 import { renderApp } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -282,6 +283,11 @@ describe("the retired support-guidelines page", () => {
 });
 
 describe("the document editor", () => {
+  it("goes back to Policies & FAQ from the ← above the document's title", async () => {
+    renderApp(`/shops/${SHOP_ID}/setup/documents/guidelines/returns-desk`);
+
+    await expectWayBack("Policies & FAQ", `/shops/${SHOP_ID}/setup/policies`, "document");
+  });
   it("shows the kind and the slug as values, and never asks for either", async () => {
     renderApp(`/shops/${SHOP_ID}/setup/documents/guidelines/returns-desk`);
 

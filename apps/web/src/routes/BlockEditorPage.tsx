@@ -11,7 +11,7 @@ import type {
   ObjectiveEvidence,
 } from "@agent-lab/contracts";
 import { type ReactNode, useId, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
@@ -142,12 +142,10 @@ function BlockEditor<
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
+        back={{ to: "..", label: backLabel, kind: noun }}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              {backLabel}
-            </Link>{" "}
-            · {content.statement || "No statement yet"}
+            {content.statement || "No statement yet"}
             {preview ? (
               <>
                 {" "}
@@ -245,12 +243,10 @@ function BlockEditor<
 
           <Card
             title="Parameters"
-            footer={
-              <p className="text-xs text-admin-muted">
-                {bound === 0
-                  ? "No parameter points at a shop object, so this template binds the same way in every shop."
-                  : `${bound} parameter(s) must be bound to objects in the scenario's own shop. A template never names one itself.`}
-              </p>
+            description={
+              bound === 0
+                ? "No parameter points at a shop object, so this template binds the same way in every shop."
+                : `${bound} parameter(s) must be bound to objects in the scenario's own shop. A template never names one itself.`
             }
           >
             {content.parameters.length === 0 ? (
@@ -514,7 +510,15 @@ export function ObjectiveBlockEditorPage() {
       backLabel="Objective blocks"
       publishedNote="A scenario binds this exact version."
       typeAxis={(content, edit) => (
-        <Card title="Assessment">
+        <Card
+          title="Assessment"
+          description={
+            <>
+              Objective order in a scenario is priority, not a script, so an objective never says
+              when it applies — only mutations sit on the run timeline.
+            </>
+          }
+        >
           <label className={fieldLabelClasses}>
             Assessed by
             <select
@@ -563,10 +567,6 @@ export function ObjectiveBlockEditorPage() {
               </select>
             </label>
           )}
-          <p className="text-xs text-admin-muted">
-            Objective order in a scenario is priority, not a script, so an objective never says when
-            it applies — only mutations sit on the run timeline.
-          </p>
         </Card>
       )}
     />
@@ -585,7 +585,16 @@ export function MutationBlockEditorPage() {
       backLabel="Mutation blocks"
       publishedNote="A scenario binds this exact version."
       typeAxis={(content, edit) => (
-        <Card title="Effect">
+        <Card
+          title="Effect"
+          description={
+            <>
+              Mutation order in a scenario is the run timeline, so a published mutation declares
+              exactly one timing parameter. The agent never sees the injection — only its
+              consequences.
+            </>
+          }
+        >
           <label className={fieldLabelClasses}>
             Perturbs
             <select
@@ -603,11 +612,6 @@ export function MutationBlockEditorPage() {
               ))}
             </select>
           </label>
-          <p className="text-xs text-admin-muted">
-            Mutation order in a scenario is the run timeline, so a published mutation declares
-            exactly one timing parameter. The agent never sees the injection — only its
-            consequences.
-          </p>
         </Card>
       )}
     />

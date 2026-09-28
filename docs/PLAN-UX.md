@@ -76,12 +76,13 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
 the commits and ADR 0052–0072, its goal and acceptance criteria
 `docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator
-agreed, 31 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
+agreed, 32 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
 panel's order on every editor — and Tickets followed as an index, a create page and an editor
-built on it (ADR 0073); Slice 31 moves the ticket editor's back link onto the header slot with
-every other editor's, and gives Slice 34 the neutral pill class set it draws *Shared across shops*
-with. Slices 32, 33 and 35 depend on no open slice; 34 follows 31. The order reshapes an editor
-from the outside in: panel, header, rows, lists, then the indexes.
+built on it (ADR 0073); then the header: every editor's way back in one slot (`HeaderBack`, the
+create page's piece), every card's first line on `Card`'s `description`, and the neutral pill
+(`neutralPillClasses`) Slice 34 draws *Shared across shops* with. No open slice depends on
+another. The order reshapes an editor from the outside in: panel, header, rows, lists, then the
+indexes.
 
 ## Milestone 9 — Every page is one of three templates
 
@@ -113,54 +114,6 @@ only: no backend, contract or payload moves.
 Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
 experiment keep templates of their own and are not reshaped here.
 
-### Slice 31 — The editor's back link and the card's first line
-
-The way back to an index and the sentence that says what a card is for sit in one place on every
-editor.
-
-- [ ] `PageHeader` (`WorkspaceChrome.tsx:107`) gains a back slot drawing what the prototype draws
-  above an editor's title — the ← button and the "Index · kind" line (:388–390) — which is what
-  `CreatePage` already draws (`CreatePage.tsx:99–113`): one piece for both, named "Back to
-  {index}" as `CreatePage`'s is. Consumers: the six editors whose link lives in `description`
-  (Agent config :339, Judge :184, Block :141, Scenario :214, Customer :469, Support identity
-  :142), the three that have none (Product :392, Order :380, Document :118), the ticket editor
-  (`TicketEditorPage.tsx`, its link in `description`), Shop version ("back to the draft", `ShopVersionPage.tsx:85`) and Snapshots ("Back
-  to the scenario", `SnapshotsPage.tsx:164`). The setup pages have no index and take none.
-- [ ] `Card` (`WorkspaceChrome.tsx:261`) gains `description`, the 13px muted first line under the
-  title (:408), which the reference pages draw by hand today (`ShopSetupPages.tsx:324`, :366,
-  :389; `ShopMethodCards.tsx:524`, :764) and move onto. Every editor card whose explanation is
-  a `footer` note or a trailing `text-xs` paragraph moves it there — Customer's Address book,
-  Persona, Background and Hidden facts (`CustomerEditorPage.tsx:664`, :823, :862, :960), Block
-  Parameters (`BlockEditorPage.tsx:244`), Judge Rubric and Evidence
-  (`JudgeConfigurationEditorPage.tsx:293`, :301), Support identity Permissions
-  (`SupportIdentityEditorPage.tsx:276`), Order events (`OrderEditorPage.tsx:851`), the ticket
-  editor's Incident, Conversation, Linked orders and Suggested documents (`TicketEditorPage.tsx`,
-  whose first lines are drawn by hand in `cardLineClasses`) and the rest a
-  sweep of `footer=` and trailing notes on editor cards finds. A note that is a control's
-  accessible description keeps its `id`; a footer that holds an action (Order events' *Add
-  event*, the Document card's Remove) stays a footer.
-- [ ] `CreatePage`'s standing chip (`CreatePage.tsx:120`) and Cancel (:126) leave their raw
-  classes: the chip for a neutral pill class set in `lib/ui.ts`, which `VersionChips`' two grey
-  pills (`WorkspaceChrome.tsx:45`, :54) draw through too, and Cancel for the button table.
-
-Frames: `Workspace.dc.html` :387–392 for the header; :407–408 for a card's first line.
-
-Authority: ADR 0063 (what a header reports), ADR 0066.
-
-Departures to record: the audit named the link "‹ Index"; the prototype draws ← and a
-breadcrumb line, and that is what is built.
-
-Branch: `feat/editor-header-and-card-description`. Checks: `WorkspaceChrome.test.tsx` for the
-slot (name, target, the kind line) and the description (first line, absent when not given);
-`CreatePage.test.tsx`, and the create-page tests that pin "Back to {index}" on its consumers
-(`AgentConfigurations.test.tsx` :1311, `Orders.test.tsx` :636), which the shared piece must keep
-green; new coverage, one test per editor, that the link is there and where it goes; Playwright
-`scenario-authoring`, which presses "Back to the scenario" (:411) — the name stays or the spec
-changes with it — and `sticky-header` for the header's height.
-
-Slice evidence: on every editor the way back is the same button in the same corner, and every
-card's first line says what the card is for.
-
 ### Slice 32 — Field rows on the editors that still stack
 
 The editors that stack a label over its control take the row the reference pages use.
@@ -177,8 +130,10 @@ The editors that stack a label over its control take the row the reference pages
   Assessment (:514, :544) and Effect (:585) cards. `ParameterForm`'s stacked labels (:413, :429,
   :443) are an add form's and stay.
 - [ ] Support identity: Role's fields (`SupportIdentityEditorPage.tsx:210`, :220, :230),
-  Escalation (:369), and the two permission fieldsets with their uppercase legends (:250–275),
-  which become `FieldGroup` rows named Read and Act as the prototype names them (:1818, :1834).
+  with the tone-of-voice note at the card's foot becoming the Description row's hint, where the
+  prototype draws it under Remit (:1808); Escalation (:369), and the two permission fieldsets
+  with their uppercase legends (:250–275), which become `FieldGroup` rows named Read and Act as
+  the prototype names them (:1818, :1834).
   The guidance add form (:463, :472) stays stacked.
 - [ ] Scenario: *Built on* (`ScenarioEditorPage.tsx:307`) — Name (:308) and the read-only
   ticket, customer and shop version (`Row`, :732) — and *Completion* (:579) with
@@ -279,8 +234,9 @@ The indexes that are already close take what is left of the index template.
   *Decided by a rule*, *Scored by a judge*, *Fault hooks*, *Setup mutations*, *Not composed yet*)
   are not built: the listing carries no usage figure, and the kind is the composed display
   string `type_label` (`application/blocks.py:223`, :256) rather than a field.
-- [ ] **"⇄ Shared across shops"** (`BlockLibraryPage.tsx:133`) draws through the neutral pill
-  class set of Slice 31. The premise paragraph (:154) stays, as the prototype's callout (:3565).
+- [ ] **"⇄ Shared across shops"** (`BlockLibraryPage.tsx:133`) draws through the neutral pill,
+  `neutralPillClasses` in `lib/ui.ts`. The premise paragraph (:154) stays, as the prototype's
+  callout (:3565).
 - [ ] **New document in the header** (`DocumentsPage.tsx:165`), beside the shop draft's Save and
   Discard.
 - [ ] **A failed listing says its failure and nothing else**: Scenarios (`ScenariosPage.tsx:135`),

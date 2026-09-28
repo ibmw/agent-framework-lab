@@ -20,6 +20,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { mainCards, panelCards, sidePanel } from "./test/panel";
 import { expectBusy, expectRefused, submitWithoutPressing } from "./test/refused";
 import { shellListings } from "./test/shell";
@@ -402,13 +403,23 @@ function renderPage() {
 }
 
 describe("starting states", () => {
+  it("names the scenario it belongs to above its title, and goes back to it from the ←", async () => {
+    renderPage();
+
+    // The line reads the scenario's name once its draft has answered.
+    await screen.findByRole("link", { name: "Back to Wrong shipping address" });
+    await expectWayBack(
+      "Wrong shipping address",
+      `/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`,
+      "scenario",
+    );
+  });
+
   it("freezes the newest published version by default", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(
-      await screen.findByRole("heading", { name: /Wrong shipping address · starting states/ }),
-    ).toBeVisible();
+    expect(await screen.findByRole("heading", { level: 1, name: "Starting states" })).toBeVisible();
     // The newest version is the one an operator means without saying so — whichever end of
     // the server's list it arrives on.
     await waitFor(() => expect(screen.getByLabelText("Scenario version")).toHaveValue("2"));

@@ -322,11 +322,15 @@ export function ShopIdentityPage() {
     >
       {/* The prototype's cards, in its order (`Workspace.dc.html` :2016): Identity, the Logo,
           Commerce, Channels. The two method lists this page also holds follow them. */}
-      <Card title="Identity">
-        <p className="text-[13px] text-admin-muted">
-          What the shop is called, and the slug scenarios, orders and published versions address it
-          by.
-        </p>
+      <Card
+        title="Identity"
+        description={
+          <>
+            What the shop is called, and the slug scenarios, orders and published versions address
+            it by.
+          </>
+        }
+      >
         <FieldRows>
           <Field label="Name" hint={SHOP_NAME_RULE}>
             <input
@@ -364,10 +368,7 @@ export function ShopIdentityPage() {
         onChange={(logo) => edit({ ...content, logo })}
       />
 
-      <Card title="Commerce">
-        <p className="text-[13px] text-admin-muted">
-          Where the shop trades and what it can price in.
-        </p>
+      <Card title="Commerce" description="Where the shop trades and what it can price in.">
         {/* `LocaleField` and `CurrencyField` each carry their own label and their own rule,
             so neither is wrapped in a row that would name it a second time. They are asked
             to draw themselves as rows instead, which is what keeps one card to one label
@@ -387,8 +388,7 @@ export function ShopIdentityPage() {
         </FieldRows>
       </Card>
 
-      <Card title="Channels">
-        <p className="text-[13px] text-admin-muted">A shop must always answer on at least one.</p>
+      <Card title="Channels" description="A shop must always answer on at least one.">
         <FieldRows>
           <ToggleChipGroup
             arrangement="row"

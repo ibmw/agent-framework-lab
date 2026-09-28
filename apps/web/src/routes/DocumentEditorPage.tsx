@@ -119,6 +119,7 @@ export function DocumentEditorPage() {
         // untitled product already uses, for the same reason.
         title={documentTitle(document)}
         chips={<VersionChips preview={preview} />}
+        back={{ to: documentsAt(shopId), label: "Policies & FAQ", kind: "document" }}
         description={`Editing the shop draft · ${documentKindShape(kind).column}`}
         actions={
           <EditorSaveActions

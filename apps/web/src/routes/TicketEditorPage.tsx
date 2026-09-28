@@ -81,12 +81,6 @@ const TICKET_STATUSES = optionsOf(TICKET_STATUS);
 const ORIGIN_KINDS = optionsOf(TICKET_ORIGIN_KIND);
 
 /**
- * The first line under a card's title, saying what the card is for (`Workspace.dc.html` :408),
- * drawn by hand as the reference pages draw theirs (`ShopSetupPages.tsx`).
- */
-const cardLineClasses = "text-[13px] text-admin-muted";
-
-/**
  * An add form below the entries it adds to, over a rule: *Tone of voice*'s
  * (`ShopSetupPages.tsx`), which the lists of every editor share.
  */
@@ -191,10 +185,10 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
             <VersionChips preview={preview} />
           </>
         }
+        back={{ to: `/shops/${shopId}/tickets`, label: "Tickets", kind: "ticket" }}
         description={
           <>
-            <BackToTickets shopId={shopId} /> · {channelLabel(content.channel)} · from{" "}
-            {originLabel(content.origin.kind)}
+            {channelLabel(content.channel)} · from {originLabel(content.origin.kind)}
             {content.origin.product_handle ? (
               <>
                 {" "}
@@ -294,15 +288,6 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
   );
 }
 
-/** The way back to the index, where the other editors keep theirs until the header has a slot. */
-function BackToTickets({ shopId }: { shopId: string }) {
-  return (
-    <Link className="font-semibold text-lab-ink" to={`/shops/${shopId}/tickets`}>
-      Tickets
-    </Link>
-  );
-}
-
 function IncidentCard({
   content,
   context,
@@ -321,10 +306,10 @@ function IncidentCard({
       : null;
 
   return (
-    <Card title="Incident">
-      <p className={cardLineClasses}>
-        What happened, where the customer was when they wrote, and how the ticket is filed.
-      </p>
+    <Card
+      title="Incident"
+      description="What happened, where the customer was when they wrote, and how the ticket is filed."
+    >
       <FieldRows>
         <Field label="Subject" hint="The incident as the customer would describe it.">
           <input
@@ -495,11 +480,16 @@ function Conversation({
   }
 
   return (
-    <Card title="Conversation">
-      <p className={cardLineClasses}>
-        The history every arm is handed with this ticket, then the first message a run starts from.
-        Replies happen on the live bench, per run — each arm answers this message independently.
-      </p>
+    <Card
+      title="Conversation"
+      description={
+        <>
+          The history every arm is handed with this ticket, then the first message a run starts
+          from. Replies happen on the live bench, per run — each arm answers this message
+          independently.
+        </>
+      }
+    >
       {content.history.length > 0 ? (
         <Divider label={`${messageDay(content.history[0].sent_at)} · prior support history`} />
       ) : null}
@@ -752,10 +742,10 @@ function LinkedOrders({
   }
 
   return (
-    <Card title="Linked orders">
-      <p className={cardLineClasses}>
-        The customer's orders in this shop that the incident is about.
-      </p>
+    <Card
+      title="Linked orders"
+      description="The customer's orders in this shop that the incident is about."
+    >
       {context.resources.orders.length === 0 ? (
         <p className="text-[13px] text-admin-muted">This customer has no order in this shop yet.</p>
       ) : (
@@ -841,11 +831,15 @@ function SuggestedDocuments({
   }
 
   return (
-    <Card title="Suggested documents">
-      <p className={cardLineClasses}>
-        Pre-fills a scenario's context documents when one is built on this ticket. The agent still
-        has to reach them through a tool.
-      </p>
+    <Card
+      title="Suggested documents"
+      description={
+        <>
+          Pre-fills a scenario's context documents when one is built on this ticket. The agent still
+          has to reach them through a tool.
+        </>
+      }
+    >
       {groups.length === 0 ? (
         <p className="text-[13px] text-admin-muted">
           This shop has no policy, guideline, or FAQ entry yet.

@@ -33,6 +33,7 @@ import { HELD_VALUE_REASON, METHOD_FORM_REASON } from "./lib/unsavedWork";
 import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
@@ -326,7 +327,7 @@ describe("creating a product", () => {
     await user.click(screen.getByRole("button", { name: "New product" }));
     // The catalog saves the same draft, so walking back asks nothing — and a link named by
     // an empty title would have no accessible name and nothing to click.
-    await user.click(screen.getByRole("link", { name: "Products" }));
+    await user.click(screen.getByRole("link", { name: "Back to Products" }));
 
     const row = within(await screen.findByRole("table"));
     expect(row.getByRole("link", { name: "Untitled product" })).toHaveAttribute(
@@ -341,7 +342,7 @@ describe("creating a product", () => {
 
     await screen.findByRole("heading", { level: 1, name: "Products" });
     await user.click(screen.getByRole("button", { name: "New product" }));
-    await user.click(screen.getByRole("link", { name: "Products" }));
+    await user.click(screen.getByRole("link", { name: "Back to Products" }));
     await user.click(await screen.findByRole("button", { name: "New product" }));
 
     expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/products/new-product-2`);
@@ -1591,6 +1592,8 @@ describe("shop workspace", () => {
     });
     expect(heading).toBeVisible();
     expect(screen.getByText("published · read only")).toBeVisible();
+    // The draft it was published from is the overview's, and that is where the ← goes.
+    await expectWayBack("Overview", `/shops/${SHOP_ID}`, "published version");
     const table = screen.getByRole("table");
     expect(within(table).getByText("NS-ASJ-OB-M")).toBeVisible();
     expect(within(table).getByText("249.00 EUR")).toBeVisible();
@@ -2180,6 +2183,12 @@ describe("the setup checklist beside Shop details", () => {
 describe("the product editor's side panel", () => {
   const PRODUCT = `/shops/${SHOP_ID}/products/alpine-shell-jacket`;
   const SAVED_DRAFT = "Read off the saved draft. Save to check what is on screen.";
+
+  it("goes back to Products from the ← above the product's title", async () => {
+    renderAt(PRODUCT);
+
+    await expectWayBack("Products", `/shops/${SHOP_ID}/products`, "editing the draft");
+  });
 
   it("holds the publish gate and what publishing freezes, in that order, and no field", async () => {
     renderAt(PRODUCT);

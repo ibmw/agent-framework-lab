@@ -167,9 +167,12 @@ thousands). No dropdown or toast is positioned inside the pane.
   on-screen position at the foot of the reviews card — a failed Save and a failed and a
   successful Publish reported in view, a failed Save inside the pinned header on every one of the
   twelve editors, a failure that does not unpin the header at 1366×620 and 1280×720, a first
-  keystroke that does not unpin it at 960×420, the ticket editor's Save in reach at 1600px, the
+  keystroke that does not unpin it at 1100×420, the ticket editor's Save in reach at 1600px, the
   Shift+Tab clearance on an editor and a create page, the third-of-the-pane rule at 390×844 and
   960×540, a tour step under the header and one taller than the room under it, the document that
   never scrolls, and the 43-surface enumeration with the ticket editor. `tour-anchors` still finds
   `data-tour="page-name"` on every toured surface.
+- The first-keystroke case was measured at 960×420 until every editor's header took its way back
+  above the title. The customer editor's clean header is now more than a third of that pane, so
+  the case moved to 1100×420, where the premise holds on both sides.
 - A new editor passes `sticky`, puts its outcome lines in `reasons`, and joins the sweep's list.

@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -526,6 +527,11 @@ describe("block libraries", () => {
 });
 
 describe("objective block editor", () => {
+  it("goes back to Objective blocks from the ← above its title", async () => {
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+
+    await expectWayBack("Objective blocks", "/lab/objective-blocks", "objective block");
+  });
   it("marks the parameter a scenario must resolve inside its own shop", async () => {
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
@@ -733,6 +739,11 @@ describe("objective block editor", () => {
 });
 
 describe("mutation block editor", () => {
+  it("goes back to Mutation blocks from the ← above its title", async () => {
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
+
+    await expectWayBack("Mutation blocks", "/lab/mutation-blocks", "mutation block");
+  });
   it("shows why a mutation with no timing parameter cannot be published", async () => {
     renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
 

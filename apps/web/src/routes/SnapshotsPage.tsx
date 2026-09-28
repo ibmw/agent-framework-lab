@@ -6,7 +6,7 @@ import type {
   SandboxSummarySchema,
 } from "@agent-lab/contracts";
 import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { describeApiError, LabApiError } from "../api/client";
 import { cloneSandbox, listSandboxes } from "../api/sandboxes";
 import { getScenarioDraft, listScenarioVersions } from "../api/scenarios";
@@ -160,15 +160,15 @@ export function SnapshotsPage() {
   return (
     <>
       <PageHeader
-        title={loading ? "Starting states" : `${name} · starting states`}
+        // The page's own name, under the scenario it belongs to: the line above the title names
+        // the scenario and goes back to it, so the title no longer has to carry it.
+        title="Starting states"
+        back={{ to: "..", label: name === "" ? "Scenario" : name, kind: "scenario" }}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Back to the scenario
-            </Link>{" "}
-            · a snapshot pins every published version it reaches and copies the orders nothing
-            pinned, then fingerprints the two together. Each arm of an experiment runs in its own
-            clone of one snapshot.
+            A snapshot pins every published version it reaches and copies the orders nothing pinned,
+            then fingerprints the two together. Each arm of an experiment runs in its own clone of
+            one snapshot.
           </>
         }
       />
@@ -188,12 +188,12 @@ export function SnapshotsPage() {
         <div className={editorMainClasses}>
           <Card
             title="Freeze a published version"
-            footer={
-              <p className="text-xs text-admin-muted">
+            description={
+              <>
                 Freezing the same version, seed, and orders returns the snapshot that already holds
                 them. An order edited in between is different starting state, so it produces a new
                 one.
-              </p>
+              </>
             }
           >
             {versions.length === 0 ? (
@@ -327,7 +327,15 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
   const { interaction } = snapshot.state;
   return (
     <>
-      <Card title={`Snapshot · ${snapshot.canonical_schema_version}`}>
+      <Card
+        title={`Snapshot · ${snapshot.canonical_schema_version}`}
+        description={
+          <>
+            The origin is an identifier, never a copy of the resource: an arm resolves it through
+            its tools against this same state.
+          </>
+        }
+      >
         <p className="text-[13px] text-admin-ink-soft">
           Fingerprint <Fingerprint value={snapshot.sandbox_fingerprint} /> · seed {snapshot.seed} ·
           frozen {formatTimestamp(snapshot.created_at)}
@@ -349,19 +357,15 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
             </>
           )}
         </p>
-        <p className="text-xs text-admin-muted">
-          The origin is an identifier, never a copy of the resource: an arm resolves it through its
-          tools against this same state.
-        </p>
       </Card>
 
       <Card
         title="Pinned versions"
-        footer={
-          <p className="text-xs text-admin-muted">
+        description={
+          <>
             Immutable already, so the snapshot records the pin instead of a second copy that could
             disagree with it.
-          </p>
+          </>
         }
       >
         <table className="w-full border-collapse text-[13px]">
@@ -383,11 +387,11 @@ function SnapshotDetail({ snapshot }: { snapshot: SandboxSnapshotResponse }) {
 
       <Card
         title="Copied orders"
-        footer={
-          <p className="text-xs text-admin-muted">
+        description={
+          <>
             No published version pins an order fixture, so the snapshot froze these documents as
             they read. Editing the order afterwards leaves this snapshot exactly as it is.
-          </p>
+          </>
         }
       >
         {snapshot.state.orders.length === 0 ? (
@@ -479,11 +483,11 @@ function SandboxArms({ shopId, snapshotId }: { shopId: string; snapshotId: strin
     <>
       <Card
         title="Sandbox arms"
-        footer={
-          <p className="text-xs text-admin-muted">
+        description={
+          <>
             Every arm starts at the same state fingerprint because it starts from the same bytes. A
             write inside one arm moves only that arm — never the snapshot, never the other.
-          </p>
+          </>
         }
       >
         {error ? (

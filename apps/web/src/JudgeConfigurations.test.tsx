@@ -16,6 +16,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { expectWayBack } from "./test/header";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -500,6 +501,19 @@ describe("judge workspace", () => {
 
     const anonymity = await screen.findByRole("region", { name: "Anonymity" });
     expect(within(anonymity).getByText(/pydantic-ai/)).toBeVisible();
+  });
+
+  it("opens the Rubric card on the lab's rule, which is still the rubric's own description", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const rubric = await screen.findByRole("textbox", { name: "How this judge scores" });
+    const card = screen.getByRole("region", { name: "Rubric" });
+    const rule = within(card).getByText(/What "met", "missed", and "unclear" mean/);
+    // The card's first line, ahead of the fields it is about...
+    expect(rule.parentElement?.firstElementChild).toBe(rule);
+    expect(card).toHaveAccessibleDescription(/is the lab's rule and travels above every rubric/);
+    // ...and still the field's description, by the id the field names.
+    expect(rubric).toHaveAccessibleDescription(/is the lab's rule and travels above every rubric/);
   });
 
   it("says under the rubric what the gate will refuse it for, as it is typed, and saves it", async () => {
@@ -1050,6 +1064,11 @@ describe("the rail's figure and this index", () => {
  * main column, after the rubric, as the prototype draws it (`Workspace.dc.html` :503–518).
  */
 describe("the judge editor's side panel", () => {
+  it("goes back to Judges from the ← above its title", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    await expectWayBack("Judges", "/lab/judges", "judge");
+  });
   it("holds the gate and anonymity, in that order, and no field", async () => {
     renderAt(`/lab/judges/${JUDGE_ID}`);
 

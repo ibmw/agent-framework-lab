@@ -5,7 +5,7 @@ import type {
   JudgeEvidenceScope,
 } from "@agent-lab/contracts";
 import { useEffect, useId, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import {
   getJudgeConfigurationDraft,
@@ -189,12 +189,10 @@ export function JudgeConfigurationEditorPage() {
       <PageHeader
         title={content.name}
         chips={<VersionChips preview={preview} />}
+        back={{ to: "..", label: "Judges", kind: "judge" }}
         description={
           <>
-            <Link className="font-semibold text-lab-ink" to=".." relative="path">
-              Judges
-            </Link>{" "}
-            · {content.model.model_id}
+            {content.model.model_id}
             {preview ? (
               <>
                 {" "}
@@ -257,7 +255,19 @@ export function JudgeConfigurationEditorPage() {
 
       <div className={editorColumnsClasses}>
         <div className={editorMainClasses}>
-          <Card title="Rubric">
+          {/* The first line is also the rubric's own rule, so it keeps the id the field is
+              described by. */}
+          <Card
+            title="Rubric"
+            descriptionId={rubricRuleId}
+            description={
+              <>
+                What "met", "missed", and "unclear" mean is the lab's rule and travels above every
+                rubric — including that "unclear" is a real answer rather than a failure. Write what
+                the judge is looking for, not how to report it.
+              </>
+            }
+          >
             <label className={fieldLabelClasses}>
               Name
               <input
@@ -298,11 +308,6 @@ export function JudgeConfigurationEditorPage() {
                   : null}
               </GateFindingLine>
             </div>
-            <p id={rubricRuleId} className="text-xs text-admin-muted">
-              What "met", "missed", and "unclear" mean is the lab's rule and travels above every
-              rubric — including that "unclear" is a real answer rather than a failure. Write what
-              the judge is looking for, not how to report it.
-            </p>
           </Card>
 
           {/* In the main column, after the rubric, as the prototype draws the judge's model
@@ -366,11 +371,15 @@ export function JudgeConfigurationEditorPage() {
             </p>
           </Card>
 
-          <Card title="Evidence">
-            <p className="mb-3 text-xs text-admin-muted">
-              A judge shown different things is answering a different question, so this is part of
-              the published version and of its fingerprint — not a display setting.
-            </p>
+          <Card
+            title="Evidence"
+            description={
+              <>
+                A judge shown different things is answering a different question, so this is part of
+                the published version and of its fingerprint — not a display setting.
+              </>
+            }
+          >
             <ul className="grid gap-2">
               {(resources?.evidence ?? []).map((scope) => (
                 <li key={scope}>

@@ -383,6 +383,7 @@ export function OrderEditorPage() {
     <>
       <PageHeader
         title={content.reference}
+        back={{ to: "..", label: "Orders", kind: "order fixture" }}
         chips={
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone="payment" label={paymentLabel(content.payment.status)} />
@@ -452,11 +453,15 @@ export function OrderEditorPage() {
 
       <div className={editorColumnsClasses}>
         <div className={editorMainClasses}>
-          <Card title="Line items & payment">
-            <p className="text-xs text-admin-muted">
-              Totals derive from the line items — never edited directly. A line keeps the price it
-              was frozen at, so repricing the catalog never rewrites this order.
-            </p>
+          <Card
+            title="Line items & payment"
+            description={
+              <>
+                Totals derive from the line items — never edited directly. A line keeps the price it
+                was frozen at, so repricing the catalog never rewrites this order.
+              </>
+            }
+          >
             {content.lines.length === 0 ? (
               <p className="text-[13px] text-admin-muted">No line item yet.</p>
             ) : (
@@ -845,6 +850,7 @@ export function OrderEditorPage() {
 
           <Card
             title="Order events"
+            description="Authored history — discoverable by agents through the order tools. Events are stored in chronological order."
             footer={
               <button className={outlineButtonClasses} type="button" onClick={addEvent}>
                 <ButtonIcon verb="create" />
@@ -852,10 +858,6 @@ export function OrderEditorPage() {
               </button>
             }
           >
-            <p className="text-xs text-admin-muted">
-              Authored history — discoverable by agents through the order tools. Events are stored
-              in chronological order.
-            </p>
             {content.events.length === 0 ? (
               <p className="text-[13px] text-admin-muted">No authored history yet.</p>
             ) : (
@@ -985,7 +987,10 @@ export function OrderEditorPage() {
             </p>
           </GateCard>
 
-          <Card title="Customer">
+          <Card
+            title="Customer"
+            description="History shown here is this shop's only; the profile is reusable across shops."
+          >
             {customer ? (
               <>
                 <Link
@@ -999,9 +1004,6 @@ export function OrderEditorPage() {
                 </p>
                 <p className="text-xs text-admin-muted">
                   Default address: {defaultAddress?.label ?? "none"}
-                </p>
-                <p className="text-xs text-admin-muted">
-                  History shown here is this shop's only; the profile is reusable across shops.
                 </p>
               </>
             ) : (

@@ -16,6 +16,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ORDER_METHOD_RULE, PAID_AT_RULE, SHIPPED_AT_RULE } from "./lib/fieldRules";
 import { toLocalInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -1792,6 +1793,11 @@ describe("the new-order page", () => {
 });
 
 describe("order editor", () => {
+  it("goes back to Orders from the ← above the reference", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+
+    await expectWayBack("Orders", `/shops/${SHOP_ID}/orders`, "order fixture");
+  });
   it("shows the frozen shipping address with its source label and provenance", async () => {
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
 

@@ -1,6 +1,6 @@
 import type { ShopVersionResponse } from "@agent-lab/contracts";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { getShopVersion } from "../api/shops";
 import {
@@ -84,13 +84,13 @@ export function ShopVersionPage() {
             <span aria-hidden>●</span> published · read only
           </span>
         }
+        // The draft this version was published from is edited from the overview, which is
+        // where its Review and Publish are.
+        back={{ to: `/shops/${shopId}`, label: "Overview", kind: "published version" }}
         description={
           <>
             Frozen {formatTimestamp(published.published_at)} · content fingerprint{" "}
-            <Fingerprint value={published.content_fingerprint} /> ·{" "}
-            <Link className="font-semibold text-lab-ink" to="../..">
-              back to the draft
-            </Link>
+            <Fingerprint value={published.content_fingerprint} />
           </>
         }
       />

@@ -21,6 +21,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
@@ -1082,6 +1083,11 @@ describe("the new-scenario page", () => {
 });
 
 describe("scenario editor", () => {
+  it("goes back to Scenarios from the ← above its title", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    await expectWayBack("Scenarios", `/shops/${SHOP_ID}/scenarios`, "scenario");
+  });
   it("pairs the publish gate with the state publishing would freeze", async () => {
     renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
 
