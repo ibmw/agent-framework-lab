@@ -100,18 +100,12 @@ describe("the launch control", () => {
     }
   });
 
-  it("stays with the helpdesk when it opens a ticket and replaces its own address", () => {
-    // The list is a way in rather than a waiting room: `TicketsPage` navigates to its newest
-    // ticket as soon as the listing answers. Both addresses are the one surface, and the bar
-    // went blank at the second one until the table said so.
-    for (const at of [`/shops/${SHOP_ID}/tickets`, `/shops/${SHOP_ID}/tickets/T-204`]) {
-      const mounted = launch(at);
-      expect(
-        screen.getByRole("button", { name: `Show me around ${TOURS.tickets.surface}` }),
-        at,
-      ).toBeVisible();
-      mounted.unmount();
-    }
+  it("offers the ticket index its tour", () => {
+    // The index is where its reader stands: it opens no ticket on their behalf (ADR 0073).
+    launch(`/shops/${SHOP_ID}/tickets`);
+    expect(
+      screen.getByRole("button", { name: `Show me around ${TOURS.tickets.surface}` }),
+    ).toBeVisible();
   });
 
   it("draws nothing where the route names no tour", async () => {
@@ -120,8 +114,9 @@ describe("the launch control", () => {
     for (const at of [
       `/shops/${SHOP_ID}/products/alpine-shell`,
       `/shops/${SHOP_ID}/customers/someone`,
-      // Two segments past the helpdesk is nothing this application answers at all.
-      `/shops/${SHOP_ID}/tickets/T-204/anything`,
+      // A ticket is an editor, and its create page is a surface of its own (ADR 0073).
+      `/shops/${SHOP_ID}/tickets/T-204`,
+      `/shops/${SHOP_ID}/tickets/new`,
       "/lab/agent-configurations/config-1",
       "/lab/history",
       "/settings",

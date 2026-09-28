@@ -448,16 +448,12 @@ test("at 960×420 the first keystroke does not let go of a header that was pinne
   ).toBeCloseTo(now + 8, -0.5);
 });
 
-test("at 2xl and wider the ticket editor's Save is in reach at the foot of the page", async ({
-  page,
-  lab,
-}) => {
-  // The ticket header is held within the thread's column. At 1536px and wider the context
-  // panel stands beside that column, so the column is the page and Save stays in view to its
-  // foot. Narrower, the panel stacks under the column and the header goes with the column when
-  // the page scrolls past it — the case this does not claim (ADR 0066).
-  await page.setViewportSize({ width: 1600, height: 720 });
-  await page.goto(`/shops/${lab.shopId}/tickets`);
+test("the ticket editor's Save is in reach at the foot of the page", async ({ page, lab }) => {
+  // The ticket editor is its own page now (ADR 0073), so its header is the pane's like every
+  // other editor's: held down the whole page, at the short laptop pane where it used to scroll
+  // away with the thread's column (ADR 0066, the case left as a follow-up).
+  await page.setViewportSize({ width: 1366, height: 620 });
+  await page.goto(`/shops/${lab.shopId}/tickets/${lab.ticketId}`);
   await page.getByLabel("Add a history message").fill("Still waiting on a reply.");
   await page.getByRole("button", { name: "Add to thread" }).click();
   const save = page.getByRole("button", { name: "Save draft" });
@@ -525,11 +521,9 @@ function editors(lab: BuiltLab): [string, string, ((page: Page) => Promise<void>
         await guidelines.getByRole("button", { name: /^Add/ }).click();
       },
     ],
-    // Checked here for where its failure is said and that its header is pinned — not for its
-    // Save being in reach at the foot of the page, which holds only at 2xl and wider (below).
     [
       "ticket editor",
-      `${shop}/tickets`,
+      `${shop}/tickets/${lab.ticketId}`,
       async (page) => {
         // The thread is the draft, and a message added to it is an edit to it.
         await page.getByLabel("Add a history message").fill("Any news on my parcel?");
@@ -588,10 +582,12 @@ function surfaces(lab: BuiltLab & { judgeId: string }): [string, string, Held | 
     ["support identity editor", `/lab/support-identities/${lab.identityId}`, "an editor"],
     ["shop details", `${shop}/setup/identity`, "an editor"],
     ["tone of voice", `${shop}/setup/tone`, "an editor"],
+    ["ticket editor", `${shop}/tickets/${lab.ticketId}`, "an editor"],
 
     ["new shop", "/shops/new", "a create page"],
     ["new order", `${shop}/orders/new`, "a create page"],
     ["new customer", `${shop}/customers/new`, "a create page"],
+    ["new ticket", `${shop}/tickets/new`, "a create page"],
     ["new document", `${shop}/setup/documents/new`, "a create page"],
     ["new scenario", `${shop}/scenarios/new`, "a create page"],
     ["new agent configuration", "/lab/agent-configurations/new", "a create page"],
@@ -655,34 +651,4 @@ test("every surface with a page header pins it exactly where ADR 0066 says", asy
       });
     }
   }
-
-  // The one editor that is not its page: the ticket editor, in the Tickets page's second
-  // column, whose page header ("Tickets", above) scrolls away while its own is pinned. Pinned
-  // within the thread's column: this checks the pin, not how far down the page it reaches.
-  await page.goto(`/shops/${lab.shopId}/tickets`);
-  const ticket = page
-    .locator("main header")
-    .filter({ has: page.getByRole("heading", { level: 2 }) })
-    .filter({ has: page.getByRole("button", { name: /^Publish/ }) });
-  await expect(ticket).toBeVisible();
-  await expect(ticket).toHaveAttribute("data-pinned", "true");
-  expect
-    .soft(
-      await ticket.evaluate((element) => {
-        const computed = getComputedStyle(element);
-        return {
-          position: computed.position,
-          top: computed.top,
-          background: computed.backgroundColor,
-          rule: `${computed.borderBottomWidth} ${computed.borderBottomStyle} ${computed.borderBottomColor}`,
-        };
-      }),
-      "the ticket editor does not pin its header",
-    )
-    .toEqual({
-      position: "sticky",
-      top: "-20px",
-      background: "rgb(246, 246, 247)",
-      rule: "1px solid rgb(225, 227, 229)",
-    });
 });

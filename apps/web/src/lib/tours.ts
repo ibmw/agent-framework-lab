@@ -80,16 +80,14 @@ export interface Tour {
    * The bar offers the tour of wherever the reader is standing, and it matches `route`
    * **exactly** rather than by prefix — a prefix rule would hand the catalog's walk to the
    * product editor beneath it, whose screen holds none of the catalog's anchors (ADR 0055). A
-   * surface that genuinely answers at more than one address says so here, and two do: the
-   * comparison is one layout behind three tabs, and the helpdesk replaces its own address with
-   * the ticket it opens as soon as its list answers. Both are the same screen at a second URL,
-   * which is why this is addressing and not a second tour.
+   * surface that genuinely answers at more than one address says so here, and one does: the
+   * comparison is one layout behind three tabs, the same screen at a second URL, which is why
+   * this is addressing and not a second tour.
    *
-   * A parameter segment is written as it is in a route pattern, `:likeThis`. Unlike a literal
-   * it claims *every* child of the route, so it is only right while the route table sends them
-   * all to the same component: `/shops/:shopId/tickets/:ticketId` is `TicketsPage` today, and a
-   * second screen added under that segment would need its own row here rather than inheriting
-   * this one.
+   * A parameter segment would be written as it is in a route pattern, `:likeThis`. Unlike a
+   * literal it claims *every* child of the route, so it is only right while the route table
+   * sends them all to the same component. None is declared today: the ticket editor under the
+   * ticket index is a screen of its own and has no tour (ADR 0073).
    */
   alsoAt?: readonly string[];
   /**
@@ -346,10 +344,8 @@ export const TOURS: Record<TourId, Tour> = {
   tickets: {
     surface: "tickets",
     route: "/shops/:shopId/tickets",
-    // The helpdesk is one screen at two addresses. It opens its newest ticket as soon as the
-    // list answers and replaces its own URL doing it — "the list is a way in rather than a
-    // waiting room" — so the address a reader is standing on is almost never the bare index.
-    alsoAt: [":ticketId"],
+    // The index's alone: the ticket editor and the create page are surfaces of their own and
+    // carry no tour, as every other editor and create page (ADR 0073).
     chain: { step: "ticket", anchor: PAGE_NAME },
     steps: [],
   },
@@ -515,15 +511,15 @@ function addressesOf(tour: Tour): string[] {
  *
  * Written as the addresses rather than as "anything ending in `/new`", which has two edges:
  * a trailing slash slips past it, and a product an operator names `new` would lose whatever
- * tour its editor is one day given. Slice 13 added the lab's four and Slice 14 the
- * scenario's.
+ * tour its editor is one day given. Slice 13 added the lab's four, Slice 14 the
+ * scenario's and ADR 0073 the ticket's.
  *
  * Only `/shops/new` currently *needs* excluding: `tourAt` matches a tour's addresses
  * exactly, so an index whose route is the segment above a create page does not claim it.
  * The rest are listed because this is the statement — a create page is a surface of its own
  * and has no tour — and an exclusion that held only the addresses which happen to collide
- * today would stop being that statement the moment an index declared a second address the
- * way the helpdesk does. `App.test.tsx` sweeps the route tree against this list, so a
+ * today would stop being that statement the moment an index declared a parameter segment as a
+ * second address. `App.test.tsx` sweeps the route tree against this list, so a
  * create route added without a line here fails rather than being noticed later.
  */
 export const CREATE_ROUTES = [
@@ -531,6 +527,7 @@ export const CREATE_ROUTES = [
   "/shops/:shopId/orders/new",
   "/shops/:shopId/setup/documents/new",
   "/shops/:shopId/customers/new",
+  "/shops/:shopId/tickets/new",
   "/shops/:shopId/scenarios/new",
   "/lab/support-identities/new",
   "/lab/agent-configurations/new",

@@ -246,11 +246,12 @@ describe("the tour a location is on", () => {
     }
   });
 
-  it("keeps the helpdesk's tour at the ticket it opens for itself", () => {
-    // Tickets replaces its own address with its newest ticket as soon as the list answers, so
-    // the bare index is an address almost no reader is standing on. Both are the one screen.
+  it("gives the ticket index its tour, and the ticket editor none", () => {
+    // The index opens nothing on its own any more, so it is the address its reader stands on;
+    // a ticket is an editor of its own, and no editor carries a tour (ADR 0073).
+    expect(TOURS.tickets.alsoAt).toBeUndefined();
     expect(tourAt("/shops/shop-1/tickets")).toBe("tickets");
-    expect(tourAt("/shops/shop-1/tickets/t-204")).toBe("tickets");
+    expect(tourAt("/shops/shop-1/tickets/t-204")).toBeNull();
   });
 
   it("declares every second address as one segment under its route, never a path of its own", () => {
@@ -281,6 +282,7 @@ describe("the tour a location is on", () => {
     expect(tourAt("/shops/new")).toBeNull();
     expect(tourAt("/shops/shop-1/orders/new")).toBeNull();
     expect(tourAt("/shops/shop-1/customers/new")).toBeNull();
+    expect(tourAt("/shops/shop-1/tickets/new")).toBeNull();
     expect(tourAt("/lab/support-identities/new")).toBeNull();
     expect(tourAt("/lab/agent-configurations/new")).toBeNull();
     expect(tourAt("/lab/judges/new")).toBeNull();
@@ -311,14 +313,11 @@ describe("the tour a location is on", () => {
     // series has already shipped once, and it is what an exclusion written as a prefix — or
     // as "anything under this library" — would cause here: seven of the eight create pages
     // sit directly under an index that has a walk of its own.
-    //
-    // Not swept over the whole table, because `/shops/:shopId/tickets/new` is a *ticket*
-    // rather than a create page: the helpdesk declares `:ticketId` as a second address, and
-    // the case above pins that reading deliberately.
     const pages: [string, string | null][] = [
       ["/shops/new", null],
       ["/shops/shop-1/orders/new", "orders"],
       ["/shops/shop-1/customers/new", "customers"],
+      ["/shops/shop-1/tickets/new", "tickets"],
       ["/lab/support-identities/new", "support-identities"],
       ["/lab/agent-configurations/new", "agent-configurations"],
       ["/lab/judges/new", "judges"],
@@ -335,12 +334,9 @@ describe("the tour a location is on", () => {
   });
 
   it("excludes the create pages by address, not by a last segment that reads like one", () => {
-    // The two cases that tell an address list from "anything ending in /new", which is what
-    // this exclusion used to be. A ticket *is* a surface with a tour at a second address,
-    // so a ticket whose reference is spelled `new` must keep the helpdesk's walk…
-    expect(tourAt("/shops/shop-1/tickets/new")).toBe("tickets");
-    // …and a trailing slash must not slip a create page past the exclusion into the tour of
-    // the index behind it.
+    // The cases that tell an address list from "anything ending in /new", which is what this
+    // exclusion used to be. A trailing slash must not slip a create page past the exclusion
+    // into the tour of the index behind it.
     expect(tourAt("/shops/new/")).toBeNull();
     // A product an operator names `new` is a product editor, not a create page, and keeps
     // whatever tour that surface is one day given rather than losing it to a spelling.

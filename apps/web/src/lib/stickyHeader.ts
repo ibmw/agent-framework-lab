@@ -35,14 +35,6 @@ const pinnedGroundClasses =
 
 export const stickyHeaderClasses = `${pinnedGroundClasses} -mx-6 first:-mt-5 px-6 py-4`;
 
-/**
- * The same header for an editor that is not the page: the ticket editor, which sits in the
- * Tickets page's second column beside the list. It is pinned and drawn exactly as an editor's
- * page header is, but it keeps to its own column rather than being pulled out to the pane's
- * edges, which would draw it over the list.
- */
-export const stickyInsetHeaderClasses = `${pinnedGroundClasses} py-3`;
-
 /** The most of its pane a header may cover and still be pinned. */
 export const MAX_PINNED_SHARE = 1 / 3;
 

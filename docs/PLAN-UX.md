@@ -76,12 +76,12 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
 the commits and ADR 0052–0072, its goal and acceptance criteria
 `docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator
-agreed, 30 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
-panel's order on every editor — and Slice 30 builds the ticket editor on it; Slice 31 moves the
-ticket editor's back link onto the header slot with every other editor's, and gives Slice 34 the
-neutral pill class set it draws *Shared across shops* with. Slices 32, 33 and 35 depend on no open
-slice; 34 follows 30 and 31. The order reshapes an editor from the outside in: panel, header,
-rows, lists, then the indexes.
+agreed, 31 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
+panel's order on every editor — and Tickets followed as an index, a create page and an editor
+built on it (ADR 0073); Slice 31 moves the ticket editor's back link onto the header slot with
+every other editor's, and gives Slice 34 the neutral pill class set it draws *Shared across shops*
+with. Slices 32, 33 and 35 depend on no open slice; 34 follows 31. The order reshapes an editor
+from the outside in: panel, header, rows, lists, then the indexes.
 
 ## Milestone 9 — Every page is one of three templates
 
@@ -113,91 +113,6 @@ only: no backend, contract or payload moves.
 Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
 experiment keep templates of their own and are not reshaped here.
 
-### Slice 30 — Tickets as an index, a create page and an editor
-
-The Tickets page becomes the three templates every other surface already is (direction B),
-leaving the three-pane helpdesk.
-
-- [ ] Write ADR 0073 (the next free number when this plan was written; check `docs/adr/` at
-  branch time) with the slice: it supersedes ADR 0016's *The helpdesk workspace* (the three-pane
-  anatomy) and amends ADR 0066's paragraph on the ticket editor as the one editor that is not
-  its page; it records the three routes, the redirect's removal, the create page, and that the
-  thread still authors history and never live replies. It records the prototype's (:2170–2322)
-  and the README's ("Three-pane; header spans list + customer panel") drawings as departures.
-- [ ] **Index** at `/shops/:shopId/tickets` (`routeTree.tsx:177`): `PageHeader` "Tickets", one
-  sentence, and *New ticket* with the create glyph, linking to `new`. One index card: a title
-  that says what it lists (added to the *Index card titles* departure row), `SearchField` over
-  subject, reference and customer, `FilterChips` All, then Published and Never published —
-  `TicketSummarySchema` carries `latest_published_version` and `published_version_count`
-  (`openapi.yaml`:13926–13932) — then Open and Resolved. Table: the subject as the link with the
-  mono reference under it, the customer, the channel with "from <origin>" under it, the status
-  as `StatusBadge` draws it (`TicketsPage.tsx:276`), Published in the words the other indexes
-  write today (Slice 34 makes it the pill with theirs), Draft updated. The empty state says a
-  ticket is raised by a customer attached to this shop and links to Customers when none is;
-  the miss reads "No ticket matches this view"; a failed listing says its failure and nothing
-  else. The "N in this shop" description goes (`TicketsPage.tsx:176–179`): the count is the All
-  chip's, off the listing the rail counts (ADR 0056). The redirect to the newest ticket
-  (:142–166) goes.
-- [ ] **Create page** at `/shops/:shopId/tickets/new`: `CreatePage` with the fields
-  `NewTicketForm` asks today (:284–450) — Subject, Customer (attached customers only, one
-  already chosen when it is the only one, ADR 0064), Channel (the shop's channels), Reference
-  (`DerivedIdField`, `nextReference("T", …)`, `TICKET_REFERENCE_RULE`) — and a *Created as a
-  draft* card saying the first message is written in the thread. Create is `CreatePage`'s
-  `PrimaryAction`, refused with its reason; it refreshes `listings.tickets` and lands in the
-  editor. The route is added to `CREATE_ROUTES` (`lib/tours.ts:529`). Its Create is named as the
-  other create pages name theirs ("Create ticket"), and the specs that press "Open ticket"
-  change with it.
-- [ ] **Editor** at `/shops/:shopId/tickets/:ticketId` (`routeTree.tsx:178`), its own page on the
-  editor template: pinned `PageHeader` with the subject as its title, the reference as a mono
-  chip, the status, `VersionChips`, `EditorSaveActions`, `PublishButton` and the reasons
-  (:536–600); the back link to Tickets goes in `description` as the other editors' do until Slice
-  31 gives every editor the slot. Main column: **Incident** (Subject, Status, Channel, Opened
-  from with its product or order, Tags — from *Ticket details*, :950–1073, on field rows);
-  **Conversation** (the thread, :625–790, as a card: prior history, the trigger divider and the
-  bubbles, with the composer as the card's add form below its rule — "Add a history message" and
-  "Add to thread" keep their names); **Linked orders** (from *Linked objects*, :1115);
-  **Suggested documents** (:1174, grouped by kind). Side panel (`editorPanelClasses`): `GateCard`
-  titled "Publish gate" in place of *Validation* (:609); **Customer** (:1076) with *Other tickets from this customer*
-  (:1233) inside it; "What publishing freezes", saying a scenario built on the ticket freezes
-  its published version.
-- [ ] The tours: the `tickets` tour loses `alsoAt: [":ticketId"]` (`lib/tours.ts:352`) and stays
-  the index's; the editor and the create page carry none. `lib/tours.test.ts` (:252–253,
-  :310–341) and the settling comment in `tour-anchors.spec.ts` (:136–150) change with it.
-- [ ] `docs/design-direction.md`: *Direction*'s "Tickets use the three-pane helpdesk anatomy";
-  *The form language*'s "Ticket authoring stays inside the three-pane screen" and its list of the
-  creates that are pages; *A blocked primary action says why*'s count of create pages; *Lists
-  and counts*' "the ticket editor's own header in its column included"; *Principles*' "the
-  ticket side panels"; the *Departures* rows "The Tickets page's title and count" (removed) and
-  "Filter chips on Tickets and the block libraries" (Tickets leaves it).
-
-Frames: `Workspace.dc.html` :2170–2322 for what the helpdesk holds — the list's head and rows
-(:2174–2193), the subject (:2200), the composer (:2243), the customer (:2251), what is linked
-(:2267) and the suggested documents (:2293); :149–200 and :3225–3285 for the index; :1195 and
-:1326 for a create page; :385–480 for the editor.
-
-Authority: ADR 0016, ADR 0051, ADR 0054, ADR 0056, ADR 0060, ADR 0063, ADR 0064, ADR 0066,
-ADR 0067.
-
-Departures to record: the whole composition departs from the prototype's three panes and from
-the README's screen table, which the ADR records; the prototype draws no chips on Tickets, and
-the four built are the ones the listing can count.
-
-Branch: `feat/tickets-index-and-editor`. Checks: `Tickets.test.tsx` for the index (chips and
-their counts, search, the empty state and its link, the miss, the failed listing, no redirect),
-the create page (the refusal and its reason, the derived reference, one customer already chosen,
-landing in the editor with the listing refreshed) and the editor (cards in order, the panel, the
-header); `App.test.tsx` for the route tree against `CREATE_ROUTES`; `lib/tours.test.ts`;
-Playwright `ticket-authoring`, `scenario-authoring` and `experiment-start` (they create a ticket
-through "Open ticket" and read `card(page, "Tickets")`, "Ticket thread", "Ticket details",
-"Linked objects" and "Validation"), `sticky-header` (the ticket editor becomes its page at its
-own address, and the create page joins the surface table; the fixture makes a ticket
-(`tests/e2e/support/lab.ts:222–231`) and does not return it, so its return value, :438, gains the
-ticket's id), `workspace-shell`, and `tour-anchors`.
-
-Slice evidence: an operator opens Tickets and reads a table of the shop's incidents with Open 3 ·
-Resolved 1; presses *New ticket*, types a subject, is refused Create until a customer is chosen,
-and lands on the ticket's own page with the thread in the main column and the gate on the right.
-
 ### Slice 31 — The editor's back link and the card's first line
 
 The way back to an index and the sentence that says what a card is for sit in one place on every
@@ -209,7 +124,7 @@ editor.
   {index}" as `CreatePage`'s is. Consumers: the six editors whose link lives in `description`
   (Agent config :339, Judge :184, Block :141, Scenario :214, Customer :469, Support identity
   :142), the three that have none (Product :392, Order :380, Document :118), the ticket editor
-  (Slice 30), Shop version ("back to the draft", `ShopVersionPage.tsx:85`) and Snapshots ("Back
+  (`TicketEditorPage.tsx`, its link in `description`), Shop version ("back to the draft", `ShopVersionPage.tsx:85`) and Snapshots ("Back
   to the scenario", `SnapshotsPage.tsx:164`). The setup pages have no index and take none.
 - [ ] `Card` (`WorkspaceChrome.tsx:261`) gains `description`, the 13px muted first line under the
   title (:408), which the reference pages draw by hand today (`ShopSetupPages.tsx:324`, :366,
@@ -218,7 +133,9 @@ editor.
   Persona, Background and Hidden facts (`CustomerEditorPage.tsx:664`, :823, :862, :960), Block
   Parameters (`BlockEditorPage.tsx:244`), Judge Rubric and Evidence
   (`JudgeConfigurationEditorPage.tsx:293`, :301), Support identity Permissions
-  (`SupportIdentityEditorPage.tsx:276`), Order events (`OrderEditorPage.tsx:851`) and the rest a
+  (`SupportIdentityEditorPage.tsx:276`), Order events (`OrderEditorPage.tsx:851`), the ticket
+  editor's Incident, Conversation, Linked orders and Suggested documents (`TicketEditorPage.tsx`,
+  whose first lines are drawn by hand in `cardLineClasses`) and the rest a
   sweep of `footer=` and trailing notes on editor cards finds. A note that is a control's
   accessible description keeps its `id`; a footer that holds an action (Order events' *Add
   event*, the Document card's Remove) stays a footer.
@@ -292,7 +209,8 @@ Slice evidence: the agent configuration, judge, block, identity and scenario edi
 Every list a page edits is the same row, opened the same way, added to by the same form.
 
 - [ ] `addFormClasses` moves from `ShopSetupPages.tsx:151` to `lib/ui.ts`, because the lists below
-  in five other route files draw their add form with it.
+  in five other route files draw their add form with it, and the ticket editor's composer
+  (`TicketEditorPage.tsx`) composes the same classes locally until then.
 - [ ] Order events (`OrderEditorPage.tsx:879`), always-editable divs today: `EntryCard` rows that
   open in place; *Add event* (:845) becomes the add form below the rule, asking the event's
   fields; the `ConfirmRemove` (:860) stays.
@@ -347,7 +265,7 @@ The indexes that are already close take what is left of the index template.
   already uses (`admin-published`, `admin-border`). Every index writes "v3 · 2 version(s)" today,
   so the wording moves with the pill. It replaces the plain text on Shops, Customers,
   Support identities, Agent configs and Judges, the *Version* column on Scenarios and the block
-  libraries, and the ticket index's (Slice 30). Whether `VersionChips`' own pill draws through it
+  libraries, and the ticket index's (`TicketsPage.tsx`). Whether `VersionChips`' own pill draws through it
   is decided in the slice and said in one sentence.
 - [ ] **The create glyph** (`ButtonIcon verb="create"`) on every *New X*: Shops, Orders,
   Customers (`CustomersPage.tsx:207`), Scenarios (`ScenariosPage.tsx:101`), Support identities,

@@ -131,9 +131,9 @@ consistently.
 Bring every route in `apps/web` onto one of three templates — the index, the editor and the
 create page — with *Shop details* and *Tone of voice* as the reference, as the operator asked on
 28 September 2026, on the primitives the workspace already has and without a backend or contract
-change. `docs/PLAN-UX.md` is the authority for its scope, order and checks. The Tickets slice
-writes its ADR with its code, because it supersedes the three-pane helpdesk ADR 0016 decided.
-Acceptance is that plan's.
+change. `docs/PLAN-UX.md` is the authority for its scope, order and checks. Tickets landed as an
+index, a create page and an editor with ADR 0073, which supersedes the three-pane helpdesk ADR
+0016 decided. Acceptance is that plan's.
 
 ## Deferred decision triggers
 

@@ -609,7 +609,10 @@ export type FilterChipKind =
  * A page names a kind; it never names the icon. Which kind a chip takes is the prototype's
  * own `filterKind` classifier (`Workspace.dc.html`:5568–5577) read over that chip's label —
  * *Payment unsettled* and *Without a default address* are alerts by that function, *Shared* is
- * a chain, and everything it does not otherwise place is the check.
+ * a chain, and everything it does not otherwise place is the check. `published` is that check:
+ * the classifier's `ok`, named for the README's "check = published/active", and so the kind of
+ * every active-state chip the classifier leaves unplaced — Orders' and Tickets' *Open*,
+ * Tickets' *Resolved*, *Active*, *Usable*, *Runnable*, *Adoptable* — as well as of *Published*.
  *
  * The drawings are `lucide-react`, as the button glyphs are, and they are the circled marks
  * the prototype draws rather than the bare ones the buttons use: `FILTER_ICONS.ok` is a check

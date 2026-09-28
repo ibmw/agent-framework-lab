@@ -182,15 +182,19 @@ async function buildIncident(page: Page, unique: string) {
   await page.getByRole("button", { name: "Save order" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 
+  // Opening a ticket is a page that lands in its editor (ADR 0073).
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
-  const list = card(page, "Tickets");
-  await list.getByLabel("Reference", { exact: true }).fill("T-204");
-  await list.getByLabel("Subject", { exact: true }).fill("Wrong address concern");
-  await list.getByLabel("Customer", { exact: true }).selectOption({ label: "Maya Laurent" });
-  await list.getByRole("button", { name: "Open ticket" }).click();
-  await expect(page.getByRole("heading", { name: /T-204 · Wrong address concern/ })).toBeVisible();
+  await page.getByRole("link", { name: "New ticket" }).click();
+  await expect(page.getByLabel("Reference", { exact: true })).not.toHaveValue("");
+  await page.getByLabel("Reference", { exact: true }).fill("T-204");
+  await page.getByLabel("Subject", { exact: true }).fill("Wrong address concern");
+  await page.getByLabel("Customer", { exact: true }).selectOption({ label: "Maya Laurent" });
+  await page.getByRole("button", { name: "Create ticket" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Wrong address concern" }),
+  ).toBeVisible();
 
-  const thread = card(page, "Ticket thread");
+  const thread = card(page, "Conversation");
   await thread.getByRole("button", { name: "as Maya Laurent" }).click();
   await thread.getByLabel("Sent at", { exact: true }).fill("2026-08-21T13:40");
   await thread
@@ -198,10 +202,10 @@ async function buildIncident(page: Page, unique: string) {
     .fill("I just noticed this is going to my old address. Can you change it before it ships?");
   await thread.getByRole("button", { name: "Add to thread" }).click();
 
-  const details = card(page, "Ticket details");
-  await details.getByLabel("Opened from", { exact: true }).selectOption("order_page");
-  await details.getByLabel("Order", { exact: true }).selectOption({ label: "NS-10482" });
-  await card(page, "Linked objects").getByLabel("NS-10482").check();
+  const incident = card(page, "Incident");
+  await incident.getByLabel("Opened from", { exact: true }).selectOption("order_page");
+  await incident.getByLabel("Order", { exact: true }).selectOption({ label: "NS-10482" });
+  await card(page, "Linked orders").getByLabel("NS-10482").check();
   // The suggestion is what pre-fills the scenario's context documents.
   await card(page, "Suggested documents")
     .getByLabel(/^Address-change policy/)

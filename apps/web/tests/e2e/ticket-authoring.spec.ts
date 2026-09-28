@@ -28,7 +28,7 @@ async function saveDraft(page: Page) {
 }
 
 async function addMessage(page: Page, role: string, body: string, sentAt: string) {
-  const thread = card(page, "Ticket thread");
+  const thread = card(page, "Conversation");
   await thread.getByRole("button", { name: role }).click();
   await thread.getByLabel("Sent at", { exact: true }).fill(sentAt);
   await thread.getByLabel("Add a history message", { exact: true }).fill(body);
@@ -146,26 +146,33 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await page.getByRole("button", { name: "Save order" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 
-  // The incident itself.
+  // The incident itself. The index lists what the shop holds: nothing yet, and its chips
+  // say so.
   await page.getByLabel("Shop workspace").getByRole("link", { name: "Tickets" }).click();
-  const list = card(page, "Tickets");
-  // One header over the list and the ticket, counting what the shop holds: nothing yet.
-  const pageHeader = page
-    .locator("header")
-    .filter({ has: page.getByRole("heading", { level: 1, name: "Tickets" }) });
-  await expect(pageHeader.getByText("0 in this shop")).toBeVisible();
-  await expect(list.getByLabel("Reference", { exact: true })).toHaveValue("T-1");
-  await list.getByLabel("Reference", { exact: true }).fill("T-204");
-  await list.getByLabel("Subject", { exact: true }).fill("Wrong address concern");
-  await list.getByLabel("Customer", { exact: true }).selectOption({ label: "Maya Laurent" });
-  await list.getByRole("button", { name: "Open ticket" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Tickets" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "All 0" })).toBeVisible();
+  await expect(page.getByText(/No ticket in this shop yet/)).toBeVisible();
 
-  await expect(page.getByRole("heading", { name: /T-204 · Wrong address concern/ })).toBeVisible();
-  await expect(pageHeader.getByText("1 in this shop")).toBeVisible();
-  const thread = card(page, "Ticket thread");
+  // Opening one is a page that lands in the ticket's own editor (ADR 0073).
+  await page.getByRole("link", { name: "New ticket" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "New ticket" })).toBeVisible();
+  await expect(page.getByLabel("Reference", { exact: true })).toHaveValue("T-1");
+  await page.getByLabel("Reference", { exact: true }).fill("T-204");
+  // The one attached customer is already chosen; Create waits only for the subject.
+  await expect(page.getByLabel("Customer", { exact: true })).toHaveValue(/.+/);
+  const create = page.getByRole("button", { name: "Create ticket" });
+  await expect(create).toHaveAttribute("aria-disabled", "true");
+  await page.getByLabel("Subject", { exact: true }).fill("Wrong address concern");
+  await create.click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Wrong address concern" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/tickets\/[0-9a-f-]{36}$/);
+  const thread = card(page, "Conversation");
   await expect(thread.getByText(/No first message yet/)).toBeVisible();
   await expect(
-    card(page, "Validation").getByText(/must carry the first message every arm receives/),
+    card(page, "Publish gate").getByText(/must carry the first message every arm receives/),
   ).toBeVisible();
 
   // Prior support history first, then the triggering first message.
@@ -181,23 +188,23 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
     "I just noticed this is going to my old address. Can you change it before it ships?",
     "2026-08-21T13:40",
   );
-  await expect(thread.getByText("first message")).toBeVisible();
+  await expect(thread.getByText("first message", { exact: true })).toBeVisible();
   await expect(thread.getByText(/prior support history/i)).toBeVisible();
 
   // The incident points at the order the agent has to resolve, and at the document a
   // scenario built on this ticket would inherit as context.
-  const details = card(page, "Ticket details");
-  await details.getByLabel("Opened from", { exact: true }).selectOption("order_page");
-  await details.getByLabel("Order", { exact: true }).selectOption({ label: "NS-10482" });
-  await card(page, "Linked objects").getByLabel("NS-10482").check();
+  const incident = card(page, "Incident");
+  await incident.getByLabel("Opened from", { exact: true }).selectOption("order_page");
+  await incident.getByLabel("Order", { exact: true }).selectOption({ label: "NS-10482" });
+  await card(page, "Linked orders").getByLabel("NS-10482").check();
   await card(page, "Suggested documents")
     .getByLabel(/^Address-change policy/)
     .check();
 
   await saveDraft(page);
-  await expect(card(page, "Validation").getByText("No validation findings.")).toBeVisible();
+  await expect(card(page, "Publish gate").getByText("No validation findings.")).toBeVisible();
   await expect(
-    card(page, "Linked objects").getByText(/ship-to: Bordeaux previous flat/),
+    card(page, "Linked orders").getByText(/ship-to: Bordeaux previous flat/),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Publish v1" }).click();
@@ -206,8 +213,18 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   );
 
   // The published version stays frozen while the draft moves on.
-  await details.getByLabel("Subject", { exact: true }).fill("Something else entirely");
+  await incident.getByLabel("Subject", { exact: true }).fill("Something else entirely");
   await saveDraft(page);
   await expect(page.getByText("v1 published")).toBeVisible();
   await expect(page.getByText("Draft v2 in progress")).toBeVisible();
+
+  // Back on the index, the incident is a row: the saved subject, the version it froze, and
+  // the chips counting it.
+  await page.locator("main header").getByRole("link", { name: "Tickets", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Tickets" })).toBeVisible();
+  const row = page.getByRole("row").filter({ hasText: "Something else entirely" });
+  await expect(row).toContainText("T-204");
+  await expect(row).toContainText("v1 · 1 version(s)");
+  await expect(page.getByRole("button", { name: "Open 1" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Published 1" })).toBeVisible();
 });

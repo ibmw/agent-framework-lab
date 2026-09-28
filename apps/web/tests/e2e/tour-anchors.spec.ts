@@ -135,13 +135,14 @@ for (const id of TOUR_IDS) {
 
     // Wait for the surface to have finished arriving before asking what the bar offers.
     //
-    // The control is drawn from the route (ADR 0055), and a surface may replace its own
-    // address on load — Tickets opens its newest ticket as soon as the list answers. Asked on
-    // the frame after `goto`, this guard would go on passing while the control vanished a
-    // moment later, which is exactly how a tour goes stale silently and exactly what this
-    // sweep exists to prevent. It is asked twice, of two different things: the address the
-    // surface settles at has to be one the table names, and the control has to be on screen
-    // there.
+    // The control is drawn from the route (ADR 0055), and a surface that replaced its own
+    // address on load would take its tour away a moment after arriving — Tickets did, opening
+    // its newest ticket as soon as its list answered, until the index became a page of its own
+    // (ADR 0073). Asked on the frame after `goto`, this guard would go on passing while the
+    // control vanished a moment later, which is exactly how a tour goes stale silently and
+    // exactly what this sweep exists to prevent. It is asked twice, of two different things:
+    // the address the surface settles at has to be one the table names, and the control has to
+    // be on screen there.
     await page.waitForLoadState("networkidle");
     expect(
       tourAt(new URL(page.url()).pathname),

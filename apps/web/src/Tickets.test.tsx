@@ -15,10 +15,12 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { stickyHeaderClasses } from "./lib/stickyHeader";
 import { TOURS, tourAt } from "./lib/tours";
 import { renderApp } from "./test/app";
-import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
-import { railEntry, shellListings } from "./test/shell";
+import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
+import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
 const PROFILE_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -365,165 +367,355 @@ function otherTicketHandlers() {
   ];
 }
 
-describe("ticket list", () => {
-  // The thread's subject line is drawn in open code rather than by `Card` or `PageHeader`, so
-  // it is measured against the one size the prototype draws between a page title and a card
-  // title.
-  it("names the page once, over the list and the ticket, with what the shop holds under it", async () => {
+/** A second attached customer, so choosing one is a choice the operator has to make. */
+const SECOND_PROFILE_ID = "2b3c4d5e-6f70-4a8b-9c0d-1e2f3a4b5c6d";
+
+function twoCustomers() {
+  return http.get("*/api/v1/customer-profiles", () =>
+    HttpResponse.json({
+      profiles: [
+        {
+          profile_id: PROFILE_ID,
+          display_name: "Maya Laurent",
+          email: "maya.laurent@example.org",
+          persona_traits: ["frequent", "direct"],
+          address_count: 2,
+          default_address_label: "Home — Lyon",
+          updated_at: "2026-08-23T12:05:00+00:00",
+          latest_published_version: 2,
+          published_version_count: 2,
+          attached_shop_count: 1,
+        },
+        {
+          profile_id: SECOND_PROFILE_ID,
+          display_name: "Jonas Berg",
+          email: "jonas.berg@example.org",
+          persona_traits: [],
+          address_count: 1,
+          default_address_label: "Home — Oslo",
+          updated_at: "2026-08-23T12:05:00+00:00",
+          latest_published_version: 1,
+          published_version_count: 1,
+          attached_shop_count: 1,
+        },
+      ],
+    } satisfies CustomerProfileListResponse),
+  );
+}
+
+function listingFails(message = "The listing could not be read.") {
+  return http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+    HttpResponse.json({ code: "unavailable", message, request_id: "r" }, { status: 503 }),
+  );
+}
+
+/** The ticket this suite creates, as the listing reads once the create has landed. */
+const CREATED: TicketSummarySchema = {
+  ...TICKETS.tickets[0],
+  reference: "T-205",
+  subject: "Late delivery",
+  updated_at: "2026-08-25T12:00:00+00:00",
+};
+
+/** The index's table, once the listing has answered. */
+async function ticketTable() {
+  return screen.findByRole("table");
+}
+
+function createButton() {
+  return screen.getByRole("button", { name: /^(Create ticket|Creating…)$/ });
+}
+
+describe("the ticket index", () => {
+  it("names the page, says what a ticket is, and offers New ticket with its glyph", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets`);
 
     const title = await screen.findByRole("heading", { level: 1, name: "Tickets" });
     const header = title.closest("header") as HTMLElement;
-
-    // The whole listing, as the rail counts it — not the rows the filter leaves.
-    expect(await within(header).findByText("2 in this shop")).toBeVisible();
-    // The header is above both columns rather than inside the list, and the list no longer
-    // titles itself a second time.
-    const list = screen.getByRole("region", { name: "Tickets" });
-    expect(header.contains(list)).toBe(false);
-    expect(list.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(within(list).queryByRole("heading", { name: "Tickets" })).toBeNull();
-    expect(within(list).getByLabelText("Filter tickets")).toBeVisible();
-  });
-
-  it("keeps counting the whole shop while the filter narrows the list", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    const header = (await screen.findByRole("heading", { level: 1, name: "Tickets" })).closest(
-      "header",
-    ) as HTMLElement;
-    await within(header).findByText("2 in this shop");
-
-    await user.selectOptions(screen.getByLabelText("Filter tickets"), "open");
-
-    expect(within(header).getByText("2 in this shop")).toBeVisible();
-  });
-
-  it("says no count while the listing cannot be read", async () => {
-    server.use(
-      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
-        HttpResponse.json(
-          { code: "internal_error", message: "down", request_id: "req-1" },
-          { status: 500 },
-        ),
-      ),
-    );
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-
-    const header = (await screen.findByRole("heading", { level: 1, name: "Tickets" })).closest(
-      "header",
-    ) as HTMLElement;
-    await screen.findByRole("alert");
-
+    expect(within(header).getByText(/One customer's incident each/)).toBeVisible();
+    // The count is the All chip's, not a line under the title.
+    await ticketTable();
     expect(within(header).queryByText(/in this shop/)).toBeNull();
+
+    const create = within(header).getByRole("link", { name: "New ticket" });
+    expect(create).toHaveAttribute("href", `/shops/${SHOP_ID}/tickets/new`);
+    expect(create.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    // An index scrolls its header away; only an editor or a create page pins one.
+    expect(header.className).not.toContain("sticky");
   });
 
-  it("draws the thread's subject in the display face at the prototype's 19px", async () => {
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-
-    const subject = await screen.findByRole("heading", {
-      level: 2,
-      name: /Wrong address concern/,
-    });
-
-    expect(subject.className).toContain("font-display");
-    expect(subject.className).toContain("text-[19px]");
-    expect(subject.className).toContain("font-bold");
-    expect(subject.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/);
-  });
-
-  it("shows each incident with its customer, preview, and channel", async () => {
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-
-    expect(await screen.findByText("Wrong address concern")).toBeVisible();
-    const rows = within(screen.getByRole("region", { name: "Tickets" })).getByRole("list");
-    expect(within(rows).getAllByText("Maya Laurent")).toHaveLength(2);
-    expect(within(rows).getByText(/I just noticed this is going to my old address/)).toBeVisible();
-    expect(within(rows).getByText("No first message yet")).toBeVisible();
-    expect(within(rows).getByText("Open")).toBeVisible();
-    expect(within(rows).getByText("Resolved")).toBeVisible();
-  });
-
-  it("filters by status with the count the frame shows", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    await screen.findByText("Wrong address concern");
-    const list = screen.getByRole("region", { name: "Tickets" });
-
-    await user.selectOptions(within(list).getByLabelText("Filter tickets"), "open");
-
-    expect(within(list).getByText("Wrong address concern")).toBeVisible();
-    expect(within(list).queryByText("Sizing question")).toBeNull();
-    expect(within(list).getByRole("option", { name: "Open (1)" })).toBeVisible();
-  });
-
-  it("opens on the incident touched most recently, not the first one listed", async () => {
-    // Listed second and updated later, so a page that opened on the head of the list would pass
-    // this by accident. What the operator wants back is the one they were last working on.
+  it("counts the whole listing on its chips, the figure the rail draws beside it", async () => {
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
         HttpResponse.json({
           tickets: [
-            { ...TICKETS.tickets[1], updated_at: "2026-08-24T09:00:00+00:00" },
-            { ...TICKETS.tickets[0], updated_at: "2026-08-25T17:30:00+00:00" },
+            { ...TICKETS.tickets[0], latest_published_version: 1, published_version_count: 1 },
+            TICKETS.tickets[1],
           ],
-        }),
+        } satisfies TicketListResponse),
       ),
     );
     renderAt(`/shops/${SHOP_ID}/tickets`);
+    await ticketTable();
 
+    const chips = screen.getByRole("group", { name: "Filter tickets" });
     expect(
-      await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ }),
-    ).toBeVisible();
+      within(chips)
+        .getAllByRole("button")
+        .map((chip) => chip.getAttribute("aria-label")),
+    ).toEqual(["All 2", "Published 1", "Never published 1", "Open 1", "Resolved 1"]);
+    const entry = railEntry("Tickets");
+    expect(within(entry).getByText("2")).toBeVisible();
+    expect(entry).toHaveAccessibleDescription("2 tickets");
   });
 
-  it("opens on an address the tour table still knows as tickets", async () => {
-    // The defect this is written for shipped: the bar reads the surface's tour from the route
-    // (ADR 0055), this page replaces its own address with the ticket it opens, and the table
-    // named only the index — so the helpdesk lost its *Show me around* one frame after
-    // loading, on every lab holding a ticket. The browser sweep catches it too; this catches
-    // it with no browser and no timing, by asking the table about the address the redirect
-    // actually produced.
-    const { router } = renderApp(`/shops/${SHOP_ID}/tickets`);
-    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`),
+  it("narrows the table to the chip pressed, and back", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const table = await ticketTable();
+    expect(bodyRows(table)).toBe(2);
+
+    await user.click(screen.getByRole("button", { name: "Open 1" }));
+    expect(screen.getByRole("button", { name: "Open 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("table")).getByText("Wrong address concern")).toBeVisible();
+    expect(within(screen.getByRole("table")).queryByText("Sizing question")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Resolved 1" }));
+    expect(within(screen.getByRole("table")).getByText("Sizing question")).toBeVisible();
+    expect(within(screen.getByRole("table")).queryByText("Wrong address concern")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Never published 2" }));
+    expect(bodyRows(screen.getByRole("table"))).toBe(2);
+    await user.click(screen.getByRole("button", { name: "Published 0" }));
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText("No ticket matches this view.")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "All 2" }));
+    expect(bodyRows(screen.getByRole("table"))).toBe(2);
+  });
+
+  it("searches by subject, reference and customer, and leaves the counts alone", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    await ticketTable();
+    const search = screen.getByRole("searchbox", {
+      name: "Search by subject, reference or customer",
+    });
+
+    await user.type(search, "t-187");
+    expect(within(screen.getByRole("table")).getByText("Sizing question")).toBeVisible();
+    expect(bodyRows(screen.getByRole("table"))).toBe(1);
+    // A chip counts the list, not the word typed.
+    expect(screen.getByRole("button", { name: "All 2" })).toBeVisible();
+
+    await user.clear(search);
+    await user.type(search, "address");
+    expect(within(screen.getByRole("table")).getByText("Wrong address concern")).toBeVisible();
+    expect(bodyRows(screen.getByRole("table"))).toBe(1);
+
+    await user.clear(search);
+    await user.type(search, "maya");
+    expect(bodyRows(screen.getByRole("table"))).toBe(2);
+
+    await user.clear(search);
+    await user.type(search, "parcel");
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText("No ticket matches this view.")).toBeVisible();
+  });
+
+  it("draws each incident as a row that opens its editor", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const table = await ticketTable();
+
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["Ticket", "Customer", "Channel", "Status", "Published", "Draft updated"]);
+    const row = within(table).getByRole("link", { name: "Wrong address concern" }).closest("tr");
+    expect(within(table).getByRole("link", { name: "Wrong address concern" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/tickets/${TICKET_ID}`,
     );
-
-    expect(tourAt(router.state.location.pathname)).toBe("tickets");
-    expect(
-      screen.getByRole("button", { name: `Show me around ${TOURS.tickets.surface}` }),
-    ).toBeVisible();
+    const cells = within(row as HTMLElement).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent("Wrong address concernT-204");
+    expect(within(cells[0]).getByText("T-204")).toHaveClass("font-mono");
+    expect(cells[1]).toHaveTextContent("Maya Laurent");
+    expect(cells[2]).toHaveTextContent("Chatfrom order page");
+    expect(cells[3]).toHaveTextContent("Open");
+    expect(cells[4]).toHaveTextContent("Never published");
   });
 
-  it("says so rather than opening something when the shop has no incidents", async () => {
+  it("says why it is empty, and links to Customers when no customer is attached", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () => HttpResponse.json({ tickets: [] })),
+      http.get("*/api/v1/customer-profiles", () => HttpResponse.json({ profiles: [] })),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    const empty = await screen.findByText(/No ticket in this shop yet/);
+    expect(empty).toHaveTextContent(/raised by a customer attached to this shop, and none is/);
+    expect(within(empty).getByRole("link", { name: /Customers/ })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/customers`,
+    );
+    // The zero is drawn, and pressable: it is the answer to a question.
+    expect(screen.getByRole("button", { name: "All 0" })).toBeVisible();
+  });
+
+  it("says a ticket is raised by an attached customer, with nothing to link when one is", async () => {
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () => HttpResponse.json({ tickets: [] })),
     );
     renderAt(`/shops/${SHOP_ID}/tickets`);
 
-    expect(await screen.findByText(/No tickets yet/)).toBeVisible();
+    const empty = await screen.findByText(/No ticket in this shop yet/);
+    await waitFor(() =>
+      expect(empty).toHaveTextContent(
+        "No ticket in this shop yet. A ticket is raised by a customer attached to this shop.",
+      ),
+    );
+    expect(within(empty).queryByRole("link")).toBeNull();
   });
 
-  it("moves between tickets without leaving the shop", async () => {
+  it("says a failed listing and nothing else", async () => {
+    server.use(listingFails());
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The listing could not be read.");
+    expect(screen.queryByText(/No ticket/)).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Filter tickets" })).toBeNull();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    // The card still says what it lists.
+    expect(screen.getByRole("heading", { level: 2, name: "Raised in this shop" })).toBeVisible();
+  });
+
+  it("stays the index: it opens no ticket on its own, and offers its tour", async () => {
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets`);
+    // Every address the router passes through from here, before the listing has answered: a
+    // redirect scheduled off the listing's answer is a location this set records, whenever it
+    // lands relative to the table.
+    const visited = new Set<string>([router.state.location.pathname]);
+    router.subscribe((state) => visited.add(state.location.pathname));
+    await ticketTable();
+    await waitFor(() => expect(railEntry("Tickets")).toHaveAccessibleDescription("2 tickets"));
+
+    expect([...visited]).toEqual([`/shops/${SHOP_ID}/tickets`]);
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets`);
+    expect(screen.queryByRole("region", { name: "Conversation" })).toBeNull();
+    expect(tourAt(router.state.location.pathname)).toBe("tickets");
+    expect(
+      screen.getByRole("button", { name: `Show me around ${TOURS.tickets.surface}` }),
+    ).toBeVisible();
+  });
+});
+
+describe("the create page", () => {
+  it("opens from New ticket at its own address, as a create page with no tour", async () => {
     const user = userEvent.setup();
-    server.use(...otherTicketHandlers());
-    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets`);
+    await ticketTable();
 
-    const rows = within(within(screen.getByRole("region", { name: "Tickets" })).getByRole("list"));
-    await user.click(rows.getByRole("link", { name: /Sizing question/ }));
+    await user.click(screen.getByRole("link", { name: "New ticket" }));
 
-    // A relative-by-path link resolved against `/shops/…/tickets/T-204` asked for
-    // `…/tickets/tickets/…`, which matches no route, and the catch-all put the operator back
-    // on the shop index — out of the shop they were working in.
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}`),
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/new`);
+    expect(await screen.findByRole("heading", { level: 1, name: "New ticket" })).toBeVisible();
+    expect(screen.getByText("nothing created yet")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Back to Tickets" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/tickets`,
+    );
+    expect(screen.queryByRole("button", { name: /Show me around/ })).toBeNull();
+    expect(within(card("Created as a draft")).getByText(/first message every arm/)).toBeVisible();
+  });
+
+  it("refuses Create with its reason until a subject is typed and a customer chosen", async () => {
+    const user = userEvent.setup();
+    server.use(twoCustomers());
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
+    await screen.findByRole("option", { name: "Jonas Berg" });
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("T-205"));
+
+    expectRefused(
+      createButton(),
+      "The ticket needs a subject: the incident as the customer would describe it.",
+    );
+    await user.type(screen.getByLabelText("Subject"), "Late delivery");
+    expectRefused(createButton(), "Choose the customer who raised the ticket.");
+    // Pressed, or submitted some other way, a refused Create writes nothing.
+    await user.click(createButton());
+    await submitWithoutPressing(createButton());
+    expect(createdTickets).toHaveLength(0);
+    // The title reads back what is being made.
+    expect(screen.getByRole("heading", { level: 1, name: "Late delivery" })).toBeVisible();
+
+    await user.selectOptions(screen.getByLabelText("Customer"), SECOND_PROFILE_ID);
+    expectNotRefused(createButton());
+  });
+
+  it("chooses the one attached customer, and says so", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
+
+    const customer = await screen.findByLabelText("Customer");
+    await waitFor(() => expect(customer).toHaveValue(PROFILE_ID));
+    expect(customer).toHaveAccessibleDescription(
+      /This one is the only customer attached to this shop, so it is already chosen\./,
     );
   });
 
-  it("takes no reference until it knows which references are free", async () => {
+  it("puts each field's hint in that control's accessible description", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
+
+    expect(await screen.findByLabelText("Reference")).toHaveAccessibleDescription(
+      /uppercase letters, digits, and hyphens.*named in scenarios/i,
+    );
+    expect(screen.getByLabelText("Subject")).toHaveAccessibleDescription(
+      /the incident as the customer would describe it/i,
+    );
+    expect(screen.getByLabelText("Customer")).toHaveAccessibleDescription(
+      /only customers attached to this shop.*fixed at creation/i,
+    );
+    expect(screen.getByLabelText("Channel")).toHaveAccessibleDescription(
+      /the channel the incident arrived on/i,
+    );
+  });
+
+  it("offers only the channels this shop supports", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
+
+    const channel = await screen.findByLabelText("Channel");
+    expect(
+      Array.from(channel.querySelectorAll("option")).map((entry) => entry.textContent),
+    ).toEqual(["Chat", "Email"]);
+  });
+
+  it("derives the next free reference, resumes when emptied, and refuses a duplicate", async () => {
     const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
+    const reference = await screen.findByLabelText("Reference");
+
+    await waitFor(() => expect(reference).toHaveValue("T-205"));
+    await user.clear(reference);
+    await user.type(reference, "T-900");
+    await user.clear(reference);
+    expect(reference).toHaveValue("");
+    await user.tab();
+    expect(reference).toHaveValue("T-205");
+
+    await user.type(screen.getByLabelText("Subject"), "Late delivery");
+    await user.clear(reference);
+    await user.type(reference, "T-204");
+    expect(reference).toBeInvalid();
+    expect(reference).toHaveAccessibleDescription(
+      /t-204 is already used by a ticket in this shop/i,
+    );
+    expectRefused(createButton(), "T-204 is already used by a ticket in this shop.");
+    await user.click(createButton());
+    expect(createdTickets).toHaveLength(0);
+  });
+
+  it("takes no reference until it knows which references are free", async () => {
     let release: (() => void) | null = null;
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, async () => {
@@ -533,248 +725,138 @@ describe("ticket list", () => {
         return HttpResponse.json(TICKETS);
       }),
     );
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
 
     // The suggestion is the next free reference, and which one that is is exactly what the
-    // list still has to say. An operator who types into the field before it lands has their
-    // reference written over by the suggestion arriving behind it.
-    expect(list.getByLabelText("Reference")).toBeDisabled();
-    expect(list.getByLabelText("Reference")).toHaveValue("");
+    // listing still has to say. A reference typed before it lands would be written over.
+    const reference = await screen.findByLabelText("Reference");
+    expect(reference).toBeDisabled();
+    expect(reference).toHaveValue("");
+    expectRefused(createButton(), "Reading what this shop already holds…");
 
-    await user.type(list.getByLabelText("Subject"), "Late delivery");
-    await list.findByRole("option", { name: "Maya Laurent" });
-    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
-    await user.click(list.getByRole("button", { name: "Open ticket" }));
-
-    // Nothing was opened — and the form says so rather than leaving the button to do nothing.
-    expect(createdTickets).toHaveLength(0);
-    expect(list.getByRole("alert")).toHaveTextContent(
-      "The ticket needs a reference before it can be opened.",
-    );
-
+    await waitFor(() => expect(release).not.toBeNull());
     (release as unknown as () => void)();
-    await waitFor(() => expect(list.getByLabelText("Reference")).toBeEnabled());
+    await waitFor(() => expect(reference).toBeEnabled());
     // Enabled and already holding the suggestion: never enabled and empty.
-    expect(list.getByLabelText("Reference")).toHaveValue("T-205");
+    expect(reference).toHaveValue("T-205");
   });
 
-  it("takes no reference while a create is in flight either", async () => {
+  it("does not guess a reference after the listing fails, and shows the listing's failure", async () => {
+    server.use(listingFails());
+    renderAt(`/shops/${SHOP_ID}/tickets/new`);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
+    expect(screen.getByLabelText("Reference")).toHaveValue("");
+    expect(screen.getByLabelText("Reference")).toBeEnabled();
+  });
+
+  it("closes the reference while a create is in flight, and holds the press", async () => {
     const user = userEvent.setup();
+    let created = false;
     let release: (() => void) | null = null;
-    let reads = 0;
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, async () => {
-        reads += 1;
-        if (reads === 1) {
+        if (!created) {
           return HttpResponse.json(TICKETS);
         }
-        // The reload a create triggers, held open: the list that decides the next free
-        // reference has not answered yet, so neither has the suggestion.
+        // The re-read the create triggers, held open for a moment.
         await new Promise<void>((resolve) => {
           release = resolve;
         });
         return HttpResponse.json({
-          tickets: [...TICKETS.tickets, { ...TICKETS.tickets[0], reference: "T-205" }],
+          tickets: [...TICKETS.tickets, CREATED],
         } satisfies TicketListResponse);
       }),
+      http.post(`*/api/v1/shops/${SHOP_ID}/tickets`, async ({ request }) => {
+        createdTickets.push((await request.json()) as Record<string, unknown>);
+        created = true;
+        return HttpResponse.json(
+          {
+            ticket_id: TICKET_ID,
+            shop_id: SHOP_ID,
+            lifecycle_state: "draft",
+            content: currentContent,
+            created_at: "2026-08-24T12:00:00+00:00",
+            updated_at: "2026-08-24T12:00:00+00:00",
+          } satisfies TicketDraftResponse,
+          { status: 201 },
+        );
+      }),
     );
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
-    await list.findByRole("option", { name: "Maya Laurent" });
-    await waitFor(() => expect(list.getByLabelText("Reference")).toHaveValue("T-205"));
-    await user.type(list.getByLabelText("Subject"), "Late delivery");
-    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/new`);
+    const reference = await screen.findByLabelText("Reference");
+    await waitFor(() => expect(reference).toHaveValue("T-205"));
+    await waitFor(() => expect(screen.getByLabelText("Customer")).toHaveValue(PROFILE_ID));
+    await user.type(screen.getByLabelText("Subject"), "Late delivery");
 
-    await user.click(list.getByRole("button", { name: "Open ticket" }));
-
-    // The list panel stays on screen across the create, and the list behind the suggestion is
-    // moving. Left open, the field would be back where it started: empty, editable, and about
-    // to be written over — or still showing the reference that has just been used.
-    await waitFor(() => expect(list.getByLabelText("Reference")).toBeDisabled());
-    expect(list.getByLabelText("Reference")).toHaveValue("");
-
-    (release as unknown as () => void)();
-    await waitFor(() => expect(list.getByLabelText("Reference")).toBeEnabled());
-    expect(list.getByLabelText("Reference")).toHaveValue("T-206");
-  });
-
-  it("opens a ticket for a customer attached to this shop", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    await screen.findByRole("region", { name: "Tickets" });
-
-    // Scoped to the list panel: the page opens on the most recently updated ticket, so the
-    // editor's own Subject is on screen beside this form's.
-    const list = within(screen.getByRole("region", { name: "Tickets" }));
-    await list.findByRole("option", { name: "Maya Laurent" });
-    await waitFor(() => expect(list.getByLabelText("Reference")).toHaveValue("T-205"));
-    await user.type(list.getByLabelText("Subject"), "Late delivery");
-    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
-    await user.click(list.getByRole("button", { name: "Open ticket" }));
+    await user.click(createButton());
 
     await waitFor(() => expect(createdTickets).toHaveLength(1));
-    expect(createdTickets[0]).toMatchObject({
+    expect(createdTickets[0]).toEqual({
       reference: "T-205",
       subject: "Late delivery",
       customer_profile_id: PROFILE_ID,
       channel: "chat",
     });
+    // While the listing that decides which reference is free is moving, the field is nobody's
+    // and the press is in flight.
+    await waitFor(() => expect(reference).toBeDisabled());
+    expect(reference).toHaveValue("");
+    expectBusy(createButton());
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/new`);
+
+    (release as unknown as () => void)();
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`),
+    );
   });
 
-  it("opens the ticket it created with one navigation, not two", async () => {
+  it("lands in the editor of what it made, with the listing the rail counts read again", async () => {
     const user = userEvent.setup();
-    // A ticket created from `/tickets` is opened by the create. The page also opens the most
-    // recently updated ticket when it is given none — and that effect is scheduled from the
-    // render the reloaded list produces, where `ticketId` is still undefined although the
-    // create's navigation is already on its way. Left alone it sent a second navigation after
-    // the first, every time, on the one page in the workspace that creates and navigates in
-    // the same breath. PLAN-UX Slice 10 gives that shape to eight more surfaces.
-    // The shop has no incident yet, which is the journey the e2e specs walk: the page is
-    // standing on `/tickets` with nothing named when the create lands.
-    let listed: TicketSummarySchema[] = [];
+    let created = false;
     server.use(
       http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
-        HttpResponse.json({ tickets: listed } satisfies TicketListResponse),
+        HttpResponse.json({
+          tickets: created ? [...TICKETS.tickets, CREATED] : TICKETS.tickets,
+        } satisfies TicketListResponse),
       ),
+      http.post(`*/api/v1/shops/${SHOP_ID}/tickets`, async ({ request }) => {
+        createdTickets.push((await request.json()) as Record<string, unknown>);
+        created = true;
+        return HttpResponse.json(
+          {
+            ticket_id: TICKET_ID,
+            shop_id: SHOP_ID,
+            lifecycle_state: "draft",
+            content: currentContent,
+            created_at: "2026-08-24T12:00:00+00:00",
+            updated_at: "2026-08-24T12:00:00+00:00",
+          } satisfies TicketDraftResponse,
+          { status: 201 },
+        );
+      }),
     );
-    const { router } = renderApp(`/shops/${SHOP_ID}/tickets`);
-    await screen.findByText(/No tickets yet/);
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/new`);
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("T-205"));
+    await waitFor(() => expect(screen.getByLabelText("Customer")).toHaveValue(PROFILE_ID));
+    await user.type(screen.getByLabelText("Subject"), "Late delivery");
+    await waitFor(() => expect(railEntry("Tickets")).toHaveAccessibleDescription("2 tickets"));
     const keys = new Set<string>([router.state.location.key]);
     router.subscribe((state) => keys.add(state.location.key));
-    listed = TICKETS.tickets.filter((ticket) => ticket.ticket_id === TICKET_ID);
 
-    const list = within(screen.getByRole("region", { name: "Tickets" }));
-    await list.findByRole("option", { name: "Maya Laurent" });
-    await waitFor(() => expect(list.getByLabelText("Reference")).not.toHaveValue(""));
-    await user.type(list.getByLabelText("Subject"), "Late delivery");
-    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
-    await user.click(list.getByRole("button", { name: "Open ticket" }));
+    await user.click(createButton());
 
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`),
     );
-    // One location beyond the one it started on: the redirect did not follow the create.
+    expect(await screen.findByRole("region", { name: "Conversation" })).toBeVisible();
+    // The rail reads the listing the create re-read, not the one the page opened on.
+    expect(railEntry("Tickets")).toHaveAccessibleDescription("3 tickets");
+    // One navigation: the create's own.
     expect([...keys]).toHaveLength(2);
   });
 
-  it("re-reads the list when the prompt saves the ticket, not only when the button does", async () => {
-    const user = userEvent.setup();
-    server.use(
-      // The list reflects what the lab holds, so a renamed ticket shows its new subject.
-      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
-        HttpResponse.json({
-          tickets: TICKETS.tickets.map((ticket) =>
-            ticket.ticket_id === TICKET_ID
-              ? { ...ticket, subject: currentContent.subject }
-              : ticket,
-          ),
-        } satisfies TicketListResponse),
-      ),
-      ...otherTicketHandlers(),
-    );
-    renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-
-    const details = within(await screen.findByRole("region", { name: "Ticket details" }));
-    await user.clear(details.getByLabelText("Subject"));
-    await user.type(details.getByLabelText("Subject"), "Address changed before dispatch");
-
-    // Moving to the customer's other ticket happens inside this page, so nothing remounts and
-    // the list stays on screen to be wrong on.
-    const other = within(screen.getByRole("region", { name: "Other tickets from this customer" }));
-    await user.click(other.getByRole("link", { name: "T-187" }));
-    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
-    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
-
-    await waitFor(() => expect(savedRequests).toHaveLength(1));
-    // The save landed, and so did the read that follows every save of this draft — which the
-    // page's own Save button used to be the only thing that ran.
-    const list = within(screen.getByRole("region", { name: "Tickets" }));
-    expect(await list.findByText("Address changed before dispatch")).toBeVisible();
-    expect(list.queryByText("Wrong address concern")).toBeNull();
-  });
-
-  it("offers only the channels this shop supports", async () => {
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    await screen.findByRole("region", { name: "Tickets" });
-
-    const list = within(screen.getByRole("region", { name: "Tickets" }));
-    const channel = list.getByLabelText("Channel");
-    expect(
-      Array.from(channel.querySelectorAll("option")).map((entry) => entry.textContent),
-    ).toEqual(["Chat", "Email"]);
-  });
-
-  it("opens the new ticket on the one attached customer, and says so", async () => {
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
-    const customer = list.getByLabelText("Customer");
-    await waitFor(() => expect(customer).toHaveValue(PROFILE_ID));
-    await waitFor(() =>
-      expect(customer).toHaveAccessibleDescription(
-        /This one is the only customer attached to this shop, so it is already chosen\./,
-      ),
-    );
-  });
-
-  it("puts each new-ticket field's hint in that control's accessible description", async () => {
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
-    expect(list.getByLabelText("Reference")).toHaveAccessibleDescription(
-      /uppercase letters, digits, and hyphens.*named in scenarios/i,
-    );
-    expect(list.getByLabelText("Subject")).toHaveAccessibleDescription(
-      /the incident as the customer would describe it/i,
-    );
-    expect(list.getByLabelText("Customer")).toHaveAccessibleDescription(
-      /only customers attached to this shop/i,
-    );
-    expect(list.getByLabelText("Channel")).toHaveAccessibleDescription(
-      /the channel the incident arrived on/i,
-    );
-  });
-
-  it("prefills the next free reference, resumes when emptied, and refuses a duplicate", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
-
-    await waitFor(() => expect(list.getByLabelText("Reference")).toHaveValue("T-205"));
-    await user.clear(list.getByLabelText("Reference"));
-    await user.type(list.getByLabelText("Reference"), "T-900");
-    await user.clear(list.getByLabelText("Reference"));
-    expect(list.getByLabelText("Reference")).toHaveValue("");
-    await user.tab();
-    expect(list.getByLabelText("Reference")).toHaveValue("T-205");
-
-    await user.clear(list.getByLabelText("Reference"));
-    await user.type(list.getByLabelText("Reference"), "T-204");
-    expect(list.getByLabelText("Reference")).toBeInvalid();
-    expect(list.getByLabelText("Reference")).toHaveAccessibleDescription(
-      /t-204 is already used by a ticket in this shop/i,
-    );
-    await user.click(list.getByRole("button", { name: "Open ticket" }));
-    expect(createdTickets).toHaveLength(0);
-  });
-
-  it("does not guess a reference after the listing fails to load", async () => {
-    server.use(
-      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
-        HttpResponse.json(
-          { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
-          { status: 503 },
-        ),
-      ),
-    );
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
-    expect(list.getByLabelText("Reference")).toHaveValue("");
-  });
-
-  it("shows a refused create beside the button that failed, not as a listing load error", async () => {
+  it("shows a refused create under Create, and keeps the operator on the page", async () => {
     server.use(
       http.post(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
         HttpResponse.json(
@@ -788,19 +870,20 @@ describe("ticket list", () => {
       ),
     );
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/new`);
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("T-205"));
+    await waitFor(() => expect(screen.getByLabelText("Customer")).toHaveValue(PROFILE_ID));
+    await user.type(screen.getByLabelText("Subject"), "Late delivery");
 
-    await list.findByRole("option", { name: "Maya Laurent" });
-    await user.type(list.getByLabelText("Subject"), "Late delivery");
-    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
-    await user.click(list.getByRole("button", { name: "Open ticket" }));
+    await user.click(createButton());
 
-    expect(await list.findByRole("alert")).toHaveTextContent(/reference already exists/i);
-    expect(createdTickets).toHaveLength(0);
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    expect(await within(header).findByRole("alert")).toHaveTextContent(/reference already exists/i);
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/new`);
+    expect(screen.getByLabelText("Subject")).toHaveValue("Late delivery");
   });
 
-  it("reports a failed listing reload as a load error, not a failed create", async () => {
+  it("opens the ticket it made even when the listing cannot be read again", async () => {
     let created = false;
     server.use(
       http.post(`*/api/v1/shops/${SHOP_ID}/tickets`, async ({ request }) => {
@@ -818,37 +901,124 @@ describe("ticket list", () => {
           { status: 201 },
         );
       }),
-      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () => {
-        if (created) {
-          return HttpResponse.json(
-            { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
-            { status: 503 },
-          );
-        }
-        return HttpResponse.json(TICKETS);
-      }),
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        created
+          ? HttpResponse.json(
+              { code: "unavailable", message: "The listing could not be read.", request_id: "r" },
+              { status: 503 },
+            )
+          : HttpResponse.json(TICKETS),
+      ),
     );
     const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-    const list = within(await screen.findByRole("region", { name: "Tickets" }));
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/new`);
+    await waitFor(() => expect(screen.getByLabelText("Reference")).toHaveValue("T-205"));
+    await waitFor(() => expect(screen.getByLabelText("Customer")).toHaveValue(PROFILE_ID));
+    await user.type(screen.getByLabelText("Subject"), "Late delivery");
 
-    await list.findByRole("option", { name: "Maya Laurent" });
-    await user.type(list.getByLabelText("Subject"), "Late delivery");
-    await user.selectOptions(list.getByLabelText("Customer"), PROFILE_ID);
-    await user.click(list.getByRole("button", { name: "Open ticket" }));
+    await user.click(createButton());
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/listing could not be read/i);
-    const form = list.getByRole("button", { name: "Open ticket" }).closest("form");
-    expect(form).not.toBeNull();
-    expect(within(form as HTMLElement).queryByRole("alert")).toBeNull();
+    // The ticket exists: a listing that failed to follow it is not a failed create.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`),
+    );
+    expect(await screen.findByRole("region", { name: "Conversation" })).toBeVisible();
+    expect(screen.queryByText(/could not be created/)).toBeNull();
+  });
+
+  it("asks nothing when a half-typed ticket is left", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/new`);
+    await user.type(await screen.findByLabelText("Subject"), "Late delivery");
+
+    await user.click(screen.getByRole("link", { name: "Cancel" }));
+
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets`);
+    expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull();
   });
 });
 
-describe("ticket thread", () => {
+describe("the ticket editor", () => {
+  it("is its own page, under a pinned header holding the ticket and its actions", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+
+    const title = await screen.findByRole("heading", { level: 1, name: "Wrong address concern" });
+    const header = title.closest("header") as HTMLElement;
+    for (const utility of stickyHeaderClasses.split(" ")) {
+      expect(header).toHaveClass(utility);
+    }
+    expect(within(header).getByText("T-204")).toHaveClass("font-mono");
+    expect(within(header).getByText("Open")).toBeVisible();
+    expect(await within(header).findByText("Never published")).toBeVisible();
+    expect(within(header).getByRole("link", { name: "Tickets" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/tickets`,
+    );
+    expect(within(header).getByText(/Chat · from order page/)).toBeVisible();
+    expect(within(header).getByText("All changes saved")).toBeVisible();
+    expect(within(header).getByRole("button", { name: "Publish v1" })).toBeVisible();
+    // No page is drawn around it: it is the page.
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("draws its cards in order beside the panel, and no field of the draft in the panel", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Customer" });
+
+    const panel = sidePanel(card("Publish gate"));
+    expect(panelCards(panel)).toEqual(["Publish gate", "Customer", "What publishing freezes"]);
+    expect(mainCards(panel)).toEqual([
+      "Incident",
+      "Conversation",
+      "Linked orders",
+      "Suggested documents",
+    ]);
+    expect(panelFields(panel)).toEqual([]);
+  });
+
+  it("says in the freeze card that a scenario freezes a published version", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Conversation" });
+
+    expect(
+      within(card("What publishing freezes")).getByText(
+        /never been published\. A scenario built on it freezes a published version/,
+      ),
+    ).toBeVisible();
+  });
+
+  it("offers no tour, as no editor does", async () => {
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Conversation" });
+
+    expect(tourAt(router.state.location.pathname)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Show me around/ })).toBeNull();
+  });
+
+  it("arrives with the rail expanded, and collapses it only on request", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Conversation" });
+
+    expect(screen.getByRole("button", { name: "Collapse menu" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "Collapse menu" }));
+
+    const rail = screen.getByRole("navigation", { name: "Shop workspace" });
+    expect(screen.getByRole("button", { name: "Expand menu" })).toBeVisible();
+    // Collapsed is a first-class layout, not a hidden one: the names survive as link names.
+    expect(within(rail).getByRole("link", { name: "Tickets" })).toBeVisible();
+  });
+});
+
+describe("the conversation", () => {
   it("renders prior history and badges the trigger every arm receives", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 
-    const thread = await screen.findByRole("region", { name: "Ticket thread" });
+    const thread = await screen.findByRole("region", { name: "Conversation" });
     expect(within(thread).getByText(/prior support history/i)).toBeVisible();
     expect(within(thread).getByText(/Did my payment go through/)).toBeVisible();
     expect(within(thread).getByText("Past support agent")).toBeVisible();
@@ -856,10 +1026,24 @@ describe("ticket thread", () => {
     expect(within(thread).getByText("first message")).toBeVisible();
   });
 
+  it("puts the composer below the thread, as the card's add form", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const thread = await screen.findByRole("region", { name: "Conversation" });
+
+    const composer = within(thread).getByRole("form", { name: "Add a message to the thread" });
+    expect(composer).toHaveClass("border-t");
+    const trigger = within(thread).getByText("first message");
+    expect(
+      trigger.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(composer).getByLabelText("Add a history message")).toBeVisible();
+    expect(within(composer).getByRole("button", { name: "Add to thread" })).toBeVisible();
+  });
+
   it("asks before the first message leaves, saying no earlier message takes its place", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    const thread = within(await screen.findByRole("region", { name: "Ticket thread" }));
+    const thread = within(await screen.findByRole("region", { name: "Conversation" }));
 
     const remove = thread
       .getAllByRole("button", { name: /^Remove message from Maya Laurent/ })
@@ -898,8 +1082,8 @@ describe("ticket thread", () => {
     const user = userEvent.setup();
     server.use(...otherTicketHandlers());
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("heading", { name: /T-204 · Wrong address concern/ });
-    const thread = () => within(screen.getByRole("region", { name: "Ticket thread" }));
+    await screen.findByRole("region", { name: "Customer" });
+    const thread = () => within(screen.getByRole("region", { name: "Conversation" }));
 
     await user.click(
       thread()
@@ -909,18 +1093,19 @@ describe("ticket thread", () => {
     expect(thread().getByRole("group", { name: /^Remove the first message/ })).toBeVisible();
 
     // Both fixtures key their first message `trigger`; the confirm was asked about T-204's.
-    const rows = within(within(screen.getByRole("region", { name: "Tickets" })).getByRole("list"));
-    await user.click(rows.getByRole("link", { name: /Sizing question/ }));
-    await screen.findByRole("heading", { name: /T-187 · Sizing question/ });
+    await user.click(within(card("Customer")).getByRole("link", { name: "T-187" }));
+    await screen.findByRole("heading", { level: 1, name: "Sizing question" });
 
-    expect(thread().queryByRole("group", { name: /^Remove the first message/ })).toBeNull();
+    await waitFor(() =>
+      expect(thread().queryByRole("group", { name: /^Remove the first message/ })).toBeNull(),
+    );
     expect(thread().getByText("first message")).toBeVisible();
   });
 
-  it("says a live reply belongs to the bench, not to the ticket", async () => {
+  it("offers history as the customer or as past support, never a live reply", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 
-    const thread = await screen.findByRole("region", { name: "Ticket thread" });
+    const thread = await screen.findByRole("region", { name: "Conversation" });
     expect(within(thread).getByText(/Replies happen on the live bench, per run/)).toBeVisible();
     expect(within(thread).getByRole("button", { name: "as Maya Laurent" })).toBeVisible();
     expect(within(thread).getByRole("button", { name: "as past support" })).toBeVisible();
@@ -929,7 +1114,7 @@ describe("ticket thread", () => {
   it("adds a past support reply to history rather than making it the trigger", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    const thread = await screen.findByRole("region", { name: "Ticket thread" });
+    const thread = await screen.findByRole("region", { name: "Conversation" });
 
     await user.click(within(thread).getByRole("button", { name: "as past support" }));
     await user.type(
@@ -946,7 +1131,7 @@ describe("ticket thread", () => {
   it("refuses to add an empty message, or one with no time, and says which", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    const thread = within(await screen.findByRole("region", { name: "Ticket thread" }));
+    const thread = within(await screen.findByRole("region", { name: "Conversation" }));
     const articles = thread.getAllByRole("article").length;
 
     const add = thread.getByRole("button", { name: "Add to thread" });
@@ -978,7 +1163,7 @@ describe("ticket thread", () => {
   it("refuses history that would land at or after the first message", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    const thread = await screen.findByRole("region", { name: "Ticket thread" });
+    const thread = await screen.findByRole("region", { name: "Conversation" });
 
     await user.click(within(thread).getByRole("button", { name: "as past support" }));
     // A `datetime-local` value is set rather than typed: jsdom has no segmented editor.
@@ -996,7 +1181,7 @@ describe("ticket thread", () => {
     expect(within(thread).getByLabelText("Add a history message")).toHaveValue("Already handled.");
   });
 
-  it("says what is missing when a ticket has no first message", async () => {
+  it("says what is missing when a ticket has no first message, and the gate says it too", async () => {
     currentContent = { ...DRAFT_CONTENT, trigger: null, message_count: 2, opened_at: null };
     currentPreview = preview({
       publishable: false,
@@ -1012,38 +1197,50 @@ describe("ticket thread", () => {
     });
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
 
-    const thread = await screen.findByRole("region", { name: "Ticket thread" });
+    const thread = await screen.findByRole("region", { name: "Conversation" });
     expect(within(thread).getByText(/No first message yet/)).toBeVisible();
     expect(
-      within(card("Validation")).getByText(/must carry the first message every arm receives/),
+      await within(card("Publish gate")).findByText(
+        /must carry the first message every arm receives/,
+      ),
     ).toBeVisible();
   });
 });
 
-describe("ticket context panel", () => {
+describe("what the ticket points at", () => {
   it("shows the customer, the linked order, and the documents a scenario would inherit", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Customer" });
 
     const customer = card("Customer");
     expect(within(customer).getByText(/Maya Laurent/)).toBeVisible();
     expect(within(customer).getByText("Home — Lyon")).toBeVisible();
     expect(within(customer).getByText("1 order(s) · 2 ticket(s)")).toBeVisible();
 
-    const linked = card("Linked objects");
-    expect(within(linked).getByText("NS-10482")).toBeVisible();
+    const linked = card("Linked orders");
+    expect(within(linked).getByLabelText("NS-10482")).toBeChecked();
     // The order's two statuses read as words on a pill, not as the wire's own spelling.
     expect(within(linked).getByText("Paid")).toBeVisible();
     expect(within(linked).getByText("Unfulfilled")).toBeVisible();
     expect(within(linked).queryByText(/unfulfilled/)).toBeNull();
     expect(within(linked).getByText(/ship-to: Bordeaux — previous flat/)).toBeVisible();
 
-    // Each document is named by its title and its kind, an FAQ entry by its question; the
+    // Each document is named by its title under its kind, an FAQ entry by its question; the
     // slug is how the ticket refers to it, not how an author reads it.
     const documents = card("Suggested documents");
-    expect(within(documents).getByLabelText(/^Address-change policy/)).toBeChecked();
-    expect(within(documents).getByLabelText(/^Escalating a refund/)).not.toBeChecked();
-    expect(within(documents).getByLabelText(/^When will my order arrive\?/)).not.toBeChecked();
+    expect(
+      within(documents)
+        .getAllByRole("group")
+        .map((group) => group.querySelector("legend")?.textContent),
+    ).toEqual(["Policies", "Guidelines", "FAQ"]);
+    const policies = within(documents).getByRole("group", { name: "Policies" });
+    expect(within(policies).getByLabelText("Address-change policy")).toBeChecked();
+    expect(
+      within(within(documents).getByRole("group", { name: "Guidelines" })).getByLabelText(
+        "Escalating a refund",
+      ),
+    ).not.toBeChecked();
+    expect(within(documents).getByLabelText("When will my order arrive?")).not.toBeChecked();
     expect(within(documents).queryByText("address-change")).toBeNull();
     expect(within(documents).queryByText("Unresolved document")).toBeNull();
   });
@@ -1055,10 +1252,10 @@ describe("ticket context panel", () => {
     };
     currentPreview = preview({ content: currentContent });
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Conversation" });
 
     expect(await screen.findByText(/from product page Alpine Shell Jacket/)).toBeVisible();
-    const picker = within(card("Ticket details")).getByLabelText("Product");
+    const picker = within(card("Incident")).getByLabelText("Product");
     expect(picker).toHaveValue("alpine-shell-jacket");
     expect(within(picker).getByRole("option", { selected: true })).toHaveTextContent(
       "Alpine Shell Jacket",
@@ -1073,11 +1270,11 @@ describe("ticket context panel", () => {
     };
     currentPreview = preview({ content: currentContent });
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Conversation" });
 
     const header = (await screen.findByText(/from product page/)).closest("p");
     await waitFor(() => expect(header).toHaveTextContent(/trailhead-cap \(unresolved\)/));
-    const picker = within(card("Ticket details")).getByLabelText("Product");
+    const picker = within(card("Incident")).getByLabelText("Product");
     expect(picker).toHaveValue("trailhead-cap");
     expect(within(picker).getByRole("option", { selected: true })).toHaveTextContent(
       "trailhead-cap (unresolved)",
@@ -1097,18 +1294,17 @@ describe("ticket context panel", () => {
     };
     currentPreview = preview({ content: currentContent });
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
-    const documents = card("Suggested documents");
+    const documents = await screen.findByRole("region", { name: "Suggested documents" });
 
     expect(await within(documents).findByText("Unresolved document")).toBeVisible();
     expect(within(documents).getByText("policy · delivery")).toBeVisible();
-    expect(within(documents).getByLabelText(/^When will my order arrive\?/)).not.toBeChecked();
+    expect(within(documents).getByLabelText("When will my order arrive?")).not.toBeChecked();
     await user.click(
       within(documents).getByRole("button", { name: "Remove suggested policy delivery" }),
     );
 
     expect(within(documents).queryByText("Unresolved document")).toBeNull();
-    expect(within(documents).getByLabelText(/^Address-change policy/)).toBeChecked();
+    expect(within(documents).getByLabelText("Address-change policy")).toBeChecked();
   });
 
   it("keeps a link the shop can no longer resolve removable", async () => {
@@ -1118,8 +1314,7 @@ describe("ticket context panel", () => {
     currentContent = { ...DRAFT_CONTENT, linked_order_ids: [ORDER_ID, MISSING_ORDER_ID] };
     currentPreview = preview({ content: currentContent });
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
-    const linked = card("Linked objects");
+    const linked = await screen.findByRole("region", { name: "Linked orders" });
 
     expect(within(linked).getByText("Unresolved order")).toBeVisible();
     await user.click(
@@ -1129,26 +1324,42 @@ describe("ticket context panel", () => {
     expect(within(linked).queryByText("Unresolved order")).toBeNull();
   });
 
-  it("lists this customer's other tickets", async () => {
+  it("lists this customer's other tickets inside the customer's card", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    const customer = await screen.findByRole("region", { name: "Customer" });
 
-    const other = card("Other tickets from this customer");
-    expect(within(other).getByRole("link", { name: "T-187" })).toBeVisible();
+    const other = within(customer).getByRole("region", {
+      name: "Other tickets from this customer",
+    });
+    expect(within(other).getByRole("link", { name: "T-187" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/tickets/${OTHER_TICKET_ID}`,
+    );
     expect(within(other).getByText("Resolved")).toBeVisible();
   });
 
   it("only offers a resource picker the chosen origin can carry", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
-    const details = card("Ticket details");
+    await screen.findByRole("region", { name: "Conversation" });
+    const incident = card("Incident");
 
-    expect(within(details).getByLabelText("Order")).toBeVisible();
-    await user.selectOptions(within(details).getByLabelText("Opened from"), "product_page");
+    expect(within(incident).getByLabelText("Order")).toBeVisible();
+    await user.selectOptions(within(incident).getByLabelText("Opened from"), "product_page");
 
-    expect(within(details).queryByLabelText("Order")).toBeNull();
-    expect(within(details).getByLabelText("Product")).toHaveValue("");
+    expect(within(incident).queryByLabelText("Order")).toBeNull();
+    expect(within(incident).getByLabelText("Product")).toHaveValue("");
+  });
+
+  it("offers only the channels the shop supports, on a row with its rule", async () => {
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Customer" });
+
+    const channel = within(card("Incident")).getByLabelText("Channel");
+    expect(
+      Array.from(channel.querySelectorAll("option")).map((entry) => entry.textContent),
+    ).toEqual(["Chat", "Email"]);
+    expect(channel).toHaveAccessibleDescription(/the channel the incident arrived on/i);
   });
 });
 
@@ -1156,7 +1367,7 @@ describe("the ticket's tags", () => {
   it("respells a typed tag, previews it, and refuses one the ticket already carries", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Conversation" });
 
     const tags = within(screen.getByRole("group", { name: "Tags" }));
     expect(tags.getByRole("button", { name: "Remove address-change" })).toBeVisible();
@@ -1201,9 +1412,9 @@ describe("saving and publishing", () => {
   it("saves the authored content without the derived thread facts", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Conversation" });
 
-    await user.selectOptions(within(card("Ticket details")).getByLabelText("Status"), "resolved");
+    await user.selectOptions(within(card("Incident")).getByLabelText("Status"), "resolved");
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedRequests).toHaveLength(1));
@@ -1212,21 +1423,87 @@ describe("saving and publishing", () => {
     expect(savedRequests[0].payload).not.toHaveProperty("customer_profile_id");
   });
 
+  it("asks before another ticket is opened over unsaved work, and re-reads the listing once saved", async () => {
+    const user = userEvent.setup();
+    server.use(
+      // The listing reflects what the lab holds, so a renamed ticket shows its new subject.
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json({
+          tickets: TICKETS.tickets.map((ticket) =>
+            ticket.ticket_id === TICKET_ID
+              ? { ...ticket, subject: currentContent.subject }
+              : ticket,
+          ),
+        } satisfies TicketListResponse),
+      ),
+      ...otherTicketHandlers(),
+    );
+    renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+
+    const incident = within(await screen.findByRole("region", { name: "Incident" }));
+    await user.clear(incident.getByLabelText("Subject"));
+    await user.type(incident.getByLabelText("Subject"), "Address changed before dispatch");
+    // The header reads back what is being edited.
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Address changed before dispatch" }),
+    ).toBeVisible();
+
+    await user.click(within(card("Customer")).getByRole("link", { name: "T-187" }));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    await user.click(within(prompt).getByRole("button", { name: "Save and leave" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    await screen.findByRole("heading", { level: 1, name: "Sizing question" });
+    // The save's own re-read of the listing is what the index renders: the shell reads it
+    // once, and nothing else on the way back reads it again (ADR 0056).
+    await user.click(
+      within(screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement).getByRole(
+        "link",
+        { name: "Tickets" },
+      ),
+    );
+    const table = await ticketTable();
+    expect(within(table).getByText("Address changed before dispatch")).toBeVisible();
+    expect(within(table).queryByText("Wrong address concern")).toBeNull();
+  });
+
+  it("asks before the header's way back to Tickets leaves unsaved work", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    const incident = within(await screen.findByRole("region", { name: "Incident" }));
+    await user.selectOptions(incident.getByLabelText("Status"), "resolved");
+
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    await user.click(within(header).getByRole("link", { name: "Tickets" }));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(router.state.location.pathname).toBe(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+    expect(incident.getByLabelText("Status")).toHaveValue("resolved");
+    expect(savedRequests).toHaveLength(0);
+  });
+
   it("refuses to publish unsaved edits", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Conversation" });
 
-    await user.selectOptions(within(card("Ticket details")).getByLabelText("Status"), "resolved");
+    await user.selectOptions(within(card("Incident")).getByLabelText("Status"), "resolved");
 
     expectRefused(screen.getByRole("button", { name: "Publish v1" }), /Save the draft first/);
     expect(screen.getByText(/Save the draft first/)).toBeVisible();
+    // The gate card says its findings are the last save's.
+    expect(
+      within(card("Publish gate")).getByText(
+        "Read off the saved draft. Save to check what is on screen.",
+      ),
+    ).toBeVisible();
   });
 
   it("freezes the ticket and says what a scenario built on it will pin", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Conversation" });
 
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
 
@@ -1247,53 +1524,14 @@ describe("saving and publishing", () => {
       },
     };
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
+    await screen.findByRole("region", { name: "Conversation" });
 
     await user.click(screen.getByRole("button", { name: "Publish v1" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/has no published version to pin/);
-    expect(screen.getByRole("region", { name: "Ticket thread" })).toBeVisible();
-  });
-});
-
-/**
- * The rail's figure and this index are one listing, read once by the shell and handed to
- * both, so they cannot come to disagree (ADR 0056).
- */
-describe("the rail's figure and this index", () => {
-  it("says on the rail what the list has entries", async () => {
-    renderAt(`/shops/${SHOP_ID}/tickets`);
-
-    const list = await screen.findByRole("region", { name: "Tickets" });
-    const entries = within(list).getAllByRole("listitem").length;
-    const entry = railEntry("Tickets");
-    expect(within(entry).getByText(String(entries))).toBeVisible();
-    expect(entry).toHaveAccessibleDescription(`${entries} ticket${entries === 1 ? "" : "s"}`);
-  });
-});
-
-describe("the helpdesk layout", () => {
-  it("arrives with the rail expanded, like every other section", async () => {
-    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
-
-    const collapse = screen.getByRole("button", { name: "Collapse menu" });
-    expect(collapse).toHaveAttribute("aria-expanded", "true");
-    expect(
-      within(screen.getByRole("navigation", { name: "Shop workspace" })).getByText("Tickets"),
-    ).toBeVisible();
-  });
-
-  it("collapses to an icon rail on request and keeps every label reachable", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
-    await screen.findByRole("region", { name: "Ticket thread" });
-
-    await user.click(screen.getByRole("button", { name: "Collapse menu" }));
-
-    const rail = screen.getByRole("navigation", { name: "Shop workspace" });
-    expect(screen.getByRole("button", { name: "Expand menu" })).toBeVisible();
-    // Collapsed is a first-class layout, not a hidden one: the names survive as link names.
-    expect(within(rail).getByRole("link", { name: "Tickets" })).toBeVisible();
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    expect(await within(header).findByRole("alert")).toHaveTextContent(
+      /has no published version to pin/,
+    );
+    expect(screen.getByRole("region", { name: "Conversation" })).toBeVisible();
   });
 });

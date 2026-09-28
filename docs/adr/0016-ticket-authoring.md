@@ -1,6 +1,6 @@
 # ADR 0016 — Tickets: the first shop-scoped definition, and the trigger every arm receives
 
-Status: accepted — 2026-08-24
+Status: accepted, partially superseded by ADR 0073 (*The helpdesk workspace*) — 2026-08-24
 
 Implements the ticket half of `docs/PLAN.md` Milestone 2's second outcome under ADR 0011, the
 lifecycle fixed by ADR 0012, and the payload pattern established by ADR 0013 and generalized by
@@ -223,6 +223,9 @@ deleted or reassigned order blocks publication and would otherwise leave the aut
 finding with no affordance to act on it.
 
 ### The helpdesk workspace
+
+Superseded by ADR 0073 as to the anatomy: Tickets are an index, a create page and an editor. The
+composer still authors history, and the two paragraphs on the shell and the rail stand.
 
 Frame 3's three-pane anatomy: ticket list, conversation thread, context panel. The thread renders
 every fixture message as a chat bubble with the prior-history divider and the badged trigger, and the

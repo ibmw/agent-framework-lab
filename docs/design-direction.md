@@ -1,6 +1,6 @@
 # Design direction
 
-Status: current — 2026-09-28. The design rules that govern `apps/web`, stated once as rules a
+Status: current — 2026-09-29. The design rules that govern `apps/web`, stated once as rules a
 slice is checked against. Values are not restated here: a measurement or a colour that is built lives
 in the code that draws it (`styles.css` for tokens, `lib/ui.ts` for class sets and glyph tables,
 `shell/AppShell.tsx` for the chrome), and one that is not yet built lives in its slice in
@@ -30,7 +30,7 @@ Carried forward from the brief; they outrank any measurement below.
 - **Status is never colour alone**: a glyph or a word always accompanies it. WCAG 2.2 AA
   contrast; every workflow keyboard-reachable.
 - **Desktop first, usable narrower.** Every row and card row wraps; nothing is fixed width except
-  the rail, the ticket side panels, the editor's side panel and the settings column cap. No
+  the rail, the editor's side panel and the settings column cap. No
   narrow-width treatment of the live comparison is drawn.
 - **Dense is fine, decorative is not.** No dashboard metrics for their own sake, no oversized
   status cards, realistic content rather than placeholder text.
@@ -46,8 +46,8 @@ director's notes on the live bench, an objectives matrix on the bench and the re
 zoning where the split conversation takes the width. The Studio is a **shop-scoped admin
 workspace** in a neutral light admin language — persistent resource navigation, index tables
 with status pills, resource detail pages — with the lab's pine and paper identity in the top bar,
-the accents and the display type. Tickets use the three-pane helpdesk anatomy and author
-*history*, never live replies. The scenario editor composes shared block libraries. The prompt
+the accents and the display type. Tickets are an index, a create page and an editor like every
+other definition (ADR 0073), and their thread authors *history*, never live replies. The scenario editor composes shared block libraries. The prompt
 editor renders markdown with inline variable chips and a grouped insert menu whose customer,
 order and ticket facts are visibly non-injectable.
 
@@ -90,7 +90,9 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
 | Setup pages' header | *Shop details* and *Tone of voice* scroll their header away (:1893, :1993) | pinned like an editor's | each edits one object and carries Save; ADR 0066 |
 | Compact controls | 42/40px in sub-editors and filters | the one 44px control | no compact component exists to size |
-| Filter chips on Tickets and the block libraries | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked. Policies & FAQ left this row when its documents became a table with four chips (ADR 0057) |
+| Filter chips on the block libraries | drawn | none until a table exists to filter | a chip whose figure the payload lacks is not faked. Policies & FAQ left this row when its documents became a table with four chips (ADR 0057), and Tickets when they became an index (ADR 0073) |
+| The Tickets surface | three panes — the list, the thread under its subject, the customer's panel (`Workspace.dc.html` :2170–2322); the README's "Three-pane; header spans list + customer panel" | an index, a create page and the ticket's own editor on the 790/312 grid; the incident's fields, the conversation with its composer as the card's add form, the linked orders and the suggested documents in the main column, the gate, the customer with their other tickets and the freeze card in the panel | the operator's direction B of 28 September 2026 (ADR 0073). The panel's *Linked to this ticket* and *Scenario context* hold fields of the draft, which the panel never does; *Used by* stays undrawn, as ADR 0016 left it |
+| Chips on Tickets | none: the list is a column of the helpdesk (:2174) | All, Published, Never published, Open and Resolved | every index draws the chips its listing can count, and `TicketSummarySchema` carries a published version and a status (ADR 0056, ADR 0073) |
 | Model on the connection, masked key | drawn | neither | ADR 0052 |
 | *A support identity* on the setup checklist | a line of the panel | not drawn | identities are a lab listing, and counting them on a shop page is the cross-listing progress reading ADR 0045 removed; the panel reads the shop's own gate only (ADR 0071) |
 | Identity's line under its title | "The slug was fixed at creation and cannot change." | what the two fields are for | the slug changes here and only a taken one is refused (ADR 0069) |
@@ -145,9 +147,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | A guideline's delete | *Delete guideline* (:1969) | *Remove*, named "Remove {name}", and a confirm asking to remove it | every entry list in this workspace removes under one verb and the specs reach the control by that name; rule 5 |
 | The queue under the composer | a coloured letter badge per arm and the configuration beside it; the queue drawn only for the bench's send | the arm's name and what it runs, in words, and the same queue for a Run on an arm's card, a scoring pass, a replay, a fork and — without arms — a freeze | the workspace has no per-arm colour to paint a badge with, and the arm's name is what its card is titled; `form-decisions.md` 10.2 is the rule for every long action, and the prototype draws the one it had room for (ADR 0065) |
 | A line beside Replay and Fork | "Same seed, same starting snapshot. Replay reproduces this exactly." in the finding's card | "Replay runs this incident again as it was recorded; Fork runs it again with the arms you choose." under the header, describing both buttons | a replay runs its arms against their models again, and a model arm does not reproduce its answer exactly; the line says what each derivation is, beside the reach line that says why one cannot run (ADR 0053, ADR 0065) |
-| The Tickets page's title and count | "Tickets" and "4 in this shop" at the head of the list column (:2174), with no page header | the page header every surface has, spanning the list and the ticket beside it, with "N in this shop" as its description; the list keeps its filter select and no longer titles itself | the header holds the title and the tour anchor where every other page holds them, and the count is the whole listing the rail reads (ADR 0056). The ticket editor's own pinned header stays in its column under it (ADR 0066) |
 | The Scenarios index's last chip | "Draft" (:6864) | "Never published", as on every other index | one name per thing (*Names*): the chip counts the scenarios with no published version, which is what the Shops, Customers, Agent configs and Support identities chips call "Never published" |
-| Index card titles | "All shops" (:162), "Catalog" (:826), "Order fixtures" (:1067), "Attached to this shop" (:1141), "All scenarios" (:1459), "Documents" (:1532), "All identities" (:1594), "All configurations" (:3237), "All judges" (:3418), "Library" twice (:3569, :3713) | "In this lab", "Catalog", "Order fixtures", "Attached to this shop", "Built on this shop", "What the agent can consult", "Shared by every shop", "Agents under test", "What a scenario leaves to a judge", "What a scenario can assert" and "Faults a scenario can inject"; one `SearchRow` draws each, in every state of its listing | the operator asked for titles that say what the list is, where the prototype's *All X* says nothing the header has not. Where a reason is more than that: a judge scores the objectives whose assessment a block leaves to a judge, which is also the index's empty state; the Documents region keeps the name "Documents", which specs and the tour reach it by (rule 5); the two libraries are two routes with one index component, so each gets its own title in its empty state's words; and *agent under test* is the glossary's own definition of a configuration, so it describes the thing rather than renaming it (*Names*) |
+| Index card titles | "All shops" (:162), "Catalog" (:826), "Order fixtures" (:1067), "Attached to this shop" (:1141), "Tickets" (:2174), "All scenarios" (:1459), "Documents" (:1532), "All identities" (:1594), "All configurations" (:3237), "All judges" (:3418), "Library" twice (:3569, :3713) | "In this lab", "Catalog", "Order fixtures", "Attached to this shop", "Raised in this shop", "Built on this shop", "What the agent can consult", "Shared by every shop", "Agents under test", "What a scenario leaves to a judge", "What a scenario can assert" and "Faults a scenario can inject"; one `SearchRow` draws each, in every state of its listing | the operator asked for titles that say what the list is, where the prototype's *All X* says nothing the header has not. Where a reason is more than that: a judge scores the objectives whose assessment a block leaves to a judge, which is also the index's empty state; the Documents region keeps the name "Documents", which specs and the tour reach it by (rule 5); the two libraries are two routes with one index component, so each gets its own title in its empty state's words; and *agent under test* is the glossary's own definition of a configuration, so it describes the thing rather than renaming it (*Names*) |
 | An arm's objectives figure | "5 of 6 objectives met", green on one arm and amber on the other (:2578, :2587) | "met of decided" over "decided objectives met", in one ink on both | two arms driven to different depths hold different denominators, and a colour between them is the verdict *Evidence before opinion* refuses (ADR 0068) |
 | The results header's Fork | "Fork" | "Fork…" | it opens the panel that asks which versions to run, where Replay asks nothing; rule 5, the name a spec presses |
 | *Clear filters* on History | drawn, pressable whatever is set (:2680) | disabled while nothing is set, with the reason in `title` and in the line beside it, which says "Filters cleared." once pressed | a secondary control that can do nothing keeps native `disabled` and says why (ADR 0063); the same line reports the press, so the reason and the outcome are one place |
@@ -309,8 +310,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **A free-text field over a set the draft already uses offers it** as a `<datalist>`, spelled as
   the lab keeps it: the product category offers the other products' categories (ADR 0069).
 - **A reference reads as what it points at.** A ticket's origin product and its suggested
-  documents are named by the title the shop draft gives them, a document with its kind beside
-  it. One the shop no longer resolves is named by its identifier, marked unresolved, and keeps
+  documents are named by the title the shop draft gives them, a document under its kind (ADR
+  0073). One the shop no longer resolves is named by its identifier, marked unresolved, and keeps
   the control that removes it — as an unresolved linked order does (ADR 0067).
 - **No contract union reaches a reader in its wire spelling.** One table per union in
   `lib/enumLabels.ts`, keyed to the generated type and swept; free strings through
@@ -365,16 +366,15 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   the same rule as any editor, and its running write stands down when the operator leaves. **A
   second write is sent only where the form asked for something the create request could not
   carry**, so the same page is a one-write create when it did not, and registers nothing.
-  Built for the shop, the order, the profile, the identity, the scenario, the agent
-  configuration, the judge, the two block libraries and the shop document — every create the
-  workspace has. **A product is the exception**: it is a row of the shop draft rather than a
+  Built for the shop, the order, the profile, the ticket (ADR 0073), the identity, the scenario,
+  the agent configuration, the judge, the two block libraries and the shop document — every
+  create the workspace has. **A product is the exception**: it is a row of the shop draft rather than a
   definition, so *New product* appends an empty one and opens its editor, and the handle it is
   addressed by is answered there. **A document is a row of the draft too and is still a page**,
   because it is named by its kind and its slug together and the kind is a question its editor
   cannot ask (ADR 0057); it writes by appending to the draft rather than through
   `useCreateThenComplete`, for the same three reasons the product needs no page — nothing to
-  post, nothing to be refused, nothing to wait for. Ticket authoring stays inside the
-  three-pane screen.
+  post, nothing to be refused, nothing to wait for.
 - **A finding links to the fix** (`form-decisions.md` 11.2). `IssueList` groups the gate's
   findings by the entry that is wrong, names that entry as its own surface names it, tallies
   each severity and carries one *Open* that lands on the editor and, where the path names one,
@@ -425,7 +425,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   is the weight — deliberately outside the button table, with a focus ring and no hover — and
   `PrimaryAction` the only thing that draws it, with `RefusalLine` for the sentence where the
   surface has one to write. A primary action is one at the accent or ink weight or the one
-  submit of a form, a saved row's Save included; every create page (nine route files, ten
+  submit of a form, a saved row's Save included; every create page (ten route files, eleven
   surfaces), Publish everywhere (`PublishButton`, described by `PublishReasons`), Start, the
   connection's Save and Test, the bench's *Send as the customer*, *Attach to this shop*, *Fork
   this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, Shop details' method forms
@@ -488,8 +488,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   filtered to Guidelines (ADR 0054, ADR 0057), and a filter an address names has to be the
   filter that is pressed. Pressing one replaces the history entry rather than pushing one.
 - **Every header spans the content width** and holds the page's actions. Every page that edits
-  or creates one object pins its header — the ticket editor's own header in its column included —
-  with what its actions report beneath them: the failure, the published version, the reasons
+  or creates one object pins its header, with what its actions report beneath them: the failure, the published version, the reasons
   under Publish. Index and overview pages do not, even where they carry the shop draft's Save.
   A pinned header keeps what the pane scrolls into view clear of it, and holds only where its
   name and actions take a third of the pane or less — decided when the pane is sized, never on

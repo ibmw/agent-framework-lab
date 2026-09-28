@@ -22,6 +22,7 @@ export interface BuiltLab {
   /** Every other object the chain writes, for a spec that opens one of their editors. */
   profileId: string;
   orderId: string;
+  ticketId: string;
   objectiveId: string;
   mutationId: string;
   identityId: string;
@@ -441,6 +442,7 @@ export async function buildLab(request: APIRequestContext): Promise<BuiltLab> {
     experimentId,
     profileId,
     orderId,
+    ticketId,
     objectiveId,
     mutationId,
     identityId,

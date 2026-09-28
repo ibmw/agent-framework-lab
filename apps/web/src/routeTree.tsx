@@ -45,7 +45,8 @@ import { ShopVersionPage } from "./routes/ShopVersionPage";
 import { SnapshotsPage } from "./routes/SnapshotsPage";
 import { NewSupportIdentityPage, SupportIdentitiesPage } from "./routes/SupportIdentitiesPage";
 import { SupportIdentityEditorPage } from "./routes/SupportIdentityEditorPage";
-import { TicketsPage } from "./routes/TicketsPage";
+import { TicketEditorRoute } from "./routes/TicketEditorPage";
+import { NewTicketPage, TicketsPage } from "./routes/TicketsPage";
 import { LabWorkspace } from "./shell/LabWorkspace";
 import { ShopWorkspace } from "./shell/ShopWorkspace";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
@@ -175,7 +176,10 @@ export const routeTree = createRoutesFromElements(
       <Route path="customers" element={<CustomersPage />} />
       <Route path="customers/new" element={<NewCustomerPage />} />
       <Route path="tickets" element={<TicketsPage />} />
-      <Route path="tickets/:ticketId" element={<TicketsPage />} />
+      {/* Opening a ticket is a page that lands in its editor (ADR 0073); `new` is a static
+          segment and outranks the identifier beside it. */}
+      <Route path="tickets/new" element={<NewTicketPage />} />
+      <Route path="tickets/:ticketId" element={<TicketEditorRoute />} />
       <Route path="customers/:profileId" element={<CustomerEditorRoute />} />
       <Route path="scenarios" element={<ScenariosPage />} />
       {/* Creating the scenario is a page too: `new` is a static segment and

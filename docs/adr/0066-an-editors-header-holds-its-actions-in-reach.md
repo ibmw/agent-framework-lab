@@ -1,6 +1,6 @@
 # ADR 0066 — An editor's header holds its actions in reach
 
-Status: accepted — 2026-09-27
+Status: accepted, amended by ADR 0073 (the ticket editor is its own page) — 2026-09-27
 
 Settles `docs/PLAN-UX.md` Slice 25: `PageHeader` sticks on every editor, as the create page's
 header already did (`Workspace.dc.html` :207, :387, :483, :890, :1197, :1328, :1638, :1746). It
@@ -24,7 +24,9 @@ the canvas `#f6f6f7` over a `1px solid #e1e3e5` rule. The create pages already d
 
 ## Decisions
 
-**Which headers stick.** Every page that edits or creates one object pins its header; index
+**Which headers stick.** (Amended by ADR 0073: the ticket editor is its own page, pinned through
+`PageHeader` like the others, and `stickyInsetHeaderClasses` is gone.) Every page that edits or
+creates one object pins its header; index
 and overview pages do not, even where they carry the shop draft's Save. `PageHeader` takes
 `sticky`, and eleven surfaces pass it: the product, order, customer, document, scenario, agent
 configuration, judge, block (objective and mutation) and support identity editors, and the

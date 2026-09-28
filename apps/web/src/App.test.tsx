@@ -3324,8 +3324,9 @@ describe("the tree's create pages and the tour table", () => {
       .filter((path) => path.endsWith("/new"));
 
     // Ten with the document's, which is a create page for a row of the shop draft: the kind
-    // it lands in is a question its editor cannot ask (ADR 0057).
-    expect(declared).toHaveLength(10);
+    // it lands in is a question its editor cannot ask (ADR 0057). Eleven with the ticket's,
+    // which left the helpdesk's list column for a page of its own (ADR 0073).
+    expect(declared).toHaveLength(11);
     expect([...declared].sort()).toEqual([...CREATE_ROUTES].sort());
     for (const path of declared) {
       expect(tourAt(path.replaceAll(/:[A-Za-z]+/g, "x")), `${path} was offered a tour`).toBeNull();
@@ -3402,7 +3403,8 @@ describe("the route tree under the data router", () => {
       ["/shops/:shopId/customers", "CustomersPage"],
       ["/shops/:shopId/customers/new", "NewCustomerPage"],
       ["/shops/:shopId/tickets", "TicketsPage"],
-      ["/shops/:shopId/tickets/:ticketId", "TicketsPage"],
+      ["/shops/:shopId/tickets/new", "NewTicketPage"],
+      ["/shops/:shopId/tickets/:ticketId", "TicketEditorRoute"],
       ["/shops/:shopId/customers/:profileId", "CustomerEditorRoute"],
       ["/shops/:shopId/scenarios", "ScenariosPage"],
       ["/shops/:shopId/scenarios/new", "NewScenarioPage"],
