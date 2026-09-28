@@ -17,6 +17,7 @@ import {
   Card,
   EditorSaveActions,
   Fingerprint,
+  GateCard,
   IssueList,
   PageHeader,
   StatusPill,
@@ -59,6 +60,9 @@ import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
   destructiveOutlineButtonClasses,
   destructiveSubtleButtonClasses,
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   formatFixtureTimestamp,
@@ -446,8 +450,8 @@ export function OrderEditorPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Line items & payment">
             <p className="text-xs text-admin-muted">
               Totals derive from the line items — never edited directly. A line keeps the price it
@@ -969,13 +973,17 @@ export function OrderEditorPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
-          <Card title="Findings">
+        <div className={editorPanelClasses}>
+          {/* Not "Publish gate": an order fixture is never published, and its findings are
+              `validate_order_fixture`'s, read off the saved order, so they gate no publish. There
+              is no gate to wait on either — the findings arrive with the save's own answer — so
+              the card is busy while that save is in flight. */}
+          <GateCard title="Findings" busy={saving} dirty={dirty} record="order">
             <IssueList issues={order.issues} />
             <p className="text-xs text-admin-muted">
               Fingerprint <Fingerprint value={order.content_fingerprint} />
             </p>
-          </Card>
+          </GateCard>
 
           <Card title="Customer">
             {customer ? (

@@ -18,6 +18,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -1035,4 +1036,15 @@ describe("the rail's figures and the two libraries", () => {
       );
     },
   );
+});
+
+describe("the block editor's side panel", () => {
+  it("holds the gate, what uses the block and what publishing freezes, in that order, and no field", async () => {
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    expect(panelCards(panel)).toEqual(["Publish gate", "Used by", "What publishing freezes"]);
+    expect(panelFields(panel)).toEqual([]);
+  });
 });

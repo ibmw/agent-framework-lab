@@ -23,6 +23,7 @@ import {
   EntryId,
   EntryText,
   Fingerprint,
+  GateCard,
   IssueList,
   PageHeader,
   PublishButton,
@@ -37,6 +38,9 @@ import { CHIP_LABEL_MAX_LENGTH, ESCALATION_CONDITIONS_RULE } from "../lib/fieldR
 import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
 import {
   destructiveSubtleButtonClasses,
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
@@ -204,8 +208,8 @@ export function SupportIdentityEditorPage() {
         sticky
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Role">
             <label className={fieldLabelClasses}>
               Name
@@ -410,11 +414,11 @@ export function SupportIdentityEditorPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
-          <Card title="Publish gate">
+        <div className={editorPanelClasses}>
+          <GateCard title="Publish gate" busy={editor.checking} dirty={editor.dirty}>
             <IssueList issues={preview?.issues ?? []} />
-          </Card>
-          <Card title="What publishing would freeze">
+          </GateCard>
+          <Card title="What publishing freezes">
             {preview && preview.changes.length > 0 ? (
               <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
                 {preview.changes.map((change) => (

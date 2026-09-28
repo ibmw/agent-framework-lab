@@ -24,6 +24,7 @@ import {
   EntryEditNotice,
   EntryId,
   EntryKind,
+  GateCard,
   IssueList,
   PageHeader,
   VersionChips,
@@ -88,6 +89,7 @@ import {
   removeOption,
   removeProduct,
   replaceProduct,
+  SHOP_DRAFT_FREEZE_NOTE,
   type VariantCollision,
   variantCollisions,
   variantOptionLabel,
@@ -98,6 +100,9 @@ import {
   accentButtonClasses,
   destructiveOutlineButtonClasses,
   destructiveSubtleButtonClasses,
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   outlineButtonClasses,
@@ -178,6 +183,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
     shopId,
     content,
     preview,
+    checking,
     edit,
     save,
     saving,
@@ -439,8 +445,8 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Details">
             {/* Status and Category shared a `sm:grid-cols-2` here. The prototype gives each of
                 the four its own full-width row, and the field pattern's own wrap already
@@ -557,14 +563,15 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
           <ReviewsCard product={product} onChange={update} />
         </div>
 
-        <div className="grid content-start gap-4">
-          <Card title="Product validation">
+        <div className={editorPanelClasses}>
+          {/* The shop draft publishes, and this product's findings are what its gate raises
+              about it (`issuesForProduct`). */}
+          <GateCard title="Publish gate" busy={checking} dirty={dirty || heldHandle !== null}>
             <IssueList issues={issuesForProduct(preview?.issues ?? [], product.handle)} />
-          </Card>
-          <Card title="Freezing">
+          </GateCard>
+          <Card title="What publishing freezes">
             <p className="text-[13px] leading-relaxed text-admin-ink-soft">
-              These edits belong to the shop draft. Published shop versions are immutable, so
-              experiments that pinned an earlier version never see them.
+              {SHOP_DRAFT_FREEZE_NOTE}
             </p>
           </Card>
         </div>

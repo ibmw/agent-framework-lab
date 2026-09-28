@@ -21,6 +21,7 @@ import {
   Card,
   EditorSaveActions,
   Fingerprint,
+  GateCard,
   IssueList,
   PageHeader,
   PublishButton,
@@ -40,7 +41,14 @@ import {
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
 import { namedTerms } from "../lib/rubric";
-import { fieldControlClasses, fieldLabelClasses, textAreaClasses } from "../lib/ui";
+import {
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
+  fieldControlClasses,
+  fieldLabelClasses,
+  textAreaClasses,
+} from "../lib/ui";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
 
@@ -247,8 +255,8 @@ export function JudgeConfigurationEditorPage() {
         sticky
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Rubric">
             <label className={fieldLabelClasses}>
               Name
@@ -297,40 +305,8 @@ export function JudgeConfigurationEditorPage() {
             </p>
           </Card>
 
-          <Card title="Evidence">
-            <p className="mb-3 text-xs text-admin-muted">
-              A judge shown different things is answering a different question, so this is part of
-              the published version and of its fingerprint — not a display setting.
-            </p>
-            <ul className="grid gap-2">
-              {(resources?.evidence ?? []).map((scope) => (
-                <li key={scope}>
-                  <label className="flex items-start gap-2 text-[13px] text-admin-ink-soft">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={content.evidence.includes(scope)}
-                      onChange={() => toggleScope(scope)}
-                    />
-                    <span>
-                      <span className="font-semibold text-lab-ink">
-                        {JUDGE_EVIDENCE_SCOPE[scope].label}
-                      </span>
-                      <br />
-                      {JUDGE_EVIDENCE_SCOPE[scope].explanation}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
-
-        <div className="grid content-start gap-4">
-          <Card title="Publish gate">
-            <IssueList issues={preview?.issues ?? []} />
-          </Card>
-
+          {/* In the main column, after the rubric, as the prototype draws the judge's model
+              (`Workspace.dc.html` :503–518): the side panel holds no field of the draft. */}
           <Card title="Model">
             <FieldHint
               label="Provider"
@@ -389,6 +365,40 @@ export function JudgeConfigurationEditorPage() {
               for its own reasons would make every rerun unreadable.
             </p>
           </Card>
+
+          <Card title="Evidence">
+            <p className="mb-3 text-xs text-admin-muted">
+              A judge shown different things is answering a different question, so this is part of
+              the published version and of its fingerprint — not a display setting.
+            </p>
+            <ul className="grid gap-2">
+              {(resources?.evidence ?? []).map((scope) => (
+                <li key={scope}>
+                  <label className="flex items-start gap-2 text-[13px] text-admin-ink-soft">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={content.evidence.includes(scope)}
+                      onChange={() => toggleScope(scope)}
+                    />
+                    <span>
+                      <span className="font-semibold text-lab-ink">
+                        {JUDGE_EVIDENCE_SCOPE[scope].label}
+                      </span>
+                      <br />
+                      {JUDGE_EVIDENCE_SCOPE[scope].explanation}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+
+        <div className={editorPanelClasses}>
+          <GateCard title="Publish gate" busy={editor.checking} dirty={editor.dirty}>
+            <IssueList issues={preview?.issues ?? []} />
+          </GateCard>
 
           <Card title="Anonymity">
             <p className="text-[13px] text-admin-ink-soft">

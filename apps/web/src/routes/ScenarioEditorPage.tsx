@@ -35,6 +35,7 @@ import {
   Card,
   EditorSaveActions,
   Fingerprint,
+  GateCard,
   IssueList,
   PageHeader,
   PublishButton,
@@ -84,6 +85,9 @@ import {
 import { onlyChoiceNote, soleCandidate, useSingleChoice } from "../lib/singleChoice";
 import {
   destructiveSubtleButtonClasses,
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   subtleButtonClasses,
@@ -302,8 +306,8 @@ export function ScenarioEditorPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid min-w-0 content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Built on">
             <label className={fieldLabelClasses}>
               Name
@@ -604,7 +608,10 @@ export function ScenarioEditorPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
+        <div className={editorPanelClasses}>
+          <GateCard title="Publish gate" busy={editor.checking} dirty={editor.dirty}>
+            <IssueList issues={preview?.issues ?? []} />
+          </GateCard>
           <Card title="Resolved-state preview">
             {resolution === null ? (
               <p className="text-[13px] text-admin-muted">Resolving…</p>
@@ -612,10 +619,14 @@ export function ScenarioEditorPage() {
               <ResolvedState resolution={resolution} />
             )}
           </Card>
-          <Card title="Publish gate">
-            <IssueList issues={preview?.issues ?? []} />
+          <Card title="How read-checks report">
+            <p className="text-[13px] text-admin-ink-soft">
+              <strong>Required</strong> — the objective fails when the arm never reads the document.{" "}
+              <strong>Expected</strong> — a visible warning on the run, without failing it. Either
+              way the read/no-read event is recorded evidence.
+            </p>
           </Card>
-          <Card title="What publishing would freeze">
+          <Card title="What publishing freezes">
             {preview && preview.changes.length > 0 ? (
               <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
                 {preview.changes.map((change) => (
@@ -627,13 +638,6 @@ export function ScenarioEditorPage() {
                 The draft matches the latest published version.
               </p>
             )}
-          </Card>
-          <Card title="How read-checks report">
-            <p className="text-[13px] text-admin-ink-soft">
-              <strong>Required</strong> — the objective fails when the arm never reads the document.{" "}
-              <strong>Expected</strong> — a visible warning on the run, without failing it. Either
-              way the read/no-read event is recorded evidence.
-            </p>
           </Card>
         </div>
       </div>

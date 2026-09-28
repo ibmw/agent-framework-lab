@@ -296,6 +296,52 @@ export function Card({
   );
 }
 
+/** What a gate card says while the screen holds edits its findings were not read off. */
+function readOffTheSaved(record: string): string {
+  return `Read off the saved ${record}. Save to check what is on screen.`;
+}
+
+/**
+ * The first card of an editor's side panel: the findings the saved draft's gate returned, in a
+ * frame that says when they are about to change and when the screen has moved past them.
+ *
+ * It is a frame and nothing more — what it holds is the caller's (`IssueList` on an editor, the
+ * checklist's lines on the setup pages, ADR 0071). The gate answers for the saved draft, so the
+ * card is `busy` from the moment a save lands until the gate has answered for it (ADR 0065),
+ * and while the editor holds unsaved edits a line under the title says the findings are the
+ * last save's: a clean ✓ beside a field the operator has just emptied is the gate's answer
+ * about the saved draft, not a contradiction.
+ */
+export function GateCard({
+  title,
+  busy,
+  dirty,
+  record = "draft",
+  children,
+}: {
+  /** "Publish gate" wherever the record or its shop draft publishes. */
+  title: string;
+  /**
+   * The gate has not answered for the saved draft yet (`DefinitionEditor.checking`), or the save
+   * is in flight, where no gate answers separately (the order's findings come back with it).
+   */
+  busy: boolean;
+  /** The screen holds edits the saved draft does not. */
+  dirty: boolean;
+  /** What the findings are read off, where it is not a draft: an order is saved as itself. */
+  record?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card title={title} busy={busy}>
+      {/* Under the title rather than at the foot of the card: it is what everything below it
+          is to be read with. */}
+      {dirty ? <p className="text-xs text-admin-muted">{readOffTheSaved(record)}</p> : null}
+      {children}
+    </Card>
+  );
+}
+
 /**
  * The Edit a saved row carries, and the Save and Cancel it opens into.
  *

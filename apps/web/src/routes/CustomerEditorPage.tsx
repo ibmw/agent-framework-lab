@@ -36,6 +36,7 @@ import {
   EntryId,
   EntryText,
   Fingerprint,
+  GateCard,
   IssueList,
   PageHeader,
   PublishButton,
@@ -68,6 +69,9 @@ import {
 } from "../lib/removal";
 import {
   destructiveSubtleButtonClasses,
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   inkButtonClasses,
@@ -532,8 +536,8 @@ export function CustomerEditorPage() {
         sticky
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Identity">
             <FieldRows>
               <Field label="Given name" hint={CUSTOMER_NAME_RULE}>
@@ -1046,10 +1050,10 @@ export function CustomerEditorPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
-          <Card title="Publish gate">
+        <div className={editorPanelClasses}>
+          <GateCard title="Publish gate" busy={editor.checking} dirty={editor.dirty}>
             <IssueList issues={preview?.issues ?? []} />
-          </Card>
+          </GateCard>
 
           <Card title="Attached shops">
             {attachError ? (
@@ -1127,7 +1131,7 @@ export function CustomerEditorPage() {
             </p>
           </Card>
 
-          <Card title="Freezing">
+          <Card title="What publishing freezes">
             <p className="text-[13px] text-admin-ink-soft">
               {preview?.latest_published_version === null
                 ? "This profile has never been published. Tickets can only reference a published version."

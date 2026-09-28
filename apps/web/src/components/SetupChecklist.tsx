@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { shopIssueEntries } from "../lib/issueRoutes";
 import type { ShopDraft } from "../lib/productKeys";
 import { type ChecklistLine, setupChecklist } from "../lib/setupChecklist";
-import { Card, IssueList } from "./WorkspaceChrome";
+import { GateCard, IssueList } from "./WorkspaceChrome";
 
 /**
  * The setup pages' side panel (`Workspace.dc.html` :2154): what a publishable shop has, each
@@ -17,7 +17,8 @@ import { Card, IssueList } from "./WorkspaceChrome";
  *
  * It reads the gate, and the gate answers for the saved draft. While the draft on screen has
  * unsaved edits the panel says so under its title, because a ✓ beside a count the operator has just emptied
- * is the gate's answer about the last save, not a contradiction.
+ * is the gate's answer about the last save, not a contradiction. That frame — the title, `busy`
+ * while checking, the saved-draft line — is `GateCard`'s, which every editor's panel opens with.
  */
 export function SetupChecklist({
   shopId,
@@ -43,14 +44,9 @@ export function SetupChecklist({
   );
   const checklist = setupChecklist(content, issues);
   return (
-    <Card title="Setup checklist" busy={checking}>
-      {/* Under the title rather than at the foot of a panel a screen and more tall: it is what
-          every line below it is to be read with. */}
-      {dirty ? (
-        <p className="text-xs text-admin-muted">
-          Read off the saved draft. Save to check what is on screen.
-        </p>
-      ) : null}
+    // The gate card every editor's panel opens with, titled as the prototype titles this one
+    // (:2156) and as the tour lights it (`lib/tours.ts`).
+    <GateCard title="Setup checklist" busy={checking} dirty={dirty}>
       <ul
         className={`-mx-4 -mb-4 divide-y divide-[#f1f2f3] ${dirty ? "border-t border-[#f1f2f3]" : "-mt-4"}`}
       >
@@ -59,7 +55,7 @@ export function SetupChecklist({
         ))}
         <ChecklistItem line={checklist.rest} entryOf={entryOf} />
       </ul>
-    </Card>
+    </GateCard>
   );
 }
 

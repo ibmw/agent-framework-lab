@@ -38,6 +38,9 @@ import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/
 import { unsoldCurrencyFindings } from "../lib/setupChecklist";
 import {
   destructiveSubtleButtonClasses,
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   textAreaClasses,
@@ -92,18 +95,17 @@ function SetupPage({
         }
         sticky
       />
-      {/* The prototype's two columns: the cards at most 790px wide and the 312px checklist
-          beside them, top-aligned. Narrower than both need, the checklist follows the cards,
-          which is where the prototype's wrapping row puts it. */}
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,790px)_312px]">
-        <div className="grid min-w-0 gap-4">{children}</div>
-        <SetupChecklist
-          shopId={shopId}
-          content={content}
-          issues={preview?.issues ?? []}
-          checking={checking}
-          dirty={dirty}
-        />
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>{children}</div>
+        <div className={editorPanelClasses}>
+          <SetupChecklist
+            shopId={shopId}
+            content={content}
+            issues={preview?.issues ?? []}
+            checking={checking}
+            dirty={dirty}
+          />
+        </div>
       </div>
     </>
   );

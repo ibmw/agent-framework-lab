@@ -75,12 +75,13 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
 the commits and ADR 0052–0072, its goal and acceptance criteria
-`docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its seven slices in the order the operator
-agreed, 29 to 35. Slice 29 goes first because Slice 30 builds the ticket editor on its side panel;
-Slice 31 moves the ticket editor's back link onto the header slot with every other editor's, and
-gives Slice 34 the neutral pill class set it draws *Shared across shops* with. Slices 32, 33 and 35
-depend on nothing after 29; 34 follows 30 and 31. The order reshapes an editor from the outside
-in: panel, header, rows, lists, then the indexes.
+`docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator
+agreed, 30 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
+panel's order on every editor — and Slice 30 builds the ticket editor on it; Slice 31 moves the
+ticket editor's back link onto the header slot with every other editor's, and gives Slice 34 the
+neutral pill class set it draws *Shared across shops* with. Slices 32, 33 and 35 depend on no open
+slice; 34 follows 30 and 31. The order reshapes an editor from the outside in: panel, header,
+rows, lists, then the indexes.
 
 ## Milestone 9 — Every page is one of three templates
 
@@ -111,88 +112,6 @@ only: no backend, contract or payload moves.
 
 Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
 experiment keep templates of their own and are not reshaped here.
-
-### Slice 29 — The editor's side panel
-
-Every editor draws the same two columns and the same side panel, in the same order.
-
-- [ ] Every editor's body becomes the reference grid, `grid items-start gap-5
-  xl:grid-cols-[minmax(0,790px)_312px]`: Agent config (`AgentConfigurationEditorPage.tsx:398`,
-  340 today), Scenario (`ScenarioEditorPage.tsx:305`, 340), Judge
-  (`JudgeConfigurationEditorPage.tsx:250`, 320), Block (`BlockEditorPage.tsx:206`), Customer
-  (`CustomerEditorPage.tsx:535`), Support identity (`SupportIdentityEditorPage.tsx:207`),
-  Product (`ProductEditorPage.tsx:442`), Order (`OrderEditorPage.tsx:449`), and Document
-  (`DocumentEditorPage.tsx:139`, one 790px column today), which gains the panel. Snapshots
-  (`SnapshotsPage.tsx:184`, 360) and Shop version (`ShopVersionPage.tsx:91`, 320) take the same
-  grid. The ticket editor is Slice 30's.
-- [ ] One gate card in `components/WorkspaceChrome.tsx`, extracted from what `SetupChecklist`
-  already does and nothing more (`components/SetupChecklist.tsx:46–53`): the title, `busy` while
-  the gate has not answered for the saved draft (`checking`), and "Read off the saved draft. Save
-  to check what is on screen." under the title while the editor is dirty. It is a frame: its
-  content is the `IssueList` each card holds today, over the same issues, and **no editor gains a
-  checklist line**. The order editor, which reads its findings off the saved order and has no
-  `checking`, marks the card busy while its save is in flight.
-- [ ] Its title is "Publish gate" on every editor whose record, or whose shop draft, publishes:
-  the six definitions (Agent config :774, Scenario :615, Judge :330, Block :291, Customer :1050,
-  Support identity :414), Product (renamed from "Product validation", :561, still through
-  `issuesForProduct`, `lib/shop.ts:320`). The document editor takes none (below). Two keep
-  their title. The setup pages' `SetupChecklist` draws through the same card as "Setup
-  checklist", its lines, grouping and reading of the shop's own gate unchanged (ADR 0071), because
-  the prototype titles it so (:2156) and the tour lights it by that name (`lib/tours.ts:436`).
-  The order editor keeps "Findings" (:973) and its fingerprint line, because an order fixture is
-  never published: its findings are `validate_order_fixture`'s and gate no publish.
-- [ ] The panel's order — gate first, read-only context next, the freeze card last under the
-  prototype's title "What publishing freezes" (:3144):
-  - Agent config: gate, Variables (:760), Reproducibility (:792), freeze (from "What publishing
-    would freeze", :778).
-  - Scenario: gate, Resolved-state preview (:608), How read-checks report (:631), freeze (:618).
-  - Judge: gate, Anonymity (:393). The editable *Model* card (:334) leaves the panel for the main
-    column, after Rubric, unchanged and still named "Model" (`experiment-start.spec.ts:350` reaches
-    it by that name); Slice 32 puts its fields on rows. It moves here, not in Slice 32, so that the
-    rule "never a field of the draft" lands whole.
-  - Block: gate, Used by (:307), freeze (:294).
-  - Customer: gate, Attached shops (:1054), freeze (from "Freezing", :1130). Attach and Detach
-    are writes of their own rather than fields of the draft, and stay on the card.
-  - Support identity: gate, freeze (:417).
-  - Product: gate, freeze (from "Freezing", :564).
-  - Order: Findings, Customer (:980), Freezing (:1004), which keeps its title for the reason its
-    gate card does.
-  - Document: *Never in the prompt* (moved from the main column, :247), then the freeze card,
-    with the product editor's sentence — these edits belong to the shop draft, and a published
-    version never sees them. No gate card: the shop gate raises nothing on one document, only
-    that a collection is empty (`domain/shop.py`), which cannot be true while one is open.
-- [ ] `docs/design-direction.md`: *The form language* gains the panel's rule (one sentence: the
-  grid, the gate card first with what it says while checking and while dirty, the freeze card
-  last, no field of the draft); the *Departures* row "The document editor's side column" is
-  rewritten for the panel it now has (*Read by* still not drawn); *Principles*' list of fixed
-  widths gains the editor's side panel.
-
-Frames: `Workspace.dc.html` :404–405 and :467 for the two columns (every editor frame draws the
-312px panel: :552, :626, :700, :1874, :2786, :2905, :3142, :3211); :2154–2156 for the gate card's
-position and title, which is the setup checklist's; :3142–3144 for the freeze card; :503–518 for
-the judge's Model in its main column.
-
-Authority: ADR 0063 (a Publish whose gate has not answered says so), ADR 0065 (`busy` on what
-is about to change), ADR 0066 (the pinned header), ADR 0071 (the setup checklist).
-
-Departures to record: the prototype's editor panels draw no gate card — the setup checklist's
-place and behaviour is the frame every editor takes, the operator's decision of 28 September
-2026; the order editor's two titles, for the reason above; the document editor's panel without
-a gate card, because no finding of the shop gate is about one document.
-
-Branch: `feat/editor-side-panel`. Checks: `WorkspaceChrome.test.tsx` for the card (title, `busy`
-while checking, the saved-draft line while dirty and not otherwise); `App.test.tsx` for the
-setup checklist unchanged through it and for the product editor's panel; one test per editor
-that the panel holds its cards in order and no field of the draft (`AgentConfigurations`,
-`JudgeConfigurations`, `Blocks`, `Customers`, `SupportIdentities`, `Scenarios`, `Orders`,
-`Documents`, `Snapshots`); Playwright `agent-configuration`,
-`block-library`, `customer-publication` and `scenario-authoring`, which read "Publish gate" by
-name, `experiment-start` for the judge's Model card, and `tour-anchors` for the scenario editor's
-`[aria-label="Publish gate"]` step (`lib/tours.ts:248`).
-
-Slice evidence: on any editor, at 1440px, the findings are the first thing in a 312px panel on the
-right, say "Checking…" the moment a save lands, and say they read the saved draft while an edit is
-unsaved; the judge's model is edited in the main column.
 
 ### Slice 30 — Tickets as an index, a create page and an editor
 
@@ -237,8 +156,8 @@ leaving the three-pane helpdesk.
   **Conversation** (the thread, :625–790, as a card: prior history, the trigger divider and the
   bubbles, with the composer as the card's add form below its rule — "Add a history message" and
   "Add to thread" keep their names); **Linked orders** (from *Linked objects*, :1115);
-  **Suggested documents** (:1174, grouped by kind). Side panel: the gate card of Slice 29 in
-  place of *Validation* (:609); **Customer** (:1076) with *Other tickets from this customer*
+  **Suggested documents** (:1174, grouped by kind). Side panel (`editorPanelClasses`): `GateCard`
+  titled "Publish gate" in place of *Validation* (:609); **Customer** (:1076) with *Other tickets from this customer*
   (:1233) inside it; "What publishing freezes", saying a scenario built on the ticket freezes
   its published version.
 - [ ] The tours: the `tickets` tour loses `alsoAt: [":ticketId"]` (`lib/tours.ts:352`) and stays

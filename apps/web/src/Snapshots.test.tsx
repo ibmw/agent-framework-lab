@@ -20,6 +20,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { mainCards, panelCards, sidePanel } from "./test/panel";
 import { expectBusy, expectRefused, submitWithoutPressing } from "./test/refused";
 import { shellListings } from "./test/shell";
 
@@ -1055,5 +1056,32 @@ describe("the safe address change", () => {
     ).toBeVisible();
     // A conflict is the world moving, not the lab breaking.
     expect(within(console).queryByRole("alert")).toBeNull();
+  });
+});
+
+/**
+ * Order only, and no "no field" assertion: the *Sandbox arms* card's clone form is a write of
+ * its own, not a field of a draft — this page edits no draft at all.
+ */
+describe("the starting states' side panel", () => {
+  it("stands in the editor's grid, the frozen state before a snapshot is chosen", async () => {
+    renderPage();
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Frozen starting state" }));
+
+    expect(panelCards(panel)).toEqual(["Frozen starting state"]);
+    expect(mainCards(panel)).toEqual(["Freeze a published version", "Snapshots"]);
+  });
+
+  it("reads a chosen snapshot top to bottom: what it is, what it pinned, what it copied, its arms", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Freeze snapshot" }));
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Pinned versions" }));
+
+    const cards = panelCards(panel);
+    expect(cards[0]).toMatch(/^Snapshot · /);
+    expect(cards.slice(1)).toEqual(["Pinned versions", "Copied orders", "Sandbox arms"]);
   });
 });

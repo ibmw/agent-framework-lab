@@ -24,7 +24,14 @@ import {
   VARIANT_AVAILABILITY,
 } from "../lib/enumLabels";
 import { ratingLabel, variantOptionLabel, variantPriceLabel } from "../lib/shop";
-import { formatTimestamp, tableCellClasses, tableHeadClasses } from "../lib/ui";
+import {
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
+  formatTimestamp,
+  tableCellClasses,
+  tableHeadClasses,
+} from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 export function ShopVersionPage() {
@@ -88,8 +95,8 @@ export function ShopVersionPage() {
         }
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           {content.products.map((product) => (
             <Card
               key={product.handle}
@@ -238,7 +245,7 @@ export function ShopVersionPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
+        <div className={editorPanelClasses}>
           <Card title="Shop identity">
             <dl className="grid gap-1 text-[13px]">
               {(

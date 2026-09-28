@@ -25,6 +25,7 @@ import {
   Card,
   EditorSaveActions,
   Fingerprint,
+  GateCard,
   IssueList,
   PageHeader,
   PublishButton,
@@ -44,6 +45,9 @@ import {
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
 import {
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   subtleButtonClasses,
@@ -395,8 +399,8 @@ export function AgentConfigurationEditorPage() {
         sticky
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Identity">
             <label className={fieldLabelClasses}>
               Name
@@ -756,7 +760,11 @@ export function AgentConfigurationEditorPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
+        <div className={editorPanelClasses}>
+          <GateCard title="Publish gate" busy={editor.checking} dirty={editor.dirty}>
+            <IssueList issues={preview?.issues ?? []} />
+          </GateCard>
+
           <Card title="Variables" label="Variables">
             <p className="text-xs text-admin-muted">Resolved at experiment start.</p>
             {Object.entries(GROUP_LABELS).map(([group, label]) => (
@@ -771,11 +779,15 @@ export function AgentConfigurationEditorPage() {
             ))}
           </Card>
 
-          <Card title="Publish gate">
-            <IssueList issues={preview?.issues ?? []} />
+          <Card title="Reproducibility">
+            <p className="text-[13px] text-admin-ink-soft">
+              {SUPPORT_IDENTITY_PIN_RULE} Starting an experiment records the resolved prompt, tone
+              of voice, model, and tool bindings, so a published version keeps explaining a past run
+              while the template stays reusable.
+            </p>
           </Card>
 
-          <Card title="What publishing would freeze">
+          <Card title="What publishing freezes">
             {preview && preview.changes.length > 0 ? (
               <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
                 {preview.changes.map((change) => (
@@ -787,14 +799,6 @@ export function AgentConfigurationEditorPage() {
                 The draft matches the latest published version.
               </p>
             )}
-          </Card>
-
-          <Card title="Reproducibility">
-            <p className="text-[13px] text-admin-ink-soft">
-              {SUPPORT_IDENTITY_PIN_RULE} Starting an experiment records the resolved prompt, tone
-              of voice, model, and tool bindings, so a published version keeps explaining a past run
-              while the template stays reusable.
-            </p>
           </Card>
         </div>
       </div>

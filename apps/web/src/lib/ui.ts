@@ -58,6 +58,21 @@ export const surfaceClasses =
 export const cardTitleClasses = "font-display text-[17px] font-bold tracking-[-0.01em]";
 
 /**
+ * An editor's body: the cards at most 790px wide and the 312px side panel beside them from
+ * `xl`, top-aligned (`Workspace.dc.html` :404–405, :467), as *Shop details* drew it first
+ * (ADR 0071). Narrower than both need, the panel follows the cards, which is where the
+ * prototype's wrapping row puts it.
+ *
+ * The panel holds the gate card first (`GateCard`), read-only context next and the freeze card
+ * — "What publishing freezes" — last, and never a field of the draft
+ * (`docs/design-direction.md`, *The form language*). Its cards are 14px apart, as every
+ * prototype panel spaces them.
+ */
+export const editorColumnsClasses = "grid items-start gap-5 xl:grid-cols-[minmax(0,790px)_312px]";
+export const editorMainClasses = "grid min-w-0 gap-4";
+export const editorPanelClasses = "grid min-w-0 gap-3.5";
+
+/**
  * The ground every form control is drawn on: what the classes below share, and no more.
  *
  * Only the values that are one decision for every control live here — the box, the radius, the

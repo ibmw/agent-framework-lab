@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   Card,
+  GateCard,
   PageHeader,
   PublishButton,
   type PublishGate,
@@ -141,6 +142,93 @@ describe("a card's title", () => {
     expect(title.className).toContain("font-bold");
     expect(title.className).toContain("tracking-[-0.01em]");
     expect(title.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/);
+  });
+});
+
+/**
+ * The first card of every editor's side panel, and of the setup pages' (ADR 0071): a frame over
+ * the findings the saved draft's gate returned. It says two things of its own and nothing else —
+ * that they are about to change while the gate has not answered for the save (ADR 0065), and
+ * that they were read off the saved draft while the screen holds edits the save does not.
+ */
+describe("the gate card", () => {
+  const SAVED_DRAFT = "Read off the saved draft. Save to check what is on screen.";
+
+  it("is a region named by its title, holding what it is handed", () => {
+    render(
+      <GateCard title="Publish gate" busy={false} dirty={false}>
+        <p>No validation findings.</p>
+      </GateCard>,
+    );
+
+    const card = screen.getByRole("region", { name: "Publish gate" });
+
+    expect(within(card).getByRole("heading", { level: 2, name: "Publish gate" })).toBeVisible();
+    expect(within(card).getByText("No validation findings.")).toBeVisible();
+  });
+
+  it("is busy while the gate has not answered for the saved draft, and only then", () => {
+    const { rerender } = render(
+      <GateCard title="Publish gate" busy dirty={false}>
+        <p>findings</p>
+      </GateCard>,
+    );
+
+    expect(screen.getByRole("region", { name: "Publish gate" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+
+    rerender(
+      <GateCard title="Publish gate" busy={false} dirty={false}>
+        <p>findings</p>
+      </GateCard>,
+    );
+
+    expect(screen.getByRole("region", { name: "Publish gate" })).not.toHaveAttribute("aria-busy");
+  });
+
+  it("says under its title that it reads the saved draft while the editor is dirty", () => {
+    render(
+      <GateCard title="Publish gate" busy={false} dirty>
+        <p>the findings</p>
+      </GateCard>,
+    );
+
+    const card = screen.getByRole("region", { name: "Publish gate" });
+    const note = within(card).getByText(SAVED_DRAFT);
+
+    expect(note).toBeVisible();
+    // Between the title and what the card holds, which is what it is to be read with.
+    expect(card.querySelector("h2")?.compareDocumentPosition(note)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(note.compareDocumentPosition(within(card).getByText("the findings"))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("says nothing of the saved draft while the screen holds what was saved", () => {
+    render(
+      <GateCard title="Publish gate" busy dirty={false}>
+        <p>the findings</p>
+      </GateCard>,
+    );
+
+    expect(screen.queryByText(/read off the saved/i)).toBeNull();
+  });
+
+  it("names what its findings are read off where that is not a draft", () => {
+    render(
+      <GateCard title="Findings" busy={false} dirty record="order">
+        <p>the findings</p>
+      </GateCard>,
+    );
+
+    expect(
+      screen.getByText("Read off the saved order. Save to check what is on screen."),
+    ).toBeVisible();
+    expect(screen.queryByText(SAVED_DRAFT)).toBeNull();
   });
 });
 

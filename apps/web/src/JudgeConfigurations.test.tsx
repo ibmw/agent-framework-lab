@@ -16,6 +16,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -1041,5 +1042,31 @@ describe("the rail's figure and this index", () => {
     await waitFor(() =>
       expect(within(railEntry("Judges", "Experiment lab workspace")).getByText("2")).toBeVisible(),
     );
+  });
+});
+
+/**
+ * The editor's side panel holds no field of the draft, so the judge's model is edited in the
+ * main column, after the rubric, as the prototype draws it (`Workspace.dc.html` :503–518).
+ */
+describe("the judge editor's side panel", () => {
+  it("holds the gate and anonymity, in that order, and no field", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    expect(panelCards(panel)).toEqual(["Publish gate", "Anonymity"]);
+    expect(panelFields(panel)).toEqual([]);
+  });
+
+  it("edits the model in the main column, after the rubric and under its own name", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    expect(mainCards(panel)).toEqual(["Rubric", "Model", "Evidence"]);
+    const model = within(screen.getByRole("region", { name: "Model" }));
+    expect(model.getByLabelText("Provider")).toBeVisible();
+    expect(model.getByLabelText("Temperature")).toBeVisible();
   });
 });

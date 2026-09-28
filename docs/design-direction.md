@@ -1,6 +1,6 @@
 # Design direction
 
-Status: current — 2026-09-24. The design rules that govern `apps/web`, stated once as rules a
+Status: current — 2026-09-28. The design rules that govern `apps/web`, stated once as rules a
 slice is checked against. Values are not restated here: a measurement or a colour that is built lives
 in the code that draws it (`styles.css` for tokens, `lib/ui.ts` for class sets and glyph tables,
 `shell/AppShell.tsx` for the chrome), and one that is not yet built lives in its slice in
@@ -30,8 +30,8 @@ Carried forward from the brief; they outrank any measurement below.
 - **Status is never colour alone**: a glyph or a word always accompanies it. WCAG 2.2 AA
   contrast; every workflow keyboard-reachable.
 - **Desktop first, usable narrower.** Every row and card row wraps; nothing is fixed width except
-  the rail, the ticket side panels and the settings column cap. No narrow-width treatment of the
-  live comparison is drawn.
+  the rail, the ticket side panels, the editor's side panel and the settings column cap. No
+  narrow-width treatment of the live comparison is drawn.
 - **Dense is fine, decorative is not.** No dashboard metrics for their own sake, no oversized
   status cards, realistic content rather than placeholder text.
 - **Every state is designed for**: empty, draft with findings, published and immutable, tool in
@@ -130,7 +130,9 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | *Version* and *Read by* columns on Documents | two of the table's four columns | neither; the table is Document and Kind, with a policy's own subject under it | a shop document has no version of its own — the shop has the version — and which scenarios read one is the same figure the chip above lacks; the same rule (ADR 0056) |
 | Kind on the document editor | a read-only value, beside a slug "set at creation" | the same read-only value, and the create page that sets it | the prototype draws no surface that could set either, and the plan's own bullet asks for the kind as a select. It is a select on the create page instead of a control in the editor, because a document is named by its kind and its slug together and moving either would make it a different document to every scenario that had named it (ADR 0057) |
 | Remove on the document editor | not drawn | drawn in the Document card's footer, with the second press every Remove gets standing in the footer's place (ADR 0060) | the three collections this table presents each carried a Remove per row before it, and a presentation is not where an author loses their only way to delete a policy |
-| The document editor's side column | two note cards beside a 790px form — *Read by*, *Never in the prompt* | the one 790px column, with *Never in the prompt* as a card in it and *Read by* not drawn | the same reading as the create page's side column above; *Read by* is the figure the chip and the column beside it also lack |
+| The document editor's side column | two note cards beside a 790px form — *Read by*, *Never in the prompt* | the editor's side panel: *Never in the prompt*, then "What publishing freezes" with the product editor's sentence, and no gate card; *Read by* not drawn | the shop gate raises nothing about one document, only that a collection is empty (`domain/shop.py`), which cannot be true while one is open, so a gate card here would always be empty; *Read by* is the figure the chip and the column beside it also lack |
+| An editor's gate card | context first on every editor frame's 312px panel (:467, :552, :626, :700, :1874, :2786, :2905, :3142, :3211) but the product's, whose 300px panel opens on *Findings on this product* (:1022, :1024), then *Where this product is used*; the setup pages' panel opens on the *Setup checklist* (:2156) | "Publish gate" first in every editor's 312px panel, the product's included, in the setup checklist's place and with its behaviour — busy while the gate has not answered for the saved draft, "Read off the saved draft. Save to check what is on screen." under its title while the editor is dirty — over the findings `IssueList` draws, with no checklist line; and "What publishing freezes" last on every panel, where the scenario frame draws it first (:3144) | the operator's decision of 28 September 2026: the findings every editor already showed get one frame and one place, the one the setup pages give theirs (ADR 0071), and `IssueList` stays the only way a finding is drawn; with the gate first and the context read beside it next, what publishing freezes closes the panel on every editor rather than on some |
+| The order editor's two panel titles | the order frame's panel draws *Used by* and *Sandboxed at run time* (:2786) and no findings card; the departure is from *The form language*'s panel rule, which titles the gate card "Publish gate" and the freeze card "What publishing freezes" | "Findings", with its fingerprint line, and "Freezing"; its saved-draft line says "the saved order", and the card is busy while the order's save is in flight | an order fixture is never published: its findings are `validate_order_fixture`'s, read off the saved order and returned by its save, and gate no publish, so there is no gate to title the card after and none to wait on |
 | The rows of *What this shop holds* | the whole row is a click target, with a link inside it | the row, with the link as its one control | a nested link inside a clickable row is two controls a keyboard reaches as one; *Principles*, every workflow keyboard-reachable |
 | A guideline's `slug · version` line | drawn | the slug alone, as the row's `EntryId` | `ToneOfVoiceSchema` carries no version: the shop carries the version, the page header's `VersionChips` is where it is read, and a per-row copy of it would be the same figure written once per guideline. A figure the payload lacks is not faked (*Lists and counts*) |
 | *Used by* under a guideline | "Resolved by 3 agent configurations" / "Named as an override by 1 configuration" | not drawn | `AgentConfigurationSummarySchema` carries no tone selection at all, and the configurations listing is the lab shell's rather than the shop's (ADR 0056), so the figure would cost one configuration draft read per row — and even then an override is a free-typed `guideline_id` on a shop-independent configuration, which may name a guideline of a shop this page is not. The one use this page does know is drawn: the *shop default* chip is which guideline a configuration with no override resolves to |
@@ -345,6 +347,11 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   line still to do lists the gate's findings for it as `IssueList` draws them; the last line,
   "No blocking findings", holds every finding no other line owns, grouped by product with an
   *Open*. It says when it is reading a saved draft the screen has moved past.
+- **Every editor draws one side panel** (`editorColumnsClasses`, `GateCard`): beside cards at most
+  790px wide, a 312px panel opens on the gate card — "Publish gate", busy while the gate has not
+  answered for the saved draft and saying under its title that it reads the saved draft while
+  the editor is dirty — holds read-only context next and "What publishing freezes" last, and
+  never a field of the draft.
 - **A number field says what it accepts** and refuses at the save what a pattern cannot. A
   closed set of five is five named radios.
 - **A create form asks for what constrains the work that follows** and names where the rest

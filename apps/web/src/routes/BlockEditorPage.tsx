@@ -21,6 +21,7 @@ import {
   Card,
   EditorSaveActions,
   Fingerprint,
+  GateCard,
   IssueList,
   PageHeader,
   PublishButton,
@@ -50,6 +51,9 @@ import { optionalParameterWithoutDefaultRule } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
   destructiveSubtleButtonClasses,
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   subtleButtonClasses,
@@ -203,8 +207,8 @@ function BlockEditor<
         sticky
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card title="Template">
             <label className={fieldLabelClasses}>
               Name
@@ -287,11 +291,18 @@ function BlockEditor<
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
-          <Card title="Publish gate">
+        <div className={editorPanelClasses}>
+          <GateCard title="Publish gate" busy={editor.checking} dirty={editor.dirty}>
             <IssueList issues={preview?.issues ?? []} />
+          </GateCard>
+          <Card title="Used by">
+            <p className="text-[13px] text-admin-muted">
+              A published scenario pins the exact template version it composed, so editing here
+              always happens in a new draft and never reaches a scenario that already froze this
+              block. A cross-shop usage roll-up arrives with the experiment surfaces that need it.
+            </p>
           </Card>
-          <Card title="What publishing would freeze">
+          <Card title="What publishing freezes">
             {preview && preview.changes.length > 0 ? (
               <ul className="grid gap-1 text-[13px] text-admin-ink-soft">
                 {preview.changes.map((change) => (
@@ -303,13 +314,6 @@ function BlockEditor<
                 The draft matches the latest published version.
               </p>
             )}
-          </Card>
-          <Card title="Used by">
-            <p className="text-[13px] text-admin-muted">
-              A published scenario pins the exact template version it composed, so editing here
-              always happens in a new draft and never reaches a scenario that already froze this
-              block. A cross-shop usage roll-up arrives with the experiment surfaces that need it.
-            </p>
           </Card>
         </div>
       </div>

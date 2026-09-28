@@ -21,6 +21,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
+import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
   expectNotRefused,
@@ -1599,5 +1600,21 @@ describe("the rail's figure and this index", () => {
     await user.click(screen.getByRole("button", { name: "Create scenario" }));
 
     await waitFor(() => expect(within(railEntry("Scenarios")).getByText("2")).toBeVisible());
+  });
+});
+
+describe("the scenario editor's side panel", () => {
+  it("holds the gate, the resolved state, how read-checks report and what publishing freezes, in that order, and no field", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    expect(panelCards(panel)).toEqual([
+      "Publish gate",
+      "Resolved-state preview",
+      "How read-checks report",
+      "What publishing freezes",
+    ]);
+    expect(panelFields(panel)).toEqual([]);
   });
 });

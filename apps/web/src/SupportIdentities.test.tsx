@@ -13,6 +13,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -626,5 +627,16 @@ describe("the rail's figure and this index", () => {
     const entry = railEntry("Support identities", "Experiment lab workspace");
     expect(within(entry).getByText(String(rows))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${rows} support identit${rows === 1 ? "y" : "ies"}`);
+  });
+});
+
+describe("the support identity editor's side panel", () => {
+  it("holds the gate and what publishing freezes, in that order, and no field", async () => {
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    expect(panelCards(panel)).toEqual(["Publish gate", "What publishing freezes"]);
+    expect(panelFields(panel)).toEqual([]);
   });
 });

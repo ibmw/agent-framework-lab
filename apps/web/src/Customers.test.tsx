@@ -17,6 +17,7 @@ import { toProfilePayload } from "./api/customerProfiles";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
+import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -1776,5 +1777,24 @@ describe("one write per shop on this page", () => {
     await user.click(screen.getByRole("button", { name: "Detach from Aurora Supply Co." }));
 
     await waitFor(() => expect(detach.sent).toHaveLength(2));
+  });
+});
+
+/**
+ * Attach and Detach are writes of their own rather than fields of the draft, so they stay on
+ * the *Attached shops* card in the panel.
+ */
+describe("the customer editor's side panel", () => {
+  it("holds the gate, the attached shops and what publishing freezes, in that order, and no field", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    expect(panelCards(panel)).toEqual([
+      "Publish gate",
+      "Attached shops",
+      "What publishing freezes",
+    ]);
+    expect(panelFields(panel)).toEqual([]);
   });
 });

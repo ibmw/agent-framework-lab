@@ -33,6 +33,9 @@ import { MAX_SEED, SEED_RULE } from "../lib/fieldRules";
 import { fulfilmentLabel, paymentLabel } from "../lib/orders";
 import { channelLabel, originLabel } from "../lib/tickets";
 import {
+  editorColumnsClasses,
+  editorMainClasses,
+  editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
@@ -181,8 +184,8 @@ export function SnapshotsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid min-w-0 content-start gap-4">
+      <div className={editorColumnsClasses}>
+        <div className={editorMainClasses}>
           <Card
             title="Freeze a published version"
             footer={
@@ -295,7 +298,7 @@ export function SnapshotsPage() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-4">
+        <div className={editorPanelClasses}>
           {selected === null ? (
             <Card title="Frozen starting state">
               <p className="text-[13px] text-admin-muted">

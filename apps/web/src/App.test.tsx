@@ -33,6 +33,7 @@ import { HELD_VALUE_REASON, METHOD_FORM_REASON } from "./lib/unsavedWork";
 import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
+import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
   expectNotRefused,
@@ -1644,6 +1645,11 @@ describe("shop workspace", () => {
     // Twice: the method's own name, and the kind chip that now spells `card` for a reader.
     expect(within(payment).getAllByText("Card")).toHaveLength(2);
     expect(within(payment).getByText("visa", { selector: "code" })).toBeVisible();
+
+    // Beside the frozen catalog in the editor's grid: identity and methods in its 312px panel.
+    const panel = sidePanel(identity);
+    expect(panelCards(panel)).toEqual(["Shop identity", "Payment methods", "Fulfilment methods"]);
+    expect(panelFields(panel)).toEqual([]);
   });
 });
 
@@ -2155,6 +2161,73 @@ describe("the setup checklist beside Shop details", () => {
     const panel = await screen.findByRole("region", { name: "Setup checklist" });
     expect(await within(panel).findByText("A tone of voice default")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Draft validation" })).toBeNull();
+  });
+
+  it("is the one card of the editor's side panel, drawn through the gate card", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Setup checklist" }));
+
+    expect(panelCards(panel)).toEqual(["Setup checklist"]);
+    expect(panelFields(panel)).toEqual([]);
+  });
+});
+
+/**
+ * The product editor's panel: the shop draft publishes, so its first card is the Publish gate —
+ * over this product's findings (`issuesForProduct`) — and what publishing freezes is last.
+ */
+describe("the product editor's side panel", () => {
+  const PRODUCT = `/shops/${SHOP_ID}/products/alpine-shell-jacket`;
+  const SAVED_DRAFT = "Read off the saved draft. Save to check what is on screen.";
+
+  it("holds the publish gate and what publishing freezes, in that order, and no field", async () => {
+    renderAt(PRODUCT);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Publish gate" }));
+
+    expect(panelCards(panel)).toEqual(["Publish gate", "What publishing freezes"]);
+    expect(panelFields(panel)).toEqual([]);
+    expect(screen.queryByRole("region", { name: "Product validation" })).toBeNull();
+  });
+
+  it("says it reads the saved draft while an edit is unsaved, and is busy until the gate answers for a save", async () => {
+    const user = userEvent.setup();
+    let held: (() => void) | null = null;
+    let holding = false;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/draft/preview`, async () => {
+        if (holding) {
+          await new Promise<void>((resolve) => {
+            held = resolve;
+          });
+        }
+        return HttpResponse.json(currentPreview);
+      }),
+    );
+    renderAt(PRODUCT);
+    const gate = () => screen.getByRole("region", { name: "Publish gate" });
+    await screen.findByRole("region", { name: "Publish gate" });
+    await waitFor(() => expect(gate()).not.toHaveAttribute("aria-busy"));
+    expect(within(gate()).queryByText(SAVED_DRAFT)).toBeNull();
+
+    await user.type(screen.getByLabelText("Description"), " Taped seams.");
+
+    expect(within(gate()).getByText(SAVED_DRAFT)).toBeVisible();
+    expect(gate()).not.toHaveAttribute("aria-busy");
+
+    holding = true;
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    // The save has landed and the gate has not answered for it: what the card lists is about
+    // to change, and the screen is the saved draft again.
+    await waitFor(() => expect(gate()).toHaveAttribute("aria-busy", "true"));
+    expect(within(gate()).queryByText(SAVED_DRAFT)).toBeNull();
+
+    holding = false;
+    await waitFor(() => expect(held).not.toBeNull());
+    (held as unknown as () => void)();
+    await waitFor(() => expect(gate()).not.toHaveAttribute("aria-busy"));
   });
 });
 

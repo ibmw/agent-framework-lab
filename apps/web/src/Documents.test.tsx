@@ -12,6 +12,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { toPayload } from "./lib/shop";
 import { renderApp } from "./test/app";
+import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -495,5 +496,24 @@ describe("the slice's own evidence", () => {
     expect(screen.getByLabelText("Content")).toHaveValue(
       "Offer a credit note rather than refusing.",
     );
+  });
+});
+
+/**
+ * The document editor's panel has no gate card: the shop gate raises nothing about one
+ * document, only that a collection is empty, which cannot be true while one is open.
+ */
+describe("the document editor's side panel", () => {
+  it("holds never-in-the-prompt and what publishing freezes, in that order, and no field", async () => {
+    renderApp(`/shops/${SHOP_ID}/setup/documents/guidelines/returns-desk`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Never in the prompt" }));
+
+    expect(panelCards(panel)).toEqual(["Never in the prompt", "What publishing freezes"]);
+    expect(panelFields(panel)).toEqual([]);
+    expect(screen.queryByRole("region", { name: "Publish gate" })).toBeNull();
+    expect(within(panel).getByText(/These edits belong to the shop draft/)).toBeVisible();
+    // The main column holds the document itself and nothing the panel says.
+    expect(mainCards(panel)).toEqual(["Document", "Body"]);
   });
 });

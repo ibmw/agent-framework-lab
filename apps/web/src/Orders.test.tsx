@@ -16,6 +16,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ORDER_METHOD_RULE, PAID_AT_RULE, SHIPPED_AT_RULE } from "./lib/fieldRules";
 import { toLocalInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
+import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -2304,5 +2305,57 @@ describe("a status moves the time beside it", () => {
       status: "fulfilled",
       shipped_at: PLACED_AT,
     });
+  });
+});
+
+/**
+ * An order fixture is never published, so its gate card keeps the title "Findings" and its
+ * freeze card "Freezing": the findings are `validate_order_fixture`'s and gate no publish.
+ */
+describe("the order editor's side panel", () => {
+  it("holds the findings, the customer and freezing, in that order, and no field", async () => {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+
+    const panel = sidePanel(await screen.findByRole("region", { name: "Findings" }));
+
+    expect(panelCards(panel)).toEqual(["Findings", "Customer", "Freezing"]);
+    expect(panelFields(panel)).toEqual([]);
+    expect(screen.queryByRole("region", { name: "Publish gate" })).toBeNull();
+  });
+
+  it("says its findings are the saved order's while an edit is unsaved, and is busy while the save is in flight", async () => {
+    const user = userEvent.setup();
+    let release: (() => void) | null = null;
+    server.use(
+      http.put(`*/api/v1/shops/${SHOP_ID}/orders/${ORDER_ID}`, async ({ request }) => {
+        savedRequests.push((await request.json()) as ReplaceOrderRequest);
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return HttpResponse.json(currentOrder);
+      }),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    const findings = () => screen.getByRole("region", { name: "Findings" });
+    const SAVED_ORDER = "Read off the saved order. Save to check what is on screen.";
+    expect(within(findings()).queryByText(SAVED_ORDER)).toBeNull();
+    expect(findings()).not.toHaveAttribute("aria-busy");
+
+    const lines = card("Line items & payment");
+    await user.clear(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"));
+    await user.type(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"), "2");
+
+    expect(within(findings()).getByText(SAVED_ORDER)).toBeVisible();
+    // The order has no gate to wait on: its findings come back with the save.
+    expect(findings()).not.toHaveAttribute("aria-busy");
+
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+
+    await waitFor(() => expect(findings()).toHaveAttribute("aria-busy", "true"));
+    await waitFor(() => expect(release).not.toBeNull());
+    (release as unknown as () => void)();
+    await waitFor(() => expect(findings()).not.toHaveAttribute("aria-busy"));
+    expect(within(findings()).queryByText(SAVED_ORDER)).toBeNull();
   });
 });
