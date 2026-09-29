@@ -77,6 +77,19 @@ export const SUPPORT_IDENTITY_PIN_RULE =
   "Publishing pins the support-identity version a configuration names.";
 
 /**
+ * Where an identity's tone of voice comes from, said on its Remit on both of its surfaces.
+ *
+ * `SupportIdentityPayload` (`domain/support_identity.py`) carries no tone at all, by ADR 0012;
+ * the shop holds its guidelines (`tone_of_voice_guidelines` in `domain/shop.py`), and an agent
+ * configuration's `tone_of_voice.source` is `shop_default` or `override`, which is the choice
+ * the sentence names. The create page draws
+ * it as the Remit row's second line, under a hint of its own; the editor's Remit has no other
+ * rule, so there it is the hint.
+ */
+export const IDENTITY_TONE_RULE =
+  "Tone of voice is not authored here: it belongs to the shop, and an agent configuration selects the shop default or a named override.";
+
+/**
  * Where a country code is asked for. The shape is the lab's — `require_country_code` in
  * `domain/content.py` takes two letters and deliberately does not check the register — so the
  * rule says what is accepted and the field suggests the register beside it.

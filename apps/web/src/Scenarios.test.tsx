@@ -29,6 +29,7 @@ import {
   expectRefused,
   submitWithoutPressing,
 } from "./test/refused";
+import { expectCardOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1622,5 +1623,47 @@ describe("the scenario editor's side panel", () => {
       "What publishing freezes",
     ]);
     expect(panelFields(panel)).toEqual([]);
+  });
+});
+
+/**
+ * The scenario editor's *Built on* and *Completion* on the reference pages' rows. The bound
+ * blocks' fields are list rows, and stay where they are.
+ */
+describe("the scenario editor's rows", () => {
+  it("draws Built on as the name and the three things it is read against, each on a row", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    const builtOn = await screen.findByRole("region", { name: "Built on" });
+    const card = within(builtOn);
+
+    expectFieldRow(card.getByLabelText("Name"), "Name");
+    // Shown, not asked: the scenario never moves off them.
+    await waitFor(() => expect(card.getByLabelText("Ticket")).toHaveTextContent("T-204"));
+    const ticket = card.getByLabelText("Ticket");
+    expect(ticket.tagName).toBe("OUTPUT");
+    // The latest published version, as the shop version beside it is: not a frozen one.
+    expect(ticket).toHaveTextContent("T-204 · Wrong address concern — published at v1");
+    expectFieldRow(ticket, "Ticket");
+    expect(card.getByLabelText("Customer")).toHaveTextContent("Maya Laurent");
+    expectFieldRow(card.getByLabelText("Customer"), "Customer");
+    const shop = card.getByLabelText("Shop version");
+    expect(shop).toHaveTextContent("Northstar Outfitters v3");
+    expectFieldRow(shop, "Shop version");
+    // The version moves with the shop's next publish, so the row says that rather than the
+    // prototype's "does not move it".
+    expect(shop).toHaveAccessibleDescription(
+      /The shop's newest published version, which is what the scenario resolves against today\./,
+    );
+    expectCardOnRows(builtOn);
+  });
+
+  it("draws Completion's statement and turn cap on rows", async () => {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    const completion = await screen.findByRole("region", { name: "Completion" });
+
+    for (const label of ["A resolved incident looks like", "Turn cap"]) {
+      expectFieldRow(within(completion).getByLabelText(label), label);
+    }
+    expectCardOnRows(completion);
   });
 });

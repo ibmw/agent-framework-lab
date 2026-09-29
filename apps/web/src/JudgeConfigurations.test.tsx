@@ -19,6 +19,7 @@ import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectCardOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -810,6 +811,14 @@ describe("the new-judge page", () => {
     );
   });
 
+  it("draws the model on a row with the fields around it, its rule still its description", async () => {
+    renderAt("/lab/judges/new");
+
+    const model = await screen.findByLabelText("Model");
+    expectFieldRow(model, "Model");
+    expect(model).toHaveAccessibleDescription(/Pick a proven model/);
+  });
+
   it("names the judge before the rubric while there is no name either", async () => {
     renderAt("/lab/judges/new");
 
@@ -1087,5 +1096,43 @@ describe("the judge editor's side panel", () => {
     const model = within(screen.getByRole("region", { name: "Model" }));
     expect(model.getByLabelText("Provider")).toBeVisible();
     expect(model.getByLabelText("Temperature")).toBeVisible();
+  });
+});
+
+/**
+ * The judge editor's sections on the reference pages' rows. The Model card keeps its name —
+ * `experiment-start.spec.ts` reaches the model by it — although the prototype draws Provider and
+ * Model in the card that holds the name (`Workspace.dc.html` :503–518).
+ */
+describe("the judge editor's rows", () => {
+  it("draws the rubric's fields and the model's on rows, each found by its own label", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+    const rubric = await screen.findByRole("region", { name: "Rubric" });
+    const model = screen.getByRole("region", { name: "Model" });
+
+    for (const label of ["Name", "Description", "How this judge scores"]) {
+      expectFieldRow(within(rubric).getByLabelText(label), label);
+    }
+    for (const label of ["Provider", "Model", "Temperature"]) {
+      expectFieldRow(within(model).getByLabelText(label), label);
+    }
+    expectCardOnRows(rubric);
+    expectCardOnRows(model);
+  });
+
+  it("keeps each model rule in its control's description, the zero default under the temperature", async () => {
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+    const model = within(await screen.findByRole("region", { name: "Model" }));
+
+    expect(model.getByLabelText("Provider")).toHaveAccessibleDescription(
+      /Only the providers this has been proven against/,
+    );
+    expect(model.getByLabelText("Model")).toHaveAccessibleDescription(/Pick a proven model/);
+    const temperature = model.getByLabelText("Temperature");
+    expect(temperature).toHaveAccessibleDescription(/Between 0 and 2, with at most two decimals/);
+    // The note that closed the card is about this field alone.
+    expect(temperature).toHaveAccessibleDescription(
+      /Zero by default: a judge is rerun to see whether a verdict holds/,
+    );
   });
 });

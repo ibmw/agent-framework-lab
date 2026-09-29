@@ -21,6 +21,7 @@ import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
+import { expectCardOnRows, expectFieldRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -1057,5 +1058,49 @@ describe("the block editor's side panel", () => {
 
     expect(panelCards(panel)).toEqual(["Publish gate", "Used by", "What publishing freezes"]);
     expect(panelFields(panel)).toEqual([]);
+  });
+});
+
+/**
+ * The block editor's sections on the reference pages' rows. The parameters stay a list with an
+ * add form beneath it, whose stacked labels are an add form's (`ParameterForm`).
+ */
+describe("the block editor's rows", () => {
+  it("draws the template's fields on rows, the statement's rule under its label", async () => {
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+    const template = await screen.findByRole("region", { name: "Template" });
+
+    for (const label of ["Name", "Statement", "Description"]) {
+      expectFieldRow(within(template).getByLabelText(label), label);
+    }
+    expect(within(template).getByLabelText("Statement")).toHaveAccessibleDescription(
+      /A scenario renders each bound instance as this statement followed by what it was bound to/,
+    );
+    expectCardOnRows(template);
+  });
+
+  it("asks how an objective is assessed on rows, and says under the choice what a judge scores", async () => {
+    const user = userEvent.setup();
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+    const assessment = await screen.findByRole("region", { name: "Assessment" });
+    const assessedBy = within(assessment).getByLabelText("Assessed by");
+
+    expectFieldRow(assessedBy, "Assessed by");
+    expectFieldRow(within(assessment).getByLabelText("Evidence"), "Evidence");
+    expectCardOnRows(assessment);
+    expect(assessedBy).not.toHaveAccessibleDescription(/scored on a rubric dimension/);
+
+    await user.selectOptions(assessedBy, "judge");
+    expect(assessedBy).toHaveAccessibleDescription(
+      /A judged objective is scored on a rubric dimension/,
+    );
+  });
+
+  it("asks what a mutation perturbs on a row", async () => {
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
+    const effect = await screen.findByRole("region", { name: "Effect" });
+
+    expectFieldRow(within(effect).getByLabelText("Perturbs"), "Perturbs");
+    expectCardOnRows(effect);
   });
 });

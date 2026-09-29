@@ -15,6 +15,7 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
+import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import {
   Card,
   EditorSaveActions,
@@ -34,7 +35,11 @@ import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEdi
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import { optionText, SUPPORT_PERMISSION } from "../lib/enumLabels";
-import { CHIP_LABEL_MAX_LENGTH, ESCALATION_CONDITIONS_RULE } from "../lib/fieldRules";
+import {
+  CHIP_LABEL_MAX_LENGTH,
+  ESCALATION_CONDITIONS_RULE,
+  IDENTITY_TONE_RULE,
+} from "../lib/fieldRules";
 import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
 import {
   destructiveSubtleButtonClasses,
@@ -211,45 +216,40 @@ export function SupportIdentityEditorPage() {
       <div className={editorColumnsClasses}>
         <div className={editorMainClasses}>
           <Card title="Role">
-            <label className={fieldLabelClasses}>
-              Name
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.role.name}
-                onChange={(event) =>
-                  edit({ ...content, role: { ...content.role, name: event.target.value } })
-                }
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Title
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.role.title}
-                onChange={(event) =>
-                  edit({ ...content, role: { ...content.role, title: event.target.value } })
-                }
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Remit
-              <textarea
-                className={`${textAreaClasses} w-full`}
-                value={content.role.description}
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    role: { ...content.role, description: event.target.value },
-                  })
-                }
-              />
-            </label>
-            {/* A note on the field above — the prototype's Remit (:1808) — rather than what the
-                card is for, so it is not the card's first line. */}
-            <p className="text-xs text-admin-muted">
-              Tone of voice is not authored here: it belongs to the shop, and an agent configuration
-              selects the shop default or a named override.
-            </p>
+            <FieldRows>
+              <Field label="Name">
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.role.name}
+                  onChange={(event) =>
+                    edit({ ...content, role: { ...content.role, name: event.target.value } })
+                  }
+                />
+              </Field>
+              <Field label="Title">
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.role.title}
+                  onChange={(event) =>
+                    edit({ ...content, role: { ...content.role, title: event.target.value } })
+                  }
+                />
+              </Field>
+              {/* The note the card used to close on is about this field — the prototype draws
+                  it under Remit (:1808) — so it is the row's rule, and the create page's words. */}
+              <Field label="Remit" hint={IDENTITY_TONE_RULE}>
+                <textarea
+                  className={`${textAreaClasses} w-full`}
+                  value={content.role.description}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      role: { ...content.role, description: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           <Card
@@ -261,32 +261,23 @@ export function SupportIdentityEditorPage() {
               </>
             }
           >
-            <fieldset className="grid gap-2">
-              <legend className="text-xs font-semibold text-admin-muted uppercase">Read</legend>
-              {READ_PERMISSIONS.map((permission) => (
-                <label key={permission} className="flex items-center gap-2 text-[13px]">
-                  <input
-                    type="checkbox"
-                    checked={content.permissions.includes(permission)}
-                    onChange={() => togglePermission(permission)}
-                  />
-                  {optionText(SUPPORT_PERMISSION[permission])}
-                </label>
-              ))}
-            </fieldset>
-            <fieldset className="grid gap-2">
-              <legend className="text-xs font-semibold text-admin-muted uppercase">Act</legend>
-              {ACTION_PERMISSIONS.map((permission) => (
-                <label key={permission} className="flex items-center gap-2 text-[13px]">
-                  <input
-                    type="checkbox"
-                    checked={content.permissions.includes(permission)}
-                    onChange={() => togglePermission(permission)}
-                  />
-                  {optionText(SUPPORT_PERMISSION[permission])}
-                </label>
-              ))}
-            </fieldset>
+            {/* Two groups named by their rows, as the prototype names them (:1818, :1834). */}
+            <FieldRows>
+              <FieldGroup label="Read">
+                <PermissionBoxes
+                  permissions={READ_PERMISSIONS}
+                  granted={content.permissions}
+                  onToggle={togglePermission}
+                />
+              </FieldGroup>
+              <FieldGroup label="Act">
+                <PermissionBoxes
+                  permissions={ACTION_PERMISSIONS}
+                  granted={content.permissions}
+                  onToggle={togglePermission}
+                />
+              </FieldGroup>
+            </FieldRows>
           </Card>
 
           <Card title="Guidance">
@@ -376,19 +367,23 @@ export function SupportIdentityEditorPage() {
           </Card>
 
           <Card title="Escalation">
-            <label className={fieldLabelClasses}>
-              Escalate to
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.escalation.escalate_to}
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    escalation: { ...content.escalation, escalate_to: event.target.value },
-                  })
-                }
-              />
-            </label>
+            <FieldRows>
+              <Field label="Escalate to">
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.escalation.escalate_to}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      escalation: { ...content.escalation, escalate_to: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+            </FieldRows>
+            {/* `ChipListField` is a `<fieldset>` with its own `<legend>` and its own hint on the
+                control that takes the next condition, as a ticket's tags are drawn under their
+                rows. Wrapping it in a row would name it twice. */}
             <ChipListField
               legend="Conditions"
               label="New condition"
@@ -440,6 +435,32 @@ export function SupportIdentityEditorPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/** One group's permissions, a checkbox each, named by the permission and what it allows. */
+function PermissionBoxes({
+  permissions,
+  granted,
+  onToggle,
+}: {
+  permissions: SupportPermission[];
+  granted: SupportPermission[];
+  onToggle: (permission: SupportPermission) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      {permissions.map((permission) => (
+        <label key={permission} className="flex items-center gap-2 text-[13px]">
+          <input
+            type="checkbox"
+            checked={granted.includes(permission)}
+            onChange={() => onToggle(permission)}
+          />
+          {optionText(SUPPORT_PERMISSION[permission])}
+        </label>
+      ))}
+    </div>
   );
 }
 

@@ -348,6 +348,7 @@ export function NewAgentConfigurationPage() {
               </output>
             </Field>
             <ProvenModelField
+              arrangement="row"
               value={modelId}
               models={framework?.models ?? []}
               proven={framework?.label ?? frameworkId}

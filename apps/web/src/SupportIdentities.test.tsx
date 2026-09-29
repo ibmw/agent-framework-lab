@@ -16,6 +16,7 @@ import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
+import { expectCardOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -648,5 +649,53 @@ describe("the support identity editor's side panel", () => {
 
     expect(panelCards(panel)).toEqual(["Publish gate", "What publishing freezes"]);
     expect(panelFields(panel)).toEqual([]);
+  });
+});
+
+/**
+ * The identity editor's sections on the reference pages' rows. The guidance add form keeps its
+ * stacked labels, and the escalation conditions keep `ChipListField`'s own legend beneath the
+ * row, as a ticket's tags do.
+ */
+describe("the support identity editor's rows", () => {
+  it("draws the role on rows, with the tone-of-voice note as the remit's rule", async () => {
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+    const role = await screen.findByRole("region", { name: "Role" });
+
+    for (const label of ["Name", "Title", "Remit"]) {
+      expectFieldRow(within(role).getByLabelText(label), label);
+    }
+    expect(within(role).getByLabelText("Remit")).toHaveAccessibleDescription(
+      /^Tone of voice is not authored here: it belongs to the shop, and an agent configuration selects the shop default or a named override\./,
+    );
+    expectCardOnRows(role);
+  });
+
+  it("asks for the permissions as two groups named Read and Act by their rows", async () => {
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+    const card = await screen.findByRole("region", { name: "Permissions" });
+    const permissions = within(card);
+
+    const read = permissions.getByRole("group", { name: "Read" });
+    const act = permissions.getByRole("group", { name: "Act" });
+    expectGroupRow(read, "Read");
+    expectGroupRow(act, "Act");
+    expect(
+      within(read).getByLabelText("Read orders — look up this customer's orders"),
+    ).not.toBeChecked();
+    expect(
+      within(act).getByLabelText(
+        "Change shipping address — redirect an order that has not shipped",
+      ),
+    ).toBeChecked();
+    expectCardOnRows(card);
+  });
+
+  it("puts the escalation target on a row above the conditions", async () => {
+    renderAt(`/lab/support-identities/${IDENTITY_ID}`);
+    const escalation = await screen.findByRole("region", { name: "Escalation" });
+
+    expectFieldRow(within(escalation).getByLabelText("Escalate to"), "Escalate to");
+    expectCardOnRows(escalation, [within(escalation).getByRole("group", { name: "Conditions" })]);
   });
 });

@@ -30,6 +30,7 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { CappedTitle } from "../components/CappedTitle";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
+import { Field, FieldRows } from "../components/FieldHint";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
@@ -90,6 +91,7 @@ import {
   editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
+  readOnlyValueClasses,
   subtleButtonClasses,
   surfaceClasses,
   textAreaClasses,
@@ -314,26 +316,59 @@ export function ScenarioEditorPage() {
               </>
             }
           >
-            <label className={fieldLabelClasses}>
-              Name
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.name}
-                onChange={(event) => edit({ ...content, name: event.target.value })}
-              />
-            </label>
-            <p className="text-[13px] text-admin-ink-soft">
-              Ticket{" "}
-              <span className="font-mono font-semibold">{resolution?.ticket_reference ?? "—"}</span>{" "}
-              · {resolution?.ticket_subject ?? "…"} · {resolution?.customer_display_name ?? "…"}
-              {resolution === null ? null : (
-                <span className="ml-1.5 text-admin-muted">
-                  {resolution.ticket_version === null
-                    ? "— not published yet"
-                    : `— frozen at v${resolution.ticket_version}`}
-                </span>
-              )}
-            </p>
+            {/* The prototype's four rows (`Workspace.dc.html` :3047–3062): the name, and the
+                ticket, customer and shop version the scenario is read against, which this page
+                cannot change and so shows rather than asks. */}
+            <FieldRows>
+              <Field label="Name">
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.name}
+                  onChange={(event) => edit({ ...content, name: event.target.value })}
+                />
+              </Field>
+              {/* The ticket's latest published version, read on every resolve as the shop's
+                  is (`ScenarioService.resolve`), so it says published rather than frozen. */}
+              <Field label="Ticket">
+                <output className={readOnlyValueClasses}>
+                  <span>
+                    <span className="font-mono font-semibold">
+                      {resolution?.ticket_reference ?? "—"}
+                    </span>{" "}
+                    · {resolution?.ticket_subject ?? "…"}
+                    {/* A space rather than a margin, so the line reads as words too. */}
+                    {resolution === null ? null : (
+                      <span className="text-admin-muted">
+                        {" "}
+                        {resolution.ticket_version === null
+                          ? "— not published yet"
+                          : `— published at v${resolution.ticket_version}`}
+                      </span>
+                    )}
+                  </span>
+                </output>
+              </Field>
+              <Field label="Customer">
+                <output className={readOnlyValueClasses}>
+                  {resolution?.customer_display_name ?? "…"}
+                </output>
+              </Field>
+              {/* Not the prototype's hint, which says publishing the shop again does not move
+                  the scenario: `ScenarioService.resolve` (`application/scenarios.py`) reads the
+                  shop's latest published version each time, so a new publish does move it. */}
+              <Field
+                label="Shop version"
+                hint="The shop's newest published version, which is what the scenario resolves against today."
+              >
+                <output className={readOnlyValueClasses}>
+                  {resolution === null
+                    ? "…"
+                    : resolution.shop_version === null
+                      ? `${resolution.shop_name} — not published yet`
+                      : `${resolution.shop_name} v${resolution.shop_version}`}
+                </output>
+              </Field>
+            </FieldRows>
           </Card>
 
           <Card
@@ -594,26 +629,27 @@ export function ScenarioEditorPage() {
               </>
             }
           >
-            <label className={fieldLabelClasses}>
-              A resolved incident looks like
-              <textarea
-                className={`${textAreaClasses} w-full`}
-                value={content.completion.statement}
-                placeholder="The order ships to the confirmed address and the customer acknowledges it."
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    completion: { ...content.completion, statement: event.target.value },
-                  })
+            <FieldRows>
+              <Field label="A resolved incident looks like">
+                <textarea
+                  className={`${textAreaClasses} w-full`}
+                  value={content.completion.statement}
+                  placeholder="The order ships to the confirmed address and the customer acknowledges it."
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      completion: { ...content.completion, statement: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+              <TurnCapField
+                value={content.completion.max_turns}
+                onCommit={(max_turns) =>
+                  edit({ ...content, completion: { ...content.completion, max_turns } })
                 }
               />
-            </label>
-            <TurnCapField
-              value={content.completion.max_turns}
-              onCommit={(max_turns) =>
-                edit({ ...content, completion: { ...content.completion, max_turns } })
-              }
-            />
+            </FieldRows>
           </Card>
         </div>
 
@@ -719,8 +755,7 @@ function TurnCapField({ value, onCommit }: { value: number; onCommit: (turns: nu
   const [typed, setTyped] = useState<string | null>(null);
 
   return (
-    <label className={fieldLabelClasses}>
-      Turn cap
+    <Field label="Turn cap">
       <input
         type="number"
         min={MIN_TURN_CAP}
@@ -738,7 +773,7 @@ function TurnCapField({ value, onCommit }: { value: number; onCommit: (turns: nu
         // clamped entry never lingers on screen as something the scenario does not say.
         onBlur={() => setTyped(null)}
       />
-    </label>
+    </Field>
   );
 }
 

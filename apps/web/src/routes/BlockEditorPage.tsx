@@ -15,6 +15,7 @@ import { useParams } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
+import { Field, FieldRows } from "../components/FieldHint";
 import { GateFindingLine } from "../components/GateFindingLine";
 import { ParameterForm } from "../components/ParameterForm";
 import {
@@ -208,35 +209,37 @@ function BlockEditor<
       <div className={editorColumnsClasses}>
         <div className={editorMainClasses}>
           <Card title="Template">
-            <label className={fieldLabelClasses}>
-              Name
-              <input
-                className={`${fieldControlClasses} w-full font-mono`}
-                value={content.name}
-                onChange={(event) => edit({ ...content, name: event.target.value })}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Statement
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.statement}
-                placeholder="Read document"
-                onChange={(event) => edit({ ...content, statement: event.target.value })}
-              />
-            </label>
-            <p className="text-xs text-admin-muted">
-              A scenario renders each bound instance as this statement followed by what it was bound
-              to — “Read document → Address-change policy”.
-            </p>
-            <label className={fieldLabelClasses}>
-              Description
-              <textarea
-                className={`${textAreaClasses} w-full`}
-                value={content.description}
-                onChange={(event) => edit({ ...content, description: event.target.value })}
-              />
-            </label>
+            <FieldRows>
+              <Field label="Name">
+                <input
+                  className={`${fieldControlClasses} w-full font-mono`}
+                  value={content.name}
+                  onChange={(event) => edit({ ...content, name: event.target.value })}
+                />
+              </Field>
+              {/* The sentence the card carried under this field, moved beside it and not
+                  rewritten: the scenario editor titles each composed instance with the
+                  template's statement, and `domain/blocks.py` refuses an empty one at
+                  publication for that reason. */}
+              <Field
+                label="Statement"
+                hint="A scenario renders each bound instance as this statement followed by what it was bound to — “Read document → Address-change policy”."
+              >
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.statement}
+                  placeholder="Read document"
+                  onChange={(event) => edit({ ...content, statement: event.target.value })}
+                />
+              </Field>
+              <Field label="Description">
+                <textarea
+                  className={`${textAreaClasses} w-full`}
+                  value={content.description}
+                  onChange={(event) => edit({ ...content, description: event.target.value })}
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           {typeAxis(content, edit)}
@@ -519,54 +522,60 @@ export function ObjectiveBlockEditorPage() {
             </>
           }
         >
-          <label className={fieldLabelClasses}>
-            Assessed by
-            <select
-              aria-label="Assessed by"
-              className={`${fieldControlClasses} w-full`}
-              value={content.assessment}
-              onChange={(event) => {
-                const assessment = event.target.value as ObjectiveAssessment;
-                // A judge scores a rubric dimension and nothing else, and `evidenceFor` is
-                // where that pairing is decided for both this editor and the create page.
-                edit({
-                  ...content,
-                  assessment,
-                  evidence: evidenceFor(assessment, content.evidence),
-                });
-              }}
+          <FieldRows>
+            {/* A judged objective has no evidence to choose, so what it is scored on is the
+                assessment's second line rather than a row of its own. Each claim is the lab's:
+                the judge is shown the anonymized brief (`JudgeRequest`,
+                `application/judge_runtime.py:95`), a pass freezes the judge's published version
+                (`application/judge_runs.py:13`), and a rerun appends an attempt beside the last
+                (`application/judgements.py:9`). */}
+            <Field
+              label="Assessed by"
+              extra={
+                content.assessment === "judge"
+                  ? "A judged objective is scored on a rubric dimension. Judge evidence is anonymized, versioned, and rerunnable, and is recorded separately from deterministic evidence."
+                  : null
+              }
             >
-              {ASSESSMENTS.map((entry) => (
-                <option key={entry.value} value={entry.value}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {content.assessment === "judge" ? (
-            <p className="text-[13px] text-admin-ink-soft">
-              A judged objective is scored on a rubric dimension. Judge evidence is anonymized,
-              versioned, and rerunnable, and is recorded separately from deterministic evidence.
-            </p>
-          ) : (
-            <label className={fieldLabelClasses}>
-              Evidence
               <select
-                aria-label="Evidence"
                 className={`${fieldControlClasses} w-full`}
-                value={content.evidence}
-                onChange={(event) =>
-                  edit({ ...content, evidence: event.target.value as ObjectiveEvidence })
-                }
+                value={content.assessment}
+                onChange={(event) => {
+                  const assessment = event.target.value as ObjectiveAssessment;
+                  // A judge scores a rubric dimension and nothing else, and `evidenceFor` is
+                  // where that pairing is decided for both this editor and the create page.
+                  edit({
+                    ...content,
+                    assessment,
+                    evidence: evidenceFor(assessment, content.evidence),
+                  });
+                }}
               >
-                {DETERMINISTIC_EVIDENCE.map((entry) => (
+                {ASSESSMENTS.map((entry) => (
                   <option key={entry.value} value={entry.value}>
                     {entry.label}
                   </option>
                 ))}
               </select>
-            </label>
-          )}
+            </Field>
+            {content.assessment === "judge" ? null : (
+              <Field label="Evidence">
+                <select
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.evidence}
+                  onChange={(event) =>
+                    edit({ ...content, evidence: event.target.value as ObjectiveEvidence })
+                  }
+                >
+                  {DETERMINISTIC_EVIDENCE.map((entry) => (
+                    <option key={entry.value} value={entry.value}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+          </FieldRows>
         </Card>
       )}
     />
@@ -595,23 +604,23 @@ export function MutationBlockEditorPage() {
             </>
           }
         >
-          <label className={fieldLabelClasses}>
-            Perturbs
-            <select
-              aria-label="Perturbs"
-              className={`${fieldControlClasses} w-full`}
-              value={content.effect}
-              onChange={(event) =>
-                edit({ ...content, effect: event.target.value as MutationEffect })
-              }
-            >
-              {EFFECTS.map((entry) => (
-                <option key={entry.value} value={entry.value}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FieldRows>
+            <Field label="Perturbs">
+              <select
+                className={`${fieldControlClasses} w-full`}
+                value={content.effect}
+                onChange={(event) =>
+                  edit({ ...content, effect: event.target.value as MutationEffect })
+                }
+              >
+                {EFFECTS.map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </FieldRows>
         </Card>
       )}
     />

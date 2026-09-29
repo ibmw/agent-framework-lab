@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { PROVEN_MODEL_RULE, unexercisedModelRule } from "../lib/fieldRules";
 import { fieldControlClasses } from "../lib/ui";
-import { FieldHint } from "./FieldHint";
+import { type Arrangement, FieldHint } from "./FieldHint";
 
 /**
  * The Model field, wherever the lab has proven a set of them.
@@ -20,11 +20,15 @@ import { FieldHint } from "./FieldHint";
  * `proven` is what the gate names as the thing the set belongs to: a framework's label in the
  * agent editor, a provider's in the judge editor. It is the subject of the gate's sentence,
  * so it is passed rather than guessed.
+ *
+ * `arrangement` is `FieldHint`'s: the field labels itself, so a card whose other fields are rows
+ * asks it to draw itself as one rather than wrapping it in a row that would name it twice.
  */
 export function ProvenModelField({
   value,
   models,
   proven,
+  arrangement,
   onChange,
 }: {
   value: string;
@@ -32,6 +36,7 @@ export function ProvenModelField({
   models: string[];
   /** The framework or provider the proven set belongs to, as the gate names it. */
   proven: string;
+  arrangement?: Arrangement;
   onChange: (value: string) => void;
 }) {
   const listId = useId();
@@ -45,6 +50,7 @@ export function ProvenModelField({
         hint={PROVEN_MODEL_RULE}
         extra={offList ? unexercisedModelRule(value, proven, models) : null}
         extraTone="warning"
+        arrangement={arrangement}
       >
         <input
           className={`${fieldControlClasses} w-full`}

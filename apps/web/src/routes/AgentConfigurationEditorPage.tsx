@@ -19,7 +19,7 @@ import {
   replaceAgentConfigurationDraft,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
-import { FieldHint } from "../components/FieldHint";
+import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
@@ -49,7 +49,7 @@ import {
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
-  fieldLabelClasses,
+  readOnlyValueClasses,
   subtleButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
@@ -91,6 +91,15 @@ const MEMORY_MODES: { value: MemoryMode; label: string; detail: string }[] = [
     detail: "Memory the lab persists and can restore across runs.",
   },
 ];
+
+/**
+ * What the preview picker decides, which its second line ("Values: …") answers. The values
+ * come from the chosen shop's published version and the adopted identity's
+ * (`AgentConfigurationService.resolve`, `application/agent_configurations.py`), and a run
+ * resolves the template again against the shop its experiment names — the card's first line.
+ */
+const PREVIEW_CONTEXT_RULE =
+  "The shop whose published version, with the adopted identity's, fills the resolved prompt below.";
 
 const GROUP_LABELS: Record<string, string> = {
   shop: "Shop",
@@ -291,6 +300,18 @@ export function AgentConfigurationEditorPage() {
     : null;
   const previewShop = resources?.preview_shops.find((shop) => shop.shop_id === previewShopId);
   const guidelines = previewShop?.tone_of_voice_guidelines ?? [];
+  const resolvedValues = resolution ? (
+    <>
+      Values:{" "}
+      {resolution.shop_name === null
+        ? "no published shop"
+        : `${resolution.shop_name} v${resolution.shop_version}`}{" "}
+      ·{" "}
+      {resolution.support_identity_name === null
+        ? "unpublished identity"
+        : `${resolution.support_identity_name} v${resolution.support_identity_version}`}
+    </>
+  ) : null;
 
   /**
    * Changing the framework changes what the lab has proven, so the two fields under it follow.
@@ -400,75 +421,71 @@ export function AgentConfigurationEditorPage() {
       <div className={editorColumnsClasses}>
         <div className={editorMainClasses}>
           <Card title="Identity">
-            <label className={fieldLabelClasses}>
-              Name
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.name}
-                onChange={(event) => edit({ ...content, name: event.target.value })}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Framework
-              <select
-                aria-label="Framework"
-                className={`${fieldControlClasses} w-full`}
-                value={content.framework_id}
-                onChange={(event) => chooseFramework(event.target.value)}
-              >
-                {(resources?.frameworks ?? []).map((framework) => (
-                  <option key={framework.framework_id} value={framework.framework_id}>
-                    {framework.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={fieldLabelClasses}>
-              Architecture
-              <select
-                aria-label="Architecture"
-                className={`${fieldControlClasses} w-full`}
-                value={content.architecture}
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    architecture: event.target.value as typeof content.architecture,
-                  })
-                }
-              >
-                {ARCHITECTURES.map((value) => (
-                  <option key={value} value={value}>
-                    {ARCHITECTURE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={fieldLabelClasses}>
-              Support identity
-              <select
-                aria-label="Support identity"
-                className={`${fieldControlClasses} w-full`}
-                value={content.support_identity_id}
-                onChange={(event) => edit({ ...content, support_identity_id: event.target.value })}
-              >
-                {(resources?.support_identities ?? []).map((identity) => (
-                  <option key={identity.identity_id} value={identity.identity_id}>
-                    {identity.name} · {identity.title}
-                    {identity.latest_published_version === null
-                      ? " (never published)"
-                      : ` (v${identity.latest_published_version})`}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className={fieldLabelClasses}>
-              Description
-              <textarea
-                className={`${textAreaClasses} w-full`}
-                value={content.description}
-                onChange={(event) => edit({ ...content, description: event.target.value })}
-              />
-            </label>
+            <FieldRows>
+              <Field label="Name">
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.name}
+                  onChange={(event) => edit({ ...content, name: event.target.value })}
+                />
+              </Field>
+              <Field label="Framework">
+                <select
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.framework_id}
+                  onChange={(event) => chooseFramework(event.target.value)}
+                >
+                  {(resources?.frameworks ?? []).map((framework) => (
+                    <option key={framework.framework_id} value={framework.framework_id}>
+                      {framework.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Architecture">
+                <select
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.architecture}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      architecture: event.target.value as typeof content.architecture,
+                    })
+                  }
+                >
+                  {ARCHITECTURES.map((value) => (
+                    <option key={value} value={value}>
+                      {ARCHITECTURE_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Support identity">
+                <select
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.support_identity_id}
+                  onChange={(event) =>
+                    edit({ ...content, support_identity_id: event.target.value })
+                  }
+                >
+                  {(resources?.support_identities ?? []).map((identity) => (
+                    <option key={identity.identity_id} value={identity.identity_id}>
+                      {identity.name} · {identity.title}
+                      {identity.latest_published_version === null
+                        ? " (never published)"
+                        : ` (v${identity.latest_published_version})`}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Description">
+                <textarea
+                  className={`${textAreaClasses} w-full`}
+                  value={content.description}
+                  onChange={(event) => edit({ ...content, description: event.target.value })}
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           <Card
@@ -481,57 +498,49 @@ export function AgentConfigurationEditorPage() {
               </>
             }
           >
-            {previewSettling || previewShops.length > 0 ? (
-              <label className={fieldLabelClasses}>
-                Preview context
-                <select
-                  className={`${fieldControlClasses} w-full`}
-                  aria-label="Preview context"
-                  value={previewShopId}
-                  onChange={(event) => setChosenShopId(event.target.value)}
-                >
-                  {/* A select whose value matches no option shows its first one, so "nothing is
-                      settled yet" needs an option of its own to be visible at all — otherwise
-                      this control names a shop while the prompt beside it resolves against none.
-                      The same shape as the top bar's switcher before a shop is chosen. It is
-                      drawn while a read is in flight and never once both have answered: it is
-                      the question being asked, not the value that came back. */}
-                  {previewSettling ? <option value="">Choosing a shop…</option> : null}
-                  {previewShops.map((shop) => (
-                    <option key={shop.shop_id} value={shop.shop_id}>
-                      {shop.name}
-                      {shop.latest_published_version === null
-                        ? " (never published)"
-                        : ` v${shop.latest_published_version}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              // Both reads have answered and offered nothing, so there is no choice to make
-              // and no control to make it with. A select of one placeholder is the same
-              // sentence with a disclosure arrow on it.
-              <div className={fieldLabelClasses}>
-                <span>Preview context</span>
-                <p className="font-normal">
-                  {resources === null
-                    ? "The shops this prompt would resolve against could not be read."
-                    : "This lab has no shops, so there is nothing to resolve the prompt against."}
-                </p>
-              </div>
-            )}
-            {resolution ? (
-              <p className="text-xs text-admin-muted">
-                Values:{" "}
-                {resolution.shop_name === null
-                  ? "no published shop"
-                  : `${resolution.shop_name} v${resolution.shop_version}`}{" "}
-                ·{" "}
-                {resolution.support_identity_name === null
-                  ? "unpublished identity"
-                  : `${resolution.support_identity_name} v${resolution.support_identity_version}`}
-              </p>
-            ) : null}
+            {/* The rule names what the picker decides — the published versions the resolved
+                prompt is read from (`AgentConfigurationService.resolve` reads the shop's and the
+                identity's published versions) — and the second line answers it with the ones
+                this context resolved. */}
+            <FieldRows>
+              {previewSettling || previewShops.length > 0 ? (
+                <Field label="Preview context" hint={PREVIEW_CONTEXT_RULE} extra={resolvedValues}>
+                  <select
+                    className={`${fieldControlClasses} w-full`}
+                    value={previewShopId}
+                    onChange={(event) => setChosenShopId(event.target.value)}
+                  >
+                    {/* A select whose value matches no option shows its first one, so "nothing
+                        is settled yet" needs an option of its own to be visible at all —
+                        otherwise this control names a shop while the prompt beside it resolves
+                        against none. The same shape as the top bar's switcher before a shop is
+                        chosen. It is drawn while a read is in flight and never once both have
+                        answered: it is the question being asked, not the value that came back. */}
+                    {previewSettling ? <option value="">Choosing a shop…</option> : null}
+                    {previewShops.map((shop) => (
+                      <option key={shop.shop_id} value={shop.shop_id}>
+                        {shop.name}
+                        {shop.latest_published_version === null
+                          ? " (never published)"
+                          : ` v${shop.latest_published_version}`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ) : (
+                // Both reads have answered and offered nothing, so there is no choice to make
+                // and no control to make it with. A select of one placeholder is the same
+                // sentence with a disclosure arrow on it, so the row shows the sentence as a
+                // value the editor states rather than asks, as the scenario's Built on does.
+                <Field label="Preview context" hint={PREVIEW_CONTEXT_RULE} extra={resolvedValues}>
+                  <output className={readOnlyValueClasses}>
+                    {resources === null
+                      ? "The shops this prompt would resolve against could not be read."
+                      : "This lab has no shops, so there is nothing to resolve the prompt against."}
+                  </output>
+                </Field>
+              )}
+            </FieldRows>
             <textarea
               ref={promptRef}
               aria-label="Prompt template"
@@ -555,39 +564,67 @@ export function AgentConfigurationEditorPage() {
           </Card>
 
           <Card title="Tone of voice">
-            <label className={fieldLabelClasses}>
-              Source
-              <select
-                aria-label="Tone of voice source"
-                className={`${fieldControlClasses} w-full`}
-                value={content.tone_of_voice.source}
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    tone_of_voice: {
-                      source: event.target.value as ToneOfVoiceSource,
-                      guideline_id:
-                        event.target.value === "override" ? content.tone_of_voice.guideline_id : "",
-                    },
-                  })
+            <FieldRows>
+              {/*
+               * The note that used to close the card is this field's rule: how the source
+               * resolves (`{{shop.tone_of_voice}}`, which `AgentConfigurationResolutionSchema`
+               * carries as `tone_of_voice_label`) and what an override the target shop lacks
+               * does. What the preview context resolves it to is the second line — only where
+               * no field carries the answer. An override says what it resolves to beside the ID
+               * that names it, and this line is the *saved* draft's resolution — so on an
+               * override it would contradict the field for as long as the edit is unsaved,
+               * which is a card arguing with itself.
+               */}
+              <Field
+                label="Source"
+                hint={
+                  <>
+                    Resolves per shop through{" "}
+                    <code className="font-mono">{"{{shop.tone_of_voice}}"}</code>. An override
+                    missing from the target shop fails at experiment setup and is reported as a
+                    configuration variable in comparisons.
+                  </>
+                }
+                extra={
+                  content.tone_of_voice.source === "override"
+                    ? null
+                    : resolution?.tone_of_voice_label
+                      ? `This context resolves to ${resolution.tone_of_voice_label}.`
+                      : "This context resolves to nothing yet."
                 }
               >
-                <option value="shop_default">Shop default (recommended)</option>
-                <option value="override">Named override</option>
-              </select>
-            </label>
-            {content.tone_of_voice.source === "override" ? (
-              <div>
-                {/*
-                 * The preview shop's own list, served with the option (`tone_of_voice_guidelines`
-                 * on `PreviewShopOptionSchema`) and read off its *published* version, because
-                 * that is the version a run resolves against. A datalist rather than a select
-                 * for `CountryField`'s reason: the configuration is shop-independent, so an ID
-                 * this shop does not publish may still be the right one for the shop the
-                 * experiment will name, and a dropdown would refuse it here while the lab takes
-                 * it. The line beneath says which of the two it is, live.
-                 */}
-                <FieldHint
+                <select
+                  aria-label="Tone of voice source"
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.tone_of_voice.source}
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      tone_of_voice: {
+                        source: event.target.value as ToneOfVoiceSource,
+                        guideline_id:
+                          event.target.value === "override"
+                            ? content.tone_of_voice.guideline_id
+                            : "",
+                      },
+                    })
+                  }
+                >
+                  <option value="shop_default">Shop default (recommended)</option>
+                  <option value="override">Named override</option>
+                </select>
+              </Field>
+              {/*
+               * The preview shop's own list, served with the option (`tone_of_voice_guidelines`
+               * on `PreviewShopOptionSchema`) and read off its *published* version, because
+               * that is the version a run resolves against. A datalist rather than a select
+               * for `CountryField`'s reason: the configuration is shop-independent, so an ID
+               * this shop does not publish may still be the right one for the shop the
+               * experiment will name, and a dropdown would refuse it here while the lab takes
+               * it. The line beneath says which of the two it is, live.
+               */}
+              {content.tone_of_voice.source === "override" ? (
+                <Field
                   label="Guideline ID"
                   hint={TONE_OVERRIDE_RULE}
                   extra={overrideEcho(content.tone_of_voice.guideline_id, guidelines, previewShop)}
@@ -608,31 +645,14 @@ export function AgentConfigurationEditorPage() {
                       })
                     }
                   />
-                </FieldHint>
-                <datalist id="tone-of-voice-guidelines">
-                  {guidelines.map((guideline) => (
-                    <option key={guideline.id} value={guideline.id} label={guideline.name} />
-                  ))}
-                </datalist>
-              </div>
-            ) : null}
-            <p className="text-xs text-admin-muted">
-              Resolves per shop through{" "}
-              <code className="font-mono">{"{{shop.tone_of_voice}}"}</code>
-              {/*
-               * Only where no field carries the answer. An override now says what it resolves
-               * to beside the ID that names it, and this line is the *saved* draft's resolution
-               * — so on an override it would contradict the field for as long as the edit is
-               * unsaved, which is a card arguing with itself.
-               */}
-              {content.tone_of_voice.source === "override"
-                ? ""
-                : resolution?.tone_of_voice_label
-                  ? ` — this context resolves to ${resolution.tone_of_voice_label}.`
-                  : " — this context resolves to nothing yet."}{" "}
-              An override missing from the target shop fails at experiment setup and is reported as
-              a configuration variable in comparisons.
-            </p>
+                </Field>
+              ) : null}
+            </FieldRows>
+            <datalist id="tone-of-voice-guidelines">
+              {guidelines.map((guideline) => (
+                <option key={guideline.id} value={guideline.id} label={guideline.name} />
+              ))}
+            </datalist>
           </Card>
 
           <Card
@@ -676,8 +696,8 @@ export function AgentConfigurationEditorPage() {
           </Card>
 
           <Card title="LLM and runtime">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldHint
+            <FieldRows>
+              <Field
                 label="Provider"
                 hint={PROVEN_PROVIDER_RULE}
                 extra={
@@ -709,8 +729,9 @@ export function AgentConfigurationEditorPage() {
                     </option>
                   ))}
                 </select>
-              </FieldHint>
+              </Field>
               <ProvenModelField
+                arrangement="row"
                 value={content.model.model_id}
                 models={provenModels}
                 proven={framework?.label ?? content.framework_id}
@@ -718,7 +739,7 @@ export function AgentConfigurationEditorPage() {
                   edit({ ...content, model: { ...content.model, model_id: modelId } })
                 }
               />
-              <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
+              <Field label="Temperature" hint={TEMPERATURE_RULE}>
                 <input
                   className={`${fieldControlClasses} w-full`}
                   value={content.model.temperature}
@@ -733,32 +754,35 @@ export function AgentConfigurationEditorPage() {
                     })
                   }
                 />
-              </FieldHint>
+              </Field>
               <ToolRoundsField
                 value={content.model.max_tool_rounds}
                 onChange={(rounds) =>
                   edit({ ...content, model: { ...content.model, max_tool_rounds: rounds } })
                 }
               />
-            </div>
-            <fieldset className="grid gap-2">
-              <legend className="text-xs font-semibold text-admin-muted uppercase">Memory</legend>
-              {MEMORY_MODES.map((mode) => (
-                <label key={mode.value} className="flex items-start gap-2 text-[13px]">
-                  <input
-                    type="radio"
-                    name="memory"
-                    value={mode.value}
-                    checked={content.memory === mode.value}
-                    onChange={() => edit({ ...content, memory: mode.value })}
-                  />
-                  <span>
-                    {mode.label}
-                    <span className="block text-xs text-admin-muted">{mode.detail}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
+              {/* Three named radios, each with the line that says what it keeps: a closed set
+                  whose options need an explanation is not a chip group. */}
+              <FieldGroup label="Memory">
+                <div className="grid gap-2">
+                  {MEMORY_MODES.map((mode) => (
+                    <label key={mode.value} className="flex items-start gap-2 text-[13px]">
+                      <input
+                        type="radio"
+                        name="memory"
+                        value={mode.value}
+                        checked={content.memory === mode.value}
+                        onChange={() => edit({ ...content, memory: mode.value })}
+                      />
+                      <span>
+                        {mode.label}
+                        <span className="block text-xs text-admin-muted">{mode.detail}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </FieldGroup>
+            </FieldRows>
           </Card>
         </div>
 
@@ -861,8 +885,7 @@ function ToolRoundsField({
   }, [value]);
 
   return (
-    <label className={fieldLabelClasses}>
-      Max tool rounds
+    <Field label="Max tool rounds">
       <input
         className={`${fieldControlClasses} w-full`}
         type="number"
@@ -878,7 +901,7 @@ function ToolRoundsField({
         }}
         onBlur={() => setText(String(value))}
       />
-    </label>
+    </Field>
   );
 }
 

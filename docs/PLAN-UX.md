@@ -76,13 +76,15 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
 the commits and ADR 0052–0072, its goal and acceptance criteria
 `docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator
-agreed, 32 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
+agreed, 33 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
 panel's order on every editor — and Tickets followed as an index, a create page and an editor
 built on it (ADR 0073); then the header: every editor's way back in one slot (`HeaderBack`, the
 create page's piece), every card's first line on `Card`'s `description`, and the neutral pill
-(`neutralPillClasses`) Slice 34 draws *Shared across shops* with. No open slice depends on
-another. The order reshapes an editor from the outside in: panel, header, rows, lists, then the
-indexes.
+(`neutralPillClasses`) Slice 34 draws *Shared across shops* with; then the rows: the agent
+configuration, judge, block, identity and scenario editors on `Field`/`FieldGroup` rows, with
+a gate error the draft still saves with drawn as the row's second line (`Field`'s `finding`
+tone). No open slice depends on another. The order reshapes an editor from the outside in:
+panel, header, rows, lists, then the indexes.
 
 ## Milestone 9 — Every page is one of three templates
 
@@ -113,51 +115,6 @@ only: no backend, contract or payload moves.
 
 Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
 experiment keep templates of their own and are not reshaped here.
-
-### Slice 32 — Field rows on the editors that still stack
-
-The editors that stack a label over its control take the row the reference pages use.
-
-- [ ] Agent config: the stacked labels (`AgentConfigurationEditorPage.tsx:401`, :409, :424,
-  :444, :462, :483, :512, :556, :859), the raw `sm:grid-cols-2` pair (:673) and the memory
-  fieldset (:738) go onto `Field`/`FieldGroup` rows inside their current cards.
-- [ ] Judge: Name, Description and the rubric (`JudgeConfigurationEditorPage.tsx:253`, :261,
-  :270), and the Model card's Provider, Model and Temperature (the `FieldHint`s at :335 and
-  :371, and `ProvenModelField`). The card keeps the name "Model"; the prototype draws Provider and
-  Model in the card that holds Name (:503–518), and moving them there would rename the card
-  `experiment-start.spec.ts:350` reaches.
-- [ ] Block: Name, Statement and Description (`BlockEditorPage.tsx:209`, :217, :230), and the
-  Assessment (:514, :544) and Effect (:585) cards. `ParameterForm`'s stacked labels (:413, :429,
-  :443) are an add form's and stay.
-- [ ] Support identity: Role's fields (`SupportIdentityEditorPage.tsx:210`, :220, :230),
-  with the tone-of-voice note at the card's foot becoming the Description row's hint, where the
-  prototype draws it under Remit (:1808); Escalation (:369), and the two permission fieldsets
-  with their uppercase legends (:250–275), which become `FieldGroup` rows named Read and Act as
-  the prototype names them (:1818, :1834).
-  The guidance add form (:463, :472) stays stacked.
-- [ ] Scenario: *Built on* (`ScenarioEditorPage.tsx:307`) — Name (:308) and the read-only
-  ticket, customer and shop version (`Row`, :732) — and *Completion* (:579) with
-  `TurnCapField` (:705). The bound blocks' `BindingField` (:864) is a list row's, and Slice 33's.
-- [ ] Every hint stays in its control's accessible description and every label keeps its text,
-  which is what the specs reach the controls by.
-
-Frames: `Workspace.dc.html` :407–466 (agent), :503–518 (judge), :588–612 and :662–680 (blocks),
-:1787–1834 (identity), :3047–3062 (scenario *Built on*).
-
-Authority: ADR 0050, ADR 0069 (a field states its own width); `docs/design-direction.md`, *The
-form language*, *The row*.
-
-Departures to record: the cards keep the codebase's grouping (the prototype groups the agent
-editor as Runtime, Identity and Tools, :407, :442, :452); only the rows change.
-
-Branch: `feat/editor-field-rows`. Checks: `AgentConfigurations.test.tsx`,
-`JudgeConfigurations.test.tsx`, `Blocks.test.tsx`, `SupportIdentities.test.tsx`,
-`Scenarios.test.tsx` — each field found by its label, its hint in its description, a fieldset
-named by its row; `lib/fieldRules.test.ts` where a hint moves; Playwright `agent-configuration`,
-`block-library`, `scenario-authoring` and `experiment-start`, which fill these fields by label.
-
-Slice evidence: the agent configuration, judge, block, identity and scenario editors read like
-*Shop details* — label and rule on the left, control on the right, wrapping when narrow.
 
 ### Slice 33 — Lists on `EntryCard`, and one add form
 

@@ -21,14 +21,25 @@ type ControlProps = {
  * finding (it paints the message itself `admin-ink-soft`, and `PublishReasons` summarises
  * warnings in `admin-muted`). It is borrowed here as the workspace's warning ink, not as a
  * copy of any one of those three renderings.
+ *
+ * `finding` is a publish-gate **error** on a draft that still saves — `GateFindingLine`'s line,
+ * drawn as a row's second line: the refusal's ink and weight, announced politely rather than as
+ * an alert, and marking nothing invalid on the control's behalf, because nothing was refused.
+ * The control says `aria-invalid` itself, as the judge's rubric does.
  */
 const EXTRA_TONES = {
   muted: "text-admin-muted",
   warning: "text-admin-draft-ink",
   error: "text-lab-error",
+  finding: "text-lab-error",
 } as const;
 
 type ExtraTone = keyof typeof EXTRA_TONES;
+
+/** A refusal and a gate error read at the validation weight (ADR 0063); the rest stay normal. */
+function atValidationWeight(tone: ExtraTone): boolean {
+  return tone === "error" || tone === "finding";
+}
 
 /**
  * Label, hint and second line are one contract with two arrangements.
@@ -150,6 +161,10 @@ type FieldHintProps = {
    * finding must not claim a severity the gate did not give it: an unexercised model is
    * a warning there, so it is a warning here, and it is announced politely rather than
    * as an alert because nothing has been refused.
+   *
+   * `finding` is the gate's **error** on a draft that still saves — the judge's rubric — at
+   * the refusal's ink and weight, announced politely and marking nothing invalid on the
+   * control's behalf (see `EXTRA_TONES`).
    */
   extraTone?: ExtraTone;
   /**
@@ -198,7 +213,7 @@ function StackedFieldHint({
       <ExtraLine
         id={extraId}
         tone={extraTone}
-        className={extraTone === "error" ? "text-[13px] font-semibold" : "font-normal"}
+        className={atValidationWeight(extraTone) ? "text-[13px] font-semibold" : "font-normal"}
       >
         {extra}
       </ExtraLine>
@@ -279,7 +294,7 @@ export function Field({
         <ExtraLine
           id={extraId}
           tone={extraTone}
-          className={`mt-[7px] text-[13px] ${extraTone === "error" ? "font-semibold" : "font-normal"}`}
+          className={`mt-[7px] text-[13px] ${atValidationWeight(extraTone) ? "font-semibold" : "font-normal"}`}
         >
           {extra}
         </ExtraLine>
@@ -345,7 +360,7 @@ export function FieldGroup({
         <ExtraLine
           id={extraId}
           tone={extraTone}
-          className={`mt-[7px] text-[13px] ${extraTone === "error" ? "font-semibold" : "font-normal"}`}
+          className={`mt-[7px] text-[13px] ${atValidationWeight(extraTone) ? "font-semibold" : "font-normal"}`}
         >
           {extra}
         </ExtraLine>

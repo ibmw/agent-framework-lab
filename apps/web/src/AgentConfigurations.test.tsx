@@ -19,6 +19,7 @@ import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectCardOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -758,6 +759,11 @@ describe("agent configuration workspace", () => {
     await waitFor(() => expect(previewShopIds).toContain(null));
     expect(screen.queryByRole("combobox", { name: "Preview context" })).toBeNull();
     expect(screen.queryByText("Choosing a shop…")).toBeNull();
+    // The sentence is the row's value, stated rather than asked, on the row the picker had.
+    const stated = screen.getByLabelText("Preview context");
+    expect(stated.tagName).toBe("OUTPUT");
+    expect(stated).toHaveTextContent(/This lab has no shops/);
+    expectFieldRow(stated, "Preview context");
     // The rest of the editor is unaffected: the prompt is still a template being written.
     expect(screen.getByLabelText("Prompt template")).toBeVisible();
   });
@@ -781,6 +787,9 @@ describe("agent configuration workspace", () => {
     expect(screen.queryByRole("combobox", { name: "Preview context" })).toBeNull();
     expect(screen.queryByText("Choosing a shop…")).toBeNull();
     expect(screen.queryByText(/This lab has no shops/)).toBeNull();
+    const stated = screen.getByLabelText("Preview context");
+    expect(stated.tagName).toBe("OUTPUT");
+    expectFieldRow(stated, "Preview context");
   });
 
   it("offers the providers and models the chosen framework is proven on", async () => {
@@ -1145,6 +1154,15 @@ describe("the new-configuration page", () => {
     );
   });
 
+  it("draws the model on a row with the fields around it, its rule still its description", async () => {
+    renderAt("/lab/agent-configurations/new");
+    const runtime = await screen.findByRole("region", { name: "Runtime" });
+
+    const model = within(runtime).getByLabelText("Model");
+    expectFieldRow(model, "Model");
+    expect(model).toHaveAccessibleDescription(/Pick a proven model/);
+  });
+
   it("opens on the lab's one support identity, and says so", async () => {
     renderAt("/lab/agent-configurations/new");
 
@@ -1385,5 +1403,89 @@ describe("the agent configuration editor's side panel", () => {
       "What publishing freezes",
     ]);
     expect(panelFields(panel)).toEqual([]);
+  });
+});
+
+/**
+ * The editor's sections on the reference pages' rows (`ShopSetupPages.tsx`): label and rule on
+ * the left, control on the right. The cards keep the codebase's grouping; only the rows change.
+ */
+describe("the agent configuration editor's rows", () => {
+  it("draws every field of its cards on a row, found by its own label", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const identity = await screen.findByRole("region", { name: "Identity" });
+
+    for (const label of ["Name", "Framework", "Architecture", "Support identity", "Description"]) {
+      expectFieldRow(within(identity).getByLabelText(label), label);
+    }
+    const prompt = screen.getByRole("region", { name: "System prompt" });
+    expectFieldRow(await within(prompt).findByLabelText("Preview context"), "Preview context");
+    const runtime = screen.getByRole("region", { name: "LLM and runtime" });
+    for (const label of ["Provider", "Model", "Temperature", "Max tool rounds"]) {
+      expectFieldRow(within(runtime).getByLabelText(label), label);
+    }
+    // The visible label binds the select; the name a spec reaches it by stays the longer one.
+    const tone = screen.getByRole("region", { name: "Tone of voice" });
+    expectFieldRow(within(tone).getByLabelText("Source"), "Source");
+    expect(within(tone).getByLabelText("Source")).toBe(
+      within(tone).getByRole("combobox", { name: "Tone of voice source" }),
+    );
+
+    expectCardOnRows(identity);
+    // The template is the prompt editor, the width of the card, and not a row.
+    expectCardOnRows(prompt, [within(prompt).getByLabelText("Prompt template")]);
+    expectCardOnRows(tone);
+    expectCardOnRows(runtime);
+  });
+
+  it("asks for the memory as a group named by its row", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const runtime = await screen.findByRole("region", { name: "LLM and runtime" });
+
+    const memory = within(runtime).getByRole("group", { name: "Memory" });
+    expectGroupRow(memory, "Memory");
+    expect(
+      within(memory)
+        .getAllByRole("radio")
+        .map((radio) => radio.getAttribute("value")),
+    ).toEqual(["none", "conversation", "durable"]);
+  });
+
+  it("says how the tone of voice resolves under its own field, and what this context resolves it to", async () => {
+    const user = userEvent.setup();
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const tone = within(await screen.findByRole("region", { name: "Tone of voice" }));
+    const source = tone.getByLabelText("Source");
+
+    expect(source).toHaveAccessibleDescription(
+      /Resolves per shop through \{\{shop\.tone_of_voice\}\}\./,
+    );
+    expect(source).toHaveAccessibleDescription(/An override missing from the target shop fails/);
+    await waitFor(() =>
+      expect(source).toHaveAccessibleDescription(/This context resolves to Warm and precise\./),
+    );
+
+    // On an override the ID's own line says what it resolves to, so this one says nothing.
+    await user.selectOptions(source, "override");
+    expect(source).not.toHaveAccessibleDescription(/This context resolves to/);
+    expectFieldRow(tone.getByLabelText("Guideline ID"), "Guideline ID");
+    expect(tone.getByLabelText("Guideline ID")).toHaveAccessibleDescription(
+      /The ID of a guideline the target shop publishes/,
+    );
+  });
+
+  it("puts what the preview context resolves to under the picker, answering its rule", async () => {
+    renderAt(`/lab/agent-configurations/${CONFIGURATION_ID}`);
+    const prompt = within(await screen.findByRole("region", { name: "System prompt" }));
+
+    expect(await prompt.findByLabelText("Preview context")).toHaveAccessibleDescription(
+      /^The shop whose published version, with the adopted identity's, fills the resolved prompt below\./,
+    );
+
+    await waitFor(() =>
+      expect(prompt.getByLabelText("Preview context")).toHaveAccessibleDescription(
+        /Values: Northstar Outfitters v\d+ · Northstar tier 1 v\d+/,
+      ),
+    );
   });
 });

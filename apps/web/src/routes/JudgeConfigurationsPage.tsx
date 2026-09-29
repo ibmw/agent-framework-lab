@@ -306,6 +306,7 @@ export function NewJudgePage() {
               </select>
             </Field>
             <ProvenModelField
+              arrangement="row"
               value={modelId}
               models={chosen?.models ?? []}
               proven={chosen === undefined ? provider : describeProvider(chosen.provider)}

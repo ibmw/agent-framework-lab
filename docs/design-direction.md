@@ -88,6 +88,9 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | Primary token | redefine `lab-accent` to pine | new `lab-primary`; the clay stays on trace bars, the review star, a ticket's emphasis and the armed seed | those four are not the refresh's to repaint |
 | The create page's chip | *nothing created yet* in `#f0f2f4` under `#59636d`, 11px 700 (:211) | the neutral pill (`neutralPillClasses`), `admin-border` under `admin-ink-soft` at 11.5px 600, as `VersionChips` draws its grey states | one pill for a standing fact, in the value that is already a token; rule 5 |
 | A line under an editor's title | none: the header is the ←, the "Index · kind" line, the title and its chip, and the actions (:388–392, :485–487, :892–894, :1748–1750) | `PageHeader`'s `description` under the title — a fingerprint, a model, a statement, a date — beside the "Index · kind" line, which it partly repeats on Customers, Judges and the block editors | open: it predates the way back, and it is the growth that moved the sticky-header spec's short-pane case from 960×420 to 1100×420 (ADR 0066). Folding it into the kind line, as the prototype does, is a follow-up rather than this row's licence |
+| The far editors' cards | the agent editor grouped as Runtime, Identity and Tools (:407, :442, :452), and the judge's Provider and Model in the card that holds its name (:503–518) | the codebase's cards — the agent's Identity, System prompt, Tone of voice, Tool bindings and LLM and runtime; the judge's Rubric, Model and Evidence — with their fields on rows | only the rows changed: *LLM and runtime*, *Tool bindings*, *Tone of voice* and the judge's *Model* are regions the Playwright journeys reach their fields by (rule 5) |
+| Hints on those editors' rows | one per row, as on every row of the prototype | the rules the editors already stated, moved under their labels — the provider, model and temperature, the tone override, the statement, the tone-of-voice note on the identity's Remit, the judge's zero temperature, the source's resolution — and no hint on the rest | a row carries a hint only once it is checked against the code that makes it true, and several of the prototype's are its own lab's. The prototype draws the identity's note under the Remit control (:1808), as the create page does beneath a Remit hint of its own; the editor's Remit has no other rule, so the note is its hint |
+| The scenario's *Built on* rows | a Ticket select (:3055) under "Building a scenario freezes the ticket at its current version, so the opening message can never drift."; Customer under "Resolved through the ticket, and pinned at the version the scenario published against." (:3058); Shop version under "The scenario reads this exact version. Publishing the shop again does not move it." (:3059) | Ticket, Customer and Shop version read-only, the ticket "— published at vN" or "— not published yet"; no hint on Ticket or Customer, and on Shop version "The shop's newest published version, which is what the scenario resolves against today." | the resolution reads the ticket's and the shop's latest published versions on every read (`ScenarioService.resolve`, `application/scenarios.py`), so a new publish of either moves them and none of the three pinning claims is true here — the Customer hint's "Resolved through the ticket" is, and the row reads the customer that way; the Ticket row is read-only because the scenario never changes *which* ticket it is built on — the create page chooses it, and the draft carries its ID |
 | Page title | 22px bound name, 24px fixed label | one `PageHeader` at 24px, and `CreatePage`'s own header at the same size | one size for the workspace, no variant yet; rule 3 |
 | Card title | sans on note cards, Georgia on table and section cards | one `Card`, Georgia 17px | same |
 | Setup pages' header | *Shop details* and *Tone of voice* scroll their header away (:1893, :1993) | pinned like an editor's | each edits one object and carries Save; ADR 0066 |
@@ -366,6 +369,18 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   control's description keeps the id the control names. On an editor, a card's footer holds
   what acts on the whole card — *Add event*, a document's Remove — and never an explanation,
   and a note about one field is that field's hint rather than the card's line.
+- **Every editor section is on rows** (`Field`, `FieldGroup`, `FieldRows`, and the
+  `arrangement="row"` a self-labelling field draws itself in — `ProvenModelField` among them):
+  stacked labels only inside an add form, as `ParameterForm` and the guidance form draw them;
+  a self-labelling list (`ChipListField`) keeps its own legend beneath the rows; a value the
+  editor shows rather than asks is an `<output>` in `readOnlyValueClasses` on a row; and a gate
+  error the draft still saves with is the row's second line in `Field`'s `finding` tone —
+  `GateFindingLine`'s weight, polite, marking nothing invalid on the control's behalf. Three
+  exceptions stand, owned by no slice yet: on the agent editor, *Tool bindings*, still a bare
+  checkbox list where the prototype draws an *Enabled* group row (:452–466), and the system
+  prompt's template, the card's full-width editor, named by its `aria-label` ("Prompt
+  template", which the specs fill it by) with no visible label; and on the judge, *Evidence*,
+  a bare checkbox list too.
 - **A number field says what it accepts** and refuses at the save what a pattern cannot. A
   closed set of five is five named radios.
 - **A create form asks for what constrains the work that follows** and names where the rest

@@ -250,6 +250,28 @@ describe("Field", () => {
     expect(row(container).right).toContainElement(screen.getByRole("alert"));
   });
 
+  it("says a gate error the draft still saves with at the validation weight, politely", () => {
+    const { container } = render(
+      <Field
+        label="How this judge scores"
+        extra="a published judge must carry the rubric it scores by"
+        extraTone="finding"
+      >
+        <textarea />
+      </Field>,
+    );
+    const rubric = screen.getByLabelText("How this judge scores");
+    const line = screen.getByText("a published judge must carry the rubric it scores by");
+
+    expect(rubric).toHaveAccessibleDescription(/must carry the rubric/);
+    // Nothing was refused: no alert, and the control is not marked invalid on its behalf.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(line).toHaveAttribute("aria-live", "polite");
+    expect(rubric).not.toHaveAttribute("aria-invalid");
+    expect(line).toHaveClass("text-[13px]", "font-semibold", "text-lab-error");
+    expect(row(container).right).toContainElement(line);
+  });
+
   it("keeps the second line mounted so a later preview announces", () => {
     const { rerender } = render(
       <Field label="Name" hint="Saved as a lowercase slug.">

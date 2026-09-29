@@ -8,6 +8,7 @@ import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { IDENTITY_TONE_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import {
   accentButtonClasses,
@@ -245,7 +246,7 @@ export function NewSupportIdentityPage() {
               label="Remit"
               optional
               hint="What this identity is for, in its own words. Keep it to scope — anything factual belongs in a policy document a scenario can require."
-              extra="Tone of voice is not authored here: it belongs to the shop, and an agent configuration selects the shop default or a named override."
+              extra={IDENTITY_TONE_RULE}
             >
               <textarea
                 className={`${textAreaClasses} w-full`}

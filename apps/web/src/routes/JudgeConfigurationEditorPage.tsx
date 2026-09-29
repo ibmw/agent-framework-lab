@@ -14,8 +14,7 @@ import {
   readJudgeConfigurationResources,
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
-import { FieldHint } from "../components/FieldHint";
-import { GateFindingLine } from "../components/GateFindingLine";
+import { Field, FieldRows } from "../components/FieldHint";
 import { ProvenModelField } from "../components/ProvenModelField";
 import {
   Card,
@@ -46,7 +45,6 @@ import {
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { useUnreachableProviders } from "../lib/useUnreachableProviders";
@@ -83,7 +81,6 @@ export function JudgeConfigurationEditorPage() {
   const { listings } = useLabWorkspace();
   const publishReasonsId = useId();
   const rubricRuleId = useId();
-  const rubricFindingId = useId();
   const editor = useDefinitionEditor(judgeId, CLIENT, {
     label: "The judge draft has unsaved changes.",
     // The library index prints the row this editor is changing (ADR 0056).
@@ -268,107 +265,121 @@ export function JudgeConfigurationEditorPage() {
               </>
             }
           >
-            <label className={fieldLabelClasses}>
-              Name
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.name}
-                onChange={(event) => edit({ ...content, name: event.target.value })}
-              />
-            </label>
-            <label className={fieldLabelClasses}>
-              Description
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.description}
-                onChange={(event) => edit({ ...content, description: event.target.value })}
-              />
-            </label>
-            <div className="grid gap-1">
-              <label className={fieldLabelClasses}>
-                How this judge scores
+            <FieldRows>
+              <Field label="Name">
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.name}
+                  onChange={(event) => edit({ ...content, name: event.target.value })}
+                />
+              </Field>
+              <Field label="Description">
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.description}
+                  onChange={(event) => edit({ ...content, description: event.target.value })}
+                />
+              </Field>
+              {/* The rule is the card's first line, which the rubric keeps pointing at; the
+                  gate's findings are the row's second line, at the gate's own severity — an
+                  error the draft still saves with, so polite and refusing nothing. */}
+              <Field
+                label="How this judge scores"
+                extra={
+                  rubricFindings.length > 0
+                    ? rubricFindings.map((finding) => (
+                        <span key={finding} className="block">
+                          {finding}
+                        </span>
+                      ))
+                    : null
+                }
+                extraTone="finding"
+              >
                 <textarea
                   className={`${textAreaClasses} w-full min-h-56 font-mono`}
                   value={content.rubric}
                   aria-required
-                  aria-describedby={
-                    rubricFindings.length > 0 ? `${rubricRuleId} ${rubricFindingId}` : rubricRuleId
-                  }
+                  aria-describedby={rubricRuleId}
                   aria-invalid={rubricFindings.length > 0 || undefined}
                   onChange={(event) => edit({ ...content, rubric: event.target.value })}
                 />
-              </label>
-              <GateFindingLine id={rubricFindingId}>
-                {rubricFindings.length > 0
-                  ? rubricFindings.map((finding) => (
-                      <span key={finding} className="block">
-                        {finding}
-                      </span>
-                    ))
-                  : null}
-              </GateFindingLine>
-            </div>
+              </Field>
+            </FieldRows>
           </Card>
 
           {/* In the main column, after the rubric, as the prototype draws the judge's model
               (`Workspace.dc.html` :503–518): the side panel holds no field of the draft. */}
           <Card title="Model">
-            <FieldHint
-              label="Provider"
-              hint={PROVEN_PROVIDER_RULE}
-              extra={
-                unprovenProvider ? unprovenJudgeProviderRule(content.model.provider) : providerNote
-              }
-              extraTone={unprovenProvider ? "error" : "muted"}
-            >
-              <select
-                className={`${fieldControlClasses} w-full`}
-                value={content.model.provider}
-                onChange={(event) => chooseProvider(event.target.value)}
+            <FieldRows>
+              <Field
+                label="Provider"
+                hint={PROVEN_PROVIDER_RULE}
+                extra={
+                  unprovenProvider
+                    ? unprovenJudgeProviderRule(content.model.provider)
+                    : providerNote
+                }
+                extraTone={unprovenProvider ? "error" : "muted"}
               >
-                {/*
-                 * The served label where the catalog has one, so the option and the sentence
-                 * beneath it cannot come apart: `ProvenModelField`'s subject must stay
-                 * `judge.label` to keep that sentence character-identical to the gate, which
-                 * writes it from exactly that field. The shared table is the fallback, for
-                 * the appended off-list value that the catalog knows nothing about.
-                 */}
-                {providers.map((candidate) => (
-                  <option key={candidate} value={candidate}>
-                    {resources?.judges.find((judge) => judge.provider === candidate)?.label ??
-                      describeProvider(candidate)}
-                  </option>
-                ))}
-              </select>
-            </FieldHint>
-            <ProvenModelField
-              value={content.model.model_id}
-              models={models}
-              proven={provider?.label ?? describeProvider(content.model.provider)}
-              onChange={(modelId) =>
-                edit({ ...content, model: { ...content.model, model_id: modelId } })
-              }
-            />
-            <FieldHint label="Temperature" hint={TEMPERATURE_RULE}>
-              <input
-                className={`${fieldControlClasses} w-full`}
-                value={content.model.temperature}
-                inputMode="decimal"
-                pattern={TEMPERATURE_PATTERN}
-                title={TEMPERATURE_RULE}
-                placeholder="0.00"
-                onChange={(event) =>
-                  edit({
-                    ...content,
-                    model: { ...content.model, temperature: event.target.value },
-                  })
+                <select
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.model.provider}
+                  onChange={(event) => chooseProvider(event.target.value)}
+                >
+                  {/*
+                   * The served label where the catalog has one, so the option and the sentence
+                   * beneath it cannot come apart: `ProvenModelField`'s subject must stay
+                   * `judge.label` to keep that sentence character-identical to the gate, which
+                   * writes it from exactly that field. The shared table is the fallback, for
+                   * the appended off-list value that the catalog knows nothing about.
+                   */}
+                  {providers.map((candidate) => (
+                    <option key={candidate} value={candidate}>
+                      {resources?.judges.find((judge) => judge.provider === candidate)?.label ??
+                        describeProvider(candidate)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <ProvenModelField
+                arrangement="row"
+                value={content.model.model_id}
+                models={models}
+                proven={provider?.label ?? describeProvider(content.model.provider)}
+                onChange={(modelId) =>
+                  edit({ ...content, model: { ...content.model, model_id: modelId } })
                 }
               />
-            </FieldHint>
-            <p className="text-xs text-admin-muted">
-              Zero by default: a judge is rerun to see whether a verdict holds, and one that varied
-              for its own reasons would make every rerun unreadable.
-            </p>
+              {/* The note that closed the card is about this field alone, so it is the second
+                  sentence of its rule: a new draft starts on `DEFAULT_JUDGE_MODEL`
+                  (`application/judge_capabilities.py`), at 0.00. */}
+              <Field
+                label="Temperature"
+                hint={
+                  <>
+                    {TEMPERATURE_RULE} Zero by default: a judge is rerun to see whether a verdict
+                    holds, and one that varied for its own reasons would make every rerun
+                    unreadable.
+                  </>
+                }
+              >
+                <input
+                  className={`${fieldControlClasses} w-full`}
+                  value={content.model.temperature}
+                  inputMode="decimal"
+                  pattern={TEMPERATURE_PATTERN}
+                  title={TEMPERATURE_RULE}
+                  placeholder="0.00"
+                  onChange={(event) =>
+                    edit({
+                      ...content,
+                      model: { ...content.model, temperature: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+            </FieldRows>
           </Card>
 
           <Card
