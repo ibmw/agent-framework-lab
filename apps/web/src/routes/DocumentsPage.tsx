@@ -1,6 +1,7 @@
 import type { ShopDocumentKind } from "@agent-lab/contracts";
 import { type FormEvent, useId, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { DerivedIdField } from "../components/DerivedIdField";
@@ -37,8 +38,8 @@ import {
 import { filterList } from "../lib/filters";
 import { useArrivedRemoval, useRemoval } from "../lib/removal";
 import {
-  accentButtonClasses,
   fieldControlClasses,
+  outlineButtonClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -139,14 +140,25 @@ export function DocumentsPage() {
         chips={<VersionChips preview={preview} />}
         description="The documents an agent can only reach through tools, never in its prompt. A scenario records which reads it expects."
         actions={
-          <EditorSaveActions
-            tone="accent"
-            dirty={dirty}
-            saving={saving}
-            discarding={discarding}
-            onSave={() => void save()}
-            onDiscard={() => void discard()}
-          />
+          // *New document* stands beside the shop draft's Save and Discard, where the page's
+          // create action stands on every other index, rather than on the card's header line
+          // the prototype draws it on (`Workspace.dc.html`:1535) — the operator's request, and
+          // a departure `docs/design-direction.md` records. It keeps the prototype's weights:
+          // Save is this page's primary action, and *New document* the secondary beside it.
+          <>
+            <EditorSaveActions
+              tone="accent"
+              dirty={dirty}
+              saving={saving}
+              discarding={discarding}
+              onSave={() => void save()}
+              onDiscard={() => void discard()}
+            />
+            <Link className={outlineButtonClasses} to={newDocumentAt(shopId)}>
+              <ButtonIcon verb="create" />
+              New document
+            </Link>
+          </>
         }
       />
 
@@ -157,14 +169,8 @@ export function DocumentsPage() {
       ) : null}
 
       <section aria-label="Documents" className={`${surfaceClasses} overflow-hidden`}>
-        {/* The prototype puts *New document* on the card's header line beside the search
-            rather than in the page header, which this page's own Save and Discard fill
-            (`Workspace.dc.html`:1531–1536). */}
         <SearchRow title="What the agent can consult">
           <SearchField label="Search documents" onChange={setQuery} value={query} />
-          <Link className={accentButtonClasses} to={newDocumentAt(shopId)}>
-            New document
-          </Link>
         </SearchRow>
         <div data-tour="document-kinds">
           <FilterChips

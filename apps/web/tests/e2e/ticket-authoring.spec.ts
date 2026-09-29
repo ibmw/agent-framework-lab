@@ -224,7 +224,7 @@ test("an author publishes the wrong-address ticket for one shop's customer", asy
   await expect(page.getByRole("heading", { level: 1, name: "Tickets" })).toBeVisible();
   const row = page.getByRole("row").filter({ hasText: "Something else entirely" });
   await expect(row).toContainText("T-204");
-  await expect(row).toContainText("v1 · 1 version(s)");
+  await expect(row).toContainText("v1 · 1 version");
   await expect(page.getByRole("button", { name: "Open 1" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Published 1" })).toBeVisible();
 });

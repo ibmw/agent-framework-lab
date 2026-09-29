@@ -190,6 +190,7 @@ export function ProductsPage() {
               data-tour="new-product"
               onClick={newProduct}
             >
+              <ButtonIcon verb="create" />
               New product
             </button>
           </>

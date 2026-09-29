@@ -447,6 +447,17 @@ export const neutralPillClasses =
   "inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft";
 
 /**
+ * The published pill: the neutral pill's shape on the published tokens.
+ *
+ * `VersionChips` draws "vN published" in it and the index's publication pill draws a
+ * published record's "v3 · 2 versions" in it — the green the prototype gives a published
+ * state (`Workspace.dc.html` :189), on the tokens `VersionChips` already used. Written once
+ * so the two cannot drift; the glyph is the caller's child, as on the neutral pill.
+ */
+export const publishedPillClasses =
+  "inline-flex items-center gap-1.5 rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink";
+
+/**
  * A chip that says what something is, and does nothing when pressed.
  *
  * The bench and the timeline mark a tool call, a retried attempt, a scenario fault and a turn
@@ -631,7 +642,7 @@ export type FilterChipKind =
   | "document";
 
 /**
- * Kind to glyph, written once so the pairing cannot drift across the ten chip rows.
+ * Kind to glyph, written once so the pairing cannot drift across the chip rows.
  *
  * A page names a kind; it never names the icon. Which kind a chip takes is the prototype's
  * own `filterKind` classifier (`Workspace.dc.html`:5568–5577) read over that chip's label —

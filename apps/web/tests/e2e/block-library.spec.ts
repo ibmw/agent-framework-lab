@@ -95,7 +95,7 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
 
   await openSection(page, "Objective blocks", "Objective blocks");
   const row = page.getByRole("row").filter({ hasText: name });
-  await expect(row.getByText("v1 · 1 version(s)")).toBeVisible();
+  await expect(row.getByText("v1 · 1 version")).toBeVisible();
   await expect(row.getByText("deterministic · event")).toBeVisible();
   await expect(row.getByText("1 bound same-shop")).toBeVisible();
 });

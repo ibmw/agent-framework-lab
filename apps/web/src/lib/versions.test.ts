@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newestVersion, versionOptionLabel } from "./versions";
+import { newestVersion, publicationLabel, versionOptionLabel } from "./versions";
 
 describe("the newest published version", () => {
   const version = (number: number) => ({
@@ -26,5 +26,18 @@ describe("a version as a select offers it", () => {
     [1, null, "v1"],
   ])("v%s beside a newest of %s reads %j", (version, newest, expected) => {
     expect(versionOptionLabel(version, newest)).toBe(expected);
+  });
+});
+
+describe("a record's publication, as an index writes it", () => {
+  it.each([
+    [null, 0, "Never published"],
+    [1, 1, "v1 · 1 version"],
+    [3, 2, "v3 · 2 versions"],
+    [12, 12, "v12 · 12 versions"],
+  ])("with v%s and %s published version(s) reads %j", (latest, count, expected) => {
+    expect(
+      publicationLabel({ latest_published_version: latest, published_version_count: count }),
+    ).toBe(expected);
   });
 });

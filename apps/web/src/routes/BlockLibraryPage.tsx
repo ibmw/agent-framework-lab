@@ -11,9 +11,16 @@ import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
+import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { ParameterForm } from "../components/ParameterForm";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, EntryCard, EntryKind, PageHeader } from "../components/WorkspaceChrome";
+import {
+  Card,
+  EntryCard,
+  EntryKind,
+  PageHeader,
+  PublicationPill,
+} from "../components/WorkspaceChrome";
 import {
   ASSESSMENTS,
   addedParameter,
@@ -29,12 +36,13 @@ import {
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { BLOCK_PARAMETER_KIND, labelOf } from "../lib/enumLabels";
 import { savedAsPreview } from "../lib/fieldPreviews";
-import { searchRows } from "../lib/filters";
+import { filterList } from "../lib/filters";
 import {
   accentButtonClasses,
   destructiveSubtleButtonClasses,
   fieldControlClasses,
   formatTimestamp,
+  neutralPillClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -53,6 +61,8 @@ interface LibraryCopy {
    */
   indexTitle: string;
   emptyState: string;
+  /** Names the chip row for a reader who reaches it out of context. */
+  filterLegend: string;
   /** What the card says when the library holds blocks but the search left none of them. */
   noMatch: string;
   createLabel: string;
@@ -76,6 +86,7 @@ const OBJECTIVE_COPY: LibraryCopy = {
     "Blocks are shop-independent templates with typed parameters. A scenario binds those parameters to its own shop's objects — a binding can never point outside the scenario's shop.",
   indexTitle: "What a scenario can assert",
   emptyState: "No objective block yet. Create one to define what a scenario can assert.",
+  filterLegend: "Filter objective blocks",
   noMatch: "No objective block matches this view.",
   createLabel: "New objective block",
   typeHeading: "Assessment · evidence",
@@ -94,6 +105,7 @@ const MUTATION_COPY: LibraryCopy = {
     "Mutations are injected into a run's sandbox at a bound trigger time. They are never exposed as agent tools — an arm only ever observes their consequences, and both arms receive the identical schedule.",
   indexTitle: "Faults a scenario can inject",
   emptyState: "No mutation block yet. Create one to define a fault a scenario can inject.",
+  filterLegend: "Filter mutation blocks",
   noMatch: "No mutation block matches this view.",
   createLabel: "New mutation block",
   typeHeading: "Effect",
@@ -103,6 +115,37 @@ const MUTATION_COPY: LibraryCopy = {
   editorBase: "/lab/mutation-blocks",
   owes: (name) => `Mutation block ${name} was created without the template authored for it.`,
 };
+
+type Filter = "all" | "published" | "draft";
+
+/**
+ * The library's chips: All, the published subset and *Never published*, off
+ * `latest_published_version` — the one publication fact `BlockSummarySchema` carries.
+ *
+ * The prototype draws the domains instead (:6284–6310): *Decided by a rule* and *Scored by a
+ * judge* on objectives, *Fault hooks* and *Setup mutations* on mutations, and *Not composed
+ * yet* on both. None of the five is drawn. *Not composed yet* is a usage figure, and the
+ * listing carries no count of the scenarios composing a block; the other four read a block's
+ * kind, which reaches this page only as `type_label`, a display string the service composes
+ * (`application/blocks.py`) rather than a field a chip could filter on without parsing prose.
+ * A figure the payload lacks is not faked (`docs/design-direction.md`, *Lists and counts*,
+ * where the departure is recorded).
+ */
+const FILTERS: FilterChipDefinition<Filter, BlockSummarySchema>[] = [
+  { id: "all", label: "All", kind: "all", matches: () => true },
+  {
+    id: "published",
+    label: "Published",
+    kind: "published",
+    matches: (block) => block.latest_published_version !== null,
+  },
+  {
+    id: "draft",
+    label: "Never published",
+    kind: "draft",
+    matches: (block) => block.latest_published_version === null,
+  },
+];
 
 function BlockLibrary({
   copy,
@@ -118,20 +161,23 @@ function BlockLibrary({
   const blocks = listing.rows;
   const loading = listing.loading;
   const loadError = listing.error;
+  const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
 
   // The name alone, which is what the prototype's two library searches read (`x.name` in its
-  // `shownObBlocks` and `shownMutBlocks` filters). This library draws no filter chips — UI-4
-  // records why — so there is no count for the search to move, and `searchRows` is the same
-  // narrowing `filterList` applies under the chips on the eight indexes that have them.
-  const visible = searchRows(blocks, { query, fields: (block) => [block.name] });
+  // `shownObBlocks` and `shownMutBlocks` filters).
+  const { chips, visible } = filterList(blocks, FILTERS, filter, {
+    query,
+    fields: (block) => [block.name],
+  });
 
   return (
     <>
       <PageHeader
         title={copy.title}
         chips={
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft">
+          // A standing fact about the page, in the neutral pill every such fact is drawn in.
+          <span className={neutralPillClasses}>
             <span aria-hidden>⇄</span> Shared across shops
           </span>
         }
@@ -141,30 +187,39 @@ function BlockLibrary({
           // this control by its accessible name (`lib/tours.ts`) and a selector needs the
           // attribute. The name does not move: it is the word the side card carried.
           <Link className={accentButtonClasses} to="new" aria-label={copy.createLabel}>
+            <ButtonIcon verb="create" />
             {copy.createLabel}
           </Link>
         }
       />
 
-      {loadError ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
-        </p>
-      ) : null}
-
       <p className="mb-4 max-w-3xl text-[13px] text-admin-ink-soft">{copy.premise}</p>
 
       {/* The index is not a named region, so it carries the tour's anchor (ADR 0045). */}
       <section data-tour="block-index" className={`${surfaceClasses} overflow-hidden`}>
-        {/* Only once there is a library to search: a box that can only narrow nothing is a
-            control that does nothing, which is the rule the chip rows on the eight indexes
-            with filters already follow. */}
+        {/* Only once there is a library to search and count: a box that can only narrow
+            nothing is a control that does nothing, and a row of zeros over a listing that is
+            still in flight or failed answers nothing. */}
         <SearchRow title={copy.indexTitle}>
           {loading || loadError ? null : (
             <SearchField label="Search the library" onChange={setQuery} value={query} />
           )}
         </SearchRow>
-        {loading ? (
+        {loading || loadError ? null : (
+          <FilterChips
+            legend={copy.filterLegend}
+            chips={chips}
+            selected={filter}
+            onSelect={setFilter}
+          />
+        )}
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // library is empty.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
+          </p>
+        ) : loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading blocks…</p>
         ) : blocks.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">{copy.emptyState}</p>
@@ -212,9 +267,7 @@ function BlockLibrary({
                       )}
                     </td>
                     <td className={tableCellClasses}>
-                      {block.latest_published_version === null
-                        ? "Never published"
-                        : `v${block.latest_published_version} · ${block.published_version_count} version(s)`}
+                      <PublicationPill record={block} />
                     </td>
                     <td className={tableCellClasses}>{formatTimestamp(block.updated_at)}</td>
                   </tr>

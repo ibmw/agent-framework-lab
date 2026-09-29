@@ -7,14 +7,16 @@ import {
   Card,
   GateCard,
   PageHeader,
+  PublicationPill,
   PublishButton,
   type PublishGate,
   PublishReasons,
+  StatusPill,
   VersionChips,
 } from "./components/WorkspaceChrome";
 import { PUBLISH_UNSAVED_REASON } from "./lib/definitionEditor";
 import { STICKY_REPORT_ATTRIBUTE, stickyHeaderClasses } from "./lib/stickyHeader";
-import { neutralPillClasses } from "./lib/ui";
+import { neutralPillClasses, publishedPillClasses } from "./lib/ui";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 
 /**
@@ -316,6 +318,69 @@ describe("the version chips' grey states", () => {
 
     expect(screen.getByText(/Never published/).className).toBe(neutralPillClasses);
     expect(screen.getByText(/Draft matches v2/).className).toBe(neutralPillClasses);
+  });
+});
+
+describe("the publication pill", () => {
+  it("says a published record's version and how many there are, beside the axis's dot, on the published fill", () => {
+    render(
+      <PublicationPill record={{ latest_published_version: 3, published_version_count: 2 }} />,
+    );
+
+    const pill = screen.getByText("v3 · 2 versions");
+    // The dot names the axis and is hidden; the word is what a reader hears.
+    expect(pill.firstElementChild).toHaveAttribute("aria-hidden");
+    expect(pill.firstElementChild).toHaveTextContent("●");
+    expect(pill.className).toContain(publishedPillClasses);
+    expect(pill).toHaveClass("whitespace-nowrap");
+  });
+
+  it("says Never published beside the same dot, on the neutral pill the version chips' grey state takes", () => {
+    render(
+      <PublicationPill record={{ latest_published_version: null, published_version_count: 0 }} />,
+    );
+
+    const pill = screen.getByText("Never published");
+    expect(pill.firstElementChild).toHaveAttribute("aria-hidden");
+    expect(pill.firstElementChild).toHaveTextContent("●");
+    expect(pill.className).toContain(neutralPillClasses);
+    expect(pill).not.toHaveClass("bg-admin-published");
+  });
+
+  it("counts one version in the singular", () => {
+    render(
+      <PublicationPill record={{ latest_published_version: 1, published_version_count: 1 }} />,
+    );
+
+    expect(screen.getByText("v1 · 1 version")).toBeInTheDocument();
+  });
+
+  it("is the version chips' published fill, so the two greens are one value", () => {
+    render(
+      <VersionChips
+        preview={{ latest_published_version: 2, next_version: 3, matches_latest_published: true }}
+      />,
+    );
+
+    expect(screen.getByText(/v2 published/).className).toBe(publishedPillClasses);
+  });
+
+  it("leaves the other axes on their one quiet fill, each with its own glyph", () => {
+    render(
+      <>
+        <StatusPill tone="payment" label="Paid" />
+        <StatusPill tone="fulfilment" label="Unfulfilled" />
+      </>,
+    );
+
+    const paid = screen.getByText("Paid");
+    const unfulfilled = screen.getByText("Unfulfilled");
+    expect(paid.className).toBe(unfulfilled.className);
+    expect(paid).not.toHaveClass("bg-admin-published");
+    expect(paid.firstElementChild?.textContent).not.toBe(
+      unfulfilled.firstElementChild?.textContent,
+    );
+    expect(paid.firstElementChild?.textContent).not.toBe("●");
   });
 });
 

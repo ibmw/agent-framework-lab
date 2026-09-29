@@ -10,7 +10,7 @@ import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
 import { TicketStatusBadge } from "../components/TicketStatusBadge";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { nextReference } from "../lib/entryIds";
 import { alreadyTakenMessage, REFERENCE_PATTERN, TICKET_REFERENCE_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
@@ -28,13 +28,6 @@ import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 /** Completes "{reference} is already {…}." wherever a ticket reference is refused. */
 const TICKET_REFERENCE_TAKEN_PLACE = "used by a ticket in this shop";
-
-function publishedLabel(ticket: TicketSummarySchema): string {
-  if (ticket.latest_published_version === null) {
-    return "Never published";
-  }
-  return `v${ticket.latest_published_version} · ${ticket.published_version_count} version(s)`;
-}
 
 type Filter = "all" | "published" | "draft" | "open" | "resolved";
 
@@ -190,7 +183,9 @@ export function TicketsPage() {
                   <td className={tableCellClasses}>
                     <TicketStatusBadge status={ticket.status} />
                   </td>
-                  <td className={tableCellClasses}>{publishedLabel(ticket)}</td>
+                  <td className={tableCellClasses}>
+                    <PublicationPill record={ticket} />
+                  </td>
                   <td className={tableCellClasses}>{formatTimestamp(ticket.updated_at)}</td>
                 </tr>
               ))}

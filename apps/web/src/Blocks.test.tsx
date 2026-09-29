@@ -17,8 +17,10 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
+import { neutralPillClasses } from "./lib/ui";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectPublicationPill } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { expectCardOnRows, expectFieldRow } from "./test/rows";
@@ -444,7 +446,7 @@ describe("block libraries", () => {
     expect(screen.getByText("Shared across shops")).toBeVisible();
     expect(await screen.findByRole("link", { name: "read-required-document" })).toBeVisible();
     expect(screen.getByText("deterministic · event")).toBeVisible();
-    expect(screen.getByText("v1 · 1 version(s)")).toBeVisible();
+    expect(screen.getByText("v1 · 1 version")).toBeVisible();
     // The column a scenario's binding work is read from.
     expect(screen.getByText("1 bound same-shop")).toBeVisible();
   });
@@ -460,13 +462,76 @@ describe("block libraries", () => {
     expect(within(row as HTMLElement).getByText("Never published")).toBeVisible();
   });
 
+  it("says Shared across shops in the neutral pill beside the title", async () => {
+    renderAt("/lab/objective-blocks");
+
+    await screen.findByRole("heading", { level: 1, name: "Objective blocks" });
+    const pill = screen.getByText("Shared across shops");
+    expect(pill.className).toBe(neutralPillClasses);
+    expect(pill.firstElementChild).toHaveAttribute("aria-hidden");
+    expect(pill.firstElementChild).toHaveTextContent("⇄");
+  });
+
+  it("says each block's publication in a pill: the version and how many, or Never published", async () => {
+    renderAt("/lab/objective-blocks");
+
+    const published = (await screen.findByRole("link", { name: "read-required-document" })).closest(
+      "tr",
+    ) as HTMLElement;
+    const never = screen
+      .getByRole("link", { name: "verify-before-disclosure" })
+      .closest("tr") as HTMLElement;
+    expectPublicationPill(published, "v1 · 1 version", "published");
+    expectPublicationPill(never, "Never published", "never published");
+  });
+
   /**
-   * The two libraries are the only adopting path that does not go through `filterList`: they
-   * draw no chips — UI-4 left them chipless because `BlockSummarySchema` carries the composed
-   * caption `type_label` and not the assessment or effect the prototype's own chip rows
-   * (`obFilters`, `muFilters`) filter on — so they call `searchRows` directly. Without these
-   * two assertions the field on them narrows nothing and no test says so.
+   * The chips the listing can count: All, Published and *Never published*, off
+   * `latest_published_version`. The prototype's five domain chips are not drawn — the listing
+   * carries no usage figure, and the kind only as the composed caption `type_label`.
    */
+  it("counts the whole library on All, Published and Never published, and nothing else", async () => {
+    renderAt("/lab/objective-blocks");
+    await screen.findByRole("link", { name: "read-required-document" });
+
+    const chips = within(screen.getByRole("group", { name: "Filter objective blocks" }));
+    expect(chips.getAllByRole("button").map((chip) => chip.getAttribute("aria-label"))).toEqual([
+      "All 2",
+      "Published 1",
+      "Never published 1",
+    ]);
+  });
+
+  it("narrows the library to the chip pressed, and the search leaves the counts where they were", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/objective-blocks");
+    await screen.findByRole("link", { name: "read-required-document" });
+    const chips = within(screen.getByRole("group", { name: "Filter objective blocks" }));
+
+    await user.click(chips.getByRole("button", { name: "Never published 1" }));
+    expect(screen.getByRole("link", { name: "verify-before-disclosure" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "read-required-document" })).toBeNull();
+
+    await user.click(chips.getByRole("button", { name: "Published 1" }));
+    expect(screen.getByRole("link", { name: "read-required-document" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "verify-before-disclosure" })).toBeNull();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search the library" }), "verify");
+    expect(screen.getByText("No objective block matches this view.")).toBeVisible();
+    expect(chips.getByRole("button", { name: "All 2" })).toBeVisible();
+    expect(chips.getByRole("button", { name: "Published 1" })).toBeVisible();
+  });
+
+  it("counts the mutation library under its own name", async () => {
+    renderAt("/lab/mutation-blocks");
+    await screen.findByRole("link", { name: "concurrent-entity-mutation" });
+
+    const chips = within(screen.getByRole("group", { name: "Filter mutation blocks" }));
+    expect(chips.getByRole("button", { name: "All 1" })).toBeVisible();
+    expect(chips.getByRole("button", { name: "Published 0" })).toBeVisible();
+    expect(chips.getByRole("button", { name: "Never published 1" })).toBeVisible();
+  });
+
   it("narrows the library to the blocks the word is in", async () => {
     const user = userEvent.setup();
     renderAt("/lab/objective-blocks");

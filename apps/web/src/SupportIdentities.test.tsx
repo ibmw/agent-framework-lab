@@ -14,6 +14,7 @@ import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectPublicationPill } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 import { expectCardOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
@@ -234,6 +235,35 @@ describe("support identity workspace", () => {
 
     expect(screen.getByRole("link", { name: "Northstar tier 2" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Northstar tier 1" })).toBeNull();
+  });
+
+  it("says each identity's publication in a pill: the version and how many, or Never published", async () => {
+    server.use(
+      http.get("*/api/v1/support-identities", () =>
+        HttpResponse.json({
+          identities: [
+            ...identities.identities,
+            {
+              ...identities.identities[0],
+              identity_id: "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d",
+              name: "Northstar tier 2",
+              latest_published_version: 4,
+              published_version_count: 3,
+            },
+          ],
+        } satisfies SupportIdentityListResponse),
+      ),
+    );
+    renderAt("/lab/support-identities");
+
+    const never = (await screen.findByRole("link", { name: "Northstar tier 1" })).closest(
+      "tr",
+    ) as HTMLElement;
+    const published = screen
+      .getByRole("link", { name: "Northstar tier 2" })
+      .closest("tr") as HTMLElement;
+    expectPublicationPill(published, "v4 · 3 versions", "published");
+    expectPublicationPill(never, "Never published", "never published");
   });
 
   it("offers a New identity button rather than a form beside the table", async () => {

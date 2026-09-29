@@ -19,6 +19,7 @@ import { stickyHeaderClasses } from "./lib/stickyHeader";
 import { TOURS, tourAt } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -545,6 +546,25 @@ describe("the ticket index", () => {
     expect(cells[2]).toHaveTextContent("Chatfrom order page");
     expect(cells[3]).toHaveTextContent("Open");
     expect(cells[4]).toHaveTextContent("Never published");
+  });
+
+  it("says each ticket's publication in a pill: the version and how many, or Never published", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/tickets`, () =>
+        HttpResponse.json({
+          tickets: [
+            { ...TICKETS.tickets[0], latest_published_version: 2, published_version_count: 2 },
+            TICKETS.tickets[1],
+          ],
+        } satisfies TicketListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/tickets`);
+    const table = await ticketTable();
+
+    const rows = within(table).getAllByRole("row").slice(1);
+    expectPublicationPill(rows[0], "v2 · 2 versions", "published");
+    expectPublicationPill(rows[1], "Never published", "never published");
   });
 
   it("says why it is empty, and links to Customers when no customer is attached", async () => {

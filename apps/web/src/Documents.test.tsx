@@ -13,6 +13,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { toPayload } from "./lib/shop";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectCreateGlyph } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -184,6 +185,24 @@ describe("the Documents table", () => {
     expect(title.parentElement).toContainElement(
       within(table()).getByRole("searchbox", { name: "Search documents" }),
     );
+  });
+
+  it("puts New document in the page header beside the draft's Save and Discard, not on the card", async () => {
+    await openTable();
+
+    const header = screen
+      .getByRole("heading", { level: 1, name: "Policies & FAQ" })
+      .closest("header") as HTMLElement;
+    const create = within(header).getByRole("link", { name: "New document" });
+    expect(create).toHaveAttribute("href", `/shops/${SHOP_ID}/setup/documents/new`);
+    expectCreateGlyph(create, "New document");
+    expect(within(table()).queryByRole("link", { name: "New document" })).toBeNull();
+
+    // In the one row of actions the draft's save state leads, after it.
+    const saved = within(header).getByRole("status");
+    expect(saved).toHaveTextContent("All changes saved");
+    expect(saved.parentElement).toBe(create.parentElement);
+    expect(saved.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("draws the three lists as one table, with each document's kind beside it", async () => {

@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
 import { createOrder, replaceOrder } from "../api/orders";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { RemovalNotice } from "../components/ConfirmRemove";
 import { CreatePage } from "../components/CreatePage";
 import { DerivedIdField } from "../components/DerivedIdField";
@@ -113,16 +114,11 @@ export function OrdersPage() {
         description="Orders are authored fixture state for this shop. Starting an experiment freezes them into the snapshot each arm's sandbox is cloned from — live runs mutate isolated clones, never this data."
         actions={
           <Link className={accentButtonClasses} to="new">
+            <ButtonIcon verb="create" />
             New order
           </Link>
         }
       />
-
-      {loadError ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
-        </p>
-      ) : null}
 
       <section className={`${surfaceClasses} overflow-hidden`}>
         {/* Only once there are rows to search and count. A chip is a filter, and a row of
@@ -149,14 +145,28 @@ export function OrdersPage() {
           />
         )}
 
-        {loading ? (
-          <p className="p-4 text-[13px] text-admin-muted">Loading orders…</p>
-        ) : visible.length === 0 ? (
-          <p className="p-4 text-[13px] text-admin-muted">
-            {orders.length === 0
-              ? "This shop has no order fixtures yet. Create one for a customer attached to this shop."
-              : "No order matches this view."}
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // shop holds no order.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
           </p>
+        ) : loading ? (
+          <p className="p-4 text-[13px] text-admin-muted">Loading orders…</p>
+        ) : orders.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">
+            This shop has no order fixtures yet. An order is placed by a customer attached to this
+            shop —{" "}
+            <Link
+              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+              to={`/shops/${shopId}/customers`}
+            >
+              attach or create one in Customers
+            </Link>
+            .
+          </p>
+        ) : visible.length === 0 ? (
+          <p className="p-4 text-[13px] text-admin-muted">No order matches this view.</p>
         ) : (
           <table className="w-full border-collapse text-[13px]">
             <thead>

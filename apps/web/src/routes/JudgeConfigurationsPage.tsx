@@ -11,12 +11,13 @@ import {
   readJudgeConfigurationResources,
   replaceJudgeConfigurationDraft,
 } from "../api/judgeConfigurations";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { ProvenModelField } from "../components/ProvenModelField";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { filterList } from "../lib/filters";
@@ -33,10 +34,12 @@ import { useLabWorkspace } from "../shell/useLabWorkspace";
 
 const UNAVAILABLE = "The judge service is unavailable.";
 
-type Filter = "all" | "published";
+type Filter = "all" | "published" | "draft";
 
 /**
- * The prototype's judge chips (`tmp/design-frames/Workspace.dc.html`:6260–6262), less one.
+ * The prototype's judge chips (`tmp/design-frames/Workspace.dc.html`:6260–6262), less one,
+ * and *Never published* after *Usable*, which every index whose listing carries a published
+ * version draws (PLAN-UX Milestone 9, the index template; `docs/design-direction.md`, *Names*).
  *
  * *No rubric* is not here. The rubric is the whole of what a judge is, so a judge without one
  * is exactly the row an author wants picked out — but `JudgeConfigurationSummarySchema`
@@ -50,6 +53,12 @@ const FILTERS: FilterChipDefinition<Filter, JudgeConfigurationSummarySchema>[] =
     label: "Usable",
     kind: "published",
     matches: (judge) => judge.latest_published_version !== null,
+  },
+  {
+    id: "draft",
+    label: "Never published",
+    kind: "draft",
+    matches: (judge) => judge.latest_published_version === null,
   },
 ];
 
@@ -77,16 +86,11 @@ export function JudgeConfigurationsPage() {
         description="What scores the objectives no rule can decide: a rubric, a model, and the parts of an arm's record the judge is shown. Judges are cross-shop, and every verdict records the exact version that produced it — so a result stays explainable after the rubric moves on."
         actions={
           <Link className={accentButtonClasses} to="new">
+            <ButtonIcon verb="create" />
             New judge
           </Link>
         }
       />
-
-      {loadError ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
-        </p>
-      ) : null}
 
       <section className={`${surfaceClasses} overflow-hidden`}>
         {/* Only once there are rows to search and count. A chip is a filter, and a row of
@@ -108,7 +112,13 @@ export function JudgeConfigurationsPage() {
             onSelect={setFilter}
           />
         )}
-        {loading ? (
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // lab holds no judge.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
+          </p>
+        ) : loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading judges…</p>
         ) : judges.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">
@@ -145,9 +155,7 @@ export function JudgeConfigurationsPage() {
                   <td className={tableCellClasses}>{judge.model_id}</td>
                   <td className={tableCellClasses}>{judge.evidence_count} kind(s) of evidence</td>
                   <td className={tableCellClasses}>
-                    {judge.latest_published_version === null
-                      ? "Never published"
-                      : `v${judge.latest_published_version} · ${judge.published_version_count} version(s)`}
+                    <PublicationPill record={judge} />
                   </td>
                   <td className={tableCellClasses}>{formatTimestamp(judge.updated_at)}</td>
                 </tr>

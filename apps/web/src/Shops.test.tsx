@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { SHOP_NAME_RULE } from "./lib/fieldRules";
 import { cardTitleClasses } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
+import { expectPublicationPill } from "./test/indexes";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { shellListings } from "./test/shell";
 
@@ -77,6 +78,47 @@ describe("the shops table", () => {
     // Presence alone would pass a header that kept a sans size beside the shared one, which is
     // exactly how a copy half-reverts.
     expect(title.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/);
+  });
+});
+
+describe("a shop's publication on the index", () => {
+  const listed: ShopListResponse = {
+    shops: [
+      {
+        shop_id: SHOP_ID,
+        name: "Northstar Outfitters",
+        slug: "northstar",
+        updated_at: "2026-08-23T12:05:00+00:00",
+        latest_published_version: 3,
+        published_version_count: 2,
+        logo: null,
+      },
+      {
+        shop_id: "1b2c3d4e-5f60-4718-9a0b-c1d2e3f4a5b6",
+        name: "Harbour Lane Supply",
+        slug: "harbour-lane-supply",
+        updated_at: "2026-08-22T12:05:00+00:00",
+        latest_published_version: null,
+        published_version_count: 0,
+        logo: null,
+      },
+    ],
+  };
+
+  it("is a pill: the version and how many there are, or Never published", async () => {
+    server.use(http.get("*/api/v1/shops", () => HttpResponse.json(listed)));
+    renderShops();
+
+    const published = (await screen.findByRole("link", { name: "Northstar Outfitters" })).closest(
+      "tr",
+    ) as HTMLElement;
+    const never = screen
+      .getByRole("link", { name: "Harbour Lane Supply" })
+      .closest("tr") as HTMLElement;
+    expectPublicationPill(published, "v3 · 2 versions", "published");
+    expectPublicationPill(never, "Never published", "never published");
+    // The chip keeps the row's word and its own name, so neither is mistaken for the other.
+    expect(screen.getByRole("button", { name: "Never published 1" })).toBeVisible();
   });
 });
 

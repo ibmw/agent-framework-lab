@@ -20,16 +20,23 @@ import {
   focusRingClasses,
   neutralPillClasses,
   outlineButtonClasses,
+  publishedPillClasses,
   subtleButtonClasses,
   surfaceClasses,
   validationMessageClasses,
 } from "../lib/ui";
+import { type PublicationRecord, publicationLabel } from "../lib/versions";
 import { ButtonIcon } from "./ButtonIcon";
 import { PrimaryAction, type Refusal } from "./PrimaryAction";
 
 /**
  * Draft and published state is never carried by colour alone: every chip pairs its colour
  * with a glyph and an explicit label.
+ *
+ * These chips do not draw through `StatusPill`'s publication tone, though they share its two
+ * fills: they state two axes of one draft — what is published, and where the draft stands
+ * against it — with a glyph per state (●, ◦, =, ◐), where a status pill's glyph names its axis
+ * and an index row has only the one axis to say.
  */
 export interface VersionProvenance {
   latest_published_version: number | null;
@@ -48,7 +55,7 @@ export function VersionChips({ preview }: { preview: VersionProvenance | null })
           <span aria-hidden>◦</span> Never published
         </span>
       ) : (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
+        <span className={publishedPillClasses}>
           <span aria-hidden>●</span> v{preview.latest_published_version} published
         </span>
       )}
@@ -955,24 +962,62 @@ export function PublishButton({
  * one table cell are told apart by their shape before they are read. It is decorative on
  * purpose: the label beside it carries the meaning, so nothing here is the only carrier of
  * anything, and a reader who sees no colour and no glyph still reads the status.
+ *
+ * `publication` is the prototype's dot, which it draws on both of a record's states — the
+ * published "v3 · 2 versions" and *Never published* (`Workspace.dc.html` :189, :192) — so the
+ * dot says "publication" and the word says which.
  */
 const PILL_GLYPHS = {
   payment: "◆",
   fulfilment: "▣",
   product: "◧",
   availability: "▤",
+  publication: "●",
 } as const;
 
 export type StatusTone = keyof typeof PILL_GLYPHS;
 
+const statusPillClasses =
+  "inline-flex items-center gap-1.5 rounded-full bg-admin-border/60 px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft";
+
 /**
  * One status axis. Status is never carried by colour alone: the pill pairs a glyph with the
- * written label, and the label is a contract enum's own name from `lib/enumLabels.ts`.
+ * written label, and the label is a contract enum's own name from `lib/enumLabels.ts` — or,
+ * on the publication axis, `publicationLabel`'s words.
+ *
+ * The publication axis is the one whose two states take two fills, as the prototype paints
+ * them (:189, :192): a published record on the published tokens and one never published on
+ * the neutral pill's, the same two `VersionChips` draws its published and grey states in. It
+ * does not wrap, as the prototype's does not: "v3 · 2 versions" broken over two lines in a
+ * narrow column reads as two facts.
  */
-export function StatusPill({ tone, label }: { tone: StatusTone; label: string }) {
+export function StatusPill(
+  props:
+    | { tone: Exclude<StatusTone, "publication">; label: string }
+    | { tone: "publication"; label: string; published: boolean },
+) {
+  const classes =
+    props.tone === "publication"
+      ? `${props.published ? publishedPillClasses : neutralPillClasses} whitespace-nowrap`
+      : statusPillClasses;
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border/60 px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-ink-soft">
-      <span aria-hidden>{PILL_GLYPHS[tone]}</span> {label}
+    <span className={classes}>
+      <span aria-hidden>{PILL_GLYPHS[props.tone]}</span> {props.label}
     </span>
+  );
+}
+
+/**
+ * The index's Published column: a record's publication as a pill (PLAN-UX Milestone 9, the
+ * index template). Every index that lists a definition draws its publication here and in no
+ * other words.
+ */
+export function PublicationPill({ record }: { record: PublicationRecord }) {
+  return (
+    <StatusPill
+      tone="publication"
+      published={record.latest_published_version !== null}
+      label={publicationLabel(record)}
+    />
   );
 }

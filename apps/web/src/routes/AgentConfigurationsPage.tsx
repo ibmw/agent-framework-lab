@@ -12,12 +12,13 @@ import {
   replaceAgentConfigurationDraft,
 } from "../api/agentConfigurations";
 import { describeApiError } from "../api/client";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { ProvenModelField } from "../components/ProvenModelField";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { SUPPORT_IDENTITY_PIN_RULE } from "../lib/fieldRules";
@@ -90,16 +91,11 @@ export function AgentConfigurationsPage() {
         description="What runs the support agent: framework, architecture, model, prompt, tools, and the support identity it adopts. Configurations are cross-shop — prompt variables resolve at experiment start and the resolved configuration is pinned to the run."
         actions={
           <Link className={accentButtonClasses} to="new">
+            <ButtonIcon verb="create" />
             New configuration
           </Link>
         }
       />
-
-      {loadError ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
-        </p>
-      ) : null}
 
       <section className={`${surfaceClasses} overflow-hidden`}>
         {/* Only once there are rows to search and count. A chip is a filter, and a row of
@@ -121,11 +117,25 @@ export function AgentConfigurationsPage() {
             onSelect={setFilter}
           />
         )}
-        {loading ? (
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // lab holds no agent configuration.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
+          </p>
+        ) : loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading agent configurations…</p>
         ) : configurations.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">
-            No agent configuration yet. Create one to describe the agent an experiment runs.
+            No agent configuration yet. A configuration describes the agent an experiment runs and
+            adopts exactly one support identity —{" "}
+            <Link
+              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+              to="/lab/support-identities"
+            >
+              author one in Support identities
+            </Link>
+            .
           </p>
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No configuration matches this view.</p>
@@ -156,9 +166,7 @@ export function AgentConfigurationsPage() {
                   <td className={tableCellClasses}>{configuration.model_id}</td>
                   <td className={tableCellClasses}>{configuration.tool_count} enabled</td>
                   <td className={tableCellClasses}>
-                    {configuration.latest_published_version === null
-                      ? "Never published"
-                      : `v${configuration.latest_published_version} · ${configuration.published_version_count} version(s)`}
+                    <PublicationPill record={configuration} />
                   </td>
                   <td className={tableCellClasses}>{formatTimestamp(configuration.updated_at)}</td>
                 </tr>

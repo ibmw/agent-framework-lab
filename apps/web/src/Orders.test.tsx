@@ -25,6 +25,7 @@ import { toLocalInput } from "./lib/orders";
 import { formatFixtureTimestamp } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -591,6 +592,24 @@ describe("order index", () => {
     const entry = railEntry("Orders");
     expect(within(entry).getByText(String(rows))).toBeVisible();
     expect(entry).toHaveAccessibleDescription(`${rows} orders`);
+  });
+
+  it("says, with no order yet, that an order needs an attached customer, and links to Customers", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+        HttpResponse.json({ orders: [] } satisfies OrderListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/orders`);
+
+    await screen.findByText(/This shop has no order fixtures yet/);
+    const card = indexCard("Order fixtures");
+    expect(card).toHaveTextContent(/An order is placed by a customer attached to this shop/);
+    expect(
+      within(card).getByRole("link", { name: "attach or create one in Customers" }),
+    ).toHaveAttribute("href", `/shops/${SHOP_ID}/customers`);
+    // Not the miss: nothing has been searched for.
+    expect(within(card).queryByText("No order matches this view.")).toBeNull();
   });
 
   it("offers a New order button rather than a form beside the table", async () => {

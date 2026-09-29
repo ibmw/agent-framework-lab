@@ -23,6 +23,7 @@ import {
 import { todayInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectPublicationPill, indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectBusy, expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
@@ -334,10 +335,48 @@ describe("customer workspace", () => {
     expect(await screen.findByRole("link", { name: "Maya Laurent" })).toBeVisible();
     expect(screen.getByText("frequent · direct")).toBeVisible();
     expect(screen.getByText("3 · default: Home")).toBeVisible();
-    expect(screen.getByText("v2 · 2 version(s)")).toBeVisible();
+    expect(screen.getByText("v2 · 2 versions")).toBeVisible();
 
     // A profile that exists but is attached elsewhere is not this shop's customer.
     expect(screen.queryByRole("link", { name: "Tomás Rivera" })).toBeNull();
+  });
+
+  it("says each profile's publication in a pill: the version and how many, or Never published", async () => {
+    server.use(
+      http.get("*/api/v1/customer-profiles", () =>
+        HttpResponse.json({ profiles: [MAYA, UNATTACHED] } satisfies CustomerProfileListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    const maya = (await screen.findByRole("link", { name: "Maya Laurent" })).closest(
+      "tr",
+    ) as HTMLElement;
+    const tomas = screen.getByRole("link", { name: "Tomás Rivera" }).closest("tr") as HTMLElement;
+    expectPublicationPill(maya, "v2 · 2 versions", "published");
+    expectPublicationPill(tomas, "Never published", "never published");
+  });
+
+  it("keeps the attached profiles when only the lab-wide list the attach offers fails", async () => {
+    // Two reads: the shop's attached profiles are the index's rows, and the lab-wide list is
+    // the attach control's. The second failing is said, and does not take the first's rows.
+    server.use(
+      http.get("*/api/v1/customer-profiles", ({ request }) =>
+        new URL(request.url).searchParams.get("shop_id") === null
+          ? HttpResponse.json(
+              { code: "unavailable", message: "The lab-wide list is down.", request_id: "r" },
+              { status: 503 },
+            )
+          : HttpResponse.json({ profiles: [MAYA] } satisfies CustomerProfileListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/customers`);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The lab-wide list is down.");
+    const card = indexCard("Attached to this shop");
+    expect(within(card).getByRole("link", { name: "Maya Laurent" })).toBeVisible();
+    expect(within(card).queryByRole("alert")).toBeNull();
+    expect(within(card).getByRole("group", { name: "Filter customers" })).toBeVisible();
   });
 
   /**

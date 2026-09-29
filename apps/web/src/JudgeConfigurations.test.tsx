@@ -17,6 +17,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
+import { expectPublicationPill } from "./test/indexes";
 import { mainCards, panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { expectCardOnRows, expectFieldRow } from "./test/rows";
@@ -365,6 +366,70 @@ describe("judge workspace", () => {
 
     expect(screen.getByRole("link", { name: "Tone" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Resolution quality" })).toBeNull();
+  });
+
+  describe("with a judge published and two never published", () => {
+    const three: JudgeConfigurationListResponse = {
+      judges: [
+        ...LIST.judges,
+        {
+          ...LIST.judges[0],
+          judge_id: "9e8d7c6b-5a49-4837-9261-0f1e2d3c4b5a",
+          name: "Tone",
+          latest_published_version: 3,
+          published_version_count: 3,
+        },
+        {
+          ...LIST.judges[0],
+          judge_id: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+          name: "Evidence recall",
+          latest_published_version: null,
+          published_version_count: 0,
+        },
+      ],
+    };
+
+    it("draws Never published after Usable, counting the whole list", async () => {
+      server.use(http.get("*/api/v1/judge-configurations", () => HttpResponse.json(three)));
+      renderAt("/lab/judges");
+      await screen.findByRole("link", { name: "Resolution quality" });
+      const filters = within(screen.getByRole("group", { name: "Filter judges" }));
+
+      expect(filters.getAllByRole("button").map((chip) => chip.getAttribute("aria-label"))).toEqual(
+        ["All 3", "Usable 1", "Never published 2"],
+      );
+    });
+
+    it("narrows to the judges no version of which is published, and the search leaves its count", async () => {
+      const user = userEvent.setup();
+      server.use(http.get("*/api/v1/judge-configurations", () => HttpResponse.json(three)));
+      renderAt("/lab/judges");
+      await screen.findByRole("link", { name: "Resolution quality" });
+      const filters = within(screen.getByRole("group", { name: "Filter judges" }));
+
+      await user.click(filters.getByRole("button", { name: "Never published 2" }));
+
+      expect(screen.getByRole("link", { name: "Resolution quality" })).toBeVisible();
+      expect(screen.getByRole("link", { name: "Evidence recall" })).toBeVisible();
+      expect(screen.queryByRole("link", { name: "Tone" })).toBeNull();
+
+      await user.type(screen.getByRole("searchbox", { name: "Search judges" }), "recall");
+
+      expect(screen.queryByRole("link", { name: "Resolution quality" })).toBeNull();
+      expect(filters.getByRole("button", { name: "Never published 2" })).toBeVisible();
+    });
+
+    it("says each judge's publication in a pill: the version and how many, or Never published", async () => {
+      server.use(http.get("*/api/v1/judge-configurations", () => HttpResponse.json(three)));
+      renderAt("/lab/judges");
+
+      const never = (await screen.findByRole("link", { name: "Resolution quality" })).closest(
+        "tr",
+      ) as HTMLElement;
+      const published = screen.getByRole("link", { name: "Tone" }).closest("tr") as HTMLElement;
+      expectPublicationPill(published, "v3 · 3 versions", "published");
+      expectPublicationPill(never, "Never published", "never published");
+    });
   });
 
   it("constrains the judge's temperature the way the agent editor constrains its own", async () => {

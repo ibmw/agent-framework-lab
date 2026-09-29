@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { LabApiError } from "../api/client";
 import { createShop, listShops } from "../api/shops";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
 import { CurrencyField } from "../components/CurrencyField";
 import { DerivedIdField } from "../components/DerivedIdField";
@@ -13,7 +14,7 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { ShopBadge } from "../components/ShopBadge";
 import { ShopLogoCard } from "../components/ShopLogoCard";
 import { ToggleChipGroup } from "../components/ToggleChipGroup";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
 import { uniqueSuggestion } from "../lib/entryIds";
 import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
@@ -133,16 +134,11 @@ export function ShopsPage() {
         description="Every shop is a synthetic simulation environment. Publishing a shop freezes an immutable version that scenarios and experiments pin."
         actions={
           <Link className={accentButtonClasses} to="/shops/new">
+            <ButtonIcon verb="create" />
             New shop
           </Link>
         }
       />
-
-      {loadError ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
-        </p>
-      ) : null}
 
       <section className={`${surfaceClasses} overflow-hidden`}>
         <SearchRow title="In this lab">
@@ -157,7 +153,13 @@ export function ShopsPage() {
         {loading || loadError ? null : (
           <FilterChips legend="Filter shops" chips={chips} selected={filter} onSelect={setFilter} />
         )}
-        {loading ? (
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // lab holds no shop.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
+          </p>
+        ) : loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading shops…</p>
         ) : shops.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">
@@ -195,9 +197,7 @@ export function ShopsPage() {
                     </div>
                   </td>
                   <td className={tableCellClasses}>
-                    {shop.latest_published_version === null
-                      ? "Never published"
-                      : `v${shop.latest_published_version} · ${shop.published_version_count} version(s)`}
+                    <PublicationPill record={shop} />
                   </td>
                   <td className={tableCellClasses}>{formatTimestamp(shop.updated_at)}</td>
                 </tr>

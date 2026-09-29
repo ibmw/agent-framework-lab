@@ -17,6 +17,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
 import { expectWayBack } from "./test/header";
+import { expectPublicationPill, indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import { expectNotRefused, expectRefused } from "./test/refused";
 import { expectCardOnRows, expectFieldRow, expectGroupRow } from "./test/rows";
@@ -514,6 +515,51 @@ describe("agent configuration workspace", () => {
     expect(table.getByText("gpt-5-mini")).toBeVisible();
     // Scoped to the table: "Never published" is also a filter chip's label now.
     expect(table.getByText("Never published")).toBeVisible();
+  });
+
+  it("says each configuration's publication in a pill: the version and how many, or Never published", async () => {
+    server.use(
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({
+          configurations: [
+            ...configurations.configurations,
+            {
+              ...configurations.configurations[0],
+              configuration_id: "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9",
+              name: "Deterministic control",
+              latest_published_version: 2,
+              published_version_count: 2,
+            },
+          ],
+        } satisfies AgentConfigurationListResponse),
+      ),
+    );
+    renderAt("/lab/agent-configurations");
+
+    const never = (await screen.findByRole("link", { name: "Frontline single agent" })).closest(
+      "tr",
+    ) as HTMLElement;
+    const published = screen
+      .getByRole("link", { name: "Deterministic control" })
+      .closest("tr") as HTMLElement;
+    expectPublicationPill(published, "v2 · 2 versions", "published");
+    expectPublicationPill(never, "Never published", "never published");
+  });
+
+  it("says, with nothing configured, that a configuration adopts an identity, and links to them", async () => {
+    server.use(
+      http.get("*/api/v1/agent-configurations", () =>
+        HttpResponse.json({ configurations: [] } satisfies AgentConfigurationListResponse),
+      ),
+    );
+    renderAt("/lab/agent-configurations");
+
+    await screen.findByText(/No agent configuration yet/);
+    const card = indexCard("Agents under test");
+    expect(card).toHaveTextContent(/adopts exactly one support identity/);
+    expect(
+      within(card).getByRole("link", { name: "author one in Support identities" }),
+    ).toHaveAttribute("href", "/lab/support-identities");
   });
 
   it("counts the configurations an arm could adopt, and filters to them", async () => {

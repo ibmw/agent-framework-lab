@@ -3,11 +3,12 @@ import { type FormEvent, useId, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { createSupportIdentity } from "../api/supportIdentities";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { IDENTITY_TONE_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import {
@@ -71,16 +72,11 @@ export function SupportIdentitiesPage() {
         description="What the support agent is and what it may do. Identities are cross-shop; tone of voice comes from the shop, and an agent configuration adopts one published identity."
         actions={
           <Link className={accentButtonClasses} to="new">
+            <ButtonIcon verb="create" />
             New identity
           </Link>
         }
       />
-
-      {loadError ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
-        </p>
-      ) : null}
 
       <section className={`${surfaceClasses} overflow-hidden`}>
         {/* Only once there are rows to search and count. A chip is a filter, and a row of
@@ -102,7 +98,13 @@ export function SupportIdentitiesPage() {
             onSelect={setFilter}
           />
         )}
-        {loading ? (
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // lab holds no support identity.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
+          </p>
+        ) : loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading support identities…</p>
         ) : identities.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">
@@ -136,9 +138,7 @@ export function SupportIdentitiesPage() {
                   <td className={tableCellClasses}>{identity.permission_count}</td>
                   <td className={tableCellClasses}>{identity.guidance_count}</td>
                   <td className={tableCellClasses}>
-                    {identity.latest_published_version === null
-                      ? "Never published"
-                      : `v${identity.latest_published_version} · ${identity.published_version_count} version(s)`}
+                    <PublicationPill record={identity} />
                   </td>
                   <td className={tableCellClasses}>{formatTimestamp(identity.updated_at)}</td>
                 </tr>

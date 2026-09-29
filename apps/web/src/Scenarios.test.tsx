@@ -22,6 +22,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TOURS } from "./lib/tours";
 import { renderApp } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectPublicationPill, indexCard } from "./test/indexes";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
@@ -570,7 +571,53 @@ describe("scenario index", () => {
       within(row as HTMLElement).getByText(/Wrong address concern · Maya Laurent/),
     ).toBeVisible();
     expect(within(row as HTMLElement).getByText("2 objective(s)")).toBeVisible();
-    expect(within(row as HTMLElement).getByText("v1 · 1 version(s)")).toBeVisible();
+    expect(within(row as HTMLElement).getByText("v1 · 1 version")).toBeVisible();
+  });
+
+  it("says each scenario's publication in a pill: the version and how many, or Never published", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({
+          scenarios: [
+            ...scenarioIndex.scenarios,
+            {
+              ...scenarioIndex.scenarios[0],
+              scenario_id: "2c1b0a9f-8e7d-4c6b-9a58-4f3e2d1c0b9a",
+              name: "Damaged delivery",
+              latest_published_version: null,
+              published_version_count: 0,
+            },
+          ],
+        } satisfies ScenarioListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+
+    const published = (await screen.findByRole("link", { name: "Wrong shipping address" })).closest(
+      "tr",
+    ) as HTMLElement;
+    const never = screen
+      .getByRole("link", { name: "Damaged delivery" })
+      .closest("tr") as HTMLElement;
+    expectPublicationPill(published, "v1 · 1 version", "published");
+    expectPublicationPill(never, "Never published", "never published");
+  });
+
+  it("says, with no scenario yet, that one is built on a ticket, and links to Tickets", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios`, () =>
+        HttpResponse.json({ scenarios: [] } satisfies ScenarioListResponse),
+      ),
+    );
+    renderAt(`/shops/${SHOP_ID}/scenarios`);
+
+    await screen.findByText(/No scenario yet/);
+    const card = indexCard("Built on this shop");
+    expect(card).toHaveTextContent(/A scenario is built on a ticket/);
+    expect(within(card).getByRole("link", { name: "raise one in Tickets" })).toHaveAttribute(
+      "href",
+      `/shops/${SHOP_ID}/tickets`,
+    );
   });
 
   it("counts the scenarios an experiment could run, and filters to the ones never published", async () => {

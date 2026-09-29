@@ -75,18 +75,19 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
 the commits and ADR 0052–0072, its goal and acceptance criteria
-`docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator
-agreed, 34 then 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
-panel's order on every editor — and Tickets followed as an index, a create page and an editor
-built on it (ADR 0073); then the header: every editor's way back in one slot (`HeaderBack`, the
-create page's piece), every card's first line on `Card`'s `description`, and the neutral pill
-(`neutralPillClasses`) Slice 34 draws *Shared across shops* with; then the rows: the agent
-configuration, judge, block, identity and scenario editors on `Field`/`FieldGroup` rows, with
-a gate error the draft still saves with drawn as the row's second line (`Field`'s `finding`
-tone); then the lists: the editors' lists on `EntryCard`, opened in place and grown by
-the add form below a rule (`addFormClasses`) whose submit is `PrimaryAction`. No open slice
-depends on another. The order reshapes an editor from the outside in: panel, header, rows,
-lists, then the indexes.
+`docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator agreed,
+and Slice 35 is the one left. The editor's side panel landed first — the 790/312 grid, `GateCard`
+and the panel's order on every editor — and Tickets followed as an index, a create page and an
+editor built on it (ADR 0073); then the header: every editor's way back in one slot (`HeaderBack`,
+the create page's piece), every card's first line on `Card`'s `description`, and the neutral pill
+(`neutralPillClasses`); then the rows: the agent configuration, judge, block, identity and scenario
+editors on `Field`/`FieldGroup` rows, with a gate error the draft still saves with drawn as the
+row's second line (`Field`'s `finding` tone); then the lists: the editors' lists on `EntryCard`,
+opened in place and grown by the add form below a rule (`addFormClasses`) whose submit is
+`PrimaryAction`; then the indexes: publication as a pill (`PublicationPill`), the create glyph on
+every *New X*, empty states that link to the prerequisite, a failed listing that says only that, and
+the block libraries' chips. The order reshaped an editor from the outside in — panel, header, rows,
+lists — and then the indexes; History's card is what remains.
 
 ## Milestone 9 — Every page is one of three templates
 
@@ -118,63 +119,6 @@ only: no backend, contract or payload moves.
 Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
 experiment keep templates of their own and are not reshaped here.
 
-### Slice 34 — The indexes finished
-
-The indexes that are already close take what is left of the index template.
-
-- [ ] **Published as a pill.** `StatusPill` (`WorkspaceChrome.tsx:804`) gains a publication
-  tone, following *The form language*'s "a status column is a `StatusPill`: glyph for the axis,
-  word for the meaning" and *Principles*' "status is never colour alone": one glyph for the axis
-  (the prototype's dot, drawn on both states, :189, :192), the word "v3 · 2 versions" or "Never
-  published", and the two fills the prototype gives the two states from the tokens `VersionChips`
-  already uses (`admin-published`, `admin-border`). Every index writes "v3 · 2 version(s)" today,
-  so the wording moves with the pill. It replaces the plain text on Shops, Customers,
-  Support identities, Agent configs and Judges, the *Version* column on Scenarios and the block
-  libraries, and the ticket index's (`TicketsPage.tsx`). Whether `VersionChips`' own pill draws through it
-  is decided in the slice and said in one sentence.
-- [ ] **The create glyph** (`ButtonIcon verb="create"`) on every *New X*: Shops, Orders,
-  Customers (`CustomersPage.tsx:207`), Scenarios (`ScenariosPage.tsx:101`), Support identities,
-  Agent configs, Judges, the block libraries (`BlockLibraryPage.tsx:143`), Documents and *New
-  product*. The glyph is `aria-hidden`; no name moves.
-- [ ] **Empty states link to the prerequisite**: Orders to Customers, Scenarios to Tickets, Agent
-  configs to Support identities.
-- [ ] **Judges' *Never published* chip**, after *Usable* (`JudgeConfigurationsPage.tsx:46–53`).
-- [ ] **The block libraries' chips**: All, Published and Never published, off
-  `latest_published_version` (`BlockSummarySchema`). The prototype's domain chips (:6284–6310 —
-  *Decided by a rule*, *Scored by a judge*, *Fault hooks*, *Setup mutations*, *Not composed yet*)
-  are not built: the listing carries no usage figure, and the kind is the composed display
-  string `type_label` (`application/blocks.py:223`, :256) rather than a field.
-- [ ] **"⇄ Shared across shops"** (`BlockLibraryPage.tsx:133`) draws through the neutral pill,
-  `neutralPillClasses` in `lib/ui.ts`. The premise paragraph (:154) stays, as the prototype's
-  callout (:3565).
-- [ ] **New document in the header** (`DocumentsPage.tsx:165`), beside the shop draft's Save and
-  Discard.
-- [ ] **A failed listing says its failure and nothing else**: Scenarios (`ScenariosPage.tsx:135`),
-  Shops (`ShopsPage.tsx:162`) and Customers (`CustomersPage.tsx:299`) stop falling through to
-  "No … yet" under the alert.
-- [ ] `docs/design-direction.md`: the *Departures* row "Filter chips on Tickets and the block
-  libraries" becomes the block libraries' five undrawn chips; a row for *New document*'s place.
-
-Frames: `Workspace.dc.html` :189 and :192 (the pill; also :1178, :1481, :1618, :3262, :3443);
-:3556–3590 (a block library, its chips at :3573); :1514–1536 (Documents); :3406–3453 (Judges).
-
-Authority: ADR 0056 (the listing a chip counts), ADR 0057 (the Documents table).
-
-Departures to record: *New document* leaves the card's header row the prototype draws (:1535)
-for the page header, the operator's request; the five block chips above.
-
-Branch: `feat/index-polish`. Checks: `WorkspaceChrome.test.tsx` for the tone; `Shops.test.tsx`,
-`Customers.test.tsx`, `SupportIdentities.test.tsx`, `AgentConfigurations.test.tsx`,
-`JudgeConfigurations.test.tsx`, `Scenarios.test.tsx`, `Blocks.test.tsx`, `Orders.test.tsx` and
-`Documents.test.tsx` — the pill's word, the glyph without a name change, the link in the empty
-state, the chips and their counts, the failure without the empty sentence; Playwright
-`block-library` (it reads "v1 · 1 version(s)", :94), `customer-publication` and
-`shop-publication` (they read "Never published" by text, which the pill and the chip must not
-make ambiguous).
-
-Slice evidence: every index says a record's publication the same way, in a pill; an empty Orders
-page says an order needs a customer and links to Customers; the block libraries filter.
-
 ### Slice 35 — History as an index card
 
 History keeps its submitted, URL-backed form and takes the index's card.
@@ -187,7 +131,7 @@ History keeps its submitted, URL-backed form and takes the index's card.
 - [ ] `FilterChips` takes a chip without a count (`FilterChips.tsx:18–23`), whose name is its
   label alone: `ExperimentHistoryResponse` carries a page and a total and no count per status,
   and a figure the payload lacks is not faked.
-- [ ] The status is `StatusPill` (`WorkspaceChrome.tsx:804`) with a run-status tone, replacing
+- [ ] The status is `StatusPill` (`WorkspaceChrome.tsx:994`) with a run-status tone, replacing
   the colour map (:33–37) and its span (:763–767).
 - [ ] The empty state and the miss part (:571–576): with nothing recorded at all — the lab's
   total, which the shell already holds (`shell/listings.ts:270`) — the page says so and links to

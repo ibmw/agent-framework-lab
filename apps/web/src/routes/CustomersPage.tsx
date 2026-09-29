@@ -15,7 +15,7 @@ import { type FilterChipDefinition, FilterChips } from "../components/FilterChip
 import { LocaleField } from "../components/LocaleField";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { todayInput } from "../lib/orders";
@@ -34,13 +34,6 @@ import {
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The customer service is unavailable.";
-
-function publishedLabel(profile: CustomerProfileSummarySchema): string {
-  if (profile.latest_published_version === null) {
-    return "Never published";
-  }
-  return `v${profile.latest_published_version} · ${profile.published_version_count} version(s)`;
-}
 
 type Filter = "all" | "published" | "draft" | "shared" | "noaddress";
 
@@ -98,7 +91,12 @@ export function CustomersPage() {
   const [loadingEverything, setLoadingEverything] = useState(true);
   const [everythingError, setEverythingError] = useState<string | null>(null);
   const loading = listings.customers.loading || loadingEverything;
-  const loadError = listings.customers.error ?? everythingError;
+  // The index's own listing — the attached profiles the rail counts. The cross-shop read is
+  // the attach control's, and its failure is said above the card rather than in it: the
+  // attached profiles it did not stop from arriving are still this index's rows. When the
+  // attached listing failed too, the card's failure is the page's one sentence: two reads down
+  // together are the service down, said once.
+  const listError = listings.customers.error;
   const [attachError, setAttachError] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -205,15 +203,16 @@ export function CustomersPage() {
               Attach existing
             </button>
             <Link className={accentButtonClasses} to="new">
+              <ButtonIcon verb="create" />
               New customer
             </Link>
           </>
         }
       />
 
-      {loadError ? (
+      {everythingError && listError === null ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
+          {everythingError}
         </p>
       ) : null}
 
@@ -282,11 +281,11 @@ export function CustomersPage() {
             narrow nothing is a control that does nothing. Both arrive with the table they
             belong to; the title beside the box is the card's, drawn in every state. */}
         <SearchRow title="Attached to this shop">
-          {loading || loadError ? null : (
+          {loading || listError ? null : (
             <SearchField label="Search by name or email" onChange={setQuery} value={query} />
           )}
         </SearchRow>
-        {loading || loadError ? null : (
+        {loading || listError ? null : (
           <FilterChips
             legend="Filter customers"
             chips={chips}
@@ -294,7 +293,13 @@ export function CustomersPage() {
             onSelect={setFilter}
           />
         )}
-        {loading ? (
+        {listError ? (
+          // Its failure and nothing else: a listing that could not be read has not said no
+          // customer is attached.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {listError}
+          </p>
+        ) : loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading customers…</p>
         ) : attached.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">
@@ -336,7 +341,9 @@ export function CustomersPage() {
                       : " · no default"}
                   </td>
                   <td className={tableCellClasses}>{profile.attached_shop_count}</td>
-                  <td className={tableCellClasses}>{publishedLabel(profile)}</td>
+                  <td className={tableCellClasses}>
+                    <PublicationPill record={profile} />
+                  </td>
                   <td className={tableCellClasses}>{formatTimestamp(profile.updated_at)}</td>
                 </tr>
               ))}

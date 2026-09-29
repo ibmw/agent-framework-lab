@@ -9,13 +9,20 @@ import { Link } from "react-router-dom";
 import { mutationBlocks, objectiveBlocks } from "../api/blocks";
 import { describeApiError } from "../api/client";
 import { createScenario, replaceScenarioDraft } from "../api/scenarios";
+import { ButtonIcon } from "../components/ButtonIcon";
 import { CappedTitle } from "../components/CappedTitle";
 import { ChipListField } from "../components/ChipListField";
 import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, EntryCard, EntryId, PageHeader } from "../components/WorkspaceChrome";
+import {
+  Card,
+  EntryCard,
+  EntryId,
+  PageHeader,
+  PublicationPill,
+} from "../components/WorkspaceChrome";
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { CHIP_LABEL_MAX_LENGTH, MUTATIONS_CAP_RULE, OBJECTIVES_CAP_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
@@ -78,7 +85,7 @@ export function ScenariosPage() {
   // and read again here whenever this page changes what it lists (ADR 0056). The tickets a
   // scenario is built on are the create page's question now, so this index no longer reads
   // that listing at all.
-  const { listings } = useShopWorkspace();
+  const { shopId, listings } = useShopWorkspace();
   const scenarios = listings.scenarios.rows;
   const loading = listings.scenarios.loading;
   const loadError = listings.scenarios.error;
@@ -99,16 +106,11 @@ export function ScenariosPage() {
         description="What an experiment runs: one ticket, the documents that matter for it, the objectives it is judged by, and the faults the runtime injects."
         actions={
           <Link className={accentButtonClasses} to="new">
+            <ButtonIcon verb="create" />
             New scenario
           </Link>
         }
       />
-
-      {loadError ? (
-        <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {loadError}
-        </p>
-      ) : null}
 
       <section className={`${surfaceClasses} overflow-hidden`}>
         {/* Only once there are rows to search and count. A chip is a filter, and a row of
@@ -130,11 +132,25 @@ export function ScenariosPage() {
             onSelect={setFilter}
           />
         )}
-        {loading ? (
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // shop holds no scenario.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
+          </p>
+        ) : loading ? (
           <p className="p-4 text-[13px] text-admin-muted">Loading scenarios…</p>
         ) : scenarios.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">
-            No scenario yet. Build one on a ticket to turn the incident into an experiment.
+            No scenario yet. A scenario is built on a ticket and turns its incident into an
+            experiment —{" "}
+            <Link
+              className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+              to={`/shops/${shopId}/tickets`}
+            >
+              raise one in Tickets
+            </Link>
+            .
           </p>
         ) : visible.length === 0 ? (
           <p className="p-4 text-[13px] text-admin-muted">No scenario matches this view.</p>
@@ -176,9 +192,7 @@ export function ScenariosPage() {
                       <div className="text-admin-muted">{scenario.mutation_count} mutation(s)</div>
                     </td>
                     <td className={tableCellClasses}>
-                      {scenario.latest_published_version === null
-                        ? "Never published"
-                        : `v${scenario.latest_published_version} · ${scenario.published_version_count} version(s)`}
+                      <PublicationPill record={scenario} />
                     </td>
                     <td className={tableCellClasses}>{formatTimestamp(scenario.updated_at)}</td>
                   </tr>
