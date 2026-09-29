@@ -1,7 +1,7 @@
-# UX plan
+# UX plan — a list is edited in the form below it
 
-Status: no milestone open — 2026-09-29. Open slices only: a slice that lands is removed from this
-file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
+Status: proposed — 2026-09-29. Open slices only: a slice that lands is removed from this file.
+Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
 `docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
 and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; and the 28 September plan,
 whose delivered Milestone 9's are in `docs/history/PLAN-UX-2026-09-28.md`.
@@ -10,7 +10,9 @@ whose delivered Milestone 9's are in `docs/history/PLAN-UX-2026-09-28.md`.
 
 `docs/PLAN.md` records what the lab holds; this plan records how the operator's workspace reaches
 the design it was handed on 19 September 2026: the whole-workspace prototype in
-`tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Read, in
+`tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Since
+29 September 2026 it also records how the lists an editor edits with a form reach the pattern
+Shop details' *Payment methods* draws (Milestone 10). Read, in
 order, `AGENTS.md`, `docs/product-direction.md`, `docs/architecture.md`, `docs/PLAN.md`'s delivery
 rules, `docs/design-direction.md` (its *Authority* section settles which authority governs where the
 prototype, the README and the codebase disagree), then a slice's brief and the ADRs it names.
@@ -74,8 +76,373 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestones 8 and 9 are delivered. Their record is the commits and ADR 0052–0073; their goals and
 acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md` and
-`docs/history/PLAN-UX-2026-09-28.md`. No UX milestone is open: the next one is planned here, under
-the rules above, when the operator asks for it.
+`docs/history/PLAN-UX-2026-09-28.md`. Milestone 10 runs its four slices in order, 36 to 39, one
+editor or pair of editors to a branch:
+
+- **36 goes first** because it extracts the pieces every later slice draws through and writes the
+  ADR they cite, and the order editor is the surface the operator named.
+- **37** takes the customer editor and an identity's guidance: prose lists whose items carry no
+  control of their own beyond *Make default*, and it adds the Playwright helper that edits an item.
+- **38** takes the product editor's four lists: one route file, one test file and one scope
+  (ADR 0061), and none of them reached by a spec that edits.
+- **39** takes the two lists that keep a control on the item — the default guideline's radio and a
+  parameter's ↑/↓ — for which the item gains its `lead` slot and the actions their arrows. It
+  follows 37, whose helper its block journeys use.
+
+## Milestone 10 — A list is edited in the form below it
+
+### Goal
+
+An operator correcting an order's line, an address or a guideline meets the list Shop details'
+*Payment methods* draws, so that editing an entry is learned once. The pattern replaces the open
+row (`EntryCard` edit mode) on the lists named below, as the operator asked on 29 September 2026.
+The change is the UI's only: no backend, contract or payload moves. The slices' `Frames:` lines cite
+the methods handoff ADR 0072 was built from
+(`tmp/design-frames/design_handoff_shop_details_methods/shop-details.template.html`) beside
+`Workspace.dc.html`.
+
+The pattern is what `routes/ShopMethodCards.tsx` draws (ADR 0072):
+
+- **Two rows in the card** (`FieldRows`): the list under its row label and hint, then the form,
+  labelled "Add a …" while adding and "Edit {name}" while editing, with its hint. A list row takes
+  the prototype's label where it draws one — *Items* (`Workspace.dc.html` :2745), *Entries*
+  (:2880), *Typed parameters* (:607) — and otherwise one the slice writes for what the list holds;
+  a hint only where its rule is true (*Guidance lives under the field*).
+- **An item** (`MethodItem`, :81): the name at 13.5px 700, the ID in monospace, one detail line;
+  its actions — a control of the list's own where it has one, the 30px pencil, the 30px trash —
+  wrapping as one group; `aria-current` and the pine border and ground while the form holds it.
+- **Edit** loads the item into the form, highlights it and moves focus to the form's first field;
+  a key another record names the entry by is shown and fixed while editing. *Save changes*
+  writes the entry where it stands and *Cancel* empties the form, both returning focus to that
+  Edit; an Edit while the form holds something replaces it.
+- **Remove** is the trash, named "Remove {name}", asking twice under the preference (ADR 0060):
+  `ConfirmRemove` takes the item's place and the notice line takes focus after.
+- **One refusal line after the buttons** (`MethodFormRow`, :350): the submit is `PrimaryAction`,
+  refused with the first rule the form breaks in the order its fields ask, said once in a polite
+  live region; the field that breaks it is `aria-invalid` and described by that line; a blank form
+  is refused and says why and marks nothing until something is typed; the handler checks the
+  refusal too (ADR 0063, ADR 0072).
+- **The form is unsaved work** while it holds something other than what it was filled with
+  (`useMethodForm`, :241; ADR 0051); an entry taken off the list while the form edits it empties
+  the form, and a clean edit follows the draft through a discard.
+
+The lists converted: an order's line items and events; a profile's addresses, background and
+hidden facts; an identity's guidance; a product's options, media, attributes and reviews; the
+tone-of-voice guidelines; a template's parameters. Not converted, as the operator scoped it: the
+product's variants table, a scenario's composed objectives and mutations, the create pages' rows
+and a ticket's thread.
+
+### Slice 36 — The method list shared, and the order editor on it
+
+Shop details' method list becomes the workspace's, and an order's lines and events are edited
+through it.
+
+- [ ] The method cards' pieces move out of `routes/ShopMethodCards.tsx` into a component module
+  (`components/ItemList.tsx`) and a hook module (`lib/itemForm.ts`), drawing what they draw today:
+  the item (`MethodItem`, :81, its class sets :69–79 moving to `lib/ui.ts`), `EditButton` (:167),
+  `RemoveButton` (:191) with its held reason, the form row (`MethodFormRow`, :350) with its submit,
+  *Save changes*, *Cancel* and the one `RefusalLine` after them, the form's label (`formTitle`,
+  :450, today fixed to "Add a method"), the form's state (`useMethodForm`, :241),
+  `useFocusAfterCommit` (:309), `useEditButtons` (:324), `refusedProps` (:339) and the refusal's
+  `{ field, reason }` shape (`MethodRefusal`, `lib/shopMethods.ts:69`). `EnabledSwitch` (:115),
+  `MethodIdField` (:408), `NameField` (:656) and `DaysField` (:686) stay in the route, which is
+  their one consumer. `PaymentMethodsCard` (:454) and `FulfilmentMethodsCard` (:718) draw through
+  the shared pieces with no change anyone can see, hear or press.
+- [ ] `METHOD_FORM_REASON` (`lib/unsavedWork.ts:59`) and the form's three unsaved-work labels
+  (`ShopMethodCards.tsx:281–286`) are written from the list's noun, so Shop details' prompt reads
+  word for word as today and an order's says "a line" or "an event".
+- [ ] **Line items** (`OrderEditorPage.tsx:468`): the table (:480–572) becomes the card's first
+  row, *Items*, one item a line — the product title · variant summary as the name, the SKU as the
+  ID, "{quantity} × {unit} = {line total}" as the detail — named by the SKU on their controls, so
+  "Remove {SKU}" keeps its name (:552). The add form (:576–619) becomes the second row, "Add a
+  line" / "Edit {SKU}": *Variant* (the priced variants not yet a line, already chosen when only one
+  is left, `useSingleChoice` :274, ADR 0064) and *Quantity* (`MIN_LINE_QUANTITY` to
+  `MAX_LINE_QUANTITY`, `lib/orders.ts:138–139`, 1 when adding). Edit loads the line's quantity and
+  its variant, shown and fixed: the lab keys a line on its SKU and keeps its frozen price
+  (`_materialize_lines`, `application/order_fixtures.py:323`). Refused after the buttons, in order:
+  nothing left to add (`NO_PRICED_VARIANT`, `EVERY_VARIANT_ORDERED`, :93–95; adding only), no
+  variant chosen, a quantity outside the bounds. The quantity typed in place goes
+  (`quantityDraft` :139, `changeQuantity` :336); `clampQuantity` stays for the create page
+  (`OrdersPage.tsx:504`). The removal's confirm (:496) takes an item's place instead of a table
+  row's. The payment rows (:624) and the totals (:682–734) stay below, in the same card.
+- [ ] **Order events** (:876): items — the kind as the name, the event's ID, the time
+  (`formatFixtureTimestamp`) and the summary as the detail — named by `eventLabel` (:1080) on
+  their controls as today. `OrderEventForm` (:1144) and `OrderEventFieldset` (:1088) become the
+  one form, "Add an event" / "Edit {label}", asking Kind, Occurred at and Summary. Refused after
+  the buttons, in order: the cap (`ORDER_EVENTS_CAP_RULE`; adding only), the time
+  (`ORDER_EVENT_TIME_RULE`), the summary (`ORDER_EVENT_SUMMARY_RULE`) — `lib/fieldRules.ts`
+  :568–579. A time left alone keeps the event's instant to the second, as `orderEventEntry` does
+  today. `eventEditor` (:144) and the list's `EntryEditNotice` (:965) go.
+- [ ] Write ADR 0074 (the next free number when this plan was written; check `docs/adr/` at branch
+  time) with the slice. It makes the method list the workspace's pattern for a list of records
+  edited with a form, superseding *A saved row opens where it stands* (`docs/design-direction.md`
+  :429) and `form-decisions.md` 8.2 for the lists this milestone converts; says what stays on
+  `EntryCard` edit mode — the variants table, a scenario's composed objectives and mutations — and
+  what stays on `EntryCard` without Edit — the create pages' rows, the shop version's lists, the
+  lab's frameworks; states which keys are fixed while editing; and says how the pattern meets
+  ADR 0051 (the form registers itself, and the prompt cannot save it), ADR 0060 (the trash asks
+  twice, the confirm in the item's place) and ADR 0063 (refused before the press, in one line
+  after the buttons, a blank form refused and marked nowhere — ADR 0072's placement, taken by every
+  converted form, a field's native `required` included). It records the order's line items leaving
+  their table and their quantity leaving the row.
+- [ ] `docs/design-direction.md`: *Shop details' two method lists are edited in their card's form*
+  (:448) becomes the rule for every list edited in its card's form, naming the method lists and an
+  order's lines and events; *A saved row opens where it stands* (:429) loses the order's events and
+  "An order's line items stay a table…" (:445–446); *A blocked primary action says why* (:470)
+  writes *Add line* and *Add event* with the form's refusals (:487–488).
+
+Frames: methods handoff `shop-details.template.html` :160–186 (the card; the list row :163–172, an
+item :166–171, the form row :173–185, the line after the buttons :183) and :200 (an empty list at
+the validation weight); `Workspace.dc.html` :2742–2752 (the order's *Lines* card as items, one at
+:2748, under the row *Items*, :2745).
+
+Authority: ADR 0051, ADR 0060, ADR 0063, ADR 0064, ADR 0072; `docs/design-direction.md`, *The
+form language*.
+
+Departures to record: `form-decisions.md` 8.2's open row, for the converted lists, in the ADR; the
+prototype's line reads "authored at the price below" beside its total (:2749–2750), where the
+detail says quantity × unit = total, the arithmetic the totals derive; the prototype's order frame
+draws no events card, and the codebase's takes the handoff's items.
+
+Branch: `feat/order-lists-in-one-form`. Checks: `ItemList.test.tsx` for the shared pieces (the
+item's `aria-current`, the two icon buttons' names, the form row's label, *Save changes* and
+*Cancel* while editing, the one line after the buttons); `App.test.tsx` *payment and fulfilment
+methods, as the handoff draws them* (:5857), *editing a saved entry in place*'s two method edits
+(:2387, :2427) and the prompt's method labels (:6209, :6229), unchanged and green, which is the
+extraction's proof; `lib/ui.test.ts` for the moved class sets; `Orders.test.tsx` *order editor*
+(:1822), whose tests type into "Quantity for {SKU}" (:1861, :1874, :2020, :2152, :2379) and pick
+from "Add product" (:1985, :1997) — they edit through the form, and the total follows *Save
+changes* rather than each keystroke — and *order events* (:2401: the open-row tests :2423 and
+:2475, the confirm :2568, the cap :2652, *Add line*'s refusal :2665); new coverage for the variant
+fixed while editing, each field's rule in order, a blank form refused and unmarked, the form
+emptied when its line or event is removed, and the prompt for a typed line and an edited event.
+Playwright `order-fixture`, `experiment-start`, `scenario-authoring` and `ticket-authoring` read
+*Line items & payment*, its payment rows by label and the total by text
+(`order-fixture.spec.ts:120`), and every journey's shop setup presses *Add payment method* and *Add
+fulfilment method* (`workspace-shell.spec.ts:54` among them); none of those names moves. The names
+that move — "Quantity for {SKU}", "Add product", the forms named "Add a line", "Add an event" and
+"Edit {label}" (groups of the same name now), "Save {label}", "Cancel editing {label}" — no spec
+reaches.
+
+Slice evidence: on an order, the operator presses the pencil on a line; the line turns pine and
+the form below reads "Edit NS-ASJ-OB-M" with its variant fixed; 1000 in Quantity says after the
+button why *Save changes* will not save; 2 saves, the item reads "2 × 249.00 EUR = 498.00 EUR" and
+the total follows. Shop details' two cards are as they were.
+
+### Slice 37 — A profile's lists and an identity's guidance
+
+The customer editor's three lists and the support identity's guidance are edited in the form below
+them.
+
+- [ ] **Addresses** (`CustomerEditorPage.tsx:651`): items — the label as the name, the entry's ID,
+  `addressLine` (:1184) as the detail — with the *Default* pill beside the name (:695–699) and
+  *Make default* ("Make {label} the default address", :740–749) in the item's actions before the
+  pencil, as the prototype draws it (:2888–2891); the default carries none. `AddressForm` (:1245)
+  and `AddressFieldset` (:1203) become the one form, "Add an address" — the name its group already
+  has — / "Edit {label}", with `ADDRESS_FIELDS_RULE` (`lib/fieldRules.ts:587`) after the buttons.
+  The default is never the form's answer (:713–716), and the country still follows the profile's
+  locale while adding.
+- [ ] **Background** (:822): the date · kind as the name, its controls' names unchanged (:880), the
+  ID, the note as the detail; `BackgroundForm` (:1321) and `BackgroundFieldset` (:136) the one
+  form, "Add a background entry" / "Edit {date · kind}", submitted by *Add entry*.
+- [ ] **Hidden simulator facts** (:920): the fact as the name, its controls' names unchanged (:968),
+  the ID, "Revealed when …" as the detail where it has one; `HiddenFactForm` (:1351) and
+  `HiddenFactFieldset` (:182) the one form, "Add a hidden fact" / "Edit {fact}", submitted by *Add
+  fact*.
+- [ ] **Guidance** (`SupportIdentityEditorPage.tsx:284`): the title as the name, the ID, the body as
+  the detail; `GuidanceForm` (:517) and `GuidanceFieldset` (:486) the one form, "Add a note" /
+  "Edit {title}", submitted by *Add guidance*.
+- [ ] Each form's rules, today a native `required` on each field it needs (`CustomerEditorPage.tsx`
+  :173, :196; `SupportIdentityEditorPage.tsx` :500, :509), are said after the buttons in field
+  order, in the lab's words where `lib/fieldRules.ts` holds them. The editors' `useEntryEdit`
+  (:242–250; `SupportIdentityEditorPage.tsx:99`) and `EntryEditNotice`s (:774, :899, :989;
+  `SupportIdentityEditorPage.tsx:349`) go.
+- [ ] `tests/e2e/support/authoring.ts` gains `editItem`: press "Edit {name}", answer inside the
+  group "Edit {name}", press its *Save changes*, and see the group go. `editRow` (:29) stays for a
+  scenario's composed blocks, and its comment says so.
+- [ ] `docs/design-direction.md`: the list rule names these four lists, and *A saved row opens
+  where it stands* loses them; *A blocked primary action says why* rewrites *Add address*'s reason
+  (:488–489); *Every editor section is on rows* (:380–382) stops citing "the guidance form" as an
+  add form that stacks.
+
+Frames: `Workspace.dc.html` :2877–2899 (the address book: the *Entries* row :2880, an item :2884,
+the pill :2888, *Make default* :2891), :1853–1866 (guidance); methods handoff
+`shop-details.template.html` :160–186.
+
+Authority: ADR 0051, ADR 0060 (the address removal's findings), ADR 0063, ADR 0074.
+
+Departures to record: the prototype draws an address with neither Edit nor Remove (:2884–2893)
+and a guidance note with a one-press × and no Edit (:1858–1866); the items carry the pencil and a
+trash that asks twice.
+
+Branch: `feat/profile-and-guidance-lists`. Checks: `Customers.test.tsx` *editing a saved customer
+entry in place* (:1087), which becomes loading into the form, *removing is deliberate* (:1285) and
+*the address book* (:1879) — the confirm in the item's place, *Make default* on the item, the
+default untouched by an edit, each form's first rule after its button, the prompt for a typed
+address and an edited fact; `SupportIdentities.test.tsx` *editing a saved guidance note in place*
+(:457) and *support identity workspace* (:189). Playwright `order-fixture` (:27 the group "Add an
+address"; :132 `editRow` becomes `editItem`, with "Street" in the form), `customer-publication`
+(:55 the group, :66 *Add address*, and :67 `getByText("Default")`, which the *Entries* row's hint
+must not make ambiguous — keep "default" out of it or make the read exact, and say which),
+`experiment-start` (:134–152, *Make Home the default address*), `scenario-authoring` (:103–117)
+and `ticket-authoring` (:109). The names that move — the open rows' forms "Edit {label}", "Save
+{label}", "Cancel editing {label}" — are reached only by `order-fixture.spec.ts:132`, through
+`editRow`.
+
+Slice evidence: on a profile, the operator presses the pencil on "Bordeaux previous flat", the form
+reads "Edit Bordeaux previous flat", a new street saves into the item, and *Make default* on
+another entry moves the pill; an identity's guidance note is corrected the same way.
+
+### Slice 38 — The product editor's four lists
+
+A product's options, media, attributes and reviews are edited in the form below them.
+
+- [ ] **Options** (`ProductEditorPage.tsx:788`): the option's name, its key as the ID, its values as
+  the detail, the `ChipList` the row already draws (:820). The add form (:883–921) is the one form,
+  "Add an option" / "Edit {name}": *Option name*, *Option key* (`DerivedIdField` while adding,
+  fixed while editing — a variant chooses by it) and *Values* (`OptionValuesField`, :737), with
+  `OPTION_NEEDS_VALUE` (:728) after the buttons. "Remove {name}" stays the trash's name and stops
+  being its visible word (:871).
+- [ ] **Media references** (:1479): the reference in monospace as the name — its own key, which
+  nothing else names, so it stays editable while editing (`docs/design-direction.md` :315) — and
+  the alt text as the detail. `MediaFieldset` (:1407) is the one form, "Add a media reference" /
+  "Edit {reference}", submitted by *Add media*. `MEDIA_NEEDS_REFERENCE` (:731) and a reference
+  another entry holds move from the Reference field's second line (`extra`, :1425) to the line
+  after the buttons, the field `aria-invalid` and described by it.
+- [ ] **Custom attributes (typed)** (:1727): the label, the key as the ID, the type (`EntryKind`)
+  beside them, and the value with its unit and "one of" its choices as the detail (:1798–1812).
+  `AttributeFieldset` (:1614) is the one form, "Add an attribute" / "Edit {label}", submitted by
+  *Add attribute*, the key derived while adding and fixed while editing; the type still decides
+  what the value, unit and choices ask.
+- [ ] **Ratings & reviews** (:1895): "{rating}★" as the name, the review's ID, "“{body}” —
+  {author}" as the detail, the line `sticky-header` reads; the controls keep "review {id}"
+  (:1959). `ReviewFieldset` (:1852) with `StarRatingField` (:2017) is the one form, "Add a
+  review" / "Edit review {id}", submitted by *Add review*.
+- [ ] The four cards' `useEntryEdit` (:764, :1454, :1706, :1886) and `EntryEditNotice`s (:881,
+  :1571, :1820, :1973) go; the removals keep `useRemoval(product.key, discarding)` (ADR 0061), and
+  the page is keyed by the product (:161), so no form carries one product's edit onto another. The
+  variants table (:1021) is untouched.
+- [ ] `docs/design-direction.md`: the list rule names the product's four lists, and *A saved row
+  opens where it stands* keeps the variants alone of the product's; *A blocked primary action says
+  why* rewrites *Add media*'s reason (:489–490), and *Two refusals with one cause are one sentence*
+  (:504–507) its media sentence.
+
+Frames: `Workspace.dc.html` :955–975 (an option: its name, its values, the confirm in its place);
+methods handoff `shop-details.template.html` :160–186. The prototype draws no media, attribute or
+review list on the product frame.
+
+Authority: ADR 0060 (an option's removal takes its variants' values), ADR 0061, ADR 0063,
+ADR 0074.
+
+Departures to record: none beyond ADR 0074's, unless the slice finds one; the *Departures* row
+"The option's confirm" (`docs/design-direction.md` :150) still holds, the confirm taking the
+item's place.
+
+Branch: `feat/product-lists-in-one-form`. Checks: `App.test.tsx` *editing a saved entry in place*
+(:2356 — the option :2461, the attributes :2493, :2530, :2557, the review :2601), the media
+refusals (:2773, :2829), the keys derived and fixed (:1510), the saved rows read back (:1267, :1284,
+:1345, :1842), the chip fields (:1666, :1709), the stars (:1762) and *removing is deliberate*'s
+option confirms (:4597–:4715) — each through the one form, with the prompt for a typed option and
+an edited review. Playwright `agent-configuration`, `shop-publication`, `experiment-start`,
+`order-fixture`, `scenario-authoring` and `ticket-authoring` fill *Option name* in *Options*,
+press *Add option* and read "Remove Ocean Blue", a value chip's name in the form
+(`shop-publication.spec.ts:103`), none of which moves; `sticky-header` adds a review through
+*Author*, *Body* and *Add review* in the region "Ratings and reviews", reads its line and holds *Add
+review* in view at the foot (:55–72, :207–226), which the shorter items must keep true. The names
+that move — the open rows' forms and their Save and Cancel — no spec reaches.
+
+Slice evidence: on a product, the operator loads an option into the form, adds a value, and saves;
+a media reference another entry holds is refused after *Save changes* with the field marked; the
+variants table still opens in place.
+
+### Slice 39 — Tone of voice and a template's parameters
+
+The two lists that keep a control on the item — the default guideline's radio, a parameter's
+↑/↓ — are edited in the form below them.
+
+- [ ] The item gains a `lead` slot before the name, as `EntryCard`'s `lead`
+  (`WorkspaceChrome.tsx:578`), for a control the list keeps on each item that is neither Edit nor
+  Remove and reads first.
+- [ ] **Guidelines** (`ShopSetupPages.tsx:447`): the default radio as the item's lead (:488–501,
+  "Make {name} the shop default", unchanged), the name with `DefaultToneChip` (:506), the slug as
+  the ID (the *Departures* row "A guideline's `slug · version` line", `docs/design-direction.md`
+  :146), the guidance as the detail; the default's way-out line (`TONE_DEFAULT_REMOVAL_RULE`, :550)
+  stands where its trash would (*A refusal that has a way out*, :520). The add form (:572–629) is
+  the one form, "Add a guideline" / "Edit {name}": *Name*, *ID* (derived while adding, fixed while
+  editing — an agent configuration names a guideline by it) and *Guidance*, with `TONE_NAME_RULE`
+  after the buttons; *Add tone of voice* keeps its name, and the card its name "Guidelines", the
+  tour's anchor (`lib/tours.ts:472`). The radio is the list's, never the form's, as the payment
+  switch is (ADR 0072): it reads the draft, which always holds the guideline's saved name, so it is
+  no longer refused while the form holds a nameless edit (:420–432, :450–454, :494–496), and an
+  edit still never moves the default (:520–522).
+- [ ] **Parameters** (`BlockEditorPage.tsx:260`): `ParameterRow` (:350) becomes an item — the name
+  in monospace, the kind (`EntryKind`) and *bound same-shop* beside it, the description, default
+  and binding as the detail (:450–481), `optional_parameter_without_default`'s `GateFindingLine`
+  under it (:482–486) — with ↑/↓ ("Move {name} up/down", unchanged, :415–432) at the icon buttons'
+  30px before the pencil, because the order is authored. One form, "Add a parameter" / "Edit
+  {name}", asks what the add form and the open row ask between them: *Label* (derived to an
+  identifier with its "Saved as" line while adding, fixed while editing — a scenario binds by it),
+  *Kind*, *Description*, *Default* and *A scenario must bind this* (`ParameterFieldset`, :496),
+  the gate's finding under the checkbox as today (ADR 0063's lab amendment). Refused after the
+  buttons, in order: the cap (`PARAMETERS_FULL`, `components/ParameterForm.tsx:11`; adding only),
+  an empty label. `ParameterForm` stays the new-block page's. The labels "Kind of {name}",
+  "Description of {name}" and "Default of {name}" (:514, :532, :547, :562) give way to the form's
+  own.
+- [ ] `docs/design-direction.md`: the list rule names the guidelines and a template's parameters,
+  and *A saved row opens where it stands* keeps only what stays on `EntryCard` edit mode — the
+  variants and a scenario's composed blocks — and says so; the *Departures* rows "*New guideline*
+  on the Guidelines card" (:148), "The guideline editor's two validation messages" (:149) and "A
+  template's parameters" (:166) are rewritten for the form; *Two refusals with one cause are one
+  sentence* (:504–507) loses its guideline example and is rewritten, or removed if no example is
+  left, as the slice says; *A blocked primary action says why* rewrites *Add parameter* at the cap
+  (:487).
+
+Frames: `Workspace.dc.html` :1914–1935 (a guideline: its pill, its slug line, *Make default* and
+*Edit*), :604–620 (a template's *Typed parameters*, an item :611); methods handoff
+`shop-details.template.html` :160–186.
+
+Authority: ADR 0051, ADR 0060, ADR 0063 (and its lab amendment), ADR 0072 (the list's control is
+never the form's), ADR 0074.
+
+Departures to record: the prototype's *Make default* button on a guideline (:1926–1928) stays the
+radio, the operator's decision of 29 September 2026; the prototype's read-only parameter item
+(:611–616) is the *Departures* row this slice rewrites.
+
+Branch: `feat/guideline-and-parameter-lists`. Checks: `App.test.tsx` *a tone-of-voice guideline's
+own rules* (:2894 — :2953's radio refused beside a nameless open row becomes a radio that stays
+free while the form holds one), :1425, :1493; `Blocks.test.tsx` *a template's parameters* (:1195),
+*objective block editor* (:595) and *mutation block editor* (:817) — ↑/↓ on the item, the finding on
+the item and in the form, a description and a default given while adding. Playwright
+`block-library` (:59 and :118 read the form "Add a parameter", which is now a group of that name;
+:63, :71, :122 and :135 `editRow` becomes `editItem`, reaching *Description* and *Default* by their
+own labels), `scenario-authoring` (:221, :244, :249) and `experiment-start` (:257, :296, :301) the
+same, their composed-block edits (:301, :314; :375, :386) staying on `editRow`;
+`agent-configuration` (:27–31), `shop-publication`, `scenario-authoring`, `ticket-authoring` and
+`experiment-start` fill the guideline's *ID*, *Name* and *Guidance* and press *Add tone of voice*,
+unchanged; `sticky-header`'s tone-of-voice editor (:515–525) the same, and its tour step "taller
+than the room under the header" (:470–495), whose premise is the Guidelines card's height, which
+compact items shrink — the slice restores the premise and says how; `tour-anchors` for
+`[aria-label="Guidelines"]`.
+
+Slice evidence: on Tone of voice, the pencil on "Warm and precise" loads it into the form with its
+ID fixed, *Save changes* rewords it, and the radio still names the shop default; on an objective
+block, a parameter is moved up, loaded into the form, given a default and saved.
+
+### Acceptance criteria
+
+- Every list named in the goal is items in one row of its card and one form in the next, and none
+  of them opens in place.
+- Edit loads and highlights the entry and fixes the key another record names it by; *Save changes*
+  writes it where it stands; *Cancel*, and the entry's removal, empty the form; focus goes to the
+  form's first field and back to the Edit.
+- Every Remove on them is the trash, asking twice under the preference, the confirm in the item's
+  place.
+- Every form's submit is refused before the press with the first rule it breaks, in one line after
+  its buttons.
+- A form holding something is unsaved work, and the prompt says it cannot be saved from there.
+- Shop details' two cards draw, sound and behave as before, through the shared pieces.
+- ADR 0074 records the pattern and what stays on `EntryCard`; nothing in the backend or a contract
+  moved; the Playwright journeys pass, and every moved accessible name lists the specs it touched.
 
 ## Deliberately not here
 
@@ -97,6 +464,9 @@ the rules above, when the operator asks for it.
   the prototype does not draw.
 - **A component library or a new UI dependency.** The `CreatePage` layout, `ConfirmRemove` and
   `ActionStatus` are small components on the existing chrome, as the switcher's panel was.
+- **The product's variants, a scenario's composed blocks, the create pages' rows and a ticket's
+  thread in the form below them.** Outside Milestone 10 as the operator scoped it; they keep
+  `EntryCard` and `EntryEditButtons`, and the thread its composer (ADR 0073).
 - **Read-only version pages for configurations and scenarios.** The results link a pinned
   version to its definition's editor (ADR 0068); a frozen view per definition is worth its own
   slice in `docs/PLAN.md` if a review journey needs it.

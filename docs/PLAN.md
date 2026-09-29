@@ -125,6 +125,18 @@ consistently.
 | UX — The refresh's pattern layer | Pine primary and the glyph vocabulary, the field row, the rail's metrics, filter chips, display type, search, control metrics, row copy. | `docs/history/workspace-refresh-pattern-slices.md` |
 | 8 — The workspace becomes the prototype | Two modes with their rails, the top bar, creation as a page, the overview, documents, settings in three zones, the model connection, and the behaviour the prototype specifies everywhere. | ADR 0052–0072, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-20.md` |
 | 9 — Every page is one of three templates | One editor side panel, header and card, field rows and lists everywhere; Tickets as an index, a create page and an editor; the indexes and History finished on the index template. | ADR 0073, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-28.md` |
+| **10 — A list is edited in the form below it** | **Open.** Shop details' method list shared, and the lists the editors edit with a form drawn on it: an order's lines and events, a profile's addresses, background and hidden facts, an identity's guidance, a product's options, media, attributes and reviews, the tone-of-voice guidelines, a template's parameters. | slices in `docs/PLAN-UX.md` |
+
+## Milestone 10 — A list is edited in the form below it
+
+Bring the lists the editors edit with a form, all but the product's variants and a scenario's
+composed blocks, onto the pattern Shop details' *Payment methods* draws (ADR 0072): compact items
+with an icon Edit and Remove, and one form below the list that adds or, on Edit, holds the item it
+loaded. The operator asked for it on 29 September 2026; it is built on the primitives the workspace
+already has, without a backend or contract change. `docs/PLAN-UX.md` is the authority for its
+scope, order and checks. Its first slice writes ADR 0074 with its code, because the pattern
+supersedes *A saved row opens where it stands* for the lists it converts. Acceptance is that
+plan's.
 
 ## Deferred decision triggers
 
