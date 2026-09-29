@@ -9,6 +9,7 @@ import type {
   ObjectiveBlockPayloadSchema,
   ObjectiveBlockPreviewResponse,
   ObjectiveEvidence,
+  ObjectiveSeverity,
 } from "@agent-lab/contracts";
 import { type ReactNode, useId, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -21,6 +22,9 @@ import { ParameterForm } from "../components/ParameterForm";
 import {
   Card,
   EditorSaveActions,
+  EntryCard,
+  EntryEditNotice,
+  EntryKind,
   Fingerprint,
   GateCard,
   IssueList,
@@ -41,13 +45,16 @@ import {
   MAX_PARAMETERS,
   moveParameter,
   PARAMETER_KINDS,
+  type ParameterFields,
+  parameterFields,
   removeParameter,
-  retypeParameter,
+  replaceParameter,
+  retypedFields,
   shopBoundCount,
-  updateParameter,
 } from "../lib/blocks";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
-import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import { type EntryEdit, entryEdit, useEntryEdit } from "../lib/entryEdit";
+import { BLOCK_PARAMETER_KIND, labelOf, OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import { optionalParameterWithoutDefaultRule } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import {
@@ -122,6 +129,12 @@ function BlockEditor<
   });
   const { content, preview, edit } = editor;
   const parameterRemoval = useRemoval(blockId);
+  // The parameters list's one open row: nothing typed in it is in the draft until its Save
+  // (ADR 0051), and the line that says so is what every other row's Edit points at.
+  const parameterEditor = useEntryEdit<ParameterFields>(
+    (content?.parameters ?? []).map((parameter) => parameter.name),
+  );
+  const parameterNotice = useId();
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
   if (editor.loading) {
@@ -258,15 +271,28 @@ function BlockEditor<
                 legitimate design for a rule that applies everywhere.
               </p>
             ) : (
-              <ul className="grid gap-3">
+              <ul className="grid gap-2 text-[13px]">
                 {content.parameters.map((parameter, index) => (
                   <ParameterRow
                     key={parameter.name}
                     parameter={parameter}
                     isFirst={index === 0}
                     isLast={index === content.parameters.length - 1}
-                    onRetype={(kind) => edit(retypeParameter(content, parameter.name, kind))}
-                    onUpdate={(next) => edit(updateParameter(content, parameter.name, next))}
+                    edit={entryEdit(
+                      parameterEditor,
+                      parameterNotice,
+                      parameter.name,
+                      parameter.name,
+                      () => parameterFields(parameter),
+                      (fields) => edit(replaceParameter(content, parameter.name, fields)),
+                      (value, onChange) => (
+                        <ParameterFieldset
+                          name={parameter.name}
+                          value={value}
+                          onChange={onChange}
+                        />
+                      ),
+                    )}
                     onMove={(direction) => edit(moveParameter(content, parameter.name, direction))}
                     removal={parameterRemoval}
                     // A mutation is injected at a bound moment, so its only timing parameter
@@ -281,6 +307,7 @@ function BlockEditor<
                 ))}
               </ul>
             )}
+            <EntryEditNotice id={parameterNotice} label={parameterEditor.open?.label ?? null} />
             <RemovalNotice removal={parameterRemoval} />
             <ParameterForm
               taken={content.parameters.map((parameter) => parameter.name)}
@@ -324,8 +351,7 @@ function ParameterRow({
   parameter,
   isFirst,
   isLast,
-  onRetype,
-  onUpdate,
+  edit,
   onMove,
   removal,
   lastTiming,
@@ -334,8 +360,8 @@ function ParameterRow({
   parameter: BlockParameterSchema;
   isFirst: boolean;
   isLast: boolean;
-  onRetype: (kind: BlockParameterKind) => void;
-  onUpdate: (next: Partial<BlockParameterSchema>) => void;
+  /** The row's open-in-place edit: kind, description, default and whether a scenario must bind it. */
+  edit: EntryEdit;
   onMove: (direction: -1 | 1) => void;
   /** The list's second press (ADR 0060). */
   removal: Removal;
@@ -343,9 +369,9 @@ function ParameterRow({
   onRemove: () => void;
 }) {
   const literal = acceptsDefault(parameter.kind);
-  // The gate's `optional_parameter_without_default`, said beside the checkbox that raises it.
-  // A finding and not a refusal — `BlockParameter` stores it and publication refuses it — so it
-  // refuses no save: it is said, on the checkbox and on the default that would clear it.
+  // The gate's `optional_parameter_without_default`, said on the row that holds it. A finding
+  // and not a refusal — `BlockParameter` stores it and publication refuses it — so it is said
+  // on the closed row, and on the checkbox and the default of an open one.
   const findingId = useId();
   const optionalWithoutDefault = !parameter.required && parameter.default === null;
 
@@ -369,15 +395,23 @@ function ParameterRow({
   }
 
   return (
-    <li className="grid gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <code className="font-mono text-[13px] font-semibold text-lab-ink">{parameter.name}</code>
-        {bindsShopObject(parameter.kind) ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
-            <span aria-hidden>⌖</span> bound same-shop
-          </span>
-        ) : null}
-        <div className="ml-auto flex items-center gap-1.5">
+    <EntryCard
+      title={<code className="font-mono text-lab-ink">{parameter.name}</code>}
+      chips={
+        <>
+          <EntryKind value={labelOf(BLOCK_PARAMETER_KIND, parameter.kind)} />
+          {bindsShopObject(parameter.kind) ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
+              <span aria-hidden>⌖</span> bound same-shop
+            </span>
+          ) : null}
+        </>
+      }
+      edit={edit}
+      actions={
+        // The order is authored — it is the order the editor and a binding follow — so the
+        // arrows stay on the row beside its Remove.
+        <>
           <button
             className={subtleButtonClasses}
             type="button"
@@ -410,16 +444,79 @@ function ParameterRow({
             <ButtonIcon verb="delete" />
             Remove
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
+      <dl className="grid gap-x-3 gap-y-1 text-[13px] sm:grid-cols-[max-content_minmax(0,1fr)]">
+        <dt className="text-xs font-semibold text-admin-muted">Description</dt>
+        <dd className="text-admin-ink-soft">
+          {parameter.description || (
+            <span className="text-admin-muted">
+              None yet — a scenario binding it is told nothing.
+            </span>
+          )}
+        </dd>
+        {literal ? (
+          <>
+            <dt className="text-xs font-semibold text-admin-muted">Default</dt>
+            <dd className="text-admin-ink-soft">
+              {parameter.default === null ? (
+                <span className="text-admin-muted">None</span>
+              ) : parameter.kind === "severity" ? (
+                labelOf(OBJECTIVE_SEVERITY, parameter.default as ObjectiveSeverity)
+              ) : (
+                <code className="font-mono text-[12px]">{parameter.default}</code>
+              )}
+            </dd>
+          </>
+        ) : null}
+        <dt className="text-xs font-semibold text-admin-muted">Binding</dt>
+        <dd className="text-admin-ink-soft">
+          {!literal
+            ? "Always bound by the scenario — a template cannot default an object."
+            : parameter.required
+              ? "A scenario must bind this."
+              : "A scenario may leave it to the default."}
+        </dd>
+      </dl>
+      <GateFindingLine id={findingId}>
+        {optionalWithoutDefault
+          ? optionalParameterWithoutDefaultRule(parameter.name, literal)
+          : null}
+      </GateFindingLine>
+    </EntryCard>
+  );
+}
 
+/**
+ * The questions an open parameter row asks. Each control keeps the name it had when the rows
+ * were always open — "Kind of doc_ref", "Description of doc_ref", "Default of doc_ref" — so the
+ * visible word leads it and a reader, a test and a journey reach the same control as before.
+ */
+function ParameterFieldset({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: ParameterFields;
+  onChange: (next: ParameterFields) => void;
+}) {
+  const literal = acceptsDefault(value.kind);
+  const findingId = useId();
+  const optionalWithoutDefault = !value.required && value.default === null;
+
+  return (
+    <div className="grid gap-2">
       <label className={fieldLabelClasses}>
         Kind
         <select
-          aria-label={`Kind of ${parameter.name}`}
+          aria-label={`Kind of ${name}`}
           className={`${fieldControlClasses} w-full`}
-          value={parameter.kind}
-          onChange={(event) => onRetype(event.target.value as BlockParameterKind)}
+          value={value.kind}
+          onChange={(event) =>
+            onChange(retypedFields(value, event.target.value as BlockParameterKind))
+          }
         >
           {PARAMETER_KINDS.map((entry) => (
             <option key={entry.kind} value={entry.kind}>
@@ -432,10 +529,10 @@ function ParameterRow({
       <label className={fieldLabelClasses}>
         Description
         <input
-          aria-label={`Description of ${parameter.name}`}
+          aria-label={`Description of ${name}`}
           className={`${fieldControlClasses} w-full`}
-          value={parameter.description}
-          onChange={(event) => onUpdate({ description: event.target.value })}
+          value={value.description}
+          onChange={(event) => onChange({ ...value, description: event.target.value })}
         />
       </label>
 
@@ -445,13 +542,13 @@ function ParameterRow({
               no resolvable control. Each branch names itself instead. */}
           <div className={fieldLabelClasses}>
             <span>Default</span>
-            {parameter.kind === "severity" ? (
+            {value.kind === "severity" ? (
               <select
-                aria-label={`Default of ${parameter.name}`}
+                aria-label={`Default of ${name}`}
                 aria-describedby={optionalWithoutDefault ? findingId : undefined}
                 className={`${fieldControlClasses} w-full`}
-                value={parameter.default ?? ""}
-                onChange={(event) => onUpdate({ default: event.target.value || null })}
+                value={value.default ?? ""}
+                onChange={(event) => onChange({ ...value, default: event.target.value || null })}
               >
                 <option value="">No default</option>
                 {SEVERITIES.map((severity) => (
@@ -462,12 +559,12 @@ function ParameterRow({
               </select>
             ) : (
               <input
-                aria-label={`Default of ${parameter.name}`}
+                aria-label={`Default of ${name}`}
                 aria-describedby={optionalWithoutDefault ? findingId : undefined}
                 className={`${fieldControlClasses} w-full`}
-                value={parameter.default ?? ""}
-                placeholder={parameter.kind === "timing" ? "after_first_read" : "PT30S"}
-                onChange={(event) => onUpdate({ default: event.target.value || null })}
+                value={value.default ?? ""}
+                placeholder={value.kind === "timing" ? "after_first_read" : "PT30S"}
+                onChange={(event) => onChange({ ...value, default: event.target.value || null })}
               />
             )}
           </div>
@@ -475,17 +572,15 @@ function ParameterRow({
             <label className="flex items-center gap-2 text-[13px]">
               <input
                 type="checkbox"
-                checked={parameter.required}
+                checked={value.required}
                 aria-describedby={optionalWithoutDefault ? findingId : undefined}
                 aria-invalid={optionalWithoutDefault || undefined}
-                onChange={(event) => onUpdate({ required: event.target.checked })}
+                onChange={(event) => onChange({ ...value, required: event.target.checked })}
               />
               A scenario must bind this
             </label>
             <GateFindingLine id={findingId}>
-              {optionalWithoutDefault
-                ? optionalParameterWithoutDefaultRule(parameter.name, literal)
-                : null}
+              {optionalWithoutDefault ? optionalParameterWithoutDefaultRule(name, literal) : null}
             </GateFindingLine>
           </div>
         </>
@@ -497,7 +592,7 @@ function ParameterRow({
           default it.
         </p>
       )}
-    </li>
+    </div>
   );
 }
 

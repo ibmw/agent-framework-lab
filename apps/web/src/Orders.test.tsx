@@ -13,12 +13,20 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { ORDER_METHOD_RULE, PAID_AT_RULE, SHIPPED_AT_RULE } from "./lib/fieldRules";
+import {
+  MAX_ORDER_EVENTS,
+  ORDER_EVENT_SUMMARY_RULE,
+  ORDER_EVENTS_CAP_RULE,
+  ORDER_METHOD_RULE,
+  PAID_AT_RULE,
+  SHIPPED_AT_RULE,
+} from "./lib/fieldRules";
 import { toLocalInput } from "./lib/orders";
+import { formatFixtureTimestamp } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
-import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectNotRefused, expectRefused, submitWithoutPressing } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -2363,5 +2371,289 @@ describe("the order editor's side panel", () => {
     (release as unknown as () => void)();
     await waitFor(() => expect(findings()).not.toHaveAttribute("aria-busy"));
     expect(within(findings()).queryByText(SAVED_ORDER)).toBeNull();
+  });
+});
+
+/**
+ * *Order events* is a list on `EntryCard` (PLAN-UX Slice 33): a saved event opens where it
+ * stands, nothing typed in it reaches the order until its Save, and a new one arrives through
+ * the add form below the list — both paths through `orderEventEntry`.
+ */
+describe("order events", () => {
+  // A row's controls are named by what happened and the id the order keys it by — stable, and
+  // unique where two events share a minute — while the row's own line reads the time.
+  const PLACED_LABEL = "Placed · order-created";
+  const CONTACT: ShopOrderResponse["content"]["events"][number] = {
+    id: "support-contact",
+    kind: "support_contact",
+    occurred_at: CAPTURED_AT,
+    summary: "Customer asked where the parcel was.",
+  };
+  const CONTACT_LABEL = "Support contact · support-contact";
+
+  function withEvents(events: ShopOrderResponse["content"]["events"]) {
+    currentOrder = { ...PAID_ORDER, content: { ...PAID_ORDER.content, events } };
+  }
+
+  async function openEditor() {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    return card("Order events");
+  }
+
+  it("reads an event back rather than offering its fields, and opens it in place on Edit", async () => {
+    const user = userEvent.setup();
+    const events = await openEditor();
+
+    // Closed, the row is read, not typed into, its time on its own line.
+    expect(within(events).getByText("Order created — checkout, order page")).toBeVisible();
+    expect(
+      within(events).getByRole("heading", {
+        name: `Placed · ${formatFixtureTimestamp(PLACED_AT)}`,
+      }),
+    ).toBeVisible();
+    expect(within(events).queryByRole("form", { name: `Edit ${PLACED_LABEL}` })).toBeNull();
+
+    await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+
+    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
+    expect(within(open).getByLabelText("Kind")).toHaveValue("placed");
+    expect(within(open).getByLabelText("Occurred at")).toHaveValue(toLocalInput(PLACED_AT));
+    expect(within(open).getByLabelText("Summary")).toHaveValue(
+      "Order created — checkout, order page",
+    );
+    // The identifier stays on the header line and is never asked.
+    expect(within(events).getByText("order-created", { selector: "code" })).toBeVisible();
+    // Removing the entry being corrected is not one of the open row's two answers.
+    expect(within(events).queryByRole("button", { name: `Remove ${PLACED_LABEL}` })).toBeNull();
+  });
+
+  it("writes nothing on Cancel, and nothing typed in an open row reaches the order's Save", async () => {
+    const user = userEvent.setup();
+    const events = await openEditor();
+
+    // The order is dirty for another reason, so Save order is pressable while the row is open.
+    await user.selectOptions(
+      within(card("Fulfilment & shipping")).getByLabelText("Fulfilment method"),
+      "",
+    );
+    await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
+    await user.clear(within(open).getByLabelText("Summary"));
+    await user.type(within(open).getByLabelText("Summary"), "Typed and never saved.");
+
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].events[0].summary).toBe("Order created — checkout, order page");
+
+    await user.click(
+      within(events).getByRole("button", { name: `Cancel editing ${PLACED_LABEL}` }),
+    );
+    expect(within(events).getByText("Order created — checkout, order page")).toBeVisible();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("saves an edited event with exactly the payload the add form writes for the same answers", async () => {
+    const user = userEvent.setup();
+    const events = await openEditor();
+    const answers = { time: "2026-08-22T09:30", summary: "  Asked to reroute the parcel.  " };
+
+    const add = within(events).getByRole("form", { name: "Add an event" });
+    await user.selectOptions(within(add).getByLabelText("Kind"), "address_updated");
+    await user.clear(within(add).getByLabelText("Occurred at"));
+    await user.type(within(add).getByLabelText("Occurred at"), answers.time);
+    await user.type(within(add).getByLabelText("Summary"), answers.summary);
+    await user.click(within(add).getByRole("button", { name: "Add event" }));
+
+    await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
+    await user.selectOptions(within(open).getByLabelText("Kind"), "address_updated");
+    await user.clear(within(open).getByLabelText("Occurred at"));
+    await user.type(within(open).getByLabelText("Occurred at"), answers.time);
+    await user.clear(within(open).getByLabelText("Summary"));
+    await user.type(within(open).getByLabelText("Summary"), answers.summary);
+    await user.click(within(open).getByRole("button", { name: `Save ${PLACED_LABEL}` }));
+
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    const [edited, added] = savedRequests[0].events;
+    // The edit keeps the entry's own id; everything else is what the add form wrote.
+    expect(edited.id).toBe("order-created");
+    expect(added.id).toBe("event");
+    expect({ ...edited, id: null }).toEqual({ ...added, id: null });
+    expect(added.summary).toBe("Asked to reroute the parcel.");
+  });
+
+  it("keeps the instant an untouched time already holds", async () => {
+    const user = userEvent.setup();
+    withEvents([{ ...CONTACT, occurred_at: "2026-08-21T13:12:34Z" }]);
+    const events = await openEditor();
+    const label = CONTACT_LABEL;
+
+    await user.click(within(events).getByRole("button", { name: `Edit ${label}` }));
+    const open = within(events).getByRole("form", { name: `Edit ${label}` });
+    await user.type(within(open).getByLabelText("Summary"), " Again.");
+    await user.click(within(open).getByRole("button", { name: `Save ${label}` }));
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].events[0]).toEqual({
+      id: "support-contact",
+      kind: "support_contact",
+      occurred_at: "2026-08-21T13:12:34Z",
+      summary: "Customer asked where the parcel was. Again.",
+    });
+  });
+
+  it("holds one open row per list, and every other Edit says why it is disabled", async () => {
+    const user = userEvent.setup();
+    withEvents([...PAID_ORDER.content.events, CONTACT]);
+    const events = await openEditor();
+
+    await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+
+    const sibling = within(events).getByRole("button", { name: `Edit ${CONTACT_LABEL}` });
+    expect(sibling).toBeDisabled();
+    expect(sibling).toHaveAccessibleDescription(
+      `Editing ${PLACED_LABEL}. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.`,
+    );
+
+    await user.click(
+      within(events).getByRole("button", { name: `Cancel editing ${PLACED_LABEL}` }),
+    );
+    expect(within(events).getByRole("button", { name: `Edit ${CONTACT_LABEL}` })).toBeEnabled();
+  });
+
+  it("refuses an open row's Save with the reason when the summary is emptied", async () => {
+    const user = userEvent.setup();
+    const events = await openEditor();
+
+    await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
+    const save = within(open).getByRole("button", { name: `Save ${PLACED_LABEL}` });
+    await user.clear(within(open).getByLabelText("Summary"));
+    // Emptied, the summary is its own `required` to say: Save is not refused, and the browser
+    // stops the press, so the row stays open with nothing written.
+    expectNotRefused(save);
+    await user.click(save);
+    expect(within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` })).toBeVisible();
+    await user.type(within(open).getByLabelText("Summary"), "   ");
+
+    expectRefused(save, ORDER_EVENT_SUMMARY_RULE);
+    await user.click(save);
+    await submitWithoutPressing(save);
+    expect(within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` })).toBeVisible();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("removes an event only on the second press, the confirm standing in the row's place", async () => {
+    const user = userEvent.setup();
+    withEvents([...PAID_ORDER.content.events, CONTACT]);
+    const events = await openEditor();
+
+    await user.click(within(events).getByRole("button", { name: `Remove ${CONTACT_LABEL}` }));
+
+    const confirm = within(events).getByRole("group", {
+      name: "Remove the support contact event?",
+    });
+    expect(confirm).toHaveFocus();
+    // Nothing has left the order yet: the row is asking, not gone.
+    expect(within(events).queryByText("Customer asked where the parcel was.")).toBeNull();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+
+    await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
+
+    expect(within(events).queryByRole("group", { name: /Remove the support contact/ })).toBeNull();
+    expect(
+      within(events).getByText("Removed the support contact event from the order."),
+    ).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].events.map((entry) => entry.id)).toEqual(["order-created"]);
+  });
+
+  it("leaves an empty summary to its field, and refuses one of nothing but spaces with the reason", async () => {
+    const user = userEvent.setup();
+    const events = await openEditor();
+    const add = within(events).getByRole("form", { name: "Add an event" });
+    const button = within(add).getByRole("button", { name: "Add event" });
+    const summary = within(add).getByLabelText("Summary");
+
+    // It opens on a support contact at the moment the order was placed, and asks the summary.
+    expect(within(add).getByLabelText("Kind")).toHaveValue("support_contact");
+    expect(within(add).getByLabelText("Occurred at")).toHaveValue(toLocalInput(PLACED_AT));
+    // Empty is the field's own `required` to say (ADR 0063), so the button is not refused…
+    expectNotRefused(button);
+    expect(summary).toBeRequired();
+    expect(summary).toBeInvalid();
+    await user.click(button);
+    expect(within(events).getAllByRole("listitem")).toHaveLength(1);
+
+    // …and spaces, which `required` lets through and the lab refuses, are the button's.
+    await user.type(summary, "   ");
+    expectRefused(button, ORDER_EVENT_SUMMARY_RULE);
+    await user.click(button);
+    await submitWithoutPressing(button);
+    expect(within(events).getAllByRole("listitem")).toHaveLength(1);
+
+    await user.clear(summary);
+    await user.type(summary, "Customer called.");
+    expectNotRefused(button);
+    await user.click(button);
+
+    expect(within(events).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(events).getByText("Customer called.")).toBeVisible();
+    expect(summary).toHaveValue("");
+  });
+
+  it("keeps the placement's own instant for a new event whose time was left alone", async () => {
+    // The control spells a minute; a placement with seconds would otherwise come back as an
+    // event seconds before it (`event_precedes_placement`).
+    const user = userEvent.setup();
+    const placedWithSeconds = "2026-08-20T14:55:42Z";
+    currentOrder = {
+      ...PAID_ORDER,
+      content: { ...PAID_ORDER.content, placed_at: placedWithSeconds },
+    };
+    const events = await openEditor();
+    const add = within(events).getByRole("form", { name: "Add an event" });
+
+    await user.type(within(add).getByLabelText("Summary"), "Customer called.");
+    await user.click(within(add).getByRole("button", { name: "Add event" }));
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].events[1]).toMatchObject({
+      id: "event",
+      occurred_at: placedWithSeconds,
+      summary: "Customer called.",
+    });
+  });
+
+  it("refuses Add event at the lab's cap, in the lab's words", async () => {
+    withEvents(
+      Array.from({ length: MAX_ORDER_EVENTS }, (_, index) => ({
+        ...CONTACT,
+        id: `contact-${index}`,
+      })),
+    );
+    const events = await openEditor();
+    const add = within(events).getByRole("form", { name: "Add an event" });
+
+    expectRefused(within(add).getByRole("button", { name: "Add event" }), ORDER_EVENTS_CAP_RULE);
+  });
+
+  it("refuses Add line with its reason when every priced variant is already a line", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    const lines = card("Line items & payment");
+
+    const add = within(lines).getByRole("button", { name: "Add line" });
+    expectRefused(add, "Every priced variant in the catalog is already a line of this order.");
+
+    await user.click(screen.getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
+    await user.click(screen.getByRole("button", { name: "Remove it" }));
+    expectNotRefused(within(lines).getByRole("button", { name: "Add line" }));
   });
 });

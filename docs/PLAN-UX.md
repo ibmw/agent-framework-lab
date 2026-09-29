@@ -76,15 +76,17 @@ application, and the verdict on each slice of the 13 September plan — is
 Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
 the commits and ADR 0052–0072, its goal and acceptance criteria
 `docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator
-agreed, 33 to 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
+agreed, 34 then 35. The editor's side panel landed first — the 790/312 grid, `GateCard` and the
 panel's order on every editor — and Tickets followed as an index, a create page and an editor
 built on it (ADR 0073); then the header: every editor's way back in one slot (`HeaderBack`, the
 create page's piece), every card's first line on `Card`'s `description`, and the neutral pill
 (`neutralPillClasses`) Slice 34 draws *Shared across shops* with; then the rows: the agent
 configuration, judge, block, identity and scenario editors on `Field`/`FieldGroup` rows, with
 a gate error the draft still saves with drawn as the row's second line (`Field`'s `finding`
-tone). No open slice depends on another. The order reshapes an editor from the outside in:
-panel, header, rows, lists, then the indexes.
+tone); then the lists: the editors' lists on `EntryCard`, opened in place and grown by
+the add form below a rule (`addFormClasses`) whose submit is `PrimaryAction`. No open slice
+depends on another. The order reshapes an editor from the outside in: panel, header, rows,
+lists, then the indexes.
 
 ## Milestone 9 — Every page is one of three templates
 
@@ -115,55 +117,6 @@ only: no backend, contract or payload moves.
 
 Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
 experiment keep templates of their own and are not reshaped here.
-
-### Slice 33 — Lists on `EntryCard`, and one add form
-
-Every list a page edits is the same row, opened the same way, added to by the same form.
-
-- [ ] `addFormClasses` moves from `ShopSetupPages.tsx:151` to `lib/ui.ts`, because the lists below
-  in five other route files draw their add form with it, and the ticket editor's composer
-  (`TicketEditorPage.tsx`) composes the same classes locally until then.
-- [ ] Order events (`OrderEditorPage.tsx:879`), always-editable divs today: `EntryCard` rows that
-  open in place; *Add event* (:845) becomes the add form below the rule, asking the event's
-  fields; the `ConfirmRemove` (:860) stays.
-- [ ] Customer addresses (`CustomerEditorPage.tsx:699`), always-editable today: `EntryCard` rows
-  that open in place, the default chip and *Make default* on the row, `AddressForm` (:1157) as
-  the add form.
-- [ ] Block parameters: `ParameterRow` (`BlockEditorPage.tsx:320`) becomes an `EntryCard` whose
-  kind, description and default are edited in the open row; the ↑/↓ (:385, :394) stay on the row,
-  because the order is authored; `ParameterForm` is the add form.
-- [ ] Scenario bound blocks: `BoundBlockRow` (`ScenarioEditorPage.tsx:750`) draws through
-  `EntryCard` rather than copying its classes, and its bindings (`BindingField`, :864) move onto
-  field rows in the open row.
-- [ ] New block's parameters (`BlockLibraryPage.tsx:366–391`) are `EntryCard`s and keep their
-  one-press Remove: ADR 0060 exempts a removal on a create page before Create is pressed, and
-  names these parameters (ADR 0060, *Every removal that is not trivially re-added asks twice*).
-- [ ] New scenario's composed rows (`ScenariosPage.tsx:333–352`) are `EntryCard`s without Edit —
-  nothing can be edited before the first write.
-- [ ] Every add form's submit is `PrimaryAction` with the create glyph and its `RefusalLine`, as
-  *Tone of voice* draws it (`ShopSetupPages.tsx:623–631`): the raw accent submits
-  (`ProductEditorPage.tsx:1380`, :1573, :1815, :1960), the raw ink ones
-  (`SupportIdentityEditorPage.tsx:498`, `CustomerEditorPage.tsx:1230`, :1259, :1280) and the raw
-  outline one (`OrderEditorPage.tsx:581`). Their names do not move.
-- [ ] `docs/design-direction.md`: *A blocked primary action says why* stops restricting
-  `PrimaryAction` to "the add forms refused for a reason no field states"; *A saved row opens
-  where it stands* names the lists it now covers.
-
-Frames: `Workspace.dc.html` :1914 (the guidelines list, the reference), :607–612 (a block's
-parameters), :3091–3120 (a scenario's composed blocks).
-
-Authority: ADR 0051 (an open row is not in the draft until Save), ADR 0060, ADR 0063;
-`form-decisions.md` 8.2 and 9.2.
-
-Branch: `feat/lists-on-entry-card`. Checks: `EntryCard.test.tsx`; `Orders.test.tsx`,
-`Customers.test.tsx`, `Blocks.test.tsx`, `Scenarios.test.tsx`, `SupportIdentities.test.tsx` and
-`App.test.tsx` (the product lists) — one row open at a time, Cancel writes nothing, the confirm
-takes the row, the add form's refusal; `lib/ui.test.ts` if the class set is pinned; Playwright
-`order-fixture`, `customer-publication`, `block-library` and `scenario-authoring`, which add
-addresses, lines, events, parameters and bindings by name.
-
-Slice evidence: an operator corrects an order event, an address and a block parameter by pressing
-Edit on the row, and adds each through a form below the list that says why it will not submit.
 
 ### Slice 34 — The indexes finished
 

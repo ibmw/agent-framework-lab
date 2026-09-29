@@ -544,10 +544,15 @@ describe("objective block editor", () => {
   });
 
   it("offers a default only for a parameter whose kind can carry one", async () => {
+    const user = userEvent.setup();
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
+    await user.click(screen.getByRole("button", { name: "Edit severity" }));
     expect(screen.getByLabelText("Default of severity")).toHaveValue("required");
+    await user.click(screen.getByRole("button", { name: "Cancel editing severity" }));
+
+    await user.click(screen.getByRole("button", { name: "Edit doc_ref" }));
     expect(screen.queryByLabelText("Default of doc_ref")).toBeNull();
     expect(screen.getByText(/a template\s+cannot default it/)).toBeVisible();
   });
@@ -559,8 +564,9 @@ describe("objective block editor", () => {
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
+    await user.click(screen.getByRole("button", { name: "Edit severity" }));
     const defaultOf = screen.getByLabelText("Default of severity");
-    const row = within(defaultOf.closest("li") as HTMLElement);
+    const row = within(screen.getByRole("form", { name: "Edit severity" }));
     const required = row.getByRole("checkbox", { name: "A scenario must bind this" });
     expect(screen.queryByText(sentence)).toBeNull();
 
@@ -589,7 +595,9 @@ describe("objective block editor", () => {
     expect(screen.queryByText(sentence)).toBeNull();
     await user.click(required);
 
-    // A finding, not a refusal: the lab stores the draft, so Save saves it.
+    // A finding, not a refusal: the row saves it, and the closed row goes on saying it.
+    await user.click(row.getByRole("button", { name: "Save severity" }));
+    expect(screen.getByText(sentence)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
@@ -601,10 +609,12 @@ describe("objective block editor", () => {
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
 
     await screen.findByRole("heading", { name: "read-required-document" });
+    await user.click(screen.getByRole("button", { name: "Edit severity" }));
     await user.selectOptions(screen.getByLabelText("Kind of severity"), "entity_reference");
 
     // The field is gone rather than showing a value the publish gate would refuse.
     expect(screen.queryByLabelText("Default of severity")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save severity" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
@@ -767,7 +777,9 @@ describe("mutation block editor", () => {
     await user.type(within(form).getByLabelText("Label"), "timing");
     await user.selectOptions(within(form).getByLabelText("Kind"), "timing");
     await user.click(within(form).getByRole("button", { name: "Add parameter" }));
+    await user.click(screen.getByRole("button", { name: "Edit timing" }));
     await user.type(screen.getByLabelText("Default of timing"), "after_first_read");
+    await user.click(screen.getByRole("button", { name: "Save timing" }));
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
@@ -910,7 +922,12 @@ describe("the two create pages", () => {
     await user.selectOptions(addParameter.getByLabelText("Kind"), "timing");
     await user.click(addParameter.getByRole("button", { name: "Add parameter" }));
 
+    // A create page's parameter has no Edit — its description and default are the editor's —
+    // and one press takes it off: ADR 0060 exempts a removal before Create is pressed.
+    expect(screen.queryByRole("button", { name: "Edit timing" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Remove timing" }));
+    expect(screen.queryByRole("group", { name: /Remove the parameter/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove timing" })).toBeNull();
 
     await user.selectOptions(screen.getByLabelText("Perturbs"), "tool_fault");
     await user.click(screen.getByRole("button", { name: "Create block" }));
@@ -1102,5 +1119,117 @@ describe("the block editor's rows", () => {
 
     expectFieldRow(within(effect).getByLabelText("Perturbs"), "Perturbs");
     expectCardOnRows(effect);
+  });
+});
+
+/**
+ * A template's parameters are a list on `EntryCard` (PLAN-UX Slice 33): a parameter opens where
+ * it stands on its kind, description, default and whether a scenario must bind it; the arrows
+ * stay on the row; *Add parameter* is the add form below it — both through `parameterEntry`.
+ */
+describe("a template's parameters", () => {
+  async function openEditor() {
+    renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);
+    await screen.findByRole("heading", { name: "read-required-document" });
+    return within(screen.getByRole("region", { name: "Parameters" }));
+  }
+
+  it("reads a parameter back on its row and opens its fields in place", async () => {
+    const user = userEvent.setup();
+    const parameters = await openEditor();
+
+    expect(parameters.queryByLabelText("Description of doc_ref")).toBeNull();
+    expect(parameters.getByText("The shop document the arm has to read.")).toBeVisible();
+
+    await user.click(parameters.getByRole("button", { name: "Edit doc_ref" }));
+
+    const open = within(parameters.getByRole("form", { name: "Edit doc_ref" }));
+    expect(open.getByLabelText("Kind of doc_ref")).toHaveValue("document_reference");
+    expect(open.getByLabelText("Description of doc_ref")).toHaveValue(
+      "The shop document the arm has to read.",
+    );
+    // The open row's arrows and Remove wait for Save or Cancel.
+    expect(parameters.queryByRole("button", { name: "Move doc_ref down" })).toBeNull();
+    expect(parameters.queryByRole("button", { name: "Remove doc_ref" })).toBeNull();
+    expect(parameters.getByRole("button", { name: "Move severity up" })).toBeVisible();
+  });
+
+  it("saves a retyped parameter with exactly what the add form writes for the same kind", async () => {
+    const user = userEvent.setup();
+    const parameters = await openEditor();
+
+    const add = within(parameters.getByRole("form", { name: "Add a parameter" }));
+    await user.type(add.getByLabelText("Label"), "order");
+    await user.selectOptions(add.getByLabelText("Kind"), "entity_reference");
+    await user.click(add.getByRole("button", { name: "Add parameter" }));
+
+    // `severity` is optional-capable and carries a default; as an entity reference it can
+    // carry neither, and the builder says so the way the add form's does.
+    await user.click(parameters.getByRole("button", { name: "Edit severity" }));
+    const open = within(parameters.getByRole("form", { name: "Edit severity" }));
+    await user.selectOptions(open.getByLabelText("Kind of severity"), "entity_reference");
+    await user.clear(open.getByLabelText("Description of severity"));
+    await user.click(open.getByRole("button", { name: "Save severity" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const [, edited, added] = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(edited.name).toBe("severity");
+    expect(added.name).toBe("order");
+    expect({ ...edited, name: null }).toEqual({ ...added, name: null });
+    expect(added).toMatchObject({ shop_bound: true, required: true, default: null });
+  });
+
+  it("writes nothing on Cancel, and nothing typed in an open row reaches Save draft", async () => {
+    const user = userEvent.setup();
+    const parameters = await openEditor();
+
+    await user.type(screen.getByLabelText("Statement"), " now");
+    await user.click(parameters.getByRole("button", { name: "Edit doc_ref" }));
+    await user.type(parameters.getByLabelText("Description of doc_ref"), " Typed, never saved.");
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const saved = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(saved[0].description).toBe("The shop document the arm has to read.");
+
+    await user.click(parameters.getByRole("button", { name: "Cancel editing doc_ref" }));
+    expect(parameters.getByText("The shop document the arm has to read.")).toBeVisible();
+    expect(parameters.queryByText(/Typed, never saved/)).toBeNull();
+  });
+
+  it("holds one open row, and the other Edit says why it is disabled", async () => {
+    const user = userEvent.setup();
+    const parameters = await openEditor();
+
+    await user.click(parameters.getByRole("button", { name: "Edit doc_ref" }));
+
+    const sibling = parameters.getByRole("button", { name: "Edit severity" });
+    expect(sibling).toBeDisabled();
+    expect(sibling).toHaveAccessibleDescription(
+      "Editing doc_ref. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.",
+    );
+  });
+
+  it("removes a parameter only on the second press", async () => {
+    const user = userEvent.setup();
+    const parameters = await openEditor();
+
+    await user.click(parameters.getByRole("button", { name: "Remove severity" }));
+    const confirm = parameters.getByRole("group", { name: "Remove the parameter severity?" });
+    expect(confirm).toHaveFocus();
+    expect(parameters.queryByRole("button", { name: "Edit severity" })).toBeNull();
+
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(parameters.getByRole("button", { name: "Remove severity" })).toHaveFocus();
+
+    await user.click(parameters.getByRole("button", { name: "Remove severity" }));
+    await user.click(
+      within(parameters.getByRole("group", { name: "Remove the parameter severity?" })).getByRole(
+        "button",
+        { name: "Remove it" },
+      ),
+    );
+    expect(parameters.getByText("Removed the parameter severity from the draft.")).toHaveFocus();
   });
 });

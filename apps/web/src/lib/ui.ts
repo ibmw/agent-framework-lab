@@ -73,6 +73,18 @@ export const editorMainClasses = "grid min-w-0 gap-4";
 export const editorPanelClasses = "grid min-w-0 gap-3.5";
 
 /**
+ * The form a list grows by, below the saved entries it adds to (`docs/design-direction.md`,
+ * *A saved row opens where it stands*). Now that an entry carries its body, the top rule is
+ * what tells an author where the saved configuration ends and the blank form begins. Its
+ * labels stack — the one place an editor's fields are not on rows — and its one submit is a
+ * `PrimaryAction` with the create glyph and, where it is refused, its `RefusalLine`.
+ *
+ * A form that lays its fields out across columns composes its grid onto this rather than
+ * restating the rule.
+ */
+export const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
+
+/**
  * The ground every form control is drawn on: what the classes below share, and no more.
  *
  * Only the values that are one decision for every control live here — the box, the radius, the

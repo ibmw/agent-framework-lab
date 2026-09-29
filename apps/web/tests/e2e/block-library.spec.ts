@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createBlock, createShop } from "./support/authoring";
+import { createBlock, createShop, editRow } from "./support/authoring";
 import { expect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
 
@@ -60,16 +60,20 @@ test("an author publishes an objective block the whole lab can bind", async ({ p
 
   // A document reference is bound by the scenario, so the template cannot default it.
   await expect(parameters.getByText("bound same-shop")).toBeVisible();
-  await expect(parameters.getByLabel("Default of doc_ref")).toHaveCount(0);
-  await parameters.getByLabel("Description of doc_ref").fill("The document the arm must read.");
+  await editRow(parameters, "doc_ref", async (row) => {
+    await expect(row.getByLabel("Default of doc_ref")).toHaveCount(0);
+    await row.getByLabel("Description of doc_ref").fill("The document the arm must read.");
+  });
 
   await addParameter.getByLabel("Label", { exact: true }).fill("severity");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("severity");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
-  await parameters.getByLabel("Default of severity").selectOption("required");
-  await parameters
-    .getByLabel("Description of severity")
-    .fill("Whether missing the read fails the objective or only warns.");
+  await editRow(parameters, "severity", async (row) => {
+    await row.getByLabel("Default of severity").selectOption("required");
+    await row
+      .getByLabel("Description of severity")
+      .fill("Whether missing the read fails the objective or only warns.");
+  });
 
   await expect(
     parameters.getByText(/1 parameter\(s\) must be bound to objects in the scenario's own shop/),
@@ -115,7 +119,9 @@ test("a mutation block cannot be published until it says when it fires", async (
   await addParameter.getByLabel("Label", { exact: true }).fill("entity_ref");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("entity_reference");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
-  await parameters.getByLabel("Description of entity_ref").fill("The order that moves.");
+  await editRow(parameters, "entity_ref", async (row) => {
+    await row.getByLabel("Description of entity_ref").fill("The order that moves.");
+  });
   await saveDraft(page);
 
   // Mutation order is the run timeline, so a mutation with no bound moment has no place on it.
@@ -126,8 +132,10 @@ test("a mutation block cannot be published until it says when it fires", async (
   await addParameter.getByLabel("Label", { exact: true }).fill("timing");
   await addParameter.getByLabel("Kind", { exact: true }).selectOption("timing");
   await addParameter.getByRole("button", { name: "Add parameter" }).click();
-  await parameters.getByLabel("Default of timing").fill("after_first_read");
-  await parameters.getByLabel("Description of timing").fill("When the runtime injects it.");
+  await editRow(parameters, "timing", async (row) => {
+    await row.getByLabel("Default of timing").fill("after_first_read");
+    await row.getByLabel("Description of timing").fill("When the runtime injects it.");
+  });
   await saveDraft(page);
 
   await expect(gate.getByText("No validation findings.")).toBeVisible();

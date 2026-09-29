@@ -6,6 +6,7 @@ import {
   createJudge,
   createScenario,
   createShop,
+  editRow,
 } from "./support/authoring";
 import { expect as baseExpect, test } from "./support/e2e";
 import { openSection } from "./support/navigate";
@@ -253,10 +254,11 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
   await objectiveTemplate
     .getByLabel("Description", { exact: true })
     .fill("Passes when the arm reads the bound document through its tool before the run ends.");
-  const objectiveParameters = card(page, "Parameters");
-  await objectiveParameters
-    .getByLabel("Description of doc_ref", { exact: true })
-    .fill("The shop document the arm has to read.");
+  await editRow(card(page, "Parameters"), "doc_ref", async (row) => {
+    await row
+      .getByLabel("Description of doc_ref", { exact: true })
+      .fill("The shop document the arm has to read.");
+  });
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(publicationNotice(page)).toContainText("Published version 1");
@@ -291,15 +293,17 @@ async function publishTemplates(page: Page, objective: string, judged: string, m
     .getByLabel("Description", { exact: true })
     .fill("Mutates the bound entity out of band, bumping the version the arm holds.");
   const mutationParameters = card(page, "Parameters");
-  await mutationParameters
-    .getByLabel("Description of entity_ref", { exact: true })
-    .fill("The order that moves under the arm.");
-  await mutationParameters
-    .getByLabel("Description of timing", { exact: true })
-    .fill("When the runtime injects the mutation.");
-  await mutationParameters
-    .getByLabel("Default of timing", { exact: true })
-    .fill("after_first_read");
+  await editRow(mutationParameters, "entity_ref", async (row) => {
+    await row
+      .getByLabel("Description of entity_ref", { exact: true })
+      .fill("The order that moves under the arm.");
+  });
+  await editRow(mutationParameters, "timing", async (row) => {
+    await row
+      .getByLabel("Description of timing", { exact: true })
+      .fill("When the runtime injects the mutation.");
+    await row.getByLabel("Default of timing", { exact: true }).fill("after_first_read");
+  });
   await saveDraft(page);
   await page.getByRole("button", { name: "Publish v1" }).click();
   await expect(publicationNotice(page)).toContainText("Published version 1");
@@ -368,19 +372,22 @@ async function publishScenario(page: Page, objective: string, judged: string, mu
     composes: [objective, judged],
   });
 
-  const objectives = card(page, "Objectives");
-  await objectives
-    .getByLabel(`doc_ref of ${objective}`, { exact: true })
-    .selectOption("policy:address-change");
+  await editRow(card(page, "Objectives"), objective, async (row) => {
+    await row
+      .getByLabel(`doc_ref of ${objective}`, { exact: true })
+      .selectOption("policy:address-change");
+  });
 
   const mutations = card(page, "Mutations");
   await mutations
     .getByLabel("Add mutation block", { exact: true })
     .selectOption({ label: `${mutation} — v1` });
   await mutations.getByRole("button", { name: "Add" }).click();
-  await mutations
-    .getByLabel(`entity_ref of ${mutation}`, { exact: true })
-    .selectOption({ label: "Order NS-10482 — paid, unfulfilled" });
+  await editRow(mutations, mutation, async (row) => {
+    await row
+      .getByLabel(`entity_ref of ${mutation}`, { exact: true })
+      .selectOption({ label: "Order NS-10482 — paid, unfulfilled" });
+  });
 
   const completion = card(page, "Completion");
   await completion

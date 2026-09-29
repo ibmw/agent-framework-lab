@@ -15,7 +15,7 @@ import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { type FilterChipDefinition, FilterChips } from "../components/FilterChips";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, EntryCard, EntryId, PageHeader } from "../components/WorkspaceChrome";
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { CHIP_LABEL_MAX_LENGTH, MUTATIONS_CAP_RULE, OBJECTIVES_CAP_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
@@ -330,26 +330,28 @@ function ComposeFromLibrary({
         </p>
       ) : null}
       {chosen.length > 0 ? (
-        <ol aria-label={composedLabel} className="grid gap-1.5 text-[13px]">
+        <ol aria-label={composedLabel} className="grid gap-2 text-[13px]">
           {chosen.map((blockId, index) => {
             const block = blocks.find((entry) => entry.block_id === blockId);
             if (block === undefined) {
               return null;
             }
             return (
-              <li
+              // No Edit: nothing can be edited before the first write, and a binding is to an
+              // object of a shop the scenario does not belong to yet. The chip above takes it
+              // back off.
+              <EntryCard
                 key={blockId}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-2.5"
+                lead={
+                  <span className="rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-bold text-admin-ink-soft">
+                    {index + 1}
+                  </span>
+                }
+                title={block.statement || block.name}
+                chips={<EntryId value={`${block.name} ${versionLabel(block)}`} />}
               >
-                <span className="rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-bold text-admin-ink-soft">
-                  {index + 1}
-                </span>
-                <span className="font-semibold">{block.statement || block.name}</span>
-                <code className="rounded bg-admin-border/60 px-1.5 py-0.5 font-mono text-[11px] text-admin-ink-soft">
-                  {block.name} {versionLabel(block)}
-                </code>
-                <span className="ml-auto text-[11.5px] text-admin-muted">{owedLabel(block)}</span>
-              </li>
+                <p className="text-[11.5px] text-admin-muted">{owedLabel(block)}</p>
+              </EntryCard>
             );
           })}
         </ol>

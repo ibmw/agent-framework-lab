@@ -13,7 +13,7 @@ import { CreatePage } from "../components/CreatePage";
 import { Field, FieldRows } from "../components/FieldHint";
 import { ParameterForm } from "../components/ParameterForm";
 import { SearchField, SearchRow } from "../components/SearchField";
-import { Card, PageHeader } from "../components/WorkspaceChrome";
+import { Card, EntryCard, EntryKind, PageHeader } from "../components/WorkspaceChrome";
 import {
   ASSESSMENTS,
   addedParameter,
@@ -27,6 +27,7 @@ import {
   withoutParameter,
 } from "../lib/blocks";
 import { useCreateThenComplete } from "../lib/createDefinition";
+import { BLOCK_PARAMETER_KIND, labelOf } from "../lib/enumLabels";
 import { savedAsPreview } from "../lib/fieldPreviews";
 import { searchRows } from "../lib/filters";
 import {
@@ -361,32 +362,39 @@ function NewBlockPage<PayloadT extends BlockPayload>({
             design for a rule that applies everywhere.
           </p>
         ) : (
-          <ul className="grid gap-2">
+          <ul className="grid gap-2 text-[13px]">
             {parameters.map((parameter) => (
-              <li
+              // No Edit: a parameter's description and default are authored in the editor,
+              // which is where the card's footer sends them. And one press removes it — ADR
+              // 0060 exempts a removal on a create page before Create is pressed, and names
+              // these parameters: nothing has been written that a slip could lose.
+              <EntryCard
                 key={parameter.name}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3"
-              >
-                <code className="font-mono text-[13px] font-semibold text-lab-ink">
-                  {parameter.name}
-                </code>
-                {bindsShopObject(parameter.kind) ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
-                    <span aria-hidden>⌖</span> bound same-shop
-                  </span>
-                ) : null}
-                <button
-                  className={`ml-auto ${destructiveSubtleButtonClasses}`}
-                  type="button"
-                  aria-label={`Remove ${parameter.name}`}
-                  onClick={() =>
-                    setParameters((current) => withoutParameter(current, parameter.name))
-                  }
-                >
-                  <ButtonIcon verb="delete" />
-                  Remove
-                </button>
-              </li>
+                title={<code className="font-mono text-lab-ink">{parameter.name}</code>}
+                chips={
+                  <>
+                    <EntryKind value={labelOf(BLOCK_PARAMETER_KIND, parameter.kind)} />
+                    {bindsShopObject(parameter.kind) ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-semibold text-admin-ink-soft">
+                        <span aria-hidden>⌖</span> bound same-shop
+                      </span>
+                    ) : null}
+                  </>
+                }
+                actions={
+                  <button
+                    className={destructiveSubtleButtonClasses}
+                    type="button"
+                    aria-label={`Remove ${parameter.name}`}
+                    onClick={() =>
+                      setParameters((current) => withoutParameter(current, parameter.name))
+                    }
+                  >
+                    <ButtonIcon verb="delete" />
+                    Remove
+                  </button>
+                }
+              />
             ))}
           </ul>
         )}

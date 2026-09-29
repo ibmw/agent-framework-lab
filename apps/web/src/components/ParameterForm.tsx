@@ -2,7 +2,7 @@ import type { BlockParameterKind } from "@agent-lab/contracts";
 import { type FormEvent, useId, useState } from "react";
 import { MAX_PARAMETERS, PARAMETER_KINDS, toIdentifier, uniqueParameterName } from "../lib/blocks";
 import { savedAsPreview } from "../lib/fieldPreviews";
-import { fieldControlClasses, fieldLabelClasses } from "../lib/ui";
+import { addFormClasses, fieldControlClasses, fieldLabelClasses } from "../lib/ui";
 import { ButtonIcon } from "./ButtonIcon";
 import { FieldHint } from "./FieldHint";
 import { PrimaryAction, RefusalLine } from "./PrimaryAction";
@@ -49,52 +49,50 @@ export function ParameterForm({
   }
 
   return (
-    <form className="flex flex-wrap items-end gap-2" aria-label="Add a parameter" onSubmit={submit}>
-      <div className="min-w-40 flex-1">
-        <FieldHint
-          label="Label"
-          hint="The name a scenario binds. Saved as a snake_case identifier."
-          extra={label ? savedAsPreview(identifier) : undefined}
-        >
-          <input
-            className={`${fieldControlClasses} w-full`}
-            value={label}
-            required
-            placeholder="Document"
-            onChange={(event) => setLabel(event.target.value)}
-          />
-        </FieldHint>
-      </div>
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        Kind
-        {/* Named explicitly: a wrapping label around a select carries every option's text in
+    <form className={addFormClasses} aria-label="Add a parameter" onSubmit={submit}>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-40 flex-1">
+          <FieldHint
+            label="Label"
+            hint="The name a scenario binds. Saved as a snake_case identifier."
+            extra={label ? savedAsPreview(identifier) : undefined}
+          >
+            <input
+              className={`${fieldControlClasses} w-full`}
+              value={label}
+              required
+              placeholder="Document"
+              onChange={(event) => setLabel(event.target.value)}
+            />
+          </FieldHint>
+        </div>
+        <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
+          Kind
+          {/* Named explicitly: a wrapping label around a select carries every option's text in
             its own text content, so the control needs its own name to be addressable. */}
-        <select
-          aria-label="Kind"
-          className={`${fieldControlClasses} w-full`}
-          value={kind}
-          onChange={(event) => setKind(event.target.value as BlockParameterKind)}
+          <select
+            aria-label="Kind"
+            className={`${fieldControlClasses} w-full`}
+            value={kind}
+            onChange={(event) => setKind(event.target.value as BlockParameterKind)}
+          >
+            {PARAMETER_KINDS.map((entry) => (
+              <option key={entry.kind} value={entry.kind}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <PrimaryAction
+          variant="ink"
+          type="submit"
+          refusal={full ? { id: reasonId, reason: PARAMETERS_FULL } : null}
         >
-          {PARAMETER_KINDS.map((entry) => (
-            <option key={entry.kind} value={entry.kind}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <PrimaryAction
-        variant="ink"
-        type="submit"
-        refusal={full ? { id: reasonId, reason: PARAMETERS_FULL } : null}
-      >
-        <ButtonIcon verb="create" />
-        Add parameter
-      </PrimaryAction>
-      {full ? (
-        <RefusalLine id={reasonId} className="w-full">
-          {PARAMETERS_FULL}
-        </RefusalLine>
-      ) : null}
+          <ButtonIcon verb="create" />
+          Add parameter
+        </PrimaryAction>
+      </div>
+      {full ? <RefusalLine id={reasonId}>{PARAMETERS_FULL}</RefusalLine> : null}
     </form>
   );
 }

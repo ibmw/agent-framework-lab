@@ -159,6 +159,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | *Clear filters* on History | drawn, pressable whatever is set (:2680) | disabled while nothing is set, with the reason in `title` and in the line beside it, which says "Filters cleared." once pressed | a secondary control that can do nothing keeps native `disabled` and says why (ADR 0063); the same line reports the press, so the reason and the outcome are one place |
 | New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 | The agent-configuration index's name | "Agent configurations" on the lab rail (:4827), the page title (:3229), the links back to the index (:390, :3291), the tour surface (:4637) and the setup-chain step (:4506) | "Agent configs" on the rail entry, the page title, the links back to the index and its tour; the setup-chain step "Agent configuration", with "Open agent configs" as its link | "Agent configurations" wraps onto two lines beside its count in the 216px rail; *Agent configs* is the same word shortened, where *Agent setup* would take the word the shop's setup pages already hold (*Names*). The step names the record kind, as its neighbours Support identity and Judge do, and its link names the index |
+| A template's parameters | read-only rows of name, kind and *same-shop* (:607–612), with no way to author one on the editor | `EntryCard` rows that open in place on kind, description, default and whether a scenario must bind it, with ↑/↓ and a Remove that asks twice on the row and *Add parameter* below a rule | the parameters are authored on this editor and nowhere else once the block exists — the prototype's editor has no other place to write a description or a default — and ADR 0060 asks twice before one leaves; the order is what a binding follows, so it stays authored |
+| A scenario's composed blocks | a row of name, binding line and kind with a one-press ×, and the picker beside a free-text binding input (:3091–3120) | `EntryCard` rows that read each binding back as the object it names, open in place on field rows for the bindings and an objective's severity, with ↑/↓ and a Remove that asks twice, and the picker below a rule | a binding is picked from this shop's own objects and never typed (*Where a set comes from decides the control*); ADR 0060 names composed objectives and mutations among the removals that ask twice; objective order is priority and mutation order the run timeline, both authored |
 
 Georgia on the results' stat numerals landed with the surface that first draws it, the arm cards
 under the results header (ADR 0068) — as the `open` button verb landed with the overview's
@@ -367,7 +369,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **Every card says what it is for on its first line** (`Card`'s `description`): 13px muted
   under the title, and the section's accessible description; a sentence that is also a
   control's description keeps the id the control names. On an editor, a card's footer holds
-  what acts on the whole card — *Add event*, a document's Remove — and never an explanation,
+  what acts on the whole card — a document's Remove — and never an explanation,
   and a note about one field is that field's hint rather than the card's line.
 - **Every editor section is on rows** (`Field`, `FieldGroup`, `FieldRows`, and the
   `arrangement="row"` a self-labelling field draws itself in — `ProvenModelField` among them):
@@ -421,7 +423,22 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
   for the add form and the open row; one row open per list, siblings' Edit disabled with a line
   saying why and that an open row is not in the draft until Save; Cancel writes nothing; the row
-  is a named form; a refusal one path makes the other makes too.
+  is a named form; a refusal one path makes the other makes too. The lists that open this way:
+  the tone-of-voice guidelines; a profile's addresses (the default chip and *Make default*
+  on the row), background and hidden facts; an identity's guidance notes; a product's options,
+  variants, media, attributes and reviews; an order's events; a template's parameters (the ↑/↓
+  on the row, because the order is authored); a scenario's composed objectives and mutations
+  (the ↑/↓ on the row too). A set of values entered one at a time is a `ChipListField`, and a
+  ticket's thread grows by its composer, rather than either being this.
+  An open row asks in the add form's words, stacked as the add form draws them, except a
+  composed block's, whose bindings and severity have no add form to share words with and stand
+  on field rows. A list grows by the add form below it, over the rule `addFormClasses` draws.
+  A row a create page holds before Create is pressed — a new block's parameters, a new
+  scenario's composed blocks — is the same `EntryCard` without Edit: what it carries beyond what
+  the create page asked is authored in the editor once the first write has landed, and a new
+  block's parameter keeps its one-press Remove (ADR 0060). An order's line items stay a table, their quantity typed in
+  place: it is one value, re-typed in the field beside it. Shop details' method lists are the
+  one exception, below.
 - **Shop details' two method lists are edited in their card's form** (ADR 0072): Edit loads the
   method into the one form, highlights it and fixes its ID; *Save changes* writes it in place.
   The last enabled payment method stays on and on the list, a workspace rule stricter than the
@@ -458,9 +475,15 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   connection's Save and Test, the bench's *Send as the customer*, *Attach to this shop*, *Fork
   this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, Shop details' method forms
   (*Add payment method*, *Add fulfilment method* and *Save changes*: the first rule broken, in
-  one line after the buttons, ADR 0072), the scenario editor's *Add* at the
-  objective and mutation caps (the lab's sentence, under the picker) and the add forms refused
-  for a reason no field states wear it. Start is refused until it can work, and says every cause
+  one line after the buttons, ADR 0072), and every add form's submit, which is `PrimaryAction`
+  with the create glyph wherever it is refused or not, and says its reason in a `RefusalLine`
+  under it where it is — the scenario editor's *Add* at the objective and mutation caps (the
+  lab's sentence), *Add parameter* at the template's cap, *Add event* at the order's cap and
+  while the summary is only spaces, *Add line* when every priced variant is already a line, *Add
+  address* while a field it needs is only spaces, *Add media* on the line the reference field
+  says its collision in. A refusal a field already states natively — a `required` field left
+  empty (in an add form or an open row alike); an identifier `DerivedIdField` refuses — is left
+  to the field, so a submit whose only fault is a `required` field left empty is not dashed. Start is refused until it can work, and says every cause
   it waits for at once. A press in flight is not a refusal: it says nothing, and is `aria-disabled`
   rather than `disabled` so the reader who pressed keeps focus while it runs and after (ADR
   0065); a Publish whose gate has not answered for the saved draft is one too, and the gate says

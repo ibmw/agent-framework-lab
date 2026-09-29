@@ -61,6 +61,7 @@ import {
   unresolvedDocuments,
 } from "../lib/tickets";
 import {
+  addFormClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
@@ -79,12 +80,6 @@ const UNAVAILABLE = "The ticket service is unavailable.";
 const TICKET_STATUSES = optionsOf(TICKET_STATUS);
 
 const ORIGIN_KINDS = optionsOf(TICKET_ORIGIN_KIND);
-
-/**
- * An add form below the entries it adds to, over a rule: *Tone of voice*'s
- * (`ShopSetupPages.tsx`), which the lists of every editor share.
- */
-const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
 
 /**
  * `/shops/:shopId/tickets/:ticketId`, keyed by the ticket: moving to another of the customer's

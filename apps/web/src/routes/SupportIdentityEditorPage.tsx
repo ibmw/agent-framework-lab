@@ -16,6 +16,7 @@ import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
+import { PrimaryAction } from "../components/PrimaryAction";
 import {
   Card,
   EditorSaveActions,
@@ -42,13 +43,13 @@ import {
 } from "../lib/fieldRules";
 import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
 import {
+  addFormClasses,
   destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  inkButtonClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { useLabWorkspace } from "../shell/useLabWorkspace";
@@ -518,18 +519,20 @@ function GuidanceForm({ onAdd }: { onAdd: (fields: GuidanceFields) => void }) {
 
   return (
     <form
-      className="flex flex-wrap items-end gap-2"
+      className={addFormClasses}
       onSubmit={(event) => {
         event.preventDefault();
         onAdd(fields);
         setFields({ title: "", body: "" });
       }}
     >
-      <GuidanceFieldset value={fields} onChange={setFields} />
-      <button className={inkButtonClasses} type="submit">
-        <ButtonIcon verb="create" />
-        Add guidance
-      </button>
+      <div className="flex flex-wrap items-end gap-2">
+        <GuidanceFieldset value={fields} onChange={setFields} />
+        <PrimaryAction variant="ink" type="submit">
+          <ButtonIcon verb="create" />
+          Add guidance
+        </PrimaryAction>
+      </div>
     </form>
   );
 }

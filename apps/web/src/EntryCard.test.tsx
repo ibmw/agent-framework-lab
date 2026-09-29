@@ -256,3 +256,33 @@ describe("EntryCard edit mode", () => {
     });
   });
 });
+
+/**
+ * A row that cannot be edited yet — a create page's parameter, a new scenario's composed block
+ * (PLAN-UX Slice 33) — is still the same row: the header line, the lead, the chips and its
+ * actions, and no Edit.
+ */
+describe("EntryCard without edit mode", () => {
+  it("draws the row's lead, title and actions, and offers no Edit", () => {
+    render(
+      <ul>
+        <EntryCard
+          lead={<span>1</span>}
+          title="Read document"
+          chips={<EntryId value="read-required-document v1" />}
+          actions={<button type="button">Remove read-required-document</button>}
+        >
+          <p>1 binding to this shop's objects, made in the editor</p>
+        </EntryCard>
+      </ul>,
+    );
+
+    expect(screen.getByRole("heading", { level: 3, name: "Read document" })).toBeVisible();
+    expect(screen.getByText("1")).toBeVisible();
+    expect(screen.getByText("read-required-document v1", { selector: "code" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Remove read-required-document" })).toBeVisible();
+    expect(screen.getByText(/1 binding to this shop's objects/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Edit/ })).toBeNull();
+    expect(screen.queryByRole("form")).toBeNull();
+  });
+});

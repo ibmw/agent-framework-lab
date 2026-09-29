@@ -358,7 +358,7 @@ export function EditorSaveActions({
  * as well as what it is called. Where the sentence is also a control's description — the rule
  * a field is written under — `descriptionId` keeps the `id` that control points at.
  *
- * `footer` is for what acts on the card as a whole — *Add event*, the document's Remove — and
+ * `footer` is for what acts on the card as a whole — the document's Remove — and
  * not for an explanation, which belongs on the first line.
  */
 export function Card({

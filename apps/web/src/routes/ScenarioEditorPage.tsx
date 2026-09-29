@@ -11,6 +11,7 @@ import type {
 } from "@agent-lab/contracts";
 import {
   type FormEvent,
+  Fragment,
   type ReactNode,
   useCallback,
   useEffect,
@@ -30,11 +31,14 @@ import {
 import { ButtonIcon } from "../components/ButtonIcon";
 import { CappedTitle } from "../components/CappedTitle";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
-import { Field, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldRows } from "../components/FieldHint";
 import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   EditorSaveActions,
+  EntryCard,
+  EntryEditNotice,
+  EntryId,
   Fingerprint,
   GateCard,
   IssueList,
@@ -44,7 +48,8 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
-import { OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
+import { type EntryEdit, entryEdit, useEntryEdit } from "../lib/entryEdit";
+import { labelOf, OBJECTIVE_SEVERITY, optionsOf } from "../lib/enumLabels";
 import {
   CONTEXT_DOCUMENTS_CAP_RULE,
   MUTATIONS_CAP_RULE,
@@ -55,6 +60,8 @@ import {
   addMutation,
   addObjective,
   bindableParameters,
+  boundMutation,
+  boundObjective,
   boundValue,
   dataFieldsFor,
   documentCollectionLabel,
@@ -66,8 +73,12 @@ import {
   MAX_OBJECTIVES,
   MAX_TURN_CAP,
   MIN_TURN_CAP,
+  type MutationFields,
   moveMutation,
   moveObjective,
+  mutationFields,
+  type ObjectiveFields,
+  objectiveFields,
   parseTurnCap,
   readChecksByDocument,
   referenceChoices,
@@ -80,11 +91,11 @@ import {
   toScenarioRequest,
   updateMutation,
   updateObjective,
-  withBinding,
   withCurrentChoice,
 } from "../lib/scenarios";
 import { onlyChoiceNote, soleCandidate, useSingleChoice } from "../lib/singleChoice";
 import {
+  addFormClasses,
   destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
@@ -154,6 +165,17 @@ export function ScenarioEditorPage() {
   const { content, preview, edit: editDraft } = editor;
   const objectiveRemoval = useRemoval(scenarioId);
   const mutationRemoval = useRemoval(scenarioId);
+  // Each composed list's one open row: its bindings (and an objective's severity) are not in
+  // the draft until its Save (ADR 0051), and the line that says so is what the other rows'
+  // Edit points at.
+  const objectiveEditor = useEntryEdit<ObjectiveFields>(
+    (content?.objectives ?? []).map((objective) => objective.id),
+  );
+  const mutationEditor = useEntryEdit<MutationFields>(
+    (content?.mutations ?? []).map((mutation) => mutation.id),
+  );
+  const objectiveNotice = useId();
+  const mutationNotice = useId();
   const [state, setState] = useState<ResourceState>({ status: "loading" });
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
@@ -476,63 +498,90 @@ export function ScenarioEditorPage() {
                 evidence to compare.
               </p>
             ) : (
-              <ol className="grid gap-3">
-                {content.objectives.map((objective, index) => (
-                  <BoundBlockRow
-                    key={objective.id}
-                    index={index + 1}
-                    instance={objective}
-                    option={findOption(objectiveOptions, objective.block_id)}
-                    resources={resources}
-                    pending={pending}
-                    isFirst={index === 0}
-                    isLast={index === content.objectives.length - 1}
-                    onBind={(parameter, value) =>
-                      edit(
-                        updateObjective(
-                          content,
-                          objective.id,
-                          withBinding(objective, parameter, value),
-                        ),
-                      )
-                    }
-                    onMove={(direction) => edit(moveObjective(content, objective.id, direction))}
-                    removal={objectiveRemoval}
-                    consequence={consequenceOf(
-                      "A run no longer asserts it, and the bindings it carries are lost with it — composing the template again starts them empty.",
-                      findingClauses([
-                        content.objectives.length === 1 && "scenario_without_objective",
-                      ]),
-                      "Nothing is written until you save the draft, and a published version keeps it.",
-                    )}
-                    onRemove={() => edit(removeObjective(content, objective.id))}
-                  >
-                    <label className={fieldLabelClasses}>
-                      Severity
-                      <select
-                        aria-label={`Severity of ${objective.id}`}
-                        className={`${fieldControlClasses} w-full`}
-                        value={objective.severity}
-                        onChange={(event) =>
+              <ol className="grid gap-2 text-[13px]">
+                {content.objectives.map((objective, index) => {
+                  const option = findOption(objectiveOptions, objective.block_id);
+                  return (
+                    <BoundBlockRow
+                      key={objective.id}
+                      index={index + 1}
+                      instance={objective}
+                      option={option}
+                      resources={resources}
+                      pending={pending}
+                      isFirst={index === 0}
+                      isLast={index === content.objectives.length - 1}
+                      edit={entryEdit(
+                        objectiveEditor,
+                        objectiveNotice,
+                        objective.id,
+                        objective.id,
+                        () => objectiveFields(objective),
+                        (fields) =>
                           edit(
-                            updateObjective(content, objective.id, {
-                              ...objective,
-                              severity: event.target.value as ObjectiveSeverity,
-                            }),
-                          )
-                        }
-                      >
-                        {SEVERITIES.map((entry) => (
-                          <option key={entry.value} value={entry.value}>
-                            {entry.option}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </BoundBlockRow>
-                ))}
+                            updateObjective(
+                              content,
+                              objective.id,
+                              boundObjective(objective.id, objective.block_id, fields),
+                            ),
+                          ),
+                        (value, onChange) => (
+                          <FieldRows>
+                            <BindingFields
+                              instanceId={objective.id}
+                              option={option}
+                              resources={resources}
+                              values={value.bindings}
+                              onBind={(parameter, bound) =>
+                                onChange({
+                                  ...value,
+                                  bindings: { ...value.bindings, [parameter]: bound },
+                                })
+                              }
+                            />
+                            <Field label="Severity">
+                              <select
+                                aria-label={`Severity of ${objective.id}`}
+                                className={`${fieldControlClasses} w-full`}
+                                value={value.severity}
+                                onChange={(event) =>
+                                  onChange({
+                                    ...value,
+                                    severity: event.target.value as ObjectiveSeverity,
+                                  })
+                                }
+                              >
+                                {SEVERITIES.map((entry) => (
+                                  <option key={entry.value} value={entry.value}>
+                                    {entry.option}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                          </FieldRows>
+                        ),
+                      )}
+                      onMove={(direction) => edit(moveObjective(content, objective.id, direction))}
+                      removal={objectiveRemoval}
+                      consequence={consequenceOf(
+                        "A run no longer asserts it, and the bindings it carries are lost with it — composing the template again starts them empty.",
+                        findingClauses([
+                          content.objectives.length === 1 && "scenario_without_objective",
+                        ]),
+                        "Nothing is written until you save the draft, and a published version keeps it.",
+                      )}
+                      onRemove={() => edit(removeObjective(content, objective.id))}
+                    >
+                      <dt className="text-xs font-semibold text-admin-muted">Severity</dt>
+                      <dd className="text-admin-ink-soft">
+                        {labelOf(OBJECTIVE_SEVERITY, objective.severity)}
+                      </dd>
+                    </BoundBlockRow>
+                  );
+                })}
               </ol>
             )}
+            <EntryEditNotice id={objectiveNotice} label={objectiveEditor.open?.label ?? null} />
             <RemovalNotice removal={objectiveRemoval} />
             <TemplatePicker
               label="Add objective block"
@@ -563,34 +612,60 @@ export function ScenarioEditorPage() {
                 scenario.
               </p>
             ) : (
-              <ol className="grid gap-3">
-                {content.mutations.map((mutation, index) => (
-                  <BoundBlockRow
-                    key={mutation.id}
-                    index={index + 1}
-                    instance={mutation}
-                    option={findOption(mutationOptions, mutation.block_id)}
-                    resources={resources}
-                    pending={pending}
-                    isFirst={index === 0}
-                    isLast={index === content.mutations.length - 1}
-                    onBind={(parameter, value) =>
-                      edit(
-                        updateMutation(
-                          content,
-                          mutation.id,
-                          withBinding(mutation, parameter, value),
+              <ol className="grid gap-2 text-[13px]">
+                {content.mutations.map((mutation, index) => {
+                  const option = findOption(mutationOptions, mutation.block_id);
+                  return (
+                    <BoundBlockRow
+                      key={mutation.id}
+                      index={index + 1}
+                      instance={mutation}
+                      option={option}
+                      resources={resources}
+                      pending={pending}
+                      isFirst={index === 0}
+                      isLast={index === content.mutations.length - 1}
+                      edit={entryEdit(
+                        mutationEditor,
+                        mutationNotice,
+                        mutation.id,
+                        mutation.id,
+                        () => mutationFields(mutation),
+                        (fields) =>
+                          edit(
+                            updateMutation(
+                              content,
+                              mutation.id,
+                              boundMutation(mutation.id, mutation.block_id, fields),
+                            ),
+                          ),
+                        (value, onChange) => (
+                          <FieldRows>
+                            <BindingFields
+                              instanceId={mutation.id}
+                              option={option}
+                              resources={resources}
+                              values={value.bindings}
+                              onBind={(parameter, bound) =>
+                                onChange({
+                                  ...value,
+                                  bindings: { ...value.bindings, [parameter]: bound },
+                                })
+                              }
+                            />
+                          </FieldRows>
                         ),
-                      )
-                    }
-                    onMove={(direction) => edit(moveMutation(content, mutation.id, direction))}
-                    removal={mutationRemoval}
-                    consequence="The sandbox no longer changes at that point of a run, and the bindings it carries are lost with it — composing the template again starts them empty. Nothing is written until you save the draft, and a published version keeps it."
-                    onRemove={() => edit(removeMutation(content, mutation.id))}
-                  />
-                ))}
+                      )}
+                      onMove={(direction) => edit(moveMutation(content, mutation.id, direction))}
+                      removal={mutationRemoval}
+                      consequence="The sandbox no longer changes at that point of a run, and the bindings it carries are lost with it — composing the template again starts them empty. Nothing is written until you save the draft, and a published version keeps it."
+                      onRemove={() => edit(removeMutation(content, mutation.id))}
+                    />
+                  );
+                })}
               </ol>
             )}
+            <EntryEditNotice id={mutationNotice} label={mutationEditor.open?.label ?? null} />
             <RemovalNotice removal={mutationRemoval} />
             <TemplatePicker
               label="Add mutation block"
@@ -803,7 +878,7 @@ function BoundBlockRow({
   pending,
   isFirst,
   isLast,
-  onBind,
+  edit,
   onMove,
   removal,
   consequence,
@@ -818,12 +893,14 @@ function BoundBlockRow({
   pending: boolean;
   isFirst: boolean;
   isLast: boolean;
-  onBind: (parameter: string, value: string) => void;
+  /** The row's open-in-place edit: its bindings on field rows, and an objective's severity. */
+  edit: EntryEdit;
   onMove: (direction: -1 | 1) => void;
   /** The list's second press (ADR 0060), and what it says the removal costs. */
   removal: Removal;
   consequence: string;
   onRemove: () => void;
+  /** What the row reads back besides its bindings, as `<dt>`/`<dd>` pairs. */
   children?: ReactNode;
 }) {
   const named = option?.statement || instance.id;
@@ -839,21 +916,25 @@ function BoundBlockRow({
       />
     );
   }
+  const bindable = bindableParameters(option);
   return (
-    <li className="grid gap-2 rounded-lg border border-admin-border bg-admin-canvas/40 p-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <EntryCard
+      lead={
         <span className="rounded-full bg-admin-border px-2 py-0.5 text-[11px] font-bold text-admin-ink-soft">
           {index}
         </span>
-        <span className="text-[13px] font-semibold">{option?.statement || instance.id}</span>
-        {option ? (
+      }
+      title={named}
+      chips={
+        option ? (
           <>
-            <code className="rounded bg-admin-border/60 px-1.5 py-0.5 font-mono text-[11px] text-admin-ink-soft">
-              {option.name}{" "}
-              {option.latest_published_version === null
-                ? "draft"
-                : `v${option.latest_published_version}`}
-            </code>
+            <EntryId
+              value={`${option.name} ${
+                option.latest_published_version === null
+                  ? "draft"
+                  : `v${option.latest_published_version}`
+              }`}
+            />
             <span className="text-[11.5px] text-admin-muted">{option.type_label}</span>
           </>
         ) : pending ? (
@@ -862,8 +943,13 @@ function BoundBlockRow({
           <span className="text-[11.5px] font-semibold text-lab-error">
             template no longer in the library
           </span>
-        )}
-        <div className="ml-auto flex items-center gap-1.5">
+        )
+      }
+      edit={edit}
+      actions={
+        // The order is authored — priority for objectives, the run timeline for mutations —
+        // so the arrows stay on the row beside its Remove.
+        <>
           <button
             className={subtleButtonClasses}
             type="button"
@@ -892,45 +978,116 @@ function BoundBlockRow({
             <ButtonIcon verb="delete" />
             Remove
           </button>
-        </div>
-      </div>
-
-      {bindableParameters(option).map((parameter) => (
-        <BindingField
-          key={parameter.name}
-          instance={instance}
-          parameter={parameter}
-          resources={resources}
-          onBind={onBind}
-        />
-      ))}
-      {children}
-    </li>
+        </>
+      }
+    >
+      {bindable.length > 0 || children ? (
+        <dl className="grid gap-x-3 gap-y-1 sm:grid-cols-[max-content_minmax(0,1fr)]">
+          {bindable.map((parameter) => {
+            const bound = boundLabel(parameter, boundValue(instance, parameter.name), resources);
+            return (
+              <Fragment key={parameter.name}>
+                <dt className="font-mono text-xs font-semibold text-admin-muted">
+                  {parameter.name}
+                </dt>
+                <dd className={bound === null ? "text-admin-muted" : "text-admin-ink-soft"}>
+                  {bound ?? "Not bound yet"}
+                </dd>
+              </Fragment>
+            );
+          })}
+          {children}
+        </dl>
+      ) : null}
+    </EntryCard>
   );
 }
 
-function BindingField({
-  instance,
-  parameter,
+/**
+ * What a binding reads as on a closed row: the choice the picker would show for it, or the
+ * value itself where no picker names it. Null while it is unbound.
+ */
+function boundLabel(
+  parameter: BlockParameterSchema,
+  value: string,
+  resources: ScenarioResourcesSchema | null,
+): string | null {
+  if (!value) {
+    return null;
+  }
+  if (parameter.kind === "data_reference") {
+    const { entity, field } = splitDataReference(value);
+    const choices = resources ? referenceChoices(parameter, resources) : [];
+    const named = choices.find((choice) => choice.value === entity)?.label ?? entity;
+    return field ? `${named} · ${field}` : named;
+  }
+  const choices =
+    parameter.kind === "timing"
+      ? TIMING_CHOICES
+      : resources
+        ? referenceChoices(parameter, resources)
+        : [];
+  return choices.find((choice) => choice.value === value)?.label ?? value;
+}
+
+/** An open row's bindings, one field row per parameter the template leaves to the scenario. */
+function BindingFields({
+  instanceId,
+  option,
   resources,
+  values,
   onBind,
 }: {
-  instance: BoundObjectiveSchema | BoundMutationSchema;
-  parameter: BlockParameterSchema;
+  instanceId: string;
+  option: ScenarioBlockOptionSchema | undefined;
   resources: ScenarioResourcesSchema | null;
+  values: Readonly<Record<string, string>>;
   onBind: (parameter: string, value: string) => void;
 }) {
-  const value = boundValue(instance, parameter.name);
-  const name = `${parameter.name} of ${instance.id}`;
+  return (
+    <>
+      {bindableParameters(option).map((parameter) => (
+        <BindingField
+          key={parameter.name}
+          instanceId={instanceId}
+          parameter={parameter}
+          resources={resources}
+          value={values[parameter.name] ?? ""}
+          onBind={onBind}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
+ * One binding on a field row. Each control keeps the name it had when the rows were always open
+ * — "doc_ref of read-required-document" — so the parameter's name, which the row's label also
+ * shows, leads it, and a reader, a test and a journey reach the same control as before.
+ */
+function BindingField({
+  instanceId,
+  parameter,
+  resources,
+  value,
+  onBind,
+}: {
+  instanceId: string;
+  parameter: BlockParameterSchema;
+  resources: ScenarioResourcesSchema | null;
+  value: string;
+  onBind: (parameter: string, value: string) => void;
+}) {
+  const name = `${parameter.name} of ${instanceId}`;
+  const hint = parameterHint(parameter);
 
   if (parameter.kind === "data_reference") {
     const { entity, field } = splitDataReference(value);
     const choices = resources ? referenceChoices(parameter, resources) : [];
     return (
-      // A div, not a label: the value is two controls, so a wrapping label has no single
-      // resolvable control. Each half names itself instead.
-      <div className={fieldLabelClasses}>
-        <span>{parameter.name}</span>
+      // A group row: the value is two controls, so there is no single control for a label to
+      // name. Each half names itself.
+      <FieldGroup label={parameter.name} hint={hint}>
         <div className="flex flex-wrap gap-2">
           <select
             aria-label={name}
@@ -969,8 +1126,7 @@ function BindingField({
             ))}
           </select>
         </div>
-        <ParameterHint parameter={parameter} />
-      </div>
+      </FieldGroup>
     );
   }
 
@@ -988,8 +1144,7 @@ function BindingField({
 
   if (choices.length > 0 || parameter.shop_bound) {
     return (
-      <label className={fieldLabelClasses}>
-        {parameter.name}
+      <Field label={parameter.name} hint={hint}>
         <select
           aria-label={name}
           className={`${fieldControlClasses} w-full`}
@@ -1003,14 +1158,12 @@ function BindingField({
             </option>
           ))}
         </select>
-        <ParameterHint parameter={parameter} />
-      </label>
+      </Field>
     );
   }
 
   return (
-    <label className={fieldLabelClasses}>
-      {parameter.name}
+    <Field label={parameter.name} hint={hint}>
       <input
         aria-label={name}
         className={`${fieldControlClasses} w-full`}
@@ -1018,18 +1171,15 @@ function BindingField({
         placeholder={parameter.default ?? ""}
         onChange={(event) => onBind(parameter.name, event.target.value)}
       />
-      <ParameterHint parameter={parameter} />
-    </label>
+    </Field>
   );
 }
 
-function ParameterHint({ parameter }: { parameter: BlockParameterSchema }) {
-  return (
-    <span className="text-[11.5px] font-normal text-admin-muted">
-      {parameter.description || "The template gives no guidance on what to bind."}
-      {parameter.shop_bound ? " · resolved inside this shop" : null}
-    </span>
-  );
+/** What the template says a binding is for, and where it resolves: the binding row's hint. */
+function parameterHint(parameter: BlockParameterSchema): string {
+  return `${parameter.description || "The template gives no guidance on what to bind."}${
+    parameter.shop_bound ? " · resolved inside this shop" : ""
+  }`;
 }
 
 function TemplatePicker({
@@ -1085,46 +1235,44 @@ function TemplatePicker({
   }
 
   return (
-    <form className="flex flex-wrap items-end gap-2" onSubmit={submit}>
-      <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-        {label}
-        <select
-          aria-label={label}
-          aria-describedby={onlyTemplate ? noteId : undefined}
-          className={`${fieldControlClasses} w-full`}
-          value={blockId}
-          required
-          onChange={(event) => setBlockId(event.target.value)}
+    <form className={addFormClasses} onSubmit={submit}>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
+          {label}
+          <select
+            aria-label={label}
+            aria-describedby={onlyTemplate ? noteId : undefined}
+            className={`${fieldControlClasses} w-full`}
+            value={blockId}
+            required
+            onChange={(event) => setBlockId(event.target.value)}
+          >
+            <option value="">Select a template</option>
+            {options.map((option) => (
+              <option key={option.block_id} value={option.block_id}>
+                {option.name} —{" "}
+                {option.latest_published_version === null
+                  ? "draft"
+                  : `v${option.latest_published_version}`}
+              </option>
+            ))}
+          </select>
+          {onlyTemplate ? (
+            <span id={noteId} className="text-xs font-normal text-admin-muted">
+              {onlyChoiceNote("template in the library")}
+            </span>
+          ) : null}
+        </label>
+        <PrimaryAction
+          variant="outline"
+          type="submit"
+          refusal={full ? { id: capId, reason: capRule } : null}
         >
-          <option value="">Select a template</option>
-          {options.map((option) => (
-            <option key={option.block_id} value={option.block_id}>
-              {option.name} —{" "}
-              {option.latest_published_version === null
-                ? "draft"
-                : `v${option.latest_published_version}`}
-            </option>
-          ))}
-        </select>
-        {onlyTemplate ? (
-          <span id={noteId} className="text-xs font-normal text-admin-muted">
-            {onlyChoiceNote("template in the library")}
-          </span>
-        ) : null}
-      </label>
-      <PrimaryAction
-        variant="outline"
-        type="submit"
-        refusal={full ? { id: capId, reason: capRule } : null}
-      >
-        <ButtonIcon verb="create" />
-        Add
-      </PrimaryAction>
-      {full ? (
-        <RefusalLine id={capId} className="w-full">
-          {capRule}
-        </RefusalLine>
-      ) : null}
+          <ButtonIcon verb="create" />
+          Add
+        </PrimaryAction>
+      </div>
+      {full ? <RefusalLine id={capId}>{capRule}</RefusalLine> : null}
     </form>
   );
 }

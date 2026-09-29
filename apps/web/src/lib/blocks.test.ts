@@ -2,16 +2,19 @@ import type { ObjectiveBlockPayloadSchema } from "@agent-lab/contracts";
 import { describe, expect, it } from "vitest";
 import {
   acceptsDefault,
+  addedParameter,
   addParameter,
   bindsShopObject,
   moveParameter,
+  parameterEntry,
+  parameterFields,
   removeParameter,
-  retypeParameter,
+  replaceParameter,
+  retypedFields,
   shopBoundCount,
   toIdentifier,
   toSlug,
   uniqueParameterName,
-  updateParameter,
 } from "./blocks";
 
 function payload(
@@ -124,27 +127,85 @@ describe("editing parameters", () => {
   it("drops a default the new kind cannot carry when a parameter is retyped", () => {
     // Otherwise the form would keep showing a default the backend refuses with
     // `reference_parameter_with_default`, and offer no way to clear it.
-    const next = retypeParameter(payload(), "severity", "entity_reference");
-    const [, severity] = next.parameters;
+    const severity = payload().parameters[1];
+    const next = replaceParameter(
+      payload(),
+      "severity",
+      retypedFields(parameterFields(severity), "entity_reference"),
+    ).parameters[1];
 
-    expect(severity.kind).toBe("entity_reference");
-    expect(severity.default).toBeNull();
-    expect(severity.shop_bound).toBe(true);
+    expect(next.kind).toBe("entity_reference");
+    expect(next.default).toBeNull();
+    expect(next.shop_bound).toBe(true);
     // An optional parameter with no default is a publish-gate error, and the default just went.
-    expect(severity.required).toBe(true);
+    expect(next.required).toBe(true);
+  });
+
+  it("holds the kind's rules in the builder, whatever the fields it is handed say", () => {
+    const entry = parameterEntry("ref", {
+      kind: "entity_reference",
+      description: "",
+      required: false,
+      default: "leaked",
+    });
+
+    expect(entry).toEqual({
+      name: "ref",
+      kind: "entity_reference",
+      description: "",
+      required: true,
+      default: null,
+      shop_bound: true,
+    });
   });
 
   it("keeps a default when the new kind is still a literal", () => {
-    const next = retypeParameter(payload(), "severity", "text");
+    const severity = payload().parameters[1];
+    const next = replaceParameter(
+      payload(),
+      "severity",
+      retypedFields(parameterFields(severity), "text"),
+    );
 
     expect(next.parameters[1].default).toBe("required");
   });
 
-  it("updates only the named parameter", () => {
-    const next = updateParameter(payload(), "doc_ref", { description: "Something else." });
+  it("replaces only the named parameter, where it stands", () => {
+    const next = replaceParameter(payload(), "doc_ref", {
+      ...parameterFields(payload().parameters[0]),
+      description: "Something else.",
+    });
 
     expect(next.parameters[0].description).toBe("Something else.");
     expect(next.parameters[1]).toEqual(payload().parameters[1]);
+  });
+
+  it("writes a saved parameter's fields as they stand while its kind has not moved", () => {
+    // A draft authored through the API may carry an optional reference; a description edit
+    // is not the place to rewrite it. The gate says what it thinks of it meanwhile.
+    const saved = {
+      name: "ref",
+      kind: "entity_reference" as const,
+      description: "",
+      required: false,
+      default: null,
+      shop_bound: true,
+    };
+
+    expect(
+      parameterEntry("ref", { ...parameterFields(saved), description: "The order." }, saved),
+    ).toEqual({ ...saved, description: "The order." });
+    // Moving the kind is what brings the kind's rules to bear.
+    expect(
+      parameterEntry("ref", { ...parameterFields(saved), kind: "document_reference" }, saved)
+        .required,
+    ).toBe(true);
+  });
+
+  it("adds exactly what an open row saving the same answers writes", () => {
+    const [added] = addedParameter([], "Order", "entity_reference");
+
+    expect(parameterEntry("order", parameterFields(added), added)).toEqual(added);
   });
 
   it("removes a parameter by name", () => {

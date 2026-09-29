@@ -13,21 +13,29 @@ import { deleteOrder, getOrder, replaceOrder } from "../api/orders";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { Field, FieldRows } from "../components/FieldHint";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   EditorSaveActions,
+  EntryCard,
+  EntryEditNotice,
+  EntryId,
+  EntryText,
   Fingerprint,
   GateCard,
   IssueList,
   PageHeader,
   StatusPill,
 } from "../components/WorkspaceChrome";
+import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import {
   FULFILMENT_STATUS_RULE,
   isMoneyAmount,
+  MAX_ORDER_EVENTS,
   MONEY_PATTERN,
   MONEY_RULE,
+  ORDER_EVENTS_CAP_RULE,
   ORDER_METHOD_RULE,
   PAID_AT_RULE,
   PAYMENT_STATUS_RULE,
@@ -42,6 +50,11 @@ import {
   lineTotal,
   MAX_LINE_QUANTITY,
   MIN_LINE_QUANTITY,
+  type OrderEventFields,
+  orderEventEntry,
+  orderEventFields,
+  orderEventIncomplete,
+  orderEventRefusal,
   paymentLabel,
   previewTotals,
   toLocalInput,
@@ -58,6 +71,7 @@ import {
 } from "../lib/removal";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
 import {
+  addFormClasses,
   destructiveOutlineButtonClasses,
   destructiveSubtleButtonClasses,
   editorColumnsClasses,
@@ -66,7 +80,6 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   formatFixtureTimestamp,
-  outlineButtonClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -76,6 +89,11 @@ import { useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The order service is unavailable.";
+
+/** Why *Add line* has nothing to offer: a line is frozen at a price, so only a priced variant can be one. */
+const NO_PRICED_VARIANT = "The catalog has no priced variant to order yet.";
+const EVERY_VARIANT_ORDERED =
+  "Every priced variant in the catalog is already a line of this order.";
 
 type LineSchema = OrderContentSchema["lines"][number];
 
@@ -121,6 +139,14 @@ export function OrderEditorPage() {
   const [quantityDraft, setQuantityDraft] = useState<{ id: string; text: string } | null>(null);
   // Declared with the other hooks because this component returns early while it loads.
   const feeRuleId = useId();
+  // The events list's one open row (ADR 0051: nothing in it reaches the order until its Save),
+  // the line that says so, and the line an open row's refused Save points at.
+  const eventEditor = useEntryEdit<OrderEventFields>(
+    (content?.events ?? []).map((entry) => entry.id),
+  );
+  const eventNotice = useId();
+  const openEventRefusalId = useId();
+  const addLineRefusalId = useId();
 
   const apply = useCallback((response: ShopOrderResponse) => {
     edits.current += 1;
@@ -349,28 +375,14 @@ export function OrderEditorPage() {
     setNewSku("");
   }
 
-  function addEvent() {
-    if (!content) {
-      return;
-    }
-    const id = uniqueId(
-      slugify("event"),
-      content.events.map((entry) => entry.id),
-    );
-    edit({
-      ...content,
-      events: [
-        ...content.events,
-        {
-          id,
-          kind: "support_contact",
-          occurred_at: content.placed_at,
-          summary: "New event",
-        },
-      ],
-    });
-  }
-
+  // The one thing Add line can be refused for that its select does not say: there is nothing
+  // left to add. An unchosen variant is the select's own `required` to say.
+  const addLineRefusal =
+    addableSkus.length > 0
+      ? null
+      : catalog.length === 0
+        ? NO_PRICED_VARIANT
+        : EVERY_VARIANT_ORDERED;
   const totals = previewTotals(content);
   const feeRefused = !isMoneyAmount(content.shipping_fee.amount);
   const address = content.shipping_address;
@@ -561,36 +573,49 @@ export function OrderEditorPage() {
             )}
 
             <RemovalNotice removal={lineRemoval} />
-            <form className="flex flex-wrap items-end gap-2" onSubmit={addLine}>
-              <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-                Add product
-                <select
-                  aria-label="Add product"
-                  aria-describedby={onlyAddable ? addNoteId : undefined}
-                  className={`${fieldControlClasses} w-full`}
-                  value={newSku}
-                  required
-                  onChange={(event) => setNewSku(event.target.value)}
+            <form className={addFormClasses} aria-label="Add a line" onSubmit={addLine}>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
+                  Add product
+                  <select
+                    aria-label="Add product"
+                    aria-describedby={onlyAddable ? addNoteId : undefined}
+                    className={`${fieldControlClasses} w-full`}
+                    value={newSku}
+                    required
+                    onChange={(event) => setNewSku(event.target.value)}
+                  >
+                    <option value="">Select a variant</option>
+                    {catalog
+                      .filter((variant) => !content.lines.some((line) => line.sku === variant.sku))
+                      .map((variant) => (
+                        <option key={variant.sku} value={variant.sku}>
+                          {variant.label} · {variant.price.amount} {variant.price.currency}
+                        </option>
+                      ))}
+                  </select>
+                  {onlyAddable ? (
+                    <span id={addNoteId} className="text-xs font-normal text-admin-muted">
+                      {onlyChoiceNote("priced variant not yet on this order")}
+                    </span>
+                  ) : null}
+                </label>
+                <PrimaryAction
+                  variant="outline"
+                  type="submit"
+                  refusal={
+                    addLineRefusal === null
+                      ? null
+                      : { id: addLineRefusalId, reason: addLineRefusal }
+                  }
                 >
-                  <option value="">Select a variant</option>
-                  {catalog
-                    .filter((variant) => !content.lines.some((line) => line.sku === variant.sku))
-                    .map((variant) => (
-                      <option key={variant.sku} value={variant.sku}>
-                        {variant.label} · {variant.price.amount} {variant.price.currency}
-                      </option>
-                    ))}
-                </select>
-                {onlyAddable ? (
-                  <span id={addNoteId} className="text-xs font-normal text-admin-muted">
-                    {onlyChoiceNote("priced variant not yet on this order")}
-                  </span>
-                ) : null}
-              </label>
-              <button className={outlineButtonClasses} type="submit">
-                <ButtonIcon verb="create" />
-                Add line
-              </button>
+                  <ButtonIcon verb="create" />
+                  Add line
+                </PrimaryAction>
+              </div>
+              {addLineRefusal === null ? null : (
+                <RefusalLine id={addLineRefusalId}>{addLineRefusal}</RefusalLine>
+              )}
             </form>
 
             {/* The three-across `sm:grid-cols-3` went with the pattern: the prototype gives
@@ -851,127 +876,114 @@ export function OrderEditorPage() {
           <Card
             title="Order events"
             description="Authored history — discoverable by agents through the order tools. Events are stored in chronological order."
-            footer={
-              <button className={outlineButtonClasses} type="button" onClick={addEvent}>
-                <ButtonIcon verb="create" />
-                Add event
-              </button>
-            }
           >
             {content.events.length === 0 ? (
               <p className="text-[13px] text-admin-muted">No authored history yet.</p>
             ) : (
-              content.events.map((entry) =>
-                eventRemoval.isArmed(entry.id) ? (
-                  <ConfirmRemove
-                    key={entry.id}
-                    title={`Remove the ${eventKindLabel(entry.kind).toLowerCase()} event?`}
-                    consequence={consequenceOf(
-                      "It leaves the order's authored history, which the order tools hand an agent.",
-                      findingClauses(eventRemovalFindings(content, entry.id)),
-                      "Nothing is written until you save the order.",
-                    )}
-                    onConfirm={eventRemoval.confirm(
-                      () =>
-                        edit({
-                          ...content,
-                          events: content.events.filter((candidate) => candidate.id !== entry.id),
-                        }),
-                      `Removed the ${eventKindLabel(entry.kind).toLowerCase()} event from the order.`,
-                    )}
-                    onKeep={eventRemoval.keep}
-                  />
-                ) : (
-                  <div key={entry.id} className={`${surfaceClasses} grid gap-2 p-3`}>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className={fieldLabelClasses}>
-                        Kind
-                        <select
-                          className={`${fieldControlClasses} w-full`}
-                          value={entry.kind}
-                          aria-label={`Kind for ${entry.id}`}
-                          onChange={(event) =>
-                            edit({
-                              ...content,
-                              events: content.events.map((candidate) =>
-                                candidate.id === entry.id
-                                  ? { ...candidate, kind: event.target.value as OrderEventKind }
-                                  : candidate,
-                              ),
-                            })
-                          }
-                        >
-                          {EVENT_KINDS.map((kind) => (
-                            <option key={kind} value={kind}>
-                              {eventKindLabel(kind)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className={fieldLabelClasses}>
-                        Occurred at
-                        <input
-                          className={`${fieldControlClasses} w-full`}
-                          type="datetime-local"
-                          aria-label={`Time for ${entry.id}`}
-                          value={toLocalInput(entry.occurred_at)}
-                          onChange={(event) =>
-                            edit({
-                              ...content,
-                              events: content.events.map((candidate) =>
-                                candidate.id === entry.id
-                                  ? {
-                                      ...candidate,
-                                      occurred_at:
-                                        fromLocalInput(event.target.value) ?? candidate.occurred_at,
-                                    }
-                                  : candidate,
-                              ),
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                    <label className={fieldLabelClasses}>
-                      Summary
-                      <textarea
-                        className={`${textAreaClasses} w-full`}
-                        aria-label={`Summary for ${entry.id}`}
-                        value={entry.summary}
-                        onChange={(event) =>
+              <ul className="grid gap-2 text-[13px]">
+                {content.events.map((entry) => {
+                  const label = eventLabel(entry);
+                  const notice = `Removed the ${eventKindLabel(entry.kind).toLowerCase()} event from the order.`;
+                  const drop = () =>
+                    edit({
+                      ...content,
+                      events: content.events.filter((candidate) => candidate.id !== entry.id),
+                    });
+                  if (eventRemoval.isArmed(entry.id)) {
+                    return (
+                      <ConfirmRemove
+                        key={entry.id}
+                        as="li"
+                        title={`Remove the ${eventKindLabel(entry.kind).toLowerCase()} event?`}
+                        consequence={consequenceOf(
+                          "It leaves the order's authored history, which the order tools hand an agent.",
+                          findingClauses(eventRemovalFindings(content, entry.id)),
+                          "Nothing is written until you save the order.",
+                        )}
+                        onConfirm={eventRemoval.confirm(drop, notice)}
+                        onKeep={eventRemoval.keep}
+                      />
+                    );
+                  }
+                  return (
+                    <EntryCard
+                      key={entry.id}
+                      title={`${eventKindLabel(entry.kind)} · ${formatFixtureTimestamp(entry.occurred_at)}`}
+                      chips={<EntryId value={entry.id} />}
+                      edit={entryEdit(
+                        eventEditor,
+                        eventNotice,
+                        entry.id,
+                        label,
+                        () => orderEventFields(entry),
+                        (fields) =>
                           edit({
                             ...content,
                             events: content.events.map((candidate) =>
                               candidate.id === entry.id
-                                ? { ...candidate, summary: event.target.value }
+                                ? orderEventEntry(entry.id, fields, entry.occurred_at)
                                 : candidate,
                             ),
-                          })
-                        }
-                      />
-                    </label>
-                    <button
-                      className={destructiveSubtleButtonClasses}
-                      type="button"
-                      ref={eventRemoval.trigger(entry.id)}
-                      onClick={eventRemoval.ask(
-                        entry.id,
-                        () =>
-                          edit({
-                            ...content,
-                            events: content.events.filter((candidate) => candidate.id !== entry.id),
                           }),
-                        `Removed the ${eventKindLabel(entry.kind).toLowerCase()} event from the order.`,
+                        (value, onChange) => {
+                          const refused = orderEventRefusal(value);
+                          return (
+                            <>
+                              <OrderEventFieldset value={value} onChange={onChange} />
+                              {refused === null ? null : (
+                                <RefusalLine id={openEventRefusalId}>{refused}</RefusalLine>
+                              )}
+                            </>
+                          );
+                        },
+                        (value) => {
+                          const refused = orderEventRefusal(value);
+                          return refused === null
+                            ? true
+                            : { id: openEventRefusalId, reason: refused };
+                        },
                       )}
+                      actions={
+                        <button
+                          className={destructiveSubtleButtonClasses}
+                          type="button"
+                          aria-label={`Remove ${label}`}
+                          ref={eventRemoval.trigger(entry.id)}
+                          onClick={eventRemoval.ask(entry.id, drop, notice)}
+                        >
+                          <ButtonIcon verb="delete" />
+                          Remove
+                        </button>
+                      }
                     >
-                      <ButtonIcon verb="delete" />
-                      Remove event
-                    </button>
-                  </div>
-                ),
-              )
+                      <EntryText label="Summary" value={entry.summary} />
+                    </EntryCard>
+                  );
+                })}
+              </ul>
             )}
+            <EntryEditNotice id={eventNotice} label={eventEditor.open?.label ?? null} />
             <RemovalNotice removal={eventRemoval} />
+            <OrderEventForm
+              placedAt={content.placed_at}
+              full={content.events.length >= MAX_ORDER_EVENTS}
+              onAdd={(fields, kept) =>
+                edit({
+                  ...content,
+                  events: [
+                    ...content.events,
+                    orderEventEntry(
+                      uniqueId(
+                        slugify("event"),
+                        content.events.map((candidate) => candidate.id),
+                      ),
+                      fields,
+                      kept,
+                    ),
+                  ],
+                })
+              }
+            />
           </Card>
         </div>
 
@@ -1057,4 +1069,133 @@ function eventRemovalFindings(content: OrderContentSchema, eventId: string): Rem
     findings.push("fulfilment_status_without_event");
   }
   return findings;
+}
+
+/**
+ * How an event is named on its row and on the controls that act on it: what happened, and the
+ * identifier the order keys it by. Not its time, which is written in the operator's timestamp
+ * preference and can be the same minute for two events; the id is stable and unique, and the
+ * time is read on the row's own line.
+ */
+function eventLabel(entry: OrderContentSchema["events"][number]): string {
+  return `${eventKindLabel(entry.kind)} · ${entry.id}`;
+}
+
+/**
+ * An event's three questions, asked in the same words by the add form below the list and by an
+ * open row, stacked as an add form draws its fields.
+ */
+function OrderEventFieldset({
+  value,
+  onChange,
+}: {
+  value: OrderEventFields;
+  onChange: (next: OrderEventFields) => void;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <label className={fieldLabelClasses}>
+        Kind
+        <select
+          className={`${fieldControlClasses} w-full`}
+          value={value.kind}
+          onChange={(event) => onChange({ ...value, kind: event.target.value as OrderEventKind })}
+        >
+          {EVENT_KINDS.map((kind) => (
+            <option key={kind} value={kind}>
+              {eventKindLabel(kind)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className={fieldLabelClasses}>
+        Occurred at
+        <input
+          className={`${fieldControlClasses} w-full`}
+          type="datetime-local"
+          required
+          value={value.occurredAt}
+          onChange={(event) => onChange({ ...value, occurredAt: event.target.value })}
+        />
+      </label>
+      <label className={`${fieldLabelClasses} sm:col-span-2`}>
+        Summary
+        <textarea
+          className={`${textAreaClasses} w-full`}
+          required
+          value={value.summary}
+          placeholder="Customer asked by email to change the delivery address."
+          onChange={(event) => onChange({ ...value, summary: event.target.value })}
+        />
+      </label>
+    </div>
+  );
+}
+
+/**
+ * *Add event*: the add form below the order's history, asking what an open row asks and handing
+ * it to the same builder (`orderEventEntry`).
+ *
+ * It opens on a support contact at the moment the order was placed — what the card's old *Add
+ * event* appended — with the summary left to the author, since a made-up sentence would read as
+ * history nobody wrote. The time follows the order's placement until it is typed, as the address
+ * form's country follows the profile's locale.
+ */
+function OrderEventForm({
+  placedAt,
+  full,
+  onAdd,
+}: {
+  placedAt: string;
+  /** The order already carries `MAX_ORDER_EVENTS`. */
+  full: boolean;
+  /** Handed the order's placement too, which an untouched time keeps to the second. */
+  onAdd: (fields: OrderEventFields, kept: string) => void;
+}) {
+  const refusalId = useId();
+  const [kind, setKind] = useState<OrderEventKind>("support_contact");
+  const [typedTime, setTypedTime] = useState<string | null>(null);
+  const [summary, setSummary] = useState("");
+  const fields: OrderEventFields = {
+    kind,
+    occurredAt: typedTime ?? toLocalInput(placedAt),
+    summary,
+  };
+  const refusal = full ? ORDER_EVENTS_CAP_RULE : orderEventRefusal(fields);
+
+  return (
+    <form
+      className={addFormClasses}
+      aria-label="Add an event"
+      onSubmit={(event) => {
+        event.preventDefault();
+        // The button refuses the press and the browser holds an empty `required` field; a
+        // submission that reaches the form another way is refused here too.
+        if (refusal !== null || orderEventIncomplete(fields)) {
+          return;
+        }
+        onAdd(fields, placedAt);
+        setSummary("");
+      }}
+    >
+      <OrderEventFieldset
+        value={fields}
+        onChange={(next) => {
+          setKind(next.kind);
+          setTypedTime(next.occurredAt);
+          setSummary(next.summary);
+        }}
+      />
+      <PrimaryAction
+        variant="outline"
+        className="justify-self-start"
+        type="submit"
+        refusal={refusal === null ? null : { id: refusalId, reason: refusal }}
+      >
+        <ButtonIcon verb="create" />
+        Add event
+      </PrimaryAction>
+      {refusal === null ? null : <RefusalLine id={refusalId}>{refusal}</RefusalLine>}
+    </form>
+  );
 }

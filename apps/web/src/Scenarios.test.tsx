@@ -524,6 +524,19 @@ async function addBlock(
 }
 
 /**
+ * A composed instance opened where it stands: its bindings, and an objective's severity, are
+ * asked on field rows in the open row and reach the draft on its Save (PLAN-UX Slice 33).
+ */
+async function openRow(user: ReturnType<typeof userEvent.setup>, id: string) {
+  await user.click(screen.getByRole("button", { name: `Edit ${id}` }));
+  return screen.getByRole("form", { name: `Edit ${id}` });
+}
+
+async function saveRow(user: ReturnType<typeof userEvent.setup>, id: string) {
+  await user.click(screen.getByRole("button", { name: `Save ${id}` }));
+}
+
+/**
  * The page's publication notice, out of the status lines the header now also carries: every
  * editor reports "All changes saved" as a status of its own (PLAN-UX Slice 8).
  */
@@ -732,6 +745,9 @@ describe("the new-scenario page", () => {
     expect(
       composed.getByText("1 binding to this shop's objects, made in the editor"),
     ).toBeVisible();
+    // A saved row's shape, without its Edit: nothing is editable before the first write.
+    expect(composed.getByRole("heading", { level: 3 })).toBeVisible();
+    expect(composed.queryByRole("button", { name: /^Edit/ })).toBeNull();
     expect(screen.getByRole("button", { name: "read-required-document" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -1136,10 +1152,12 @@ describe("scenario editor", () => {
 
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await addBlock(user, "Objectives", "Add objective block", READ_BLOCK_ID);
+    await openRow(user, "read-required-document");
 
     const picker = screen.getByLabelText("doc_ref of read-required-document");
     expect(within(picker).getByRole("option", { name: /Address-change policy/ })).toBeVisible();
     await user.selectOptions(picker, "policy:address-change");
+    await saveRow(user, "read-required-document");
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
@@ -1159,6 +1177,7 @@ describe("scenario editor", () => {
 
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await addBlock(user, "Objectives", "Add objective block", READ_BLOCK_ID);
+    await openRow(user, "read-required-document");
 
     // The template declares a `severity` parameter; the instance's own field resolves it.
     expect(screen.queryByLabelText("severity of read-required-document")).toBeNull();
@@ -1171,6 +1190,7 @@ describe("scenario editor", () => {
 
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await addBlock(user, "Mutations", "Add mutation block", MUTATION_BLOCK_ID);
+    await openRow(user, "concurrent-entity-mutation");
 
     const timing = screen.getByLabelText("timing of concurrent-entity-mutation");
     // The template's default is what a new binding starts at.
@@ -1185,10 +1205,12 @@ describe("scenario editor", () => {
 
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await addBlock(user, "Objectives", "Add objective block", READ_BLOCK_ID);
+    await openRow(user, "read-required-document");
     await user.selectOptions(
       screen.getByLabelText("doc_ref of read-required-document"),
       "policy:address-change",
     );
+    await saveRow(user, "read-required-document");
 
     const documents = screen.getByRole("region", { name: "Context documents" });
     expect(within(documents).getByText("read-check → objective 1")).toBeVisible();
@@ -1204,17 +1226,19 @@ describe("scenario editor", () => {
 
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await addBlock(user, "Objectives", "Add objective block", FORBIDDEN_BLOCK_ID);
+    await openRow(user, "forbidden-disclosure");
 
     const object = screen.getByLabelText("data_ref of forbidden-disclosure");
     const field = screen.getByLabelText("Field of data_ref of forbidden-disclosure");
     await user.selectOptions(object, `order:${ORDER_ID}`);
     await user.selectOptions(field, "shipping_address");
     await user.selectOptions(object, "");
+    expect(field).toHaveValue("");
+    await saveRow(user, "forbidden-disclosure");
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
     expect((savedPayloads[0].objectives as BoundObjectiveSchema[])[0].bindings).toEqual([]);
-    expect(field).toHaveValue("");
   });
 
   it("drops a field the newly bound object has no answer for", async () => {
@@ -1223,6 +1247,7 @@ describe("scenario editor", () => {
 
     await screen.findByRole("heading", { name: "Wrong shipping address" });
     await addBlock(user, "Objectives", "Add objective block", FORBIDDEN_BLOCK_ID);
+    await openRow(user, "forbidden-disclosure");
 
     const object = screen.getByLabelText("data_ref of forbidden-disclosure");
     await user.selectOptions(object, `order:${ORDER_ID}`);
@@ -1232,6 +1257,7 @@ describe("scenario editor", () => {
     );
     // A customer has no shipping_address, so the field cannot survive the switch.
     await user.selectOptions(object, `customer:${PROFILE_ID}`);
+    await saveRow(user, "forbidden-disclosure");
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => expect(savedPayloads).toHaveLength(1));
@@ -1241,6 +1267,7 @@ describe("scenario editor", () => {
   });
 
   it("keeps showing a bound value the picker's own list does not name", async () => {
+    const user = userEvent.setup();
     current = {
       ...EMPTY_CONTENT,
       mutations: [
@@ -1255,10 +1282,12 @@ describe("scenario editor", () => {
 
     await screen.findByRole("heading", { name: "Wrong shipping address" });
 
-    // The list offers turns 2 and 3; a draft holding turn 5 must not read as unbound.
-    expect(await screen.findByLabelText("timing of order-moves-under-the-arm")).toHaveValue(
-      "at_turn:5",
-    );
+    // The list offers turns 2 and 3; a draft holding turn 5 must not read as unbound — on the
+    // closed row, or in the open one.
+    const mutations = screen.getByRole("region", { name: "Mutations" });
+    expect(await within(mutations).findByText("at_turn:5")).toBeVisible();
+    await openRow(user, "order-moves-under-the-arm");
+    expect(screen.getByLabelText("timing of order-moves-under-the-arm")).toHaveValue("at_turn:5");
   });
 
   it("publishes the saved draft and says which version it froze", async () => {
@@ -1322,7 +1351,7 @@ describe("scenario editor", () => {
 /** The card's title, which reads how far into the lab's cap its collection is. */
 function capOf(card: string): string {
   const region = screen.getByRole("region", { name: card });
-  return within(region).getByRole("heading").textContent ?? "";
+  return within(region).getByRole("heading", { level: 2 }).textContent ?? "";
 }
 
 const OBJECTIVES_CAP = "a scenario composes at most 24 objectives";
@@ -1665,5 +1694,115 @@ describe("the scenario editor's rows", () => {
       expectFieldRow(within(completion).getByLabelText(label), label);
     }
     expectCardOnRows(completion);
+  });
+});
+
+/**
+ * A scenario's composed objectives and mutations are lists on `EntryCard` (PLAN-UX Slice 33):
+ * a row reads its bindings back, opens them on field rows in place, and writes them — and an
+ * objective's severity — through the same builder the template picker composes with.
+ */
+describe("a scenario's composed blocks", () => {
+  const READ_OBJECTIVE = {
+    id: "read-required-document",
+    block_id: READ_BLOCK_ID,
+    severity: "required" as const,
+    bindings: [{ parameter: "doc_ref", value: "policy:address-change" }],
+  };
+  const SECOND_OBJECTIVE = { ...READ_OBJECTIVE, id: "read-required-document-2", bindings: [] };
+
+  async function openEditor() {
+    renderAt(`/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}`);
+    await screen.findByRole("heading", { name: "Wrong shipping address" });
+    return within(screen.getByRole("region", { name: "Objectives" }));
+  }
+
+  it("reads a row's bindings back and opens them on field rows in place", async () => {
+    const user = userEvent.setup();
+    current = { ...EMPTY_CONTENT, objectives: [READ_OBJECTIVE] };
+    const objectives = await openEditor();
+
+    // Closed, the binding is read as the choice it names, not offered as a picker.
+    expect(await objectives.findByText(/^Address-change policy/)).toBeVisible();
+    expect(objectives.getByText("Required")).toBeVisible();
+    expect(screen.queryByLabelText("doc_ref of read-required-document")).toBeNull();
+
+    const open = within(await openRow(user, "read-required-document"));
+    const binding = open.getByLabelText("doc_ref of read-required-document");
+    expect(binding).toHaveValue("policy:address-change");
+    expectFieldRow(binding, "doc_ref");
+    expectFieldRow(open.getByLabelText("Severity of read-required-document"), "Severity");
+    // The arrows and the Remove wait for Save or Cancel.
+    expect(objectives.queryByRole("button", { name: "Remove read-required-document" })).toBeNull();
+  });
+
+  it("saves an open row with exactly what composing the same template writes for the same answers", async () => {
+    const user = userEvent.setup();
+    current = { ...EMPTY_CONTENT, objectives: [READ_OBJECTIVE] };
+    await openEditor();
+    await addBlock(user, "Objectives", "Add objective block", READ_BLOCK_ID);
+
+    // The composed one starts unbound; the saved one is unbound by hand and saved.
+    const open = within(await openRow(user, "read-required-document"));
+    await user.selectOptions(open.getByLabelText("doc_ref of read-required-document"), "");
+    await saveRow(user, "read-required-document");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const [edited, composed] = savedPayloads[0].objectives as BoundObjectiveSchema[];
+    expect(edited.id).toBe("read-required-document");
+    expect(composed.id).toBe("read-required-document-2");
+    expect({ ...edited, id: null }).toEqual({ ...composed, id: null });
+  });
+
+  it("writes nothing on Cancel, and nothing typed in an open row reaches Save draft", async () => {
+    const user = userEvent.setup();
+    current = { ...EMPTY_CONTENT, objectives: [READ_OBJECTIVE] };
+    await openEditor();
+
+    await user.type(screen.getByLabelText("Hidden facts"), "Maya says nothing unprompted.");
+    const open = within(await openRow(user, "read-required-document"));
+    await user.selectOptions(open.getByLabelText("Severity of read-required-document"), "expected");
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect((savedPayloads[0].objectives as BoundObjectiveSchema[])[0].severity).toBe("required");
+
+    await user.click(screen.getByRole("button", { name: "Cancel editing read-required-document" }));
+    const objectives = within(screen.getByRole("region", { name: "Objectives" }));
+    expect(objectives.getByText("Required")).toBeVisible();
+    expect(objectives.queryByText("Expected")).toBeNull();
+  });
+
+  it("holds one open row per list, and every other Edit on it says why it is disabled", async () => {
+    const user = userEvent.setup();
+    current = {
+      ...EMPTY_CONTENT,
+      objectives: [READ_OBJECTIVE, SECOND_OBJECTIVE],
+      mutations: [{ id: "order-moves", block_id: MUTATION_BLOCK_ID, bindings: [] }],
+    };
+    const objectives = await openEditor();
+
+    await openRow(user, "read-required-document");
+
+    const sibling = objectives.getByRole("button", { name: "Edit read-required-document-2" });
+    expect(sibling).toBeDisabled();
+    expect(sibling).toHaveAccessibleDescription(
+      "Editing read-required-document. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.",
+    );
+    // One per list: the mutations keep their own open row.
+    expect(screen.getByRole("button", { name: "Edit order-moves" })).toBeEnabled();
+  });
+
+  it("removes a composed block only on the second press", async () => {
+    const user = userEvent.setup();
+    current = { ...EMPTY_CONTENT, objectives: [READ_OBJECTIVE] };
+    const objectives = await openEditor();
+
+    await user.click(objectives.getByRole("button", { name: "Remove read-required-document" }));
+    const confirm = objectives.getByRole("group", { name: /^Remove / });
+    expect(confirm).toHaveFocus();
+    await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(objectives.getByRole("button", { name: "Remove read-required-document" })).toHaveFocus();
   });
 });

@@ -557,3 +557,32 @@ export const TONE_NAME_RULE =
 
 export const TONE_DEFAULT_REMOVAL_RULE =
   "The shop default cannot be deleted — point the default elsewhere first.";
+
+/**
+ * An order event's two refusals, said by the add form below *Order events* and by an open row's
+ * Save alike (`orderEventRefusal` in `lib/orders.ts`). `OrderEvent.__post_init__` in
+ * `domain/order_fixture.py` refuses a summary left empty — `require_text(self.summary, "order
+ * event summary")` — and an instant that is not a UTC timestamp. The workspace's words, not the
+ * lab's: neither is a gate finding, both are a 422 the save would otherwise meet.
+ */
+export const ORDER_EVENT_SUMMARY_RULE =
+  "An event needs a summary: it is the history the order tools hand an agent.";
+
+export const ORDER_EVENT_TIME_RULE = "An event needs the moment it occurred.";
+
+/**
+ * Mirrors `MAX_ORDER_EVENTS` in `domain/order_fixture.py`, so the add form stops where the lab
+ * does, with the sentence `OrderFixturePayload` refuses the next one in.
+ */
+export const MAX_ORDER_EVENTS = 40;
+
+export const ORDER_EVENTS_CAP_RULE = `an order can carry at most ${MAX_ORDER_EVENTS} events`;
+
+/**
+ * An address's refusal, said by the add form below *Address book* and by an open row's Save
+ * alike. `AddressEntry.__post_init__` in `domain/customer_profile.py` refuses a label,
+ * recipient, first line, postal code or city that is empty or only padding (`require_label`);
+ * the second line and the region are optional and stored as none when left empty.
+ */
+export const ADDRESS_FIELDS_RULE =
+  "An address needs its label, recipient, street, postal code and city; only the second street line and the region may be left empty.";

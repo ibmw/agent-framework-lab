@@ -149,6 +149,74 @@ export function uniqueParameterName(base: string, taken: readonly string[]): str
 }
 
 /**
+ * A parameter's authored fields — everything but its name, which is derived once when it is
+ * added and keys the entry from then on — as the add form and an open row both hold them.
+ */
+export interface ParameterFields {
+  kind: BlockParameterKind;
+  description: string;
+  required: boolean;
+  default: string | null;
+}
+
+export function parameterFields(parameter: BlockParameterSchema): ParameterFields {
+  return {
+    kind: parameter.kind,
+    description: parameter.description,
+    required: parameter.required,
+    default: parameter.default,
+  };
+}
+
+/**
+ * What a parameter's fields become when its kind moves.
+ *
+ * A default the new kind cannot carry goes: otherwise the form would keep showing a default the
+ * backend refuses with `reference_parameter_with_default`, and offer no way to clear it. And an
+ * optional parameter with no default is a publish-gate error, so a kind that takes the default
+ * away makes the parameter required again.
+ */
+export function retypedFields(fields: ParameterFields, kind: BlockParameterKind): ParameterFields {
+  const literal = acceptsDefault(kind);
+  return {
+    ...fields,
+    kind,
+    default: literal ? fields.default : null,
+    required: literal ? fields.required : true,
+  };
+}
+
+/**
+ * The one function that turns a parameter's fields into the entry the template stores, called
+ * by the add form (`addedParameter`) and by an open row's Save alike, so the two paths cannot
+ * write different payloads. `shop_bound` is the server's echo of the kind and is derived here
+ * rather than carried.
+ *
+ * The kind's rules (`retypedFields`) hold only where the kind is being chosen: on a new
+ * parameter, and on a saved one whose kind moved. `saved` is the entry an open row was opened
+ * on; while its kind is unchanged the fields are written as they stand, so a description edit
+ * never rewrites what the draft already held — a draft authored through the API keeps its own
+ * `required` and `default` until the author moves the kind, and the gate says what it thinks of
+ * them meanwhile.
+ */
+export function parameterEntry(
+  name: string,
+  fields: ParameterFields,
+  saved?: BlockParameterSchema,
+): BlockParameterSchema {
+  const held =
+    saved !== undefined && saved.kind === fields.kind ? fields : retypedFields(fields, fields.kind);
+  return {
+    name,
+    kind: held.kind,
+    description: held.description,
+    required: held.required,
+    default: held.default,
+    shop_bound: bindsShopObject(held.kind),
+  };
+}
+
+/**
  * One more parameter on a list of them.
  *
  * The list rather than the payload, because the create page holds its parameters before
@@ -156,6 +224,9 @@ export function uniqueParameterName(base: string, taken: readonly string[]): str
  * `POST` that makes the block carries a name and nothing else (PLAN-UX Slice 13). The
  * payload-shaped helper below is this one with the payload rebuilt around it, so the create
  * page and the editor cannot come to disagree about what adding a parameter means.
+ *
+ * The add form asks the label and the kind; a new parameter is required, undescribed and
+ * undefaulted until its row is opened.
  */
 export function addedParameter(
   parameters: readonly BlockParameterSchema[],
@@ -164,17 +235,13 @@ export function addedParameter(
 ): BlockParameterSchema[] {
   return [
     ...parameters,
-    {
-      name: uniqueParameterName(
+    parameterEntry(
+      uniqueParameterName(
         toIdentifier(name),
         parameters.map((entry) => entry.name),
       ),
-      kind,
-      description: "",
-      required: true,
-      default: null,
-      shop_bound: bindsShopObject(kind),
-    },
+      { kind, description: "", required: true, default: null },
+    ),
   ];
 }
 
@@ -193,45 +260,16 @@ export function addParameter<PayloadT extends BlockPayload>(
   return { ...payload, parameters: addedParameter(payload.parameters, name, kind) };
 }
 
-/**
- * Retyping a parameter drops a default the new kind cannot carry.
- *
- * Without this the editor would keep showing a default the backend refuses with
- * `reference_parameter_with_default`, and the author would read a finding about a value the
- * form no longer offers a way to clear.
- */
-export function retypeParameter<PayloadT extends BlockPayload>(
+/** An open row's Save: the named parameter replaced where it stands, through `parameterEntry`. */
+export function replaceParameter<PayloadT extends BlockPayload>(
   payload: PayloadT,
   name: string,
-  kind: BlockParameterKind,
+  fields: ParameterFields,
 ): PayloadT {
   return {
     ...payload,
     parameters: payload.parameters.map((entry) =>
-      entry.name === name
-        ? {
-            ...entry,
-            kind,
-            shop_bound: bindsShopObject(kind),
-            default: acceptsDefault(kind) ? entry.default : null,
-            // An optional parameter with no default is a publish-gate error, and the
-            // default is what just went away.
-            required: acceptsDefault(kind) ? entry.required : true,
-          }
-        : entry,
-    ),
-  };
-}
-
-export function updateParameter<PayloadT extends BlockPayload>(
-  payload: PayloadT,
-  name: string,
-  next: Partial<BlockParameterSchema>,
-): PayloadT {
-  return {
-    ...payload,
-    parameters: payload.parameters.map((entry) =>
-      entry.name === name ? { ...entry, ...next } : entry,
+      entry.name === name ? parameterEntry(name, fields, entry) : entry,
     ),
   };
 }

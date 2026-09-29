@@ -2813,7 +2813,13 @@ describe("editing a saved entry in place", () => {
     // before, and two entries sharing a reference are one key in the change summary.
     await user.type(card.getByLabelText("Reference"), "media/alpine-charcoal.jpg");
     await user.type(card.getByLabelText("Alt text"), "Charcoal again");
-    await user.click(card.getByRole("button", { name: "Add media" }));
+    // Add is refused by the field's own line, as the open row's Save is (PLAN-UX Slice 33).
+    const add = card.getByRole("button", { name: "Add media" });
+    expectRefused(add, /media\/alpine-charcoal\.jpg is already a media reference of this product/);
+    expect(
+      card.getAllByText(/media\/alpine-charcoal\.jpg is already a media reference/),
+    ).toHaveLength(1);
+    await user.click(add);
 
     expect(card.getByLabelText("Reference")).toBeInvalid();
     expect(card.getAllByRole("listitem")).toHaveLength(2);

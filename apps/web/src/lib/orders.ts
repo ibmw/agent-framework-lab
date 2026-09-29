@@ -2,6 +2,7 @@ import type {
   FulfilmentStatus,
   OrderContentSchema,
   OrderEventKind,
+  OrderEventSchema,
   PaymentStatus,
   ReplaceOrderRequest,
 } from "@agent-lab/contracts";
@@ -12,6 +13,7 @@ import {
   ORDER_EVENT_KIND,
   PAYMENT_STATUS,
 } from "./enumLabels";
+import { ORDER_EVENT_SUMMARY_RULE, ORDER_EVENT_TIME_RULE } from "./fieldRules";
 
 /**
  * Status is never carried by colour alone: every pill pairs its tone with a written label,
@@ -214,4 +216,71 @@ export function toLocalInput(instant: string): string {
 export function fromLocalInput(value: string): string | null {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * An event's authored fields, as the add form below *Order events* and an open row both hold
+ * them: the kind, the instant as the `datetime-local` control spells it, and the summary.
+ */
+export interface OrderEventFields {
+  kind: OrderEventKind;
+  occurredAt: string;
+  summary: string;
+}
+
+export function orderEventFields(event: OrderEventSchema): OrderEventFields {
+  return { kind: event.kind, occurredAt: toLocalInput(event.occurred_at), summary: event.summary };
+}
+
+/**
+ * The one function that turns an event's fields into the entry the order stores, called by the
+ * add form and by an open row's Save alike, so the two paths cannot write different payloads.
+ *
+ * The summary is stored trimmed: `OrderEvent` refuses a summary with surrounding whitespace
+ * (`require_text` in `domain/content.py`), and a trailing newline in a text area is not
+ * something an author means. Only call it once `orderEventRefusal` has nothing to say and no
+ * `required` field is empty.
+ *
+ * `kept` is the instant the time field opened on — the entry's own, for an open row; the
+ * order's placement, for the add form. The control spells an instant to the minute, so a time
+ * the author left alone keeps that instant rather than losing its seconds to the round trip:
+ * on an open row that would show in the change summary as an edit nobody made, and on the add
+ * form it would put a new event seconds before the placement it opened on
+ * (`event_precedes_placement`).
+ */
+export function orderEventEntry(
+  id: string,
+  fields: OrderEventFields,
+  kept?: string,
+): OrderEventSchema {
+  const untouched = kept !== undefined && toLocalInput(kept) === fields.occurredAt;
+  return {
+    id,
+    kind: fields.kind,
+    occurred_at: untouched ? kept : (fromLocalInput(fields.occurredAt) ?? ""),
+    summary: fields.summary.trim(),
+  };
+}
+
+/**
+ * Why the lab would refuse these fields when no field says so, or null — one answer for the add
+ * form and the open row, so a refusal one path makes the other makes too.
+ *
+ * A field left empty is not here: both controls are `required`, and the browser says that on
+ * the field (ADR 0063, *Deliberately not here*). What `required` lets through is a summary of
+ * nothing but spaces, which `require_text` then refuses, and a time that does not parse.
+ */
+export function orderEventRefusal(fields: OrderEventFields): string | null {
+  if (fields.summary !== "" && fields.summary.trim() === "") {
+    return ORDER_EVENT_SUMMARY_RULE;
+  }
+  if (fields.occurredAt !== "" && fromLocalInput(fields.occurredAt) === null) {
+    return ORDER_EVENT_TIME_RULE;
+  }
+  return null;
+}
+
+/** A `required` field left empty: the field's own to say, and the submit handler's to hold. */
+export function orderEventIncomplete(fields: OrderEventFields): boolean {
+  return fields.summary === "" || fields.occurredAt === "";
 }

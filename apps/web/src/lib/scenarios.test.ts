@@ -9,10 +9,13 @@ import { describe, expect, it } from "vitest";
 import {
   addObjective,
   bindableParameters,
+  boundMutation,
+  boundObjective,
   dataFieldsFor,
   documentKey,
   joinDataReference,
   moveObjective,
+  objectiveFields,
   parseTurnCap,
   readChecksByDocument,
   referenceChoices,
@@ -20,7 +23,6 @@ import {
   splitDataReference,
   toggleContextDocument,
   toScenarioRequest,
-  withBinding,
   withCurrentChoice,
 } from "./scenarios";
 
@@ -137,20 +139,29 @@ describe("binding a template", () => {
       severity: "required",
       bindings: [{ parameter: "doc_ref", value: "policy:address-change" }],
     };
+    const fields = objectiveFields(objective);
 
-    expect(withBinding(objective, "doc_ref", "").bindings).toEqual([]);
+    expect(
+      boundObjective(objective.id, objective.block_id, {
+        ...fields,
+        bindings: { ...fields.bindings, doc_ref: "" },
+      }).bindings,
+    ).toEqual([]);
   });
 
   it("keeps bindings ordered by parameter, matching what the lab stores", () => {
-    const objective: BoundObjectiveSchema = {
-      id: "read-the-policy",
-      block_id: READ_TEMPLATE.block_id,
-      severity: "required",
-      bindings: [{ parameter: "z_last", value: "x" }],
-    };
+    expect(
+      boundMutation("m", READ_TEMPLATE.block_id, {
+        bindings: { z_last: "x", a_first: "y" },
+      }).bindings.map((entry) => entry.parameter),
+    ).toEqual(["a_first", "z_last"]);
+  });
 
-    expect(withBinding(objective, "a_first", "y").bindings.map((entry) => entry.parameter)).toEqual(
-      ["a_first", "z_last"],
+  it("composes exactly what an open row saving the same answers writes", () => {
+    const [composed] = addObjective(content(), READ_TEMPLATE).objectives;
+
+    expect(boundObjective(composed.id, composed.block_id, objectiveFields(composed))).toEqual(
+      composed,
     );
   });
 });

@@ -4,6 +4,7 @@ import {
   createCustomer,
   createOrder,
   createShop,
+  editRow,
   saveDraft,
 } from "./support/authoring";
 import { expect, test } from "./support/e2e";
@@ -126,10 +127,12 @@ test("an author builds a paid order shipping to the customer's stale address", a
   // Editing the address-book entry never rewrites the order that froze a copy of it.
   await openSection(page, "Customers", "Customers");
   await page.getByRole("link", { name: "Maya Laurent" }).click();
-  const bordeaux = card(page, "Address book")
-    .getByRole("listitem")
-    .filter({ has: page.getByLabel("Label for bordeaux-previous-flat") });
-  await bordeaux.getByLabel("Street", { exact: true }).fill("1 rue Inconnue");
+  // A saved entry opens where it stands, and its Save writes the correction into the draft.
+  const book = card(page, "Address book");
+  await editRow(book, "Bordeaux previous flat", async (row) => {
+    await row.getByLabel("Street", { exact: true }).fill("1 rue Inconnue");
+  });
+  await expect(book.getByText(/1 rue Inconnue/)).toBeVisible();
   await saveDraft(page);
 
   await openSection(page, "Orders", "Orders");

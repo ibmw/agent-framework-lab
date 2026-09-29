@@ -97,7 +97,7 @@ import {
   variantsChoosing,
 } from "../lib/shop";
 import {
-  accentButtonClasses,
+  addFormClasses,
   destructiveOutlineButtonClasses,
   destructiveSubtleButtonClasses,
   editorColumnsClasses,
@@ -880,7 +880,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
       </ul>
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
       <RemovalNotice removal={removal} />
-      <form className="grid gap-2" onSubmit={add}>
+      <form className={addFormClasses} onSubmit={add}>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className={fieldLabelClasses}>
             Option name
@@ -1314,7 +1314,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
       <EntryEditNotice id={editNoticeId} label={editor.open?.label ?? null} />
       <RemovalNotice removal={removal} />
 
-      <form className="grid gap-2 sm:grid-cols-2" onSubmit={add}>
+      <form className={`${addFormClasses} sm:grid-cols-2`} onSubmit={add}>
         {product.options.map((option) => (
           <div key={option.key} className={fieldLabelClasses}>
             {/* An explicit association keeps the accessible name free of the option text. */}
@@ -1385,10 +1385,10 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
           normalize={(value) => value.toUpperCase()}
           onChange={setSku}
         />
-        <button className={`${accentButtonClasses} self-end`} type="submit">
+        <PrimaryAction variant="accent" className="self-end justify-self-start" type="submit">
           <ButtonIcon verb="create" />
           Add variant
-        </button>
+        </PrimaryAction>
       </form>
     </Card>
   );
@@ -1455,6 +1455,7 @@ function MediaCard({ product, onChange }: EditorProps) {
   const notice = useId();
   const openCollisionId = useId();
   const openEmptyId = useId();
+  const addCollisionId = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
@@ -1570,9 +1571,11 @@ function MediaCard({ product, onChange }: EditorProps) {
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
       <RemovalNotice removal={removal} />
       <form
-        className="grid gap-2 sm:grid-cols-[2fr_2fr_auto]"
+        className={`${addFormClasses} sm:grid-cols-[2fr_2fr_auto]`}
         onSubmit={(event) => {
           event.preventDefault();
+          // The button refuses the press; a submission that reaches the form another way is
+          // refused here too.
           if (addCollision) {
             return;
           }
@@ -1580,11 +1583,24 @@ function MediaCard({ product, onChange }: EditorProps) {
           setMedia({ reference: "", altText: "" });
         }}
       >
-        <MediaFieldset value={media} onChange={setMedia} collision={addCollision} />
-        <button className={`${accentButtonClasses} self-end`} type="submit">
+        <MediaFieldset
+          value={media}
+          onChange={setMedia}
+          collision={addCollision}
+          collisionId={addCollisionId}
+        />
+        {/* The collision is said once, on the field, and Add points at that line rather than
+            repeating it (*Two refusals with one cause are one sentence*) — as the open row's
+            Save does. */}
+        <PrimaryAction
+          variant="accent"
+          className="self-end justify-self-start"
+          type="submit"
+          refusal={addCollision === undefined ? null : { id: addCollisionId, reason: addCollision }}
+        >
           <ButtonIcon verb="create" />
           Add media
-        </button>
+        </PrimaryAction>
       </form>
     </Card>
   );
@@ -1803,7 +1819,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
       </ul>
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
       <RemovalNotice removal={removal} />
-      <form className="grid gap-2 sm:grid-cols-3" onSubmit={add}>
+      <form className={`${addFormClasses} sm:grid-cols-3`} onSubmit={add}>
         <AttributeFieldset
           value={fields}
           onChange={setFields}
@@ -1823,10 +1839,10 @@ function AttributesCard({ product, onChange }: EditorProps) {
             />
           }
         />
-        <button className={`${accentButtonClasses} self-end`} type="submit">
+        <PrimaryAction variant="accent" className="self-end justify-self-start" type="submit">
           <ButtonIcon verb="create" />
           Add attribute
-        </button>
+        </PrimaryAction>
       </form>
     </Card>
   );
@@ -1957,7 +1973,7 @@ function ReviewsCard({ product, onChange }: EditorProps) {
       <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
       <RemovalNotice removal={removal} />
       <form
-        className="grid gap-2 sm:grid-cols-4"
+        className={`${addFormClasses} sm:grid-cols-4`}
         onSubmit={(event) => {
           event.preventDefault();
           const id = uniqueId(
@@ -1969,10 +1985,10 @@ function ReviewsCard({ product, onChange }: EditorProps) {
         }}
       >
         <ReviewFieldset value={fields} onChange={setFields} />
-        <button className={`${accentButtonClasses} self-end`} type="submit">
+        <PrimaryAction variant="accent" className="self-end justify-self-start" type="submit">
           <ButtonIcon verb="create" />
           Add review
-        </button>
+        </PrimaryAction>
       </form>
     </Card>
   );

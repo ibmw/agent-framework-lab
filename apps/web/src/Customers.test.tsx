@@ -14,7 +14,12 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { toProfilePayload } from "./api/customerProfiles";
-import { CUSTOMER_EMAIL_RULE, CUSTOMER_NAME_RULE, CUSTOMER_SINCE_RULE } from "./lib/fieldRules";
+import {
+  ADDRESS_FIELDS_RULE,
+  CUSTOMER_EMAIL_RULE,
+  CUSTOMER_NAME_RULE,
+  CUSTOMER_SINCE_RULE,
+} from "./lib/fieldRules";
 import { todayInput } from "./lib/orders";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
@@ -976,11 +981,16 @@ describe("typed controls on the customer editor", () => {
   });
 
   it("reads a saved address row's country back as the country it names", async () => {
+    const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
 
     await screen.findByRole("heading", { name: "Maya Laurent" });
     const book = within(screen.getByRole("region", { name: "Address book" }));
-    const [row] = book.getAllByLabelText("Country");
+    // Closed, the row reads the country by its name…
+    expect(book.getByText(/69005 Lyon · France$/)).toBeVisible();
+    // …and open, the field holds the code and reads it back as the country.
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    const row = within(book.getByRole("form", { name: "Edit Home" })).getByLabelText("Country");
     expect(row).toHaveValue("FR");
     expect(row).toHaveAccessibleDescription(/France/);
   });
@@ -1252,7 +1262,7 @@ describe("removing is deliberate", () => {
     // The confirm takes the row's place: the row's own fields are gone, the question stands
     // there instead, and it holds focus so the question and its consequence are read out.
     const confirm = confirmNamed("Remove the address “Home”?");
-    expect(screen.queryByLabelText("Label for home")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit Home" })).toBeNull();
     expect(confirm).toHaveFocus();
     expect(confirm).toHaveAccessibleDescription(
       /^It is the profile's last address, and a profile with none is refused at publication\. An order shipped to it keeps its frozen copy, and its findings warn that the entry can no longer be reselected\./,
@@ -1261,7 +1271,7 @@ describe("removing is deliberate", () => {
     // Walking back puts the row back, focus on the Remove that asked, and writes nothing.
     await user.click(within(confirm).getByRole("button", { name: "Keep it" }));
     expect(screen.queryByRole("group", { name: "Remove the address “Home”?" })).toBeNull();
-    expect(screen.getByLabelText("Label for home")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit Home" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Remove Home" })).toHaveFocus();
     expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
 
@@ -1277,7 +1287,7 @@ describe("removing is deliberate", () => {
         name: "Remove it",
       }),
     );
-    expect(screen.queryByLabelText("Label for home")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit Home" })).toBeNull();
     // The row is gone, so focus is left on the line that says so. Focus is what announces it:
     // it is not also a live region, which would read it twice.
     const said = screen.getByText("Removed the address “Home” from the draft.");
@@ -1298,7 +1308,7 @@ describe("removing is deliberate", () => {
     await user.click(screen.getByRole("button", { name: "Remove Home" }));
 
     expect(screen.queryByRole("group", { name: /Remove the address/ })).toBeNull();
-    expect(screen.queryByLabelText("Label for home")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit Home" })).toBeNull();
     expect(screen.getByText("Removed the address “Home” from the draft.")).toHaveFocus();
   });
 
@@ -1819,5 +1829,172 @@ describe("the customer editor's side panel", () => {
       "What publishing freezes",
     ]);
     expect(panelFields(panel)).toEqual([]);
+  });
+});
+
+/**
+ * *Address book* is a list on `EntryCard` (PLAN-UX Slice 33): an address opens where it stands,
+ * the default chip and *Make default* stay on the row, and a new one arrives through the add
+ * form below the list — both paths through one builder.
+ */
+describe("the address book", () => {
+  const OFFICE = {
+    ...PROFILE_CONTENT.addresses[0],
+    id: "office",
+    label: "Office",
+    line1: "12 quai Perrache",
+    postal_code: "69002",
+    is_default: false,
+  };
+
+  async function openBook() {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+    await screen.findByRole("heading", { name: "Maya Laurent" });
+    return within(screen.getByRole("region", { name: "Address book" }));
+  }
+
+  it("reads an address back on its row and opens every field it stores on Edit", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+
+    expect(book.getByText("Maya Laurent · 18 rue des Écoles · 69005 Lyon · France")).toBeVisible();
+    expect(book.getByText("Default")).toBeVisible();
+    expect(book.queryByRole("form", { name: "Edit Home" })).toBeNull();
+
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+
+    const open = within(book.getByRole("form", { name: "Edit Home" }));
+    expect(open.getByLabelText("Label")).toHaveValue("Home");
+    expect(open.getByLabelText("Recipient")).toHaveValue("Maya Laurent");
+    expect(open.getByLabelText("Street")).toHaveValue("18 rue des Écoles");
+    expect(open.getByLabelText("Street line 2 (optional)")).toHaveValue("");
+    expect(open.getByLabelText("Postal code")).toHaveValue("69005");
+    expect(open.getByLabelText("City")).toHaveValue("Lyon");
+    expect(open.getByLabelText("Region (optional)")).toHaveValue("");
+    // The identifier stays on the header line, and so does the default chip.
+    expect(book.getByText("home", { selector: "code" })).toBeVisible();
+    expect(book.getByText("Default")).toBeVisible();
+    expect(book.queryByRole("button", { name: "Remove Home" })).toBeNull();
+  });
+
+  it("saves a corrected address with the payload the add form writes, and keeps the default where it was", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+    const answers = {
+      label: " Office ",
+      street: "12 quai Perrache ",
+      postal: "69002",
+      city: "Lyon",
+    };
+
+    const add = within(screen.getByRole("group", { name: "Add an address" }));
+    await user.type(add.getByLabelText("Label"), answers.label);
+    await user.type(add.getByLabelText("Street"), answers.street);
+    await user.type(add.getByLabelText("Postal code"), answers.postal);
+    await user.type(add.getByLabelText("City"), answers.city);
+    await user.click(add.getByRole("button", { name: "Add address" }));
+
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    const open = within(book.getByRole("form", { name: "Edit Home" }));
+    for (const [label, value] of [
+      ["Label", answers.label],
+      ["Street", answers.street],
+      ["Postal code", answers.postal],
+      ["City", answers.city],
+    ] as const) {
+      await user.clear(open.getByLabelText(label));
+      await user.type(open.getByLabelText(label), value);
+    }
+    await user.click(open.getByRole("button", { name: "Save Home" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const [edited, added] = savedPayloads[0].addresses as Array<Record<string, unknown>>;
+    expect(edited.id).toBe("home");
+    expect(added.id).toBe("office");
+    // The only differences are the id and which one is the default — the row's own answer.
+    expect(edited.is_default).toBe(true);
+    expect(added.is_default).toBe(false);
+    expect({ ...edited, id: null, is_default: null }).toEqual({
+      ...added,
+      id: null,
+      is_default: null,
+    });
+    expect(added).toMatchObject({ label: "Office", line1: "12 quai Perrache", line2: null });
+  });
+
+  it("writes nothing on Cancel, and nothing typed in an open row reaches Save draft", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+
+    await user.type(screen.getByLabelText("Given name"), "h");
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    const open = within(book.getByRole("form", { name: "Edit Home" }));
+    await user.clear(open.getByLabelText("City"));
+    await user.type(open.getByLabelText("City"), "Villeurbanne");
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect((savedPayloads[0].addresses as Array<{ city: string }>)[0].city).toBe("Lyon");
+
+    await user.click(book.getByRole("button", { name: "Cancel editing Home" }));
+    expect(book.getByText(/69005 Lyon/)).toBeVisible();
+    expect(book.queryByText(/Villeurbanne/)).toBeNull();
+  });
+
+  it("holds one open row, and the other Edit says why it is disabled", async () => {
+    const user = userEvent.setup();
+    currentProfile = { ...PROFILE_CONTENT, addresses: [PROFILE_CONTENT.addresses[0], OFFICE] };
+    const book = await openBook();
+
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+
+    const sibling = book.getByRole("button", { name: "Edit Office" });
+    expect(sibling).toBeDisabled();
+    expect(sibling).toHaveAccessibleDescription(
+      "Editing Home. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.",
+    );
+    // *Make default* is on the closed row still.
+    expect(book.getByRole("button", { name: "Make Office the default address" })).toBeVisible();
+  });
+
+  it("refuses an open row's Save, and the add form, only for what `required` lets through", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    const open = within(book.getByRole("form", { name: "Edit Home" }));
+    const save = open.getByRole("button", { name: "Save Home" });
+    // Emptied, the field is `required` and says so itself; the row's Save does not.
+    await user.clear(open.getByLabelText("Recipient"));
+    expect(open.getByLabelText("Recipient")).toBeInvalid();
+    expectNotRefused(save);
+    // …and the browser stops the press, so the row stays open with nothing written.
+    await user.click(save);
+    expect(book.getByRole("form", { name: "Edit Home" })).toBeVisible();
+    await user.type(open.getByLabelText("Recipient"), "  ");
+    expectRefused(save, ADDRESS_FIELDS_RULE);
+    await user.click(save);
+    expect(book.getByRole("form", { name: "Edit Home" })).toBeVisible();
+
+    const add = within(screen.getByRole("group", { name: "Add an address" }));
+    const button = add.getByRole("button", { name: "Add address" });
+    // An empty field is its own `required` to say (ADR 0063): nothing typed refuses nothing.
+    expectNotRefused(button);
+    expect(add.getByLabelText("Street")).toBeRequired();
+    await user.click(button);
+    expect(book.queryByRole("button", { name: "Edit Office" })).toBeNull();
+    await user.type(add.getByLabelText("Label"), "Office");
+    await user.type(add.getByLabelText("Street"), "   ");
+    await user.type(add.getByLabelText("Postal code"), "69002");
+    await user.type(add.getByLabelText("City"), "Lyon");
+    expectRefused(button, ADDRESS_FIELDS_RULE);
+    await user.click(button);
+    await submitWithoutPressing(button);
+    expect(book.queryByRole("button", { name: "Edit Office" })).toBeNull();
+
+    await user.clear(add.getByLabelText("Street"));
+    await user.type(add.getByLabelText("Street"), "12 quai Perrache");
+    expectNotRefused(button);
   });
 });

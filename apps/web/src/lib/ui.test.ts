@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import themeSource from "../styles.css?raw";
 import { writeTimestampFormat } from "./preferences";
 import {
+  addFormClasses,
   type ButtonVerb,
   blockedButtonClasses,
   buttonIcon,
@@ -798,5 +799,59 @@ describe("how a timestamp is written", () => {
     expect(formatFixtureTimestamp(placed)).toBe(quoted);
     // And the preference does still reach the instants the lab's own clock wrote.
     expect(formatTimestamp(placed)).not.toBe(quoted);
+  });
+});
+
+/**
+ * The add form a list grows by (PLAN-UX Slice 33): *Tone of voice*'s, spelled once here and
+ * drawn by every list's add form rather than copied into each page that has one.
+ */
+const FORM_OPENING_ON_THE_RULE =
+  /<form\b(?:[^>{]|\{(?:[^{}]|\{[^{}]*\})*\})*?className=\{?["`][^"`]*\bborder-t border-admin-border pt-3\b/;
+
+describe("the add form", () => {
+  const consumers = Object.entries(sources).filter(
+    ([path]) => !path.includes(".test.") && path !== "./ui.ts",
+  );
+
+  it("opens on a rule, so the saved entries above it end where the blank form begins", () => {
+    expect(addFormClasses.split(" ").sort()).toEqual(
+      ["grid", "gap-2", "border-t", "border-admin-border", "pt-3"].sort(),
+    );
+  });
+
+  it("is declared nowhere else", () => {
+    expect(
+      consumers
+        .filter(([, source]) => /\bconst addFormClasses\b/.test(codeOf(source)))
+        .map(([path]) => path),
+    ).toEqual([]);
+  });
+
+  it("is spelled by hand on no form, and the lists' add forms draw with it", () => {
+    // A form that opens on the rule: a card's totals or a list may open on the same rule, and
+    // are not add forms.
+    const spelled = consumers
+      .filter(([, source]) =>
+        // A string or a template literal, wherever the attribute sits in the tag: the tag runs
+        // to the first `>` outside an attribute's braces (two levels deep, as an arrow handler's).
+        FORM_OPENING_ON_THE_RULE.test(codeOf(source)),
+      )
+      .map(([path]) => path);
+    expect(spelled).toEqual([]);
+    // The sweep sees the spellings it is for, and not a child of a form.
+    for (const form of [
+      '<form className="grid gap-2 border-t border-admin-border pt-3">',
+      "<form onSubmit={(event) => save(event)} className={`grid border-t border-admin-border pt-3`}>",
+    ]) {
+      expect(FORM_OPENING_ON_THE_RULE.test(form), form).toBe(true);
+    }
+    expect(
+      FORM_OPENING_ON_THE_RULE.test(
+        '<form onSubmit={add}><div className="grid gap-2 border-t border-admin-border pt-3">',
+      ),
+    ).toBe(false);
+    const drawing = consumers.filter(([, source]) => /\baddFormClasses\b/.test(codeOf(source)));
+    expect(drawing.length).toBeGreaterThan(5);
   });
 });

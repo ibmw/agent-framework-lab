@@ -6,14 +6,17 @@ import agentCapabilities from "../../../../apps/api/src/capability_lab/applicati
 import judgeCapabilities from "../../../../apps/api/src/capability_lab/application/judge_capabilities.py?raw";
 import blocksDomain from "../../../../apps/api/src/capability_lab/domain/blocks.py?raw";
 import judgeDomain from "../../../../apps/api/src/capability_lab/domain/judge.py?raw";
+import orderDomain from "../../../../apps/api/src/capability_lab/domain/order_fixture.py?raw";
 import scenarioDomain from "../../../../apps/api/src/capability_lab/domain/scenario.py?raw";
 import shopDomain from "../../../../apps/api/src/capability_lab/domain/shop.py?raw";
 import * as fieldRules from "./fieldRules";
 import {
   CONTEXT_DOCUMENTS_CAP_RULE,
   capCount,
+  MAX_ORDER_EVENTS,
   MUTATIONS_CAP_RULE,
   OBJECTIVES_CAP_RULE,
+  ORDER_EVENTS_CAP_RULE,
   optionalParameterWithoutDefaultRule,
   productWithoutVariantRule,
   RUBRIC_EMPTY_RULE,
@@ -289,6 +292,18 @@ describe("the scenario, block and judge sentences, as the editors repeat them", 
       });
       expect(rule).toBe(rendered);
     }
+  });
+
+  it("counts an order's events to the cap `domain/order_fixture.py` refuses, in its words", () => {
+    expect(MAX_ORDER_EVENTS).toBe(pythonConstant(orderDomain, "MAX_ORDER_EVENTS"));
+    const match =
+      /raise OrderFixtureConfigurationError\(\s*f"([^"]*\{MAX_ORDER_EVENTS\}[^"]*)"/.exec(
+        joinedLiterals(orderDomain),
+      );
+    expect(match, "no raise names MAX_ORDER_EVENTS").not.toBeNull();
+    expect(ORDER_EVENTS_CAP_RULE).toBe(
+      render(match?.[1] ?? "", { MAX_ORDER_EVENTS: String(MAX_ORDER_EVENTS) }),
+    );
   });
 
   it("spells an optional parameter with nothing to fall back on as `_parameter_issues` does", () => {

@@ -4,6 +4,7 @@ import type {
   BoundMutationSchema,
   BoundObjectiveSchema,
   ContextDocumentSchema,
+  ObjectiveSeverity,
   ReplaceScenarioDraftRequest,
   ScenarioBindingSchema,
   ScenarioBlockOptionSchema,
@@ -165,7 +166,7 @@ export function splitDataReference(value: string): { entity: string; field: stri
 
 export function joinDataReference(entity: string, field: string): string {
   // A field with no object is not a reference at all. Without this guard, clearing the object
-  // picker would build `#shipping_address` — a truthy string `withBinding` would store, that
+  // picker would build `#shipping_address` — a non-empty string the instance builder would store, that
   // no control on screen displays, and that the publish gate refuses with a finding an author
   // cannot connect to anything.
   if (!entity) {
@@ -229,43 +230,78 @@ export function boundValue(
 }
 
 /**
- * Set one binding, dropping it when the value is cleared.
- *
- * An empty binding is a publish-gate error (`binding_empty`), and "not bound yet" is the
- * state a draft is legitimately in, so clearing a picker removes the entry rather than
- * writing an empty one the gate would then refuse.
+ * A composed instance's authored fields — its bindings as one value per parameter, and an
+ * objective's severity — as the template picker below a list and an open row both hold them.
+ * The instance's id and template are not among them: they are fixed when it is composed.
  */
-export function withBinding<InstanceT extends BoundObjectiveSchema | BoundMutationSchema>(
-  instance: InstanceT,
-  parameter: string,
-  value: string,
-): InstanceT {
-  const others = instance.bindings.filter((binding) => binding.parameter !== parameter);
-  const bindings = value ? [...others, { parameter, value }] : others;
+export interface MutationFields {
+  bindings: Readonly<Record<string, string>>;
+}
+
+export interface ObjectiveFields extends MutationFields {
+  severity: ObjectiveSeverity;
+}
+
+export function mutationFields(instance: BoundMutationSchema): MutationFields {
   return {
-    ...instance,
-    bindings: [...bindings].sort((left, right) => left.parameter.localeCompare(right.parameter)),
+    bindings: Object.fromEntries(
+      instance.bindings.map((binding) => [binding.parameter, binding.value]),
+    ),
   };
 }
 
+export function objectiveFields(instance: BoundObjectiveSchema): ObjectiveFields {
+  return { ...mutationFields(instance), severity: instance.severity };
+}
+
 /**
- * Start a bound instance with every default its template carries.
+ * The bindings an instance stores for these values.
+ *
+ * A value that is empty is dropped rather than written: an empty binding is a publish-gate
+ * error (`binding_empty`), and "not bound yet" is the state a draft is legitimately in. The
+ * rest are ordered by parameter, which is how the lab stores them.
+ */
+function storedBindings(values: Readonly<Record<string, string>>): ScenarioBindingSchema[] {
+  return Object.entries(values)
+    .filter(([, value]) => value !== "")
+    .map(([parameter, value]) => ({ parameter, value }))
+    .sort((left, right) => left.parameter.localeCompare(right.parameter));
+}
+
+/**
+ * The one function per list that turns an instance's fields into the entry the scenario
+ * stores, called by the template picker (`addObjective`, `addMutation`) and by an open row's
+ * Save alike, so the two paths cannot write different payloads.
+ */
+export function boundMutation(
+  id: string,
+  blockId: string,
+  fields: MutationFields,
+): BoundMutationSchema {
+  return { id, block_id: blockId, bindings: storedBindings(fields.bindings) };
+}
+
+export function boundObjective(
+  id: string,
+  blockId: string,
+  fields: ObjectiveFields,
+): BoundObjectiveSchema {
+  return { ...boundMutation(id, blockId, fields), severity: fields.severity };
+}
+
+/**
+ * The bindings a newly composed instance starts with: every default its template carries.
  *
  * A reference parameter never has one — a template may not default an object it does not own
  * — so this fills in the literals only, which is exactly what the template author meant them
  * for.
  */
-export function bindTemplate(
-  option: ScenarioBlockOptionSchema,
-  taken: readonly string[],
-): { id: string; block_id: string; bindings: ScenarioBindingSchema[] } {
-  return {
-    id: uniqueId(slugify(option.name, "block"), taken),
-    block_id: option.block_id,
-    bindings: bindableParameters(option)
+function templateDefaults(option: ScenarioBlockOptionSchema): Record<string, string> {
+  return Object.fromEntries(
+    bindableParameters(option)
       .filter((parameter) => parameter.default)
-      .map((parameter) => ({ parameter: parameter.name, value: parameter.default as string })),
-  };
+      .map((parameter) => [parameter.name, parameter.default as string]),
+  );
 }
 
 /**
@@ -283,7 +319,7 @@ export function bindTemplate(
  * `required` when it cannot see one — the strictest answer there is, because a failed required
  * objective fails the run. A page composing from the counts alone would turn a template whose
  * author wrote `expected` into an objective that means something else, on the one field that
- * decides what a run's verdict is. `bindTemplate`'s literal defaults ride on the same read.
+ * decides what a run's verdict is. `templateDefaults`' literals ride on the same read.
  *
  * `description` is the one field left empty: it explains a template to whoever binds it, no
  * instance built from this carries it, and the editor reads it from the resources.
@@ -330,11 +366,11 @@ export function addObjective(
     ...content,
     objectives: [
       ...content.objectives,
-      {
-        ...bindTemplate(option, taken),
+      boundObjective(uniqueId(slugify(option.name, "block"), taken), option.block_id, {
+        bindings: templateDefaults(option),
         // The template's severity default is what an author meant a new binding to start at.
         severity: severity?.default === "expected" ? "expected" : "required",
-      },
+      }),
     ],
   };
 }
@@ -344,7 +380,15 @@ export function addMutation(
   option: ScenarioBlockOptionSchema,
 ): ScenarioContentSchema {
   const taken = content.mutations.map((mutation) => mutation.id);
-  return { ...content, mutations: [...content.mutations, bindTemplate(option, taken)] };
+  return {
+    ...content,
+    mutations: [
+      ...content.mutations,
+      boundMutation(uniqueId(slugify(option.name, "block"), taken), option.block_id, {
+        bindings: templateDefaults(option),
+      }),
+    ],
+  };
 }
 
 export function updateObjective(

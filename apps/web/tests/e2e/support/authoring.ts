@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { openSection } from "./navigate";
 
 /**
@@ -17,6 +17,25 @@ import { openSection } from "./navigate";
 export async function saveDraft(page: Page) {
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
+}
+
+/**
+ * A saved row of a list, opened where it stands, answered, and saved back into the draft.
+ *
+ * Every list a page edits is an `EntryCard` (PLAN-UX Slice 33): its fields are read back until
+ * Edit opens them, and nothing typed there is in the draft until the row's own Save — so a
+ * journey correcting a parameter, a binding or an address says both presses.
+ */
+export async function editRow(
+  scope: Locator,
+  name: string,
+  answer: (row: Locator) => Promise<void>,
+) {
+  await scope.getByRole("button", { name: `Edit ${name}`, exact: true }).click();
+  const row = scope.getByRole("form", { name: `Edit ${name}`, exact: true });
+  await answer(row);
+  await row.getByRole("button", { name: `Save ${name}`, exact: true }).click();
+  await expect(row).toHaveCount(0);
 }
 
 /**

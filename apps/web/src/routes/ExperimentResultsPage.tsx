@@ -29,6 +29,7 @@ import {
   writesOf,
 } from "../lib/evidence";
 import {
+  addFormClasses,
   fieldControlClasses,
   formatTimestamp,
   tableCellClasses,
@@ -437,7 +438,7 @@ function NotesAndTags({
         </ul>
       ) : null}
 
-      <form className="grid gap-2 border-t border-admin-border pt-3" onSubmit={submitNote}>
+      <form className={addFormClasses} onSubmit={submitNote}>
         <label className="sr-only" htmlFor="experiment-note">
           Add a note
         </label>

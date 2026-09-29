@@ -37,6 +37,7 @@ import {
 import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
 import { unsoldCurrencyFindings } from "../lib/setupChecklist";
 import {
+  addFormClasses,
   destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
@@ -144,13 +145,6 @@ function RemoveButton({
     </button>
   );
 }
-
-/**
- * The authoring form sits below the saved entries it adds to. Now that an entry carries its
- * body, the rule is what tells an author where the saved configuration ends and the blank
- * form begins.
- */
-const addFormClasses = "grid gap-2 border-t border-admin-border pt-3";
 
 /**
  * A tone of voice's authored fields, and the one function that turns them into the entry the

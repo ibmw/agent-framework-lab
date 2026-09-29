@@ -28,6 +28,7 @@ import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { CountryField } from "../components/CountryField";
 import { Field, FieldRows } from "../components/FieldHint";
 import { LocaleField } from "../components/LocaleField";
+import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
 import {
   Card,
   EditorSaveActions,
@@ -43,6 +44,7 @@ import {
   PublishReasons,
   VersionChips,
 } from "../components/WorkspaceChrome";
+import { countryName } from "../lib/countries";
 import { type DefinitionClient, useDefinitionEditor } from "../lib/definitionEditor";
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
@@ -50,6 +52,7 @@ import { BACKGROUND_KIND, labelOf, optionsOf } from "../lib/enumLabels";
 import {
   ACCOUNT_NOTES_RULE,
   ACCOUNT_STATUS_RULE,
+  ADDRESS_FIELDS_RULE,
   CHIP_LABEL_MAX_LENGTH,
   CUSTOMER_EMAIL_RULE,
   CUSTOMER_NAME_RULE,
@@ -68,15 +71,14 @@ import {
   useRemoval,
 } from "../lib/removal";
 import {
+  addFormClasses,
   destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
   fieldLabelClasses,
-  inkButtonClasses,
   subtleButtonClasses,
-  surfaceClasses,
   textAreaClasses,
 } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
@@ -243,6 +245,11 @@ export function CustomerEditorPage() {
   const hiddenFactEditor = useEntryEdit<HiddenFactFields>(
     (content?.hidden_facts ?? []).map((fact) => fact.id),
   );
+  const addressEditor = useEntryEdit<AddressFields>(
+    (content?.addresses ?? []).map((entry) => entry.id),
+  );
+  const addressNotice = useId();
+  const openAddressRefusalId = useId();
   const backgroundNotice = useId();
   const hiddenFactNotice = useId();
   const navigate = useNavigate();
@@ -294,40 +301,20 @@ export function CustomerEditorPage() {
     );
   }
 
-  function addAddress(draft: NewAddress) {
+  function addAddress(fields: AddressFields) {
     if (!content) {
       return;
     }
-    const entry: AddressSchema = {
-      id: uniqueId(
-        slugify(draft.label),
+    const entry = addressEntry(
+      uniqueId(
+        slugify(fields.label),
         content.addresses.map((existing) => existing.id),
       ),
-      label: draft.label,
-      // The recipient is the customer unless the author says otherwise; every other field
-      // is authored, never invented, so a new entry is never a plausible-looking fiction.
-      recipient: content.display_name,
-      line1: draft.line1,
-      line2: null,
-      postal_code: draft.postalCode,
-      city: draft.city,
-      region: null,
-      country: draft.country,
-      is_default: content.addresses.length === 0,
-    };
+      fields,
+      // The first address is the default, because a published profile must hold one.
+      content.addresses.length === 0,
+    );
     edit({ ...content, addresses: [...content.addresses, entry] });
-  }
-
-  function updateAddress(id: string, next: Partial<AddressSchema>) {
-    if (!content) {
-      return;
-    }
-    edit({
-      ...content,
-      addresses: content.addresses.map((entry) =>
-        entry.id === id ? { ...entry, ...next } : entry,
-      ),
-    });
   }
 
   function makeDefault(id: string) {
@@ -675,147 +662,120 @@ export function CustomerEditorPage() {
                 No address yet. A published profile must hold at least one, with one default.
               </p>
             ) : (
-              <ul className="grid gap-3">
-                {content.addresses.map((entry) =>
-                  addressRemoval.isArmed(entry.id) ? (
-                    <ConfirmRemove
-                      key={entry.id}
-                      as="li"
-                      title={`Remove the address “${entry.label}”?`}
-                      consequence={consequenceOf(
-                        findingClauses([
-                          content.addresses.length === 1
-                            ? "profile_without_address"
-                            : entry.is_default && "address_book_without_default",
-                          "shipping_address_source_removed",
-                        ]),
-                        "Published scenarios and snapshots are never rewritten. Nothing is written until you save the draft.",
-                      )}
-                      onConfirm={addressRemoval.confirm(
-                        () => removeAddress(entry.id),
-                        `Removed the address “${entry.label}” from the draft.`,
-                      )}
-                      onKeep={addressRemoval.keep}
-                    />
-                  ) : (
-                    <li key={entry.id} className={`${surfaceClasses} grid gap-2 p-3`}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input
-                          aria-label={`Label for ${entry.id}`}
-                          className={`${fieldControlClasses} w-full max-w-56`}
-                          value={entry.label}
-                          onChange={(event) =>
-                            updateAddress(entry.id, { label: event.target.value })
-                          }
-                        />
-                        {entry.is_default ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
-                            <span aria-hidden>●</span> Default
-                          </span>
-                        ) : (
-                          <button
-                            className={subtleButtonClasses}
-                            type="button"
-                            aria-label={`Make ${entry.label} the default address`}
-                            onClick={() => makeDefault(entry.id)}
-                          >
-                            <ButtonIcon verb="makeDefault" />
-                            Make default
-                          </button>
+              <ul className="grid gap-2 text-[13px]">
+                {content.addresses.map((entry) => {
+                  const notice = `Removed the address “${entry.label}” from the draft.`;
+                  if (addressRemoval.isArmed(entry.id)) {
+                    return (
+                      <ConfirmRemove
+                        key={entry.id}
+                        as="li"
+                        title={`Remove the address “${entry.label}”?`}
+                        consequence={consequenceOf(
+                          findingClauses([
+                            content.addresses.length === 1
+                              ? "profile_without_address"
+                              : entry.is_default && "address_book_without_default",
+                            "shipping_address_source_removed",
+                          ]),
+                          "Published scenarios and snapshots are never rewritten. Nothing is written until you save the draft.",
                         )}
-                        <button
-                          className={`${destructiveSubtleButtonClasses} ml-auto`}
-                          type="button"
-                          aria-label={`Remove ${entry.label}`}
-                          ref={addressRemoval.trigger(entry.id)}
-                          onClick={addressRemoval.ask(
-                            entry.id,
-                            () => removeAddress(entry.id),
-                            `Removed the address “${entry.label}” from the draft.`,
+                        onConfirm={addressRemoval.confirm(() => removeAddress(entry.id), notice)}
+                        onKeep={addressRemoval.keep}
+                      />
+                    );
+                  }
+                  return (
+                    <EntryCard
+                      key={entry.id}
+                      title={entry.label}
+                      chips={
+                        <>
+                          <EntryId value={entry.id} />
+                          {entry.is_default ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-admin-published px-2.5 py-0.5 text-[11.5px] font-semibold text-admin-published-ink">
+                              <span aria-hidden>●</span> Default
+                            </span>
+                          ) : null}
+                        </>
+                      }
+                      edit={entryEdit(
+                        addressEditor,
+                        addressNotice,
+                        entry.id,
+                        entry.label,
+                        () => addressFields(entry),
+                        (fields) =>
+                          edit({
+                            ...content,
+                            addresses: content.addresses.map((item) =>
+                              item.id === entry.id
+                                ? // Which entry is the default is *Make default*'s answer on
+                                  // the row, never the form's: correcting a street must not
+                                  // move it.
+                                  addressEntry(entry.id, fields, entry.is_default)
+                                : item,
+                            ),
+                          }),
+                        (value, onChange) => {
+                          const refused = addressRefusal(value);
+                          return (
+                            <>
+                              <AddressFieldset asks="every" value={value} onChange={onChange} />
+                              {refused === null ? null : (
+                                <RefusalLine id={openAddressRefusalId}>{refused}</RefusalLine>
+                              )}
+                            </>
+                          );
+                        },
+                        (value) => {
+                          const refused = addressRefusal(value);
+                          return refused === null
+                            ? true
+                            : { id: openAddressRefusalId, reason: refused };
+                        },
+                      )}
+                      actions={
+                        <>
+                          {entry.is_default ? null : (
+                            <button
+                              className={subtleButtonClasses}
+                              type="button"
+                              aria-label={`Make ${entry.label} the default address`}
+                              onClick={() => makeDefault(entry.id)}
+                            >
+                              <ButtonIcon verb="makeDefault" />
+                              Make default
+                            </button>
                           )}
-                        >
-                          <ButtonIcon verb="delete" />
-                          Remove
-                        </button>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <label className={fieldLabelClasses}>
-                          Recipient
-                          <input
-                            className={`${fieldControlClasses} w-full`}
-                            value={entry.recipient}
-                            onChange={(event) =>
-                              updateAddress(entry.id, { recipient: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label className={fieldLabelClasses}>
-                          Street
-                          <input
-                            className={`${fieldControlClasses} w-full`}
-                            value={entry.line1}
-                            onChange={(event) =>
-                              updateAddress(entry.id, { line1: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label className={fieldLabelClasses}>
-                          Postal code
-                          <input
-                            className={`${fieldControlClasses} w-full`}
-                            value={entry.postal_code}
-                            onChange={(event) =>
-                              updateAddress(entry.id, { postal_code: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label className={fieldLabelClasses}>
-                          Street line 2
-                          <input
-                            className={`${fieldControlClasses} w-full`}
-                            value={entry.line2 ?? ""}
-                            onChange={(event) =>
-                              updateAddress(entry.id, {
-                                line2: event.target.value === "" ? null : event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <label className={fieldLabelClasses}>
-                          City
-                          <input
-                            className={`${fieldControlClasses} w-full`}
-                            value={entry.city}
-                            onChange={(event) =>
-                              updateAddress(entry.id, { city: event.target.value })
-                            }
-                          />
-                        </label>
-                        <label className={fieldLabelClasses}>
-                          Region
-                          <input
-                            className={`${fieldControlClasses} w-full`}
-                            value={entry.region ?? ""}
-                            onChange={(event) =>
-                              updateAddress(entry.id, {
-                                region: event.target.value === "" ? null : event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <CountryField
-                          value={entry.country}
-                          onChange={(country) => updateAddress(entry.id, { country })}
-                        />
-                      </div>
-                    </li>
-                  ),
-                )}
+                          <button
+                            className={destructiveSubtleButtonClasses}
+                            type="button"
+                            aria-label={`Remove ${entry.label}`}
+                            ref={addressRemoval.trigger(entry.id)}
+                            onClick={addressRemoval.ask(
+                              entry.id,
+                              () => removeAddress(entry.id),
+                              notice,
+                            )}
+                          >
+                            <ButtonIcon verb="delete" />
+                            Remove
+                          </button>
+                        </>
+                      }
+                    >
+                      <p className="text-admin-ink-soft">{addressLine(entry)}</p>
+                    </EntryCard>
+                  );
+                })}
               </ul>
             )}
+            <EntryEditNotice id={addressNotice} label={addressEditor.open?.label ?? null} />
             <RemovalNotice removal={addressRemoval} />
             <AddressForm
               defaultCountry={countryForLocale(content.identity.locale)}
+              recipient={content.display_name}
               onAdd={addAddress}
             />
           </Card>
@@ -1146,97 +1106,213 @@ export function CustomerEditorPage() {
   );
 }
 
-interface NewAddress {
-  label: string;
-  line1: string;
-  postalCode: string;
-  city: string;
-  country: string;
-}
-
 /** `fr-FR` implies France; a bare `fr` implies nothing, so the author states it. */
 function countryForLocale(locale: string): string {
   const [, region] = locale.split("-");
   return region ?? "";
 }
 
+/**
+ * The questions an address answers, as the add form below the book and an open row both hold
+ * them. The two optional lines are held as text and stored as nothing when left empty.
+ */
+interface AddressFields {
+  label: string;
+  recipient: string;
+  line1: string;
+  line2: string;
+  postalCode: string;
+  city: string;
+  region: string;
+  country: string;
+}
+
+function addressFields(entry: AddressSchema): AddressFields {
+  return {
+    label: entry.label,
+    recipient: entry.recipient,
+    line1: entry.line1,
+    line2: entry.line2 ?? "",
+    postalCode: entry.postal_code,
+    city: entry.city,
+    region: entry.region ?? "",
+    country: entry.country,
+  };
+}
+
+/**
+ * The one function that turns an address's fields into the entry the book stores, called by the
+ * add form and an open row's Save alike, so the two paths cannot write different payloads.
+ *
+ * Every text is stored trimmed — `AddressEntry` refuses padding (`require_label` in
+ * `domain/content.py`) — and an optional line left empty is stored as none rather than as an
+ * empty string the lab would refuse.
+ */
+function addressEntry(id: string, fields: AddressFields, isDefault: boolean): AddressSchema {
+  const optional = (value: string) => (value.trim() === "" ? null : value.trim());
+  return {
+    id,
+    label: fields.label.trim(),
+    recipient: fields.recipient.trim(),
+    line1: fields.line1.trim(),
+    line2: optional(fields.line2),
+    postal_code: fields.postalCode.trim(),
+    city: fields.city.trim(),
+    region: optional(fields.region),
+    country: fields.country,
+    is_default: isDefault,
+  };
+}
+
+/** The fields an address cannot be stored without: `AddressEntry` refuses each empty or padded. */
+function requiredAddressFields(fields: AddressFields): string[] {
+  return [fields.label, fields.recipient, fields.line1, fields.postalCode, fields.city];
+}
+
+/**
+ * Why the lab would refuse these fields when no field says so, or null — one answer for both
+ * paths. A field left empty is not here: each is `required`, and the browser says that on the
+ * field (ADR 0063, *Deliberately not here*). What `required` lets through is a field of nothing
+ * but spaces, which `require_label` then refuses.
+ */
+function addressRefusal(fields: AddressFields): string | null {
+  const padded = requiredAddressFields(fields).some((value) => value !== "" && value.trim() === "");
+  return padded ? ADDRESS_FIELDS_RULE : null;
+}
+
+/** An entry read back on one line, as the order editor reads its frozen copy. */
+function addressLine(entry: AddressSchema): string {
+  return [
+    entry.recipient,
+    entry.line1,
+    entry.line2,
+    `${entry.postal_code} ${entry.city}`,
+    entry.region,
+    // Named, as the Country field reads its code back: `FR` and `FI` are one keystroke apart.
+    countryName(entry.country) ?? entry.country,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * An address's questions, in the same words on the add form and in an open row. The add form
+ * asks what a new entry cannot do without — the recipient is the customer until the entry is
+ * corrected — and the open row asks every field the entry stores.
+ */
+function AddressFieldset({
+  asks,
+  value,
+  onChange,
+}: {
+  asks: "new" | "every";
+  value: AddressFields;
+  onChange: (next: AddressFields) => void;
+}) {
+  const every = asks === "every";
+  function text(label: string, key: keyof AddressFields, options: { optional?: boolean } = {}) {
+    return (
+      <label className={fieldLabelClasses}>
+        {options.optional ? `${label} (optional)` : label}
+        <input
+          className={`${fieldControlClasses} w-full`}
+          value={value[key]}
+          required={!options.optional}
+          placeholder={key === "label" ? "Home, Office, Parent's house…" : undefined}
+          onChange={(event) => onChange({ ...value, [key]: event.target.value })}
+        />
+      </label>
+    );
+  }
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {text("Label", "label")}
+      {every ? text("Recipient", "recipient") : null}
+      {text("Street", "line1")}
+      {every ? text("Street line 2", "line2", { optional: true }) : null}
+      {text("Postal code", "postalCode")}
+      {text("City", "city")}
+      {every ? text("Region", "region", { optional: true }) : null}
+      <CountryField
+        value={value.country}
+        required
+        onChange={(country) => onChange({ ...value, country })}
+      />
+    </div>
+  );
+}
+
 function AddressForm({
   defaultCountry,
+  recipient,
   onAdd,
 }: {
   defaultCountry: string;
-  onAdd: (draft: NewAddress) => void;
+  /** Who a new entry ships to: the customer, until the entry is opened and corrected. */
+  recipient: string;
+  onAdd: (fields: AddressFields) => void;
 }) {
-  const [label, setLabel] = useState("");
-  const [line1, setLine1] = useState("");
-  const [postalCode, setPostalCode] = useState("");
-  const [city, setCity] = useState("");
+  const refusalId = useId();
+  const [typed, setTyped] = useState({ label: "", line1: "", postalCode: "", city: "" });
   // Null until the author types one, so the locale-derived default keeps following an
   // edit to the profile's locale instead of freezing at the first render's value.
   const [typedCountry, setTypedCountry] = useState<string | null>(null);
-  const country = typedCountry ?? defaultCountry;
+  const fields: AddressFields = {
+    ...typed,
+    recipient,
+    line2: "",
+    region: "",
+    country: typedCountry ?? defaultCountry,
+  };
+  const refusal = addressRefusal(fields);
 
   return (
     <form
+      className={addFormClasses}
       onSubmit={(event) => {
         event.preventDefault();
-        onAdd({ label, line1, postalCode, city, country });
-        setLabel("");
-        setLine1("");
-        setPostalCode("");
-        setCity("");
+        // The button refuses the press and the browser holds an empty `required` field; a
+        // submission that reaches the form another way is refused here too.
+        // Only the four fields this form asks: the recipient is the customer's name, not a
+        // field here, and an empty one is `addressRefusal`'s and the gate's to say.
+        if (refusal !== null || Object.values(typed).includes("")) {
+          return;
+        }
+        onAdd(fields);
+        setTyped({ label: "", line1: "", postalCode: "", city: "" });
       }}
     >
-      {/* Grouped so its fields never collide with the entries above, which use the same
-          field names. */}
-      <fieldset className="flex flex-wrap items-end gap-2">
+      {/* Grouped so its fields never collide with an open row above, which asks the same
+          questions in the same words. */}
+      <fieldset className="grid gap-2">
         <legend className="mb-1 text-xs font-semibold text-admin-muted uppercase">
           Add an address
         </legend>
-        <label className={fieldLabelClasses}>
-          Label
-          <input
-            className={`${fieldControlClasses} w-full`}
-            value={label}
-            required
-            placeholder="Home, Office, Parent's house…"
-            onChange={(event) => setLabel(event.target.value)}
-          />
-        </label>
-        <label className={`${fieldLabelClasses} min-w-48 flex-1`}>
-          Street
-          <input
-            className={`${fieldControlClasses} w-full`}
-            value={line1}
-            required
-            onChange={(event) => setLine1(event.target.value)}
-          />
-        </label>
-        <label className={fieldLabelClasses}>
-          Postal code
-          <input
-            className={`${fieldControlClasses} w-full`}
-            value={postalCode}
-            required
-            onChange={(event) => setPostalCode(event.target.value)}
-          />
-        </label>
-        <label className={fieldLabelClasses}>
-          City
-          <input
-            className={`${fieldControlClasses} w-full`}
-            value={city}
-            required
-            onChange={(event) => setCity(event.target.value)}
-          />
-        </label>
-        <div className="min-w-44">
-          <CountryField value={country} required onChange={setTypedCountry} />
-        </div>
-        <button className={inkButtonClasses} type="submit">
+        <AddressFieldset
+          asks="new"
+          value={fields}
+          onChange={(next) => {
+            setTyped({
+              label: next.label,
+              line1: next.line1,
+              postalCode: next.postalCode,
+              city: next.city,
+            });
+            if (next.country !== fields.country) {
+              setTypedCountry(next.country);
+            }
+          }}
+        />
+        <PrimaryAction
+          variant="ink"
+          className="justify-self-start"
+          type="submit"
+          refusal={refusal === null ? null : { id: refusalId, reason: refusal }}
+        >
           <ButtonIcon verb="create" />
           Add address
-        </button>
+        </PrimaryAction>
+        {refusal === null ? null : <RefusalLine id={refusalId}>{refusal}</RefusalLine>}
       </fieldset>
     </form>
   );
@@ -1254,18 +1330,20 @@ function BackgroundForm({ onAdd }: { onAdd: (fields: BackgroundFields) => void }
 
   return (
     <form
-      className="flex flex-wrap items-end gap-2"
+      className={addFormClasses}
       onSubmit={(event) => {
         event.preventDefault();
         onAdd(fields);
         setFields({ ...fields, note: "" });
       }}
     >
-      <BackgroundFieldset value={fields} onChange={setFields} />
-      <button className={inkButtonClasses} type="submit">
-        <ButtonIcon verb="create" />
-        Add entry
-      </button>
+      <div className="flex flex-wrap items-end gap-2">
+        <BackgroundFieldset value={fields} onChange={setFields} />
+        <PrimaryAction variant="ink" type="submit">
+          <ButtonIcon verb="create" />
+          Add entry
+        </PrimaryAction>
+      </div>
     </form>
   );
 }
@@ -1275,18 +1353,20 @@ function HiddenFactForm({ onAdd }: { onAdd: (fields: HiddenFactFields) => void }
 
   return (
     <form
-      className="flex flex-wrap items-end gap-2"
+      className={addFormClasses}
       onSubmit={(event) => {
         event.preventDefault();
         onAdd(fields);
         setFields({ note: "", revealedWhen: "" });
       }}
     >
-      <HiddenFactFieldset value={fields} onChange={setFields} />
-      <button className={inkButtonClasses} type="submit">
-        <ButtonIcon verb="create" />
-        Add fact
-      </button>
+      <div className="flex flex-wrap items-end gap-2">
+        <HiddenFactFieldset value={fields} onChange={setFields} />
+        <PrimaryAction variant="ink" type="submit">
+          <ButtonIcon verb="create" />
+          Add fact
+        </PrimaryAction>
+      </div>
     </form>
   );
 }
