@@ -1,22 +1,21 @@
-# UX plan — every page is one of three templates
+# UX plan
 
-Status: proposed — 2026-09-28. Open slices only: a slice that lands is removed from this file.
-Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
-`docs/history/PLAN-UX-2026-09-13.md`, and the 20 September plan, whose delivered Milestone 8's goal
-and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`.
+Status: no milestone open — 2026-09-29. Open slices only: a slice that lands is removed from this
+file. Supersedes the 13 September plan, whose delivered Slices 1–8 and reread Slices 9–16 are in
+`docs/history/PLAN-UX-2026-09-13.md`; the 20 September plan, whose delivered Milestone 8's goal
+and acceptance criteria are in `docs/history/PLAN-UX-2026-09-20.md`; and the 28 September plan,
+whose delivered Milestone 9's are in `docs/history/PLAN-UX-2026-09-28.md`.
 
 ## Purpose and authority
 
 `docs/PLAN.md` records what the lab holds; this plan records how the operator's workspace reaches
 the design it was handed on 19 September 2026: the whole-workspace prototype in
-`tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Since
-28 September 2026 it also records how every page reaches one of the three templates that
-*Shop details* and *Tone of voice* already follow (Milestone 9). Read, in
+`tmp/design-frames/Workspace.html`, its handoff `README.md`, and `form-decisions.md`. Read, in
 order, `AGENTS.md`, `docs/product-direction.md`, `docs/architecture.md`, `docs/PLAN.md`'s delivery
 rules, `docs/design-direction.md` (its *Authority* section settles which authority governs where the
-prototype, the README and the codebase disagree), then the slice's brief below and the ADRs it
-names. ADR 0052 and ADR 0053 decide the model connection and the provider, and both are
-implemented; ADR 0054 is the route scheme every slice below is written against.
+prototype, the README and the codebase disagree), then a slice's brief and the ADRs it names.
+ADR 0052 and ADR 0053 decide the model connection and the provider, and both are implemented;
+ADR 0054 is the route scheme every slice is written against.
 
 The plan sits under `docs/PLAN.md`'s delivery rules and changes none of them.
 
@@ -73,68 +72,10 @@ application, and the verdict on each slice of the 13 September plan — is
 
 ## Sequencing
 
-Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
-the commits and ADR 0052–0072, its goal and acceptance criteria
-`docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 ran its slices in the order the operator agreed, and
-every one has landed. The editor's side panel landed first — the 790/312 grid, `GateCard`
-and the panel's order on every editor — and Tickets followed as an index, a create page and an
-editor built on it (ADR 0073); then the header: every editor's way back in one slot (`HeaderBack`,
-the create page's piece), every card's first line on `Card`'s `description`, and the neutral pill
-(`neutralPillClasses`); then the rows: the agent configuration, judge, block, identity and scenario
-editors on `Field`/`FieldGroup` rows, with a gate error the draft still saves with drawn as the
-row's second line (`Field`'s `finding` tone); then the lists: the editors' lists on `EntryCard`,
-opened in place and grown by the add form below a rule (`addFormClasses`) whose submit is
-`PrimaryAction`; then the indexes: publication as a pill (`PublicationPill`), the create glyph on
-every *New X*, empty states that link to the prerequisite, a failed listing that says only that, and
-the block libraries' chips; last, History as an index card. The order reshaped an editor from the
-outside in — panel, header, rows, lists — and then the indexes.
-
-## Milestone 9 — Every page is one of three templates
-
-### Goal
-
-An operator moving between pages meets the same organisation everywhere, so that nothing about
-where a control sits has to be learned twice. Every page that lists, edits or creates one thing
-is one of three templates, with *Shop details* and *Tone of voice* (`routes/ShopSetupPages.tsx`)
-as the reference; the Tickets page becomes the operator's direction B. The change is the UI's
-only: no backend, contract or payload moves.
-
-- **Index** — `PageHeader` (not pinned) with a one-sentence description and the create action,
-  with its glyph, on the right; one index card: `SearchRow` title and `SearchField`,
-  `FilterChips` (All, then the published subset and *Never published* where the listing carries
-  a published version, then the domain's chips), a table whose first cell is the link with a
-  muted second line, the Published column as a pill; an empty state that says why and links to
-  the prerequisite; a miss that reads "No X matches this view".
-- **Editor** — pinned `PageHeader` with the back link above the title, `VersionChips`,
-  `EditorSaveActions` and `PublishButton` where the definition publishes, reasons beneath; body
-  `grid items-start gap-5 xl:grid-cols-[minmax(0,790px)_312px]` (`ShopSetupPages.tsx:98`); a main
-  column of `Card`s, each with its 13px muted description as its first line, sections on
-  `Field`/`FieldGroup`/`FieldRows` rows (stacked labels only inside an add form, as
-  `ProseFieldset` draws them); lists on `EntryCard` with open-in-place edit, `ConfirmRemove`
-  taking the row's place, and the add form below a top rule, submitted by `PrimaryAction` with
-  its `RefusalLine`; a 312px side panel holding the gate card first, read-only context cards
-  next and "What publishing freezes" last — never a field of the draft.
-- **Create** — `CreatePage` as built, one 790px column, landing in the editor.
-
-Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
-experiment keep templates of their own and are not reshaped here.
-
-### Acceptance criteria
-
-- Every editor's body is the 790/312 grid, with the gate card first, the freeze card last and no
-  editable field in the panel.
-- Every editor has its way back in one slot, and every card says what it is for on its first
-  line.
-- Every editor section is on field rows, stacked only inside an add form.
-- Every list is `EntryCard`, removes through `ConfirmRemove` wherever ADR 0060 asks twice, and
-  grows through an add form below a rule whose submit is `PrimaryAction`.
-- Every index has a header with a description and a create action with its glyph, one card with
-  a title, a search and chips, publication as a pill, an empty state that links, a miss that
-  says so, and a failed listing that says only that.
-- Tickets are an index, a create page and an editor, with an ADR, and nothing redirects.
-- History narrows inside one card and its form is still the address.
-- Nothing in the backend or a contract moved, no figure a payload lacks is drawn, the Playwright
-  journeys pass, and every renamed accessible name lists the specs it touched.
+Milestones 8 and 9 are delivered. Their record is the commits and ADR 0052–0073; their goals and
+acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md` and
+`docs/history/PLAN-UX-2026-09-28.md`. No UX milestone is open: the next one is planned here, under
+the rules above, when the operator asks for it.
 
 ## Deliberately not here
 

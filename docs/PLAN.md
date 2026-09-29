@@ -1,6 +1,6 @@
 # Project plan
 
-Status: current roadmap — 2026-09-28. Open work only; delivered milestones are one line each in
+Status: current roadmap — 2026-09-29. Open work only; delivered milestones are one line each in
 the index below, and their narrative is `docs/history/PLAN.md`.
 
 ## Purpose and authority
@@ -124,16 +124,7 @@ consistently.
 | UX — Forms that guide the operator | Hints, derived identifiers, enum labels, currencies at creation, typed controls, closed sets, edit-in-place, the unsaved-work guard. Slices 1–8 of the 13 September plan. | ADR 0050–0051, `docs/history/PLAN-UX-2026-09-13.md` |
 | UX — The refresh's pattern layer | Pine primary and the glyph vocabulary, the field row, the rail's metrics, filter chips, display type, search, control metrics, row copy. | `docs/history/workspace-refresh-pattern-slices.md` |
 | 8 — The workspace becomes the prototype | Two modes with their rails, the top bar, creation as a page, the overview, documents, settings in three zones, the model connection, and the behaviour the prototype specifies everywhere. | ADR 0052–0072, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-20.md` |
-| **9 — Every page is one of three templates** | **Open.** One editor side panel, header and card, field rows and lists everywhere; Tickets as an index, a create page and an editor; the indexes and History finished on the index template. | slices in `docs/PLAN-UX.md` |
-
-## Milestone 9 — Every page is one of three templates
-
-Bring every route in `apps/web` onto one of three templates — the index, the editor and the
-create page — with *Shop details* and *Tone of voice* as the reference, as the operator asked on
-28 September 2026, on the primitives the workspace already has and without a backend or contract
-change. `docs/PLAN-UX.md` is the authority for its scope, order and checks. Tickets landed as an
-index, a create page and an editor with ADR 0073, which supersedes the three-pane helpdesk ADR
-0016 decided. Acceptance is that plan's.
+| 9 — Every page is one of three templates | One editor side panel, header and card, field rows and lists everywhere; Tickets as an index, a create page and an editor; the indexes and History finished on the index template. | ADR 0073, `docs/history/PLAN.md`, `docs/history/PLAN-UX-2026-09-28.md` |
 
 ## Deferred decision triggers
 

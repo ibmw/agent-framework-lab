@@ -1,13 +1,15 @@
 # Project plan — the record of what was delivered
 
-Status: history — closed 2026-09-20; Milestone 8 appended 2026-09-28. **Read `docs/PLAN.md` for
-the delivery rules, the vocabulary and the open work.** This file holds what that document carried
-before it was compressed to open work only: the narrative of the implementation state as it stood,
-and Milestones 0 to 7 as they were planned and delivered, verbatim. The ADRs each milestone names
-are the authoritative record of the decisions; this is the roadmap's own account of them, kept
-because it says why the milestones came in this order. Nothing here is edited any more, save that
-a milestone delivered since is appended after Milestone 7, verbatim as `docs/PLAN.md` carried it:
-Milestone 8 on 2026-09-28, whose plan is `docs/history/PLAN-UX-2026-09-20.md`.
+Status: history — closed 2026-09-20; Milestone 8 appended 2026-09-28, Milestone 9 2026-09-29.
+**Read `docs/PLAN.md` for the delivery rules, the vocabulary and the open work.** This file holds
+what that document carried before it was compressed to open work only: the narrative of the
+implementation state as it stood, and Milestones 0 to 7 as they were planned and delivered,
+verbatim. The ADRs each milestone names are the authoritative record of the decisions; this is the
+roadmap's own account of them, kept because it says why the milestones came in this order.
+Nothing here is edited any more, save that a milestone delivered since is appended after
+Milestone 7, verbatim as `docs/PLAN.md` carried it: Milestone 8 on 2026-09-28, whose plan is
+`docs/history/PLAN-UX-2026-09-20.md`, and Milestone 9 on 2026-09-29, whose plan is
+`docs/history/PLAN-UX-2026-09-28.md`.
 
 The last section is the walk through delivered milestones that `docs/decisions-and-next-step.md`
 carried under *Recommended next steps* until the same date.
@@ -1174,6 +1176,15 @@ scope: ADR 0054 is the route scheme every later slice is written against. Accept
 plan's, plus: nothing about progress is stored (ADR 0044, ADR 0045 stand), the connection never
 enters a fingerprint (ADR 0052), and the eleven Playwright journeys pass on the new routes
 without the application having been bent to them.
+
+## Milestone 9 — Every page is one of three templates
+
+Bring every route in `apps/web` onto one of three templates — the index, the editor and the
+create page — with *Shop details* and *Tone of voice* as the reference, as the operator asked on
+28 September 2026, on the primitives the workspace already has and without a backend or contract
+change. `docs/PLAN-UX.md` is the authority for its scope, order and checks. Tickets landed as an
+index, a create page and an editor with ADR 0073, which supersedes the three-pane helpdesk ADR
+0016 decided. Acceptance is that plan's.
 
 ## Historical POC milestones
 
