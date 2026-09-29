@@ -764,10 +764,11 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   await page.getByLabel("Framework", { exact: true }).selectOption({ label: "Deterministic fake" });
   await narrowed;
   await expect(row).toHaveCount(1);
-  await page.getByLabel("Search").fill("a name nothing was given");
+  const search = listed.getByRole("searchbox", { name: "Search experiments, notes and tags" });
+  await search.fill("a name nothing was given");
   await page.getByRole("button", { name: "Search" }).click();
-  await expect(listed.getByText(/No experiment matches these filters/)).toBeVisible();
-  await page.getByLabel("Search").fill(`Prompt comparison ${unique}`);
+  await expect(listed.getByText("No experiment matches this view.")).toBeVisible();
+  await search.fill(`Prompt comparison ${unique}`);
   await page.getByRole("button", { name: "Search" }).click();
   await expect(row).toHaveCount(1);
 
@@ -775,7 +776,7 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
   // sentence they wrote finds the run even though the listing never shows it.
   await expect(row.getByText("read-check-gap")).toBeVisible();
   await expect(row.getByText("1 note")).toBeVisible();
-  await page.getByLabel("Search").fill(`Beacon never opened the policy ${unique}.`);
+  await search.fill(`Beacon never opened the policy ${unique}.`);
   await page.getByRole("button", { name: "Search" }).click();
   await expect(row).toHaveCount(1);
   const filtered = page.waitForResponse(
@@ -783,8 +784,34 @@ test("an operator starts a paired experiment, drives both arms, and comes back t
       response.url().includes("/api/v1/experiments?") &&
       response.url().includes("tag=read-check-gap"),
   );
-  await page.getByLabel("Tag").selectOption("read-check-gap");
+  // Exact, as Framework is: the search box's name ends "notes and tags".
+  await page.getByLabel("Tag", { exact: true }).selectOption("read-check-gap");
   await filtered;
+  await expect(row).toHaveCount(1);
+
+  // The status is a chip in the card, and the chip is the address: pressed, it narrows the
+  // listing and the URL at once, a reload keeps it, and Clear filters drops it with the rest.
+  const byStatus = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/experiments?") && response.url().includes("status=failed"),
+  );
+  await listed.getByRole("button", { name: "Failed", exact: true }).click();
+  await byStatus;
+  await expect(page).toHaveURL(/[?&]status=failed/);
+  await page.reload();
+  await expect(listed.getByRole("button", { name: "Failed", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await listed.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page).not.toHaveURL(/status=/);
+  await expect(listed.getByRole("button", { name: "All", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(search).toBeFocused();
+  await search.fill(`Prompt comparison ${unique}`);
+  await page.getByRole("button", { name: "Search" }).click();
   await expect(row).toHaveCount(1);
 
   // And the row opens the evidence it summarizes.

@@ -75,8 +75,8 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestone 8 is delivered: Groups B and C landed, the shop logo last (ADR 0070), and its record is
 the commits and ADR 0052–0072, its goal and acceptance criteria
-`docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 runs its slices in the order the operator agreed,
-and Slice 35 is the one left. The editor's side panel landed first — the 790/312 grid, `GateCard`
+`docs/history/PLAN-UX-2026-09-20.md`. Milestone 9 ran its slices in the order the operator agreed, and
+every one has landed. The editor's side panel landed first — the 790/312 grid, `GateCard`
 and the panel's order on every editor — and Tickets followed as an index, a create page and an
 editor built on it (ADR 0073); then the header: every editor's way back in one slot (`HeaderBack`,
 the create page's piece), every card's first line on `Card`'s `description`, and the neutral pill
@@ -86,8 +86,8 @@ row's second line (`Field`'s `finding` tone); then the lists: the editors' lists
 opened in place and grown by the add form below a rule (`addFormClasses`) whose submit is
 `PrimaryAction`; then the indexes: publication as a pill (`PublicationPill`), the create glyph on
 every *New X*, empty states that link to the prerequisite, a failed listing that says only that, and
-the block libraries' chips. The order reshaped an editor from the outside in — panel, header, rows,
-lists — and then the indexes; History's card is what remains.
+the block libraries' chips; last, History as an index card. The order reshaped an editor from the
+outside in — panel, header, rows, lists — and then the indexes.
 
 ## Milestone 9 — Every page is one of three templates
 
@@ -118,46 +118,6 @@ only: no backend, contract or payload moves.
 
 Live bench, Results (with Timeline and Traces), Overview, Lab settings, Glossary and New
 experiment keep templates of their own and are not reshaped here.
-
-### Slice 35 — History as an index card
-
-History keeps its submitted, URL-backed form and takes the index's card.
-
-- [ ] The form outside any card (`ExperimentHistoryPage.tsx:396–550`) moves into the index card:
-  a `SearchRow` titled for what it lists with the search box, submitted as today; the status as
-  `FilterChips` inside the card, each press narrowing the address's `status` at once as the
-  selects do now; Shop, Scenario, Framework, Tag, Objective outcome and Started as a second row of
-  the card; *Clear filters* and *Search* keep their order and their behaviour.
-- [ ] `FilterChips` takes a chip without a count (`FilterChips.tsx:18–23`), whose name is its
-  label alone: `ExperimentHistoryResponse` carries a page and a total and no count per status,
-  and a figure the payload lacks is not faked.
-- [ ] The status is `StatusPill` (`WorkspaceChrome.tsx:994`) with a run-status tone, replacing
-  the colour map (:33–37) and its span (:763–767).
-- [ ] The empty state and the miss part (:571–576): with nothing recorded at all — the lab's
-  total, which the shell already holds (`shell/listings.ts:270`) — the page says so and links to
-  the bench; otherwise "No experiment matches this view".
-- [ ] *New experiment* with the create glyph in the header, to `/lab/bench`.
-- [ ] The rows' secondary lines at 13px, as the other indexes' (`text-xs` at :703, :708, :721).
-- [ ] `docs/design-direction.md`: *Lists and counts*' sentence on History's form is rewritten for
-  the card; *A chip lives in the component unless an address has to name it* gains History's
-  status as its second exception; a *Departures* row for the filters inside the card where the
-  prototype draws them above it (:2676–2682).
-
-Frames: `Workspace.dc.html` :2670–2697; :3569–3580 for the card's head and chips.
-
-Authority: ADR 0033 (the URL-backed history), ADR 0056, ADR 0063 (*Clear filters*).
-
-Departures to record: the filters inside the card, the operator's request; status chips without
-counts.
-
-Branch: `feat/history-index-card`. Checks: `History.test.tsx` (a chip narrows the address and
-the listing, *Clear filters* drops it, the empty state and the miss apart, the pill);
-`FilterChips.test.tsx` for the count-less chip's name; Playwright `experiment-start`, which
-narrows history by Framework and searches (:731–760) and reads "No experiment matches these
-filters".
-
-Slice evidence: an operator on History presses *Failed*, the address says so, a reload keeps it,
-and *Clear filters* brings every run back; a lab with no run is told how to start one.
 
 ### Acceptance criteria
 

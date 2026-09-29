@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { type ReactNode, type Ref, useId } from "react";
 import {
   cardTitleClasses,
   searchFieldClasses,
@@ -31,18 +31,23 @@ import {
  *
  * **It searches as it is typed**, which is what the prototype does and what an index full of
  * rows already in the browser can afford — there is no request behind a keystroke here. The
- * one search in this workspace that does go to the server, on Experiment history, is
- * submitted rather than typed and is not this control.
+ * one search in this workspace that does go to the server, on Experiment history, is the same
+ * control inside that page's form: `onChange` there holds the words, and the form's *Search*
+ * — or Enter in the box — submits them, so a keystroke still sends nothing. `inputRef` is for
+ * that page too, whose *Clear filters* hands focus back to the box it emptied.
  */
 export function SearchField({
   label,
   value,
   onChange,
+  inputRef,
 }: {
   /** What the field is called and what is written in it — "Search shops". */
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** The input itself, for a page that has to move focus to it. */
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const id = useId();
   return (
@@ -59,6 +64,7 @@ export function SearchField({
       <input
         className={searchFieldClasses}
         id={id}
+        ref={inputRef}
         onChange={(event) => onChange(event.target.value)}
         placeholder={label}
         // A `searchbox` rather than a `textbox`: it is the role the control has, it is what a

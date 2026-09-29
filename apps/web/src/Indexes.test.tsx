@@ -102,6 +102,7 @@ const CREATE_ACTIONS: ReadonlyArray<[path: string, role: "link" | "button", name
   ["/lab/judges", "link", "New judge"],
   ["/lab/objective-blocks", "link", "New objective block"],
   ["/lab/mutation-blocks", "link", "New mutation block"],
+  ["/lab/history", "link", "New experiment"],
 ];
 
 describe("every index's create action", () => {
@@ -159,6 +160,7 @@ const LISTINGS: ReadonlyArray<[path: string, route: string, title: string, empty
     "Faults a scenario can inject",
     /No mutation block/,
   ],
+  ["/lab/history", "*/api/v1/experiments", "Recorded across every shop", /No experiment/],
 ];
 
 describe("every index whose listing fails", () => {

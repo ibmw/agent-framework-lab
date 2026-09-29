@@ -5,12 +5,16 @@ import { describeApiError } from "../api/client";
 import { forkExperiment, listExperimentHistory, replayExperiment } from "../api/experiments";
 import { ActionStatus } from "../components/ActionStatus";
 import { ButtonIcon } from "../components/ButtonIcon";
+import { type FilterChip, FilterChips } from "../components/FilterChips";
 import { BusyButton } from "../components/PrimaryAction";
-import { PageHeader } from "../components/WorkspaceChrome";
+import { SearchField, SearchRow } from "../components/SearchField";
+import { PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { type ActionStatusRow, DERIVATION_NOTE, derivationReport } from "../lib/actionStatus";
+import { EXPERIMENT_STATUS, labelOf } from "../lib/enumLabels";
 import { OUTCOMES } from "../lib/evidence";
 import { unreachableArmsNote } from "../lib/modelConnections";
 import {
+  accentButtonClasses,
   fieldControlClasses,
   fieldLabelClasses,
   formatTimestamp,
@@ -29,12 +33,40 @@ import { useLabWorkspace } from "../shell/useLabWorkspace";
 const UNAVAILABLE = "Experiment history is unavailable.";
 const PAGE_SIZE = 20;
 
-/** What each status means, in the words the reading behind it is made of. */
-const STATUSES: Record<ExperimentHistoryEntrySchema["status"], { label: string; tone: string }> = {
-  running: { label: "Running", tone: "bg-admin-draft text-admin-draft-ink" },
-  completed: { label: "Completed", tone: "bg-admin-published text-admin-published-ink" },
-  failed: { label: "Failed", tone: "bg-lab-error/15 text-lab-error" },
-};
+/** The index card's title: what the card lists, beside the page's own name. */
+const CARD_TITLE = "Recorded across every shop";
+
+type StatusFilter = "all" | ExperimentHistoryEntrySchema["status"];
+
+/**
+ * The status chips: All, then each status the contract publishes, in its own words.
+ *
+ * **No counts.** `ExperimentHistoryResponse` carries one narrowed page and its total, and no
+ * figure per status, so every chip is `count: null` and named by its label alone — a figure
+ * the payload lacks is not faked (`docs/design-direction.md`, *Lists and counts*). What a
+ * chip *does* is the selects' own: it writes `status` into the address and the backend
+ * narrows, because this page's filters are the URL (ADR 0033).
+ *
+ * The kinds are the handoff's meanings rather than the prototype's `filterKind` classifier,
+ * which places none of the three words and would draw its check beside *Failed*: a running
+ * run is the clock, a completed one the check, a failed one the triangle.
+ */
+const STATUS_CHIPS: readonly FilterChip<StatusFilter>[] = [
+  { id: "all", label: "All", kind: "all", count: null },
+  {
+    id: "running",
+    label: labelOf(EXPERIMENT_STATUS, "running"),
+    kind: "unfulfilled",
+    count: null,
+  },
+  {
+    id: "completed",
+    label: labelOf(EXPERIMENT_STATUS, "completed"),
+    kind: "published",
+    count: null,
+  },
+  { id: "failed", label: labelOf(EXPERIMENT_STATUS, "failed"), kind: "attention", count: null },
+];
 
 /**
  * The date filters, as the spans an operator actually asks for.
@@ -138,7 +170,10 @@ export function ExperimentHistoryPage() {
   const [params, setParams] = useSearchParams();
   const [listing, setListing] = useState<ExperimentHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Two failures in two places: the listing's is said inside its card, where the rows would
+  // have been; a replay's or a fork's above the card, beside the queue that reported it.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deriveError, setDeriveError] = useState<string | null>(null);
   // The row being derived from, which derivation, and the arms it runs; or null.
   const [deriving, setDeriving] = useState<{
     experimentId: string;
@@ -183,7 +218,7 @@ export function ExperimentHistoryPage() {
         subject: experiment.label,
         arms: armRows(experiment, recordedPin),
       });
-      setError(null);
+      setDeriveError(null);
       try {
         const derived = await replayExperiment(experiment.shop_id, experiment.experiment_id);
         // A replay is a new experiment, so history holds one more than it did and the rail
@@ -191,7 +226,7 @@ export function ExperimentHistoryPage() {
         void refreshTotal();
         navigate(`/lab/bench/${experiment.shop_id}/${derived.experiment_id}/results`);
       } catch (cause: unknown) {
-        setError(describeApiError(cause, "This experiment could not be replayed."));
+        setDeriveError(describeApiError(cause, "This experiment could not be replayed."));
       } finally {
         setDeriving(null);
       }
@@ -218,7 +253,7 @@ export function ExperimentHistoryPage() {
         subject: experiment.label,
         arms: armRows(experiment, forkTarget),
       });
-      setError(null);
+      setDeriveError(null);
       try {
         const derived = await forkExperiment(experiment.shop_id, experiment.experiment_id, {
           arms: experiment.arms.map((arm) => {
@@ -229,7 +264,7 @@ export function ExperimentHistoryPage() {
         void refreshTotal();
         navigate(`/lab/bench/${experiment.shop_id}/${derived.experiment_id}/results`);
       } catch (cause: unknown) {
-        setError(describeApiError(cause, "This experiment could not be forked."));
+        setDeriveError(describeApiError(cause, "This experiment could not be forked."));
       } finally {
         setDeriving(null);
       }
@@ -244,7 +279,7 @@ export function ExperimentHistoryPage() {
   // The closed vocabularies are checked against the values the contract actually publishes:
   // a URL is typed by anyone, and a filter the backend would refuse should narrow nothing
   // rather than turn a shared link into an error page.
-  const status = oneOf(params.get("status"), keysOf(STATUSES));
+  const status = oneOf(params.get("status"), keysOf(EXPERIMENT_STATUS));
   const outcome = oneOf(params.get("outcome"), keysOf(OUTCOMES));
   const span = oneOf(
     params.get("span"),
@@ -292,11 +327,11 @@ export function ExperimentHistoryPage() {
     )
       .then((body) => {
         setListing(body);
-        setError(null);
+        setLoadError(null);
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -377,179 +412,39 @@ export function ExperimentHistoryPage() {
     unreachable !== null && unreachable.size > 0,
   );
 
+  // Whether the page the backend answered was narrowed at all, read off the values it was
+  // actually asked with — a `?status=bogus` this page ignored narrows nothing.
+  const narrowed = [shopId, scenarioId, frameworkId, tag, status, outcome, span, query].some(
+    (value) => value !== "",
+  );
+  // Nothing recorded at all is not a miss. The lab's total says so — the figure the rail
+  // draws, which the shell already holds (ADR 0056) — and an unnarrowed page of none is that
+  // same total, answered before the shell's read has landed.
+  const nothingRecorded = total === 0 && (lab.listings.history.count === 0 || !narrowed);
+  // The form draws what the listing answered — the facets are its options — so it waits for
+  // the first answer, and a listing that failed says its failure and nothing else.
+  const ready = listing !== null && loadError === null;
+
   return (
     <>
       <PageHeader
         title="Experiment history"
         description="Every run this lab has made, across every shop. Each row keeps the exact published versions it pinned, the starting state it froze, and what each arm's own record says — never a score across arms."
+        actions={
+          <Link className={accentButtonClasses} to="/lab/bench">
+            <ButtonIcon verb="create" />
+            New experiment
+          </Link>
+        }
       />
 
-      {error ? (
+      {deriveError ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {deriveError}
         </p>
       ) : null}
 
-      {/* Each control names itself. A select wrapped in a label takes its accessible name
-          from the whole label, options included, so "Framework" was announced — and matched
-          by tests — as "Framework All frameworks Deterministic fake …". */}
-      <form
-        aria-label="Narrow history"
-        className="mb-4 flex flex-wrap items-end gap-3"
-        onSubmit={submitSearch}
-      >
-        <label className={`${fieldLabelClasses} min-w-64 flex-1`}>
-          Search
-          <input
-            ref={searchBox}
-            aria-label="Search"
-            className={`${fieldControlClasses} w-full`}
-            placeholder="Name, scenario, shop, configuration, tag, or note…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-        <label className={fieldLabelClasses}>
-          Shop
-          <select
-            aria-label="Shop"
-            className={`${fieldControlClasses} w-full`}
-            value={shopId}
-            onChange={(event) => narrow("shop", event.target.value)}
-          >
-            <option value="">All shops</option>
-            {(listing?.shops ?? []).map((facet) => (
-              <option key={facet.id} value={facet.id}>
-                {facet.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {labShopMissing ? (
-          <div className="basis-full">
-            <NoCurrentShop what={aboutTheTopBar} />
-          </div>
-        ) : null}
-        <label className={fieldLabelClasses}>
-          Scenario
-          <select
-            aria-label="Scenario"
-            className={`${fieldControlClasses} w-full`}
-            value={scenarioId}
-            onChange={(event) => narrow("scenario", event.target.value)}
-          >
-            <option value="">All scenarios</option>
-            {(listing?.scenarios ?? []).map((facet) => (
-              <option key={facet.id} value={facet.id}>
-                {facet.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={fieldLabelClasses}>
-          Framework
-          <select
-            aria-label="Framework"
-            className={`${fieldControlClasses} w-full`}
-            value={frameworkId}
-            onChange={(event) => narrow("framework", event.target.value)}
-          >
-            <option value="">All frameworks</option>
-            {(listing?.frameworks ?? []).map((facet) => (
-              <option key={facet.id} value={facet.id}>
-                {facet.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={fieldLabelClasses}>
-          Tag
-          <select
-            aria-label="Tag"
-            className={`${fieldControlClasses} w-full`}
-            value={tag}
-            onChange={(event) => narrow("tag", event.target.value)}
-          >
-            <option value="">All tags</option>
-            {(listing?.tags ?? []).map((facet) => (
-              <option key={facet.id} value={facet.id}>
-                {facet.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={fieldLabelClasses}>
-          Status
-          <select
-            aria-label="Status"
-            className={`${fieldControlClasses} w-full`}
-            value={status}
-            onChange={(event) => narrow("status", event.target.value)}
-          >
-            <option value="">Any status</option>
-            {Object.entries(STATUSES).map(([value, meaning]) => (
-              <option key={value} value={value}>
-                {meaning.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={fieldLabelClasses}>
-          Objective outcome
-          <select
-            aria-label="Objective outcome"
-            className={`${fieldControlClasses} w-full`}
-            value={outcome}
-            onChange={(event) => narrow("outcome", event.target.value)}
-          >
-            <option value="">Any outcome</option>
-            {Object.entries(OUTCOMES).map(([value, meaning]) => (
-              <option key={value} value={value}>
-                {meaning.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={fieldLabelClasses}>
-          Started
-          <select
-            aria-label="Started"
-            className={`${fieldControlClasses} w-full`}
-            value={span}
-            onChange={(event) => narrow("span", event.target.value)}
-          >
-            {SPANS.map((entry) => (
-              <option key={entry.value} value={entry.value}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {/* The form ends on its two actions, as the frame draws them: undo every narrowing,
-            then search. Clear filters is secondary, so it keeps native `disabled` while there
-            is nothing to clear, with the reason in `title` and in the line it names (ADR 0063). */}
-        <div className="flex items-end gap-2">
-          <button
-            className={outlineButtonClasses}
-            type="button"
-            disabled={!filtered}
-            title={filtered ? undefined : NOTHING_TO_CLEAR}
-            aria-describedby={filtered ? undefined : clearNoteId}
-            onClick={clearFilters}
-          >
-            Clear filters
-          </button>
-          <button className={inkButtonClasses} type="submit">
-            Search
-          </button>
-        </div>
-        {/* Mounted before anything is cleared, so the sentence a press writes is announced. */}
-        <p id={clearNoteId} role="status" className="basis-full text-xs text-admin-muted">
-          {filtered ? "" : cleared ? FILTERS_CLEARED : NOTHING_TO_CLEAR}
-        </p>
-      </form>
-
-      {/* Outside the table, which is busy while it is read again and would silence it. */}
+      {/* Outside the card, whose rows are busy while they are read again and would silence it. */}
       <div className={deriving === null ? undefined : "mb-4"}>
         <ActionStatus
           label="Where each derived arm stands"
@@ -559,88 +454,263 @@ export function ExperimentHistoryPage() {
         />
       </div>
 
-      <section
-        aria-label="Experiment history"
-        // The rows of the previous narrowing stay on screen while the next one is read, so
-        // the section says it is busy rather than looking settled on a stale answer.
-        aria-busy={loading}
-        className={`${surfaceClasses} overflow-hidden ${loading && listing !== null ? "opacity-60" : ""}`}
-      >
-        {loading && listing === null ? (
-          <p className="p-4 text-[13px] text-admin-muted">Loading experiments…</p>
-        ) : total === 0 ? (
-          <p className="p-4 text-[13px] text-admin-muted">
-            No experiment matches these filters. Every run this lab makes stays here with the
-            versions it pinned.
-          </p>
+      <section aria-label="Experiment history" className={`${surfaceClasses} overflow-hidden`}>
+        {ready ? (
+          // One form over the card's head, as it was one form above it: the search box, the
+          // status chips and the second row of facets, ending on *Clear filters* and then
+          // *Search* (:2673). Each control names itself — a select wrapped in a label takes its
+          // accessible name from the whole label, options included, so "Framework" was once
+          // announced, and matched by tests, as "Framework All frameworks Deterministic fake …".
+          <form aria-label="Narrow history" onSubmit={submitSearch}>
+            <SearchRow title={CARD_TITLE}>
+              <SearchField
+                label="Search experiments, notes and tags"
+                inputRef={searchBox}
+                value={search}
+                onChange={setSearch}
+              />
+            </SearchRow>
+            <FilterChips
+              legend="Filter by status"
+              chips={STATUS_CHIPS}
+              selected={status === "" ? "all" : status}
+              onSelect={(chip) => narrow("status", chip === "all" ? "" : chip)}
+            />
+            <div className="flex flex-wrap items-end gap-3 border-b border-admin-border px-4 py-3">
+              <label className={fieldLabelClasses}>
+                Shop
+                <select
+                  aria-label="Shop"
+                  className={`${fieldControlClasses} w-full`}
+                  value={shopId}
+                  onChange={(event) => narrow("shop", event.target.value)}
+                >
+                  <option value="">All shops</option>
+                  {(listing?.shops ?? []).map((facet) => (
+                    <option key={facet.id} value={facet.id}>
+                      {facet.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {labShopMissing ? (
+                <div className="basis-full">
+                  <NoCurrentShop what={aboutTheTopBar} />
+                </div>
+              ) : null}
+              <label className={fieldLabelClasses}>
+                Scenario
+                <select
+                  aria-label="Scenario"
+                  className={`${fieldControlClasses} w-full`}
+                  value={scenarioId}
+                  onChange={(event) => narrow("scenario", event.target.value)}
+                >
+                  <option value="">All scenarios</option>
+                  {(listing?.scenarios ?? []).map((facet) => (
+                    <option key={facet.id} value={facet.id}>
+                      {facet.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Framework
+                <select
+                  aria-label="Framework"
+                  className={`${fieldControlClasses} w-full`}
+                  value={frameworkId}
+                  onChange={(event) => narrow("framework", event.target.value)}
+                >
+                  <option value="">All frameworks</option>
+                  {(listing?.frameworks ?? []).map((facet) => (
+                    <option key={facet.id} value={facet.id}>
+                      {facet.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Tag
+                <select
+                  aria-label="Tag"
+                  className={`${fieldControlClasses} w-full`}
+                  value={tag}
+                  onChange={(event) => narrow("tag", event.target.value)}
+                >
+                  <option value="">All tags</option>
+                  {(listing?.tags ?? []).map((facet) => (
+                    <option key={facet.id} value={facet.id}>
+                      {facet.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Objective outcome
+                <select
+                  aria-label="Objective outcome"
+                  className={`${fieldControlClasses} w-full`}
+                  value={outcome}
+                  onChange={(event) => narrow("outcome", event.target.value)}
+                >
+                  <option value="">Any outcome</option>
+                  {Object.entries(OUTCOMES).map(([value, meaning]) => (
+                    <option key={value} value={value}>
+                      {meaning.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={fieldLabelClasses}>
+                Started
+                <select
+                  aria-label="Started"
+                  className={`${fieldControlClasses} w-full`}
+                  value={span}
+                  onChange={(event) => narrow("span", event.target.value)}
+                >
+                  {SPANS.map((entry) => (
+                    <option key={entry.value} value={entry.value}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {/* The form ends on its two actions, as the frame draws them: undo every
+                  narrowing, then search. Clear filters is secondary, so it keeps native
+                  `disabled` while there is nothing to clear, with the reason in `title` and in
+                  the line it names (ADR 0063). */}
+              <div className="ml-auto flex items-end gap-2">
+                <button
+                  className={outlineButtonClasses}
+                  type="button"
+                  disabled={!filtered}
+                  title={filtered ? undefined : NOTHING_TO_CLEAR}
+                  aria-describedby={filtered ? undefined : clearNoteId}
+                  onClick={clearFilters}
+                >
+                  Clear filters
+                </button>
+                <button className={inkButtonClasses} type="submit">
+                  Search
+                </button>
+              </div>
+              {/* Mounted before anything is cleared, so the sentence a press writes is announced. */}
+              <p id={clearNoteId} role="status" className="basis-full text-xs text-admin-muted">
+                {filtered ? "" : cleared ? FILTERS_CLEARED : NOTHING_TO_CLEAR}
+              </p>
+            </div>
+          </form>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr>
-                  <th className={tableHeadClasses}>Experiment</th>
-                  <th className={tableHeadClasses}>Scenario</th>
-                  <th className={tableHeadClasses}>Arms</th>
-                  <th className={tableHeadClasses}>Objectives</th>
-                  <th className={tableHeadClasses}>Status</th>
-                  <th className={tableHeadClasses}>Started</th>
-                  <th className={tableHeadClasses}>Quick actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(listing?.experiments ?? []).map((experiment) => (
-                  <HistoryRow
-                    key={experiment.experiment_id}
-                    experiment={experiment}
-                    onReplay={replay}
-                    onFork={fork}
-                    deriving={
-                      deriving?.experimentId === experiment.experiment_id ? deriving.kind : null
-                    }
-                    busy={deriving !== null}
-                    noteId={derivingNoteId}
-                    replayBlocked={unreachableArmsNote(
-                      experiment.arms.map((arm) => providers.get(pinKey(recordedPin(arm))) ?? null),
-                      unreachable,
-                    )}
-                    forkBlocked={unreachableArmsNote(
-                      experiment.arms.map((arm) => providers.get(pinKey(forkTarget(arm))) ?? null),
-                      unreachable,
-                    )}
-                  />
-                ))}
-              </tbody>
-            </table>
+          <SearchRow title={CARD_TITLE} />
+        )}
+
+        {loadError ? (
+          // Its failure and nothing else: a listing that could not be read has not said the
+          // lab has run nothing, and the rows of an earlier answer are not this one's.
+          <p role="alert" className="p-4 text-[13px] text-lab-error">
+            {loadError}
+          </p>
+        ) : listing === null ? (
+          <p className="p-4 text-[13px] text-admin-muted">Loading experiments…</p>
+        ) : (
+          <div
+            // The rows of the previous narrowing stay on screen while the next one is read, so
+            // they say they are busy rather than looking settled on a stale answer. The rows
+            // and not the card: the form above them, and the line that reports a clear, are
+            // not what is about to change.
+            aria-busy={loading}
+            className={loading ? "opacity-60" : undefined}
+          >
+            {nothingRecorded ? (
+              <p className="p-4 text-[13px] text-admin-muted">
+                No experiment yet. An experiment runs a published scenario against one or two agent
+                configurations, and every run stays here with the versions it pinned —{" "}
+                <Link
+                  className="font-semibold text-lab-ink underline-offset-2 hover:underline"
+                  to="/lab/bench"
+                >
+                  start one on the bench
+                </Link>
+                .
+              </p>
+            ) : total === 0 ? (
+              <p className="p-4 text-[13px] text-admin-muted">No experiment matches this view.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-[13px]">
+                  <thead>
+                    <tr>
+                      <th className={tableHeadClasses}>Experiment</th>
+                      <th className={tableHeadClasses}>Scenario</th>
+                      <th className={tableHeadClasses}>Arms</th>
+                      <th className={tableHeadClasses}>Objectives</th>
+                      <th className={tableHeadClasses}>Status</th>
+                      <th className={tableHeadClasses}>Started</th>
+                      <th className={tableHeadClasses}>Quick actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {listing.experiments.map((experiment) => (
+                      <HistoryRow
+                        key={experiment.experiment_id}
+                        experiment={experiment}
+                        onReplay={replay}
+                        onFork={fork}
+                        deriving={
+                          deriving?.experimentId === experiment.experiment_id ? deriving.kind : null
+                        }
+                        busy={deriving !== null}
+                        noteId={derivingNoteId}
+                        replayBlocked={unreachableArmsNote(
+                          experiment.arms.map(
+                            (arm) => providers.get(pinKey(recordedPin(arm))) ?? null,
+                          ),
+                          unreachable,
+                        )}
+                        forkBlocked={unreachableArmsNote(
+                          experiment.arms.map(
+                            (arm) => providers.get(pinKey(forkTarget(arm))) ?? null,
+                          ),
+                          unreachable,
+                        )}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {total > 0 ? (
+              <div className="flex flex-wrap items-center gap-3 border-t border-admin-border px-4 py-3">
+                <p className="text-xs text-admin-muted">
+                  Showing {first}–{last} of {total}
+                </p>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    className={subtleButtonClasses}
+                    type="button"
+                    disabled={shown <= 1}
+                    onClick={() => turnTo(shown - 1)}
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-admin-muted">
+                    Page {shown} of {pages}
+                  </span>
+                  <button
+                    className={subtleButtonClasses}
+                    type="button"
+                    disabled={shown >= pages}
+                    onClick={() => turnTo(shown + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
-        {total > 0 ? (
-          <div className="flex flex-wrap items-center gap-3 border-t border-admin-border px-4 py-3">
-            <p className="text-xs text-admin-muted">
-              Showing {first}–{last} of {total}
-            </p>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                className={subtleButtonClasses}
-                type="button"
-                disabled={shown <= 1}
-                onClick={() => turnTo(shown - 1)}
-              >
-                Previous
-              </button>
-              <span className="text-xs text-admin-muted">
-                Page {shown} of {pages}
-              </span>
-              <button
-                className={subtleButtonClasses}
-                type="button"
-                disabled={shown >= pages}
-                onClick={() => turnTo(shown + 1)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        ) : null}
       </section>
     </>
   );
@@ -671,7 +741,6 @@ function HistoryRow({
   forkBlocked: string;
 }) {
   const bench = `/lab/bench/${experiment.shop_id}/${experiment.experiment_id}`;
-  const meaning = STATUSES[experiment.status];
   // What the row's fork would actually move. Nothing newer anywhere is nothing to fork onto.
   const newer = experiment.arms.some(
     (arm) =>
@@ -700,12 +769,13 @@ function HistoryRow({
         >
           {experiment.label}
         </Link>
-        <p className="text-xs text-admin-muted">{experiment.shop_name}</p>
+        {/* The secondary lines at the table's 13px, as every other index draws them. */}
+        <p className="text-admin-muted">{experiment.shop_name}</p>
         {experiment.derived_from ? (
           // Provenance rather than a status: a derived run is an experiment like any other,
           // and this is what says the two rows sharing a fingerprint are related. The kind
           // is the word, because "replay of" and "fork of" are not the same sentence.
-          <p className="text-xs text-admin-muted">
+          <p className="text-admin-muted">
             {experiment.derived_from.kind} of{" "}
             <Link
               className="text-lab-ink underline-offset-2 hover:underline"
@@ -718,7 +788,7 @@ function HistoryRow({
       </td>
       <td className={tableCellClasses}>
         {experiment.scenario_name}
-        <p className="text-xs text-admin-muted">
+        <p className="text-admin-muted">
           v{experiment.scenario_version}
           {experiment.scenario_superseded ? (
             // Provenance, not a warning: this run is still reproducible from what it pinned.
@@ -760,11 +830,7 @@ function HistoryRow({
         </ul>
       </td>
       <td className={tableCellClasses}>
-        <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${meaning.tone}`}
-        >
-          {meaning.label}
-        </span>
+        <StatusPill tone="run" label={labelOf(EXPERIMENT_STATUS, experiment.status)} />
         {/* What an operator wrote, which is the one thing on a row the run did not produce.
             The tags because they are what this listing narrows by, and the notes as a count
             because a note reads as itself only beside the evidence it was written about. */}

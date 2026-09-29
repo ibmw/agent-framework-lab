@@ -3,6 +3,7 @@ import type {
   BackgroundKind,
   BlockParameterKind,
   ComparisonDimension,
+  ExperimentHistoryEntrySchema,
   FulfilmentStatus,
   JudgeEvidenceScope,
   ObjectiveSeverity,
@@ -331,6 +332,19 @@ export const TICKET_ORIGIN_KIND: LabelMap<TicketOriginKind> = {
   support_entry: { label: "support entry" },
 };
 
+/**
+ * Where an experiment stands, as History's status chips and pills read it.
+ *
+ * Keyed on `ExperimentHistoryEntrySchema["status"]` because the contracts package names no
+ * `ExperimentStatus` type — the union `openapi.yaml` publishes under that name, as `Currency`
+ * is spelled off the schema that carries it. The sweep looks it up by that name.
+ */
+export const EXPERIMENT_STATUS: LabelMap<ExperimentHistoryEntrySchema["status"]> = {
+  running: { label: "Running" },
+  completed: { label: "Completed" },
+  failed: { label: "Failed" },
+};
+
 export const TICKET_AUTHOR: LabelMap<TicketAuthor> = {
   customer: { label: "Customer" },
   support_agent: { label: "Past support agent" },
@@ -401,6 +415,7 @@ export const ENUM_LABELS = {
   ComparisonDimension: COMPARISON_DIMENSION,
   Currency: CURRENCY,
   DefinitionType: DEFINITION_TYPE,
+  ExperimentStatus: EXPERIMENT_STATUS,
   FulfilmentStatus: FULFILMENT_STATUS,
   JudgeEvidenceScope: JUDGE_EVIDENCE_SCOPE,
   ObjectiveSeverity: OBJECTIVE_SEVERITY,

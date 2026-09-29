@@ -14,12 +14,17 @@ import {
  * `count` is a number rather than a string because the row renders it and the caller must not
  * be able to write one figure and filter by another — the whole point of this component is
  * that the number beside a label is the number that label produces.
+ *
+ * `null` is a chip whose listing carries no figure for it: Experiment history's status chips,
+ * whose payload is one narrowed page and a total with no count per status. It is said rather
+ * than left out, so a page cannot drop a count it holds by forgetting to pass one — and a
+ * figure the payload lacks is not faked (`docs/design-direction.md`, *Lists and counts*).
  */
 export interface FilterChip<Id extends string> {
   readonly id: Id;
   readonly label: string;
   readonly kind: FilterChipKind;
-  readonly count: number;
+  readonly count: number | null;
 }
 
 /**
@@ -76,7 +81,9 @@ export function FilterChips<Id extends string>({
             // would also give "Never published 2" — an anonymous flex item is not laid out, so
             // it costs no width — but that leans on a rule holding identically in jsdom and in
             // every browser, where this is exact and the spec below pins it to `textContent`.
-            aria-label={`${chip.label} ${chip.count}`}
+            // A chip with no count is named by its label alone: no number to announce, and
+            // none drawn.
+            aria-label={chip.count === null ? chip.label : `${chip.label} ${chip.count}`}
             aria-pressed={on}
             onClick={() => onSelect(chip.id)}
             className={on ? filterChipStateClasses.selected : filterChipStateClasses.unselected}
@@ -92,7 +99,9 @@ export function FilterChips<Id extends string>({
               strokeWidth={1.8}
             />
             {chip.label}
-            <span className={filterChipCountClasses}>{chip.count}</span>
+            {chip.count === null ? null : (
+              <span className={filterChipCountClasses}>{chip.count}</span>
+            )}
           </button>
         );
       })}

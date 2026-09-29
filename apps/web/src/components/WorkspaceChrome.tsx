@@ -966,6 +966,11 @@ export function PublishButton({
  * `publication` is the prototype's dot, which it draws on both of a record's states — the
  * published "v3 · 2 versions" and *Never published* (`Workspace.dc.html` :189, :192) — so the
  * dot says "publication" and the word says which.
+ *
+ * `run` is where an experiment stands — *Running*, *Completed*, *Failed* — on Experiment
+ * history, whose status column had a colour map of its own until it took this pill (PLAN-UX
+ * Milestone 9, the index template). The prototype draws no status there, so the glyph is this
+ * table's: a play mark, for the axis a run moves along.
  */
 const PILL_GLYPHS = {
   payment: "◆",
@@ -973,6 +978,7 @@ const PILL_GLYPHS = {
   product: "◧",
   availability: "▤",
   publication: "●",
+  run: "▷",
 } as const;
 
 export type StatusTone = keyof typeof PILL_GLYPHS;

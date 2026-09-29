@@ -159,6 +159,8 @@ the rule that licensed it. A slice that touches one revisits it; none is an over
 | An arm's objectives figure | "5 of 6 objectives met", green on one arm and amber on the other (:2578, :2587) | "met of decided" over "decided objectives met", in one ink on both | two arms driven to different depths hold different denominators, and a colour between them is the verdict *Evidence before opinion* refuses (ADR 0068) |
 | The results header's Fork | "Fork" | "Fork…" | it opens the panel that asks which versions to run, where Replay asks nothing; rule 5, the name a spec presses |
 | *Clear filters* on History | drawn, pressable whatever is set (:2680) | disabled while nothing is set, with the reason in `title` and in the line beside it, which says "Filters cleared." once pressed | a secondary control that can do nothing keeps native `disabled` and says why (ADR 0063); the same line reports the press, so the reason and the outcome are one place |
+| History's filters | a row of selects, a tag box, *Clear filters* and *Search* above the card, outside it (:2676–2682), and no search box or chips | inside the index card: the search box on the card's header line, the status as chips beneath it, the other facets and the two actions as the card's second row | the operator's request: every index is one card with a title, a search and chips (PLAN-UX Milestone 9's index template); the form is still one submitted form and still the address (ADR 0033) |
+| History's status chips | none drawn; every other index's chips carry a count (:3576–3579) | All, Running, Completed and Failed, each named by its word alone, with no figure; the kinds the clock, the check and the triangle | `ExperimentHistoryResponse` carries a page and its total and no count per status, and a figure the payload lacks is not faked (*Lists and counts*). The prototype's `filterKind` classifier (:5568–5577) places none of the three words and would draw its check beside *Failed*, so the kinds are the README's meanings instead |
 | New experiment's arms and scenario | one select per row naming configuration, version, framework and model together ("cfg-atlas v4 — Pydantic AI · gpt-5-mini"), and the scenario with its version | two selects per row — the record, then its published version — with the framework and model as the row's second line; Arm B's hint adds "Leave it empty to run arm A alone." | a configuration's versions are a read of their own, so one list of every version of every configuration is one read per configuration before the select can open; and the lab runs one arm or two, which a row that could not be emptied would not say (ADR 0064) |
 | The agent-configuration index's name | "Agent configurations" on the lab rail (:4827), the page title (:3229), the links back to the index (:390, :3291), the tour surface (:4637) and the setup-chain step (:4506) | "Agent configs" on the rail entry, the page title, the links back to the index and its tour; the setup-chain step "Agent configuration", with "Open agent configs" as its link | "Agent configurations" wraps onto two lines beside its count in the 216px rail; *Agent configs* is the same word shortened, where *Agent setup* would take the word the shop's setup pages already hold (*Names*). The step names the record kind, as its neighbours Support identity and Judge do, and its link names the index |
 | A template's parameters | read-only rows of name, kind and *same-shop* (:607–612), with no way to author one on the editor | `EntryCard` rows that open in place on kind, description, default and whether a scenario must bind it, with ↑/↓ and a Remove that asks twice on the row and *Add parameter* below a rule | the parameters are authored on this editor and nowhere else once the block exists — the prototype's editor has no other place to write a description or a default — and ADR 0060 asks twice before one leaves; the order is what a binding follows, so it stays authored |
@@ -534,14 +536,22 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   submitted, URL-backed form already makes it: its index reads one narrowed page and the rail
   reads the lab's total beside it, because the count is of the whole list and the page never is.
 - **Every index can be searched** (`SearchField`), in the card's header opposite the title with
-  the chips beneath; a miss reads "No X matches this view". Experiment history keeps its
-  submitted, URL-backed form, which ends on *Clear filters* and then *Search* (:2673): Clear
-  drops every filter and the query at once, says so in the line beside it, and hands focus to
-  the search box.
-- **A chip lives in the component unless an address has to name it.** The one exception is the
+  the chips beneath; a miss reads "No X matches this view". Experiment history's card holds its
+  submitted, URL-backed form: the search box in the card's header, submitted rather than typed;
+  the status chips beneath it; Shop, Scenario, Framework, Tag, Objective outcome and Started as
+  the card's second row, ending on *Clear filters* and then *Search* (:2673). Every chip and
+  select narrows the address at once, and the search box on submission; Clear drops every
+  filter and the query at once, says so in the line beside it, and hands focus to the search
+  box. A lab that has run nothing — the lab's total, the rail's figure — is told how to start
+  one on the bench, and a narrowing that left everything out is a miss.
+- **A chip lives in the component unless an address has to name it.** Two exceptions stand. The
   shop's *Documents* table, whose chip is `?kind=`: the retired `/setup/support` redirects to it
   filtered to Guidelines (ADR 0054, ADR 0057), and a filter an address names has to be the
-  filter that is pressed. Pressing one replaces the history entry rather than pushing one.
+  filter that is pressed; pressing one replaces the history entry rather than pushing one. And
+  Experiment history's status chips, which are `?status=` because every filter of that page is
+  the address (ADR 0033); pressing one pushes an entry, as the selects beside it do, so Back
+  walks the narrowing back. They carry no count: the listing is one narrowed page and a total,
+  with no figure per status.
 - **Every header spans the content width** and holds the page's actions. Every page that edits
   or creates one object pins its header, with what its actions report beneath them: the failure, the published version, the reasons
   under Publish. Index and overview pages do not, even where they carry the shop draft's Save.

@@ -651,6 +651,10 @@ export type FilterChipKind =
  * the classifier's `ok`, named for the README's "check = published/active", and so the kind of
  * every active-state chip the classifier leaves unplaced — Orders' and Tickets' *Open*,
  * Tickets' *Resolved*, *Active*, *Usable*, *Runnable*, *Adoptable* — as well as of *Published*.
+ * Experiment history's status chips are the one row placed otherwise: the classifier places
+ * none of *Running*, *Completed* and *Failed* and would draw its check beside *Failed*, so they
+ * take the README's *Assets* meanings — the clock, the check and the triangle
+ * (`docs/design-direction.md`, *Departures*, "History's status chips").
  *
  * The drawings are `lucide-react`, as the button glyphs are, and they are the circled marks
  * the prototype draws rather than the bare ones the buttons use: `FILTER_ICONS.ok` is a check

@@ -148,6 +148,38 @@ describe("the filter chip row", () => {
       expect(chip.getAttribute("aria-label")).toBe(written?.replace(/(\D)(\d+)$/, "$1 $2"));
     }
   });
+
+  /**
+   * A listing that carries no figure for a subset — Experiment history's statuses, whose
+   * payload is one narrowed page and a total — passes `count: null`, and the chip is its
+   * label alone: no number drawn, none announced, and still a chip that filters.
+   */
+  it("names a chip without a count by its label alone, and draws no figure", async () => {
+    const user = userEvent.setup();
+    const pressed: string[] = [];
+    render(
+      <FilterChips
+        legend="Filter by status"
+        chips={[
+          { id: "all", label: "All", kind: "all", count: null },
+          { id: "failed", label: "Failed", kind: "attention", count: null },
+        ]}
+        selected="all"
+        onSelect={(id) => pressed.push(id)}
+      />,
+    );
+    const row = within(screen.getByRole("group", { name: "Filter by status" }));
+
+    const failed = row.getByRole("button", { name: "Failed" });
+    expect(failed).toHaveAttribute("aria-label", "Failed");
+    expect(failed).toHaveTextContent(/^Failed$/);
+    expect(failed.querySelector(".tabular-nums")).toBeNull();
+    expect(row.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(failed);
+
+    expect(pressed).toEqual(["failed"]);
+  });
 });
 
 /** The same index, with the search box the eleven searchable ones draw over their chips. */

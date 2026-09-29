@@ -16,6 +16,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { HISTORY_TOTAL_PAGE_SIZE } from "./shell/listings";
 import { renderApp } from "./test/app";
 import { labConnection } from "./test/connection";
+import { indexCard } from "./test/indexes";
 import { expectBusy, expectNotRefused } from "./test/refused";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
@@ -187,7 +188,36 @@ const SHOP_LISTING: ShopListResponse = {
   ],
 };
 
-/** The page's own Shop filter, which the notice sends no reader to. */
+/** The index card's title, which the card is found by. */
+const CARD_TITLE = "Recorded across every shop";
+
+/** What the search box is called and what is written in it. */
+const SEARCH = "Search experiments, notes and tags";
+
+function searchBox(): HTMLElement {
+  return screen.getByRole("searchbox", { name: SEARCH });
+}
+
+/** The status chips, inside the card and inside the form. */
+function statusChips() {
+  return within(screen.getByRole("group", { name: "Filter by status" }));
+}
+
+/** Which status chip is pressed, by its name. */
+function pressedStatus(): string[] {
+  return statusChips()
+    .getAllByRole("button")
+    .filter((chip) => chip.getAttribute("aria-pressed") === "true")
+    .map((chip) => chip.getAttribute("aria-label") ?? "");
+}
+
+/** The rows' container, which is what says it is busy while a narrowing is read. */
+function rowsOf(): HTMLElement {
+  const rows = screen.getByRole("table").closest("[aria-busy]");
+  expect(rows, "the rows' busy container").not.toBeNull();
+  return rows as HTMLElement;
+}
+
 /** The line beside *Clear filters*: why it is disabled, or what its press did. */
 function clearLine(): HTMLElement {
   return within(screen.getByRole("form", { name: "Narrow history" })).getByRole("status");
@@ -426,6 +456,97 @@ describe("experiment history", () => {
     expect(within(table).getByText("Running")).toBeVisible();
   });
 
+  it("draws a run's status as the shared pill: the axis's glyph beside the word", async () => {
+    renderHistory();
+
+    const table = await screen.findByRole("table");
+    for (const word of ["Failed", "Running"]) {
+      const pill = within(table).getByText(word);
+      const glyph = pill.firstElementChild;
+      expect(glyph, `the glyph beside ${word}`).not.toBeNull();
+      expect(glyph).toHaveAttribute("aria-hidden");
+      expect(glyph).toHaveTextContent("▷");
+      // One fill for every state, as every status axis but publication draws: the word and
+      // the glyph carry it, never a colour of the page's own.
+      expect(pill).toHaveClass("rounded-full", "bg-admin-border/60");
+      expect(pill.className).not.toMatch(/lab-error|admin-draft|admin-published/);
+    }
+  });
+
+  it("draws a row's secondary lines at the table's 13px, as every index does", async () => {
+    renderHistory();
+
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+    for (const line of [
+      within(row).getByText("Northstar Outfitters"),
+      within(row).getByText("v1"),
+    ]) {
+      expect(line).toHaveClass("text-admin-muted");
+      expect(line).not.toHaveClass("text-xs");
+    }
+  });
+
+  it("offers New experiment in its header, with the create glyph, to the bench", async () => {
+    renderHistory();
+
+    const create = await screen.findByRole("link", { name: "New experiment" });
+    expect(create).toHaveAttribute("href", "/lab/bench");
+    expect(create.closest("header")).not.toBeNull();
+    expect(create.querySelector("svg")).toHaveClass("lucide-plus");
+  });
+
+  it("offers the statuses as chips in the card, named by their words and counting nothing", async () => {
+    renderHistory();
+    await screen.findByRole("table");
+
+    const chips = statusChips().getAllByRole("button");
+    expect(chips.map((chip) => chip.getAttribute("aria-label"))).toEqual([
+      "All",
+      "Running",
+      "Completed",
+      "Failed",
+    ]);
+    for (const chip of chips) {
+      // The payload counts no status, so no chip draws a figure — not even a zero.
+      expect(chip).toHaveAccessibleName(chip.textContent ?? "");
+      expect(chip.textContent).not.toMatch(/\d/);
+    }
+    expect(pressedStatus()).toEqual(["All"]);
+    expect(indexCard(CARD_TITLE)).toContainElement(
+      screen.getByRole("group", { name: "Filter by status" }),
+    );
+  });
+
+  it("narrows the address and the listing on a chip's press, as the selects do", async () => {
+    const user = userEvent.setup();
+    const { router } = renderHistory();
+    await screen.findByRole("table");
+
+    await user.click(statusChips().getByRole("button", { name: "Failed" }));
+
+    // At once, and into the address: the listing asked for is the one the address names.
+    await waitFor(() => expect(lastAsked().get("status")).toBe("failed"));
+    expect(new URLSearchParams(router.state.location.search).get("status")).toBe("failed");
+    // Pushed, as every narrowing of this form is, so Back walks it back.
+    expect(router.state.historyAction).toBe("PUSH");
+    expect(pressedStatus()).toEqual(["Failed"]);
+
+    await user.click(statusChips().getByRole("button", { name: "All" }));
+
+    await waitFor(() => expect(lastAsked().get("status")).toBeNull());
+    expect(router.state.location.search).toBe("");
+    expect(pressedStatus()).toEqual(["All"]);
+  });
+
+  it("opens with the chip its address names pressed, so a reload keeps it", async () => {
+    renderHistory("?status=failed");
+    await screen.findByRole("table");
+
+    expect(lastAsked().get("status")).toBe("failed");
+    expect(pressedStatus()).toEqual(["Failed"]);
+  });
+
   it("opens a row's evidence and its bench, each in the shop that ran it", async () => {
     renderHistory();
 
@@ -539,7 +660,7 @@ describe("experiment history", () => {
     await user.selectOptions(screen.getByLabelText("Scenario"), "Wrong shipping address");
     await user.selectOptions(screen.getByLabelText("Framework"), "Pydantic AI");
     await user.selectOptions(screen.getByLabelText("Tag"), "read-check-gap");
-    await user.selectOptions(screen.getByLabelText("Status"), "Completed");
+    await user.click(statusChips().getByRole("button", { name: "Completed" }));
     await user.selectOptions(screen.getByLabelText("Objective outcome"), "missed");
     await user.selectOptions(screen.getByLabelText("Started"), "Last 30 days");
 
@@ -574,7 +695,7 @@ describe("experiment history", () => {
     await screen.findByRole("table");
     const reads = asked.length;
 
-    await user.type(screen.getByLabelText("Search"), "beacon");
+    await user.type(searchBox(), "beacon");
     expect(asked).toHaveLength(reads);
 
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -588,12 +709,31 @@ describe("experiment history", () => {
 
     const form = screen.getByRole("form", { name: "Narrow history" });
     const controls = Array.from(form.querySelectorAll("input, select, button")).map(
-      (control) => control.getAttribute("aria-label") ?? control.textContent,
+      (control) =>
+        control.getAttribute("aria-label") ??
+        control.getAttribute("placeholder") ??
+        control.textContent,
     );
 
-    expect(controls.slice(-2)).toEqual(["Clear filters", "Search"]);
-    // The search box still opens the form: only its button moved.
-    expect(controls[0]).toBe("Search");
+    // The search box opens the form, in the card's head; the status chips follow it; the
+    // facets are the second row; and the form ends on its two actions.
+    expect(controls).toEqual([
+      SEARCH,
+      "All",
+      "Running",
+      "Completed",
+      "Failed",
+      "Shop",
+      "Scenario",
+      "Framework",
+      "Tag",
+      "Objective outcome",
+      "Started",
+      "Clear filters",
+      "Search",
+    ]);
+    // All of it inside the one index card, under its title.
+    expect(indexCard(CARD_TITLE)).toContainElement(form);
   });
 
   it("offers nothing to clear on an unnarrowed list, and says why", async () => {
@@ -609,7 +749,7 @@ describe("experiment history", () => {
 
   it("clears every filter and the query at once, and says so", async () => {
     const user = userEvent.setup();
-    renderHistory(
+    const { router } = renderHistory(
       `?shop=${OTHER_SHOP_ID}&scenario=${SCENARIO_ID}&framework=pydantic-ai&tag=two-arm&status=failed&outcome=missed&span=30&q=beacon&page=2`,
     );
     await screen.findByRole("table");
@@ -637,15 +777,21 @@ describe("experiment history", () => {
     }
     expect(unnarrowed.get("page")).toBe("1");
     const form = within(screen.getByRole("form", { name: "Narrow history" }));
-    expect(form.getByLabelText("Search")).toHaveValue("");
+    expect(searchBox()).toHaveValue("");
     expect(shopFilter()).toHaveValue("");
-    expect(form.getByLabelText("Status")).toHaveValue("");
+    expect(form.getByLabelText("Scenario")).toHaveValue("");
+    expect(form.getByLabelText("Framework")).toHaveValue("");
+    expect(form.getByLabelText("Tag")).toHaveValue("");
+    expect(form.getByLabelText("Objective outcome")).toHaveValue("");
     expect(form.getByLabelText("Started")).toHaveValue("");
+    expect(pressedStatus()).toEqual(["All"]);
+    // The address holds none of it either, so a reload does not bring any of it back.
+    expect(router.state.location.search).toBe("");
     // It says what it did where it will be heard, and hands focus to the form it emptied
     // rather than dropping it with the button it disabled.
     expect(clearLine()).toHaveTextContent("Filters cleared. Every run is shown.");
     expect(screen.getByRole("button", { name: "Clear filters" })).toBeDisabled();
-    expect(form.getByLabelText("Search")).toHaveFocus();
+    expect(searchBox()).toHaveFocus();
   });
 
   it("clears words typed into the search box and not yet searched for", async () => {
@@ -653,13 +799,13 @@ describe("experiment history", () => {
     renderHistory();
     await screen.findByRole("table");
 
-    await user.type(screen.getByLabelText("Search"), "beacon");
+    await user.type(searchBox(), "beacon");
     const clear = screen.getByRole("button", { name: "Clear filters" });
     expect(clear).toBeEnabled();
 
     await user.click(clear);
 
-    expect(screen.getByLabelText("Search")).toHaveValue("");
+    expect(searchBox()).toHaveValue("");
     expect(clearLine()).toHaveTextContent("Filters cleared. Every run is shown.");
   });
 
@@ -671,7 +817,7 @@ describe("experiment history", () => {
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(clearLine()).toHaveTextContent("Filters cleared.");
 
-    await user.selectOptions(screen.getByLabelText("Status"), "Completed");
+    await user.click(statusChips().getByRole("button", { name: "Completed" }));
 
     await waitFor(() => expect(clearLine()).toHaveTextContent(""));
     expect(clearLine()).toBeEmptyDOMElement();
@@ -715,7 +861,7 @@ describe("experiment history", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(lastAsked().get("page")).toBe("2"));
 
-    await user.selectOptions(screen.getByLabelText("Status"), "Running");
+    await user.click(statusChips().getByRole("button", { name: "Running" }));
 
     await waitFor(() => expect(lastAsked().get("status")).toBe("running"));
     expect(lastAsked().get("page")).toBe("1");
@@ -739,8 +885,13 @@ describe("experiment history", () => {
     let answer = () => {};
     renderHistory();
     await screen.findByRole("table");
-    const listed = screen.getByRole("region", { name: "Experiment history" });
+    const listed = rowsOf();
     expect(listed).toHaveAttribute("aria-busy", "false");
+    // The rows and not the card: the form over them is not what is about to change.
+    expect(screen.getByRole("region", { name: "Experiment history" })).not.toHaveAttribute(
+      "aria-busy",
+    );
+    expect(listed).not.toContainElement(screen.getByRole("form", { name: "Narrow history" }));
 
     server.use(
       http.get("*/api/v1/experiments", async ({ request }) => {
@@ -751,7 +902,7 @@ describe("experiment history", () => {
         return HttpResponse.json(historyOf([FINISHED]));
       }),
     );
-    await user.selectOptions(screen.getByLabelText("Status"), "Failed");
+    await user.click(statusChips().getByRole("button", { name: "Failed" }));
 
     await waitFor(() => expect(listed).toHaveAttribute("aria-busy", "true"));
     // The previous narrowing's rows are still readable while the next one is in flight.
@@ -760,22 +911,103 @@ describe("experiment history", () => {
     await waitFor(() => expect(listed).toHaveAttribute("aria-busy", "false"));
   });
 
-  it("reports a lab it cannot read with the backend's own reason", async () => {
+  it("reports a lab it cannot read with the backend's own reason, inside its card", async () => {
     unavailable = true;
     renderHistory();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The lab could not read its own history",
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The lab could not read its own history");
+    expect(indexCard(CARD_TITLE)).toContainElement(alert);
+    expect(screen.queryByRole("table")).toBeNull();
+    // A listing that never arrived has no facets to offer and has said nothing about the lab.
+    expect(screen.queryByRole("form", { name: "Narrow history" })).toBeNull();
+    expect(screen.queryByText(/No experiment/)).toBeNull();
+  });
+
+  it("drops the rows of an earlier answer when the next read fails", async () => {
+    const user = userEvent.setup();
+    renderHistory();
+    await screen.findByRole("table");
+
+    unavailable = true;
+    await user.click(statusChips().getByRole("button", { name: "Failed" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(indexCard(CARD_TITLE)).toContainElement(alert);
+    // Those rows answered another narrowing, and on screen they would read as this one's.
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("says a replay that failed above the card, and keeps the rows it was pressed on", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/${FINISHED_ID}/replays`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "The replay could not start", request_id: "r" },
+          { status: 500 },
+        ),
+      ),
     );
+    renderHistory();
+    const table = await screen.findByRole("table");
+    const row = within(table).getByText("Prompt A against prompt B").closest("tr") as HTMLElement;
+
+    await user.click(within(row).getByRole("button", { name: "Replay recorded versions" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The replay could not start");
+    // A derivation's failure is not the listing's: it is said outside the card, and the
+    // listing it was pressed from is still there.
+    expect(indexCard(CARD_TITLE)).not.toContainElement(alert);
+    expect(within(screen.getByRole("table")).getByText("Control policy alone")).toBeVisible();
+  });
+
+  it("tells a lab that has run nothing how to start, rather than showing an empty table", async () => {
+    rows = [];
+    renderHistory();
+
+    const empty = await screen.findByText(/No experiment yet/);
+    expect(indexCard(CARD_TITLE)).toContainElement(empty);
+    expect(within(empty).getByRole("link", { name: "start one on the bench" })).toHaveAttribute(
+      "href",
+      "/lab/bench",
+    );
+    expect(screen.queryByText(/matches this view/)).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
   });
 
-  it("says nothing has been run rather than showing an empty table", async () => {
-    server.use(http.get("*/api/v1/experiments", () => HttpResponse.json(historyOf([]))));
-    renderHistory();
+  it("says a narrowing missed when the lab holds runs it left out", async () => {
+    // The page asked for failed runs and got none; the lab's total — the rail's figure — is two.
+    server.use(
+      http.get("*/api/v1/experiments", ({ request }) => {
+        const url = new URL(request.url);
+        record(url);
+        const whole = url.searchParams.get("page_size") === String(HISTORY_TOTAL_PAGE_SIZE);
+        return HttpResponse.json(historyOf(whole ? EVERY_ROW : []));
+      }),
+    );
+    renderHistory("?status=failed");
 
-    expect(await screen.findByText(/No experiment matches these filters/)).toBeVisible();
-    expect(screen.queryByRole("table")).toBeNull();
+    await waitFor(() =>
+      expect(within(railEntry("History", "Experiment lab workspace")).getByText("2")).toBeVisible(),
+    );
+    const miss = await screen.findByText("No experiment matches this view.");
+    expect(indexCard(CARD_TITLE)).toContainElement(miss);
+    expect(screen.queryByText(/No experiment yet/)).toBeNull();
+    // The way out of a miss is the form, which is still there.
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeEnabled();
+  });
+
+  it("says a lab has run nothing even under a narrowing, once its total says so", async () => {
+    rows = [];
+    renderHistory("?status=failed");
+
+    await waitFor(() =>
+      expect(within(railEntry("History", "Experiment lab workspace")).getByText("0")).toBeVisible(),
+    );
+    expect(await screen.findByText(/No experiment yet/)).toBeVisible();
+    expect(screen.queryByText(/matches this view/)).toBeNull();
   });
 
   it("is reachable from the lab's rail, and carries no shop in its address", async () => {
