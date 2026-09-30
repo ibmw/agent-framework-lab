@@ -27,7 +27,7 @@ import {
   type ShopDocument,
   shopDocuments,
 } from "../lib/documents";
-import { slugify, uniqueSuggestion } from "../lib/entryIds";
+import { SLUG_MAX_LENGTH, slugify, uniqueSuggestion } from "../lib/entryIds";
 import { labelOf, POLICY_KIND } from "../lib/enumLabels";
 import {
   DOCUMENT_KIND_RULE,
@@ -338,6 +338,7 @@ export function NewDocumentPage() {
               takenBase={suggested.takenBase}
               takenPlace="in the draft"
               pattern={KEBAB_PATTERN}
+              maxLength={SLUG_MAX_LENGTH}
               title={DOCUMENT_SLUG_RULE}
               placeholder="returns-policy"
               required

@@ -11,7 +11,7 @@ import { type FilterChipDefinition, FilterChips } from "../components/FilterChip
 import { SearchField, SearchRow } from "../components/SearchField";
 import { TicketStatusBadge } from "../components/TicketStatusBadge";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
-import { nextReference } from "../lib/entryIds";
+import { nextReference, SLUG_MAX_LENGTH } from "../lib/entryIds";
 import { alreadyTakenMessage, REFERENCE_PATTERN, TICKET_REFERENCE_RULE } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
@@ -353,6 +353,7 @@ export function NewTicketPage() {
               taken={taken}
               takenPlace={TICKET_REFERENCE_TAKEN_PLACE}
               pattern={REFERENCE_PATTERN}
+              maxLength={SLUG_MAX_LENGTH}
               title={TICKET_REFERENCE_RULE}
               placeholder="T-2042"
               required

@@ -22,7 +22,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import { entryEdit, useEntryEdit } from "../lib/entryEdit";
-import { slugify, uniqueSuggestion } from "../lib/entryIds";
+import { SLUG_MAX_LENGTH, slugify, uniqueSuggestion } from "../lib/entryIds";
 import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
   alreadyTakenMessage,
@@ -349,6 +349,7 @@ export function ShopIdentityPage() {
             pending={shopsPending}
             taken={takenSlugs}
             takenPlace={SHOP_SLUG_TAKEN_PLACE}
+            maxLength={SLUG_MAX_LENGTH}
             extraId={slugLineId}
             onChange={changeSlug}
             onLeave={() => setSlugOrigin(null)}
@@ -610,6 +611,7 @@ export function ToneOfVoicePage() {
                 takenBase={toneSuggested.takenBase}
                 takenPlace="in the draft"
                 pattern={KEBAB_PATTERN}
+                maxLength={SLUG_MAX_LENGTH}
                 title={DERIVED_KEBAB_RULE}
                 required
                 onChange={(id) => setTone({ ...tone, id })}

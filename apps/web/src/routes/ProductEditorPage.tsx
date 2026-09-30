@@ -483,6 +483,7 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
                 takenBase={takenHandleBase}
                 takenPlace="in the draft"
                 pattern={KEBAB_PATTERN}
+                maxLength={SLUG_MAX_LENGTH}
                 title={PRODUCT_HANDLE_RULE}
                 placeholder="alpine-shell-jacket"
                 required
@@ -900,6 +901,7 @@ function OptionsCard({ product, onChange }: EditorProps) {
             takenBase={takenBase}
             takenPlace="in the draft"
             pattern={KEBAB_PATTERN}
+            maxLength={SLUG_MAX_LENGTH}
             title={DERIVED_KEBAB_RULE}
             required
             onChange={setKey}
@@ -1084,6 +1086,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                           className={`${fieldControlClasses} w-full max-w-44`}
                           value={rowEdit.fields.sku}
                           pattern={REFERENCE_PATTERN}
+                          maxLength={SLUG_MAX_LENGTH}
                           title={VARIANT_SKU_RENAME_RULE}
                           aria-describedby={skuRuleId}
                           aria-invalid={skuCollides || skuMisshapen || undefined}
@@ -1380,6 +1383,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
           takenBase={takenSkuBase}
           takenPlace="in the draft"
           pattern={REFERENCE_PATTERN}
+          maxLength={SLUG_MAX_LENGTH}
           title={VARIANT_SKU_RULE}
           required
           normalize={(value) => value.toUpperCase()}
@@ -1833,6 +1837,7 @@ function AttributesCard({ product, onChange }: EditorProps) {
               takenBase={takenBase}
               takenPlace="in the draft"
               pattern={KEBAB_PATTERN}
+              maxLength={SLUG_MAX_LENGTH}
               title={DERIVED_KEBAB_RULE}
               required
               onChange={setKey}

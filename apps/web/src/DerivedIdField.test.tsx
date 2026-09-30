@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useLayoutEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { DerivedIdField } from "./components/DerivedIdField";
-import { uniqueSuggestion } from "./lib/entryIds";
+import { nextReference, SLUG_MAX_LENGTH, uniqueSuggestion } from "./lib/entryIds";
+import { tooLongMessage } from "./lib/fieldRules";
 
 /**
  * A suggestion that is not derived from what the operator is typing but from something still
@@ -28,6 +29,7 @@ function Loading({
       suggested={suggested}
       pending={pending}
       takenPlace="used by a ticket in this shop"
+      maxLength={SLUG_MAX_LENGTH}
       required
       onChange={onChange}
     />
@@ -76,6 +78,7 @@ function Reopening({
       suggested={suggested}
       pending={pending}
       takenPlace="used by a ticket in this shop"
+      maxLength={SLUG_MAX_LENGTH}
       required
       onChange={setTyped}
     />
@@ -100,9 +103,41 @@ function Racing({ suggested }: { suggested: string }) {
       hint="How the ticket is named in scenarios."
       value={value}
       suggested={suggested}
+      maxLength={SLUG_MAX_LENGTH}
       required
       onChange={setValue}
     />
+  );
+}
+
+/**
+ * A reference suggested from the series a shop already quotes, as the order and ticket create
+ * pages suggest one. `nextReference` does not clamp, so a series whose last reference sits at
+ * the cap suggests one character past it.
+ */
+function Series({ taken, onSubmit }: { taken: readonly string[]; onSubmit: () => void }) {
+  const suggested = nextReference(`N${"S".repeat(60)}`, taken);
+  const [value, setValue] = useState("");
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <DerivedIdField
+        label="Reference"
+        hint="Uppercase letters and digits joined by hyphens."
+        value={value}
+        suggested={suggested}
+        taken={taken}
+        maxLength={SLUG_MAX_LENGTH}
+        required
+        normalize={(next) => next.toUpperCase()}
+        onChange={setValue}
+      />
+      <button type="submit">Create</button>
+    </form>
   );
 }
 
@@ -110,10 +145,12 @@ function Harness({
   source,
   taken = [],
   takenPlace = "in the draft",
+  onSubmit = () => {},
 }: {
   source: string;
   taken?: readonly string[];
   takenPlace?: string;
+  onSubmit?: () => void;
 }) {
   const { value: suggested, takenBase } = uniqueSuggestion(source, taken);
   const [value, setValue] = useState(suggested);
@@ -121,6 +158,7 @@ function Harness({
     <form
       onSubmit={(event) => {
         event.preventDefault();
+        onSubmit();
       }}
     >
       <DerivedIdField
@@ -131,6 +169,7 @@ function Harness({
         taken={taken}
         takenBase={takenBase}
         takenPlace={takenPlace}
+        maxLength={SLUG_MAX_LENGTH}
         required
         onChange={setValue}
       />
@@ -238,6 +277,50 @@ describe("DerivedIdField", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByLabelText("Handle")).toHaveValue("alpine-shell-jacket");
     expect(screen.getByLabelText("Handle")).toBeInvalid();
+  });
+
+  it("stops where the lab would refuse, whatever is typed or pasted", async () => {
+    const user = userEvent.setup();
+    const submitted: string[] = [];
+    render(<Harness source="alpine-jacket" onSubmit={() => submitted.push("save")} />);
+    const field = screen.getByLabelText("Handle");
+
+    await user.clear(field);
+    await user.type(field, "a".repeat(SLUG_MAX_LENGTH + 6));
+    expect(field).toHaveValue("a".repeat(SLUG_MAX_LENGTH));
+    await user.clear(field);
+    await user.paste("b".repeat(SLUG_MAX_LENGTH + 6));
+    expect(field).toHaveValue("b".repeat(SLUG_MAX_LENGTH));
+    expect(field).toBeValid();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(submitted).toEqual(["save"]);
+  });
+
+  it("refuses a suggestion past the cap on the field, and holds the form back", async () => {
+    const user = userEvent.setup();
+    const submitted: string[] = [];
+    // The series' last reference is 64 characters; the next one is 65.
+    const last = `N${"S".repeat(60)}-99`;
+    expect(last).toHaveLength(SLUG_MAX_LENGTH);
+    render(<Series taken={[last]} onSubmit={() => submitted.push("create")} />);
+    const field = screen.getByLabelText("Reference");
+
+    const suggested = `N${"S".repeat(60)}-100`;
+    await waitFor(() => expect(field).toHaveValue(suggested));
+    const refusal = tooLongMessage(SLUG_MAX_LENGTH + 1, SLUG_MAX_LENGTH);
+    expect(field).toHaveAccessibleDescription(new RegExp(refusal));
+    expect(field).toBeInvalid();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(refusal)).toHaveClass("text-lab-error");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(submitted).toEqual([]);
+
+    // Shortened by the operator, it is theirs and within the cap.
+    await user.type(field, "{Backspace}");
+    expect(field).toBeValid();
+    expect(field).not.toHaveAccessibleDescription(new RegExp(refusal));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(submitted).toEqual(["create"]);
   });
 
   it("takes nothing while its suggestion is still coming", () => {

@@ -34,7 +34,8 @@ export function variantSku(
 
 /**
  * `MAX_SLUG_LENGTH` in `domain/content.py`: the cap `require_slug` puts on every kebab-case
- * identifier a definition stores (a handle, a slug, an entry ID) and on a SKU alike.
+ * identifier a definition stores (a handle, a slug, an entry ID), `require_business_reference`
+ * on an order's or a ticket's reference, and `ProductVariant` on a SKU alike.
  */
 export const SLUG_MAX_LENGTH = 64;
 
@@ -119,8 +120,8 @@ export function uniqueVariantSku(
  * are ignored, so `NS-ABC` does not steal the next `NS-n`.
  *
  * Unlike `uniqueId` it does not clamp, because cutting the prefix would break the
- * `seriesPrefix` lookup; a reference over 64 characters is refused by the backend with a 422
- * instead.
+ * `seriesPrefix` lookup; a reference over `SLUG_MAX_LENGTH` is refused on its field instead
+ * (`DerivedIdField`), before the lab would answer it with a 422.
  */
 export function nextReference(prefix: string, taken: readonly string[]): string {
   if (!prefix) {

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { savedAsPreview } from "../lib/fieldPreviews";
-import { alreadyTakenMessage } from "../lib/fieldRules";
+import { alreadyTakenMessage, tooLongMessage } from "../lib/fieldRules";
 import { fieldControlClasses, idControlClasses } from "../lib/ui";
 import { type Arrangement, FieldHint } from "./FieldHint";
 
@@ -84,8 +84,13 @@ export function DerivedIdField({
    * says so, and never previews the value as what will be saved.
    */
   refusal?: string;
-  /** Where the lab caps the value's length, so the field stops where the lab would refuse. */
-  maxLength?: number;
+  /**
+   * Where the lab caps the value's length, so the field stops where the lab would refuse.
+   * Required: every value this field holds is sent to a rule with a cap, and a field without
+   * one lets the operator type what the lab answers with a 422. `maxLength` stops typing only,
+   * so a longer value the page put in the field — a suggestion — is refused on the field too.
+   */
+  maxLength: number;
   /**
    * Whether the second line previews the value as "Saved as `…`". An identifier is read back
    * because its shape is the point; a display name derived the same way — an experiment's —
@@ -152,6 +157,10 @@ export function DerivedIdField({
   const colliding = value !== "" && taken.includes(value);
 
   const collisionMessage = colliding ? alreadyTakenMessage(value, takenPlace) : "";
+  // Only a value the page wrote or normalized can be here: `maxLength` stops a keystroke or a
+  // paste short, but not a suggestion, nor `normalize` lengthening what was typed ("ß" → "SS").
+  const tooLong = !pending && !colliding && value.length > maxLength;
+  const tooLongText = tooLong ? tooLongMessage(value.length, maxLength) : "";
   const whyTaken =
     !colliding && takenBase && value === suggested
       ? alreadyTakenMessage(takenBase, takenPlace)
@@ -182,9 +191,11 @@ export function DerivedIdField({
     onChangeRef.current(suggested);
   }, [suggested, follows]);
 
+  // Both refusals hold the form back natively, as a `required` field left empty does.
+  const validity = collisionMessage || tooLongText;
   useEffect(() => {
-    inputRef.current?.setCustomValidity(collisionMessage);
-  }, [collisionMessage]);
+    inputRef.current?.setCustomValidity(validity);
+  }, [validity]);
 
   function change(next: string) {
     const normalized = normalize ? normalize(next) : next;
@@ -214,6 +225,8 @@ export function DerivedIdField({
     collisionMessage
   ) : refused ? (
     refusal
+  ) : tooLong ? (
+    tooLongText
   ) : (preview && value) || whyTaken ? (
     <>
       {preview && value ? savedAsPreview(value) : null}
@@ -226,7 +239,7 @@ export function DerivedIdField({
       label={label}
       hint={hint}
       extra={extra}
-      extraTone={colliding || refused ? "error" : "muted"}
+      extraTone={colliding || refused || tooLong ? "error" : "muted"}
       extraId={extraId}
       arrangement={arrangement}
     >
@@ -245,7 +258,7 @@ export function DerivedIdField({
         // opens, so there is no moment in which this input is both open and empty.
         disabled={pending}
         aria-busy={pending || undefined}
-        aria-invalid={colliding || refused || refusedBy !== undefined || undefined}
+        aria-invalid={colliding || refused || tooLong || refusedBy !== undefined || undefined}
         aria-describedby={refusedBy}
         onChange={(event) => change(event.target.value)}
         onBlur={() => {

@@ -1,3 +1,4 @@
+import { SLUG_MAX_LENGTH } from "./entryIds";
 import { MAX_CONTEXT_DOCUMENTS, MAX_MUTATIONS, MAX_OBJECTIVES } from "./scenarios";
 
 /**
@@ -53,11 +54,21 @@ export const VARIANT_SKU_RENAME_RULE =
 
 /** Whether a typed SKU is one the contract's `^[A-Z0-9]+(-[A-Z0-9]+)*$` would carry. */
 export function isVariantSku(value: string): boolean {
-  return new RegExp(`^${REFERENCE_PATTERN}$`).test(value);
+  return value.length <= SLUG_MAX_LENGTH && new RegExp(`^${REFERENCE_PATTERN}$`).test(value);
 }
 
 export const MEDIA_REFERENCE_RULE =
   "A URL or path, like media/alpine-shell.jpg. It is what keys this entry: changing it reads as a removal and an addition against the published version.";
+
+/**
+ * Why a value longer than the lab keeps is refused, on its field. The field's `maxLength`
+ * stops typing there, so this is said only of a value the page wrote or normalized — a
+ * suggestion derived from a series whose next number no longer fits, or typed text an
+ * uppercasing lengthened ("ß" is "SS").
+ */
+export function tooLongMessage(length: number, max: number): string {
+  return `This is ${length} characters long, and the lab keeps at most ${max} here.`;
+}
 
 export function alreadyTakenMessage(id: string, place: string): string {
   return `${id} is already ${place}.`;

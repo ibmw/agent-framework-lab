@@ -311,11 +311,14 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   character, pinned from both ends in `lib/fieldRules.ts`.
 - **Identifiers are derived, never asked first.** `DerivedIdField` follows its source until
   edited, resumes when emptied, previews as "Saved as `…`", refuses a taken value audibly, and
-  stays closed while the list it derives from is loading. A saved entry's identifier is displayed
-  and never asked; a SKU and a media reference are their own keys and say so. A value that is
-  taken is held on its field and never written, and the page's Save names the field's line; the
-  shop slug is refused on Shop details off the listing the create page reads, and only when the
-  operator changes it (ADR 0069).
+  stays closed while the list it derives from is loading. Every one stops at the cap the lab's
+  rule keeps (`maxLength`, required, swept in `lib/idFieldCaps.test.ts`), and a longer value
+  the page wrote or normalized — a reference series past it, an uppercased "ß" — is refused on
+  the field in words. A saved entry's identifier is displayed and never asked; a SKU and a
+  media reference are their own keys and say so. A value that is taken is held on its field and
+  never written, and the page's Save names the field's line; the shop slug is refused on Shop
+  details off the listing the create page reads, and only when the operator changes it (ADR
+  0069).
 - **A field states its own width.** The shared control declares none; every call site composes
   one — `w-full` almost everywhere — so a narrow field is narrow on screen (ADR 0069).
 - **A free-text field over a set the draft already uses offers it** as a `<datalist>`, spelled as

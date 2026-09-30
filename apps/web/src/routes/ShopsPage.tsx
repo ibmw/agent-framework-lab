@@ -16,7 +16,7 @@ import { ShopLogoCard } from "../components/ShopLogoCard";
 import { ToggleChipGroup } from "../components/ToggleChipGroup";
 import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
-import { uniqueSuggestion } from "../lib/entryIds";
+import { SLUG_MAX_LENGTH, uniqueSuggestion } from "../lib/entryIds";
 import { optionsOf, SUPPORT_CHANNEL } from "../lib/enumLabels";
 import {
   alreadyTakenMessage,
@@ -337,6 +337,7 @@ export function NewShopPage() {
                 takenBase={takenSlugBase}
                 takenPlace={SHOP_SLUG_TAKEN_PLACE}
                 pattern={KEBAB_PATTERN}
+                maxLength={SLUG_MAX_LENGTH}
                 title={SHOP_SLUG_RULE}
                 placeholder="harbour-lane-supply"
                 required

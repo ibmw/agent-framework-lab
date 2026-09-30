@@ -17,13 +17,14 @@ import { type FilterChipDefinition, FilterChips } from "../components/FilterChip
 import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { type Created, useCreateThenComplete } from "../lib/createDefinition";
-import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
+import { nextReference, referencePrefix, SLUG_MAX_LENGTH, seriesPrefix } from "../lib/entryIds";
 import {
   alreadyTakenMessage,
   MAX_LINE_QUANTITY,
   MIN_LINE_QUANTITY,
   ORDER_REFERENCE_RULE,
   REFERENCE_PATTERN,
+  tooLongMessage,
 } from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import {
@@ -372,11 +373,14 @@ export function NewOrderPage() {
               ? "The order needs a reference before it can be created."
               : referencesTakenBesides(made).includes(reference)
                 ? alreadyTakenMessage(reference, ORDER_REFERENCE_TAKEN_PLACE)
-                : catalog.length === 0
-                  ? "This shop sells no priced variant yet, so an order can hold no line."
-                  : sku === ""
-                    ? "An order needs at least one line. Choose the variant it is for."
-                    : undefined,
+                : // Only a value the page wrote or normalized can be this long.
+                  reference.length > SLUG_MAX_LENGTH
+                  ? tooLongMessage(reference.length, SLUG_MAX_LENGTH)
+                  : catalog.length === 0
+                    ? "This shop sells no priced variant yet, so an order can hold no line."
+                    : sku === ""
+                      ? "An order needs at least one line. Choose the variant it is for."
+                      : undefined,
   );
 
   const takenReferences = referencesTakenBesides(creating.made);
@@ -454,6 +458,7 @@ export function NewOrderPage() {
               taken={takenReferences}
               takenPlace={ORDER_REFERENCE_TAKEN_PLACE}
               pattern={REFERENCE_PATTERN}
+              maxLength={SLUG_MAX_LENGTH}
               title={ORDER_REFERENCE_RULE}
               placeholder="NS-10483"
               required

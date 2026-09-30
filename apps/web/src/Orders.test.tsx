@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { SLUG_MAX_LENGTH } from "./lib/entryIds";
 import {
   LINE_QUANTITY_RULE,
   LINE_VARIANT_RULE,
@@ -23,6 +24,7 @@ import {
   ORDER_METHOD_RULE,
   PAID_AT_RULE,
   SHIPPED_AT_RULE,
+  tooLongMessage,
 } from "./lib/fieldRules";
 import { toLocalInput } from "./lib/orders";
 import { formatFixtureTimestamp } from "./lib/ui";
@@ -947,6 +949,55 @@ describe("the new-order page", () => {
     expect(screen.getByRole("button", { name: "Create order" })).toHaveAccessibleDescription(
       /ns-10482 is already used by an order in this shop/i,
     );
+  });
+
+  it("refuses a suggested reference past the lab's cap, on the field and on Create", async () => {
+    const user = userEvent.setup();
+    // The shop's series ends at the 64 characters a reference may hold, so the next one it
+    // suggests is 65 — which `require_business_reference` would answer with a 422.
+    const last = `N${"S".repeat(60)}-99`;
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/orders`, () =>
+        HttpResponse.json({ orders: [{ ...ORDERS.orders[0], reference: last }] }),
+      ),
+    );
+    await newOrder();
+
+    await screen.findByRole("option", { name: "Maya Laurent" });
+    await user.selectOptions(screen.getByLabelText("Customer"), PROFILE_ID);
+    await user.selectOptions(screen.getByLabelText("Variant"), "NS-ASJ-OB-M");
+    const field = screen.getByLabelText("Reference");
+    await waitFor(() => expect(field).toHaveValue(`N${"S".repeat(60)}-100`));
+
+    const refusal = tooLongMessage(SLUG_MAX_LENGTH + 1, SLUG_MAX_LENGTH);
+    expect(field).toBeInvalid();
+    expect(field).toHaveAccessibleDescription(new RegExp(refusal));
+    const create = screen.getByRole("button", { name: "Create order" });
+    expectRefused(create, refusal);
+    await user.click(create);
+    expect(createdOrders).toEqual([]);
+
+    // Typed, a character the field uppercases into two lengthens the value past the cap, which
+    // `maxLength` cannot stop: "ß" is "SS". It stops the *next* keystroke only, so 64 of them
+    // end at the cap — and one typed into the last free place ends one past it.
+    await user.clear(field);
+    await user.type(field, "ß".repeat(SLUG_MAX_LENGTH));
+    expect(field).toHaveValue("S".repeat(SLUG_MAX_LENGTH));
+    await user.clear(field);
+    await user.type(field, `${"S".repeat(SLUG_MAX_LENGTH - 1)}ß`);
+    expect(field).toHaveValue("S".repeat(SLUG_MAX_LENGTH + 1));
+    const doubled = tooLongMessage(SLUG_MAX_LENGTH + 1, SLUG_MAX_LENGTH);
+    expect(field).toBeInvalid();
+    expect(field).toHaveAccessibleDescription(new RegExp(doubled));
+    expectRefused(create, doubled);
+    await user.click(create);
+    expect(createdOrders).toEqual([]);
+
+    // Typed, the field stops at the cap, and the order can be made.
+    await user.clear(field);
+    await user.type(field, "X".repeat(SLUG_MAX_LENGTH + 3));
+    expect(field).toHaveValue("X".repeat(SLUG_MAX_LENGTH));
+    expectNotRefused(create);
   });
 
   it("takes no reference until it knows which references are free", async () => {

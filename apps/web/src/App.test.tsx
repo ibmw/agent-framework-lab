@@ -1022,7 +1022,6 @@ describe("a product's identity across renames, saves and discards", () => {
     it.each([
       ["Summit Parka", /Summit Parka cannot be a handle/],
       ["-summit", /-summit cannot be a handle/],
-      ["x".repeat(65), /cannot be a handle/],
     ])("refuses %s on the field, says why, and never says it is saved", async (typed, why) => {
       const user = userEvent.setup();
       await openAlpine();
@@ -1034,6 +1033,19 @@ describe("a product's identity across renames, saves and discards", () => {
       expect(field).toHaveAttribute("aria-invalid", "true");
       expect(field).toHaveAccessibleDescription(why);
       expect(field).not.toHaveAccessibleDescription(/Saved as/);
+    });
+
+    it("stops at the 64 characters the lab keeps in a handle", async () => {
+      const user = userEvent.setup();
+      await openAlpine();
+      const field = screen.getByLabelText("Handle");
+
+      await user.clear(field);
+      await user.type(field, "x".repeat(65));
+
+      expect(field).toHaveValue("x".repeat(64));
+      expect(field).not.toHaveAttribute("aria-invalid");
+      expect(field).toHaveAccessibleDescription(new RegExp(`Saved as.*${"x".repeat(64)}`));
     });
 
     it("says a handle another product holds is taken, on the field", async () => {
