@@ -9,6 +9,7 @@ import { cardTitleClasses } from "./lib/ui";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectPublicationPill } from "./test/indexes";
 import { expectNotRefused, expectRefused } from "./test/refused";
+import { expectRunsOpenOnARow } from "./test/rows";
 import { shellListings } from "./test/shell";
 
 const SHOP_ID = "9c8b7a6d-5e4f-4a3b-9c8d-7e6f5a4b3c2d";
@@ -161,6 +162,19 @@ describe("the shops index and its create page", () => {
 
     await user.type(card.getByLabelText("Name"), "Harbour Lane Supply");
     expectNotRefused(create());
+  });
+
+  it("opens every card's run of rows on a row, so the first row draws no rule under the title", async () => {
+    renderNewShop();
+    await createShopPage();
+
+    // Commerce opens on the locale, a self-labelling field that used to wrap its row in a box.
+    const commerce = screen.getByRole("region", { name: "Commerce" });
+    const [locale] = expectRunsOpenOnARow(commerce);
+    expect(locale).toContainElement(within(commerce).getByLabelText("Locale"));
+    for (const name of ["Identity", "Channels"]) {
+      expectRunsOpenOnARow(screen.getByRole("region", { name }));
+    }
   });
 
   it("lands in the new shop's workspace", async () => {

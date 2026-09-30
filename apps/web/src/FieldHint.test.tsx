@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Field, FieldGroup, FieldGroupHint, FieldHint, FieldRows } from "./components/FieldHint";
+import { LocaleField } from "./components/LocaleField";
+import { ProvenModelField } from "./components/ProvenModelField";
+import { expectRunsOpenOnARow } from "./test/rows";
 
 describe("FieldHint", () => {
   it("puts the hint in the control's accessible description", () => {
@@ -434,6 +437,34 @@ describe("FieldRows", () => {
     expect((container.firstElementChild as HTMLElement).className).toContain(
       "[&>:first-child]:border-t-0",
     );
+  });
+
+  it.each([
+    ["LocaleField", () => <LocaleField arrangement="row" value="en-GB" onChange={() => {}} />],
+    [
+      "ProvenModelField",
+      () => (
+        <ProvenModelField
+          arrangement="row"
+          value="gpt-5-mini"
+          models={["gpt-5-mini"]}
+          proven="OpenAI"
+          onChange={() => {}}
+        />
+      ),
+    ],
+  ])("lets %s open a run on its own row, so the row's rule is the one dropped", (_, Control) => {
+    const { container } = render(
+      <section>
+        <FieldRows>
+          <Control />
+          <Control />
+        </FieldRows>
+      </section>,
+    );
+
+    const [first] = expectRunsOpenOnARow(container as HTMLElement);
+    expect(first).toContainElement(screen.getAllByRole("combobox")[0]);
   });
 
   it("makes a run of rows one child of whatever lays the card out", () => {

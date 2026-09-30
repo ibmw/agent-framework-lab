@@ -44,7 +44,9 @@ export function ProvenModelField({
   // say about it and neither does this line.
   const offList = value !== "" && models.length > 0 && !models.includes(value);
   return (
-    <div>
+    // A fragment, not a box: drawn as a row, the field is a child of `FieldRows`, whose first
+    // row drops its rule only when the row itself is that first child. The list is not drawn.
+    <>
       <FieldHint
         label="Model"
         hint={PROVEN_MODEL_RULE}
@@ -65,6 +67,6 @@ export function ProvenModelField({
           <option key={model} value={model} />
         ))}
       </datalist>
-    </div>
+    </>
   );
 }

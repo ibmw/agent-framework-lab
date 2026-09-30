@@ -41,6 +41,7 @@ import {
   expectRefused,
   submitWithoutPressing,
 } from "./test/refused";
+import { expectRunsOpenOnARow } from "./test/rows";
 import { bodyRows, railEntry, shellListings } from "./test/shell";
 
 const SHOP_ID = "3f4a3b2c-1d0e-4f5a-8b7c-6d5e4f3a2b1c";
@@ -3878,6 +3879,18 @@ describe("the field pattern on the shop editors", () => {
     expect(identity.queryByLabelText("Locale")).toBeNull();
     expect(identity.queryByRole("group", { name: "Currencies" })).toBeNull();
     expect(identity.queryByRole("group", { name: "Answers on" })).toBeNull();
+  });
+
+  it("opens every card's run of rows on a row, so the first row draws no rule under the title", async () => {
+    renderAt(`/shops/${SHOP_ID}/setup/identity`);
+
+    // Commerce opens on the locale, a self-labelling field that used to wrap its row in a box.
+    const commerce = await screen.findByRole("region", { name: "Commerce" });
+    const [locale] = expectRunsOpenOnARow(commerce);
+    expect(locale).toContainElement(within(commerce).getByLabelText("Locale"));
+    for (const name of ["Identity", "Logo", "Channels", "Payment methods", "Fulfilment methods"]) {
+      expectRunsOpenOnARow(screen.getByRole("region", { name }));
+    }
   });
 
   it("binds Shop details' own rows and leaves the shared fields naming themselves once", async () => {

@@ -73,3 +73,25 @@ export function expectCardOnRows(card: HTMLElement, except: HTMLElement[] = []):
   }
   return fields;
 }
+
+/** `FieldRows`' own class: the variant that drops the rule of the run's first child. */
+const RUN_CLASS = "[&>:first-child]:border-t-0";
+
+/**
+ * Every run of rows in a card opens on a row, so the rule `FieldRows` drops from its first
+ * child is the first row's own top rule and not a wrapper's, which has none — the row inside a
+ * wrapper would keep its rule under the card's heading. jsdom evaluates no variant, so what is
+ * held is that the row is the element the variant selects. Returns the first rows.
+ */
+export function expectRunsOpenOnARow(card: HTMLElement): HTMLElement[] {
+  const runs = Array.from(card.getElementsByClassName(RUN_CLASS)) as HTMLElement[];
+  expect(runs.length, "the card holds a run of rows").toBeGreaterThan(0);
+  return runs.map((run) => {
+    const first = run.firstElementChild as HTMLElement;
+    expect(
+      isRow(first),
+      `the run's first child is a row, not <${first.tagName.toLowerCase()} class="${first.className}">`,
+    ).toBe(true);
+    return first;
+  });
+}

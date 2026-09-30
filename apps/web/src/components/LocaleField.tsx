@@ -36,7 +36,9 @@ export function LocaleField({
   // no words for it, so saying nothing is the honest answer rather than repeating the tag.
   const named = LOCALES.find((locale) => locale.tag === value);
   return (
-    <div>
+    // A fragment, not a box: drawn as a row, the field is a child of `FieldRows`, whose first
+    // row drops its rule only when the row itself is that first child. The list is not drawn.
+    <>
       <FieldHint label="Locale" hint={LOCALE_RULE} extra={named?.label} arrangement={arrangement}>
         <input
           className={`${fieldControlClasses} w-full`}
@@ -55,6 +57,6 @@ export function LocaleField({
           <option key={locale.tag} value={locale.tag} label={locale.label} />
         ))}
       </datalist>
-    </div>
+    </>
   );
 }
