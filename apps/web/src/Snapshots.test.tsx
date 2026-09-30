@@ -435,6 +435,26 @@ describe("starting states", () => {
     expect(materialized[0]).toEqual({ seed: 20260825, version: "2" });
   });
 
+  it("says the read failed, and not that nothing is published or frozen yet", async () => {
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/scenarios/${SCENARIO_ID}/snapshots`, () =>
+        HttpResponse.json(
+          { code: "internal_error", message: "unavailable", request_id: "req-1" },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await waitFor(() => expect(screen.queryByText(/^Loading/)).toBeNull());
+    // A listing that could not be read has not said the scenario is unpublished or that
+    // nothing has been frozen from it.
+    expect(screen.queryByText(/has no published version yet/)).toBeNull();
+    expect(screen.queryByText(/has been frozen yet/)).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
   it("offers to show a reader around", async () => {
     renderPage();
 

@@ -72,6 +72,9 @@ export function SnapshotsPage() {
   const [seed, setSeed] = useState(String(DEFAULT_SEED));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The page's own read, apart from a freeze's or an inspection's refusal: while it has failed,
+  // neither card below has been told the scenario has no version or no snapshot.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [issues, setIssues] = useState<DefinitionIssueSchema[]>([]);
   // What is being frozen, and — once it has been — the fingerprint it was frozen as.
   const [freezing, setFreezing] = useState<{
@@ -106,10 +109,11 @@ export function SnapshotsPage() {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
+    setLoadError(null);
     reload(controller.signal)
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(describeApiError(cause, UNAVAILABLE));
+          setLoadError(describeApiError(cause, UNAVAILABLE));
         }
       })
       .finally(() => {
@@ -173,9 +177,9 @@ export function SnapshotsPage() {
         }
       />
 
-      {error ? (
+      {loadError || error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
-          {error}
+          {loadError ?? error}
         </p>
       ) : null}
       {issues.length > 0 ? (
@@ -196,7 +200,9 @@ export function SnapshotsPage() {
               </>
             }
           >
-            {versions.length === 0 ? (
+            {/* Its failure is the alert above and nothing else: a read that failed has not
+                said the scenario has no published version. */}
+            {loadError ? null : versions.length === 0 ? (
               <p className="text-[13px] text-admin-muted">
                 {loading
                   ? "Loading published versions…"
@@ -259,7 +265,8 @@ export function SnapshotsPage() {
 
           {/* Busy while a version is frozen: the snapshot it makes is about to join this list. */}
           <Card title="Snapshots" busy={working}>
-            {snapshots.length === 0 ? (
+            {/* As above: a listing that could not be read has not said nothing was frozen. */}
+            {loadError ? null : snapshots.length === 0 ? (
               <p className="text-[13px] text-admin-muted">
                 {loading ? "Loading snapshots…" : "No starting state has been frozen yet."}
               </p>
