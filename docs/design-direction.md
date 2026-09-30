@@ -368,7 +368,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   790px wide, a 312px panel opens on the gate card — "Publish gate", busy while the gate has not
   answered for the saved draft and saying under its title that it reads the saved draft while
   the editor is dirty — holds read-only context next and "What publishing freezes" last, and
-  never a field of the draft.
+  never a field of the draft. The freeze card opens on what a publish captures — the draft's
+  changes, or a sentence naming what the record's version holds — and only then on what it
+  leaves alone; a tour step titled after a panel card lights that card.
 - **Every editor keeps its way back in one slot** (`PageHeader`'s `back`, which is `HeaderBack`,
   the create page's own piece): the ← named "Back to {index}" and the "Index · kind" line above
   the title, the index's name a second link to the same place, so a record is left the way it

@@ -62,6 +62,21 @@ describe("the tour table", () => {
     }
   });
 
+  it("lights the editor panel's card a step is titled after, never its neighbour", () => {
+    // The scenario's freeze step once lit the Publish gate above the card it is named for, and
+    // every anchor still resolved: the sweep proves an anchor is on the page, not that it is
+    // the element the step talks about. A step titled after one of the panel's cards lights
+    // that card, whose name is its title (`Card`'s `aria-label`).
+    const cards = ["Publish gate", "What publishing freezes"];
+    const titled = STEPS.filter(([, step]) => cards.includes(step.title));
+    expect(titled.length).toBeGreaterThan(0);
+    for (const [id, step] of titled) {
+      expect(step.anchor, `${id}: "${step.title}" lights another card`).toBe(
+        `[aria-label="${step.title}"]`,
+      );
+    }
+  });
+
   it("names the route each surface is at, filled from the identifiers a route can carry", () => {
     // The sweep in `tests/e2e/tour-anchors.spec.ts` navigates by this field, so a tour whose
     // route is wrong is a tour swept on the wrong screen (ADR 0054).

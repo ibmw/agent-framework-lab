@@ -271,10 +271,12 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
           {context ? <CustomerCard shopId={shopId} context={context} /> : null}
           <Card title="What publishing freezes">
             <p className="text-[13px] text-admin-ink-soft">
-              {preview?.latest_published_version === null ||
-              preview?.latest_published_version === undefined
-                ? "This ticket has never been published. A scenario built on it freezes a published version, never the draft."
-                : `Published up to v${preview.latest_published_version}. A scenario built on this ticket freezes its published version: publishing draft v${preview.next_version} does not change a scenario that froze an earlier one.`}
+              {/* Nothing while the gate has not answered: no version is known to name. */}
+              {preview === null
+                ? null
+                : preview.latest_published_version === null
+                  ? `Publishing freezes the whole ticket as its first version: ${TICKET_FROZEN}. A scenario built on it freezes a published version, never the draft.`
+                  : `Publishing freezes the whole ticket as v${preview.next_version}: ${TICKET_FROZEN}. It is published up to v${preview.latest_published_version}, and a scenario that froze an earlier version does not change.`}
             </p>
           </Card>
         </div>
@@ -282,6 +284,14 @@ function TicketEditorPage({ ticketId }: { ticketId: string }) {
     </>
   );
 }
+
+/**
+ * What a ticket version holds. Its linked orders are not among what is frozen: an order fixture
+ * has no versions (`domain/order_fixture.py`), so the version holds which orders it links and
+ * nothing of the orders themselves.
+ */
+const TICKET_FROZEN =
+  "its customer at their newest published version, incident, conversation, suggested documents, and which orders it links";
 
 function IncidentCard({
   content,

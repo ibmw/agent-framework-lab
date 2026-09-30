@@ -1869,6 +1869,31 @@ describe("the customer editor's side panel", () => {
     ]);
     expect(panelFields(panel)).toEqual([]);
   });
+
+  it("says first what publishing freezes of a profile never published", async () => {
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const freeze = await screen.findByRole("region", { name: "What publishing freezes" });
+
+    expect(
+      within(freeze).getByText(
+        /^Publishing freezes the whole profile as its first version: identity, account, address book, behavioral persona, background and hidden simulator facts\. Tickets can only reference a published version\.$/,
+      ),
+    ).toBeVisible();
+  });
+
+  it("says first what the next publish freezes of a profile already published", async () => {
+    currentPreview = profilePreview({ latest_published_version: 2, next_version: 3 });
+    renderAt(`/shops/${SHOP_ID}/customers/${PROFILE_ID}`);
+
+    const freeze = await screen.findByRole("region", { name: "What publishing freezes" });
+
+    expect(
+      await within(freeze).findByText(
+        /^Publishing freezes the whole profile as v3: identity, account, address book, behavioral persona, background and hidden simulator facts\. It is published up to v2, and a ticket, scenario, or snapshot that pinned an earlier version does not change\.$/,
+      ),
+    ).toBeVisible();
+  });
 });
 
 /**

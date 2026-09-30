@@ -97,5 +97,7 @@ test("an author publishes a customer profile with an address book and persona", 
   await addAddress.getByRole("button", { name: "Add address" }).click();
   await saveDraft(page);
   await expect(page.getByText(/Draft v2 in progress/)).toBeVisible();
-  await expect(page.getByText(/Publishing draft v2 does not change/)).toBeVisible();
+  await expect(
+    page.getByText(/^Publishing freezes the whole profile as v2: .* It is published up to v1,/),
+  ).toBeVisible();
 });

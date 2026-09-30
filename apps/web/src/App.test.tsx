@@ -2211,6 +2211,12 @@ describe("the product editor's side panel", () => {
     expect(panelCards(panel)).toEqual(["Publish gate", "What publishing freezes"]);
     expect(panelFields(panel)).toEqual([]);
     expect(screen.queryByRole("region", { name: "Product validation" })).toBeNull();
+    // Its first sentence is what publishing freezes, as every freeze card's is.
+    expect(
+      within(screen.getByRole("region", { name: "What publishing freezes" })).getByText(
+        /^Publishing the shop freezes these edits into its next version/,
+      ),
+    ).toBeVisible();
   });
 
   it("says it reads the saved draft while an edit is unsaved, and is busy until the gate answers for a save", async () => {

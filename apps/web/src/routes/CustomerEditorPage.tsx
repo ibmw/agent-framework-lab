@@ -1095,9 +1095,12 @@ export function CustomerEditorPage() {
 
           <Card title="What publishing freezes">
             <p className="text-[13px] text-admin-ink-soft">
-              {preview?.latest_published_version === null
-                ? "This profile has never been published. Tickets can only reference a published version."
-                : `Published up to v${preview?.latest_published_version}. Publishing draft v${preview?.next_version} does not change any ticket, scenario, or snapshot that pinned an earlier version.`}
+              {/* Nothing while the gate has not answered: no version is known to name. */}
+              {preview === null
+                ? null
+                : preview.latest_published_version === null
+                  ? `Publishing freezes the whole profile as its first version: ${PROFILE_FROZEN}. Tickets can only reference a published version.`
+                  : `Publishing freezes the whole profile as v${preview.next_version}: ${PROFILE_FROZEN}. It is published up to v${preview.latest_published_version}, and a ticket, scenario, or snapshot that pinned an earlier version does not change.`}
             </p>
           </Card>
         </div>
@@ -1105,6 +1108,14 @@ export function CustomerEditorPage() {
     </>
   );
 }
+
+/**
+ * What a profile version holds, by the names of the cards that author it: everything on the
+ * page but the attached shops, which are the lab's record of where the profile is used rather
+ * than part of it.
+ */
+const PROFILE_FROZEN =
+  "identity, account, address book, behavioral persona, background and hidden simulator facts";
 
 /** `fr-FR` implies France; a bare `fr` implies nothing, so the author states it. */
 function countryForLocale(locale: string): string {

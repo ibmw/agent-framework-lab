@@ -537,7 +537,12 @@ describe("the document editor's side panel", () => {
     expect(panelCards(panel)).toEqual(["Never in the prompt", "What publishing freezes"]);
     expect(panelFields(panel)).toEqual([]);
     expect(screen.queryByRole("region", { name: "Publish gate" })).toBeNull();
-    expect(within(panel).getByText(/These edits belong to the shop draft/)).toBeVisible();
+    // Its first sentence is what publishing freezes, as every freeze card's is.
+    expect(
+      within(within(panel).getByRole("region", { name: "What publishing freezes" })).getByText(
+        /^Publishing the shop freezes these edits into its next version, with everything else in the shop draft\./,
+      ),
+    ).toBeVisible();
     // The main column holds the document itself and nothing the panel says.
     expect(mainCards(panel)).toEqual(["Document", "Body"]);
   });

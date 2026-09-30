@@ -318,10 +318,11 @@ export function groupIssues(issues: DefinitionIssueSchema[]): IssueGroups {
 
 /**
  * What publishing freezes, for an edit that belongs to the shop draft rather than to a
- * definition of its own: the product and document editors' last side-panel card.
+ * definition of its own: the product and document editors' last side-panel card. Its first
+ * sentence is what the freeze captures, as every freeze card's is; who it leaves alone follows.
  */
 export const SHOP_DRAFT_FREEZE_NOTE =
-  "These edits belong to the shop draft. Published shop versions are immutable, so experiments that pinned an earlier version never see them.";
+  "Publishing the shop freezes these edits into its next version, with everything else in the shop draft. Published shop versions are immutable, so experiments that pinned an earlier version never see them.";
 
 /** Issues raised by one product, so the product editor can show its own findings. */
 export function issuesForProduct(

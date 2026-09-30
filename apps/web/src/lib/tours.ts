@@ -243,10 +243,10 @@ export const TOURS: Record<TourId, Tour> = {
         ],
       },
       {
-        anchor: '[aria-label="Publish gate"]',
+        anchor: '[aria-label="What publishing freezes"]',
         title: "What publishing freezes",
         body: [
-          "What publishing does is freeze the whole composition and pin every version it reaches: the [[ticket]] it is built on, the shop behind that, and each [[objective-block|objective]] and [[mutation-block|mutation]] template it binds. An [[experiment]] runs a published version, so a scenario run next month runs what was composed today.",
+          "What publishing does is freeze the whole composition and pin every version it reaches: the [[ticket]] it is built on and the shop it runs in, each at its newest published version, and each [[objective-block|objective]] and [[mutation-block|mutation]] template it binds. An [[experiment]] runs a published version, so a scenario run next month runs what was composed today.",
         ],
       },
     ],

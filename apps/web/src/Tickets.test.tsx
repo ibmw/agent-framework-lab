@@ -1018,13 +1018,25 @@ describe("the ticket editor", () => {
     expect(panelFields(panel)).toEqual([]);
   });
 
-  it("says in the freeze card that a scenario freezes a published version", async () => {
+  it("says in the freeze card what publishing freezes, then that a scenario freezes a version", async () => {
     renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
     await screen.findByRole("region", { name: "Conversation" });
 
     expect(
       within(card("What publishing freezes")).getByText(
-        /never been published\. A scenario built on it freezes a published version/,
+        /^Publishing freezes the whole ticket as its first version: its customer at their newest published version, incident, conversation, suggested documents, and which orders it links\. A scenario built on it freezes a published version, never the draft\.$/,
+      ),
+    ).toBeVisible();
+  });
+
+  it("says first what the next publish freezes of a ticket already published", async () => {
+    currentPreview = preview({ latest_published_version: 2, next_version: 3 });
+    renderAt(`/shops/${SHOP_ID}/tickets/${TICKET_ID}`);
+    await screen.findByRole("region", { name: "Conversation" });
+
+    expect(
+      await within(card("What publishing freezes")).findByText(
+        /^Publishing freezes the whole ticket as v3: its customer at their newest published version, incident, conversation, suggested documents, and which orders it links\. It is published up to v2, and a scenario that froze an earlier version does not change\.$/,
       ),
     ).toBeVisible();
   });
