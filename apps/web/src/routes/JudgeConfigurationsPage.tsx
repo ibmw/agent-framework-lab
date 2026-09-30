@@ -21,6 +21,7 @@ import { Card, PageHeader, PublicationPill } from "../components/WorkspaceChrome
 import { describeProvider } from "../lib/agents";
 import { useCreateThenComplete } from "../lib/createDefinition";
 import { filterList } from "../lib/filters";
+import { pythonStrip } from "../lib/pythonText";
 import {
   accentButtonClasses,
   fieldControlClasses,
@@ -235,7 +236,9 @@ export function NewJudgePage() {
       compose: (made) => ({
         ...made,
         name,
-        rubric,
+        // Stripped as Python strips it: `require_text` refuses a rubric with surrounding
+        // whitespace, and the one the operator typed often ends on a newline.
+        rubric: pythonStrip(rubric),
         model: { ...made.model, provider, model_id: modelId },
       }),
       replace: replaceJudgeConfigurationDraft,
@@ -253,7 +256,7 @@ export function NewJudgePage() {
           ? "What a judge may name could not be read, so nothing can be created here yet."
           : name.trim() === ""
             ? "The judge needs a name before it can be created."
-            : rubric.trim() === ""
+            : pythonStrip(rubric) === ""
               ? "The judge has no rubric yet, and the rubric is the whole of what a judge is: nothing can be scored until it is written."
               : modelId.trim() === ""
                 ? "The judge needs the model that will score with it."

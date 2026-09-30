@@ -39,6 +39,7 @@ import {
   unprovenJudgeProviderRule,
 } from "../lib/fieldRules";
 import { unreachableProviderNote } from "../lib/modelConnections";
+import { pythonStrip } from "../lib/pythonText";
 import { namedTerms } from "../lib/rubric";
 import {
   editorColumnsClasses,
@@ -59,8 +60,17 @@ const CLIENT: DefinitionClient<
   previewDraft: previewJudgeConfigurationDraft,
   replaceDraft: replaceJudgeConfigurationDraft,
   publish: publishJudgeConfiguration,
-  // A judge carries no derived evidence, so the content *is* the payload.
-  toPayload: (content) => content,
+  // A judge carries no derived evidence, so the content *is* the payload — with its texts
+  // stripped as Python strips them, because the lab refuses surrounding whitespace on each:
+  // `require_label` on the name and the model, `require_text` on the rubric and the
+  // description, and a textarea ends on a newline as often as not.
+  toPayload: (content) => ({
+    ...content,
+    name: pythonStrip(content.name),
+    model: { ...content.model, model_id: pythonStrip(content.model.model_id) },
+    description: pythonStrip(content.description),
+    rubric: pythonStrip(content.rubric),
+  }),
   unavailable: "The judge service is unavailable.",
 };
 
@@ -133,8 +143,9 @@ export function JudgeConfigurationEditorPage() {
   // empty one, and `rubric_names_an_arm` once for each reserved term it names, read on the
   // gate's own boundaries (`lib/rubric.ts`) against the terms the catalog serves. Findings, not
   // refusals — the draft saves with either, and publication refuses it — so they refuse no Save.
+  // A rubric of whitespace alone is saved empty (`toPayload`), so it is already empty here.
   const rubricFindings =
-    content.rubric === ""
+    pythonStrip(content.rubric) === ""
       ? [RUBRIC_EMPTY_RULE]
       : namedTerms(content.rubric, resources?.reserved_terms ?? []).map(rubricNamesAnArmRule);
   const provider =

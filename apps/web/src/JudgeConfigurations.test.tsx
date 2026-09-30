@@ -633,6 +633,40 @@ describe("judge workspace", () => {
     expect(savedPayloads[0].rubric).toBe("Prefer the openai arm.");
   });
 
+  it("saves the name, the model, the rubric and the description without surrounding whitespace", async () => {
+    const user = userEvent.setup();
+    renderAt(`/lab/judges/${JUDGE_ID}`);
+
+    const rubric = await screen.findByRole("textbox", { name: "How this judge scores" });
+    const card = within(screen.getByRole("region", { name: "Rubric" }));
+    // `require_text` refuses surrounding whitespace in Python's sense of it, so a rubric of
+    // nothing else is saved empty, and the gate's `rubric_empty` is already said.
+    await user.clear(rubric);
+    await user.click(rubric);
+    await user.paste("\n \x85\u2028");
+    expect(card.getByText("a published judge must carry the rubric it scores by")).toBeVisible();
+
+    await user.clear(rubric);
+    await user.type(rubric, "Score whether it stayed warm.{Enter}{Enter}");
+    await user.paste("\x85");
+    const description = screen.getByLabelText("Description");
+    await user.click(description);
+    await user.paste(" \x1f");
+    // The name and the model are labels, which `require_label` refuses padded just the same.
+    await user.click(screen.getByLabelText("Name"));
+    await user.paste("\x85 ");
+    const model = within(screen.getByRole("region", { name: "Model" })).getByLabelText("Model");
+    await user.click(model);
+    await user.paste(" \u2028");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    expect(savedPayloads[0].rubric).toBe("Score whether it stayed warm.");
+    expect(savedPayloads[0].description).toBe("Reads the incident as the customer would.");
+    expect(savedPayloads[0].name).toBe("Resolution quality");
+    expect((savedPayloads[0].model as { model_id: string }).model_id).toBe("gpt-5-mini");
+  });
+
   it("names the terms the catalog serves, not a list of its own", async () => {
     const user = userEvent.setup();
     server.use(
@@ -863,6 +897,29 @@ describe("the new-judge page", () => {
 
     expectNotRefused(create);
     expect(screen.queryByText(reason)).toBeNull();
+  });
+
+  it("reads a rubric as the lab does: whitespace alone is none, and what it surrounds is not sent", async () => {
+    const user = userEvent.setup();
+    renderAt("/lab/judges/new");
+
+    const create = await screen.findByRole("button", { name: "Create judge" });
+    await user.type(screen.getByLabelText("Name"), "Tone");
+    const criteria = screen.getByLabelText("Criteria");
+    await user.click(criteria);
+    // Kept by JavaScript's `trim()`, removed by Python's `str.strip()`.
+    await user.paste("\x85\x1c");
+    expectRefused(
+      create,
+      "The judge has no rubric yet, and the rubric is the whole of what a judge is: nothing can be scored until it is written.",
+    );
+
+    await user.type(criteria, "Score whether the tone stayed warm.{Enter}");
+    expectNotRefused(create);
+    await user.click(create);
+
+    await waitFor(() => expect(completed).toHaveLength(1));
+    expect(completed[0].rubric).toBe("Score whether the tone stayed warm.");
   });
 
   it("puts each field's hint in that control's accessible description", async () => {
