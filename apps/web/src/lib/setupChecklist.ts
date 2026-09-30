@@ -92,9 +92,14 @@ export const CHECKLIST_SHOP_CODES: readonly string[] = SHOP_LINES.flatMap((line)
  * notes are counted off the draft on screen, which is the one the operator is editing. The
  * panel says so while the two can differ (`dirty`).
  *
+ * A shop-wide line is done when the gate raises none of its codes, whatever their severity
+ * (ADR 0071): each names a thing the shop has, and a shop with no FAQ does not have one because
+ * the gate only warns about it. Its "!" says the thing is missing, not that publication is
+ * refused; the finding under it says the severity in the gate's words.
+ *
  * The last line is the prototype's "No blocking findings": every finding no shop-wide line
  * owns — a product's, a variant's — whatever its severity. It is done while none of them is an
- * error, because an error is what blocks; its warnings are still listed under it.
+ * error, because its label is about what blocks; its warnings are still listed under it.
  */
 export function setupChecklist(
   content: ShopDraft,
