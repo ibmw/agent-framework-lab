@@ -448,6 +448,16 @@ describe("the width of a field", () => {
     );
   });
 
+  it("is never given a second font size by a consumer, which would lose to the control's", () => {
+    // Tailwind emits `text-[14.5px]` after `text-[13px]` whatever order a class string writes
+    // them in, so a size composed after a control is not drawn. This catches a size written
+    // after a control's classes in the same template literal, which is how the sweep reads a
+    // consumer; a size placed any other way is not looked for. A consumer wanting the smaller
+    // monospace face reaches for `idControlClasses`, which carries one size of its own.
+    const SIZE = /(^|\s)text-(\[[\d.]+(px|rem|em)\]|xs|sm|base|lg|\d?xl)(\s|$)/;
+    expect(composed.filter((entry) => SIZE.test(entry.split(": ")[1] ?? ""))).toEqual([]);
+  });
+
   it("is stated by every consumer that composes one", () => {
     expect(composed.filter((entry) => !WIDTH.test(entry.split(": ")[1] ?? ""))).toEqual([]);
   });

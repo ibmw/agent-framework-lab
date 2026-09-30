@@ -54,10 +54,10 @@ import {
 import { pythonStrip } from "../lib/pythonText";
 import {
   cardTitleClasses,
-  fieldControlClasses,
   focusRingClasses,
   formatAbsoluteTimestamp,
   formatTimestamp,
+  idControlClasses,
   outlineButtonClasses,
   readOnlyValueClasses,
   subtleButtonClasses,
@@ -660,7 +660,7 @@ function ConnectionCard({
         type="password"
         autoComplete="new-password"
         aria-label={saved?.key_configured === true ? "New API key" : undefined}
-        className={`${fieldControlClasses} w-full font-mono text-[13px] ${width}`}
+        className={`${idControlClasses} w-full ${width}`}
         placeholder="sk-…"
         value={typed ?? ""}
         disabled={saving}
@@ -739,7 +739,7 @@ function ConnectionCard({
           >
             <input
               type="url"
-              className={`${fieldControlClasses} w-full font-mono text-[13px]`}
+              className={`${idControlClasses} w-full`}
               placeholder="http://localhost:11434/v1"
               value={baseUrl}
               disabled={saving}

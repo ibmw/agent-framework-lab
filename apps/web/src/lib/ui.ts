@@ -178,9 +178,12 @@ export const fieldControlClasses = `box-border min-h-[44px] py-2.5 text-[14.5px]
 /**
  * The single-line control for an identifier a reader checks character by character: the same
  * box in the monospace face at 13.5px, as the methods handoff draws a method's ID field
- * (ADR 0072). Its own string rather than `font-mono text-[13.5px]` composed after the control's,
- * because Tailwind emits one of two font sizes last whatever order a class string writes them
- * in, and here that is the control's 14.5px.
+ * (ADR 0072), and as Lab settings draws the connection's base URL and API key, which the
+ * prototype sets at 13px (`Workspace.dc.html` :4018, :4038): one monospace size for every
+ * such control, half a point off that frame, as the census above flattens its compact ones.
+ * Its own string rather than `font-mono text-[13.5px]` composed after the control's, because
+ * Tailwind emits one of two font sizes last whatever order a class string writes them in, and
+ * here that is the control's 14.5px.
  */
 export const idControlClasses = `box-border min-h-[44px] py-2.5 font-mono text-[13.5px] ${fieldSurfaceClasses}`;
 
