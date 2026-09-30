@@ -73,11 +73,9 @@ import {
   MAX_OBJECTIVES,
   MAX_TURN_CAP,
   MIN_TURN_CAP,
-  type MutationFields,
   moveMutation,
   moveObjective,
   mutationFields,
-  type ObjectiveFields,
   objectiveFields,
   parseTurnCap,
   readChecksByDocument,
@@ -168,12 +166,16 @@ export function ScenarioEditorPage() {
   // Each composed list's one open row: its bindings (and an objective's severity) are not in
   // the draft until its Save (ADR 0051), and the line that says so is what the other rows'
   // Edit points at.
-  const objectiveEditor = useEntryEdit<ObjectiveFields>(
-    (content?.objectives ?? []).map((objective) => objective.id),
-  );
-  const mutationEditor = useEntryEdit<MutationFields>(
-    (content?.mutations ?? []).map((mutation) => mutation.id),
-  );
+  const objectiveEditor = useEntryEdit(content?.objectives ?? [], {
+    keyOf: (objective) => objective.id,
+    labelOf: (objective) => objective.id,
+    fieldsOf: objectiveFields,
+  });
+  const mutationEditor = useEntryEdit(content?.mutations ?? [], {
+    keyOf: (mutation) => mutation.id,
+    labelOf: (mutation) => mutation.id,
+    fieldsOf: mutationFields,
+  });
   const objectiveNotice = useId();
   const mutationNotice = useId();
   const [state, setState] = useState<ResourceState>({ status: "loading" });
@@ -515,8 +517,6 @@ export function ScenarioEditorPage() {
                         objectiveEditor,
                         objectiveNotice,
                         objective.id,
-                        objective.id,
-                        () => objectiveFields(objective),
                         (fields) =>
                           edit(
                             updateObjective(
@@ -629,8 +629,6 @@ export function ScenarioEditorPage() {
                         mutationEditor,
                         mutationNotice,
                         mutation.id,
-                        mutation.id,
-                        () => mutationFields(mutation),
                         (fields) =>
                           edit(
                             updateMutation(

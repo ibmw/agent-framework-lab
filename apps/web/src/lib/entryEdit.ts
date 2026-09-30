@@ -46,6 +46,35 @@ interface OpenRow<FieldsT> {
 }
 
 /**
+ * Whether two sets of fields hold the same values. Fields are plain data — strings, numbers,
+ * booleans, arrays of them, and records of them, like a variant's chosen values — and a list
+ * builds them afresh on every render, so identity says nothing and the comparison is by value.
+ */
+function sameValue(one: unknown, other: unknown): boolean {
+  if (one === other) {
+    return true;
+  }
+  if (Array.isArray(one) || Array.isArray(other)) {
+    return (
+      Array.isArray(one) &&
+      Array.isArray(other) &&
+      one.length === other.length &&
+      one.every((item, index) => sameValue(item, other[index]))
+    );
+  }
+  if (typeof one !== "object" || typeof other !== "object" || one === null || other === null) {
+    return false;
+  }
+  const left = one as Record<string, unknown>;
+  const right = other as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]))
+  );
+}
+
+/**
  * Which saved row of one list is open for editing, and the fields it was opened with.
  *
  * **One row at a time, per list.** A second open row would be a second uncommitted payload
@@ -58,15 +87,59 @@ interface OpenRow<FieldsT> {
  * it — `diff_keyed_collection` in `domain/definitions.py` reports an entry whose key moved as
  * a removal and an addition rather than as an update.
  */
-export interface EntryEditor<FieldsT> {
+export interface EntryEditor<FieldsT extends object> {
   /** The open row, or null when the list has none. */
   open: OpenRow<FieldsT> | null;
   isOpen: (id: string) => boolean;
   /** True while another row of this list holds the one open edit. */
   blocked: (id: string) => boolean;
-  begin: (id: string, label: string, fields: FieldsT) => void;
+  /** What the list calls the entry of this key, as the list holds it now. */
+  labelOf: (id: string) => string;
+  /** Opens the row on the entry's fields as the list holds them now. */
+  begin: (id: string) => void;
   change: (fields: FieldsT) => void;
   close: () => void;
+}
+
+/**
+ * The open fields moved onto what the list now holds, unit by unit: a unit the operator has not
+ * touched since the row last followed takes the entry's values, and a unit they typed in keeps
+ * all of its typing. A unit is one top-level key unless the list declares keys that only make
+ * sense together (`EntryEditSource.units`) — a parameter's kind, requiredness and default, where
+ * following the kind under a typed default would build a parameter the form cannot correct.
+ * A variant's chosen values are one key, so one moved choice holds all of them.
+ */
+function follow<FieldsT extends object>(
+  fields: FieldsT,
+  origin: FieldsT,
+  current: FieldsT,
+  units: readonly (readonly string[])[],
+): FieldsT {
+  const typed = fields as Record<string, unknown>;
+  const was = origin as Record<string, unknown>;
+  const now = current as Record<string, unknown>;
+  const untouched = (key: string) =>
+    (units.find((unit) => unit.includes(key)) ?? [key]).every((member) =>
+      sameValue(typed[member], was[member]),
+    );
+  return Object.fromEntries(
+    Object.keys(now).map((key) => [key, untouched(key) ? now[key] : typed[key]]),
+  ) as FieldsT;
+}
+
+/** How a list names, keys and fills its entries, for the one row of it that is open. */
+export interface EntryEditSource<EntryT, FieldsT> {
+  /** An entry's key: the id its row is opened, saved and closed by. */
+  keyOf: (entry: EntryT) => string;
+  /** What Edit, Save, Cancel, the list's notice and the navigation prompt call the entry. */
+  labelOf: (entry: EntryT) => string;
+  /** The open form an entry fills, as the list holds that entry now. */
+  fieldsOf: (entry: EntryT) => FieldsT;
+  /**
+   * Fields that follow the entry only together: a unit with any field typed in keeps what the
+   * row holds for every field of it. Absent, each field is its own unit.
+   */
+  units?: readonly (readonly (keyof FieldsT & string)[])[];
 }
 
 /**
@@ -77,23 +150,63 @@ export interface EntryEditor<FieldsT> {
  * it (ADR 0051). It declares no `save`: nothing typed in an open row has reached the draft, so
  * no page-level Save has ever carried it and the navigation prompt does not pretend to.
  *
- * @param ids the ids the list currently holds, in any order. An open row whose id is no
- *   longer among them is closed: a draft that is refetched or discarded can drop the entry
- *   being edited, and a row left open against it would render stale fields and disable every
- *   sibling's Edit behind a notice naming an entry that is gone.
+ * **An open row follows its entry, except where the operator has typed** (ADR 0051, amended).
+ * Whatever moves the entry under it — the page's Discard re-reading the draft, a refetch, a
+ * sibling control that writes the entry:
+ *
+ * - An open row whose entry the list no longer holds is closed. A row left open against it
+ *   would render stale fields and disable every sibling's Edit behind a notice naming an entry
+ *   that is gone.
+ * - Every field the operator has not typed in — all of them, in a row opened and left alone, or
+ *   typed back to what it opened on — takes the entry's value as the list now holds it, unless
+ *   it shares a declared unit with a field that was typed in. A field
+ *   left on its old value would show what the draft no longer says, and the row's Save would
+ *   write it back over the discard.
+ * - A field the operator typed in keeps the typing. The page's Discard undoes what the page's
+ *   Save would have written, and that has never carried an open row (ADR 0051, ADR 0061's S3
+ *   and S10); the row's own Cancel, or the prompt's *Discard and leave*, throws typing away.
+ * - The row's name is read off the entry on every render, so the notice and the prompt name the
+ *   entry as it now stands, not as it stood when Edit was pressed.
+ *
+ * This is the rule `useItemForm` (`lib/itemForm.ts`) keeps for an edit in a card's form, taken
+ * down to the field.
+ *
+ * @param entries the entries the list currently holds, in any order.
  */
-export function useEntryEdit<FieldsT>(ids: readonly string[]): EntryEditor<FieldsT> {
-  const [state, setState] = useState<OpenRow<FieldsT> | null>(null);
+export function useEntryEdit<EntryT, FieldsT extends object>(
+  entries: readonly EntryT[],
+  { keyOf, labelOf, fieldsOf, units = [] }: EntryEditSource<EntryT, FieldsT>,
+): EntryEditor<FieldsT> {
+  const [state, setState] = useState<{ id: string; fields: FieldsT; origin: FieldsT } | null>(null);
 
+  const entryOf = (id: string) => entries.find((entry) => keyOf(entry) === id);
+  const held = state === null ? undefined : entryOf(state.id);
   // Derived rather than corrected in an effect, so there is never a render in which the row
-  // is still open against an entry the list no longer holds.
-  const open = state !== null && ids.includes(state.id) ? state : null;
+  // is still open against an entry the list no longer holds, or shows a field the entry has
+  // since moved off.
+  const stale = state !== null && held === undefined;
+  const current = state === null || held === undefined ? null : fieldsOf(held);
+  const moved = state !== null && current !== null && !sameValue(current, state.origin);
+  const followed =
+    state !== null && moved && current !== null
+      ? follow(state.fields, state.origin, current, units)
+      : (state?.fields ?? null);
+  const open: OpenRow<FieldsT> | null =
+    state === null || held === undefined || followed === null
+      ? null
+      : { id: state.id, label: labelOf(held), fields: followed };
 
   useEffect(() => {
-    if (state !== null && open === null) {
+    if (stale) {
       setState(null);
+    } else if (moved && current !== null) {
+      setState((now) =>
+        now === null
+          ? now
+          : { ...now, fields: follow(now.fields, now.origin, current, units), origin: current },
+      );
     }
-  }, [state, open]);
+  }, [stale, moved, current, units]);
 
   useRegisterUnsavedWork(
     open === null
@@ -108,9 +221,18 @@ export function useEntryEdit<FieldsT>(ids: readonly string[]): EntryEditor<Field
     open,
     isOpen: (id) => open?.id === id,
     blocked: (id) => open !== null && open.id !== id,
-    begin: (id, label, fields) => setState({ id, label, fields }),
-    change: (fields) =>
-      setState((current) => (current === null ? current : { ...current, fields })),
+    labelOf: (id) => {
+      const entry = entryOf(id);
+      return entry === undefined ? id : labelOf(entry);
+    },
+    begin: (id) => {
+      const entry = entryOf(id);
+      if (entry !== undefined) {
+        const fields = fieldsOf(entry);
+        setState({ id, fields, origin: fields });
+      }
+    },
+    change: (fields) => setState((now) => (now === null ? now : { ...now, fields })),
     close: () => setState(null),
   };
 }
@@ -119,17 +241,16 @@ export function useEntryEdit<FieldsT>(ids: readonly string[]): EntryEditor<Field
  * The `EntryEdit` one saved row hands `EntryCard`, assembled from the list's editor.
  *
  * Every editable list in the workspace wires open, save and cancel the same way, so the
- * wiring is written once: the row opens on the entry's own fields, Save hands them back to
+ * wiring is written once: the row is named and opened on the entry as the list's
+ * `useEntryEdit` reads it, so a row opens on exactly what it later follows — Save hands them back to
  * the caller, Cancel drops them, and a row that is not the open one carries the reason its
  * Edit is disabled. It was four copies of this function for one branch, and the copies had
  * already drifted — which is the failure this slice exists to remove, so it is one function.
  */
-export function entryEdit<FieldsT>(
+export function entryEdit<FieldsT extends object>(
   editor: EntryEditor<FieldsT>,
   noticeId: string,
   id: string,
-  label: string,
-  fieldsOf: () => FieldsT,
   onSave: (fields: FieldsT) => void,
   fields: (value: FieldsT, onChange: (next: FieldsT) => void) => ReactNode,
   /**
@@ -142,6 +263,7 @@ export function entryEdit<FieldsT>(
   saveable?: (value: FieldsT) => true | { id: string; reason: string },
 ): EntryEdit {
   const open = editor.isOpen(id);
+  const label = editor.labelOf(id);
   const openFields = open ? editor.open : null;
   const verdict = openFields && saveable ? saveable(openFields.fields) : true;
   const refusal = verdict === true ? null : verdict;
@@ -149,7 +271,7 @@ export function entryEdit<FieldsT>(
     label,
     open,
     blockedBy: editor.blocked(id) ? noticeId : undefined,
-    onOpen: () => editor.begin(id, label, fieldsOf()),
+    onOpen: () => editor.begin(id),
     onSave: () => {
       if (openFields) {
         onSave(openFields.fields);

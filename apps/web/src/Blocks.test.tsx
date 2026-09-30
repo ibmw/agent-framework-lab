@@ -669,6 +669,38 @@ describe("objective block editor", () => {
     expect(parameters[1]).toMatchObject({ name: "severity", required: false, default: null });
   });
 
+  it("keeps a parameter's kind, requiredness and default as one through a Discard", async () => {
+    const user = userEvent.setup();
+    renderAt(`/lab/mutation-blocks/${MUTATION_ID}`);
+
+    // In the draft: entity_ref retyped to optional text with a default, and the row saved.
+    await screen.findByRole("heading", { name: "concurrent-entity-mutation" });
+    await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
+    await user.selectOptions(screen.getByLabelText("Kind of entity_ref"), "text");
+    const row = within(screen.getByRole("form", { name: "Edit entity_ref" }));
+    await user.click(row.getByRole("checkbox", { name: "A scenario must bind this" }));
+    await user.type(screen.getByLabelText("Default of entity_ref"), "a");
+    await user.click(screen.getByRole("button", { name: "Save entity_ref" }));
+    // Reopened, and only the default typed in.
+    await user.click(screen.getByRole("button", { name: "Edit entity_ref" }));
+    await user.clear(screen.getByLabelText("Default of entity_ref"));
+    await user.type(screen.getByLabelText("Default of entity_ref"), "b");
+
+    // The lab holds a required reference with no default. Following its kind under the typed
+    // default would build a reference with a default, which the row no longer offers to clear.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Kind of entity_ref")).toHaveValue("text"));
+    const open = within(screen.getByRole("form", { name: "Edit entity_ref" }));
+    expect(open.getByRole("checkbox", { name: "A scenario must bind this" })).not.toBeChecked();
+    expect(screen.getByLabelText("Default of entity_ref")).toHaveValue("b");
+    await user.click(screen.getByRole("button", { name: "Save entity_ref" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedPayloads).toHaveLength(1));
+    const parameters = savedPayloads[0].parameters as Array<Record<string, unknown>>;
+    expect(parameters[0]).toMatchObject({ kind: "text", required: false, default: "b" });
+  });
+
   it("drops a default the new kind cannot carry when a parameter is retyped", async () => {
     const user = userEvent.setup();
     renderAt(`/lab/objective-blocks/${OBJECTIVE_ID}`);

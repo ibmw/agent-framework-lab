@@ -96,9 +96,11 @@ export function SupportIdentityEditorPage() {
   });
   const { content, preview, edit } = editor;
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const guidanceEditor = useEntryEdit<GuidanceFields>(
-    (content?.guidance ?? []).map((note) => note.id),
-  );
+  const guidanceEditor = useEntryEdit(content?.guidance ?? [], {
+    keyOf: (note) => note.id,
+    labelOf: (note) => note.title,
+    fieldsOf: (note): GuidanceFields => ({ title: note.title, body: note.body }),
+  });
   const guidanceNotice = useId();
   const guidanceRemoval = useRemoval(identityId);
 
@@ -314,8 +316,6 @@ export function SupportIdentityEditorPage() {
                         guidanceEditor,
                         guidanceNotice,
                         note.id,
-                        note.title,
-                        () => ({ title: note.title, body: note.body }),
                         (fields) => saveGuidance(note.id, fields),
                         (value, onChange) => (
                           <div className="flex flex-wrap items-end gap-2">

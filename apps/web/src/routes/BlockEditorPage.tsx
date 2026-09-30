@@ -131,9 +131,14 @@ function BlockEditor<
   const parameterRemoval = useRemoval(blockId);
   // The parameters list's one open row: nothing typed in it is in the draft until its Save
   // (ADR 0051), and the line that says so is what every other row's Edit points at.
-  const parameterEditor = useEntryEdit<ParameterFields>(
-    (content?.parameters ?? []).map((parameter) => parameter.name),
-  );
+  const parameterEditor = useEntryEdit(content?.parameters ?? [], {
+    keyOf: (parameter) => parameter.name,
+    labelOf: (parameter) => parameter.name,
+    fieldsOf: parameterFields,
+    // A kind decides whether a default can exist and whether the parameter may be optional
+    // (`retypedFields`), so the three follow the entry together or not at all.
+    units: [["kind", "required", "default"]],
+  });
   const parameterNotice = useId();
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
 
@@ -282,8 +287,6 @@ function BlockEditor<
                       parameterEditor,
                       parameterNotice,
                       parameter.name,
-                      parameter.name,
-                      () => parameterFields(parameter),
                       (fields) => edit(replaceParameter(content, parameter.name, fields)),
                       (value, onChange) => (
                         <ParameterFieldset

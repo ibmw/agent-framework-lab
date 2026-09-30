@@ -30,13 +30,24 @@ const TITLE_REFUSAL = "A note needs a title.";
 
 function Harness({
   initial = NOTES,
+  saved = NOTES,
+  units,
   onWrite,
 }: {
   initial?: Note[];
+  /** What a page's Discard puts back: the notes as the lab holds them. */
+  saved?: Note[];
+  /** Fields the list declares follow only together. */
+  units?: readonly (readonly ("title" | "body")[])[];
   onWrite?: (notes: Note[]) => void;
 }) {
   const [notes, setNotes] = useState(initial);
-  const editor = useEntryEdit<{ title: string; body: string }>(notes.map((note) => note.id));
+  const editor = useEntryEdit(notes, {
+    keyOf: (note) => note.id,
+    labelOf: (note) => note.title,
+    fieldsOf: (note) => ({ title: note.title, body: note.body }),
+    units,
+  });
   const notice = useId();
 
   function write(next: Note[]) {
@@ -50,6 +61,10 @@ function Harness({
       <button type="button" onClick={() => setNotes(notes.filter((note) => note.id !== "returns"))}>
         Refetch without Returns
       </button>
+      {/* Replaces the list the way a page's Discard does: the draft re-read from the lab. */}
+      <button type="button" onClick={() => setNotes(saved)}>
+        Discard changes
+      </button>
       <ul>
         {notes.map((note) => (
           <EntryCard
@@ -60,7 +75,7 @@ function Harness({
               label: note.title,
               open: editor.isOpen(note.id),
               blockedBy: editor.blocked(note.id) ? notice : undefined,
-              onOpen: () => editor.begin(note.id, note.title, { ...note }),
+              onOpen: () => editor.begin(note.id),
               onSave: () => {
                 if (editor.open) {
                   const fields = editor.open.fields;
@@ -238,6 +253,80 @@ describe("EntryCard edit mode", () => {
     expect(screen.queryByLabelText("Body")).toBeNull();
     expect(screen.getByRole("button", { name: "Edit Shipping" })).toBeEnabled();
     expect(screen.queryByText(/Save or Cancel before opening another row/)).toBeNull();
+  });
+
+  it("moves an untouched open row onto the entry a page's Discard puts back", async () => {
+    const user = userEvent.setup();
+    const written: Note[][] = [];
+    const edited = [{ ...NOTES[0], body: "Sixty days." }, NOTES[1]];
+    render(<Harness initial={edited} onWrite={(notes) => written.push(notes)} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    expect(screen.getByLabelText("Body")).toHaveValue("Sixty days.");
+
+    // The page's Discard re-reads the draft: the lab holds thirty days, not the sixty the
+    // discarded draft said. The row holds nothing of the operator's, so it shows the entry.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    expect(screen.getByLabelText("Body")).toHaveValue("Thirty days.");
+    // And its Save writes what the draft now says rather than the discarded sixty days.
+    await user.click(screen.getByRole("button", { name: "Save Returns" }));
+    expect(written.at(-1)).toEqual(NOTES);
+  });
+
+  it("keeps the fields typed in through a page's Discard, and moves the rest", async () => {
+    const user = userEvent.setup();
+    const written: Note[][] = [];
+    const edited = [{ ...NOTES[0], body: "Sixty days." }, NOTES[1]];
+    render(<Harness initial={edited} onWrite={(notes) => written.push(notes)} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Refunds");
+
+    // The page's Discard undoes what the page's Save would have written, and that has never
+    // carried an open row (ADR 0051): the typed title is the operator's and stays. The body was
+    // never typed in, so it is the draft's, and it follows the draft back to thirty days.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    expect(screen.getByLabelText("Title")).toHaveValue("Refunds");
+    expect(screen.getByLabelText("Body")).toHaveValue("Thirty days.");
+    // So the row's Save writes the typing and nothing the discard threw away.
+    await user.click(screen.getByRole("button", { name: "Save Returns" }));
+    expect(written.at(-1)).toEqual([{ ...NOTES[0], title: "Refunds" }, NOTES[1]]);
+  });
+
+  it("keeps a declared unit whole when any field of it was typed in", async () => {
+    const user = userEvent.setup();
+    const edited = [{ ...NOTES[0], body: "Sixty days." }, NOTES[1]];
+    render(<Harness initial={edited} units={[["title", "body"]]} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Refunds");
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // The list says title and body only make sense together: the typed title holds its body.
+    expect(screen.getByLabelText("Title")).toHaveValue("Refunds");
+    expect(screen.getByLabelText("Body")).toHaveValue("Sixty days.");
+  });
+
+  it("counts a field typed back to where it started as untouched", async () => {
+    const user = userEvent.setup();
+    const edited = [{ ...NOTES[0], body: "Sixty days." }, NOTES[1]];
+    render(<Harness initial={edited} />);
+
+    await user.click(screen.getByRole("button", { name: "Edit Returns" }));
+    await user.clear(screen.getByLabelText("Body"));
+    await user.type(screen.getByLabelText("Body"), "Ninety days.");
+    await user.clear(screen.getByLabelText("Body"));
+    await user.type(screen.getByLabelText("Body"), "Sixty days.");
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // Nothing of the operator's is left in it, so it is the draft's to move.
+    expect(screen.getByLabelText("Body")).toHaveValue("Thirty days.");
   });
 
   it("saves the row when Enter is pressed in one of its fields", async () => {

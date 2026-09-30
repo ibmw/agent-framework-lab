@@ -762,7 +762,11 @@ function OptionsCard({ product, onChange }: EditorProps) {
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
   const [values, setValues] = useState<string[]>([]);
-  const editor = useEntryEdit<OptionFields>(product.options.map((option) => option.key));
+  const editor = useEntryEdit(product.options, {
+    keyOf: (option) => option.key,
+    labelOf: (option) => option.name,
+    fieldsOf: (option): OptionFields => ({ name: option.name, values: option.values }),
+  });
   const notice = useId();
   const openRefusalId = useId();
   const addRefusalId = useId();
@@ -825,8 +829,6 @@ function OptionsCard({ product, onChange }: EditorProps) {
                 editor,
                 notice,
                 option.key,
-                option.name,
-                () => ({ name: option.name, values: option.values }),
                 (fields) =>
                   onChange({
                     ...product,
@@ -944,7 +946,11 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
   const removal = useRemoval(product.key, discarding);
-  const editor = useEntryEdit<VariantFields>(product.variants.map((variant) => variant.sku));
+  const editor = useEntryEdit(product.variants, {
+    keyOf: (variant) => variant.sku,
+    labelOf: (variant) => variant.sku,
+    fieldsOf: variantFields,
+  });
   const [optionValues, setOptionValues] = useState<Record<string, string>>({});
   const chosenValues = product.options.map(
     (option) => optionValues[option.key] ?? option.values[0],
@@ -1253,9 +1259,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
                         saveRefusal={
                           skuRefusal === null ? undefined : { id: skuRefusalId, reason: skuRefusal }
                         }
-                        onOpen={() =>
-                          editor.begin(variant.sku, variant.sku, variantFields(variant))
-                        }
+                        onOpen={() => editor.begin(variant.sku)}
                         onSave={() => {
                           if (rowEdit) {
                             saveVariant(index, rowEdit.fields);
@@ -1455,7 +1459,11 @@ function MediaFieldset({
 function MediaCard({ product, onChange }: EditorProps) {
   const [media, setMedia] = useState<MediaFields>({ reference: "", altText: "" });
   const taken = product.media.map((entry) => entry.reference);
-  const editor = useEntryEdit<MediaFields>(taken);
+  const editor = useEntryEdit(product.media, {
+    keyOf: (entry) => entry.reference,
+    labelOf: (entry) => entry.reference,
+    fieldsOf: (entry): MediaFields => ({ reference: entry.reference, altText: entry.alt_text }),
+  });
   const notice = useId();
   const openCollisionId = useId();
   const openEmptyId = useId();
@@ -1515,8 +1523,6 @@ function MediaCard({ product, onChange }: EditorProps) {
                 editor,
                 notice,
                 entry.reference,
-                entry.reference,
-                () => ({ reference: entry.reference, altText: entry.alt_text }),
                 (fields) =>
                   onChange({
                     ...product,
@@ -1707,7 +1713,13 @@ const EMPTY_ATTRIBUTE: AttributeFields = {
 function AttributesCard({ product, onChange }: EditorProps) {
   const [key, setKey] = useState("");
   const [fields, setFields] = useState<AttributeFields>(EMPTY_ATTRIBUTE);
-  const editor = useEntryEdit<AttributeFields>(product.attributes.map((entry) => entry.key));
+  const editor = useEntryEdit(product.attributes, {
+    keyOf: (entry) => entry.key,
+    labelOf: (entry) => entry.label,
+    fieldsOf: attributeFields,
+    // A type decides what its value may be, and whether a unit or choices belong to it.
+    units: [["attributeType", "value", "unit", "choices"]],
+  });
   const notice = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
@@ -1765,8 +1777,6 @@ function AttributesCard({ product, onChange }: EditorProps) {
                 editor,
                 notice,
                 attribute.key,
-                attribute.label,
-                () => attributeFields(attribute),
                 (next) =>
                   onChange({
                     ...product,
@@ -1888,7 +1898,15 @@ function ReviewFieldset({
 
 function ReviewsCard({ product, onChange }: EditorProps) {
   const [fields, setFields] = useState<ReviewFields>({ author: "", rating: 5, body: "" });
-  const editor = useEntryEdit<ReviewFields>(product.reviews.map((review) => review.id));
+  const editor = useEntryEdit(product.reviews, {
+    keyOf: (review) => review.id,
+    labelOf: (review) => `review ${review.id}`,
+    fieldsOf: (review): ReviewFields => ({
+      author: review.author_display_name,
+      rating: review.rating,
+      body: review.body,
+    }),
+  });
   const notice = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
@@ -1930,12 +1948,6 @@ function ReviewsCard({ product, onChange }: EditorProps) {
                 editor,
                 notice,
                 review.id,
-                `review ${review.id}`,
-                () => ({
-                  author: review.author_display_name,
-                  rating: review.rating,
-                  body: review.body,
-                }),
                 (next) =>
                   onChange({
                     ...product,

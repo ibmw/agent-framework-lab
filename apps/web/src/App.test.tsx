@@ -2567,6 +2567,50 @@ describe("editing a saved entry in place", () => {
     ]);
   });
 
+  it("keeps an attribute's type, value and choices as one through a Discard", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    // The lab holds a choice, 20k among three; the draft retypes it to text "x".
+    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
+    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
+    let open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
+    await user.selectOptions(open.getByLabelText("Type"), "text");
+    await user.clear(open.getByLabelText("Value"));
+    await user.type(open.getByLabelText("Value"), "x");
+    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
+    // Reopened, and only the value typed in.
+    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
+    open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
+    await user.clear(open.getByLabelText("Value"));
+    await user.type(open.getByLabelText("Value"), "green");
+
+    // Following the type back to a choice under the typed value would build a choice whose
+    // value is none of its choices.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    await waitFor(() =>
+      expect(
+        within(card.getByRole("form", { name: "Edit Waterproofing" })).getByLabelText("Type"),
+      ).toHaveValue("text"),
+    );
+    open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
+    expect(open.getByLabelText("Value")).toHaveValue("green");
+    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().products[0].attributes).toStrictEqual([
+      {
+        key: "waterproofing",
+        label: "Waterproofing",
+        attribute_type: "text",
+        value: "green",
+        unit: null,
+        choices: [],
+      },
+    ]);
+  });
+
   it("nulls the unit when a measurement attribute is edited into a text one", async () => {
     const user = userEvent.setup();
     currentContent = {
@@ -2660,6 +2704,60 @@ describe("editing a saved entry in place", () => {
       },
       before.products[0].variants[1],
     ]);
+  });
+
+  it("moves an untouched open variant row onto what the page's Discard puts back", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const variants = within(await screen.findByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "L");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }));
+    // Opened again on the draft's L, and not touched.
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    expect(variants.getByLabelText("Size for NS-ASJ-OB-M")).toHaveValue("L");
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // The lab holds M. A row left on L would show what the draft no longer says, and its Save
+    // would write the discarded L straight back.
+    await waitFor(() => expect(variants.getByLabelText("Size for NS-ASJ-OB-M")).toHaveValue("M"));
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    expect(lastSaved().products[0].variants).toStrictEqual(unchangedPayload().products[0].variants);
+  });
+
+  it("keeps an open row's typing through a Discard that moves its entry, and follows the rest", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    await user.click(options.getByRole("button", { name: "Edit Size" }));
+    const name = within(options.getByRole("form", { name: "Edit Size" })).getByLabelText(
+      "Option name",
+    );
+    await user.clear(name);
+    await user.type(name, "Fit");
+    await user.click(options.getByRole("button", { name: "Save Size" }));
+    // Opened again on the draft's rename, and typed in: a value added, the name left alone.
+    await user.click(options.getByRole("button", { name: "Edit Fit" }));
+    const fit = within(options.getByRole("form", { name: "Edit Fit" }));
+    await user.type(fit.getByLabelText("New value"), "XXL");
+    await user.click(fit.getByRole("button", { name: "Add value" }));
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // The lab holds "Size": the untouched name follows it, and so does the row's own name —
+    // the form, its buttons and what the prompt would call it — while the typed value stays.
+    const open = within(await options.findByRole("form", { name: "Edit Size" }));
+    expect(open.getByLabelText("Option name")).toHaveValue("Size");
+    expect(open.getByText("XXL")).toBeVisible();
+    expect(options.getByRole("button", { name: "Save Size" })).toBeVisible();
+    expect(
+      screen.getByText(/^Editing Size\. Save or Cancel before opening another row/),
+    ).toBeVisible();
   });
 
   it("corrects only the SKU of a variant whose option order is not the product's", async () => {

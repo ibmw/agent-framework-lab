@@ -432,7 +432,11 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
 - **A saved row opens where it stands** (`EntryCard` edit mode): one payload builder per entry
   for the add form and the open row; one row open per list, siblings' Edit disabled with a line
   saying why and that an open row is not in the draft until Save; Cancel writes nothing; the row
-  is a named form; a refusal one path makes the other makes too. The lists that open this way:
+  is a named form; a refusal one path makes the other makes too. An open row keeps what was
+  typed in it, and every field not typed in — and the row's name — follows any change to its
+  entry, a page's Discard included (ADR 0051, amended), so its Save never writes a discarded
+  value back. Fields that only make sense together follow as one unit or not at all: a
+  parameter's kind, requiredness and default; an attribute's type, value, unit and choices. The lists that open this way:
   the tone-of-voice guidelines; a profile's addresses (the default chip and *Make default*
   on the row), background and hidden facts; an identity's guidance notes; a product's options,
   variants, media, attributes and reviews; a template's parameters (the ↑/↓

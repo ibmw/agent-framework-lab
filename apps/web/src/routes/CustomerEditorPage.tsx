@@ -239,15 +239,25 @@ export function CustomerEditorPage() {
   const [attachedShops, setAttachedShops] = useState<string[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<number | null>(null);
-  const backgroundEditor = useEntryEdit<BackgroundFields>(
-    (content?.background ?? []).map((entry) => entry.id),
-  );
-  const hiddenFactEditor = useEntryEdit<HiddenFactFields>(
-    (content?.hidden_facts ?? []).map((fact) => fact.id),
-  );
-  const addressEditor = useEntryEdit<AddressFields>(
-    (content?.addresses ?? []).map((entry) => entry.id),
-  );
+  const backgroundEditor = useEntryEdit(content?.background ?? [], {
+    keyOf: (entry) => entry.id,
+    labelOf: (entry) => `${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`,
+    fieldsOf: (entry): BackgroundFields => ({
+      kind: entry.kind,
+      occurredOn: entry.occurred_on,
+      note: entry.note,
+    }),
+  });
+  const hiddenFactEditor = useEntryEdit(content?.hidden_facts ?? [], {
+    keyOf: (fact) => fact.id,
+    labelOf: (fact) => fact.note,
+    fieldsOf: (fact): HiddenFactFields => ({ note: fact.note, revealedWhen: fact.revealed_when }),
+  });
+  const addressEditor = useEntryEdit(content?.addresses ?? [], {
+    keyOf: (entry) => entry.id,
+    labelOf: (entry) => entry.label,
+    fieldsOf: addressFields,
+  });
   const addressNotice = useId();
   const openAddressRefusalId = useId();
   const backgroundNotice = useId();
@@ -703,8 +713,6 @@ export function CustomerEditorPage() {
                         addressEditor,
                         addressNotice,
                         entry.id,
-                        entry.label,
-                        () => addressFields(entry),
                         (fields) =>
                           edit({
                             ...content,
@@ -860,12 +868,6 @@ export function CustomerEditorPage() {
                         backgroundEditor,
                         backgroundNotice,
                         entry.id,
-                        `${entry.occurred_on} · ${labelOf(BACKGROUND_KIND, entry.kind)}`,
-                        () => ({
-                          kind: entry.kind,
-                          occurredOn: entry.occurred_on,
-                          note: entry.note,
-                        }),
                         (fields) => saveBackground(entry.id, fields),
                         (value, onChange) => (
                           <div className="flex flex-wrap items-end gap-2">
@@ -952,8 +954,6 @@ export function CustomerEditorPage() {
                         hiddenFactEditor,
                         hiddenFactNotice,
                         fact.id,
-                        fact.note,
-                        () => ({ note: fact.note, revealedWhen: fact.revealed_when }),
                         (fields) => saveHiddenFact(fact.id, fields),
                         (value, onChange) => (
                           <div className="flex flex-wrap items-end gap-2">

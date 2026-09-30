@@ -1892,6 +1892,32 @@ describe("the address book", () => {
     return within(screen.getByRole("region", { name: "Address book" }));
   }
 
+  it("keeps the one address line typed in through a Discard, and moves every other line", async () => {
+    const user = userEvent.setup();
+    const book = await openBook();
+
+    // In the draft: Home moved to another street and city, and the row saved.
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    let open = within(book.getByRole("form", { name: "Edit Home" }));
+    await user.clear(open.getByLabelText("Street"));
+    await user.type(open.getByLabelText("Street"), "1 place Bellecour");
+    await user.clear(open.getByLabelText("City"));
+    await user.type(open.getByLabelText("City"), "Villeurbanne");
+    await user.click(open.getByRole("button", { name: "Save Home" }));
+    // Reopened, and only the second line typed in.
+    await user.click(book.getByRole("button", { name: "Edit Home" }));
+    open = within(book.getByRole("form", { name: "Edit Home" }));
+    await user.type(open.getByLabelText(/^Street line 2/), "Bâtiment B");
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // Each line is its own field — the lab checks each alone — so only the typed one stays.
+    open = within(book.getByRole("form", { name: "Edit Home" }));
+    await waitFor(() => expect(open.getByLabelText("Street")).toHaveValue("18 rue des Écoles"));
+    expect(open.getByLabelText("City")).toHaveValue("Lyon");
+    expect(open.getByLabelText(/^Street line 2/)).toHaveValue("Bâtiment B");
+  });
+
   it("reads an address back on its row and opens every field it stores on Edit", async () => {
     const user = userEvent.setup();
     const book = await openBook();

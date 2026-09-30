@@ -414,7 +414,11 @@ export function ToneOfVoicePage() {
   const { shopId, content, edit } = useShopWorkspace();
   const [tone, setTone] = useState<{ id: string } & ProseFields>({ id: "", name: "", text: "" });
   const takenToneIds = content.tone_of_voice_guidelines.map((entry) => entry.id);
-  const toneEditor = useEntryEdit<ProseFields>(takenToneIds);
+  const toneEditor = useEntryEdit(content.tone_of_voice_guidelines, {
+    keyOf: (entry) => entry.id,
+    labelOf: (entry) => entry.name,
+    fieldsOf: (entry): ProseFields => ({ name: entry.name, text: entry.guidance }),
+  });
   const toneNotice = useId();
   const toneSuggested = uniqueSuggestion(slugify(tone.name, ""), takenToneIds);
   const toneRemoval = useRemoval(shopId);
@@ -511,8 +515,6 @@ export function ToneOfVoicePage() {
                   toneEditor,
                   toneNotice,
                   entry.id,
-                  entry.name,
-                  () => ({ name: entry.name, text: entry.guidance }),
                   (fields) =>
                     edit({
                       ...content,

@@ -2,6 +2,18 @@
 
 Status: accepted — 2026-09-15
 
+Amendment: 2026-10-01 — "Discard … leaves open rows alone" is narrowed to *leaves an open row's
+typing alone*. An open row's fields the operator has not typed in — all of them, in a row opened
+and left, or typed back to where they started — now follow the entry as the list holds it, after a
+Discard or any other change to the entry, and the row's name follows with them (`useEntryEdit`,
+`lib/entryEdit.ts`). Left on the values they opened with, those fields showed what the draft no
+longer said, and the row's Save wrote the discarded values back over the discard, which is the loss
+this ADR exists to prevent. The reason Discard leaves typing alone is unchanged: it undoes what the
+page's Save would have written, and that has never carried an open row. Fields a list declares
+coupled follow as one unit, and a unit with any field typed in keeps all of it: following a
+parameter's kind under a typed default built a parameter the form could not correct, which is why
+the list, and not the hook, says what belongs together.
+
 Moves the application from `BrowserRouter` to `createBrowserRouter` and `RouterProvider` with the
 route tree unchanged, and adds the guard that PLAN-UX Slice 8 asks for: a navigation that would
 strand unsaved work is blocked and offers Save, Discard and Stay, a reload is preceded by the
@@ -237,7 +249,8 @@ the navigation over a draft that had already landed, telling the operator their 
 saved when it had. A contract that instead asked every caller to remember not to throw is the
 kind of rule this work keeps finding broken.
 
-Discard re-reads the draft from the lab and **leaves open rows alone**, which is the same rule read
+Discard re-reads the draft from the lab and **leaves open rows alone** (narrowed on 2026-10-01 to
+an open row's typing; see the header), which is the same rule read
 backwards: it undoes exactly what Save would have written, and Save has never carried an open row.
 A row whose entry the re-read has dropped still closes, by the derived rule Slice 7 built for it.
 
