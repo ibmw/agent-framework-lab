@@ -83,9 +83,12 @@ the prototype's wrapping row puts it.
 `ToggleChipGroup` draws a small closed set of toggles. Each chip is a **native checkbox**,
 transparent and laid over the chip it sits in, and the label is the chip: announced as checked
 or not, toggled by Space, one tab stop per chip, and found by `getByRole("checkbox", { name })`
-as every existing test and journey already found these sets. `aria-pressed` buttons would carry
-the state with none of the form semantics; they stay with filters and with the scenario's compose
-chips, whose press starts a read. The group is `FieldGroupHint`'s fieldset, in either arrangement.
+as every existing test and journey already found these sets. Enter on a chip does nothing: a
+native checkbox is toggled by Space, not Enter, and Enter in one is the browser's implicit
+submission, so the chip holds it as `ChipListField` already holds Enter, and it never submits
+the form around it. `aria-pressed` buttons would carry the state with none of the form
+semantics; they stay with filters and with the scenario's compose chips, whose press starts a
+read. The group is `FieldGroupHint`'s fieldset, in either arrangement.
 
 - `keepOne`: the last chip on is natively `disabled` (ADR 0063 keeps native controls `disabled`)
   and titled with the rule, which the group's hint also states.

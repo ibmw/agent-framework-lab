@@ -228,6 +228,89 @@ describe("ToggleChipGroup", () => {
     expect(line).toHaveTextContent(finding);
   });
 
+  it("submits nothing on Enter from a chip in a form, and leaves the chip as it was", async () => {
+    const user = userEvent.setup();
+    const submitted: string[] = [];
+    const writes: Channel[][] = [];
+    render(
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitted.push("submit");
+        }}
+      >
+        <Harness initial={["chat", "email"]} writes={writes} />
+        <button type="submit">Create shop</button>
+      </form>,
+    );
+
+    await user.click(chip("Email"));
+    await user.keyboard("{Enter}");
+    expect(submitted).toEqual([]);
+    expect(chip("Email")).not.toBeChecked();
+    // Space is still the chip's key, and the form's own button still submits it.
+    await user.keyboard(" ");
+    expect(chip("Email")).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Create shop" }));
+    expect(submitted).toEqual(["submit"]);
+  });
+
+  it("describes each chip by its own finding and its own reason, never a neighbour's", () => {
+    const emailFinding = "variant NS-1 is priced in EUR, which the shop does not sell in";
+    const phoneFinding = "variant NS-2 is priced in USD, which the shop does not sell in";
+    render(
+      <Harness
+        initial={["chat"]}
+        options={[
+          { ...CHANNELS[0], disabledReason: "Chat has completed." },
+          { ...CHANNELS[1], findings: [emailFinding] },
+          { ...CHANNELS[2], findings: [phoneFinding], disabledReason: "Phone has completed." },
+        ]}
+      />,
+    );
+
+    expect(chip("Email")).toHaveAccessibleDescription(emailFinding);
+    expect(chip("Phone")).toHaveAccessibleDescription(`Phone has completed. ${phoneFinding}`);
+    expect(chip("Chat")).toHaveAccessibleDescription("Chat has completed.");
+    // Both findings and both reasons are still said, each once, under the chips.
+    const line = group().querySelector('[id$="-findings"]') as HTMLElement;
+    expect(line).toHaveTextContent(`${emailFinding}${phoneFinding}`);
+    expect(screen.getByText(/Chat has completed\./).closest("p")).toHaveTextContent(
+      "Chat has completed. Phone has completed.",
+    );
+  });
+
+  it("greys a held chip, on or off, in the system's colour for unavailable under forced colours", () => {
+    render(
+      <Harness
+        initial={["chat"]}
+        keepOne="A shop answers on at least one channel."
+        options={[
+          CHANNELS[0],
+          CHANNELS[1],
+          { ...CHANNELS[2], disabledReason: "Phone has completed." },
+        ]}
+      />,
+    );
+
+    // jsdom evaluates no media query, so what is held is the classes the stylesheet keys on.
+    const forced = [
+      "forced-colors:text-[color:GrayText]",
+      "forced-colors:border-[color:GrayText]",
+      "forced-colors:opacity-100",
+    ];
+    const heldOn = chip("Chat").closest("label") as HTMLElement;
+    const heldOff = chip("Phone").closest("label") as HTMLElement;
+    const free = chip("Email").closest("label") as HTMLElement;
+    expect(chip("Chat")).toBeDisabled();
+    expect(chip("Phone")).toBeDisabled();
+    for (const token of forced) {
+      expect(heldOn.className.split(" ")).toContain(token);
+      expect(heldOff.className.split(" ")).toContain(token);
+      expect(free.className).not.toContain(token);
+    }
+  });
+
   it("names a chip by more than it shows where the caller asks", () => {
     render(
       <Harness

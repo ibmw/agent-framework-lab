@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from "react";
+import { Fragment, type KeyboardEvent, type ReactNode, useId } from "react";
 import { type Arrangement, FieldGroupHint } from "./FieldHint";
 import { GateFindingLine } from "./GateFindingLine";
 
@@ -20,12 +20,30 @@ const chipInputClasses =
   "absolute inset-0 m-0 h-full w-full cursor-[inherit] appearance-none rounded-lg opacity-0";
 
 /**
+ * Enter on a chip does nothing. A checkbox toggles on Space; Enter in one is the browser's
+ * implicit submission of the form around it, and a chip group sits inside the new-shop form
+ * whose submit is *Create*. `PrimaryAction` already refuses a create that is not filled in, so
+ * the hazard is a filled-in one created while the operator is still choosing its currencies or
+ * channels. The same handler holds on Shop details and on the bench's *Deliver to*, which are
+ * chips of this group too.
+ */
+function holdEnter(event: KeyboardEvent<HTMLInputElement>) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+  }
+}
+
+/**
  * The chip's classes for its state. One border colour is ever emitted, so a finding's red never
  * has to win a cascade against the state's own border: a chip the gate finds against is bordered
  * in the validation ink, as a field that holds a gate error is.
  *
  * A disabled chip keeps its state's look without the hover that promises a press; one that
- * cannot be turned on is also faded, as the scenario's compose chips fade at their cap.
+ * cannot be turned on is also faded, as the scenario's compose chips fade at their cap. Forced
+ * colours paint every chip in the system's palette, which erases the pine but not the fade, so
+ * there a held chip, on or off, is drawn in `GrayText`, the system's colour for what is
+ * unavailable, as a native disabled control is. `opacity-100` lifts the fade there, so
+ * `GrayText` is the one signal and is drawn at the contrast the system chose for it.
  */
 function toggleChipClasses({
   checked,
@@ -45,7 +63,7 @@ function toggleChipClasses({
     ? "bg-admin-chip font-bold text-lab-primary"
     : "bg-admin-surface font-[650] text-admin-ink-soft";
   const press = held
-    ? `cursor-not-allowed${checked ? "" : " opacity-55"}`
+    ? `cursor-not-allowed${checked ? "" : " opacity-55"} forced-colors:border-[color:GrayText] forced-colors:text-[color:GrayText] forced-colors:opacity-100`
     : `cursor-pointer ${checked ? "hover:bg-admin-chip-hover" : "hover:bg-[#f6f7f8]"}`;
   return `${chipBaseClasses} ${border} ${face} ${press}`;
 }
@@ -63,13 +81,15 @@ export interface ToggleChip<T extends string> {
   spoken?: string;
   /**
    * Why this chip cannot change, where the reason is the chip's own. It is disabled, titled
-   * with the sentence, and described by the line under the chips that says it.
+   * with the sentence, and described by that sentence in the line under the chips — its own,
+   * never a neighbour's.
    */
   disabledReason?: string;
   /**
    * The publish-gate errors this chip's state causes, in the gate's words (`lib/fieldRules.ts`).
-   * The chip is marked `aria-invalid` and described by the line that says them, and nothing is
-   * refused: the lab stores the draft and refuses it at publication (ADR 0063's amendment).
+   * The chip is marked `aria-invalid` and described by its own findings in the line that says
+   * them, never by another chip's, and nothing is refused: the lab stores the draft and
+   * refuses it at publication (ADR 0063's amendment).
    */
   findings?: readonly string[];
 }
@@ -117,12 +137,16 @@ export function ToggleChipGroup<T extends string>({
   onChange: (next: T[]) => void;
 }) {
   const id = useId();
-  const reasonsId = `${id}-reasons`;
-  const findingsId = `${id}-findings`;
-  const reasons = options.flatMap((option) =>
-    option.disabledReason ? [option.disabledReason] : [],
+  // One element per chip's reason and per chip's findings, each with its own id, so a chip is
+  // described by what is said about it and not by what is said about its neighbours.
+  const reasonId = (index: number) => `${id}-reason-${index}`;
+  const findingsId = (index: number) => `${id}-findings-${index}`;
+  const reasons = options.flatMap((option, index) =>
+    option.disabledReason ? [{ index, reason: option.disabledReason }] : [],
   );
-  const findings = options.flatMap((option) => option.findings ?? []);
+  const findings = options.flatMap((option, index) =>
+    (option.findings ?? []).length > 0 ? [{ index, findings: option.findings ?? [] }] : [],
+  );
 
   function toggle(chip: T) {
     if (!value.includes(chip)) {
@@ -138,14 +162,14 @@ export function ToggleChipGroup<T extends string>({
   return (
     <FieldGroupHint legend={label} hint={hint} extra={extra} arrangement={arrangement}>
       <div className="flex flex-wrap gap-[7px]">
-        {options.map((option) => {
+        {options.map((option, index) => {
           const checked = value.includes(option.value);
           const lastOn = keepOne !== undefined && checked && value.length === 1;
           const reason = option.disabledReason ?? (lastOn ? keepOne : undefined);
           const invalid = (option.findings ?? []).length > 0;
           const describedBy = [
-            option.disabledReason ? reasonsId : null,
-            invalid ? findingsId : null,
+            option.disabledReason ? reasonId(index) : null,
+            invalid ? findingsId(index) : null,
           ].filter(Boolean);
           return (
             <label
@@ -164,6 +188,7 @@ export function ToggleChipGroup<T extends string>({
                 aria-label={option.spoken ? `${option.label} ${option.spoken}` : undefined}
                 aria-invalid={invalid || undefined}
                 aria-describedby={describedBy.length > 0 ? describedBy.join(" ") : undefined}
+                onKeyDown={holdEnter}
                 onChange={() => toggle(option.value)}
               />
               {checked ? <span aria-hidden="true">✓</span> : null}
@@ -173,15 +198,24 @@ export function ToggleChipGroup<T extends string>({
         })}
       </div>
       {reasons.length > 0 ? (
-        <p id={reasonsId} className="mt-[7px] text-[13px] text-admin-muted">
-          {reasons.join(" ")}
+        <p className="mt-[7px] text-[13px] text-admin-muted">
+          {reasons.map((entry, position) => (
+            <Fragment key={entry.index}>
+              {position > 0 ? " " : null}
+              <span id={reasonId(entry.index)}>{entry.reason}</span>
+            </Fragment>
+          ))}
         </p>
       ) : null}
-      <GateFindingLine id={findingsId} className="mt-[7px]">
+      <GateFindingLine id={`${id}-findings`} className="mt-[7px]">
         {findings.length > 0
-          ? findings.map((finding) => (
-              <span key={finding} className="block">
-                {finding}
+          ? findings.map((entry) => (
+              <span key={entry.index} id={findingsId(entry.index)} className="block">
+                {entry.findings.map((finding) => (
+                  <span key={finding} className="block">
+                    {finding}
+                  </span>
+                ))}
               </span>
             ))
           : null}
