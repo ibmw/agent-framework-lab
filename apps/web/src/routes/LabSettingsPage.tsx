@@ -33,7 +33,6 @@ import {
   describeZoneSource,
   ENDPOINT_PRESETS,
   presetForBaseUrl,
-  pythonStrip,
   sameEndpoint,
 } from "../lib/modelConnections";
 import {
@@ -52,6 +51,7 @@ import {
   writeNavigationCollapsed,
   writeTimestampFormat,
 } from "../lib/preferences";
+import { pythonStrip } from "../lib/pythonText";
 import {
   cardTitleClasses,
   fieldControlClasses,

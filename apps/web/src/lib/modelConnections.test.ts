@@ -22,7 +22,6 @@ import {
   LAB_STATUS_PROVIDER,
   PROBE_OUTCOMES,
   presetForBaseUrl,
-  pythonStrip,
   sameEndpoint,
   unreachableArmsNote,
   unreachableProviderNote,
@@ -273,11 +272,6 @@ describe("the endpoint presets", () => {
     expect(sameEndpoint("http://[::1]:11434/v1", "http://[::1]:11434/v1")).toBe(true);
     expect(sameEndpoint("http://[::1]:11434/v1", "http://localhost:11434/v1")).toBe(false);
     expect(sameEndpoint("", "https://api.openai.com/v1")).toBe(false);
-  });
-
-  it("strips what Python's strip removes, and nothing JavaScript's trim adds", () => {
-    expect(pythonStrip("\x85\x1c\x1f \u00a0")).toBe("");
-    expect(pythonStrip("\ufeffx\ufeff")).toBe("\ufeffx\ufeff");
   });
 
   it("compares against the endpoint as the lab stored it, never a fold of that", () => {

@@ -83,6 +83,10 @@ const AXES: readonly Axis[] = [
   ARM_AXIS,
   [
     [{ label: "  " }, [NO_NAME]],
+    // Empty to Python's `str.strip()`, which `require_label` reads, and not to `trim()`.
+    [{ label: "\x85\x1c\u2028" }, [NO_NAME]],
+    // Kept by `str.strip()`, so the lab stores it, though `trim()` would empty it.
+    [{ label: "\ufeff" }, []],
     [{ label: "Prompt comparison" }, []],
   ],
   [
@@ -125,8 +129,8 @@ describe("what Start waits for", () => {
       expect(startRefusals(state as StartState), JSON.stringify(state)).toEqual(reasons);
       swept += 1;
     }
-    // 4 · 3 · 2 · 16 · 3 · 2 · 2: a sweep that silently shrank would pass on nothing.
-    expect(swept).toBe(4608);
+    // 4 · 16 · 4 · 3 · 3 · 2 · 2: a sweep that silently shrank would pass on nothing.
+    expect(swept).toBe(9216);
   });
 
   it("waits for nothing once each cause is answered", () => {
@@ -163,6 +167,11 @@ describe("the request a start makes", () => {
       { configuration_id: "a", version: 2, label: "" },
       { configuration_id: "b", version: 1, label: "" },
     ]);
+  });
+
+  it("sends the name as Python's `str.strip()` leaves it, which is what `require_label` keeps", () => {
+    const label = "\x85 Named \x1f";
+    expect(setupOf({ ...base, label, arms: [arm("a", "2")] })?.label).toBe("Named");
   });
 
   it.each([

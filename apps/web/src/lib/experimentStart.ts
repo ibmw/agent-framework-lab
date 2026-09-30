@@ -1,5 +1,6 @@
 import type { DefinitionIssueSchema, StartExperimentRequest } from "@agent-lab/contracts";
 import { MAX_SEED } from "./fieldRules";
+import { pythonStrip } from "./pythonText";
 
 /**
  * Everything the lab would refuse a start for, read before the press.
@@ -14,7 +15,8 @@ import { MAX_SEED } from "./fieldRules";
  *   and is not being read — is refused by name rather than left out of the request.
  * - **The name** (`ExperimentService.start`, `require_label`): non-empty once trimmed — the
  *   page trims before it sends — and at most `MAX_LABEL_LENGTH`, which the field enforces as
- *   its `maxLength`.
+ *   its `maxLength`. Trimmed as Python's `str.strip()` trims (`pythonStrip`): a name made only
+ *   of a NEL or an information separator is empty to the lab, and not to JavaScript's `trim()`.
  * - **The setup gate** (`ExperimentService._gate`, which `previewExperiment` runs with the same
  *   rules): every **error** it raises, in its own words, and a refusal of the preview itself —
  *   a scenario version not published in this shop, an arm version that does not exist — which
@@ -117,7 +119,7 @@ export function startRefusals(state: StartState): string[] {
       reasons.push(noArmVersion(position));
     }
   });
-  if (state.label.trim() === "") {
+  if (pythonStrip(state.label) === "") {
     reasons.push(NO_NAME);
   }
   if (state.seed.trim() === "") {
@@ -171,7 +173,7 @@ export function setupOf({
     return null;
   }
   return {
-    label: label.trim(),
+    label: pythonStrip(label),
     scenario_id: scenarioId,
     scenario_version: Number(scenarioVersion),
     seed: Number(seed),

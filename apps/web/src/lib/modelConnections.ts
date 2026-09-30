@@ -5,6 +5,7 @@ import type {
   ProviderConnectionListResponse,
 } from "@agent-lab/contracts";
 import { describeProvider } from "./agents";
+import { pythonStrip } from "./pythonText";
 
 /**
  * The words and the prefilled endpoints the *Model provider* zone is drawn from (ADR 0052).
@@ -122,23 +123,9 @@ const DEFAULT_PORTS: Readonly<Record<string, number>> = { http: 80, https: 443 }
 /** `MAX_BASE_URL_LENGTH` in `domain/model_connection.py`: longer is refused, so is no preset. */
 const MAX_BASE_URL_LENGTH = 2048;
 
-/**
- * Python's `str.isspace()` set, which `str.strip()` removes and JavaScript's `trim()` does not
- * match: it includes the four information separators `\x1c`–`\x1f` and NEL `\x85`, and it
- * excludes the byte-order mark `\ufeff`, which `trim()` removes and the server keeps.
- */
-const PYTHON_WHITESPACE =
-  "\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
-const PYTHON_STRIP = new RegExp(`^[${PYTHON_WHITESPACE}]+|[${PYTHON_WHITESPACE}]+$`, "g");
-
 /** The C0 controls and space `urlsplit` strips from the front of a URL before it parses one. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching these controls is the point.
 const URLSPLIT_LSTRIP = /^[\x00-\x20]+/;
-
-/** `value` with what Python's `str.strip()` removes taken off both ends, as the server strips it. */
-export function pythonStrip(value: string): string {
-  return value.replace(PYTHON_STRIP, "");
-}
 
 /**
  * Whether saving the endpoint in the field would leave the lab holding what it holds: a trailing
