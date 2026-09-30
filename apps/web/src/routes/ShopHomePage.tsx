@@ -677,9 +677,10 @@ function RunAComparison({
             .
           </p>
           <Link
-            className="min-h-[42px] rounded-[9px] bg-lab-primary px-4 text-center text-sm font-bold leading-[42px] text-lab-paper no-underline hover:bg-lab-primary-hover"
+            className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-[9px] bg-lab-primary px-4 text-sm font-bold text-lab-paper no-underline hover:bg-lab-primary-hover"
             to="/lab/bench"
           >
+            <ButtonIcon verb="create" />
             New experiment
           </Link>
         </>

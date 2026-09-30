@@ -14,6 +14,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderApp } from "./test/app";
+import { expectCreateGlyph } from "./test/indexes";
 import { expectBusy, expectNotRefused, expectRefused } from "./test/refused";
 import { shellListings } from "./test/shell";
 
@@ -601,7 +602,10 @@ describe("the readiness card", () => {
     expect(run.getByText(/A comparison runs/)).toBeVisible();
     expect(run.getByText("Wrong shipping address v1")).toBeVisible();
     expect(run.getByText("v3")).toBeVisible();
-    expect(run.getByRole("link", { name: "New experiment" })).toHaveAttribute("href", "/lab/bench");
+    const create = run.getByRole("link", { name: "New experiment" });
+    expect(create).toHaveAttribute("href", "/lab/bench");
+    // The create glyph every *New X* carries, as Experiment history's does.
+    expectCreateGlyph(create, "New experiment");
   });
 
   it("claims no readiness, because the gates a run passes are not read here", async () => {

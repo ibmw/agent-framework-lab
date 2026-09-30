@@ -162,7 +162,7 @@ export function ScenariosPage() {
                   <th className={tableHeadClasses}>Scenario</th>
                   <th className={tableHeadClasses}>Ticket</th>
                   <th className={tableHeadClasses}>Composed</th>
-                  <th className={tableHeadClasses}>Version</th>
+                  <th className={tableHeadClasses}>Published</th>
                   <th className={tableHeadClasses}>Draft updated</th>
                 </tr>
               </thead>

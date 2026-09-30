@@ -332,7 +332,8 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   `describeValue`. An explanation only where an operator could choose wrong, and only saying what
   the lab enforces. A status column is a `StatusPill`: glyph for the axis, word for the meaning —
   an index's Published column too (`PublicationPill`: "v3 · 2 versions" or *Never published*,
-  the dot on both, each state on the fill `VersionChips` gives it).
+  the dot on both, each state on the fill `VersionChips` gives it), headed *Published* on every
+  index; a *Version* column holds a version, as the starting states' does.
 - **Where a set comes from decides the control.** A contract union is a select. A register (a
   locale, a country) is a datalist that suggests and echoes the name. What the lab has proven
   follows the gate's severity: provider a select, model a datalist, tone override a datalist of

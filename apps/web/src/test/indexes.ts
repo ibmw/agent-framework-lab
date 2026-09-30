@@ -14,7 +14,10 @@ export function indexCard(title: string): HTMLElement {
 /**
  * A record's publication, drawn as the index draws it: the word in a pill, beside the dot that
  * names the axis and is hidden from a reader, on the fill of its state — never the colour
- * alone (`docs/design-direction.md`, *Principles*).
+ * alone (`docs/design-direction.md`, *Principles*). Where the pill sits in an index's table,
+ * its column is headed *Published*, on every index: one name for one thing (*Names*). Every
+ * caller's pill is in an index table, so one outside a table fails rather than passing by
+ * skipping the header.
  */
 export function expectPublicationPill(
   scope: HTMLElement,
@@ -28,6 +31,12 @@ export function expectPublicationPill(
   expect(glyph).toHaveTextContent("●");
   expect(pill).toHaveClass(state === "published" ? "bg-admin-published" : "bg-admin-border");
   expect(pill).not.toHaveClass(state === "published" ? "bg-admin-border" : "bg-admin-published");
+  const cell = pill.closest("td");
+  const table = pill.closest("table");
+  expect(cell, `the table cell ${word} is in`).not.toBeNull();
+  expect(table, `the table ${word} is in`).not.toBeNull();
+  const header = table?.querySelectorAll("thead th")[cell?.cellIndex ?? -1];
+  expect(header, `the column ${word} is in`).toHaveTextContent(/^Published$/);
 }
 
 /**

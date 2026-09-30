@@ -233,7 +233,7 @@ function BlockLibrary({
                   <th className={tableHeadClasses}>Name</th>
                   <th className={tableHeadClasses}>{copy.typeHeading}</th>
                   <th className={tableHeadClasses}>Parameters</th>
-                  <th className={tableHeadClasses}>Version</th>
+                  <th className={tableHeadClasses}>Published</th>
                   <th className={tableHeadClasses}>Draft updated</th>
                 </tr>
               </thead>
