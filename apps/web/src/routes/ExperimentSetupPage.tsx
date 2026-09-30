@@ -164,6 +164,11 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   } | null>(null);
   const [issues, setIssues] = useState<DefinitionIssueSchema[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // What the last preview could not judge. Its own state rather than `error`, because only the
+  // preview can take it back: a later preview that answers clears it, and nothing it says
+  // about the setup survives into a setup the lab has since judged — while an error a read or
+  // a start raised is not the preview's to clear.
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   // The provider each arm's pinned version names, by arm, as the arm reads it. Held here
@@ -392,18 +397,20 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
   useEffect(() => {
     if (setup === null) {
       setPreview(null);
+      setPreviewError(null);
       return;
     }
     const controller = new AbortController();
     previewExperiment(shopId, setup, controller.signal)
       .then((judgement) => {
         setPreview(judgement);
+        setPreviewError(null);
         setJudged({ setup, refusal: null });
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setPreview(null);
-          setError(describeApiError(cause, "This setup could not be judged."));
+          setPreviewError(describeApiError(cause, "This setup could not be judged."));
           // A refusal of the setup — a version this shop does not publish, an arm version that
           // is gone — is what a start would answer too, so Start says it. A preview that could
           // not be reached says nothing about the setup, and refuses nothing.
@@ -510,6 +517,11 @@ function ExperimentSetup({ shopId }: { shopId: string }) {
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-lab-error">
           {error}
+        </p>
+      ) : null}
+      {previewError ? (
+        <p role="alert" className="mb-4 text-[13px] text-lab-error">
+          {previewError}
         </p>
       ) : null}
       {issues.length > 0 ? (

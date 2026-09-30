@@ -1540,6 +1540,69 @@ describe("experiment setup", () => {
     await waitFor(() => expect(started).toHaveLength(1));
   });
 
+  it("takes back what a refused preview said once a later preview answers", async () => {
+    const user = userEvent.setup();
+    const gone = "agent configuration 1a2b3c4d has no published version 1";
+    let answered = 0;
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, async ({ request }) => {
+        const body = (await request.json()) as { arms: { version: number }[] };
+        if (body.arms[0].version === 1) {
+          return HttpResponse.json(
+            { code: "agent_configuration_version_not_found", message: gone, request_id: "r" },
+            { status: 404 },
+          );
+        }
+        answered += 1;
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await nameAs(user, "Gone");
+    await chooseArm(user, 0, "cfg-atlas");
+    await waitFor(() =>
+      expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(gone),
+    );
+
+    const arm = screen.getByRole("group", { name: "Arm A" });
+    await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
+    await waitFor(() => expect(answered).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.queryAllByRole("alert").map((alert) => alert.textContent)).not.toContain(gone),
+    );
+    expectNotRefused(screen.getByRole("button", { name: "Start experiment" }));
+  });
+
+  it("leaves an error the preview did not raise to what raised it", async () => {
+    const user = userEvent.setup();
+    startFails = true;
+    let answered = 0;
+    server.use(
+      http.post(`*/api/v1/shops/${SHOP_ID}/experiments/preview`, () => {
+        answered += 1;
+        return HttpResponse.json(PREVIEW);
+      }),
+    );
+    renderSetup();
+
+    await scenarioChosen();
+    await chooseArm(user, 0, "cfg-atlas");
+    await nameAs(user, "Prompt comparison");
+    await user.click(screen.getByRole("button", { name: "Start experiment" }));
+    const refused = "this experiment cannot be started";
+    await waitFor(() =>
+      expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(refused),
+    );
+
+    const before = answered;
+    const arm = screen.getByRole("group", { name: "Arm A" });
+    await user.selectOptions(within(arm).getByLabelText("Published version"), "2");
+    await waitFor(() => expect(answered).toBeGreaterThan(before));
+    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(refused);
+  });
+
   it("starts the experiment against the exact versions chosen and opens the bench", async () => {
     const user = userEvent.setup();
     renderSetup();
