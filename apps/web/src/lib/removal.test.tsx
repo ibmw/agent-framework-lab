@@ -451,3 +451,43 @@ describe("a notice keyed by an identity a discard gives back", () => {
     await waitFor(() => expect(screen.queryByText("Asking about a")).toBeNull());
   });
 });
+
+describe("the removal clauses", () => {
+  // Every module that says a removal's clauses — the ones importing this table — as text. A
+  // module that names a gate code for another reason (the setup checklist owns
+  // `shop_without_payment_method`) is not a removal, and must not count as citing one.
+  const sources = Object.entries(
+    import.meta.glob("../**/*.{ts,tsx}", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    }) as Record<string, string>,
+  ).filter(
+    ([path, source]) =>
+      !path.includes(".test.") &&
+      path !== "./removal.ts" &&
+      /from "(?:\.\.\/lib|\.)\/removal"/.test(source),
+  );
+
+  /** Whether some removal can say the clause: its code written as a literal, or read by name. */
+  function cited(code: string): boolean {
+    const literal = new RegExp(`["'\`]${code}["'\`]`);
+    const read = new RegExp(`REMOVAL_FINDINGS\\.${code}\\b`);
+    return sources.some(([, source]) => literal.test(source) || read.test(source));
+  }
+
+  it("found the removals to look in", () => {
+    // Asserted first: a glob that matched nothing would leave every clause uncited.
+    expect(sources.some(([path]) => path.endsWith("ShopMethodCards.tsx"))).toBe(true);
+    expect(cited("payment_method_missing_from_shop")).toBe(true);
+    expect(cited("not_a_finding_code")).toBe(false);
+    expect(sources.some(([path]) => path.endsWith("setupChecklist.ts"))).toBe(false);
+  });
+
+  it("holds only clauses some removal says", () => {
+    // A clause no removal reaches is a sentence about a consequence the workspace no longer
+    // offers: the last enabled payment method cannot be removed (ADR 0072), so the gate's
+    // `shop_without_payment_method` is the checklist's to say, never a confirm's.
+    expect(Object.keys(REMOVAL_FINDINGS).filter((code) => !cited(code))).toEqual([]);
+  });
+});

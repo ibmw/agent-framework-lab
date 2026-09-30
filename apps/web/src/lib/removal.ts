@@ -281,8 +281,6 @@ export const REMOVAL_FINDINGS = {
     "It is the product's last media reference, which the publish gate warns about.",
   shop_without_product:
     "It is the shop's last product, and a shop that sells nothing is refused at publication.",
-  shop_without_payment_method:
-    "It is the shop's last enabled payment method, and a shop with none is refused at publication.",
   shop_without_fulfilment_method:
     "It is the shop's last fulfilment method, and a shop with none is refused at publication.",
   shop_without_policy:

@@ -99,7 +99,7 @@ one method is enabled. A confirm armed before the others were switched off is dr
 enabled method reaches the card's handler and it carries no guard of its own for it. A draft
 already holding none enabled is not blocked: any switch turns on, any method can be removed.
 Consequence: the `shop_without_payment_method` removal clause is no longer reachable from this
-card, and the checklist line still owns the gate code.
+card and is deleted from `REMOVAL_FINDINGS`, and the checklist line still owns the gate code.
 
 New payment methods are added enabled.
 
