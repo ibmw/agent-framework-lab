@@ -134,7 +134,7 @@ composed blocks, onto the pattern Shop details' *Payment methods* draws (ADR 007
 with an icon Edit and Remove, and one form below the list that adds or, on Edit, holds the item it
 loaded. The operator asked for it on 29 September 2026; it is built on the primitives the workspace
 already has, without a backend or contract change. `docs/PLAN-UX.md` is the authority for its
-scope, order and checks. Its first slice writes ADR 0074 with its code, because the pattern
+scope, order and checks. ADR 0074, written with its first slice, records the pattern, which
 supersedes *A saved row opens where it stands* for the lists it converts. Acceptance is that
 plan's.
 

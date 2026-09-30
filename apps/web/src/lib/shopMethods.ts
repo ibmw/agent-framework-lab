@@ -2,6 +2,7 @@ import type { FulfilmentMethodSchema, PaymentMethodSchema } from "@agent-lab/con
 import { isSlug } from "./entryIds";
 import { PAYMENT_METHOD_KIND } from "./enumLabels";
 import { alreadyTakenMessage, TRANSIT_WINDOW_RULE } from "./fieldRules";
+import type { ItemRefusal } from "./itemForm";
 
 /**
  * The payment and fulfilment method forms on Shop details: what each holds, the order its
@@ -65,11 +66,8 @@ export const BLANK_FULFILMENT: FulfilmentForm = {
 
 export type MethodField = "name" | "id" | "carrier" | "min" | "max";
 
-/** The first rule the form breaks, and the field that breaks it. */
-export interface MethodRefusal {
-  field: MethodField;
-  reason: string;
-}
+/** The first rule the form breaks, and the field that breaks it (`ItemRefusal`'s shape). */
+export type MethodRefusal = ItemRefusal<MethodField>;
 
 /**
  * A whole number of days the contract carries, or null. `Number("")` is 0 and `Number(" 2")`

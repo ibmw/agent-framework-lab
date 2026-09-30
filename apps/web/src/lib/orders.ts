@@ -13,7 +13,16 @@ import {
   ORDER_EVENT_KIND,
   PAYMENT_STATUS,
 } from "./enumLabels";
-import { ORDER_EVENT_SUMMARY_RULE, ORDER_EVENT_TIME_RULE } from "./fieldRules";
+import {
+  LINE_QUANTITY_RULE,
+  LINE_VARIANT_RULE,
+  MAX_LINE_QUANTITY,
+  MIN_LINE_QUANTITY,
+  ORDER_EVENT_SUMMARY_RULE,
+  ORDER_EVENT_TIME_RULE,
+  ORDER_EVENTS_CAP_RULE,
+} from "./fieldRules";
+import type { ItemRefusal } from "./itemForm";
 
 /**
  * Status is never carried by colour alone: every pill pairs its tone with a written label,
@@ -135,9 +144,6 @@ export function toOrderRequest(content: OrderContentSchema): ReplaceOrderRequest
   };
 }
 
-export const MIN_LINE_QUANTITY = 1;
-export const MAX_LINE_QUANTITY = 999;
-
 function cents(amount: string): number {
   const parsed = Number(amount);
   // A half-typed shipping fee contributes nothing to the preview rather than turning every
@@ -219,8 +225,8 @@ export function fromLocalInput(value: string): string | null {
 }
 
 /**
- * An event's authored fields, as the add form below *Order events* and an open row both hold
- * them: the kind, the instant as the `datetime-local` control spells it, and the summary.
+ * An event's authored fields, as the form below *Order events* holds them: the kind, the instant
+ * as the `datetime-local` control spells it, and the summary.
  */
 export interface OrderEventFields {
   kind: OrderEventKind;
@@ -233,20 +239,18 @@ export function orderEventFields(event: OrderEventSchema): OrderEventFields {
 }
 
 /**
- * The one function that turns an event's fields into the entry the order stores, called by the
- * add form and by an open row's Save alike, so the two paths cannot write different payloads.
+ * The one function that turns an event's fields into the entry the order stores, whether the
+ * form adds it or saves an edit, so the two paths cannot write different payloads.
  *
  * The summary is stored trimmed: `OrderEvent` refuses a summary with surrounding whitespace
  * (`require_text` in `domain/content.py`), and a trailing newline in a text area is not
- * something an author means. Only call it once `orderEventRefusal` has nothing to say and no
- * `required` field is empty.
+ * something an author means. Only call it once `orderEventRefusal` has nothing to say.
  *
- * `kept` is the instant the time field opened on — the entry's own, for an open row; the
- * order's placement, for the add form. The control spells an instant to the minute, so a time
- * the author left alone keeps that instant rather than losing its seconds to the round trip:
- * on an open row that would show in the change summary as an edit nobody made, and on the add
- * form it would put a new event seconds before the placement it opened on
- * (`event_precedes_placement`).
+ * `kept` is the instant the time field opened on — the entry's own, for an edit; the order's
+ * placement, for an addition. The control spells an instant to the minute, so a time the
+ * author left alone keeps that instant rather than losing its seconds to the round trip: on an
+ * edit that would show in the change summary as a change nobody made, and on an addition it
+ * would put a new event seconds before the placement it opened on (`event_precedes_placement`).
  */
 export function orderEventEntry(
   id: string,
@@ -262,25 +266,86 @@ export function orderEventEntry(
   };
 }
 
+/** The event form's fields a rule can be broken by; the kind is a select of the contract's. */
+export type OrderEventField = "occurredAt" | "summary";
+
 /**
- * Why the lab would refuse these fields when no field says so, or null — one answer for the add
- * form and the open row, so a refusal one path makes the other makes too.
- *
- * A field left empty is not here: both controls are `required`, and the browser says that on
- * the field (ADR 0063, *Deliberately not here*). What `required` lets through is a summary of
- * nothing but spaces, which `require_text` then refuses, and a time that does not parse.
+ * The first rule the event form breaks, in the order it asks (ADR 0074): the lab's cap, when
+ * adding and the order already carries `MAX_ORDER_EVENTS` — about the list, so no field is
+ * marked — then the time, empty or not an instant, then the summary, empty or only spaces,
+ * which `require_text` refuses. The fields are not natively `required`: every rule is said in
+ * the one line after the buttons, a blank form's included (ADR 0072's placement).
  */
-export function orderEventRefusal(fields: OrderEventFields): string | null {
-  if (fields.summary !== "" && fields.summary.trim() === "") {
-    return ORDER_EVENT_SUMMARY_RULE;
+export function orderEventRefusal(
+  fields: OrderEventFields,
+  { full = false }: { full?: boolean } = {},
+): ItemRefusal<OrderEventField> | null {
+  if (full) {
+    return { field: null, reason: ORDER_EVENTS_CAP_RULE };
   }
-  if (fields.occurredAt !== "" && fromLocalInput(fields.occurredAt) === null) {
-    return ORDER_EVENT_TIME_RULE;
+  if (fromLocalInput(fields.occurredAt) === null) {
+    return { field: "occurredAt", reason: ORDER_EVENT_TIME_RULE };
+  }
+  if (fields.summary.trim() === "") {
+    return { field: "summary", reason: ORDER_EVENT_SUMMARY_RULE };
   }
   return null;
 }
 
-/** A `required` field left empty: the field's own to say, and the submit handler's to hold. */
-export function orderEventIncomplete(fields: OrderEventFields): boolean {
-  return fields.summary === "" || fields.occurredAt === "";
+/** Why *Add line* has nothing to offer: a line is frozen at a price, so only a priced variant can be one. */
+export const NO_PRICED_VARIANT = "The catalog has no priced variant to order yet.";
+export const EVERY_VARIANT_ORDERED =
+  "Every priced variant in the catalog is already a line of this order.";
+
+/**
+ * A line as the form below *Items* holds it: the variant by its SKU, which is the key the lab
+ * holds a line by and so is fixed once the line exists, and the quantity as typed.
+ */
+export interface LineForm {
+  variant: string;
+  quantity: string;
+}
+
+export type LineField = "variant" | "quantity";
+
+export function lineFormOf(line: OrderContentSchema["lines"][number]): LineForm {
+  return { variant: line.sku, quantity: String(line.quantity) };
+}
+
+/** A quantity the contract carries — whole units between the two bounds — or null. */
+export function lineQuantity(text: string): number | null {
+  if (!/^\d+$/.test(text)) {
+    return null;
+  }
+  const quantity = Number(text);
+  return quantity >= MIN_LINE_QUANTITY && quantity <= MAX_LINE_QUANTITY ? quantity : null;
+}
+
+/**
+ * The first rule the line form breaks, in the order it asks (ADR 0074): nothing left to add
+ * (`nothingLeft`, adding only — the catalog has no priced variant, or every one is a line
+ * already), which is about the list and marks no field; no variant chosen; then a quantity
+ * outside the bounds. Adding, a variant that is not among `addable` — the priced variants not
+ * yet a line — is not chosen: a discard can bring back the line the form had picked, and the
+ * select then shows its placeholder. Editing, the variant is the line's own and fixed, so only
+ * the quantity can be wrong.
+ */
+export function lineRefusal(
+  fields: LineForm,
+  {
+    adding,
+    addable,
+    nothingLeft,
+  }: { adding: boolean; addable: readonly string[]; nothingLeft: string | null },
+): ItemRefusal<LineField> | null {
+  if (adding && nothingLeft !== null) {
+    return { field: null, reason: nothingLeft };
+  }
+  if (fields.variant === "" || (adding && !addable.includes(fields.variant))) {
+    return { field: "variant", reason: LINE_VARIANT_RULE };
+  }
+  if (lineQuantity(fields.quantity) === null) {
+    return { field: "quantity", reason: LINE_QUANTITY_RULE };
+  }
+  return null;
 }

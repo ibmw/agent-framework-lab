@@ -1,11 +1,23 @@
 import type { FulfilmentStatus, OrderContentSchema, PaymentStatus } from "@agent-lab/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FULFILMENT_STATUS, labelOf, membersOf, PAYMENT_STATUS } from "./enumLabels";
-import { PAID_AT_RULE, SHIPPED_AT_RULE } from "./fieldRules";
+import {
+  LINE_QUANTITY_RULE,
+  LINE_VARIANT_RULE,
+  ORDER_EVENT_SUMMARY_RULE,
+  ORDER_EVENT_TIME_RULE,
+  ORDER_EVENTS_CAP_RULE,
+  PAID_AT_RULE,
+  SHIPPED_AT_RULE,
+} from "./fieldRules";
 import {
   clampQuantity,
+  EVERY_VARIANT_ORDERED,
   fromLocalInput,
+  lineQuantity,
+  lineRefusal,
   lineTotal,
+  orderEventRefusal,
   previewTotals,
   todayInput,
   toLocalInput,
@@ -305,6 +317,85 @@ describe("the timestamp rules name the statuses that move them", () => {
       expect(named(SHIPPED_AT_RULE, labelOf(FULFILMENT_STATUS, status)), status).toBe(
         status === "unfulfilled",
       );
+    }
+  });
+});
+
+/**
+ * The two forms below an order's lists refuse with the first rule they break, in the order the
+ * form asks its fields (ADR 0074). Every combination of a good and a bad answer per rule is
+ * checked, so a rule moved ahead of another fails here.
+ */
+describe("the line form's refusal", () => {
+  it("reads a quantity the contract carries, and nothing else", () => {
+    expect(lineQuantity("1")).toBe(1);
+    expect(lineQuantity("999")).toBe(999);
+    for (const refused of ["", "0", "1000", "1.5", "-2", " 3", "3 ", "abc", "1e2"]) {
+      expect(lineQuantity(refused)).toBeNull();
+    }
+  });
+
+  it("says the first rule broken, in the order the form asks", () => {
+    // "NS-ASJ-OB-S" is chosen but no longer addable: a discard brought its line back.
+    const addable = ["NS-ASJ-OB-M"];
+    for (const nothingLeft of [null, EVERY_VARIANT_ORDERED]) {
+      for (const variant of ["", "NS-ASJ-OB-S", "NS-ASJ-OB-M"]) {
+        for (const quantity of ["0", "2"]) {
+          const refusal = lineRefusal(
+            { variant, quantity },
+            { adding: true, addable, nothingLeft },
+          );
+          const expected =
+            nothingLeft !== null
+              ? // About the list, not a field: nothing is marked.
+                { field: null, reason: nothingLeft }
+              : variant !== "NS-ASJ-OB-M"
+                ? { field: "variant", reason: LINE_VARIANT_RULE }
+                : quantity === "0"
+                  ? { field: "quantity", reason: LINE_QUANTITY_RULE }
+                  : null;
+          expect(refusal, `${nothingLeft} ${variant} ${quantity}`).toEqual(expected);
+        }
+      }
+    }
+  });
+
+  it("asks nothing left to add, and whether the variant is addable, only while adding", () => {
+    expect(
+      lineRefusal(
+        { variant: "NS-ASJ-OB-M", quantity: "2" },
+        { adding: false, addable: [], nothingLeft: EVERY_VARIANT_ORDERED },
+      ),
+    ).toBeNull();
+  });
+
+  it("writes the bounds the contract carries", () => {
+    expect(LINE_QUANTITY_RULE).toBe("A line's quantity is a whole number from 1 to 999.");
+  });
+});
+
+describe("the event form's refusal", () => {
+  const GOOD = {
+    kind: "support_contact" as const,
+    occurredAt: "2026-08-22T09:30",
+    summary: "Called.",
+  };
+
+  it("says the first rule broken, in the order the form asks", () => {
+    for (const full of [false, true]) {
+      for (const occurredAt of ["", "not a time", GOOD.occurredAt]) {
+        for (const summary of ["", "   ", GOOD.summary]) {
+          const refusal = orderEventRefusal({ ...GOOD, occurredAt, summary }, { full });
+          const expected = full
+            ? { field: null, reason: ORDER_EVENTS_CAP_RULE }
+            : occurredAt !== GOOD.occurredAt
+              ? { field: "occurredAt", reason: ORDER_EVENT_TIME_RULE }
+              : summary !== GOOD.summary
+                ? { field: "summary", reason: ORDER_EVENT_SUMMARY_RULE }
+                : null;
+          expect(refusal, `${full} ${occurredAt} ${summary}`).toEqual(expected);
+        }
+      }
     }
   });
 });

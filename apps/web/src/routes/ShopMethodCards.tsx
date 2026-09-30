@@ -1,22 +1,21 @@
 import type { FulfilmentMethodSchema, PaymentMethodSchema } from "@agent-lab/contracts";
-import {
-  type FormEvent,
-  type ReactNode,
-  type RefObject,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
-import { ButtonIcon } from "../components/ButtonIcon";
+import { type RefObject, useId, useRef } from "react";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { EditButton, ItemFormRow, ListItem, RemoveButton } from "../components/ItemList";
 import { Card } from "../components/WorkspaceChrome";
 import { SLUG_MAX_LENGTH, slugify, uniqueSuggestion } from "../lib/entryIds";
 import { labelOf, PAYMENT_METHOD_KIND } from "../lib/enumLabels";
-import { consequenceOf, findingClauses, type Removal, useRemoval } from "../lib/removal";
+import {
+  formTitle,
+  type ItemFormWords,
+  refusedProps,
+  useEditButtons,
+  useFocusAfterCommit,
+  useItemForm,
+} from "../lib/itemForm";
+import { consequenceOf, findingClauses, useRemoval } from "../lib/removal";
 import {
   BLANK_FULFILMENT,
   BLANK_PAYMENT,
@@ -30,7 +29,6 @@ import {
   MAX_TRANSIT_DAYS,
   METHOD_ID_TAKEN_PLACE,
   METHOD_LABEL_MAX_LENGTH,
-  type MethodField,
   type MethodRefusal,
   type PaymentForm,
   paymentFormOf,
@@ -39,21 +37,28 @@ import {
   paymentRefusal,
   transitWindow,
 } from "../lib/shopMethods";
-import {
-  fieldControlClasses,
-  focusRingClasses,
-  outlineButtonClasses,
-  readOnlyValueClasses,
-  validationMessageClasses,
-} from "../lib/ui";
-import { METHOD_FORM_REASON, useRegisterUnsavedWork } from "../lib/unsavedWork";
+import { fieldControlClasses, readOnlyValueClasses, validationMessageClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 /**
  * Shop details' *Payment methods* and *Fulfilment methods*, as the methods handoff draws them
  * (`tmp/design-frames/design_handoff_shop_details_methods/`): each card a row listing the
- * methods and a row whose one form adds a method or edits the one chosen (ADR 0072).
+ * methods and a row whose one form adds a method or edits the one chosen (ADR 0072), drawn
+ * through the workspace's list pieces (`components/ItemList.tsx`, `lib/itemForm.ts`, ADR 0074).
  */
+
+/** How each form and the unsaved-work prompt name what the list holds. */
+const METHOD_ENTRY = "a method";
+const PAYMENT_WORDS: ItemFormWords = {
+  form: "Payment methods",
+  entry: METHOD_ENTRY,
+  record: "draft",
+};
+const FULFILMENT_WORDS: ItemFormWords = {
+  form: "Fulfilment methods",
+  entry: METHOD_ENTRY,
+  record: "draft",
+};
 
 const ID_FOLLOWS_HINT =
   "Lowercase with hyphens. Follows the name until you edit it; empty it to follow again.";
@@ -64,48 +69,6 @@ const ID_FOLLOWS_HINT =
  * summary keys the list on it, so a moved ID reads as a removal and an addition.
  */
 const ID_FIXED_HINT = "Set when the method was added. Orders name the method by it.";
-
-/** One method on its list. Its border and ground say it is the one the form is editing. */
-function methodItemClasses(editing: boolean): string {
-  return `flex flex-wrap items-center gap-[11px] rounded-[9px] border px-3.5 py-[11px] ${
-    editing ? "border-[#8fc3a5] bg-[#f1f8f3]" : "border-admin-border bg-[#fafbfb]"
-  }`;
-}
-
-const iconButtonClasses = `flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg border border-admin-quiet-border bg-admin-surface text-admin-muted transition ${focusRingClasses}`;
-const editButtonClasses = `${iconButtonClasses} hover:bg-[#f6f7f8] hover:text-admin-ink`;
-// A held Remove fades as a secondary control refused for a reason does (ADR 0063), and loses
-// the hover that would promise a press.
-const removeButtonClasses = `${iconButtonClasses} enabled:hover:border-[#c98676] enabled:hover:text-lab-error disabled:cursor-not-allowed disabled:opacity-55`;
-
-function MethodItem({
-  name,
-  id,
-  detail,
-  editing,
-  children,
-}: {
-  name: string;
-  id: string;
-  detail: string;
-  editing: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <li className={methodItemClasses(editing)} aria-current={editing || undefined}>
-      <div className="min-w-0 flex-[1_1_180px]">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-[13.5px] font-bold text-admin-ink">{name}</span>
-          <code className="font-mono text-[11.5px] text-[#8c9196]">{id}</code>
-        </div>
-        <div className="mt-[3px] text-[12.5px] text-[#6a7580]">{detail}</div>
-      </div>
-      {/* The actions wrap as one group, so a narrow row never leaves the trash on a line of
-          its own. */}
-      <div className="ml-auto flex flex-none items-center gap-[11px]">{children}</div>
-    </li>
-  );
-}
 
 /**
  * A payment method's *enabled*, as the handoff's switch: a native checkbox with the switch
@@ -164,246 +127,6 @@ function EnabledSwitch({
   );
 }
 
-function EditButton({
-  name,
-  buttonRef,
-  onEdit,
-}: {
-  name: string;
-  buttonRef: (element: HTMLButtonElement | null) => void;
-  onEdit: () => void;
-}) {
-  return (
-    <button
-      ref={buttonRef}
-      type="button"
-      className={editButtonClasses}
-      aria-label={`Edit ${name}`}
-      title={`Edit ${name}`}
-      onClick={onEdit}
-    >
-      <ButtonIcon verb="edit" />
-    </button>
-  );
-}
-
-/** The trash, asking twice where the preference says to (ADR 0060). */
-function RemoveButton({
-  name,
-  entryKey,
-  removal,
-  notice,
-  held,
-  describedBy,
-  onRemove,
-}: {
-  name: string;
-  entryKey: string;
-  removal: Removal;
-  notice: string;
-  /** Why this method cannot be removed, or nothing. */
-  held?: string;
-  describedBy?: string;
-  onRemove: () => void;
-}) {
-  return (
-    <button
-      ref={removal.trigger(entryKey)}
-      type="button"
-      className={removeButtonClasses}
-      aria-label={`Remove ${name}`}
-      title={held ?? `Remove ${name}`}
-      disabled={held !== undefined}
-      aria-describedby={held !== undefined ? describedBy : undefined}
-      onClick={removal.ask(entryKey, onRemove, notice)}
-    >
-      <ButtonIcon verb="delete" />
-    </button>
-  );
-}
-
-function sameFields<FieldsT extends object>(one: FieldsT, other: FieldsT): boolean {
-  return (Object.keys(one) as (keyof FieldsT)[]).every((key) => one[key] === other[key]);
-}
-
-/**
- * The card's one form: blank and adding, or holding the method whose Edit was pressed.
- *
- * `origin` is what the form was last filled with, so the form is unsaved work exactly while it
- * holds something else — a method typed and not added, or an edit not yet saved — and says so
- * to the workspace's guard (ADR 0051). A method taken off the list while the form edits it — a
- * removal, a discard that lands on a draft without it — empties the form, because what it holds
- * is about a method that is no longer there and Add would otherwise write it back. A clean edit
- * follows the method as the draft now holds it — a discard can put back another version under
- * the same ID — so *Save changes* never writes back what the draft no longer says; a dirty one
- * keeps the operator's typing.
- */
-function useMethodForm<FieldsT extends { name: string }>({
-  blank,
-  ids,
-  cardTitle,
-  nameOf,
-  formOf,
-}: {
-  blank: FieldsT;
-  ids: readonly string[];
-  cardTitle: string;
-  nameOf: (id: string) => string;
-  /** The form the draft's method of this ID fills, as the draft holds it now. */
-  formOf: (id: string) => FieldsT;
-}) {
-  const [state, setState] = useState<{ editing: string | null; fields: FieldsT; origin: FieldsT }>({
-    editing: null,
-    fields: blank,
-    origin: blank,
-  });
-  const stale = state.editing !== null && !ids.includes(state.editing);
-  const editing = stale ? null : state.editing;
-  const dirty = !stale && !sameFields(state.fields, state.origin);
-  const current = editing !== null && !dirty ? formOf(editing) : null;
-  const moved = current !== null && !sameFields(current, state.origin);
-  const fields = stale ? blank : moved && current !== null ? current : state.fields;
-
-  useEffect(() => {
-    if (stale) {
-      setState({ editing: null, fields: blank, origin: blank });
-    } else if (moved && current !== null) {
-      setState((now) => ({ ...now, fields: current, origin: current }));
-    }
-  }, [stale, blank, moved, current]);
-
-  const reset = () => setState({ editing: null, fields: blank, origin: blank });
-  const typed = fields.name.trim();
-
-  useRegisterUnsavedWork(
-    dirty
-      ? {
-          label:
-            editing !== null
-              ? `The ${cardTitle} form holds an edit to ${nameOf(editing)} that has not reached the draft.`
-              : typed !== ""
-                ? `The ${cardTitle} form holds “${typed}”, which has not been added to the draft.`
-                : `The ${cardTitle} form holds a method that has not been added to the draft.`,
-          unsavable: METHOD_FORM_REASON,
-          discard: reset,
-        }
-      : null,
-  );
-
-  return {
-    editing,
-    fields,
-    dirty,
-    update: (patch: Partial<FieldsT>) =>
-      setState((current) => ({ ...current, fields: { ...current.fields, ...patch } })),
-    begin: (id: string, loaded: FieldsT) =>
-      setState({ editing: id, fields: loaded, origin: loaded }),
-    reset,
-  };
-}
-
-/**
- * Focus that belongs to an element the next commit draws: the Name field a pressed Edit opens,
- * the Edit a saved or cancelled edit returns to.
- */
-function useFocusAfterCommit() {
-  const pending = useRef<(() => HTMLElement | null | undefined) | null>(null);
-  useEffect(() => {
-    const target = pending.current;
-    if (target !== null) {
-      pending.current = null;
-      target()?.focus();
-    }
-  });
-  return (target: () => HTMLElement | null | undefined) => {
-    pending.current = target;
-  };
-}
-
-/** Edit buttons by the method they open, so a finished edit hands focus back to its own. */
-function useEditButtons() {
-  const buttons = useRef(new Map<string, HTMLButtonElement>());
-  return {
-    ref: (id: string) => (element: HTMLButtonElement | null) => {
-      if (element) {
-        buttons.current.set(id, element);
-      } else {
-        buttons.current.delete(id);
-      }
-    },
-    get: (id: string) => buttons.current.get(id),
-  };
-}
-
-/** A form control's refusal wiring: invalid and described by the line after the buttons. */
-function refusedProps(refusal: MethodRefusal | null, field: MethodField, reasonId: string) {
-  return refusal?.field === field
-    ? { "aria-invalid": true as const, "aria-describedby": reasonId }
-    : {};
-}
-
-/**
- * The form row: its fields in the handoff's auto-fit grid, then the action — *Add …*, or *Save
- * changes* and *Cancel* while editing — and after it the one reason the action is refused
- * with, where the handoff draws its error (ADR 0072).
- */
-function MethodFormRow({
-  title,
-  hint,
-  editing,
-  addLabel,
-  refusal,
-  reasonId,
-  onSubmit,
-  onCancel,
-  children,
-}: {
-  title: string;
-  hint: string;
-  editing: boolean;
-  addLabel: string;
-  refusal: MethodRefusal | null;
-  reasonId: string;
-  onSubmit: () => void;
-  onCancel: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <form
-      onSubmit={(event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      <FieldGroup label={title} hint={hint}>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(160px,100%),1fr))] items-start gap-3">
-          {children}
-        </div>
-        <div className="mt-3.5 flex flex-wrap items-center gap-2">
-          <PrimaryAction
-            variant="accent"
-            type="submit"
-            refusal={refusal ? { id: reasonId, reason: refusal.reason } : null}
-          >
-            <ButtonIcon verb={editing ? "save" : "create"} />
-            {editing ? "Save changes" : addLabel}
-          </PrimaryAction>
-          {editing ? (
-            <button type="button" className={outlineButtonClasses} onClick={onCancel}>
-              Cancel
-            </button>
-          ) : null}
-          {/* Polite, and mounted while empty, so a reason that appears as the operator types
-              is heard without taking them out of the field they are in. */}
-          <div aria-live="polite" aria-atomic="true">
-            {refusal ? <RefusalLine id={reasonId}>{refusal.reason}</RefusalLine> : null}
-          </div>
-        </div>
-      </FieldGroup>
-    </form>
-  );
-}
-
 /** The ID field: derived while adding, shown and fixed while editing. */
 function MethodIdField({
   editing,
@@ -447,20 +170,17 @@ function MethodIdField({
   );
 }
 
-function formTitle(editing: string | null, nameOf: (id: string) => string): string {
-  return editing === null ? "Add a method" : `Edit ${nameOf(editing)}`;
-}
-
 export function PaymentMethodsCard() {
   const { shopId, content, edit } = useShopWorkspace();
   const methods = content.payment_methods;
   const ids = methods.map((method) => method.id);
   const nameOf = (id: string) => methods.find((method) => method.id === id)?.name ?? id;
-  const form = useMethodForm<PaymentForm>({
+  const form = useItemForm<PaymentForm>({
     blank: BLANK_PAYMENT,
     ids,
-    cardTitle: "Payment methods",
+    words: PAYMENT_WORDS,
     nameOf,
+    typedOf: (fields) => fields.name,
     formOf: (id) =>
       paymentFormOf(methods.find((method) => method.id === id) as PaymentMethodSchema),
   });
@@ -475,7 +195,7 @@ export function PaymentMethodsCard() {
   // A blank form is refused and says why, but no field of it is marked wrong until the operator
   // has put something in it.
   const marked = form.dirty ? refusal : null;
-  const title = formTitle(form.editing, nameOf);
+  const title = formTitle(form.editing, nameOf, METHOD_ENTRY);
 
   function toggle(method: PaymentMethodSchema) {
     if (method.id === lastEnabled) {
@@ -554,7 +274,7 @@ export function PaymentMethodsCard() {
                     );
                   }
                   return (
-                    <MethodItem
+                    <ListItem
                       key={method.id}
                       name={method.name}
                       id={method.id}
@@ -584,7 +304,7 @@ export function PaymentMethodsCard() {
                         describedBy={lastLineId}
                         onRemove={() => drop(method.id)}
                       />
-                    </MethodItem>
+                    </ListItem>
                   );
                 })}
               </ul>
@@ -599,7 +319,7 @@ export function PaymentMethodsCard() {
             <RemovalNotice removal={removal} />
           </div>
         </FieldGroup>
-        <MethodFormRow
+        <ItemFormRow
           title={title}
           hint="The name and kind can change later; the ID is fixed once the method is added."
           editing={form.editing !== null}
@@ -647,7 +367,7 @@ export function PaymentMethodsCard() {
               ))}
             </select>
           </FieldHint>
-        </MethodFormRow>
+        </ItemFormRow>
       </FieldRows>
     </Card>
   );
@@ -720,11 +440,12 @@ export function FulfilmentMethodsCard() {
   const methods = content.fulfilment_methods;
   const ids = methods.map((method) => method.id);
   const nameOf = (id: string) => methods.find((method) => method.id === id)?.name ?? id;
-  const form = useMethodForm<FulfilmentForm>({
+  const form = useItemForm<FulfilmentForm>({
     blank: BLANK_FULFILMENT,
     ids,
-    cardTitle: "Fulfilment methods",
+    words: FULFILMENT_WORDS,
     nameOf,
+    typedOf: (fields) => fields.name,
     formOf: (id) =>
       fulfilmentFormOf(methods.find((method) => method.id === id) as FulfilmentMethodSchema),
   });
@@ -735,7 +456,7 @@ export function FulfilmentMethodsCard() {
   const reasonId = useId();
   const refusal = fulfilmentRefusal(form.fields, ids, form.editing);
   const marked = form.dirty ? refusal : null;
-  const title = formTitle(form.editing, nameOf);
+  const title = formTitle(form.editing, nameOf, METHOD_ENTRY);
 
   function drop(id: string) {
     edit({ ...content, fulfilment_methods: methods.filter((entry) => entry.id !== id) });
@@ -794,7 +515,7 @@ export function FulfilmentMethodsCard() {
                     );
                   }
                   return (
-                    <MethodItem
+                    <ListItem
                       key={method.id}
                       name={method.name}
                       id={method.id}
@@ -819,7 +540,7 @@ export function FulfilmentMethodsCard() {
                         notice={notice}
                         onRemove={() => drop(method.id)}
                       />
-                    </MethodItem>
+                    </ListItem>
                   );
                 })}
               </ul>
@@ -831,7 +552,7 @@ export function FulfilmentMethodsCard() {
             <RemovalNotice removal={removal} />
           </div>
         </FieldGroup>
-        <MethodFormRow
+        <ItemFormRow
           title={title}
           hint="Min and max days are the method's delivery window, in whole days."
           editing={form.editing !== null}
@@ -892,7 +613,7 @@ export function FulfilmentMethodsCard() {
               onChange={(max) => form.update({ max })}
             />
           </div>
-        </MethodFormRow>
+        </ItemFormRow>
       </FieldRows>
     </Card>
   );

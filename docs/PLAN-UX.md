@@ -76,11 +76,11 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestones 8 and 9 are delivered. Their record is the commits and ADR 0052–0073; their goals and
 acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md` and
-`docs/history/PLAN-UX-2026-09-28.md`. Milestone 10 runs its four slices in order, 36 to 39, one
+`docs/history/PLAN-UX-2026-09-28.md`. Milestone 10's first slice, 36, is delivered: it shared the
+method list (`components/ItemList.tsx`, `lib/itemForm.ts`), put an order's lines and events on it
+and wrote ADR 0074, which the rest cite. Its three remaining slices run in order, 37 to 39, one
 editor or pair of editors to a branch:
 
-- **36 goes first** because it extracts the pieces every later slice draws through and writes the
-  ADR they cite, and the order editor is the surface the operator named.
 - **37** takes the customer editor and an identity's guidance: prose lists whose items carry no
   control of their own beyond *Make default*, and it adds the Playwright helper that edits an item.
 - **38** takes the product editor's four lists: one route file, one test file and one scope
@@ -101,14 +101,14 @@ the methods handoff ADR 0072 was built from
 (`tmp/design-frames/design_handoff_shop_details_methods/shop-details.template.html`) beside
 `Workspace.dc.html`.
 
-The pattern is what `routes/ShopMethodCards.tsx` draws (ADR 0072):
+The pattern is what `components/ItemList.tsx` and `lib/itemForm.ts` draw (ADR 0072, ADR 0074):
 
 - **Two rows in the card** (`FieldRows`): the list under its row label and hint, then the form,
   labelled "Add a …" while adding and "Edit {name}" while editing, with its hint. A list row takes
   the prototype's label where it draws one — *Items* (`Workspace.dc.html` :2745), *Entries*
   (:2880), *Typed parameters* (:607) — and otherwise one the slice writes for what the list holds;
   a hint only where its rule is true (*Guidance lives under the field*).
-- **An item** (`MethodItem`, :81): the name at 13.5px 700, the ID in monospace, one detail line;
+- **An item** (`ListItem`): the name at 13.5px 700, the ID in monospace, one detail line;
   its actions — a control of the list's own where it has one, the 30px pencil, the 30px trash —
   wrapping as one group; `aria-current` and the pine border and ground while the form holds it.
 - **Edit** loads the item into the form, highlights it and moves focus to the form's first field;
@@ -117,13 +117,13 @@ The pattern is what `routes/ShopMethodCards.tsx` draws (ADR 0072):
   Edit; an Edit while the form holds something replaces it.
 - **Remove** is the trash, named "Remove {name}", asking twice under the preference (ADR 0060):
   `ConfirmRemove` takes the item's place and the notice line takes focus after.
-- **One refusal line after the buttons** (`MethodFormRow`, :350): the submit is `PrimaryAction`,
+- **One refusal line after the buttons** (`ItemFormRow`): the submit is `PrimaryAction`,
   refused with the first rule the form breaks in the order its fields ask, said once in a polite
   live region; the field that breaks it is `aria-invalid` and described by that line; a blank form
   is refused and says why and marks nothing until something is typed; the handler checks the
   refusal too (ADR 0063, ADR 0072).
 - **The form is unsaved work** while it holds something other than what it was filled with
-  (`useMethodForm`, :241; ADR 0051); an entry taken off the list while the form edits it empties
+  (`useItemForm`; ADR 0051); an entry taken off the list while the form edits it empties
   the form, and a clean edit follows the draft through a discard.
 
 The lists converted: an order's line items and events; a profile's addresses, background and
@@ -131,103 +131,6 @@ hidden facts; an identity's guidance; a product's options, media, attributes and
 tone-of-voice guidelines; a template's parameters. Not converted, as the operator scoped it: the
 product's variants table, a scenario's composed objectives and mutations, the create pages' rows
 and a ticket's thread.
-
-### Slice 36 — The method list shared, and the order editor on it
-
-Shop details' method list becomes the workspace's, and an order's lines and events are edited
-through it.
-
-- [ ] The method cards' pieces move out of `routes/ShopMethodCards.tsx` into a component module
-  (`components/ItemList.tsx`) and a hook module (`lib/itemForm.ts`), drawing what they draw today:
-  the item (`MethodItem`, :81, its class sets :69–79 moving to `lib/ui.ts`), `EditButton` (:167),
-  `RemoveButton` (:191) with its held reason, the form row (`MethodFormRow`, :350) with its submit,
-  *Save changes*, *Cancel* and the one `RefusalLine` after them, the form's label (`formTitle`,
-  :450, today fixed to "Add a method"), the form's state (`useMethodForm`, :241),
-  `useFocusAfterCommit` (:309), `useEditButtons` (:324), `refusedProps` (:339) and the refusal's
-  `{ field, reason }` shape (`MethodRefusal`, `lib/shopMethods.ts:69`). `EnabledSwitch` (:115),
-  `MethodIdField` (:408), `NameField` (:656) and `DaysField` (:686) stay in the route, which is
-  their one consumer. `PaymentMethodsCard` (:454) and `FulfilmentMethodsCard` (:718) draw through
-  the shared pieces with no change anyone can see, hear or press.
-- [ ] `METHOD_FORM_REASON` (`lib/unsavedWork.ts:59`) and the form's three unsaved-work labels
-  (`ShopMethodCards.tsx:281–286`) are written from the list's noun, so Shop details' prompt reads
-  word for word as today and an order's says "a line" or "an event".
-- [ ] **Line items** (`OrderEditorPage.tsx:468`): the table (:480–572) becomes the card's first
-  row, *Items*, one item a line — the product title · variant summary as the name, the SKU as the
-  ID, "{quantity} × {unit} = {line total}" as the detail — named by the SKU on their controls, so
-  "Remove {SKU}" keeps its name (:552). The add form (:576–619) becomes the second row, "Add a
-  line" / "Edit {SKU}": *Variant* (the priced variants not yet a line, already chosen when only one
-  is left, `useSingleChoice` :274, ADR 0064) and *Quantity* (`MIN_LINE_QUANTITY` to
-  `MAX_LINE_QUANTITY`, `lib/orders.ts:138–139`, 1 when adding). Edit loads the line's quantity and
-  its variant, shown and fixed: the lab keys a line on its SKU and keeps its frozen price
-  (`_materialize_lines`, `application/order_fixtures.py:323`). Refused after the buttons, in order:
-  nothing left to add (`NO_PRICED_VARIANT`, `EVERY_VARIANT_ORDERED`, :93–95; adding only), no
-  variant chosen, a quantity outside the bounds. The quantity typed in place goes
-  (`quantityDraft` :139, `changeQuantity` :336); `clampQuantity` stays for the create page
-  (`OrdersPage.tsx:504`). The removal's confirm (:496) takes an item's place instead of a table
-  row's. The payment rows (:624) and the totals (:682–734) stay below, in the same card.
-- [ ] **Order events** (:876): items — the kind as the name, the event's ID, the time
-  (`formatFixtureTimestamp`) and the summary as the detail — named by `eventLabel` (:1080) on
-  their controls as today. `OrderEventForm` (:1144) and `OrderEventFieldset` (:1088) become the
-  one form, "Add an event" / "Edit {label}", asking Kind, Occurred at and Summary. Refused after
-  the buttons, in order: the cap (`ORDER_EVENTS_CAP_RULE`; adding only), the time
-  (`ORDER_EVENT_TIME_RULE`), the summary (`ORDER_EVENT_SUMMARY_RULE`) — `lib/fieldRules.ts`
-  :568–579. A time left alone keeps the event's instant to the second, as `orderEventEntry` does
-  today. `eventEditor` (:144) and the list's `EntryEditNotice` (:965) go.
-- [ ] Write ADR 0074 (the next free number when this plan was written; check `docs/adr/` at branch
-  time) with the slice. It makes the method list the workspace's pattern for a list of records
-  edited with a form, superseding *A saved row opens where it stands* (`docs/design-direction.md`
-  :429) and `form-decisions.md` 8.2 for the lists this milestone converts; says what stays on
-  `EntryCard` edit mode — the variants table, a scenario's composed objectives and mutations — and
-  what stays on `EntryCard` without Edit — the create pages' rows, the shop version's lists, the
-  lab's frameworks; states which keys are fixed while editing; and says how the pattern meets
-  ADR 0051 (the form registers itself, and the prompt cannot save it), ADR 0060 (the trash asks
-  twice, the confirm in the item's place) and ADR 0063 (refused before the press, in one line
-  after the buttons, a blank form refused and marked nowhere — ADR 0072's placement, taken by every
-  converted form, a field's native `required` included). It records the order's line items leaving
-  their table and their quantity leaving the row.
-- [ ] `docs/design-direction.md`: *Shop details' two method lists are edited in their card's form*
-  (:448) becomes the rule for every list edited in its card's form, naming the method lists and an
-  order's lines and events; *A saved row opens where it stands* (:429) loses the order's events and
-  "An order's line items stay a table…" (:445–446); *A blocked primary action says why* (:470)
-  writes *Add line* and *Add event* with the form's refusals (:487–488).
-
-Frames: methods handoff `shop-details.template.html` :160–186 (the card; the list row :163–172, an
-item :166–171, the form row :173–185, the line after the buttons :183) and :200 (an empty list at
-the validation weight); `Workspace.dc.html` :2742–2752 (the order's *Lines* card as items, one at
-:2748, under the row *Items*, :2745).
-
-Authority: ADR 0051, ADR 0060, ADR 0063, ADR 0064, ADR 0072; `docs/design-direction.md`, *The
-form language*.
-
-Departures to record: `form-decisions.md` 8.2's open row, for the converted lists, in the ADR; the
-prototype's line reads "authored at the price below" beside its total (:2749–2750), where the
-detail says quantity × unit = total, the arithmetic the totals derive; the prototype's order frame
-draws no events card, and the codebase's takes the handoff's items.
-
-Branch: `feat/order-lists-in-one-form`. Checks: `ItemList.test.tsx` for the shared pieces (the
-item's `aria-current`, the two icon buttons' names, the form row's label, *Save changes* and
-*Cancel* while editing, the one line after the buttons); `App.test.tsx` *payment and fulfilment
-methods, as the handoff draws them* (:5857), *editing a saved entry in place*'s two method edits
-(:2387, :2427) and the prompt's method labels (:6209, :6229), unchanged and green, which is the
-extraction's proof; `lib/ui.test.ts` for the moved class sets; `Orders.test.tsx` *order editor*
-(:1822), whose tests type into "Quantity for {SKU}" (:1861, :1874, :2020, :2152, :2379) and pick
-from "Add product" (:1985, :1997) — they edit through the form, and the total follows *Save
-changes* rather than each keystroke — and *order events* (:2401: the open-row tests :2423 and
-:2475, the confirm :2568, the cap :2652, *Add line*'s refusal :2665); new coverage for the variant
-fixed while editing, each field's rule in order, a blank form refused and unmarked, the form
-emptied when its line or event is removed, and the prompt for a typed line and an edited event.
-Playwright `order-fixture`, `experiment-start`, `scenario-authoring` and `ticket-authoring` read
-*Line items & payment*, its payment rows by label and the total by text
-(`order-fixture.spec.ts:120`), and every journey's shop setup presses *Add payment method* and *Add
-fulfilment method* (`workspace-shell.spec.ts:54` among them); none of those names moves. The names
-that move — "Quantity for {SKU}", "Add product", the forms named "Add a line", "Add an event" and
-"Edit {label}" (groups of the same name now), "Save {label}", "Cancel editing {label}" — no spec
-reaches.
-
-Slice evidence: on an order, the operator presses the pencil on a line; the line turns pine and
-the form below reads "Edit NS-ASJ-OB-M" with its variant fixed; 1000 in Quantity says after the
-button why *Save changes* will not save; 2 saves, the item reads "2 × 249.00 EUR = 498.00 EUR" and
-the total follows. Shop details' two cards are as they were.
 
 ### Slice 37 — A profile's lists and an identity's guidance
 

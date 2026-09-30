@@ -1,6 +1,6 @@
 # ADR 0069 — A field says its own width, and what the lab already holds
 
-Status: accepted — 2026-09-27
+Status: accepted, amended by ADR 0074 (the order line's quantity is `w-full` in the form below the list) — 2026-09-27
 
 Settles `docs/PLAN-UX.md` Slice 27, the three workspace defects `docs/decisions-and-next-step.md`
 listed as found and not fixed: three fields whose width never reached the screen, a product
@@ -54,7 +54,8 @@ Every consumer now says how wide it is. That is 190 call sites: 150 `fieldContro
 something — 21 of which gain `w-full` in front of what they had (`font-mono`, a `max-w-*` cap, a
 `flex-1` and a `min-w-*`), and three that state a width of their own:
 
-- the order line's quantity keeps `w-20`;
+- the order line's quantity keeps `w-20`; (Amended by ADR 0074: the quantity left the table's
+  column for the form below the list and composes `w-full`, as the methods handoff draws it.)
 - the shipping fee keeps `w-32`;
 - the results tag box takes the prototype's own values, `w-auto min-w-[130px] flex-1`, in place
   of `w-48`: the rest of its row at a 130px floor, so it sits beside *Add tag* rather than above

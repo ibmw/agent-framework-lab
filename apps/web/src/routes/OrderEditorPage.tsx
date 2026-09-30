@@ -5,55 +5,61 @@ import type {
   ShopOrderResponse,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { describeApiError } from "../api/client";
 import { getCustomerProfileDraft } from "../api/customerProfiles";
 import { deleteOrder, getOrder, replaceOrder } from "../api/orders";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
-import { Field, FieldRows } from "../components/FieldHint";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { Field, FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
+import { EditButton, ItemFormRow, ListItem, RemoveButton } from "../components/ItemList";
 import {
   Card,
   EditorSaveActions,
-  EntryCard,
-  EntryEditNotice,
-  EntryId,
-  EntryText,
   Fingerprint,
   GateCard,
   IssueList,
   PageHeader,
   StatusPill,
 } from "../components/WorkspaceChrome";
-import { entryEdit, useEntryEdit } from "../lib/entryEdit";
 import { slugify, uniqueId } from "../lib/entryIds";
 import {
   FULFILMENT_STATUS_RULE,
   isMoneyAmount,
+  MAX_LINE_QUANTITY,
   MAX_ORDER_EVENTS,
+  MIN_LINE_QUANTITY,
   MONEY_PATTERN,
   MONEY_RULE,
-  ORDER_EVENTS_CAP_RULE,
   ORDER_METHOD_RULE,
   PAID_AT_RULE,
   PAYMENT_STATUS_RULE,
   SHIPPED_AT_RULE,
 } from "../lib/fieldRules";
 import {
-  clampQuantity,
+  formTitle,
+  type ItemFormWords,
+  refusedProps,
+  useEditButtons,
+  useFocusAfterCommit,
+  useItemForm,
+} from "../lib/itemForm";
+import {
   EVENT_KINDS,
+  EVERY_VARIANT_ORDERED,
   eventKindLabel,
   fromLocalInput,
   fulfilmentLabel,
+  type LineForm,
+  lineFormOf,
+  lineQuantity,
+  lineRefusal,
   lineTotal,
-  MAX_LINE_QUANTITY,
-  MIN_LINE_QUANTITY,
+  NO_PRICED_VARIANT,
   type OrderEventFields,
   orderEventEntry,
   orderEventFields,
-  orderEventIncomplete,
   orderEventRefusal,
   paymentLabel,
   previewTotals,
@@ -69,31 +75,23 @@ import {
   removedState,
   useRemoval,
 } from "../lib/removal";
-import { onlyChoiceNote, useSingleChoice } from "../lib/singleChoice";
+import { onlyChoiceNote, soleCandidate } from "../lib/singleChoice";
 import {
-  addFormClasses,
   destructiveOutlineButtonClasses,
-  destructiveSubtleButtonClasses,
   editorColumnsClasses,
   editorMainClasses,
   editorPanelClasses,
   fieldControlClasses,
-  fieldLabelClasses,
   formatFixtureTimestamp,
+  readOnlyValueClasses,
   surfaceClasses,
-  tableCellClasses,
-  tableHeadClasses,
   textAreaClasses,
+  validationMessageClasses,
 } from "../lib/ui";
 import { useRegisterUnsavedWork } from "../lib/unsavedWork";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 const UNAVAILABLE = "The order service is unavailable.";
-
-/** Why *Add line* has nothing to offer: a line is frozen at a price, so only a priced variant can be one. */
-const NO_PRICED_VARIANT = "The catalog has no priced variant to order yet.";
-const EVERY_VARIANT_ORDERED =
-  "Every priced variant in the catalog is already a line of this order.";
 
 type LineSchema = OrderContentSchema["lines"][number];
 
@@ -128,30 +126,14 @@ export function OrderEditorPage() {
   // showing, and applying it would put one order's content under another's id (ADR 0051).
   const edits = useRef(0);
   const [error, setError] = useState<string | null>(null);
-  const [newSku, setNewSku] = useState("");
-  // The order's own Delete, and the two lists whose rows it holds (ADR 0060).
+  // The order's own Delete (ADR 0060); its two lists hold their own removals.
   const orderRemoval = useRemoval(orderId);
-  const lineRemoval = useRemoval(orderId);
-  const eventRemoval = useRemoval(orderId);
-  // What the author is currently typing into one quantity field. The order itself only ever
-  // holds a quantity the contract accepts, so a half-typed or cleared field can neither skew
-  // the totals on screen nor reach a save; the field still shows exactly what was typed.
-  const [quantityDraft, setQuantityDraft] = useState<{ id: string; text: string } | null>(null);
   // Declared with the other hooks because this component returns early while it loads.
   const feeRuleId = useId();
-  // The events list's one open row (ADR 0051: nothing in it reaches the order until its Save),
-  // the line that says so, and the line an open row's refused Save points at.
-  const eventEditor = useEntryEdit<OrderEventFields>(
-    (content?.events ?? []).map((entry) => entry.id),
-  );
-  const eventNotice = useId();
-  const openEventRefusalId = useId();
-  const addLineRefusalId = useId();
 
   const apply = useCallback((response: ShopOrderResponse) => {
     edits.current += 1;
     setOrder(response);
-    setQuantityDraft(null);
     setContent(response.content);
     setAddressId(response.content.shipping_address?.source_address_id ?? null);
     setDirty(false);
@@ -257,23 +239,6 @@ export function OrderEditorPage() {
       : null,
   );
 
-  // The priced variants not yet on the order: what *Add product* offers. One of them is not a
-  // choice (ADR 0064), and when adding a line leaves one, the form opens on it again. Declared
-  // before the early returns below, as every hook here is.
-  const addableSkus =
-    content === null
-      ? []
-      : shop.products.flatMap((product) =>
-          product.variants
-            .filter(
-              (variant) =>
-                variant.price !== null && !content.lines.some((line) => line.sku === variant.sku),
-            )
-            .map((variant) => variant.sku),
-        );
-  const onlyAddable = useSingleChoice(addableSkus, newSku, setNewSku);
-  const addNoteId = useId();
-
   if (loading) {
     return <p className="text-sm text-admin-muted">Loading order…</p>;
   }
@@ -333,56 +298,6 @@ export function OrderEditorPage() {
     ),
   );
 
-  function changeQuantity(lineId: string, current: number, typed: string) {
-    if (!content) {
-      return;
-    }
-    setQuantityDraft({ id: lineId, text: typed });
-    const quantity = clampQuantity(typed, current);
-    if (quantity === current) {
-      return;
-    }
-    edit({
-      ...content,
-      lines: content.lines.map((entry) => (entry.id === lineId ? { ...entry, quantity } : entry)),
-    });
-  }
-
-  function addLine(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const chosen = catalog.find((variant) => variant.sku === newSku);
-    if (!content || !chosen || content.lines.some((line) => line.sku === chosen.sku)) {
-      return;
-    }
-    // An optimistic copy of what the lab will freeze: the next save answers with the
-    // authoritative line, and an already-frozen line is never re-priced from here.
-    edit({
-      ...content,
-      lines: [
-        ...content.lines,
-        {
-          id: chosen.sku.toLowerCase(),
-          sku: chosen.sku,
-          product_handle: chosen.handle,
-          title: chosen.title,
-          variant_summary: chosen.variantSummary,
-          unit_price: chosen.price,
-          quantity: 1,
-          line_total: chosen.price,
-        } satisfies LineSchema,
-      ],
-    });
-    setNewSku("");
-  }
-
-  // The one thing Add line can be refused for that its select does not say: there is nothing
-  // left to add. An unchosen variant is the select's own `required` to say.
-  const addLineRefusal =
-    addableSkus.length > 0
-      ? null
-      : catalog.length === 0
-        ? NO_PRICED_VARIANT
-        : EVERY_VARIANT_ORDERED;
   const totals = previewTotals(content);
   const feeRefused = !isMoneyAmount(content.shipping_fee.amount);
   const address = content.shipping_address;
@@ -467,161 +382,14 @@ export function OrderEditorPage() {
         <div className={editorMainClasses}>
           <Card
             title="Line items & payment"
-            description={
-              <>
-                Totals derive from the line items — never edited directly. A line keeps the price it
-                was frozen at, so repricing the catalog never rewrites this order.
-              </>
-            }
+            description="Totals derive from the line items — never edited directly."
           >
-            {content.lines.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">No line item yet.</p>
-            ) : (
-              <table className="w-full border-collapse text-[13px]">
-                <thead>
-                  <tr>
-                    <th className={tableHeadClasses}>Product</th>
-                    <th className={tableHeadClasses}>SKU</th>
-                    <th className={tableHeadClasses}>Qty</th>
-                    <th className={tableHeadClasses}>Unit</th>
-                    <th className={tableHeadClasses}>Total</th>
-                    <th className={tableHeadClasses}>
-                      <span className="sr-only">Remove</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {content.lines.map((line) =>
-                    lineRemoval.isArmed(line.id) ? (
-                      <ConfirmRemove
-                        key={line.id}
-                        as="tr"
-                        columns={6}
-                        title={`Remove the line ${line.sku} — ${line.title}?`}
-                        consequence={consequenceOf(
-                          `Its frozen price of ${line.unit_price.amount} ${line.unit_price.currency} goes with it: adding the variant again prices it at the catalog's current amount, and the totals are derived again from what is left.`,
-                          findingClauses([content.lines.length === 1 && "order_without_line"]),
-                          "Nothing is written until you save the order.",
-                        )}
-                        onConfirm={lineRemoval.confirm(
-                          () =>
-                            edit({
-                              ...content,
-                              lines: content.lines.filter((entry) => entry.id !== line.id),
-                            }),
-                          `Removed the line ${line.sku} from the order.`,
-                        )}
-                        onKeep={lineRemoval.keep}
-                      />
-                    ) : (
-                      <tr key={line.id}>
-                        <td className={tableCellClasses}>
-                          <div className="font-semibold">{line.title}</div>
-                          <div className="text-admin-muted">{line.variant_summary}</div>
-                        </td>
-                        <td className={tableCellClasses}>{line.sku}</td>
-                        <td className={tableCellClasses}>
-                          <input
-                            className={`${fieldControlClasses} w-20`}
-                            type="number"
-                            min={MIN_LINE_QUANTITY}
-                            max={MAX_LINE_QUANTITY}
-                            step={1}
-                            aria-label={`Quantity for ${line.sku}`}
-                            value={
-                              quantityDraft?.id === line.id
-                                ? quantityDraft.text
-                                : String(line.quantity)
-                            }
-                            onChange={(event) =>
-                              changeQuantity(line.id, line.quantity, event.target.value)
-                            }
-                            onBlur={() => setQuantityDraft(null)}
-                          />
-                        </td>
-                        <td className={tableCellClasses}>
-                          {line.unit_price.amount} {line.unit_price.currency}
-                        </td>
-                        <td className={tableCellClasses}>
-                          {lineTotal(line.unit_price.amount, line.quantity)} {content.currency}
-                        </td>
-                        <td className={tableCellClasses}>
-                          <button
-                            className={destructiveSubtleButtonClasses}
-                            type="button"
-                            aria-label={`Remove ${line.sku}`}
-                            ref={lineRemoval.trigger(line.id)}
-                            onClick={lineRemoval.ask(
-                              line.id,
-                              () =>
-                                edit({
-                                  ...content,
-                                  lines: content.lines.filter((entry) => entry.id !== line.id),
-                                }),
-                              `Removed the line ${line.sku} from the order.`,
-                            )}
-                          >
-                            <ButtonIcon verb="delete" />
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ),
-                  )}
-                </tbody>
-              </table>
-            )}
-
-            <RemovalNotice removal={lineRemoval} />
-            <form className={addFormClasses} aria-label="Add a line" onSubmit={addLine}>
-              <div className="flex flex-wrap items-end gap-2">
-                <label className={`${fieldLabelClasses} min-w-56 flex-1`}>
-                  Add product
-                  <select
-                    aria-label="Add product"
-                    aria-describedby={onlyAddable ? addNoteId : undefined}
-                    className={`${fieldControlClasses} w-full`}
-                    value={newSku}
-                    required
-                    onChange={(event) => setNewSku(event.target.value)}
-                  >
-                    <option value="">Select a variant</option>
-                    {catalog
-                      .filter((variant) => !content.lines.some((line) => line.sku === variant.sku))
-                      .map((variant) => (
-                        <option key={variant.sku} value={variant.sku}>
-                          {variant.label} · {variant.price.amount} {variant.price.currency}
-                        </option>
-                      ))}
-                  </select>
-                  {onlyAddable ? (
-                    <span id={addNoteId} className="text-xs font-normal text-admin-muted">
-                      {onlyChoiceNote("priced variant not yet on this order")}
-                    </span>
-                  ) : null}
-                </label>
-                <PrimaryAction
-                  variant="outline"
-                  type="submit"
-                  refusal={
-                    addLineRefusal === null
-                      ? null
-                      : { id: addLineRefusalId, reason: addLineRefusal }
-                  }
-                >
-                  <ButtonIcon verb="create" />
-                  Add line
-                </PrimaryAction>
-              </div>
-              {addLineRefusal === null ? null : (
-                <RefusalLine id={addLineRefusalId}>{addLineRefusal}</RefusalLine>
-              )}
-            </form>
-
             {/* The three-across `sm:grid-cols-3` went with the pattern: the prototype gives
                 each of an order's questions its own row, and the row stacks itself where
-                there is no width for two columns. */}
+                there is no width for two columns. The lines are the run's first two rows: the
+                items, then the one form that adds a line or edits the one chosen (ADR 0074). */}
             <FieldRows>
+              <LineItems orderId={orderId} content={content} catalog={catalog} edit={edit} />
               <Field label="Payment status" hint={PAYMENT_STATUS_RULE}>
                 <select
                   className={`${fieldControlClasses} w-full`}
@@ -877,113 +645,9 @@ export function OrderEditorPage() {
             title="Order events"
             description="Authored history — discoverable by agents through the order tools. Events are stored in chronological order."
           >
-            {content.events.length === 0 ? (
-              <p className="text-[13px] text-admin-muted">No authored history yet.</p>
-            ) : (
-              <ul className="grid gap-2 text-[13px]">
-                {content.events.map((entry) => {
-                  const label = eventLabel(entry);
-                  const notice = `Removed the ${eventKindLabel(entry.kind).toLowerCase()} event from the order.`;
-                  const drop = () =>
-                    edit({
-                      ...content,
-                      events: content.events.filter((candidate) => candidate.id !== entry.id),
-                    });
-                  if (eventRemoval.isArmed(entry.id)) {
-                    return (
-                      <ConfirmRemove
-                        key={entry.id}
-                        as="li"
-                        title={`Remove the ${eventKindLabel(entry.kind).toLowerCase()} event?`}
-                        consequence={consequenceOf(
-                          "It leaves the order's authored history, which the order tools hand an agent.",
-                          findingClauses(eventRemovalFindings(content, entry.id)),
-                          "Nothing is written until you save the order.",
-                        )}
-                        onConfirm={eventRemoval.confirm(drop, notice)}
-                        onKeep={eventRemoval.keep}
-                      />
-                    );
-                  }
-                  return (
-                    <EntryCard
-                      key={entry.id}
-                      title={`${eventKindLabel(entry.kind)} · ${formatFixtureTimestamp(entry.occurred_at)}`}
-                      chips={<EntryId value={entry.id} />}
-                      edit={entryEdit(
-                        eventEditor,
-                        eventNotice,
-                        entry.id,
-                        label,
-                        () => orderEventFields(entry),
-                        (fields) =>
-                          edit({
-                            ...content,
-                            events: content.events.map((candidate) =>
-                              candidate.id === entry.id
-                                ? orderEventEntry(entry.id, fields, entry.occurred_at)
-                                : candidate,
-                            ),
-                          }),
-                        (value, onChange) => {
-                          const refused = orderEventRefusal(value);
-                          return (
-                            <>
-                              <OrderEventFieldset value={value} onChange={onChange} />
-                              {refused === null ? null : (
-                                <RefusalLine id={openEventRefusalId}>{refused}</RefusalLine>
-                              )}
-                            </>
-                          );
-                        },
-                        (value) => {
-                          const refused = orderEventRefusal(value);
-                          return refused === null
-                            ? true
-                            : { id: openEventRefusalId, reason: refused };
-                        },
-                      )}
-                      actions={
-                        <button
-                          className={destructiveSubtleButtonClasses}
-                          type="button"
-                          aria-label={`Remove ${label}`}
-                          ref={eventRemoval.trigger(entry.id)}
-                          onClick={eventRemoval.ask(entry.id, drop, notice)}
-                        >
-                          <ButtonIcon verb="delete" />
-                          Remove
-                        </button>
-                      }
-                    >
-                      <EntryText label="Summary" value={entry.summary} />
-                    </EntryCard>
-                  );
-                })}
-              </ul>
-            )}
-            <EntryEditNotice id={eventNotice} label={eventEditor.open?.label ?? null} />
-            <RemovalNotice removal={eventRemoval} />
-            <OrderEventForm
-              placedAt={content.placed_at}
-              full={content.events.length >= MAX_ORDER_EVENTS}
-              onAdd={(fields, kept) =>
-                edit({
-                  ...content,
-                  events: [
-                    ...content.events,
-                    orderEventEntry(
-                      uniqueId(
-                        slugify("event"),
-                        content.events.map((candidate) => candidate.id),
-                      ),
-                      fields,
-                      kept,
-                    ),
-                  ],
-                })
-              }
-            />
+            <FieldRows>
+              <OrderEvents orderId={orderId} content={content} edit={edit} />
+            </FieldRows>
           </Card>
         </div>
 
@@ -1081,121 +745,455 @@ function eventLabel(entry: OrderContentSchema["events"][number]): string {
   return `${eventKindLabel(entry.kind)} · ${entry.id}`;
 }
 
+/** How the two forms and the unsaved-work prompt name what their lists hold (ADR 0074). */
+const LINE_WORDS: ItemFormWords = { form: "Line items", entry: "a line", record: "order" };
+const EVENT_WORDS: ItemFormWords = { form: "Order events", entry: "an event", record: "order" };
+
 /**
- * An event's three questions, asked in the same words by the add form below the list and by an
- * open row, stacked as an add form draws its fields.
+ * A line's name on its item: the product and the variant it orders, as the catalog spells them.
+ * A product without options has no variant summary, and the name is its title alone.
  */
-function OrderEventFieldset({
-  value,
-  onChange,
+function lineName(line: LineSchema): string {
+  return [line.title, line.variant_summary].filter((part) => part !== "").join(" · ");
+}
+
+/**
+ * The order's lines, as items under *Items*, and the one form that adds a line or edits the one
+ * chosen (ADR 0074; `Workspace.dc.html` :2742–2752). A line is named by its SKU on its
+ * controls, the key the lab holds it by; its variant is fixed while editing, because the lab
+ * keys a line on its SKU and keeps its frozen price (`_materialize_lines` in
+ * `application/order_fixtures.py`), so only its quantity is asked again.
+ */
+function LineItems({
+  orderId,
+  content,
+  catalog,
+  edit,
 }: {
-  value: OrderEventFields;
-  onChange: (next: OrderEventFields) => void;
+  orderId: string;
+  content: OrderContentSchema;
+  catalog: CatalogVariant[];
+  edit: (next: OrderContentSchema) => void;
 }) {
+  const lines = content.lines;
+  const ids = lines.map((line) => line.id);
+  const lineOf = (id: string) => lines.find((line) => line.id === id);
+  const skuOf = (id: string) => lineOf(id)?.sku ?? id;
+  // The priced variants not yet on the order: what the form offers. One of them is not a choice
+  // (ADR 0064): the blank form carries it, so the form opens on it — and again when adding a
+  // line leaves one — without that counting as something the operator typed.
+  const addable = catalog.filter((variant) => !lines.some((line) => line.sku === variant.sku));
+  const only = soleCandidate(addable.map((variant) => variant.sku));
+  const blank = useMemo<LineForm>(
+    () => ({ variant: only ?? "", quantity: String(MIN_LINE_QUANTITY) }),
+    [only],
+  );
+  const form = useItemForm<LineForm>({
+    blank,
+    ids,
+    words: LINE_WORDS,
+    nameOf: skuOf,
+    formOf: (id) => lineFormOf(lineOf(id) as LineSchema),
+  });
+  const removal = useRemoval(orderId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const quantityInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const editingLine = form.editing === null ? undefined : lineOf(form.editing);
+  const nothingLeft =
+    addable.length > 0 ? null : catalog.length === 0 ? NO_PRICED_VARIANT : EVERY_VARIANT_ORDERED;
+  const refusal = lineRefusal(form.fields, {
+    adding: form.editing === null,
+    addable: addable.map((variant) => variant.sku),
+    nothingLeft,
+  });
+  // A blank form is refused and says why, but no field of it is marked wrong until the operator
+  // has put something in it.
+  const marked = form.dirty ? refusal : null;
+
+  function drop(id: string) {
+    edit({ ...content, lines: lines.filter((entry) => entry.id !== id) });
+  }
+
+  function submit() {
+    const quantity = lineQuantity(form.fields.quantity);
+    if (refusal !== null || quantity === null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      // An edit that changed nothing writes nothing, so the order stays as clean as it was.
+      if (form.dirty) {
+        edit({
+          ...content,
+          lines: lines.map((entry) =>
+            entry.id === editing
+              ? {
+                  ...entry,
+                  quantity,
+                  line_total: {
+                    ...entry.unit_price,
+                    amount: lineTotal(entry.unit_price.amount, quantity),
+                  },
+                }
+              : entry,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      const chosen = addable.find((variant) => variant.sku === form.fields.variant);
+      if (chosen === undefined) {
+        return;
+      }
+      // An optimistic copy of what the lab will freeze: the next save answers with the
+      // authoritative line, and an already-frozen line is never re-priced from here.
+      edit({
+        ...content,
+        lines: [
+          ...lines,
+          {
+            id: chosen.sku.toLowerCase(),
+            sku: chosen.sku,
+            product_handle: chosen.handle,
+            title: chosen.title,
+            variant_summary: chosen.variantSummary,
+            unit_price: chosen.price,
+            quantity,
+            line_total: { ...chosen.price, amount: lineTotal(chosen.price.amount, quantity) },
+          } satisfies LineSchema,
+        ],
+      });
+    }
+    form.reset();
+  }
+
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      <label className={fieldLabelClasses}>
-        Kind
-        <select
-          className={`${fieldControlClasses} w-full`}
-          value={value.kind}
-          onChange={(event) => onChange({ ...value, kind: event.target.value as OrderEventKind })}
+    <>
+      <FieldGroup
+        label="Items"
+        hint="A line names a variant, so a price change in the catalog never rewrites what this order charged."
+      >
+        <div className="grid gap-2">
+          {lines.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {lines.map((line) => {
+                const notice = `Removed the line ${line.sku} from the order.`;
+                if (removal.isArmed(line.id)) {
+                  return (
+                    <ConfirmRemove
+                      key={line.id}
+                      as="li"
+                      title={`Remove the line ${line.sku} — ${line.title}?`}
+                      consequence={consequenceOf(
+                        `Its frozen price of ${line.unit_price.amount} ${line.unit_price.currency} goes with it: adding the variant again prices it at the catalog's current amount, and the totals are derived again from what is left.`,
+                        findingClauses([lines.length === 1 && "order_without_line"]),
+                        "Nothing is written until you save the order.",
+                      )}
+                      onConfirm={removal.confirm(() => drop(line.id), notice)}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
+                return (
+                  <ListItem
+                    key={line.id}
+                    name={lineName(line)}
+                    id={line.sku}
+                    detail={`${line.quantity} × ${line.unit_price.amount} ${line.unit_price.currency} = ${lineTotal(line.unit_price.amount, line.quantity)} ${content.currency}`}
+                    editing={form.editing === line.id}
+                  >
+                    <EditButton
+                      name={line.sku}
+                      buttonRef={editButtons.ref(line.id)}
+                      onEdit={() => {
+                        form.begin(line.id, lineFormOf(line));
+                        focusAfterCommit(() => quantityInput.current);
+                      }}
+                    />
+                    <RemoveButton
+                      name={line.sku}
+                      entryKey={line.id}
+                      removal={removal}
+                      notice={notice}
+                      onRemove={() => drop(line.id)}
+                    />
+                  </ListItem>
+                );
+              })}
+            </ul>
+          ) : (
+            // At the validation weight: an order with no line is a gate error
+            // (`order_without_line`), as the methods handoff draws an empty list that is one,
+            // and says why in the gate's own reason.
+            <p className={validationMessageClasses}>
+              No line item yet, so the order has nothing to derive its totals from.
+            </p>
+          )}
+          <RemovalNotice removal={removal} />
+        </div>
+      </FieldGroup>
+      <ItemFormRow
+        title={formTitle(form.editing, skuOf, LINE_WORDS.entry)}
+        hint="A line keeps the variant it was added with; only its quantity changes after."
+        editing={form.editing !== null}
+        addLabel="Add line"
+        refusal={refusal}
+        reasonId={reasonId}
+        onSubmit={submit}
+        onCancel={() => {
+          const editing = form.editing;
+          form.reset();
+          if (editing !== null) {
+            focusAfterCommit(() => editButtons.get(editing));
+          }
+        }}
+      >
+        {editingLine !== undefined ? (
+          <FieldHint
+            label="Variant"
+            hint="Set when the line was added. The lab keys a line on its SKU and keeps its price."
+          >
+            <input
+              className={readOnlyValueClasses}
+              value={`${editingLine.title} · ${editingLine.sku}`}
+              readOnly
+            />
+          </FieldHint>
+        ) : (
+          <FieldHint
+            label="Variant"
+            extra={
+              only !== null && form.fields.variant === only
+                ? onlyChoiceNote("priced variant not yet on this order")
+                : undefined
+            }
+          >
+            <select
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.variant}
+              {...refusedProps(marked, "variant", reasonId)}
+              onChange={(event) => form.update({ variant: event.target.value })}
+            >
+              <option value="">Select a variant</option>
+              {addable.map((variant) => (
+                <option key={variant.sku} value={variant.sku}>
+                  {variant.label} · {variant.price.amount} {variant.price.currency}
+                </option>
+              ))}
+            </select>
+          </FieldHint>
+        )}
+        <FieldHint
+          label="Quantity"
+          hint={`Whole units, ${MIN_LINE_QUANTITY} to ${MAX_LINE_QUANTITY}.`}
         >
-          {EVENT_KINDS.map((kind) => (
-            <option key={kind} value={kind}>
-              {eventKindLabel(kind)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className={fieldLabelClasses}>
-        Occurred at
-        <input
-          className={`${fieldControlClasses} w-full`}
-          type="datetime-local"
-          required
-          value={value.occurredAt}
-          onChange={(event) => onChange({ ...value, occurredAt: event.target.value })}
-        />
-      </label>
-      <label className={`${fieldLabelClasses} sm:col-span-2`}>
-        Summary
-        <textarea
-          className={`${textAreaClasses} w-full`}
-          required
-          value={value.summary}
-          placeholder="Customer asked by email to change the delivery address."
-          onChange={(event) => onChange({ ...value, summary: event.target.value })}
-        />
-      </label>
-    </div>
+          <input
+            ref={quantityInput}
+            className={`${fieldControlClasses} w-full`}
+            type="number"
+            min={MIN_LINE_QUANTITY}
+            max={MAX_LINE_QUANTITY}
+            step={1}
+            inputMode="numeric"
+            value={form.fields.quantity}
+            {...refusedProps(marked, "quantity", reasonId)}
+            onChange={(event) => form.update({ quantity: event.target.value })}
+          />
+        </FieldHint>
+      </ItemFormRow>
+    </>
   );
 }
 
 /**
- * *Add event*: the add form below the order's history, asking what an open row asks and handing
- * it to the same builder (`orderEventEntry`).
- *
- * It opens on a support contact at the moment the order was placed — what the card's old *Add
- * event* appended — with the summary left to the author, since a made-up sentence would read as
- * history nobody wrote. The time follows the order's placement until it is typed, as the address
- * form's country follows the profile's locale.
+ * The order's authored history, as items, and the one form that adds an event or edits the one
+ * chosen (ADR 0074). The form opens on a support contact at the moment the order was placed,
+ * with the summary left to the author, since a made-up sentence would read as history nobody
+ * wrote; a time left alone keeps the instant it opened on, to the second (`orderEventEntry`).
  */
-function OrderEventForm({
-  placedAt,
-  full,
-  onAdd,
+function OrderEvents({
+  orderId,
+  content,
+  edit,
 }: {
-  placedAt: string;
-  /** The order already carries `MAX_ORDER_EVENTS`. */
-  full: boolean;
-  /** Handed the order's placement too, which an untouched time keeps to the second. */
-  onAdd: (fields: OrderEventFields, kept: string) => void;
+  orderId: string;
+  content: OrderContentSchema;
+  edit: (next: OrderContentSchema) => void;
 }) {
-  const refusalId = useId();
-  const [kind, setKind] = useState<OrderEventKind>("support_contact");
-  const [typedTime, setTypedTime] = useState<string | null>(null);
-  const [summary, setSummary] = useState("");
-  const fields: OrderEventFields = {
-    kind,
-    occurredAt: typedTime ?? toLocalInput(placedAt),
-    summary,
+  const events = content.events;
+  const ids = events.map((entry) => entry.id);
+  const eventOf = (id: string) => events.find((entry) => entry.id === id);
+  const labelOf = (id: string) => {
+    const entry = eventOf(id);
+    return entry === undefined ? id : eventLabel(entry);
   };
-  const refusal = full ? ORDER_EVENTS_CAP_RULE : orderEventRefusal(fields);
+  const blank = useMemo<OrderEventFields>(
+    () => ({ kind: "support_contact", occurredAt: toLocalInput(content.placed_at), summary: "" }),
+    [content.placed_at],
+  );
+  const form = useItemForm<OrderEventFields>({
+    blank,
+    ids,
+    words: EVENT_WORDS,
+    nameOf: labelOf,
+    formOf: (id) => orderEventFields(eventOf(id) as OrderContentSchema["events"][number]),
+    typedOf: (fields) => fields.summary,
+  });
+  const removal = useRemoval(orderId);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const kindSelect = useRef<HTMLSelectElement>(null);
+  const reasonId = useId();
+  const refusal = orderEventRefusal(form.fields, {
+    full: form.editing === null && events.length >= MAX_ORDER_EVENTS,
+  });
+  const marked = form.dirty ? refusal : null;
+
+  function drop(id: string) {
+    edit({ ...content, events: events.filter((candidate) => candidate.id !== id) });
+  }
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      // An edit that changed nothing writes nothing, so the order stays as clean as it was.
+      if (form.dirty) {
+        edit({
+          ...content,
+          events: events.map((candidate) =>
+            candidate.id === editing
+              ? orderEventEntry(candidate.id, form.fields, candidate.occurred_at)
+              : candidate,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      edit({
+        ...content,
+        events: [
+          ...events,
+          orderEventEntry(uniqueId(slugify("event"), ids), form.fields, content.placed_at),
+        ],
+      });
+    }
+    form.reset();
+  }
 
   return (
-    <form
-      className={addFormClasses}
-      aria-label="Add an event"
-      onSubmit={(event) => {
-        event.preventDefault();
-        // The button refuses the press and the browser holds an empty `required` field; a
-        // submission that reaches the form another way is refused here too.
-        if (refusal !== null || orderEventIncomplete(fields)) {
-          return;
-        }
-        onAdd(fields, placedAt);
-        setSummary("");
-      }}
-    >
-      <OrderEventFieldset
-        value={fields}
-        onChange={(next) => {
-          setKind(next.kind);
-          setTypedTime(next.occurredAt);
-          setSummary(next.summary);
+    <>
+      <FieldGroup label="History">
+        <div className="grid gap-2">
+          {events.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {events.map((entry) => {
+                const label = eventLabel(entry);
+                const notice = `Removed the ${eventKindLabel(entry.kind).toLowerCase()} event from the order.`;
+                if (removal.isArmed(entry.id)) {
+                  return (
+                    <ConfirmRemove
+                      key={entry.id}
+                      as="li"
+                      title={`Remove the ${eventKindLabel(entry.kind).toLowerCase()} event?`}
+                      consequence={consequenceOf(
+                        "It leaves the order's authored history, which the order tools hand an agent.",
+                        findingClauses(eventRemovalFindings(content, entry.id)),
+                        "Nothing is written until you save the order.",
+                      )}
+                      onConfirm={removal.confirm(() => drop(entry.id), notice)}
+                      onKeep={removal.keep}
+                    />
+                  );
+                }
+                return (
+                  <ListItem
+                    key={entry.id}
+                    name={eventKindLabel(entry.kind)}
+                    id={entry.id}
+                    detail={`${formatFixtureTimestamp(entry.occurred_at)} · ${entry.summary}`}
+                    editing={form.editing === entry.id}
+                  >
+                    <EditButton
+                      name={label}
+                      buttonRef={editButtons.ref(entry.id)}
+                      onEdit={() => {
+                        form.begin(entry.id, orderEventFields(entry));
+                        focusAfterCommit(() => kindSelect.current);
+                      }}
+                    />
+                    <RemoveButton
+                      name={label}
+                      entryKey={entry.id}
+                      removal={removal}
+                      notice={notice}
+                      onRemove={() => drop(entry.id)}
+                    />
+                  </ListItem>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-admin-muted">No authored history yet.</p>
+          )}
+          <RemovalNotice removal={removal} />
+        </div>
+      </FieldGroup>
+      <ItemFormRow
+        title={formTitle(form.editing, labelOf, EVENT_WORDS.entry)}
+        hint="A time left alone keeps the instant it opened on, to the second."
+        editing={form.editing !== null}
+        addLabel="Add event"
+        refusal={refusal}
+        reasonId={reasonId}
+        onSubmit={submit}
+        onCancel={() => {
+          const editing = form.editing;
+          form.reset();
+          if (editing !== null) {
+            focusAfterCommit(() => editButtons.get(editing));
+          }
         }}
-      />
-      <PrimaryAction
-        variant="outline"
-        className="justify-self-start"
-        type="submit"
-        refusal={refusal === null ? null : { id: refusalId, reason: refusal }}
       >
-        <ButtonIcon verb="create" />
-        Add event
-      </PrimaryAction>
-      {refusal === null ? null : <RefusalLine id={refusalId}>{refusal}</RefusalLine>}
-    </form>
+        <FieldHint label="Kind">
+          <select
+            ref={kindSelect}
+            className={`${fieldControlClasses} w-full`}
+            value={form.fields.kind}
+            onChange={(event) => form.update({ kind: event.target.value as OrderEventKind })}
+          >
+            {EVENT_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {eventKindLabel(kind)}
+              </option>
+            ))}
+          </select>
+        </FieldHint>
+        <FieldHint label="Occurred at">
+          <input
+            className={`${fieldControlClasses} w-full`}
+            type="datetime-local"
+            value={form.fields.occurredAt}
+            {...refusedProps(marked, "occurredAt", reasonId)}
+            onChange={(event) => form.update({ occurredAt: event.target.value })}
+          />
+        </FieldHint>
+        <div className="col-span-full">
+          <FieldHint label="Summary">
+            <textarea
+              className={`${textAreaClasses} w-full`}
+              value={form.fields.summary}
+              placeholder="Customer asked by email to change the delivery address."
+              {...refusedProps(marked, "summary", reasonId)}
+              onChange={(event) => form.update({ summary: event.target.value })}
+            />
+          </FieldHint>
+        </div>
+      </ItemFormRow>
+    </>
   );
 }

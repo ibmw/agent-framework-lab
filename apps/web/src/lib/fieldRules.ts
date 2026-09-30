@@ -559,8 +559,8 @@ export const TONE_DEFAULT_REMOVAL_RULE =
   "The shop default cannot be deleted — point the default elsewhere first.";
 
 /**
- * An order event's two refusals, said by the add form below *Order events* and by an open row's
- * Save alike (`orderEventRefusal` in `lib/orders.ts`). `OrderEvent.__post_init__` in
+ * An order event's two refusals, said after the buttons of the form below *Order events*, adding
+ * or editing alike (`orderEventRefusal` in `lib/orders.ts`, ADR 0074). `OrderEvent.__post_init__` in
  * `domain/order_fixture.py` refuses a summary left empty — `require_text(self.summary, "order
  * event summary")` — and an instant that is not a UTC timestamp. The workspace's words, not the
  * lab's: neither is a gate finding, both are a 422 the save would otherwise meet.
@@ -571,12 +571,24 @@ export const ORDER_EVENT_SUMMARY_RULE =
 export const ORDER_EVENT_TIME_RULE = "An event needs the moment it occurred.";
 
 /**
- * Mirrors `MAX_ORDER_EVENTS` in `domain/order_fixture.py`, so the add form stops where the lab
+ * Mirrors `MAX_ORDER_EVENTS` in `domain/order_fixture.py`, so the form stops adding where the lab
  * does, with the sentence `OrderFixturePayload` refuses the next one in.
  */
 export const MAX_ORDER_EVENTS = 40;
 
 export const ORDER_EVENTS_CAP_RULE = `an order can carry at most ${MAX_ORDER_EVENTS} events`;
+
+/**
+ * A line's quantity: whole units within the bounds the contract carries (`LineQuantity` in `presentation/orders.py`), said
+ * after the buttons of the form below *Items* (`lineRefusal` in `lib/orders.ts`, ADR 0074).
+ */
+export const MIN_LINE_QUANTITY = 1;
+export const MAX_LINE_QUANTITY = 999;
+
+export const LINE_QUANTITY_RULE = `A line's quantity is a whole number from ${MIN_LINE_QUANTITY} to ${MAX_LINE_QUANTITY}.`;
+
+/** A line added with no variant, or one another line now holds, orders nothing. */
+export const LINE_VARIANT_RULE = "Choose the variant this line orders.";
 
 /**
  * An address's refusal, said by the add form below *Address book* and by an open row's Save

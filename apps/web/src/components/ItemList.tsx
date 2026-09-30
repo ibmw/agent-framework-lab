@@ -1,0 +1,173 @@
+import type { FormEvent, ReactNode } from "react";
+import type { ItemRefusal } from "../lib/itemForm";
+import type { Removal } from "../lib/removal";
+import {
+  itemClasses,
+  itemEditButtonClasses,
+  itemRemoveButtonClasses,
+  outlineButtonClasses,
+} from "../lib/ui";
+import { ButtonIcon } from "./ButtonIcon";
+import { FieldGroup } from "./FieldHint";
+import { PrimaryAction, RefusalLine } from "./PrimaryAction";
+
+/**
+ * A list edited in the form below it, as the methods handoff draws Shop details' *Payment
+ * methods* (`tmp/design-frames/design_handoff_shop_details_methods/`, ADR 0072) and ADR 0074
+ * makes the workspace's: a row listing the entries as items, and a row whose one form adds an
+ * entry or edits the one chosen. The form's state is `useItemForm` in `lib/itemForm.ts`.
+ */
+
+/**
+ * One entry on its list: the name at 13.5px 700, the key in monospace, one detail line, and
+ * its actions. Its border and ground say it is the one the form is editing.
+ */
+export function ListItem({
+  name,
+  id,
+  detail,
+  editing,
+  children,
+}: {
+  name: string;
+  id: string;
+  detail: string;
+  editing: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <li className={itemClasses(editing)} aria-current={editing || undefined}>
+      <div className="min-w-0 flex-[1_1_180px]">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-[13.5px] font-bold text-admin-ink">{name}</span>
+          <code className="font-mono text-[11.5px] text-[#8c9196]">{id}</code>
+        </div>
+        <div className="mt-[3px] text-[12.5px] text-[#6a7580]">{detail}</div>
+      </div>
+      {/* The actions wrap as one group, so a narrow row never leaves the trash on a line of
+          its own. */}
+      <div className="ml-auto flex flex-none items-center gap-[11px]">{children}</div>
+    </li>
+  );
+}
+
+/** The 30px pencil, named "Edit {name}". */
+export function EditButton({
+  name,
+  buttonRef,
+  onEdit,
+}: {
+  name: string;
+  buttonRef: (element: HTMLButtonElement | null) => void;
+  onEdit: () => void;
+}) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className={itemEditButtonClasses}
+      aria-label={`Edit ${name}`}
+      title={`Edit ${name}`}
+      onClick={onEdit}
+    >
+      <ButtonIcon verb="edit" />
+    </button>
+  );
+}
+
+/** The 30px trash, named "Remove {name}", asking twice where the preference says to (ADR 0060). */
+export function RemoveButton({
+  name,
+  entryKey,
+  removal,
+  notice,
+  held,
+  describedBy,
+  onRemove,
+}: {
+  name: string;
+  entryKey: string;
+  removal: Removal;
+  notice: string;
+  /** Why this entry cannot be removed, or nothing. */
+  held?: string;
+  describedBy?: string;
+  onRemove: () => void;
+}) {
+  return (
+    <button
+      ref={removal.trigger(entryKey)}
+      type="button"
+      className={itemRemoveButtonClasses}
+      aria-label={`Remove ${name}`}
+      title={held ?? `Remove ${name}`}
+      disabled={held !== undefined}
+      aria-describedby={held !== undefined ? describedBy : undefined}
+      onClick={removal.ask(entryKey, onRemove, notice)}
+    >
+      <ButtonIcon verb="delete" />
+    </button>
+  );
+}
+
+/**
+ * The form row: its fields in the handoff's auto-fit grid, then the action — *Add …*, or *Save
+ * changes* and *Cancel* while editing — and after it the one reason the action is refused
+ * with, where the handoff draws its error (ADR 0072).
+ */
+export function ItemFormRow({
+  title,
+  hint,
+  editing,
+  addLabel,
+  refusal,
+  reasonId,
+  onSubmit,
+  onCancel,
+  children,
+}: {
+  title: string;
+  hint: string;
+  editing: boolean;
+  addLabel: string;
+  refusal: ItemRefusal | null;
+  reasonId: string;
+  onSubmit: () => void;
+  onCancel: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <form
+      onSubmit={(event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <FieldGroup label={title} hint={hint}>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(160px,100%),1fr))] items-start gap-3">
+          {children}
+        </div>
+        <div className="mt-3.5 flex flex-wrap items-center gap-2">
+          <PrimaryAction
+            variant="accent"
+            type="submit"
+            refusal={refusal ? { id: reasonId, reason: refusal.reason } : null}
+          >
+            <ButtonIcon verb={editing ? "save" : "create"} />
+            {editing ? "Save changes" : addLabel}
+          </PrimaryAction>
+          {editing ? (
+            <button type="button" className={outlineButtonClasses} onClick={onCancel}>
+              Cancel
+            </button>
+          ) : null}
+          {/* Polite, and mounted while empty, so a reason that appears as the operator types
+              is heard without taking them out of the field they are in. */}
+          <div aria-live="polite" aria-atomic="true">
+            {refusal ? <RefusalLine id={reasonId}>{refusal.reason}</RefusalLine> : null}
+          </div>
+        </div>
+      </FieldGroup>
+    </form>
+  );
+}

@@ -432,6 +432,24 @@ export const blockedButtonClasses = `${buttonShapeClasses} ${focusRingClasses} c
 export const validationMessageClasses = "text-[13px] font-semibold text-lab-error";
 
 /**
+ * One entry of a list edited in the form below it (`ListItem`, ADR 0072, ADR 0074): 11px 14px
+ * on a 9px radius, `admin-border` on `#fafbfb`, and the methods handoff's pine border and ground
+ * (`#8fc3a5` on `#f1f8f3`) while the form holds it.
+ */
+export function itemClasses(editing: boolean): string {
+  return `flex flex-wrap items-center gap-[11px] rounded-[9px] border px-3.5 py-[11px] ${
+    editing ? "border-[#8fc3a5] bg-[#f1f8f3]" : "border-admin-border bg-[#fafbfb]"
+  }`;
+}
+
+/** An item's 30px icon button: the pencil and the trash, bordered, muted until hovered. */
+export const itemIconButtonClasses = `flex h-[30px] w-[30px] flex-none items-center justify-center rounded-lg border border-admin-quiet-border bg-admin-surface text-admin-muted transition ${focusRingClasses}`;
+export const itemEditButtonClasses = `${itemIconButtonClasses} hover:bg-[#f6f7f8] hover:text-admin-ink`;
+// A held Remove fades as a secondary control refused for a reason does (ADR 0063), and loses
+// the hover that would promise a press.
+export const itemRemoveButtonClasses = `${itemIconButtonClasses} enabled:hover:border-[#c98676] enabled:hover:text-lab-error disabled:cursor-not-allowed disabled:opacity-55`;
+
+/**
  * The neutral pill: a standing fact about the page, in grey, beside its title.
  *
  * `VersionChips` draws its two grey states through it — *Never published* and *Draft matches

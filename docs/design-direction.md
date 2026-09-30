@@ -1,6 +1,6 @@
 # Design direction
 
-Status: current — 2026-09-29. The design rules that govern `apps/web`, stated once as rules a
+Status: current — 2026-09-30. The design rules that govern `apps/web`, stated once as rules a
 slice is checked against. Values are not restated here: a measurement or a colour that is built lives
 in the code that draws it (`styles.css` for tokens, `lib/ui.ts` for class sets and glyph tables,
 `shell/AppShell.tsx` for the chrome), and one that is not yet built lives in its slice in
@@ -432,7 +432,7 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   is a named form; a refusal one path makes the other makes too. The lists that open this way:
   the tone-of-voice guidelines; a profile's addresses (the default chip and *Make default*
   on the row), background and hidden facts; an identity's guidance notes; a product's options,
-  variants, media, attributes and reviews; an order's events; a template's parameters (the ↑/↓
+  variants, media, attributes and reviews; a template's parameters (the ↑/↓
   on the row, because the order is authored); a scenario's composed objectives and mutations
   (the ↑/↓ on the row too). A set of values entered one at a time is a `ChipListField`, and a
   ticket's thread grows by its composer, rather than either being this.
@@ -442,15 +442,21 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   A row a create page holds before Create is pressed — a new block's parameters, a new
   scenario's composed blocks — is the same `EntryCard` without Edit: what it carries beyond what
   the create page asked is authored in the editor once the first write has landed, and a new
-  block's parameter keeps its one-press Remove (ADR 0060). An order's line items stay a table, their quantity typed in
-  place: it is one value, re-typed in the field beside it. Shop details' method lists are the
-  one exception, below.
-- **Shop details' two method lists are edited in their card's form** (ADR 0072): Edit loads the
-  method into the one form, highlights it and fixes its ID; *Save changes* writes it in place.
-  The last enabled payment method stays on and on the list, a workspace rule stricter than the
-  lab, which only refuses it at publication. Four of the handoff's hints on these cards claim behaviour the
-  lab does not have and are written as what it does instead (ADR 0072, *The hints say what the
-  lab does*).
+  block's parameter keeps its one-press Remove (ADR 0060). The lists edited in their card's
+  form, below, are not this.
+- **A list of records is edited in its card's form** (ADR 0074, from ADR 0072), drawn by
+  `components/ItemList.tsx` and `lib/itemForm.ts`: the list is the card's first row, each entry
+  an item — name, key in monospace, one detail line, the 30px pencil and trash named "Edit
+  {name}" and "Remove {name}" — and the second row is the one form, "Add a …" or "Edit {name}".
+  Edit loads the entry into the form, highlights it, moves focus into the form and fixes the key
+  another record names the entry by; *Save changes* writes it in place and *Cancel* empties the
+  form, both handing focus back to the Edit; the entry's removal empties the form too. The form
+  is unsaved work the prompt cannot save. The lists on it: Shop details' two method lists, whose
+  ID is fixed, and an order's line items, whose variant is fixed and whose quantity is asked in
+  the form rather than typed in place, and its events. The last enabled payment method stays on
+  and on the list, a workspace rule stricter than the lab, which only refuses it at publication.
+  Four of the handoff's hints on the method cards claim behaviour the lab does not have and are
+  written as what it does instead (ADR 0072, *The hints say what the lab does*).
 - **An editor says what is unsaved and asks before it is lost** (ADR 0051): *Discard changes*
   beside *Save draft* while dirty, "All changes saved" in a live region when not; one dialog
   with Save and leave, Discard and leave, Stay.
@@ -479,15 +485,18 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   submit of a form, a saved row's Save included; every create page (ten route files, eleven
   surfaces), Publish everywhere (`PublishButton`, described by `PublishReasons`), Start, the
   connection's Save and Test, the bench's *Send as the customer*, *Attach to this shop*, *Fork
-  this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, Shop details' method forms
-  (*Add payment method*, *Add fulfilment method* and *Save changes*: the first rule broken, in
-  one line after the buttons, ADR 0072), and every add form's submit, which is `PrimaryAction`
+  this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, every form below a list
+  (*Add payment method*, *Add fulfilment method*, *Add line*, *Add event* and their *Save
+  changes*: the first rule broken, in the order the form asks — *Add line* when nothing is left to
+  add, no variant chosen, a quantity outside 1 to 999; *Add event* at the order's cap, a time
+  missing, a summary empty or only spaces — in one line after the buttons, a blank form refused
+  and marking nothing, a `required` field left empty included, ADR 0072, ADR 0074), and every
+  add form's submit, which is `PrimaryAction`
   with the create glyph wherever it is refused or not, and says its reason in a `RefusalLine`
   under it where it is — the scenario editor's *Add* at the objective and mutation caps (the
-  lab's sentence), *Add parameter* at the template's cap, *Add event* at the order's cap and
-  while the summary is only spaces, *Add line* when every priced variant is already a line, *Add
+  lab's sentence), *Add parameter* at the template's cap, *Add
   address* while a field it needs is only spaces, *Add media* on the line the reference field
-  says its collision in. A refusal a field already states natively — a `required` field left
+  says its collision in. Outside a form below a list, a refusal a field already states natively — a `required` field left
   empty (in an add form or an open row alike); an identifier `DerivedIdField` refuses — is left
   to the field, so a submit whose only fault is a `required` field left empty is not dashed. Start is refused until it can work, and says every cause
   it waits for at once. A press in flight is not a refusal: it says nothing, and is `aria-disabled`

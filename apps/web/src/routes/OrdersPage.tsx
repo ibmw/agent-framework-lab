@@ -18,13 +18,17 @@ import { SearchField, SearchRow } from "../components/SearchField";
 import { Card, PageHeader, StatusPill } from "../components/WorkspaceChrome";
 import { type Created, useCreateThenComplete } from "../lib/createDefinition";
 import { nextReference, referencePrefix, seriesPrefix } from "../lib/entryIds";
-import { alreadyTakenMessage, ORDER_REFERENCE_RULE, REFERENCE_PATTERN } from "../lib/fieldRules";
+import {
+  alreadyTakenMessage,
+  MAX_LINE_QUANTITY,
+  MIN_LINE_QUANTITY,
+  ORDER_REFERENCE_RULE,
+  REFERENCE_PATTERN,
+} from "../lib/fieldRules";
 import { filterList } from "../lib/filters";
 import {
   clampQuantity,
   fulfilmentLabel,
-  MAX_LINE_QUANTITY,
-  MIN_LINE_QUANTITY,
   paymentLabel,
   placedAt,
   todayInput,

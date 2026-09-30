@@ -14,8 +14,11 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  LINE_QUANTITY_RULE,
+  LINE_VARIANT_RULE,
   MAX_ORDER_EVENTS,
   ORDER_EVENT_SUMMARY_RULE,
+  ORDER_EVENT_TIME_RULE,
   ORDER_EVENTS_CAP_RULE,
   ORDER_METHOD_RULE,
   PAID_AT_RULE,
@@ -23,6 +26,7 @@ import {
 } from "./lib/fieldRules";
 import { toLocalInput } from "./lib/orders";
 import { formatFixtureTimestamp } from "./lib/ui";
+import { itemFormReason } from "./lib/unsavedWork";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
 import { indexCard } from "./test/indexes";
@@ -371,6 +375,19 @@ function renderAt(path: string) {
 
 function card(name: string) {
   return screen.getByRole("region", { name });
+}
+
+/**
+ * A line's quantity, corrected the one way the editor offers (ADR 0074): the line's pencil
+ * loads it into the form below the list, and *Save changes* writes it where it stands.
+ */
+async function setQuantity(user: ReturnType<typeof userEvent.setup>, sku: string, value: string) {
+  const lines = card("Line items & payment");
+  await user.click(within(lines).getByRole("button", { name: `Edit ${sku}` }));
+  const form = within(lines).getByRole("group", { name: `Edit ${sku}` });
+  await user.clear(within(form).getByLabelText("Quantity"));
+  await user.type(within(form).getByLabelText("Quantity"), value);
+  await user.click(within(form).getByRole("button", { name: "Save changes" }));
 }
 
 describe("order index", () => {
@@ -1852,27 +1869,31 @@ describe("order editor", () => {
     ).toEqual(["Paid", "Refunded"]);
   });
 
-  it("recalculates the total when a quantity changes, before the save round trip", async () => {
+  it("recalculates the total when an edited quantity is saved, before the save round trip", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
     await screen.findByRole("heading", { name: "NS-10482" });
     const lines = card("Line items & payment");
 
-    await user.clear(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"));
-    await user.type(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"), "3");
+    // Typed and not yet saved, the quantity is the form's: the order and its totals wait.
+    await user.click(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.clear(within(lines).getByLabelText("Quantity"));
+    await user.type(within(lines).getByLabelText("Quantity"), "3");
+    expect(within(lines).queryByText("747.00 EUR")).toBeNull();
 
-    // The line total, the subtotal, and the order total all follow the quantity.
-    expect(within(lines).getAllByText("747.00 EUR")).toHaveLength(3);
+    await user.click(within(lines).getByRole("button", { name: "Save changes" }));
+
+    // The line's detail, the subtotal, and the order total all follow the quantity.
+    expect(within(lines).getByText("3 × 249.00 EUR = 747.00 EUR")).toBeVisible();
+    expect(within(lines).getAllByText("747.00 EUR")).toHaveLength(2);
   });
 
   it("saves selections rather than materialized commerce content", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
     await screen.findByRole("heading", { name: "NS-10482" });
-    const lines = card("Line items & payment");
 
-    await user.clear(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"));
-    await user.type(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"), "2");
+    await setQuantity(user, "NS-ASJ-OB-M", "2");
     await user.click(screen.getByRole("button", { name: "Save order" }));
 
     await waitFor(() => expect(savedRequests).toHaveLength(1));
@@ -1963,6 +1984,9 @@ describe("order editor", () => {
     await screen.findByRole("heading", { name: "NS-10482" });
     await user.click(screen.getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
     await user.click(screen.getByRole("button", { name: "Remove it" }));
+    expect(
+      screen.getByText("No line item yet, so the order has nothing to derive its totals from."),
+    ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Save order" }));
 
     await waitFor(() => expect(savedRequests).toHaveLength(1));
@@ -1982,19 +2006,28 @@ describe("order editor", () => {
     await screen.findByRole("heading", { name: "NS-10482" });
     const lines = card("Line items & payment");
 
-    await user.selectOptions(within(lines).getByLabelText("Add product"), "NS-ASJ-OB-M");
+    await user.selectOptions(within(lines).getByLabelText("Variant"), "NS-ASJ-OB-M");
+    await user.clear(within(lines).getByLabelText("Quantity"));
+    await user.type(within(lines).getByLabelText("Quantity"), "2");
     await user.click(within(lines).getByRole("button", { name: "Add line" }));
 
-    expect(within(lines).getByText("Alpine Shell Jacket")).toBeVisible();
-    expect(within(lines).getByText("Ocean Blue")).toBeVisible();
+    // The item reads what the catalog froze: the product and variant, the SKU, the arithmetic.
+    const item = within(lines).getByText("Alpine Shell Jacket · Ocean Blue").closest("li");
+    expect(item).not.toBeNull();
+    expect(
+      within(item as HTMLElement).getByText("NS-ASJ-OB-M", { selector: "code" }),
+    ).toBeVisible();
+    expect(within(item as HTMLElement).getByText("2 × 249.00 EUR = 498.00 EUR")).toBeVisible();
+    // The form is blank again, and adds.
+    expect(within(lines).getByRole("group", { name: "Add a line" })).toBeVisible();
   });
 
-  it("opens Add product on the one variant the order does not hold yet, and says so", async () => {
+  it("opens Variant on the one variant the order does not hold yet, and says so", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
     await screen.findByRole("heading", { name: "NS-10482" });
     const lines = card("Line items & payment");
-    const picker = within(lines).getByLabelText("Add product");
+    const picker = within(lines).getByLabelText("Variant");
     // The catalog's one priced variant is on the order: nothing to offer, nothing chosen.
     expect(picker).toHaveValue("");
     expect(picker).not.toHaveAccessibleDescription(/already chosen/);
@@ -2008,27 +2041,38 @@ describe("order editor", () => {
         "This one is the only priced variant not yet on this order, so it is already chosen.",
       ),
     );
-    await user.click(within(lines).getByRole("button", { name: "Add line" }));
-    expect(within(lines).getByText("Alpine Shell Jacket")).toBeVisible();
+    // A choice the lab made is not something the operator typed: the prompt asks about the
+    // removal, which is the order's, and not about the form.
+    await user.click(railEntry("Orders"));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent("This order has unsaved changes.");
+    expect(prompt).not.toHaveTextContent(/Line items form/);
   });
 
-  it("keeps a quantity the contract could not carry out of the editor", async () => {
+  it("keeps a quantity the contract could not carry out of the order", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
     await screen.findByRole("heading", { name: "NS-10482" });
     const lines = card("Line items & payment");
-    const quantity = within(lines).getByLabelText("Quantity for NS-ASJ-OB-M");
+    await user.click(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    const quantity = within(lines).getByLabelText("Quantity");
+    const save = within(lines).getByRole("button", { name: "Save changes" });
 
-    await user.clear(quantity);
-
-    // The field shows what was typed, while the order keeps the quantity it had: the totals
-    // stay truthful and a save can only carry a quantity the contract accepts.
-    expect(quantity).toHaveValue(null);
-    expect(within(lines).getAllByText("249.00 EUR").length).toBeGreaterThan(0);
-
-    await user.type(quantity, "1200");
-    await user.tab();
-    expect(quantity).toHaveValue(999);
+    for (const typed of ["", "0", "1000", "1.5"]) {
+      await user.clear(quantity);
+      if (typed !== "") {
+        await user.type(quantity, typed);
+      }
+      // Said after the button, on the field that breaks it; the order keeps what it had.
+      expectRefused(save, LINE_QUANTITY_RULE);
+      expect(quantity).toHaveAttribute("aria-invalid", "true");
+      expect(quantity).toHaveAccessibleDescription(expect.stringContaining(LINE_QUANTITY_RULE));
+    }
+    await user.click(save);
+    await submitWithoutPressing(save);
+    expect(within(lines).getByRole("group", { name: "Edit NS-ASJ-OB-M" })).toBeVisible();
+    expect(within(lines).getByText("1 × 249.00 EUR = 249.00 EUR")).toBeVisible();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
   });
 
   it("refuses to save a shipping fee that is not an amount", async () => {
@@ -2147,14 +2191,327 @@ describe("order editor", () => {
     );
     renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
     await screen.findByRole("heading", { name: "NS-10482" });
-    const lines = card("Line items & payment");
 
-    await user.clear(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"));
-    await user.type(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"), "2");
+    await setQuantity(user, "NS-ASJ-OB-M", "2");
     await user.click(screen.getByRole("button", { name: "Save order" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/cannot move from paid to pending/);
     expect(screen.getByRole("button", { name: "Save order" })).toBeEnabled();
+  });
+});
+
+/**
+ * An order's lines as the list edited in the form below it (ADR 0074): items under *Items*, one
+ * form that adds a line or edits the one chosen, the variant fixed while editing because the lab
+ * keys a line on its SKU, and every refusal in one line after the buttons.
+ */
+describe("the line items, edited in the form below them", () => {
+  const SECOND_VARIANT = {
+    sku: "NS-ASJ-OB-L",
+    option_values: [{ key: "color", value: "Ocean Blue" }],
+    availability: "in_stock" as const,
+    stock_quantity: 4,
+    price: { amount: "259.00", currency: "EUR" as const },
+  };
+
+  /** A catalog of two priced variants, so an empty order has a choice to make. */
+  function withTwoVariants() {
+    withCatalog([...SHOP_CONTENT.products[0].variants, SECOND_VARIANT]);
+  }
+
+  function withCatalog(variants: ShopDraftResponse["content"]["products"][number]["variants"]) {
+    const [product] = SHOP_CONTENT.products;
+    const content = { ...SHOP_CONTENT, products: [{ ...product, variants }] };
+    server.use(
+      http.get(`*/api/v1/shops/${SHOP_ID}/draft`, () =>
+        HttpResponse.json({
+          shop_id: SHOP_ID,
+          lifecycle_state: "draft",
+          content,
+          created_at: "2026-08-23T12:00:00+00:00",
+          updated_at: "2026-08-23T12:05:00+00:00",
+        } satisfies ShopDraftResponse),
+      ),
+    );
+  }
+
+  function withoutLines() {
+    currentOrder = { ...PAID_ORDER, content: { ...PAID_ORDER.content, lines: [] } };
+  }
+
+  const SECOND_LINE: ShopOrderResponse["content"]["lines"][number] = {
+    id: "ns-asj-ob-l",
+    sku: "NS-ASJ-OB-L",
+    product_handle: "alpine-shell-jacket",
+    title: "Alpine Shell Jacket",
+    variant_summary: "Ocean Blue · L",
+    unit_price: { amount: "259.00", currency: "EUR" },
+    quantity: 1,
+    line_total: { amount: "259.00", currency: "EUR" },
+  };
+
+  async function openLines() {
+    renderAt(`/shops/${SHOP_ID}/orders/${ORDER_ID}`);
+    await screen.findByRole("heading", { name: "NS-10482" });
+    return card("Line items & payment");
+  }
+
+  it("lists each line as an item under Items, named by its SKU on its controls", async () => {
+    const lines = await openLines();
+    const items = within(lines).getByRole("group", { name: "Items" });
+
+    const [item] = within(items).getAllByRole("listitem");
+    expect(within(item).getByText("Alpine Shell Jacket · Ocean Blue · M")).toBeVisible();
+    expect(within(item).getByText("NS-ASJ-OB-M", { selector: "code" })).toBeVisible();
+    expect(within(item).getByText("1 × 249.00 EUR = 249.00 EUR")).toBeVisible();
+    expect(within(item).getByRole("button", { name: "Edit NS-ASJ-OB-M" })).toBeVisible();
+    expect(within(item).getByRole("button", { name: "Remove NS-ASJ-OB-M" })).toBeVisible();
+    // No quantity is typed in place any more, and the form below adds.
+    expect(within(lines).queryByRole("spinbutton", { name: /Quantity for/ })).toBeNull();
+    expect(within(lines).getByRole("group", { name: "Add a line" })).toBeVisible();
+  });
+
+  it("loads a line with its variant fixed, and saves its quantity where it stands", async () => {
+    const user = userEvent.setup();
+    const lines = await openLines();
+    const edit = within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" });
+
+    await user.click(edit);
+
+    const form = within(lines).getByRole("group", { name: "Edit NS-ASJ-OB-M" });
+    expect(edit.closest("li")).toHaveAttribute("aria-current", "true");
+    // The variant is shown and cannot be changed: the lab holds the line by its SKU.
+    const variant = within(form).getByLabelText("Variant");
+    expect(variant).toHaveValue("Alpine Shell Jacket · NS-ASJ-OB-M");
+    expect(variant).toHaveAttribute("readonly");
+    expect(within(form).queryByRole("combobox", { name: "Variant" })).toBeNull();
+    const quantity = within(form).getByLabelText("Quantity");
+    expect(quantity).toHaveValue(1);
+    expect(quantity).toHaveFocus();
+    // At the form grid's full width, as the methods handoff draws every field (ADR 0074).
+    expect(quantity).toHaveClass("w-full");
+
+    await user.clear(quantity);
+    await user.type(quantity, "1000");
+    const save = within(form).getByRole("button", { name: "Save changes" });
+    expectRefused(save, LINE_QUANTITY_RULE);
+    await user.clear(quantity);
+    await user.type(quantity, "2");
+    expectNotRefused(save);
+    await user.click(save);
+
+    expect(within(lines).getByText("2 × 249.00 EUR = 498.00 EUR")).toBeVisible();
+    expect(within(lines).getAllByText("498.00 EUR")).toHaveLength(2);
+    expect(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" })).toHaveFocus();
+    expect(within(lines).getByRole("group", { name: "Add a line" })).toBeVisible();
+    expect(
+      within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" }).closest("li"),
+    ).not.toHaveAttribute("aria-current");
+  });
+
+  it("keeps the price a line was frozen at when its quantity is saved", async () => {
+    const user = userEvent.setup();
+    // The catalog has been repriced since the line was authored at 249.00.
+    const [variant] = SHOP_CONTENT.products[0].variants;
+    withCatalog([{ ...variant, price: { amount: "199.00", currency: "EUR" } }]);
+    const lines = await openLines();
+
+    await setQuantity(user, "NS-ASJ-OB-M", "2");
+
+    expect(within(lines).getByText("2 × 249.00 EUR = 498.00 EUR")).toBeVisible();
+    expect(within(lines).queryByText(/199\.00/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    // The request selects the line; it never carries a price the lab would re-freeze.
+    expect(savedRequests[0].lines).toEqual([{ sku: "NS-ASJ-OB-M", quantity: 2 }]);
+    expect(JSON.stringify(savedRequests[0])).not.toContain("199.00");
+    expect(await within(lines).findByText("2 × 249.00 EUR = 498.00 EUR")).toBeVisible();
+  });
+
+  it("edits the second of two lines where it stands", async () => {
+    const user = userEvent.setup();
+    withTwoVariants();
+    currentOrder = {
+      ...PAID_ORDER,
+      content: { ...PAID_ORDER.content, lines: [...PAID_ORDER.content.lines, SECOND_LINE] },
+    };
+    const lines = await openLines();
+
+    await setQuantity(user, "NS-ASJ-OB-L", "3");
+
+    const items = within(within(lines).getByRole("group", { name: "Items" })).getAllByRole(
+      "listitem",
+    );
+    expect(
+      items.map((entry) => within(entry).getByText(/^NS-/, { selector: "code" }).textContent),
+    ).toEqual(["NS-ASJ-OB-M", "NS-ASJ-OB-L"]);
+    expect(within(items[0]).getByText("1 × 249.00 EUR = 249.00 EUR")).toBeVisible();
+    expect(within(items[1]).getByText("3 × 259.00 EUR = 777.00 EUR")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].lines).toEqual([
+      { sku: "NS-ASJ-OB-M", quantity: 1 },
+      { sku: "NS-ASJ-OB-L", quantity: 3 },
+    ]);
+  });
+
+  it("leaves the order clean when an untouched line is saved", async () => {
+    const user = userEvent.setup();
+    const lines = await openLines();
+
+    await user.click(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.click(within(lines).getByRole("button", { name: "Save changes" }));
+
+    expect(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" })).toHaveFocus();
+    expect(within(lines).getByRole("group", { name: "Add a line" })).toBeVisible();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("keeps a line typed in the form when the variants it could choose change under it", async () => {
+    const user = userEvent.setup();
+    withTwoVariants();
+    const lines = await openLines();
+    const variant = within(lines).getByLabelText("Variant");
+    const quantity = within(lines).getByLabelText("Quantity");
+    // The order holds M, so L is the one candidate and the form opens on it.
+    expect(variant).toHaveValue("NS-ASJ-OB-L");
+
+    await user.clear(quantity);
+    await user.type(quantity, "4");
+    await user.click(within(lines).getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
+    await user.click(within(lines).getByRole("button", { name: "Remove it" }));
+
+    // Two candidates now, and no sole one to open on — but the form holds what was typed.
+    expect(variant).toHaveValue("NS-ASJ-OB-L");
+    expect(quantity).toHaveValue(4);
+    await user.click(railEntry("Orders"));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Line items form holds a line that has not been added to the order.",
+    );
+  });
+
+  it("refuses Add line, rather than doing nothing, when a discard brings back the chosen variant's line", async () => {
+    const user = userEvent.setup();
+    withTwoVariants();
+    const lines = await openLines();
+
+    await user.click(within(lines).getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
+    await user.click(within(lines).getByRole("button", { name: "Remove it" }));
+    const variant = within(lines).getByLabelText("Variant");
+    await user.selectOptions(variant, "NS-ASJ-OB-M");
+    expectNotRefused(within(lines).getByRole("button", { name: "Add line" }));
+
+    // The discard reads the order back, M's line with it: M is no longer one to add.
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await within(lines).findByText("1 × 249.00 EUR = 249.00 EUR");
+
+    const add = within(lines).getByRole("button", { name: "Add line" });
+    expectRefused(add, LINE_VARIANT_RULE);
+    expect(variant).toHaveAttribute("aria-invalid", "true");
+    await user.click(add);
+    await submitWithoutPressing(add);
+    expect(
+      within(within(lines).getByRole("group", { name: "Items" })).getAllByRole("listitem"),
+    ).toHaveLength(1);
+  });
+
+  it("writes nothing on Cancel and hands focus back to the Edit", async () => {
+    const user = userEvent.setup();
+    const lines = await openLines();
+
+    await user.click(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.clear(within(lines).getByLabelText("Quantity"));
+    await user.type(within(lines).getByLabelText("Quantity"), "7");
+    await user.click(within(lines).getByRole("button", { name: "Cancel" }));
+
+    expect(within(lines).getByText("1 × 249.00 EUR = 249.00 EUR")).toBeVisible();
+    expect(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" })).toHaveFocus();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("refuses a blank form without marking a field, then each rule in the order it asks", async () => {
+    const user = userEvent.setup();
+    withTwoVariants();
+    withoutLines();
+    const lines = await openLines();
+    const form = within(lines).getByRole("group", { name: "Add a line" });
+    const add = within(form).getByRole("button", { name: "Add line" });
+    const variant = within(form).getByLabelText("Variant");
+    const quantity = within(form).getByLabelText("Quantity");
+
+    // Two candidates: nothing is chosen, and the form says so without marking anything yet.
+    expect(variant).toHaveValue("");
+    expectRefused(add, LINE_VARIANT_RULE);
+    expect(variant).not.toHaveAttribute("aria-invalid");
+    expect(quantity).not.toHaveAttribute("aria-invalid");
+    expect(variant).not.toBeRequired();
+
+    // The variant is asked before the quantity, so a bad quantity waits its turn.
+    await user.clear(quantity);
+    await user.type(quantity, "0");
+    expectRefused(add, LINE_VARIANT_RULE);
+    expect(variant).toHaveAttribute("aria-invalid", "true");
+    expect(quantity).not.toHaveAttribute("aria-invalid");
+
+    await user.selectOptions(variant, "NS-ASJ-OB-L");
+    expectRefused(add, LINE_QUANTITY_RULE);
+    expect(quantity).toHaveAttribute("aria-invalid", "true");
+    expect(variant).not.toHaveAttribute("aria-invalid");
+    await user.click(add);
+    await submitWithoutPressing(add);
+    expect(within(lines).queryAllByRole("listitem")).toHaveLength(0);
+
+    await user.clear(quantity);
+    await user.type(quantity, "3");
+    expectNotRefused(add);
+    await user.click(add);
+    expect(within(lines).getByText("3 × 259.00 EUR = 777.00 EUR")).toBeVisible();
+  });
+
+  it("empties the form when the line it edits is removed", async () => {
+    const user = userEvent.setup();
+    const lines = await openLines();
+
+    await user.click(within(lines).getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.clear(within(lines).getByLabelText("Quantity"));
+    await user.type(within(lines).getByLabelText("Quantity"), "5");
+    await user.click(within(lines).getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
+    // The confirm takes the item's place, and the form still holds the edit until it is answered.
+    const confirm = within(lines).getByRole("group", { name: /Remove the line NS-ASJ-OB-M/ });
+    expect(confirm.closest("li")).not.toBeNull();
+    expect(within(lines).getByRole("group", { name: "Edit NS-ASJ-OB-M" })).toBeVisible();
+    await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
+
+    const form = within(lines).getByRole("group", { name: "Add a line" });
+    expect(within(form).getByLabelText("Quantity")).toHaveValue(1);
+    expect(within(lines).queryByRole("group", { name: "Edit NS-ASJ-OB-M" })).toBeNull();
+    expect(within(lines).getByText("Removed the line NS-ASJ-OB-M from the order.")).toHaveFocus();
+    // What it held is gone with the line, so the only unsaved work is the order's own.
+    await user.click(screen.getByRole("button", { name: "Save order" }));
+    await waitFor(() => expect(savedRequests).toHaveLength(1));
+    expect(savedRequests[0].lines).toEqual([]);
+  });
+
+  it("asks before leaving a line typed in its form, with the form's own reason", async () => {
+    const user = userEvent.setup();
+    withTwoVariants();
+    withoutLines();
+    const lines = await openLines();
+
+    await user.selectOptions(within(lines).getByLabelText("Variant"), "NS-ASJ-OB-L");
+    await user.click(railEntry("Orders"));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      "The Line items form holds a line that has not been added to the order.",
+    );
+    expect(prompt).toHaveTextContent(itemFormReason("a line", "order"));
+    expect(prompt).toHaveTextContent(
+      "A line typed in its form cannot be saved from here: nothing in the form has reached the order yet.",
+    );
+    await user.click(within(prompt).getByRole("button", { name: "Discard and leave" }));
+    expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
   });
 });
 
@@ -2375,9 +2732,7 @@ describe("the order editor's side panel", () => {
     expect(within(findings()).queryByText(SAVED_ORDER)).toBeNull();
     expect(findings()).not.toHaveAttribute("aria-busy");
 
-    const lines = card("Line items & payment");
-    await user.clear(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"));
-    await user.type(within(lines).getByLabelText("Quantity for NS-ASJ-OB-M"), "2");
+    await setQuantity(user, "NS-ASJ-OB-M", "2");
 
     expect(within(findings()).getByText(SAVED_ORDER)).toBeVisible();
     // The order has no gate to wait on: its findings come back with the save.
@@ -2394,13 +2749,13 @@ describe("the order editor's side panel", () => {
 });
 
 /**
- * *Order events* is a list on `EntryCard` (PLAN-UX Slice 33): a saved event opens where it
- * stands, nothing typed in it reaches the order until its Save, and a new one arrives through
- * the add form below the list — both paths through `orderEventEntry`.
+ * *Order events* is the list edited in the form below it (ADR 0074): a saved event is an item,
+ * its pencil loads it into the one form, and a new one arrives through the same form — both
+ * paths through `orderEventEntry`.
  */
 describe("order events", () => {
-  // A row's controls are named by what happened and the id the order keys it by — stable, and
-  // unique where two events share a minute — while the row's own line reads the time.
+  // An item's controls are named by what happened and the id the order keys it by — stable,
+  // and unique where two events share a minute — while the item's detail reads the time.
   const PLACED_LABEL = "Placed · order-created";
   const CONTACT: ShopOrderResponse["content"]["events"][number] = {
     id: "support-contact",
@@ -2420,64 +2775,68 @@ describe("order events", () => {
     return card("Order events");
   }
 
-  it("reads an event back rather than offering its fields, and opens it in place on Edit", async () => {
+  it("reads an event back as an item, and loads it into the form below on Edit", async () => {
     const user = userEvent.setup();
     const events = await openEditor();
 
-    // Closed, the row is read, not typed into, its time on its own line.
-    expect(within(events).getByText("Order created — checkout, order page")).toBeVisible();
+    const item = within(events).getByText("Placed", { selector: "span" }).closest("li");
+    expect(item).not.toBeNull();
     expect(
-      within(events).getByRole("heading", {
-        name: `Placed · ${formatFixtureTimestamp(PLACED_AT)}`,
-      }),
+      within(item as HTMLElement).getByText("order-created", { selector: "code" }),
     ).toBeVisible();
-    expect(within(events).queryByRole("form", { name: `Edit ${PLACED_LABEL}` })).toBeNull();
+    expect(
+      within(item as HTMLElement).getByText(
+        `${formatFixtureTimestamp(PLACED_AT)} · Order created — checkout, order page`,
+      ),
+    ).toBeVisible();
+    expect(within(events).queryByRole("group", { name: `Edit ${PLACED_LABEL}` })).toBeNull();
 
     await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
 
-    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
-    expect(within(open).getByLabelText("Kind")).toHaveValue("placed");
-    expect(within(open).getByLabelText("Occurred at")).toHaveValue(toLocalInput(PLACED_AT));
-    expect(within(open).getByLabelText("Summary")).toHaveValue(
+    const form = within(events).getByRole("group", { name: `Edit ${PLACED_LABEL}` });
+    expect(item).toHaveAttribute("aria-current", "true");
+    expect(within(form).getByLabelText("Kind")).toHaveValue("placed");
+    expect(within(form).getByLabelText("Kind")).toHaveFocus();
+    expect(within(form).getByLabelText("Occurred at")).toHaveValue(toLocalInput(PLACED_AT));
+    expect(within(form).getByLabelText("Summary")).toHaveValue(
       "Order created — checkout, order page",
     );
-    // The identifier stays on the header line and is never asked.
-    expect(within(events).getByText("order-created", { selector: "code" })).toBeVisible();
-    // Removing the entry being corrected is not one of the open row's two answers.
-    expect(within(events).queryByRole("button", { name: `Remove ${PLACED_LABEL}` })).toBeNull();
+    // The identifier stays on the item and is never asked; the trash stays on the item too.
+    expect(within(form).queryByLabelText("ID")).toBeNull();
+    expect(within(events).getByRole("button", { name: `Remove ${PLACED_LABEL}` })).toBeVisible();
   });
 
-  it("writes nothing on Cancel, and nothing typed in an open row reaches the order's Save", async () => {
+  it("writes nothing on Cancel, and nothing typed in the form reaches the order's Save", async () => {
     const user = userEvent.setup();
     const events = await openEditor();
 
-    // The order is dirty for another reason, so Save order is pressable while the row is open.
+    // The order is dirty for another reason, so Save order is pressable while the form holds an edit.
     await user.selectOptions(
       within(card("Fulfilment & shipping")).getByLabelText("Fulfilment method"),
       "",
     );
     await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
-    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
-    await user.clear(within(open).getByLabelText("Summary"));
-    await user.type(within(open).getByLabelText("Summary"), "Typed and never saved.");
+    const form = within(events).getByRole("group", { name: `Edit ${PLACED_LABEL}` });
+    await user.clear(within(form).getByLabelText("Summary"));
+    await user.type(within(form).getByLabelText("Summary"), "Typed and never saved.");
 
     await user.click(screen.getByRole("button", { name: "Save order" }));
     await waitFor(() => expect(savedRequests).toHaveLength(1));
     expect(savedRequests[0].events[0].summary).toBe("Order created — checkout, order page");
 
-    await user.click(
-      within(events).getByRole("button", { name: `Cancel editing ${PLACED_LABEL}` }),
-    );
-    expect(within(events).getByText("Order created — checkout, order page")).toBeVisible();
+    await user.click(within(form).getByRole("button", { name: "Cancel" }));
+    expect(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` })).toHaveFocus();
+    expect(within(events).getByRole("group", { name: "Add an event" })).toBeVisible();
+    expect(within(events).getByText(/Order created — checkout, order page/)).toBeVisible();
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
   });
 
-  it("saves an edited event with exactly the payload the add form writes for the same answers", async () => {
+  it("saves an edited event with exactly the payload the form adds for the same answers", async () => {
     const user = userEvent.setup();
     const events = await openEditor();
     const answers = { time: "2026-08-22T09:30", summary: "  Asked to reroute the parcel.  " };
 
-    const add = within(events).getByRole("form", { name: "Add an event" });
+    const add = within(events).getByRole("group", { name: "Add an event" });
     await user.selectOptions(within(add).getByLabelText("Kind"), "address_updated");
     await user.clear(within(add).getByLabelText("Occurred at"));
     await user.type(within(add).getByLabelText("Occurred at"), answers.time);
@@ -2485,18 +2844,18 @@ describe("order events", () => {
     await user.click(within(add).getByRole("button", { name: "Add event" }));
 
     await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
-    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
-    await user.selectOptions(within(open).getByLabelText("Kind"), "address_updated");
-    await user.clear(within(open).getByLabelText("Occurred at"));
-    await user.type(within(open).getByLabelText("Occurred at"), answers.time);
-    await user.clear(within(open).getByLabelText("Summary"));
-    await user.type(within(open).getByLabelText("Summary"), answers.summary);
-    await user.click(within(open).getByRole("button", { name: `Save ${PLACED_LABEL}` }));
+    const form = within(events).getByRole("group", { name: `Edit ${PLACED_LABEL}` });
+    await user.selectOptions(within(form).getByLabelText("Kind"), "address_updated");
+    await user.clear(within(form).getByLabelText("Occurred at"));
+    await user.type(within(form).getByLabelText("Occurred at"), answers.time);
+    await user.clear(within(form).getByLabelText("Summary"));
+    await user.type(within(form).getByLabelText("Summary"), answers.summary);
+    await user.click(within(form).getByRole("button", { name: "Save changes" }));
 
     await user.click(screen.getByRole("button", { name: "Save order" }));
     await waitFor(() => expect(savedRequests).toHaveLength(1));
     const [edited, added] = savedRequests[0].events;
-    // The edit keeps the entry's own id; everything else is what the add form wrote.
+    // The edit keeps the entry's own id; everything else is what the added one wrote.
     expect(edited.id).toBe("order-created");
     expect(added.id).toBe("event");
     expect({ ...edited, id: null }).toEqual({ ...added, id: null });
@@ -2507,12 +2866,11 @@ describe("order events", () => {
     const user = userEvent.setup();
     withEvents([{ ...CONTACT, occurred_at: "2026-08-21T13:12:34Z" }]);
     const events = await openEditor();
-    const label = CONTACT_LABEL;
 
-    await user.click(within(events).getByRole("button", { name: `Edit ${label}` }));
-    const open = within(events).getByRole("form", { name: `Edit ${label}` });
-    await user.type(within(open).getByLabelText("Summary"), " Again.");
-    await user.click(within(open).getByRole("button", { name: `Save ${label}` }));
+    await user.click(within(events).getByRole("button", { name: `Edit ${CONTACT_LABEL}` }));
+    const form = within(events).getByRole("group", { name: `Edit ${CONTACT_LABEL}` });
+    await user.type(within(form).getByLabelText("Summary"), " Again.");
+    await user.click(within(form).getByRole("button", { name: "Save changes" }));
     await user.click(screen.getByRole("button", { name: "Save order" }));
 
     await waitFor(() => expect(savedRequests).toHaveLength(1));
@@ -2524,48 +2882,64 @@ describe("order events", () => {
     });
   });
 
-  it("holds one open row per list, and every other Edit says why it is disabled", async () => {
+  it("leaves the order clean when an untouched event is saved", async () => {
+    const user = userEvent.setup();
+    const events = await openEditor();
+
+    await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+    await user.click(within(events).getByRole("button", { name: "Save changes" }));
+
+    expect(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` })).toHaveFocus();
+    expect(screen.getByText("All changes saved")).toBeInTheDocument();
+  });
+
+  it("replaces what the form holds when another event's Edit is pressed", async () => {
     const user = userEvent.setup();
     withEvents([...PAID_ORDER.content.events, CONTACT]);
     const events = await openEditor();
 
     await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+    const other = within(events).getByRole("button", { name: `Edit ${CONTACT_LABEL}` });
+    expect(other).toBeEnabled();
+    await user.click(other);
 
-    const sibling = within(events).getByRole("button", { name: `Edit ${CONTACT_LABEL}` });
-    expect(sibling).toBeDisabled();
-    expect(sibling).toHaveAccessibleDescription(
-      `Editing ${PLACED_LABEL}. Save or Cancel before opening another row; nothing in the open row reaches the draft until you press Save.`,
-    );
-
-    await user.click(
-      within(events).getByRole("button", { name: `Cancel editing ${PLACED_LABEL}` }),
-    );
-    expect(within(events).getByRole("button", { name: `Edit ${CONTACT_LABEL}` })).toBeEnabled();
+    const form = within(events).getByRole("group", { name: `Edit ${CONTACT_LABEL}` });
+    expect(within(form).getByLabelText("Summary")).toHaveValue(CONTACT.summary);
+    expect(within(events).queryByRole("group", { name: `Edit ${PLACED_LABEL}` })).toBeNull();
+    expect(other.closest("li")).toHaveAttribute("aria-current", "true");
+    expect(
+      within(events)
+        .getByRole("button", { name: `Edit ${PLACED_LABEL}` })
+        .closest("li"),
+    ).not.toHaveAttribute("aria-current");
   });
 
-  it("refuses an open row's Save with the reason when the summary is emptied", async () => {
+  it("refuses Save changes with the reason when the summary is emptied", async () => {
     const user = userEvent.setup();
     const events = await openEditor();
 
     await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
-    const open = within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` });
-    const save = within(open).getByRole("button", { name: `Save ${PLACED_LABEL}` });
-    await user.clear(within(open).getByLabelText("Summary"));
-    // Emptied, the summary is its own `required` to say: Save is not refused, and the browser
-    // stops the press, so the row stays open with nothing written.
-    expectNotRefused(save);
-    await user.click(save);
-    expect(within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` })).toBeVisible();
-    await user.type(within(open).getByLabelText("Summary"), "   ");
+    const form = within(events).getByRole("group", { name: `Edit ${PLACED_LABEL}` });
+    const save = within(form).getByRole("button", { name: "Save changes" });
+    const summary = within(form).getByLabelText("Summary");
+    await user.clear(summary);
 
-    expectRefused(save, ORDER_EVENT_SUMMARY_RULE);
+    // Emptied or only spaces, the summary is refused in the one line after the buttons.
+    for (const typed of ["", "   "]) {
+      if (typed !== "") {
+        await user.type(summary, typed);
+      }
+      expectRefused(save, ORDER_EVENT_SUMMARY_RULE);
+      expect(summary).toHaveAttribute("aria-invalid", "true");
+      expect(summary).not.toBeRequired();
+    }
     await user.click(save);
     await submitWithoutPressing(save);
-    expect(within(events).getByRole("form", { name: `Edit ${PLACED_LABEL}` })).toBeVisible();
+    expect(within(events).getByRole("group", { name: `Edit ${PLACED_LABEL}` })).toBeVisible();
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
   });
 
-  it("removes an event only on the second press, the confirm standing in the row's place", async () => {
+  it("removes an event only on the second press, the confirm standing in the item's place", async () => {
     const user = userEvent.setup();
     withEvents([...PAID_ORDER.content.events, CONTACT]);
     const events = await openEditor();
@@ -2576,8 +2950,9 @@ describe("order events", () => {
       name: "Remove the support contact event?",
     });
     expect(confirm).toHaveFocus();
-    // Nothing has left the order yet: the row is asking, not gone.
-    expect(within(events).queryByText("Customer asked where the parcel was.")).toBeNull();
+    expect(confirm.closest("li")).not.toBeNull();
+    // Nothing has left the order yet: the item is asking, not gone.
+    expect(within(events).queryByText(/Customer asked where the parcel was\./)).toBeNull();
     expect(screen.getByText("All changes saved")).toBeInTheDocument();
 
     await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
@@ -2591,38 +2966,68 @@ describe("order events", () => {
     expect(savedRequests[0].events.map((entry) => entry.id)).toEqual(["order-created"]);
   });
 
-  it("leaves an empty summary to its field, and refuses one of nothing but spaces with the reason", async () => {
+  it("empties the form when the event it edits is removed", async () => {
+    const user = userEvent.setup();
+    withEvents([...PAID_ORDER.content.events, CONTACT]);
+    const events = await openEditor();
+
+    await user.click(within(events).getByRole("button", { name: `Edit ${CONTACT_LABEL}` }));
+    await user.type(within(events).getByLabelText("Summary"), " Twice.");
+    await user.click(within(events).getByRole("button", { name: `Remove ${CONTACT_LABEL}` }));
+    await user.click(within(events).getByRole("button", { name: "Remove it" }));
+
+    const form = within(events).getByRole("group", { name: "Add an event" });
+    expect(within(form).getByLabelText("Summary")).toHaveValue("");
+    expect(within(form).getByLabelText("Kind")).toHaveValue("support_contact");
+    expect(within(form).queryByRole("button", { name: "Save changes" })).toBeNull();
+    // Add cannot write the removed event back: the form holds nothing of it.
+    await user.click(railEntry("Orders"));
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent("This order has unsaved changes.");
+    expect(prompt).not.toHaveTextContent(/Order events form/);
+  });
+
+  it("refuses a blank form without marking a field, then each rule in the order it asks", async () => {
     const user = userEvent.setup();
     const events = await openEditor();
-    const add = within(events).getByRole("form", { name: "Add an event" });
-    const button = within(add).getByRole("button", { name: "Add event" });
-    const summary = within(add).getByLabelText("Summary");
+    const form = within(events).getByRole("group", { name: "Add an event" });
+    const add = within(form).getByRole("button", { name: "Add event" });
+    const time = within(form).getByLabelText("Occurred at");
+    const summary = within(form).getByLabelText("Summary");
 
-    // It opens on a support contact at the moment the order was placed, and asks the summary.
-    expect(within(add).getByLabelText("Kind")).toHaveValue("support_contact");
-    expect(within(add).getByLabelText("Occurred at")).toHaveValue(toLocalInput(PLACED_AT));
-    // Empty is the field's own `required` to say (ADR 0063), so the button is not refused…
-    expectNotRefused(button);
-    expect(summary).toBeRequired();
-    expect(summary).toBeInvalid();
-    await user.click(button);
-    expect(within(events).getAllByRole("listitem")).toHaveLength(1);
+    // It opens on a support contact at the moment the order was placed, and asks the summary:
+    // refused and said, and nothing marked until something is typed.
+    expect(within(form).getByLabelText("Kind")).toHaveValue("support_contact");
+    expect(time).toHaveValue(toLocalInput(PLACED_AT));
+    expectRefused(add, ORDER_EVENT_SUMMARY_RULE);
+    expect(summary).not.toHaveAttribute("aria-invalid");
+    expect(time).not.toHaveAttribute("aria-invalid");
+    expect(summary).not.toBeRequired();
+    expect(time).not.toBeRequired();
 
-    // …and spaces, which `required` lets through and the lab refuses, are the button's.
+    // The time is asked before the summary, so a summary of spaces waits its turn.
+    await user.clear(time);
     await user.type(summary, "   ");
-    expectRefused(button, ORDER_EVENT_SUMMARY_RULE);
-    await user.click(button);
-    await submitWithoutPressing(button);
+    expectRefused(add, ORDER_EVENT_TIME_RULE);
+    expect(time).toHaveAttribute("aria-invalid", "true");
+    expect(summary).not.toHaveAttribute("aria-invalid");
+
+    await user.type(time, "2026-08-22T09:30");
+    expectRefused(add, ORDER_EVENT_SUMMARY_RULE);
+    expect(summary).toHaveAttribute("aria-invalid", "true");
+    expect(time).not.toHaveAttribute("aria-invalid");
+    await user.click(add);
+    await submitWithoutPressing(add);
     expect(within(events).getAllByRole("listitem")).toHaveLength(1);
 
     await user.clear(summary);
     await user.type(summary, "Customer called.");
-    expectNotRefused(button);
-    await user.click(button);
+    expectNotRefused(add);
+    await user.click(add);
 
     expect(within(events).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(events).getByText("Customer called.")).toBeVisible();
-    expect(summary).toHaveValue("");
+    expect(within(events).getByText(/Customer called\./)).toBeVisible();
+    expect(within(events).getByLabelText("Summary")).toHaveValue("");
   });
 
   it("keeps the placement's own instant for a new event whose time was left alone", async () => {
@@ -2635,7 +3040,7 @@ describe("order events", () => {
       content: { ...PAID_ORDER.content, placed_at: placedWithSeconds },
     };
     const events = await openEditor();
-    const add = within(events).getByRole("form", { name: "Add an event" });
+    const add = within(events).getByRole("group", { name: "Add an event" });
 
     await user.type(within(add).getByLabelText("Summary"), "Customer called.");
     await user.click(within(add).getByRole("button", { name: "Add event" }));
@@ -2649,7 +3054,8 @@ describe("order events", () => {
     });
   });
 
-  it("refuses Add event at the lab's cap, in the lab's words", async () => {
+  it("refuses Add event at the lab's cap, in the lab's words, before any field", async () => {
+    const user = userEvent.setup();
     withEvents(
       Array.from({ length: MAX_ORDER_EVENTS }, (_, index) => ({
         ...CONTACT,
@@ -2657,9 +3063,43 @@ describe("order events", () => {
       })),
     );
     const events = await openEditor();
-    const add = within(events).getByRole("form", { name: "Add an event" });
+    const add = within(events).getByRole("group", { name: "Add an event" });
+    const button = within(add).getByRole("button", { name: "Add event" });
 
-    expectRefused(within(add).getByRole("button", { name: "Add event" }), ORDER_EVENTS_CAP_RULE);
+    expectRefused(button, ORDER_EVENTS_CAP_RULE);
+    // The cap is about the list, so it comes first and marks no field.
+    await user.clear(within(add).getByLabelText("Occurred at"));
+    expectRefused(button, ORDER_EVENTS_CAP_RULE);
+    expect(within(add).getByLabelText("Occurred at")).not.toHaveAttribute("aria-invalid");
+
+    // Editing one of the forty is not adding a forty-first.
+    await user.click(
+      within(events).getByRole("button", { name: "Edit Support contact · contact-0" }),
+    );
+    const form = within(events).getByRole("group", { name: "Edit Support contact · contact-0" });
+    expectNotRefused(within(form).getByRole("button", { name: "Save changes" }));
+  });
+
+  it("asks before leaving an edited event, with the form's own reason, and not once it is cancelled", async () => {
+    const user = userEvent.setup();
+    const events = await openEditor();
+
+    // Loaded and unchanged, the form holds nothing the order lacks.
+    await user.click(within(events).getByRole("button", { name: `Edit ${PLACED_LABEL}` }));
+    await user.type(within(events).getByLabelText("Summary"), " Again.");
+    await user.click(railEntry("Orders"));
+
+    const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(prompt).toHaveTextContent(
+      `The Order events form holds an edit to ${PLACED_LABEL} that has not reached the order.`,
+    );
+    expect(prompt).toHaveTextContent(itemFormReason("an event", "order"));
+    await user.click(within(prompt).getByRole("button", { name: "Stay on this page" }));
+
+    await user.click(within(events).getByRole("button", { name: "Cancel" }));
+    await user.click(railEntry("Orders"));
+    expect(await screen.findByRole("heading", { name: "Orders" })).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull();
   });
 
   it("refuses Add line with its reason when every priced variant is already a line", async () => {
@@ -2670,6 +3110,14 @@ describe("order events", () => {
 
     const add = within(lines).getByRole("button", { name: "Add line" });
     expectRefused(add, "Every priced variant in the catalog is already a line of this order.");
+    // The rule is about the list, so no field is marked, typed into or not.
+    await user.clear(within(lines).getByLabelText("Quantity"));
+    await user.type(within(lines).getByLabelText("Quantity"), "2");
+    expectRefused(add, "Every priced variant in the catalog is already a line of this order.");
+    expect(within(lines).getByLabelText("Variant")).not.toHaveAttribute("aria-invalid");
+    // Put back as it opened, the form is clean again and follows the list.
+    await user.clear(within(lines).getByLabelText("Quantity"));
+    await user.type(within(lines).getByLabelText("Quantity"), "1");
 
     await user.click(screen.getByRole("button", { name: "Remove NS-ASJ-OB-M" }));
     await user.click(screen.getByRole("button", { name: "Remove it" }));

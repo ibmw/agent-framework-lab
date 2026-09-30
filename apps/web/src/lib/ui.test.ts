@@ -25,6 +25,10 @@ import {
   formatTimestamp,
   iconLeadingClasses,
   idControlClasses,
+  itemClasses,
+  itemEditButtonClasses,
+  itemIconButtonClasses,
+  itemRemoveButtonClasses,
   readOnlyValueClasses,
   searchFieldClasses,
   searchFieldIconClasses,
@@ -203,6 +207,41 @@ describe("the validation message", () => {
       ["font-semibold", "text-[13px]", "text-lab-error"].sort(),
     );
     expect(themeSource).toMatch(/--color-lab-error:\s*#9d3028;/);
+  });
+});
+
+/**
+ * The item of a list edited in the form below it (ADR 0072, ADR 0074), moved here from Shop
+ * details' method cards so every list draws the methods handoff's values from one place.
+ */
+describe("the list item", () => {
+  it("draws the handoff's box, and the pine border and ground only while the form holds it", () => {
+    const shape = ["rounded-[9px]", "border", "px-3.5", "py-[11px]", "gap-[11px]", "flex-wrap"];
+    for (const editing of [false, true]) {
+      expect(itemClasses(editing).split(" ")).toEqual(expect.arrayContaining(shape));
+    }
+    expect(itemClasses(false)).toContain("border-admin-border bg-[#fafbfb]");
+    expect(itemClasses(false)).not.toMatch(/#8fc3a5|#f1f8f3/);
+    expect(itemClasses(true)).toContain("border-[#8fc3a5] bg-[#f1f8f3]");
+    expect(itemClasses(true)).not.toContain("bg-[#fafbfb]");
+  });
+
+  it("gives the pencil and the trash one 30px bordered box with the workspace's ring", () => {
+    for (const classes of [itemEditButtonClasses, itemRemoveButtonClasses]) {
+      expect(classes.startsWith(itemIconButtonClasses)).toBe(true);
+    }
+    expect(itemIconButtonClasses).toContain("h-[30px] w-[30px]");
+    expect(itemIconButtonClasses).toContain("border-admin-quiet-border");
+    expect(itemIconButtonClasses).toContain(focusRingClasses);
+  });
+
+  it("warms the trash to the error ink on hover, and never while it is held", () => {
+    expect(itemEditButtonClasses).toContain("hover:bg-[#f6f7f8] hover:text-admin-ink");
+    expect(itemRemoveButtonClasses).toContain(
+      "enabled:hover:border-[#c98676] enabled:hover:text-lab-error",
+    );
+    expect(itemRemoveButtonClasses).not.toMatch(/(^|\s)hover:/);
+    expect(itemRemoveButtonClasses).toContain("disabled:cursor-not-allowed disabled:opacity-55");
   });
 });
 
@@ -391,7 +430,7 @@ describe("the width of a field", () => {
     // Asserted first: a glob or a pattern that matched nothing would make the cases below pass.
     expect(Object.keys(consumers).length).toBeGreaterThan(50);
     expect(composed.length).toBeGreaterThan(150);
-    expect(composed.some((entry) => entry.includes("OrderEditorPage.tsx: w-20"))).toBe(true);
+    expect(composed.some((entry) => entry.includes("OrderEditorPage.tsx: w-32"))).toBe(true);
   });
 
   it("is declared by neither shared control", () => {
@@ -439,11 +478,12 @@ describe("the width of a field", () => {
   });
 
   it("is narrow where the prototype draws it narrow", () => {
-    // `Workspace.dc.html`:2705's order and the old order frame draw the quantity in a narrow
-    // column and the money as a figure; :2650 draws the tag input as the rest of its strip at a
-    // 130px floor. These are the three widths the call sites always said and never drew.
-    expect(composed).toContain("../routes/OrderEditorPage.tsx: w-20");
+    // The order's totals draw the shipping fee as a figure; :2650 draws the tag input as the
+    // rest of its strip at a 130px floor. An order line's quantity was the third, narrow in its
+    // table's column; it left the table for the form below the list (ADR 0074), where the
+    // methods handoff draws every field at the grid's full width.
     expect(composed).toContain("../routes/OrderEditorPage.tsx: w-32");
+    expect(composed).not.toContain("../routes/OrderEditorPage.tsx: w-20");
     expect(composed).toContain("../routes/ExperimentResultsPage.tsx: w-auto min-w-[130px] flex-1");
   });
 });

@@ -53,11 +53,17 @@ export const HELD_VALUE_REASON =
   "A field holding a value the draft would not take cannot be saved from here: the value never reached the draft. Stay and change it, or discard it and leave.";
 
 /**
- * Why a method typed in Shop details' payment or fulfilment form cannot be saved from the
- * prompt: the form adds to the draft, or saves an edit into it, only on its own press (ADR 0072).
+ * Why an entry typed in the form below a list cannot be saved from the prompt: the form adds to
+ * the record, or saves an edit into it, only on its own press (ADR 0072, ADR 0074). `entry` is
+ * the list's noun with its article — "a method", "a line", "an event" — and `record` what the
+ * form writes into: "draft" for Shop details, "order" for the order editor.
  */
-export const METHOD_FORM_REASON =
-  "A method typed in its form cannot be saved from here: nothing in the form has reached the draft yet. Stay, then press the form's Add or Save changes, or Cancel an edit.";
+export function itemFormReason(entry: string, record: string): string {
+  return `${entry.charAt(0).toUpperCase()}${entry.slice(1)} typed in its form cannot be saved from here: nothing in the form has reached the ${record} yet. Stay, then press the form's Add or Save changes, or Cancel an edit.`;
+}
+
+/** Shop details' payment and fulfilment forms' reason (ADR 0072). */
+export const METHOD_FORM_REASON = itemFormReason("a method", "draft");
 
 /**
  * One registration, as the guard reads it. Every field is read through the registering hook's
