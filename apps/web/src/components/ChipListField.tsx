@@ -85,6 +85,7 @@ export function ChipListField({
   maxLength,
   takenPlace = "in the list",
   confirmRemoval,
+  refusedBy,
   onChange,
 }: {
   /** Names the group: what this list *is* ("Values", "Tags"). */
@@ -123,6 +124,12 @@ export function ChipListField({
     /** What the list's notice line says once the value has gone. */
     notice: (value: string) => string;
   };
+  /**
+   * The id of a line elsewhere on the form that says why the list as it stands is refused — an
+   * option with no value, said after the buttons of the form below the options (ADR 0074). The
+   * field that takes the next value is marked invalid and described by that line.
+   */
+  refusedBy?: string;
   onChange: (values: string[]) => void;
 }) {
   const [typed, setTyped] = useState("");
@@ -208,7 +215,8 @@ export function ChipListField({
               value={typed}
               placeholder={placeholder}
               maxLength={maxLength}
-              aria-invalid={colliding || undefined}
+              aria-invalid={colliding || refusedBy !== undefined || undefined}
+              aria-describedby={refusedBy}
               onChange={(event) => setTyped(event.target.value)}
               onKeyDown={keyDown}
             />

@@ -76,14 +76,13 @@ application, and the verdict on each slice of the 13 September plan — is
 
 Milestones 8 and 9 are delivered. Their record is the commits and ADR 0052–0073; their goals and
 acceptance criteria are `docs/history/PLAN-UX-2026-09-20.md` and
-`docs/history/PLAN-UX-2026-09-28.md`. Milestone 10's first two slices are delivered: 36 shared the
-method list (`components/ItemList.tsx`, `lib/itemForm.ts`), put an order's lines and events on it
-and wrote ADR 0074, which the rest cite; 37 put a profile's lists and an identity's guidance on
-it and added `editItem`, the Playwright helper that edits an item. Its two remaining slices run
-in order, 38 then 39, one editor or pair of editors to a branch:
+`docs/history/PLAN-UX-2026-09-28.md`. Milestone 10's first three slices are delivered: 36 shared
+the method list (`components/ItemList.tsx`, `lib/itemForm.ts`), put an order's lines and events
+on it and wrote ADR 0074, which the rest cite; 37 put a profile's lists and an identity's
+guidance on it and added `editItem`, the Playwright helper that edits an item; 38 put a
+product's options, media, attributes and reviews on it, the variants table staying open in
+place. Its remaining slice runs on its own branch:
 
-- **38** takes the product editor's four lists: one route file, one test file and one scope
-  (ADR 0061), and none of them reached by a spec that edits.
 - **39** takes the two lists that keep a control on the item — the default guideline's radio and a
   parameter's ↑/↓ — for which the item gains its `lead` slot and the actions their arrows. Its
   block journeys edit through `editItem`.
@@ -131,68 +130,6 @@ tone-of-voice guidelines; a template's parameters. Not converted, as the operato
 product's variants table, a scenario's composed objectives and mutations, the create pages' rows
 and a ticket's thread.
 
-### Slice 38 — The product editor's four lists
-
-A product's options, media, attributes and reviews are edited in the form below them.
-
-- [ ] **Options** (`ProductEditorPage.tsx:788`): the option's name, its key as the ID, its values as
-  the detail, the `ChipList` the row already draws (:820). The add form (:883–921) is the one form,
-  "Add an option" / "Edit {name}": *Option name*, *Option key* (`DerivedIdField` while adding,
-  fixed while editing — a variant chooses by it) and *Values* (`OptionValuesField`, :737), with
-  `OPTION_NEEDS_VALUE` (:728) after the buttons. "Remove {name}" stays the trash's name and stops
-  being its visible word (:871).
-- [ ] **Media references** (:1479): the reference in monospace as the name — its own key, which
-  nothing else names, so it stays editable while editing (`docs/design-direction.md` :315) — and
-  the alt text as the detail. `MediaFieldset` (:1407) is the one form, "Add a media reference" /
-  "Edit {reference}", submitted by *Add media*. `MEDIA_NEEDS_REFERENCE` (:731) and a reference
-  another entry holds move from the Reference field's second line (`extra`, :1425) to the line
-  after the buttons, the field `aria-invalid` and described by it.
-- [ ] **Custom attributes (typed)** (:1727): the label, the key as the ID, the type (`EntryKind`)
-  beside them, and the value with its unit and "one of" its choices as the detail (:1798–1812).
-  `AttributeFieldset` (:1614) is the one form, "Add an attribute" / "Edit {label}", submitted by
-  *Add attribute*, the key derived while adding and fixed while editing; the type still decides
-  what the value, unit and choices ask.
-- [ ] **Ratings & reviews** (:1895): "{rating}★" as the name, the review's ID, "“{body}” —
-  {author}" as the detail, the line `sticky-header` reads; the controls keep "review {id}"
-  (:1959). `ReviewFieldset` (:1852) with `StarRatingField` (:2017) is the one form, "Add a
-  review" / "Edit review {id}", submitted by *Add review*.
-- [ ] The four cards' `useEntryEdit` (:764, :1454, :1706, :1886) and `EntryEditNotice`s (:881,
-  :1571, :1820, :1973) go; the removals keep `useRemoval(product.key, discarding)` (ADR 0061), and
-  the page is keyed by the product (:161), so no form carries one product's edit onto another. The
-  variants table (:1021) is untouched.
-- [ ] `docs/design-direction.md`: the list rule names the product's four lists, and *A saved row
-  opens where it stands* keeps the variants alone of the product's; *A blocked primary action says
-  why* rewrites *Add media*'s reason (:489–490), and *Two refusals with one cause are one sentence*
-  (:504–507) its media sentence.
-
-Frames: `Workspace.dc.html` :955–975 (an option: its name, its values, the confirm in its place);
-methods handoff `shop-details.template.html` :160–186. The prototype draws no media, attribute or
-review list on the product frame.
-
-Authority: ADR 0060 (an option's removal takes its variants' values), ADR 0061, ADR 0063,
-ADR 0074.
-
-Departures to record: none beyond ADR 0074's, unless the slice finds one; the *Departures* row
-"The option's confirm" (`docs/design-direction.md` :150) still holds, the confirm taking the
-item's place.
-
-Branch: `feat/product-lists-in-one-form`. Checks: `App.test.tsx` *editing a saved entry in place*
-(:2356 — the option :2461, the attributes :2493, :2530, :2557, the review :2601), the media
-refusals (:2773, :2829), the keys derived and fixed (:1510), the saved rows read back (:1267, :1284,
-:1345, :1842), the chip fields (:1666, :1709), the stars (:1762) and *removing is deliberate*'s
-option confirms (:4597–:4715) — each through the one form, with the prompt for a typed option and
-an edited review. Playwright `agent-configuration`, `shop-publication`, `experiment-start`,
-`order-fixture`, `scenario-authoring` and `ticket-authoring` fill *Option name* in *Options*,
-press *Add option* and read "Remove Ocean Blue", a value chip's name in the form
-(`shop-publication.spec.ts:103`), none of which moves; `sticky-header` adds a review through
-*Author*, *Body* and *Add review* in the region "Ratings and reviews", reads its line and holds *Add
-review* in view at the foot (:55–72, :207–226), which the shorter items must keep true. The names
-that move — the open rows' forms and their Save and Cancel — no spec reaches.
-
-Slice evidence: on a product, the operator loads an option into the form, adds a value, and saves;
-a media reference another entry holds is refused after *Save changes* with the field marked; the
-variants table still opens in place.
-
 ### Slice 39 — Tone of voice and a template's parameters
 
 The two lists that keep a control on the item — the default guideline's radio, a parameter's
@@ -231,9 +168,9 @@ The two lists that keep a control on the item — the default guideline's radio,
   variants and a scenario's composed blocks — and says so; the *Departures* rows "*New guideline*
   on the Guidelines card" (:148), "The guideline editor's two validation messages" (:149) and "A
   template's parameters" (:166) are rewritten for the form; *Two refusals with one cause are one
-  sentence* (:504–507) loses its guideline example and is rewritten, or removed if no example is
-  left, as the slice says; *A blocked primary action says why* rewrites *Add parameter* at the cap
-  (:487).
+  sentence* (:536–540) loses its guideline example, its one current example since Slice 38 left
+  the media sentence out, and is retired or rewritten with a true example; *A blocked primary
+  action says why* rewrites *Add parameter* at the cap (:522).
 
 Frames: `Workspace.dc.html` :1914–1935 (a guideline: its pill, its slug line, *Make default* and
 *Edit*), :604–620 (a template's *Typed parameters*, an item :611); methods handoff

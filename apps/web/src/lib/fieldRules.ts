@@ -642,3 +642,50 @@ export const HIDDEN_FACT_RULE =
 export const GUIDANCE_TITLE_RULE = "A note needs a title.";
 
 export const GUIDANCE_BODY_RULE = "A note needs its guidance.";
+
+/**
+ * The product editor's four forms below a list (`lib/productEntries.ts`, ADR 0074), said after
+ * their buttons. Each is one of the rules `domain/shop.py` holds the entry to, though not all of
+ * them: the length caps `require_label` and `require_text` enforce are not checked here.
+ * `OptionDefinition`, `MediaReference`, `TypedAttribute` and `ProductReview` refuse a name, a
+ * reference, a label, a value, a unit, an author or a body left empty or only padding
+ * (`require_label`, `require_text`), an option without a value, a key that is not a slug
+ * (`require_slug`), and a typed attribute whose value its type does not hold. Two entries of one
+ * list sharing a key are refused by `_require_unique`, and two media entries sharing a reference
+ * are one key in the draft's change summary. The forms store every text stripped.
+ */
+export const OPTION_NAME_RULE = "An option needs a name.";
+
+/** Why an option is refused with no value: no variant could choose it. */
+export const OPTION_NEEDS_VALUE =
+  "An option needs at least one value before a variant can choose it.";
+
+/** An option's or an attribute's key, while it is still asked: once added, it is fixed. */
+export const ENTRY_KEY_RULE = "The key must be lowercase with hyphens.";
+
+/** Why a media entry is refused with no reference: the reference is what keys it. */
+export const MEDIA_NEEDS_REFERENCE = "A media entry needs a reference.";
+
+export const MEDIA_ALT_TEXT_RULE = "A media entry needs its alt text.";
+
+export const ATTRIBUTE_LABEL_RULE = "An attribute needs a label.";
+
+export const ATTRIBUTE_VALUE_RULE = "An attribute needs a value.";
+
+export const ATTRIBUTE_NUMBER_RULE = "A number's value must be a decimal number, like 4.5.";
+
+export const ATTRIBUTE_MEASUREMENT_RULE =
+  "A measurement's value must be a decimal number, like 20000.";
+
+export const ATTRIBUTE_BOOLEAN_RULE = "A yes-or-no attribute's value is true or false.";
+
+export const ATTRIBUTE_UNIT_RULE = "A measurement needs its unit.";
+
+export const ATTRIBUTE_NEEDS_CHOICE = "A choice attribute needs at least one choice.";
+
+export const ATTRIBUTE_VALUE_AMONG_CHOICES_RULE =
+  "A choice attribute's value must be one of its choices.";
+
+export const REVIEW_AUTHOR_RULE = "A review needs its author.";
+
+export const REVIEW_BODY_RULE = "A review needs its text.";

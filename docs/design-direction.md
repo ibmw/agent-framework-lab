@@ -440,9 +440,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   typed in it, and every field not typed in — and the row's name — follows any change to its
   entry, a page's Discard included (ADR 0051, amended), so its Save never writes a discarded
   value back. Fields that only make sense together follow as one unit or not at all: a
-  parameter's kind, requiredness and default; an attribute's type, value, unit and choices. The lists that open this way:
-  the tone-of-voice guidelines; a product's options,
-  variants, media, attributes and reviews; a template's parameters (the ↑/↓
+  parameter's kind, requiredness and default. The lists that open this way:
+  the tone-of-voice guidelines; a product's variants, the one of its lists that does; a
+  template's parameters (the ↑/↓
   on the row, because the order is authored); a scenario's composed objectives and mutations
   (the ↑/↓ on the row too). A set of values entered one at a time is a `ChipListField`, and a
   ticket's thread grows by its composer, rather than either being this.
@@ -465,7 +465,11 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   ID is fixed, and an order's line items, whose variant is fixed and whose quantity is asked in
   the form rather than typed in place, and its events; a profile's addresses — the *Default* pill
   beside the name and *Make default* on the item, before the pencil, the default never the
-  form's answer — its background and its hidden facts; and an identity's guidance notes. A
+  form's answer — its background and its hidden facts; an identity's guidance notes; and a
+  product's options — the values as chips on the item and in the form, the key fixed — its
+  media references, whose reference is its own key and stays asked, its typed attributes — the
+  type beside the name, the key fixed, the form one unit through a discard — and its reviews,
+  named by their ID on their controls. A
   list's control of its own stays on the item and free while the form edits another entry. The last enabled payment method stays on
   and on the list, a workspace rule stricter than the lab, which only refuses it at publication.
   Four of the handoff's hints on the method cards claim behaviour the lab does not have and are
@@ -500,19 +504,22 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   connection's Save and Test, the bench's *Send as the customer*, *Attach to this shop*, *Fork
   this run*, *Save and leave*, *Add tag*, *Add note*, *Add to thread*, every form below a list
   (*Add payment method*, *Add fulfilment method*, *Add line*, *Add event*, *Add address*, *Add
-  entry*, *Add fact*, *Add guidance* and their *Save changes*: the first rule broken, in the
-  order the form asks — *Add line* when nothing is left to add, no variant chosen, a quantity
+  entry*, *Add fact*, *Add guidance*, *Add option*, *Add media*, *Add attribute*, *Add review*
+  and their *Save changes*: the first rule broken, in the order the form asks — *Add line* when nothing is left to add, no variant chosen, a quantity
   outside 1 to 999; *Add event* at the order's cap, a time missing, a summary empty or only
   spaces; *Add address* for the first of its label, recipient, street, postal code and city
   empty or only spaces, then a country that is not two letters; *Add entry* for a day missing,
   then a note empty; *Add fact* for the fact empty; *Add guidance* for a title empty, then the
-  guidance — in one line after the buttons, a blank form refused and marking nothing, a
-  `required` field left empty included, ADR 0072, ADR 0074), and every
+  guidance; *Add option* for a name empty, a key not a slug or another option's while adding,
+  then no value; *Add media* for a reference empty or another entry's, then the alt text empty;
+  *Add attribute* for a label empty, the key not a slug or another attribute's while adding, a
+  value empty or not one its type holds, a measurement's unit, then a choice's choices — none,
+  or none its value; *Add review* for an author empty, then the body — in one line after the
+  buttons, a blank form refused and marking nothing, a `required` field left empty included, ADR 0072, ADR 0074), and every
   add form's submit, which is `PrimaryAction`
   with the create glyph wherever it is refused or not, and says its reason in a `RefusalLine`
   under it where it is — the scenario editor's *Add* at the objective and mutation caps (the
-  lab's sentence), *Add parameter* at the template's cap, *Add media* on the line the reference
-  field says its collision in. Outside a form below a list, a refusal a field already states natively — a `required` field left
+  lab's sentence), *Add parameter* at the template's cap. Outside a form below a list, a refusal a field already states natively — a `required` field left
   empty (in an add form or an open row alike); an identifier `DerivedIdField` refuses — is left
   to the field, so a submit whose only fault is a `required` field left empty is not dashed. Start is refused until it can work, and says every cause
   it waits for at once. A press in flight is not a refusal: it says nothing, and is `aria-disabled`
@@ -528,8 +535,9 @@ Geometry and metrics are `Field`, `FieldGroup`, `fieldControlClasses`, `textArea
   `entryEdit`'s refusal is `{ id, reason }` and never a bare `false`, so a Save that will not
   save says so in the row. **Two refusals with one cause are one sentence**: a tone-of-voice
   guideline with no name can neither be saved nor be made the shop default, and its Save and its
-  default radio point at the row's single line; a media reference another entry holds is said
-  on the field, and the row's Save names that line.
+  default radio point at the row's single line. It is the rule's one current example: a form
+  below a list says its one refusal once after its buttons whatever causes it, and Slice 39,
+  which moves the guidelines onto that form, decides whether the rule is retired.
 - **A long-running action reports itself** (`form-decisions.md` 10.2, ADR 0065). Sending a
   turn, running an arm, scoring, replaying, forking and freezing draw `ActionStatus`: the arms as
   a queue, each row saying where it stands in the prototype's words ("running…", "completed

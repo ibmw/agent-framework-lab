@@ -16,8 +16,12 @@ function labelOf(control: HTMLElement): string {
  * are read in document order, every control a rule is given for is emptied, and then, control by
  * control, the submit must be refused with that control's rule, that control alone marked, the
  * line after the submit — and the control is answered before the next. A control no rule is
- * given for must be one that breaks none: a select, or a field marked "(optional)". Every rule
- * given must name a control the form asks.
+ * given for must be one that breaks none: a select, a radio (one of a closed set, always one
+ * chosen — a review's stars), a field shown read-only (a key fixed while editing), or a field
+ * marked "(optional)". Every rule given must name a control the form asks.
+ *
+ * An answer is typed as `user.type` reads it, so a list entered one value at a time is answered
+ * with the value and `{Enter}`, which adds it as a chip.
  */
 export async function expectRulesInFieldOrder(
   user: UserEvent,
@@ -35,9 +39,12 @@ export async function expectRulesInFieldOrder(
       const optional = /\(optional\)$/.test(
         (control as HTMLInputElement).labels?.[0]?.textContent ?? "",
       );
-      expect(control.tagName === "SELECT" || optional, `"${labelOf(control)}" breaks no rule`).toBe(
-        true,
-      );
+      const fixed =
+        (control as HTMLInputElement).readOnly || (control as HTMLInputElement).type === "radio";
+      expect(
+        control.tagName === "SELECT" || optional || fixed,
+        `"${labelOf(control)}" breaks no rule`,
+      ).toBe(true);
     }
   }
   const asked = controls.filter((control) => labelOf(control) in rules);

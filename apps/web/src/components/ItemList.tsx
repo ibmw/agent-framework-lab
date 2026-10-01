@@ -23,9 +23,14 @@ import { PrimaryAction, RefusalLine } from "./PrimaryAction";
  * its actions. Its border and ground say it is the one the form is editing.
  *
  * `tag` stands beside the name, ahead of the key, for what the list says of one entry among
- * the others — the address book's *Default* pill (`Workspace.dc.html` :2888). `detail` may be
- * nothing, where the entry has no line to give, and `multiline` keeps the line breaks of a
- * detail authored in a text area — a guidance note's body — which otherwise read run-on.
+ * the others — the address book's *Default* pill (`Workspace.dc.html` :2888), an attribute's
+ * type. `detail` may be nothing, where the entry has no line to give, and `multiline` keeps the
+ * line breaks of a detail authored in a text area — a guidance note's body — which otherwise
+ * read run-on. A detail may be drawn rather than written — an option's values as the chips
+ * frame 2c draws — and stays one line of the item.
+ *
+ * An entry whose name *is* its key — a media reference — draws the name in monospace
+ * (`monospace`) and no second key beside it (`id` left out).
  */
 export function ListItem({
   name,
@@ -33,14 +38,16 @@ export function ListItem({
   detail,
   tag,
   multiline = false,
+  monospace = false,
   editing,
   children,
 }: {
   name: string;
-  id: string;
-  detail: string | null;
+  id?: string;
+  detail: ReactNode;
   tag?: ReactNode;
   multiline?: boolean;
+  monospace?: boolean;
   editing: boolean;
   children: ReactNode;
 }) {
@@ -48,11 +55,17 @@ export function ListItem({
     <li className={itemClasses(editing)} aria-current={editing || undefined}>
       <div className="min-w-0 flex-[1_1_180px]">
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-[13.5px] font-bold text-admin-ink">{name}</span>
+          <span
+            className={`text-[13.5px] font-bold text-admin-ink${monospace ? " font-mono [overflow-wrap:anywhere]" : ""}`}
+          >
+            {name}
+          </span>
           {tag}
-          <code className="font-mono text-[11.5px] text-[#8c9196]">{id}</code>
+          {id === undefined ? null : (
+            <code className="font-mono text-[11.5px] text-[#8c9196]">{id}</code>
+          )}
         </div>
-        {detail === null ? null : (
+        {detail === null || detail === undefined ? null : (
           <div
             className={`mt-[3px] text-[12.5px] text-[#6a7580]${multiline ? " whitespace-pre-line" : ""}`}
           >

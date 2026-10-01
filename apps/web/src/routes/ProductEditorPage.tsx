@@ -6,23 +6,22 @@ import type {
   ReviewSchema,
   VariantSchema,
 } from "@agent-lab/contracts";
-import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ButtonIcon } from "../components/ButtonIcon";
 import { ChipList, ChipListField } from "../components/ChipListField";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
-import { Field, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
+import { Field, FieldGroup, FieldGroupHint, FieldHint, FieldRows } from "../components/FieldHint";
 import { GateFindingLine } from "../components/GateFindingLine";
-import { PrimaryAction, RefusalLine } from "../components/PrimaryAction";
+import { EditButton, ItemFormRow, ListItem, RemoveButton } from "../components/ItemList";
+import { PrimaryAction } from "../components/PrimaryAction";
 import { ProductDeleteConfirm } from "../components/ProductDeleteConfirm";
 import {
   Card,
   EditorSaveActions,
-  EntryCard,
   EntryEditButtons,
   EntryEditNotice,
-  EntryId,
   EntryKind,
   GateCard,
   IssueList,
@@ -30,7 +29,7 @@ import {
   VersionChips,
 } from "../components/WorkspaceChrome";
 import type { Currency } from "../lib/currencies";
-import { entryEdit, useEntryEdit } from "../lib/entryEdit";
+import { useEntryEdit } from "../lib/entryEdit";
 import {
   isSlug,
   SLUG_MAX_LENGTH,
@@ -50,7 +49,6 @@ import {
   ATTRIBUTE_CHOICES_RULE,
   alreadyTakenMessage,
   CHIP_LABEL_MAX_LENGTH,
-  DERIVED_KEBAB_RULE,
   isVariantSku,
   KEBAB_PATTERN,
   MEDIA_REFERENCE_RULE,
@@ -70,7 +68,39 @@ import {
   variantInStockWithoutInventoryRule,
   variantWithoutPriceRule,
 } from "../lib/fieldRules";
+import {
+  formTitle,
+  type ItemFormWords,
+  refusedProps,
+  useEditButtons,
+  useFocusAfterCommit,
+  useItemForm,
+} from "../lib/itemForm";
+import {
+  type AttributeFields,
+  attributeEntry,
+  attributeFields,
+  attributeRefusal,
+  BLANK_ATTRIBUTE,
+  BLANK_MEDIA,
+  BLANK_OPTION,
+  BLANK_REVIEW,
+  KEY_TAKEN_PLACE,
+  type MediaFields,
+  mediaEntry,
+  mediaFields,
+  mediaRefusal,
+  type OptionFields,
+  optionEntry,
+  optionFields,
+  optionRefusal,
+  type ReviewFields,
+  reviewEntry,
+  reviewFields,
+  reviewRefusal,
+} from "../lib/productEntries";
 import { type DraftProduct, productEntryState, productKeyIn } from "../lib/productKeys";
+import { pythonStrip } from "../lib/pythonText";
 import {
   consequenceOf,
   findingClauses,
@@ -106,6 +136,7 @@ import {
   fieldControlClasses,
   fieldLabelClasses,
   outlineButtonClasses,
+  readOnlyValueClasses,
   surfaceClasses,
   tableCellClasses,
   tableHeadClasses,
@@ -331,8 +362,8 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
   /**
    * The header's Delete: this product out of the draft, by its key, and back to the catalog,
    * which says what was deleted (ADR 0062). The catalog is inside the shop draft's reach, so the
-   * one unsaved-work guard has nothing to ask on the way (ADR 0051); an open row of this product
-   * goes with the product, which is what the Delete was asked to do.
+   * one unsaved-work guard has nothing to ask on the way (ADR 0051); an open variant row or an
+   * edit in one of its forms goes with the product, which is what the Delete was asked to do.
    */
   const deletedNotice = `Deleted “${productTitle(product)}” from the draft.`;
   function deleteProduct() {
@@ -583,78 +614,13 @@ function ProductEditorPage({ productKey }: { productKey: string }) {
 }
 
 /**
- * The authored fields of each of the product's five keyed lists, and the one function per
- * list that turns them into the entry the draft stores.
- *
- * The add form below a list and the open row inside it hold the same field object and hand it
- * to the same builder, so neither can grow a field the other does not write. Where an entry
- * has an identifier of its own — an option key, an attribute key, a review ID — it is the
- * builder's first argument and an edit hands back the one the entry already has. A variant
- * and a media reference have no such field: their key *is* one of their fields, which is why
- * those two are the only ones an open row may move, and why they say so where they are typed.
+ * A variant's two fields the open row corrects, and the builder that writes them. The product's
+ * other four lists are edited in the form below them, and their fields and builders are
+ * `lib/productEntries.ts` (ADR 0074).
  */
-interface OptionFields {
-  name: string;
-  values: string[];
-}
-
-interface MediaFields {
-  reference: string;
-  altText: string;
-}
-
-interface AttributeFields {
-  label: string;
-  attributeType: AttributeSchema["attribute_type"];
-  value: string;
-  unit: string;
-  choices: string[];
-}
-
-interface ReviewFields {
-  author: string;
-  rating: number;
-  body: string;
-}
-
 interface VariantFields {
   sku: string;
   optionValues: Record<string, string>;
-}
-
-function optionEntry(key: string, fields: OptionFields): OptionSchema {
-  return { key, name: fields.name, values: fields.values };
-}
-
-function mediaEntry(fields: MediaFields): MediaReferenceSchema {
-  return { reference: fields.reference, alt_text: fields.altText };
-}
-
-function attributeEntry(key: string, fields: AttributeFields): AttributeSchema {
-  return {
-    key,
-    label: fields.label,
-    attribute_type: fields.attributeType,
-    value: fields.value,
-    // A unit belongs to a measurement and choices to a choice; anything else the form was
-    // holding when the type moved is not part of the entry either path writes.
-    unit: fields.attributeType === "measurement" ? fields.unit : null,
-    choices: fields.attributeType === "choice" ? fields.choices : [],
-  };
-}
-
-function attributeFields(entry: AttributeSchema): AttributeFields {
-  return {
-    label: entry.label,
-    attributeType: entry.attribute_type,
-    value: entry.value,
-    unit: entry.unit ?? "",
-    choices: entry.choices,
-  };
-}
-
-function reviewEntry(id: string, fields: ReviewFields): ReviewSchema {
-  return { id, author_display_name: fields.author, rating: fields.rating, body: fields.body };
 }
 
 /**
@@ -725,21 +691,17 @@ interface PricedEditorProps extends EditorProps {
   currencies: Currency[];
 }
 
-/** Why an option is refused with no value: no variant could choose it. */
-const OPTION_NEEDS_VALUE = "An option needs at least one value before a variant can choose it.";
-
-/** Why a media entry is refused with no reference: the reference is what keys it. */
-const MEDIA_NEEDS_REFERENCE = "A media entry needs a reference.";
-
 /** Why a variant row is refused with no SKU: the SKU is what an order line names. */
 const VARIANT_NEEDS_SKU = "A variant needs a SKU.";
 
-/** An option's values, as both paths enter them: one chip at a time, duplicates refused. */
+/** An option's values, as the form enters them: one chip at a time, duplicates refused. */
 function OptionValuesField({
   values,
+  refusedBy,
   onChange,
 }: {
   values: string[];
+  refusedBy?: string;
   onChange: (values: string[]) => void;
 }) {
   return (
@@ -753,176 +715,215 @@ function OptionValuesField({
       empty="No value yet; an option needs at least one."
       values={values}
       takenPlace="a value of this option"
+      refusedBy={refusedBy}
       onChange={onChange}
     />
   );
 }
 
+/** A key shown and fixed while its entry is edited: something else already names the entry by it. */
+function FixedKeyField({ label, hint, value }: { label: string; hint: string; value: string }) {
+  return (
+    <FieldHint label={label} hint={hint}>
+      <input className={`${readOnlyValueClasses} font-mono`} value={value} readOnly />
+    </FieldHint>
+  );
+}
+
+/** Hands focus back to the Edit a finished edit was opened from, and empties the form. */
+function cancelEdit(
+  form: { editing: string | null; reset: () => void },
+  focusAfterCommit: (target: () => HTMLElement | null | undefined) => void,
+  editButtons: { get: (id: string) => HTMLButtonElement | undefined },
+) {
+  const editing = form.editing;
+  form.reset();
+  if (editing !== null) {
+    focusAfterCommit(() => editButtons.get(editing));
+  }
+}
+
+const OPTION_WORDS: ItemFormWords = { form: "Options", entry: "an option", record: "draft" };
+
+/** The prototype's line for the options (`Workspace.dc.html` :956), which the gate enforces. */
+const OPTIONS_HINT = "Every variant chooses one value of each option.";
+
+const OPTION_KEY_HINT =
+  "Lowercase with hyphens. Follows the option name until you edit it; empty it to follow again.";
+
+const OPTION_KEY_FIXED_HINT = "Set when the option was added. A variant chooses by it.";
+
+/**
+ * The product's options, as items, and the one form that adds an option or edits the one
+ * chosen (ADR 0074). The key is fixed while editing, because a variant chooses by it; an
+ * option's removal still takes its variants' values with it (ADR 0060), the confirm in the
+ * item's place as `Workspace.dc.html` :955–975 draws it in the option's.
+ */
 function OptionsCard({ product, onChange }: EditorProps) {
-  const [key, setKey] = useState("");
-  const [name, setName] = useState("");
-  const [values, setValues] = useState<string[]>([]);
-  const editor = useEntryEdit(product.options, {
-    keyOf: (option) => option.key,
-    labelOf: (option) => option.name,
-    fieldsOf: (option): OptionFields => ({ name: option.name, values: option.values }),
+  const options = product.options;
+  const ids = options.map((option) => option.key);
+  const nameOf = (key: string) => options.find((option) => option.key === key)?.name ?? key;
+  const form = useItemForm<OptionFields>({
+    blank: BLANK_OPTION,
+    ids,
+    words: OPTION_WORDS,
+    nameOf,
+    formOf: (key) => optionFields(options.find((option) => option.key === key) as OptionSchema),
+    typedOf: (fields) => fields.name,
   });
-  const notice = useId();
-  const openRefusalId = useId();
-  const addRefusalId = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
   const removal = useRemoval(product.key, discarding);
-  const taken = product.options.map((option) => option.key);
-  const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(name, ""), taken);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const nameInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const refusal = optionRefusal(form.fields, ids, form.editing);
+  // A blank form is refused and says why, but marks nothing until something is in it.
+  const marked = form.dirty ? refusal : null;
+  const suggested = uniqueSuggestion(slugify(form.fields.name, ""), ids);
 
-  function add(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!key || taken.includes(key) || values.length === 0) {
+  function submit() {
+    if (refusal !== null) {
       return;
     }
-    onChange({ ...product, options: [...product.options, optionEntry(key, { name, values })] });
-    setKey("");
-    setName("");
-    setValues([]);
+    const editing = form.editing;
+    if (editing !== null) {
+      // An edit that changed nothing writes nothing, so the draft stays as clean as it was.
+      if (form.dirty) {
+        onChange({
+          ...product,
+          options: options.map((option) =>
+            option.key === editing ? optionEntry(editing, form.fields) : option,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      onChange({ ...product, options: [...options, optionEntry(form.fields.key, form.fields)] });
+    }
+    form.reset();
   }
 
   return (
     <Card title="Options">
-      <ul className="grid gap-2 text-[13px]">
-        {product.options.map((option) => {
-          const choosing = variantsChoosing(product, option.key);
-          const drop = () => onChange(removeOption(product, option.key));
-          const notice = `Removed the option “${option.name}” from the draft.`;
-          return removal.isArmed(option.key) ? (
-            <ConfirmRemove
-              key={option.key}
-              as="li"
-              title={`Remove the option “${option.name}”?`}
-              consequence={consequenceOf(
-                choosing === 0
-                  ? "No variant chooses a value of it."
-                  : choosing === 1
-                    ? "One variant chooses a value of it and will lose it."
-                    : `${choosing} variants choose a value of it and will lose it.`,
-                collisionSentence(variantCollisions(product, option.key)),
-                "Nothing is written until you save the draft, and an order keeps the frozen copy of its lines either way.",
-              )}
-              onConfirm={removal.confirm(drop, notice)}
-              onKeep={removal.keep}
+      <FieldRows>
+        <FieldGroup label="Declared" hint={OPTIONS_HINT}>
+          <div className="grid gap-2">
+            {options.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {options.map((option) => {
+                  const choosing = variantsChoosing(product, option.key);
+                  const drop = () => onChange(removeOption(product, option.key));
+                  const notice = `Removed the option “${option.name}” from the draft.`;
+                  if (removal.isArmed(option.key)) {
+                    return (
+                      <ConfirmRemove
+                        key={option.key}
+                        as="li"
+                        title={`Remove the option “${option.name}”?`}
+                        consequence={consequenceOf(
+                          choosing === 0
+                            ? "No variant chooses a value of it."
+                            : choosing === 1
+                              ? "One variant chooses a value of it and will lose it."
+                              : `${choosing} variants choose a value of it and will lose it.`,
+                          collisionSentence(variantCollisions(product, option.key)),
+                          "Nothing is written until you save the draft, and an order keeps the frozen copy of its lines either way.",
+                        )}
+                        onConfirm={removal.confirm(drop, notice)}
+                        onKeep={removal.keep}
+                      />
+                    );
+                  }
+                  return (
+                    <ListItem
+                      key={option.key}
+                      name={option.name}
+                      id={option.key}
+                      // Frame 2c draws an option's values as pills, the same pills the form
+                      // below enters them as.
+                      detail={
+                        <ChipList label={`Values of ${option.name}`} values={option.values} />
+                      }
+                      editing={form.editing === option.key}
+                    >
+                      <EditButton
+                        name={option.name}
+                        buttonRef={editButtons.ref(option.key)}
+                        onEdit={() => {
+                          form.begin(option.key, optionFields(option));
+                          focusAfterCommit(() => nameInput.current);
+                        }}
+                      />
+                      <RemoveButton
+                        name={option.name}
+                        entryKey={option.key}
+                        removal={removal}
+                        notice={notice}
+                        onRemove={drop}
+                      />
+                    </ListItem>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-admin-muted">No options yet.</p>
+            )}
+            <RemovalNotice removal={removal} />
+          </div>
+        </FieldGroup>
+        <ItemFormRow
+          title={formTitle(form.editing, nameOf, OPTION_WORDS.entry)}
+          hint="The name and values can change later; the key is fixed once the option is added."
+          editing={form.editing !== null}
+          addLabel="Add option"
+          refusal={refusal}
+          reasonId={reasonId}
+          onSubmit={submit}
+          onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
+        >
+          <FieldHint label="Option name">
+            <input
+              ref={nameInput}
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.name}
+              {...refusedProps(marked, "name", reasonId)}
+              onChange={(event) => form.update({ name: event.target.value })}
+            />
+          </FieldHint>
+          {form.editing !== null ? (
+            <FixedKeyField
+              label="Option key"
+              hint={OPTION_KEY_FIXED_HINT}
+              value={form.fields.key}
             />
           ) : (
-            <EntryCard
-              key={option.key}
-              title={option.name}
-              chips={
-                <>
-                  <EntryId value={option.key} />
-                  {/* Frame 2c draws an option's values as pills on the saved row, the same pills
-                    the add form below — and the open row — enter them as. */}
-                  <ChipList label={`Values of ${option.name}`} values={option.values} />
-                </>
-              }
-              edit={entryEdit(
-                editor,
-                notice,
-                option.key,
-                (fields) =>
-                  onChange({
-                    ...product,
-                    options: product.options.map((entry) =>
-                      entry.key === option.key ? optionEntry(option.key, fields) : entry,
-                    ),
-                  }),
-                (value, change) => (
-                  <>
-                    <label className={fieldLabelClasses}>
-                      Option name
-                      <input
-                        className={`${fieldControlClasses} w-full`}
-                        value={value.name}
-                        required
-                        onChange={(event) => change({ ...value, name: event.target.value })}
-                      />
-                    </label>
-                    <OptionValuesField
-                      values={value.values}
-                      onChange={(values) => change({ ...value, values })}
-                    />
-                    {value.values.length === 0 ? (
-                      <RefusalLine id={openRefusalId}>{OPTION_NEEDS_VALUE}</RefusalLine>
-                    ) : null}
-                  </>
-                ),
-                // An option with no value is one no variant can choose, which is what the add
-                // form refuses too, in the same words.
-                (value) =>
-                  value.values.length > 0
-                    ? true
-                    : { id: openRefusalId, reason: OPTION_NEEDS_VALUE },
-              )}
-              actions={
-                <button
-                  className={destructiveSubtleButtonClasses}
-                  type="button"
-                  ref={removal.trigger(option.key)}
-                  onClick={removal.ask(option.key, drop, notice)}
-                >
-                  <ButtonIcon verb="delete" />
-                  Remove {option.name}
-                </button>
-              }
+            <DerivedIdField
+              label="Option key"
+              hint={OPTION_KEY_HINT}
+              value={form.fields.key}
+              suggested={suggested.value}
+              takenBase={suggested.takenBase}
+              takenPlace={KEY_TAKEN_PLACE}
+              monospace
+              maxLength={SLUG_MAX_LENGTH}
+              refusedBy={marked?.field === "key" ? reasonId : undefined}
+              onChange={(key) => form.update({ key })}
             />
-          );
-        })}
-        {product.options.length === 0 ? (
-          <li className="text-admin-muted">No options yet.</li>
-        ) : null}
-      </ul>
-      <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
-      <RemovalNotice removal={removal} />
-      <form className={addFormClasses} onSubmit={add}>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className={fieldLabelClasses}>
-            Option name
-            <input
-              className={`${fieldControlClasses} w-full`}
-              value={name}
-              required
-              onChange={(event) => setName(event.target.value)}
+          )}
+          <div className="col-span-full">
+            <OptionValuesField
+              key={form.session}
+              values={form.fields.values}
+              refusedBy={marked?.field === "values" ? reasonId : undefined}
+              onChange={(values) => form.update({ values })}
             />
-          </label>
-          <DerivedIdField
-            label="Option key"
-            hint={DERIVED_KEBAB_RULE}
-            value={key}
-            suggested={suggestedKey}
-            taken={taken}
-            takenBase={takenBase}
-            takenPlace="in the draft"
-            pattern={KEBAB_PATTERN}
-            maxLength={SLUG_MAX_LENGTH}
-            title={DERIVED_KEBAB_RULE}
-            required
-            onChange={setKey}
-          />
-        </div>
-        <OptionValuesField values={values} onChange={setValues} />
-        <PrimaryAction
-          variant="accent"
-          className="justify-self-start"
-          type="submit"
-          refusal={values.length === 0 ? { id: addRefusalId, reason: OPTION_NEEDS_VALUE } : null}
-        >
-          <ButtonIcon verb="create" />
-          Add option
-        </PrimaryAction>
-        {values.length === 0 ? (
-          <RefusalLine id={addRefusalId}>{OPTION_NEEDS_VALUE}</RefusalLine>
-        ) : null}
-      </form>
+          </div>
+        </ItemFormRow>
+      </FieldRows>
     </Card>
   );
 }
@@ -1402,341 +1403,253 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   );
 }
 
-/**
- * A media entry's two fields, on the add form and in an open row alike — including the
- * refusal, which both paths therefore make in the same words.
- *
- * A reference is what keys this list, in the draft's change summary and in React's own
- * reconciliation, so two entries may not share one. The add form did not refuse a duplicate
- * at all and the open row refused it by greying Save and saying nothing; both now read on
- * `DerivedIdField`'s collision model — the second line turns to the error treatment and is
- * announced, the field is marked invalid, and the press does nothing.
- */
-function MediaFieldset({
-  value,
-  onChange,
-  collision,
-  collisionId,
-}: {
-  value: MediaFields;
-  onChange: (next: MediaFields) => void;
-  /** Why this reference cannot be saved, when another entry already holds it. */
-  collision?: string;
-  /** The collision line's `id`, where a refused Save is described by it. */
-  collisionId?: string;
-}) {
-  return (
-    <>
-      <FieldHint
-        label="Reference"
-        hint={MEDIA_REFERENCE_RULE}
-        extra={collision}
-        extraTone={collision ? "error" : "muted"}
-        extraId={collisionId}
-      >
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.reference}
-          required
-          placeholder="media/alpine-shell.jpg"
-          aria-invalid={collision ? true : undefined}
-          onChange={(event) => onChange({ ...value, reference: event.target.value })}
-        />
-      </FieldHint>
-      <label className={fieldLabelClasses}>
-        Alt text
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.altText}
-          required
-          onChange={(event) => onChange({ ...value, altText: event.target.value })}
-        />
-      </label>
-    </>
-  );
-}
+const MEDIA_WORDS: ItemFormWords = {
+  form: "Media references",
+  entry: "a media reference",
+  record: "draft",
+};
 
+/**
+ * The product's media references, as items, and the one form that adds one or edits the one
+ * chosen (ADR 0074). A reference is its own key, which nothing else names, so it stays asked
+ * while editing; one another entry holds is refused after the buttons, with the field marked,
+ * because two entries sharing it are one key in the draft's change summary.
+ */
 function MediaCard({ product, onChange }: EditorProps) {
-  const [media, setMedia] = useState<MediaFields>({ reference: "", altText: "" });
-  const taken = product.media.map((entry) => entry.reference);
-  const editor = useEntryEdit(product.media, {
-    keyOf: (entry) => entry.reference,
-    labelOf: (entry) => entry.reference,
-    fieldsOf: (entry): MediaFields => ({ reference: entry.reference, altText: entry.alt_text }),
+  const media = product.media;
+  const ids = media.map((entry) => entry.reference);
+  const nameOf = (reference: string) => reference;
+  const form = useItemForm<MediaFields>({
+    blank: BLANK_MEDIA,
+    ids,
+    words: MEDIA_WORDS,
+    nameOf,
+    formOf: (reference) =>
+      mediaFields(media.find((entry) => entry.reference === reference) as MediaReferenceSchema),
+    typedOf: (fields) => fields.reference,
   });
-  const notice = useId();
-  const openCollisionId = useId();
-  const openEmptyId = useId();
-  const addCollisionId = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
   const removal = useRemoval(product.key, discarding);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const referenceInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const refusal = mediaRefusal(form.fields, ids, form.editing);
+  const marked = form.dirty ? refusal : null;
 
-  /** Computed once for both paths: a reference is free unless the row holding it is this one. */
-  function collisionOf(reference: string, own?: string): string | undefined {
-    if (reference === "" || reference === own || !taken.includes(reference)) {
-      return undefined;
+  function submit() {
+    if (refusal !== null) {
+      return;
     }
-    return alreadyTakenMessage(reference, "a media reference of this product");
+    const editing = form.editing;
+    const entry = mediaEntry(form.fields);
+    if (editing !== null) {
+      if (form.dirty) {
+        onChange({
+          ...product,
+          media: media.map((item) => (item.reference === editing ? entry : item)),
+        });
+      }
+      // The reference is the entry's key, so the Edit to hand focus back to is the one the
+      // entry is under now.
+      focusAfterCommit(() => editButtons.get(form.dirty ? entry.reference : editing));
+    } else {
+      onChange({ ...product, media: [...media, entry] });
+    }
+    form.reset();
   }
-
-  const addCollision = collisionOf(media.reference);
-  const openCollision = editor.open
-    ? collisionOf(editor.open.fields.reference, editor.open.id)
-    : undefined;
 
   return (
     <Card
       title="Media references"
       description="URL or path metadata only — managed binary upload is deferred."
     >
-      <ul className="grid gap-2 text-[13px]">
-        {product.media.map((entry) => {
-          const drop = () =>
-            onChange({
-              ...product,
-              media: product.media.filter((item) => item.reference !== entry.reference),
-            });
-          return removal.isArmed(entry.reference) ? (
-            <ConfirmRemove
-              key={entry.reference}
-              as="li"
-              title={`Remove the media reference ${entry.reference}?`}
-              consequence={consequenceOf(
-                "The reference and its alt text leave the product; the file it points at is not this lab's and is not touched.",
-                findingClauses([product.media.length === 1 && "product_without_media"]),
-                "Nothing is written until you save the draft, and a published shop version keeps it.",
-              )}
-              onConfirm={removal.confirm(
-                drop,
-                `Removed the media reference ${entry.reference} from the draft.`,
-              )}
-              onKeep={removal.keep}
-            />
-          ) : (
-            <EntryCard
-              key={entry.reference}
-              title={<code className="font-mono text-[12px]">{entry.reference}</code>}
-              edit={entryEdit(
-                editor,
-                notice,
-                entry.reference,
-                (fields) =>
-                  onChange({
-                    ...product,
-                    media: product.media.map((item) =>
-                      item.reference === entry.reference ? mediaEntry(fields) : item,
-                    ),
-                  }),
-                (value, change) => (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <MediaFieldset
-                      value={value}
-                      onChange={change}
-                      collision={openCollision}
-                      collisionId={openCollisionId}
-                    />
-                    {value.reference === "" ? (
-                      <RefusalLine id={openEmptyId} className="sm:col-span-2">
-                        {MEDIA_NEEDS_REFERENCE}
-                      </RefusalLine>
-                    ) : null}
-                  </div>
-                ),
-                // The collision is said once, on the field, and Save points at that line
-                // rather than repeating it (*Two refusals with one cause are one sentence*).
-                (value) =>
-                  value.reference === ""
-                    ? { id: openEmptyId, reason: MEDIA_NEEDS_REFERENCE }
-                    : openCollision !== undefined
-                      ? { id: openCollisionId, reason: openCollision }
-                      : true,
-              )}
-              actions={
-                <button
-                  className={destructiveSubtleButtonClasses}
-                  type="button"
-                  ref={removal.trigger(entry.reference)}
-                  onClick={removal.ask(
-                    entry.reference,
-                    drop,
-                    `Removed the media reference ${entry.reference} from the draft.`,
-                  )}
-                >
-                  <ButtonIcon verb="delete" />
-                  Remove {entry.reference}
-                </button>
-              }
-            >
-              <p className="text-admin-muted">{entry.alt_text}</p>
-            </EntryCard>
-          );
-        })}
-        {product.media.length === 0 ? (
-          <li className="text-admin-muted">No media reference yet.</li>
-        ) : null}
-      </ul>
-      <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
-      <RemovalNotice removal={removal} />
-      <form
-        className={`${addFormClasses} sm:grid-cols-[2fr_2fr_auto]`}
-        onSubmit={(event) => {
-          event.preventDefault();
-          // The button refuses the press; a submission that reaches the form another way is
-          // refused here too.
-          if (addCollision) {
-            return;
-          }
-          onChange({ ...product, media: [...product.media, mediaEntry(media)] });
-          setMedia({ reference: "", altText: "" });
-        }}
-      >
-        <MediaFieldset
-          value={media}
-          onChange={setMedia}
-          collision={addCollision}
-          collisionId={addCollisionId}
-        />
-        {/* The collision is said once, on the field, and Add points at that line rather than
-            repeating it (*Two refusals with one cause are one sentence*) — as the open row's
-            Save does. */}
-        <PrimaryAction
-          variant="accent"
-          className="self-end justify-self-start"
-          type="submit"
-          refusal={addCollision === undefined ? null : { id: addCollisionId, reason: addCollision }}
+      <FieldRows>
+        <FieldGroup label="References">
+          <div className="grid gap-2">
+            {media.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {media.map((entry) => {
+                  const drop = () =>
+                    onChange({
+                      ...product,
+                      media: media.filter((item) => item.reference !== entry.reference),
+                    });
+                  const notice = `Removed the media reference ${entry.reference} from the draft.`;
+                  if (removal.isArmed(entry.reference)) {
+                    return (
+                      <ConfirmRemove
+                        key={entry.reference}
+                        as="li"
+                        title={`Remove the media reference ${entry.reference}?`}
+                        consequence={consequenceOf(
+                          "The reference and its alt text leave the product; the file it points at is not this lab's and is not touched.",
+                          findingClauses([media.length === 1 && "product_without_media"]),
+                          "Nothing is written until you save the draft, and a published shop version keeps it.",
+                        )}
+                        onConfirm={removal.confirm(drop, notice)}
+                        onKeep={removal.keep}
+                      />
+                    );
+                  }
+                  return (
+                    <ListItem
+                      key={entry.reference}
+                      name={entry.reference}
+                      monospace
+                      detail={entry.alt_text}
+                      editing={form.editing === entry.reference}
+                    >
+                      <EditButton
+                        name={entry.reference}
+                        buttonRef={editButtons.ref(entry.reference)}
+                        onEdit={() => {
+                          form.begin(entry.reference, mediaFields(entry));
+                          focusAfterCommit(() => referenceInput.current);
+                        }}
+                      />
+                      <RemoveButton
+                        name={entry.reference}
+                        entryKey={entry.reference}
+                        removal={removal}
+                        notice={notice}
+                        onRemove={drop}
+                      />
+                    </ListItem>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-admin-muted">No media reference yet.</p>
+            )}
+            <RemovalNotice removal={removal} />
+          </div>
+        </FieldGroup>
+        <ItemFormRow
+          title={formTitle(form.editing, nameOf, MEDIA_WORDS.entry)}
+          editing={form.editing !== null}
+          addLabel="Add media"
+          refusal={refusal}
+          reasonId={reasonId}
+          onSubmit={submit}
+          onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
         >
-          <ButtonIcon verb="create" />
-          Add media
-        </PrimaryAction>
-      </form>
+          <FieldHint label="Reference" hint={MEDIA_REFERENCE_RULE}>
+            <input
+              ref={referenceInput}
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.reference}
+              placeholder="media/alpine-shell.jpg"
+              {...refusedProps(marked, "reference", reasonId)}
+              onChange={(event) => form.update({ reference: event.target.value })}
+            />
+          </FieldHint>
+          <FieldHint label="Alt text">
+            <input
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.altText}
+              {...refusedProps(marked, "altText", reasonId)}
+              onChange={(event) => form.update({ altText: event.target.value })}
+            />
+          </FieldHint>
+        </ItemFormRow>
+      </FieldRows>
     </Card>
   );
 }
 
-/**
- * The four controls an attribute is authored through, in the order both paths ask them: what
- * it is called, what kind of value it holds, the value, and the unit or the choices that kind
- * brings with it.
- */
-function AttributeFieldset({
-  value,
-  onChange,
-  beside,
-}: {
-  value: AttributeFields;
-  onChange: (next: AttributeFields) => void;
-  /** The derived key, which only the add form asks for. */
-  beside?: ReactNode;
-}) {
+const ATTRIBUTE_WORDS: ItemFormWords = {
+  form: "Custom attributes",
+  entry: "an attribute",
+  record: "draft",
+};
+
+const ATTRIBUTE_KEY_HINT =
+  "Lowercase with hyphens. Follows the label until you edit it; empty it to follow again.";
+
+const ATTRIBUTE_KEY_FIXED_HINT =
+  "Set when the attribute was added. Agents read it through the catalog tools.";
+
+/** The stored value, its unit, and "one of" the choices it is constrained to. */
+function AttributeDetail({ attribute }: { attribute: AttributeSchema }) {
   return (
-    <>
-      <label className={fieldLabelClasses}>
-        Label
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.label}
-          required
-          onChange={(event) => onChange({ ...value, label: event.target.value })}
-        />
-      </label>
-      {beside}
-      <label className={fieldLabelClasses}>
-        Type
-        <select
-          className={`${fieldControlClasses} w-full`}
-          value={value.attributeType}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              attributeType: event.target.value as AttributeSchema["attribute_type"],
-            })
-          }
-        >
-          {ATTRIBUTE_TYPES.map((entry) => (
-            <option key={entry.value} value={entry.value}>
-              {entry.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className={fieldLabelClasses}>
-        Value
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.value}
-          required
-          onChange={(event) => onChange({ ...value, value: event.target.value })}
-        />
-      </label>
-      {value.attributeType === "measurement" ? (
-        <label className={fieldLabelClasses}>
-          Unit
-          <input
-            className={`${fieldControlClasses} w-full`}
-            value={value.unit}
-            required
-            onChange={(event) => onChange({ ...value, unit: event.target.value })}
-          />
-        </label>
+    <span className="flex flex-wrap items-center gap-2">
+      <span>
+        {attribute.value}
+        {attribute.unit ? ` ${attribute.unit}` : ""}
+      </span>
+      {attribute.choices.length > 0 ? (
+        <>
+          {/* "one of" is the rule the lab applies — `shop.py` refuses a choice attribute whose
+              value is not among them — so it stays a word, and the choices beside it are the
+              chips frame 2c draws. */}
+          <span>one of</span>
+          <ChipList label={`Choices for ${attribute.label}`} values={attribute.choices} />
+        </>
       ) : null}
-      {value.attributeType === "choice" ? (
-        <div className="sm:col-span-3">
-          <ChipListField
-            legend="Choices"
-            label="New choice"
-            hint={ATTRIBUTE_CHOICES_RULE}
-            maxLength={CHIP_LABEL_MAX_LENGTH}
-            addLabel="Add choice"
-            placeholder="Regular"
-            empty="No choice yet; a choice attribute needs at least one."
-            values={value.choices}
-            takenPlace="a choice of this attribute"
-            onChange={(choices) => onChange({ ...value, choices })}
-          />
-        </div>
-      ) : null}
-    </>
+    </span>
   );
 }
 
-const EMPTY_ATTRIBUTE: AttributeFields = {
-  label: "",
-  attributeType: "text",
-  value: "",
-  unit: "",
-  choices: [],
-};
-
+/**
+ * The product's typed attributes, as items, and the one form that adds one or edits the one
+ * chosen (ADR 0074). The key is derived while adding and fixed while editing; the type decides
+ * what the value, the unit and the choices ask, and the form is one unit through a discard: a
+ * clean one follows the entry whole, a dirty one keeps all of what it holds.
+ */
 function AttributesCard({ product, onChange }: EditorProps) {
-  const [key, setKey] = useState("");
-  const [fields, setFields] = useState<AttributeFields>(EMPTY_ATTRIBUTE);
-  const editor = useEntryEdit(product.attributes, {
-    keyOf: (entry) => entry.key,
-    labelOf: (entry) => entry.label,
-    fieldsOf: attributeFields,
-    // A type decides what its value may be, and whether a unit or choices belong to it.
-    units: [["attributeType", "value", "unit", "choices"]],
+  const attributes = product.attributes;
+  const ids = attributes.map((attribute) => attribute.key);
+  const nameOf = (key: string) =>
+    attributes.find((attribute) => attribute.key === key)?.label ?? key;
+  const form = useItemForm<AttributeFields>({
+    blank: BLANK_ATTRIBUTE,
+    ids,
+    words: ATTRIBUTE_WORDS,
+    nameOf,
+    formOf: (key) =>
+      attributeFields(attributes.find((attribute) => attribute.key === key) as AttributeSchema),
+    typedOf: (fields) => fields.label,
   });
-  const notice = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
   const removal = useRemoval(product.key, discarding);
-  const taken = product.attributes.map((attribute) => attribute.key);
-  const { value: suggestedKey, takenBase } = uniqueSuggestion(slugify(fields.label, ""), taken);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const labelInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const refusal = attributeRefusal(form.fields, ids, form.editing);
+  const marked = form.dirty ? refusal : null;
+  const suggested = uniqueSuggestion(slugify(form.fields.label, ""), ids);
+  const type = form.fields.attributeType;
 
-  function add(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!key || taken.includes(key)) {
+  function submit() {
+    if (refusal !== null) {
       return;
     }
-    onChange({ ...product, attributes: [...product.attributes, attributeEntry(key, fields)] });
-    setKey("");
-    setFields(EMPTY_ATTRIBUTE);
+    const editing = form.editing;
+    if (editing !== null) {
+      if (form.dirty) {
+        onChange({
+          ...product,
+          attributes: attributes.map((attribute) =>
+            attribute.key === editing ? attributeEntry(editing, form.fields) : attribute,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      onChange({
+        ...product,
+        attributes: [...attributes, attributeEntry(form.fields.key, form.fields)],
+      });
+    }
+    form.reset();
   }
 
   return (
@@ -1744,175 +1657,214 @@ function AttributesCard({ product, onChange }: EditorProps) {
       title="Custom attributes (typed)"
       description="Discoverable by agents through catalog tools — never free-form JSON."
     >
-      <ul className="grid gap-2 text-[13px]">
-        {product.attributes.map((attribute) => {
-          const drop = () =>
-            onChange({
-              ...product,
-              attributes: product.attributes.filter((entry) => entry.key !== attribute.key),
-            });
-          return removal.isArmed(attribute.key) ? (
-            <ConfirmRemove
-              key={attribute.key}
-              as="li"
-              title={`Remove the attribute “${attribute.label}”?`}
-              consequence="Agents can no longer discover it through the catalog tools once the draft is published. Nothing is written until you save the draft, and a published shop version keeps it."
-              onConfirm={removal.confirm(
-                drop,
-                `Removed the attribute “${attribute.label}” from the draft.`,
-              )}
-              onKeep={removal.keep}
+      <FieldRows>
+        <FieldGroup label="Attributes">
+          <div className="grid gap-2">
+            {attributes.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {attributes.map((attribute) => {
+                  const drop = () =>
+                    onChange({
+                      ...product,
+                      attributes: attributes.filter((entry) => entry.key !== attribute.key),
+                    });
+                  const notice = `Removed the attribute “${attribute.label}” from the draft.`;
+                  if (removal.isArmed(attribute.key)) {
+                    return (
+                      <ConfirmRemove
+                        key={attribute.key}
+                        as="li"
+                        title={`Remove the attribute “${attribute.label}”?`}
+                        consequence="Agents can no longer discover it through the catalog tools once the draft is published. Nothing is written until you save the draft, and a published shop version keeps it."
+                        onConfirm={removal.confirm(drop, notice)}
+                        onKeep={removal.keep}
+                      />
+                    );
+                  }
+                  return (
+                    <ListItem
+                      key={attribute.key}
+                      name={attribute.label}
+                      id={attribute.key}
+                      tag={<EntryKind value={labelOf(ATTRIBUTE_TYPE, attribute.attribute_type)} />}
+                      detail={<AttributeDetail attribute={attribute} />}
+                      editing={form.editing === attribute.key}
+                    >
+                      <EditButton
+                        name={attribute.label}
+                        buttonRef={editButtons.ref(attribute.key)}
+                        onEdit={() => {
+                          form.begin(attribute.key, attributeFields(attribute));
+                          focusAfterCommit(() => labelInput.current);
+                        }}
+                      />
+                      <RemoveButton
+                        name={attribute.label}
+                        entryKey={attribute.key}
+                        removal={removal}
+                        notice={notice}
+                        onRemove={drop}
+                      />
+                    </ListItem>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-admin-muted">No custom attribute yet.</p>
+            )}
+            <RemovalNotice removal={removal} />
+          </div>
+        </FieldGroup>
+        <ItemFormRow
+          title={formTitle(form.editing, nameOf, ATTRIBUTE_WORDS.entry)}
+          hint="The type decides what the value may be, and whether a unit or choices come with it. The key is fixed once the attribute is added."
+          editing={form.editing !== null}
+          addLabel="Add attribute"
+          refusal={refusal}
+          reasonId={reasonId}
+          onSubmit={submit}
+          onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
+        >
+          <FieldHint label="Label">
+            <input
+              ref={labelInput}
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.label}
+              {...refusedProps(marked, "label", reasonId)}
+              onChange={(event) => form.update({ label: event.target.value })}
             />
+          </FieldHint>
+          {form.editing !== null ? (
+            <FixedKeyField label="Key" hint={ATTRIBUTE_KEY_FIXED_HINT} value={form.fields.key} />
           ) : (
-            <EntryCard
-              key={attribute.key}
-              title={attribute.label}
-              chips={
-                <>
-                  <EntryId value={attribute.key} />
-                  <EntryKind value={labelOf(ATTRIBUTE_TYPE, attribute.attribute_type)} />
-                </>
-              }
-              edit={entryEdit(
-                editor,
-                notice,
-                attribute.key,
-                (next) =>
-                  onChange({
-                    ...product,
-                    attributes: product.attributes.map((entry) =>
-                      entry.key === attribute.key ? attributeEntry(attribute.key, next) : entry,
-                    ),
-                  }),
-                (value, change) => (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <AttributeFieldset value={value} onChange={change} />
-                  </div>
-                ),
-              )}
-              actions={
-                <button
-                  className={destructiveSubtleButtonClasses}
-                  type="button"
-                  ref={removal.trigger(attribute.key)}
-                  onClick={removal.ask(
-                    attribute.key,
-                    drop,
-                    `Removed the attribute “${attribute.label}” from the draft.`,
-                  )}
-                >
-                  <ButtonIcon verb="delete" />
-                  Remove {attribute.label}
-                </button>
-              }
-            >
-              {/* The stored value, the unit and the choices are the row's *body*, not its
-                header: a header stays put while the row is open, and a stale "20k" printed
-                beside the box editing it is the thing an operator reads instead of the box. */}
-              <span className="flex flex-wrap items-center gap-2">
-                <span>
-                  {attribute.value}
-                  {attribute.unit ? ` ${attribute.unit}` : ""}
-                </span>
-                {attribute.choices.length > 0 ? (
-                  <>
-                    {/* "one of" is the rule the lab applies — `shop.py` refuses a choice
-                      attribute whose value is not among them — so it stays a word, and the
-                      choices beside it become the chips frame 2c draws. */}
-                    <span className="text-admin-muted">one of</span>
-                    <ChipList label={`Choices for ${attribute.label}`} values={attribute.choices} />
-                  </>
-                ) : null}
-              </span>
-            </EntryCard>
-          );
-        })}
-        {product.attributes.length === 0 ? (
-          <li className="text-admin-muted">No custom attribute yet.</li>
-        ) : null}
-      </ul>
-      <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
-      <RemovalNotice removal={removal} />
-      <form className={`${addFormClasses} sm:grid-cols-3`} onSubmit={add}>
-        <AttributeFieldset
-          value={fields}
-          onChange={setFields}
-          beside={
             <DerivedIdField
               label="Key"
-              hint={DERIVED_KEBAB_RULE}
-              value={key}
-              suggested={suggestedKey}
-              taken={taken}
-              takenBase={takenBase}
-              takenPlace="in the draft"
-              pattern={KEBAB_PATTERN}
+              hint={ATTRIBUTE_KEY_HINT}
+              value={form.fields.key}
+              suggested={suggested.value}
+              takenBase={suggested.takenBase}
+              takenPlace={KEY_TAKEN_PLACE}
+              monospace
               maxLength={SLUG_MAX_LENGTH}
-              title={DERIVED_KEBAB_RULE}
-              required
-              onChange={setKey}
+              refusedBy={marked?.field === "key" ? reasonId : undefined}
+              onChange={(key) => form.update({ key })}
             />
-          }
-        />
-        <PrimaryAction variant="accent" className="self-end justify-self-start" type="submit">
-          <ButtonIcon verb="create" />
-          Add attribute
-        </PrimaryAction>
-      </form>
+          )}
+          <FieldHint label="Type">
+            <select
+              className={`${fieldControlClasses} w-full`}
+              value={type}
+              onChange={(event) =>
+                form.update({
+                  attributeType: event.target.value as AttributeSchema["attribute_type"],
+                })
+              }
+            >
+              {ATTRIBUTE_TYPES.map((entry) => (
+                <option key={entry.value} value={entry.value}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+          </FieldHint>
+          <FieldHint label="Value">
+            <input
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.value}
+              {...refusedProps(marked, "value", reasonId)}
+              onChange={(event) => form.update({ value: event.target.value })}
+            />
+          </FieldHint>
+          {type === "measurement" ? (
+            <FieldHint label="Unit">
+              <input
+                className={`${fieldControlClasses} w-full`}
+                value={form.fields.unit}
+                {...refusedProps(marked, "unit", reasonId)}
+                onChange={(event) => form.update({ unit: event.target.value })}
+              />
+            </FieldHint>
+          ) : null}
+          {type === "choice" ? (
+            <div className="col-span-full">
+              <ChipListField
+                key={form.session}
+                legend="Choices"
+                label="New choice"
+                hint={ATTRIBUTE_CHOICES_RULE}
+                maxLength={CHIP_LABEL_MAX_LENGTH}
+                addLabel="Add choice"
+                placeholder="Regular"
+                empty="No choice yet; a choice attribute needs at least one."
+                values={form.fields.choices}
+                takenPlace="a choice of this attribute"
+                refusedBy={marked?.field === "choices" ? reasonId : undefined}
+                onChange={(choices) => form.update({ choices })}
+              />
+            </div>
+          ) : null}
+        </ItemFormRow>
+      </FieldRows>
     </Card>
   );
 }
 
-/** A synthetic review's three fields, on the add form and in an open row alike. */
-function ReviewFieldset({
-  value,
-  onChange,
-}: {
-  value: ReviewFields;
-  onChange: (next: ReviewFields) => void;
-}) {
-  return (
-    <>
-      <label className={fieldLabelClasses}>
-        Author
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.author}
-          required
-          onChange={(event) => onChange({ ...value, author: event.target.value })}
-        />
-      </label>
-      <StarRatingField value={value.rating} onChange={(rating) => onChange({ ...value, rating })} />
-      <label className={`${fieldLabelClasses} sm:col-span-3`}>
-        Body
-        <input
-          className={`${fieldControlClasses} w-full`}
-          value={value.body}
-          required
-          onChange={(event) => onChange({ ...value, body: event.target.value })}
-        />
-      </label>
-    </>
-  );
-}
+const REVIEW_WORDS: ItemFormWords = {
+  form: "Ratings and reviews",
+  entry: "a review",
+  record: "draft",
+};
 
+/**
+ * The product's synthetic reviews, as items, and the one form that adds a review or edits the
+ * one chosen (ADR 0074). A review is named by its ID on its controls — "Edit review one" — as
+ * it was on its row, and reads as "{rating}★" with "“{body}” — {author}" under it.
+ */
 function ReviewsCard({ product, onChange }: EditorProps) {
-  const [fields, setFields] = useState<ReviewFields>({ author: "", rating: 5, body: "" });
-  const editor = useEntryEdit(product.reviews, {
-    keyOf: (review) => review.id,
-    labelOf: (review) => `review ${review.id}`,
-    fieldsOf: (review): ReviewFields => ({
-      author: review.author_display_name,
-      rating: review.rating,
-      body: review.body,
-    }),
+  const reviews = product.reviews;
+  const ids = reviews.map((review) => review.id);
+  const nameOf = (id: string) => `review ${id}`;
+  const form = useItemForm<ReviewFields>({
+    blank: BLANK_REVIEW,
+    ids,
+    words: REVIEW_WORDS,
+    nameOf,
+    formOf: (id) => reviewFields(reviews.find((review) => review.id === id) as ReviewSchema),
+    typedOf: (fields) => fields.body,
   });
-  const notice = useId();
   // Scoped by the product's key (ADR 0061), which a rename does not move: it is the same
   // product. A discard that lands still drops what was armed, because what the confirm states
   // was read off the draft the discard threw away.
   const { discarding } = useShopWorkspace();
   const removal = useRemoval(product.key, discarding);
+  const editButtons = useEditButtons();
+  const focusAfterCommit = useFocusAfterCommit();
+  const authorInput = useRef<HTMLInputElement>(null);
+  const reasonId = useId();
+  const refusal = reviewRefusal(form.fields);
+  const marked = form.dirty ? refusal : null;
+
+  function submit() {
+    if (refusal !== null) {
+      return;
+    }
+    const editing = form.editing;
+    if (editing !== null) {
+      if (form.dirty) {
+        onChange({
+          ...product,
+          reviews: reviews.map((review) =>
+            review.id === editing ? reviewEntry(editing, form.fields) : review,
+          ),
+        });
+      }
+      focusAfterCommit(() => editButtons.get(editing));
+    } else {
+      const id = uniqueId(slugify(pythonStrip(form.fields.author), "review"), ids);
+      onChange({ ...product, reviews: [...reviews, reviewEntry(id, form.fields)] });
+    }
+    form.reset();
+  }
 
   return (
     <Card
@@ -1920,93 +1872,97 @@ function ReviewsCard({ product, onChange }: EditorProps) {
       label="Ratings and reviews"
       description="The rating summary is derived from these reviews; it is never authored directly."
     >
-      <ul className="grid gap-2 text-[13px]">
-        {product.reviews.map((review) => {
-          const drop = () =>
-            onChange({
-              ...product,
-              reviews: product.reviews.filter((entry) => entry.id !== review.id),
-            });
-          return removal.isArmed(review.id) ? (
-            <ConfirmRemove
-              key={review.id}
-              as="li"
-              title={`Remove the review by ${review.author_display_name}?`}
-              consequence="The rating summary is derived again without it. Nothing is written until you save the draft, and a published shop version keeps it."
-              onConfirm={removal.confirm(
-                drop,
-                `Removed the review by ${review.author_display_name} from the draft.`,
-              )}
-              onKeep={removal.keep}
+      <FieldRows>
+        <FieldGroup label="Reviews">
+          <div className="grid gap-2">
+            {reviews.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {reviews.map((review) => {
+                  const drop = () =>
+                    onChange({
+                      ...product,
+                      reviews: reviews.filter((entry) => entry.id !== review.id),
+                    });
+                  const notice = `Removed the review by ${review.author_display_name} from the draft.`;
+                  if (removal.isArmed(review.id)) {
+                    return (
+                      <ConfirmRemove
+                        key={review.id}
+                        as="li"
+                        title={`Remove the review by ${review.author_display_name}?`}
+                        consequence="The rating summary is derived again without it. Nothing is written until you save the draft, and a published shop version keeps it."
+                        onConfirm={removal.confirm(drop, notice)}
+                        onKeep={removal.keep}
+                      />
+                    );
+                  }
+                  return (
+                    <ListItem
+                      key={review.id}
+                      name={`${review.rating}★`}
+                      id={review.id}
+                      detail={`“${review.body}” — ${review.author_display_name}`}
+                      editing={form.editing === review.id}
+                    >
+                      <EditButton
+                        name={nameOf(review.id)}
+                        buttonRef={editButtons.ref(review.id)}
+                        onEdit={() => {
+                          form.begin(review.id, reviewFields(review));
+                          focusAfterCommit(() => authorInput.current);
+                        }}
+                      />
+                      <RemoveButton
+                        name={nameOf(review.id)}
+                        entryKey={review.id}
+                        removal={removal}
+                        notice={notice}
+                        onRemove={drop}
+                      />
+                    </ListItem>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-[13px] text-admin-muted">No synthetic review yet.</p>
+            )}
+            <RemovalNotice removal={removal} />
+          </div>
+        </FieldGroup>
+        <ItemFormRow
+          title={formTitle(form.editing, nameOf, REVIEW_WORDS.entry)}
+          editing={form.editing !== null}
+          addLabel="Add review"
+          refusal={refusal}
+          reasonId={reasonId}
+          onSubmit={submit}
+          onCancel={() => cancelEdit(form, focusAfterCommit, editButtons)}
+        >
+          <FieldHint label="Author">
+            <input
+              ref={authorInput}
+              className={`${fieldControlClasses} w-full`}
+              value={form.fields.author}
+              {...refusedProps(marked, "author", reasonId)}
+              onChange={(event) => form.update({ author: event.target.value })}
             />
-          ) : (
-            <EntryCard
-              key={review.id}
-              title={`${review.rating}★`}
-              chips={<EntryId value={review.id} />}
-              edit={entryEdit(
-                editor,
-                notice,
-                review.id,
-                (next) =>
-                  onChange({
-                    ...product,
-                    reviews: product.reviews.map((entry) =>
-                      entry.id === review.id ? reviewEntry(review.id, next) : entry,
-                    ),
-                  }),
-                (value, change) => (
-                  <div className="grid gap-2 sm:grid-cols-4">
-                    <ReviewFieldset value={value} onChange={change} />
-                  </div>
-                ),
-              )}
-              actions={
-                <button
-                  className={destructiveSubtleButtonClasses}
-                  type="button"
-                  ref={removal.trigger(review.id)}
-                  onClick={removal.ask(
-                    review.id,
-                    drop,
-                    `Removed the review by ${review.author_display_name} from the draft.`,
-                  )}
-                >
-                  <ButtonIcon verb="delete" />
-                  Remove review {review.id}
-                </button>
-              }
-            >
-              <p className="text-admin-ink-soft">
-                “{review.body}” — {review.author_display_name}
-              </p>
-            </EntryCard>
-          );
-        })}
-        {product.reviews.length === 0 ? (
-          <li className="text-admin-muted">No synthetic review yet.</li>
-        ) : null}
-      </ul>
-      <EntryEditNotice id={notice} label={editor.open?.label ?? null} />
-      <RemovalNotice removal={removal} />
-      <form
-        className={`${addFormClasses} sm:grid-cols-4`}
-        onSubmit={(event) => {
-          event.preventDefault();
-          const id = uniqueId(
-            slugify(fields.author, "review"),
-            product.reviews.map((review) => review.id),
-          );
-          onChange({ ...product, reviews: [...product.reviews, reviewEntry(id, fields)] });
-          setFields({ ...fields, author: "", body: "" });
-        }}
-      >
-        <ReviewFieldset value={fields} onChange={setFields} />
-        <PrimaryAction variant="accent" className="self-end justify-self-start" type="submit">
-          <ButtonIcon verb="create" />
-          Add review
-        </PrimaryAction>
-      </form>
+          </FieldHint>
+          <StarRatingField
+            value={form.fields.rating}
+            onChange={(rating) => form.update({ rating })}
+          />
+          <div className="col-span-full">
+            <FieldHint label="Body">
+              <input
+                className={`${fieldControlClasses} w-full`}
+                value={form.fields.body}
+                {...refusedProps(marked, "body", reasonId)}
+                onChange={(event) => form.update({ body: event.target.value })}
+              />
+            </FieldHint>
+          </div>
+        </ItemFormRow>
+      </FieldRows>
     </Card>
   );
 }

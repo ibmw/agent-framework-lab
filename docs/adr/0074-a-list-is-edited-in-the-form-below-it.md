@@ -8,6 +8,13 @@ item gains a `tag` beside its name, a detail line it may go without and one that
 breaks (`multiline`), and the trash a name of its list's own; `ItemFormRow`'s hint becomes
 optional; `useEntryEdit` and `EntryEditNotice` leave the customer and support identity editors.
 
+Amendment: 2026-10-01 — A product's options, media references, typed attributes and reviews are
+on the pattern (*A product's four lists*, below); its variants table stays open in place. The
+item takes a detail it draws rather than writes and a name that is its own key; the form row's
+chip lists can be the field a rule marks; a field the form holds as a list is clean while it
+holds the values it was filled with; `useEntryEdit` and `EntryEditNotice` leave the product's
+four cards.
+
 On 29 September 2026 the operator asked that the lists an editor edits with a form meet the
 pattern Shop details' *Payment methods* draws (ADR 0072), so that editing an entry is learned
 once. This records that pattern as the workspace's, what stays on `EntryCard`, and how the
@@ -149,6 +156,70 @@ and stays on the item.
   the hidden facts sent the note as typed and met a 422 over surrounding whitespace; an edit that
   changed nothing writes nothing.
 
+### A product's four lists
+
+- **Options.** Each option is an item under *Declared*, whose hint is the prototype's card line,
+  "Every variant chooses one value of each option." (`Workspace.dc.html` :956), which the gate
+  enforces — the name, the key, and the values as the chips frame 2c draws for the detail
+  (`ListItem`'s `detail` may be drawn, not only written). The one form, "Add an option" / "Edit
+  {name}", asks *Option name*, *Option key* — `DerivedIdField` while adding, shown read-only
+  while editing, because a variant chooses by it — and *Values* (`ChipListField`). Refused in
+  order: the name empty (`OPTION_NAME_RULE`), the key not a slug or another option's while
+  adding (`ENTRY_KEY_RULE`, "{key} is already in the draft."), then no value
+  (`OPTION_NEEDS_VALUE`), which marks *New value* (`ChipListField`'s `refusedBy`). "Remove
+  {name}" stays the trash's name and is no longer its visible word. The removal still takes the
+  variants' values of the option with it and still says how many and which it leaves identical
+  (ADR 0060); the confirm takes the item's place, which the *Departures* row "The option's
+  confirm" in `docs/design-direction.md` already records.
+- **Media references.** The reference is the item's name, in monospace and with no second key
+  (`ListItem`'s `monospace`, its `id` left out), the alt text the detail. Its reference is its
+  own key and nothing else names it, so the form, "Add a media reference" / "Edit {reference}",
+  asks it while editing too, and *Save changes* moves the entry under the reference typed and
+  hands focus to the Edit it now stands under. Refused in order: the reference empty
+  (`MEDIA_NEEDS_REFERENCE`), another entry's reference, as the lab would store it — said once,
+  in the line after the buttons, the Reference field marked and described by it, where the
+  field's own second line said it before — then the alt text empty (`MEDIA_ALT_TEXT_RULE`).
+- **Typed attributes.** The label, the key, the type (`EntryKind`) as the item's `tag` between
+  them, and as the detail the value, its unit and "one of" the choices as chips. The form, "Add
+  an attribute" / "Edit {label}", asks *Label*, *Key* (derived while adding, fixed while
+  editing: agents read it through the catalog tools), *Type*, *Value*, and *Unit* or
+  *Choices* as the type brings them. Refused in order: the label, the key while adding, the
+  value empty, a number's or a measurement's value not a decimal, a yes-or-no's not `true` or
+  `false`, a measurement's unit empty, then a choice's choices — none
+  (`ATTRIBUTE_NEEDS_CHOICE`), or none that is its value
+  (`ATTRIBUTE_VALUE_AMONG_CHOICES_RULE`) — the two marking *New choice*. The builder still writes
+  only what the type holds.
+- **The attribute's fields are one unit through a discard.** `useEntryEdit` followed them as one
+  unit (`units`); the form follows the entry whole while clean and keeps all it holds while
+  dirty, so a type never follows the record under a value typed for another. And whatever a
+  discard leaves, a choice whose value is none of its choices is refused before the press.
+- **Reviews.** "{rating}★" as the name, the review's ID, "“{body}” — {author}" as the detail,
+  the line `sticky-header` reads. The controls keep "review {id}": "Edit review {id}", "Remove
+  review {id}", and the form's "Edit review {id}". The form, "Add a review", asks *Author*,
+  *Rating* (`StarRatingField`) and *Body*; refused in order: the author empty, then the body.
+- **What holds for all four.** The removals keep `useRemoval(product.key, discarding)` (ADR
+  0061), and the page is keyed by the product, so no form carries one product's edit onto
+  another. Every text is stored stripped (`pythonStrip`); an edit that changed nothing writes
+  nothing. The fields and the builders moved to `lib/productEntries.ts`, beside the refusals.
+- **A list held in the form compares by its values.** `useItemForm` reads a field that is a list
+  — an option's values, an attribute's choices — as unchanged while it holds the same values in
+  the same order: the record hands back a new array on every read, and a chip added and removed
+  again leaves what was loaded.
+- **A chip field starts empty in every session of the form.** `ChipListField` keeps the value
+  typed and not yet added in its own state; under the open row it was remounted with the row,
+  under the one form it was not, so "Charcoal" typed in *New value* while editing Color stood in
+  the add form after *Save changes* or *Cancel*. `useItemForm` gives each filling of the form a
+  `session` — moved by every Edit, every reset and every entry taken away under it — and the
+  values and choices fields are keyed by it. What is typed there and not added is still not the
+  form's, and so not unsaved work, as it was not under the add forms. The profile's, the
+  identity's, the order's and Shop details' forms hold no control with typing of its own beyond
+  `DerivedIdField`, which is drawn only while adding and so is remounted by every Edit.
+- **What is proven where.** The confirm in the item's place, the form emptied when its entry is
+  removed, and a clean form following a Discard while a dirty one keeps its work are proven on
+  the options and the attributes; media and reviews carry them by the same `useItemForm` and
+  `ConfirmRemove`. *Cancel* returning to an empty add form, focus on the Edit, is proven on all
+  four.
+
 ## Departures
 
 - `form-decisions.md` 8.2's open row is superseded for the converted lists, as above.
@@ -191,6 +262,23 @@ and stays on the item.
 - The four forms' submits wear the accent weight the methods handoff draws, where the add forms
   they replace were ink.
 
+- The prototype draws each option as a field row of its own, labelled by the option's name, its
+  chips in a field and *Remove this option* under them (`Workspace.dc.html` :955–975); the
+  options are items with their chips as the detail and one form below, as the milestone
+  decides.
+- The four list rows' labels — *Declared*, *References*, *Attributes*, *Reviews* — and the option
+  and attribute forms' hints are the slice's own: the prototype draws no media, attribute or
+  review list on the product frame.
+- The forms refuse before the press what the add forms left to the lab: a number's or a
+  measurement's value that is no decimal, a yes-or-no's that is not `true` or `false`, and a
+  choice's value that is none of its choices. The alt text, an empty value and a measurement's
+  unit, which the add forms left to native `required`, move to the line after the buttons. A
+  decimal is read narrower than Python's `Decimal`, which also takes digit-grouping underscores:
+  the form refuses what the lab might accept rather than letting through what it would not.
+- A review's form opens on five stars again after each addition, where the add form kept the
+  last rating chosen: the form's blank is the one place it starts.
+- A review's body stays one line, as the add form and the open row asked it.
+
 ## Consequences
 
 - It amends ADR 0069's width for the order line's quantity: the quantity left the table's narrow
@@ -221,6 +309,24 @@ and stays on the item.
   kept their names. Specs touched: `order-fixture` (`editRow` became `editItem`, the helper
   `tests/e2e/support/authoring.ts` gained) and `customer-publication` (the pill read on its item,
   since the *Entries* hint names the default too).
+
+- The accessible names that moved with the product's four lists: the open rows' forms "Edit
+  {name}", "Edit {reference}" and "Edit review {id}" (now groups of the same name), their "Save
+  {name}", "Save review {id}" and "Cancel editing {name}" (now *Save changes* and *Cancel*), the
+  four add forms' unnamed forms (now the groups "Add an option", "Add a media reference", "Add
+  an attribute" and "Add a review"), the option's trash, whose visible "Remove {name}" became
+  its glyph with the name kept, and the line "Editing {name}. Save or Cancel before opening
+  another row" (gone). Every item's Edit and Remove, *Option name*, *Option key*, *Values*,
+  *New value*, *Reference*, *Alt text*, *Label*, *Key*, *Type*, *Value*, *Unit*, *Choices*,
+  *Author*, *Rating*, *Body*, and *Add option*, *Add media*, *Add attribute* and *Add review*,
+  kept their names. No spec was touched: the six journeys that add an option fill it through
+  the add form, and `sticky-header` adds a review through it, whose *Add review* stays in view
+  at the foot of the page.
+- `useEntryEdit` leaves the product's options, media, attributes and reviews; the product's
+  variants, the tone-of-voice guidelines and a template's parameters (until Slice 39), and a
+  scenario's composed objectives and mutations keep it. Its `units` keeps a consumer in a
+  template's parameters, whose kind, requiredness and default follow as one unit
+  (`BlockEditorPage.tsx`, `Blocks.test.tsx`).
 
 ## Verification
 
@@ -257,3 +363,26 @@ and stays on the item.
   of each list saved leaving the draft clean; Home's typed city saved after *Make default* moved
   the default to Office, the payload holding both; a marked field described by the refusal's
   own line and told the rule once; a guidance body's line breaks kept on its item.
+- `lib/productEntries.test.ts`: every combination of each product form's broken fields refused
+  with the first in the order it asks, while adding and while editing; a key another entry
+  holds and one past the cap; a reference another entry holds as the lab would store it, its
+  own excepted; the value each attribute type holds; every text stored stripped.
+  `ItemList.test.tsx`: a name that is its own key, a drawn detail, and a form holding a list
+  clean while its values are the ones it was filled with.
+- `App.test.tsx`, *a product's four lists, edited in the form below them*: each form's rules
+  walked in the order its controls stand (`expectRulesInFieldOrder`, which reads a read-only
+  key and a star's radio as breaking no rule); a blank form refused and unmarked; an option
+  loaded, given a value and saved where it stands with focus out and back; the option key and
+  the attribute key fixed while editing, and an option key derived and refused while adding; a
+  media reference another entry holds refused after *Save changes* and *Add media*, the field
+  marked and described by the one line; a reference moved where it stands; the option's removal
+  emptying the form and taking its variants' values (ADR 0060); a clean option form following a
+  Discard and a dirty one keeping its work; an attribute's type, value and choices one unit
+  through a Discard, and a choice whose value is none of its choices refused after one; the
+  prompt for a typed option and an edited review; an untouched option, media entry and review
+  saved leaving the draft clean. The S-tests of *a product's identity* keep an edit typed in the
+  options form, its element and its focus through three kinds of discard.
+  The same block cancels an edit on each of the four lists to an empty add form with focus on
+  the Edit; leaves nothing typed in *New value* behind a *Cancel*, a *Save changes* or another
+  option's Edit; and asks nothing when an option is loaded and left untouched before leaving,
+  as *Duplicate* does not either (*deleting and duplicating a product*).

@@ -3,8 +3,8 @@ import { itemFormReason, useRegisterUnsavedWork } from "./unsavedWork";
 
 /**
  * The state behind a list edited in the form below it — Shop details' two method lists, an
- * order's lines and events, a profile's addresses, background and hidden facts, and an
- * identity's guidance notes (ADR 0072, ADR 0074). The drawing is `components/ItemList.tsx`.
+ * order's lines and events, a profile's addresses, background and hidden facts, an identity's
+ * guidance notes, and a product's options, media, attributes and reviews (ADR 0072, ADR 0074). The drawing is `components/ItemList.tsx`.
  */
 
 /**
@@ -26,8 +26,20 @@ export interface ItemFormWords {
   record: string;
 }
 
+/**
+ * A field the form holds as a list — an option's values, an attribute's choices — is the same
+ * when it holds the same values in the same order, whatever array carries them: the record hands
+ * back a new one on every read, and a chip added and removed again leaves what was loaded.
+ */
+function sameValue(one: unknown, other: unknown): boolean {
+  if (Array.isArray(one) && Array.isArray(other)) {
+    return one.length === other.length && one.every((value, index) => value === other[index]);
+  }
+  return one === other;
+}
+
 function sameFields<FieldsT extends object>(one: FieldsT, other: FieldsT): boolean {
-  return (Object.keys(one) as (keyof FieldsT)[]).every((key) => one[key] === other[key]);
+  return (Object.keys(one) as (keyof FieldsT)[]).every((key) => sameValue(one[key], other[key]));
 }
 
 /**
@@ -61,10 +73,16 @@ export function useItemForm<FieldsT extends object>({
   /** What the prompt quotes of an entry typed and not added, where the form has such a field. */
   typedOf?: (fields: FieldsT) => string;
 }) {
-  const [state, setState] = useState<{ editing: string | null; fields: FieldsT; origin: FieldsT }>({
+  const [state, setState] = useState<{
+    editing: string | null;
+    fields: FieldsT;
+    origin: FieldsT;
+    session: number;
+  }>({
     editing: null,
     fields: blank,
     origin: blank,
+    session: 0,
   });
   const stale = state.editing !== null && !ids.includes(state.editing);
   const editing = stale ? null : state.editing;
@@ -75,13 +93,19 @@ export function useItemForm<FieldsT extends object>({
 
   useEffect(() => {
     if (stale) {
-      setState({ editing: null, fields: blank, origin: blank });
+      setState((now) => ({
+        editing: null,
+        fields: blank,
+        origin: blank,
+        session: now.session + 1,
+      }));
     } else if (moved && current !== null) {
       setState((now) => ({ ...now, fields: current, origin: current }));
     }
   }, [stale, blank, moved, current]);
 
-  const reset = () => setState({ editing: null, fields: blank, origin: blank });
+  const reset = () =>
+    setState((now) => ({ editing: null, fields: blank, origin: blank, session: now.session + 1 }));
   const typed = typedOf?.(fields).trim() ?? "";
 
   useRegisterUnsavedWork(
@@ -103,10 +127,21 @@ export function useItemForm<FieldsT extends object>({
     editing,
     fields,
     dirty,
+    /**
+     * Which filling of the form this is: it moves on every Edit, every reset and every entry
+     * taken away under it. A control that keeps typing of its own — a chip field's next value —
+     * is keyed by it, so nothing typed in one session is still there in the next.
+     */
+    session: state.session,
     update: (patch: Partial<FieldsT>) =>
       setState((now) => ({ ...now, fields: { ...now.fields, ...patch } })),
     begin: (id: string, loaded: FieldsT) =>
-      setState({ editing: id, fields: loaded, origin: loaded }),
+      setState((now) => ({
+        editing: id,
+        fields: loaded,
+        origin: loaded,
+        session: now.session + 1,
+      })),
     reset,
   };
 }

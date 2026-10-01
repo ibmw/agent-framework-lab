@@ -459,3 +459,87 @@ describe("the form's state", () => {
     );
   });
 });
+
+describe("an item whose name is its key, or whose detail is drawn", () => {
+  it("draws the name in monospace with no second key, and a detail that is not text", () => {
+    render(
+      <ul>
+        <ListItem name="media/front.jpg" monospace detail="Front" editing={false}>
+          {null}
+        </ListItem>
+        <ListItem
+          name="Color"
+          id="color"
+          detail={<ul aria-label="Values of Color" />}
+          editing={false}
+        >
+          {null}
+        </ListItem>
+      </ul>,
+    );
+
+    const media = item("media/front.jpg");
+    expect(within(media).getByText("media/front.jpg", { selector: "span" })).toHaveClass(
+      "font-mono",
+    );
+    expect(media.querySelector("code")).toBeNull();
+    expect(within(item("Color")).getByRole("list", { name: "Values of Color" })).toBeVisible();
+    expect(within(item("Color")).getByText("Color", { selector: "span" })).not.toHaveClass(
+      "font-mono",
+    );
+  });
+});
+
+describe("a form holding a list of values", () => {
+  type Tagged = { tags: string[] };
+
+  function Tags() {
+    const [tags, setTags] = useState(["a", "b"]);
+    const form = useItemForm<Tagged>({
+      blank: { tags: [] },
+      ids: ["one"],
+      words: { form: "Tags", entry: "a tag set", record: "draft" },
+      nameOf: () => "One",
+      // A new array on every read, as a record re-read by a discard hands back.
+      formOf: () => ({ tags: [...tags] }),
+    });
+    return (
+      <>
+        <button type="button" onClick={() => form.begin("one", { tags: [...tags] })}>
+          Edit
+        </button>
+        <button type="button" onClick={() => form.update({ tags: [...form.fields.tags, "c"] })}>
+          Add c
+        </button>
+        <button
+          type="button"
+          onClick={() => form.update({ tags: form.fields.tags.filter((tag) => tag !== "c") })}
+        >
+          Drop c
+        </button>
+        <button type="button" onClick={() => setTags(["a", "b", "z"])}>
+          Move the record
+        </button>
+        <output aria-label="Held">{form.fields.tags.join(",")}</output>
+      </>
+    );
+  }
+
+  it("is clean while it holds the values it was filled with, whatever array carries them", async () => {
+    const user = userEvent.setup();
+    const { ui, declared } = withRegister(<Tags />);
+    render(ui);
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(declared()).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Add c" }));
+    expect(declared()).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Drop c" }));
+    expect(declared()).toEqual([]);
+
+    // Clean, it follows the record when its values move.
+    await user.click(screen.getByRole("button", { name: "Move the record" }));
+    expect(screen.getByLabelText("Held")).toHaveTextContent("a,b,z");
+    expect(declared()).toEqual([]);
+  });
+});

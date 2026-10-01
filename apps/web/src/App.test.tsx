@@ -14,9 +14,22 @@ import { isValidElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  ATTRIBUTE_LABEL_RULE,
+  ATTRIBUTE_MEASUREMENT_RULE,
+  ATTRIBUTE_NEEDS_CHOICE,
+  ATTRIBUTE_UNIT_RULE,
+  ATTRIBUTE_VALUE_AMONG_CHOICES_RULE,
+  ATTRIBUTE_VALUE_RULE,
+  ENTRY_KEY_RULE,
+  MEDIA_ALT_TEXT_RULE,
+  MEDIA_NEEDS_REFERENCE,
+  OPTION_NAME_RULE,
+  OPTION_NEEDS_VALUE,
   PRODUCT_CATEGORY_RULE,
   PRODUCT_TITLE_RULE,
   productWithoutVariantRule,
+  REVIEW_AUTHOR_RULE,
+  REVIEW_BODY_RULE,
   SHOP_NAME_RULE,
   SHOP_SLUG_DETAIL_RULE,
   TONE_DEFAULT_REMOVAL_RULE,
@@ -29,16 +42,18 @@ import {
 import { shopDraftIsSavableAt, toPayload } from "./lib/shop";
 import { markColourFor } from "./lib/shopLogo";
 import { CREATE_ROUTES, tourAt } from "./lib/tours";
-import { HELD_VALUE_REASON, METHOD_FORM_REASON } from "./lib/unsavedWork";
+import { HELD_VALUE_REASON, itemFormReason, METHOD_FORM_REASON } from "./lib/unsavedWork";
 import { routeTree } from "./routeTree";
 import { UnsavedChangesGuard } from "./shell/UnsavedChangesGuard";
 import { renderApp, wholeDescription } from "./test/app";
 import { expectWayBack } from "./test/header";
+import { expectRulesInFieldOrder } from "./test/itemForm";
 import { panelCards, panelFields, sidePanel } from "./test/panel";
 import {
   describedText,
   expectNotRefused,
   expectRefused,
+  refusalElement,
   submitWithoutPressing,
 } from "./test/refused";
 import { expectRunsOpenOnARow } from "./test/rows";
@@ -572,11 +587,11 @@ describe("a product's identity across renames, saves and discards", () => {
     expect(screen.getByLabelText("Handle")).toHaveValue(handle);
   }
 
-  /** Opens the Size option's row and types into it, handing back the input typed in. */
+  /** Loads the Size option into the form below the options and types into it, handing back the input. */
   async function typeInSizeRow(user: ReturnType<typeof userEvent.setup>) {
     const options = within(screen.getByRole("region", { name: "Options" }));
     await user.click(options.getByRole("button", { name: "Edit Size" }));
-    const input = within(options.getByRole("form", { name: "Edit Size" })).getByLabelText(
+    const input = within(options.getByRole("group", { name: "Edit Size" })).getByLabelText(
       "Option name",
     );
     await user.type(input, " typed");
@@ -594,8 +609,8 @@ describe("a product's identity across renames, saves and discards", () => {
 
   async function openRowSurvived(input: HTMLElement) {
     const options = within(screen.getByRole("region", { name: "Options" }));
-    const open = within(options.getByRole("form", { name: "Edit Size" }));
-    // The same element, not a new one with the same value: the row was never unmounted.
+    const open = within(options.getByRole("group", { name: "Edit Size" }));
+    // The same element, not a new one with the same value: the form was never unmounted.
     expect(open.getByLabelText("Option name")).toBe(input);
     expect(input).toHaveValue("Size typed");
     expect(input).toHaveFocus();
@@ -731,7 +746,7 @@ describe("a product's identity across renames, saves and discards", () => {
     await settledAt(router, "saved-one");
   });
 
-  it("S2: keeps an open row, its typing and its focus through a plain discard", async () => {
+  it("S2: keeps an edit in the options form, its typing and its focus through a plain discard", async () => {
     const user = userEvent.setup();
     const { router } = await openAlpine();
 
@@ -746,7 +761,7 @@ describe("a product's identity across renames, saves and discards", () => {
     await openRowSurvived(input);
   });
 
-  it("S3: keeps an open row, its typing and its focus through a discard that undoes a rename", async () => {
+  it("S3: keeps an edit in the options form, its typing and its focus through a discard that undoes a rename", async () => {
     const user = userEvent.setup();
     const { router } = await openAlpine();
 
@@ -758,7 +773,7 @@ describe("a product's identity across renames, saves and discards", () => {
     await openRowSurvived(input);
   });
 
-  it("S10: keeps an open row, its typing and its focus through a discard that undoes a retitle", async () => {
+  it("S10: keeps an edit in the options form, its typing and its focus through a discard that undoes a retitle", async () => {
     const user = userEvent.setup();
     const { router } = await openAlpine();
 
@@ -861,7 +876,7 @@ describe("a product's identity across renames, saves and discards", () => {
     },
   );
 
-  it("does not leave an open row behind when a handle like . is typed", async () => {
+  it("does not leave an edit in the options form behind when a handle like . is typed", async () => {
     const user = userEvent.setup();
     const { router } = await openAlpine();
     const input = await typeInSizeRow(user);
@@ -2477,216 +2492,6 @@ describe("editing a saved entry in place", () => {
     });
   });
 
-  it("adds a value to a saved option through the same chip field the add form uses", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const options = within(await screen.findByRole("region", { name: "Options" }));
-    await user.click(options.getByRole("button", { name: "Edit Color" }));
-
-    // The saved values are the chips, editable, each with the name the read-only row gave it.
-    const open = within(options.getByRole("form", { name: "Edit Color" }));
-    expect(open.getByRole("button", { name: "Remove Ocean Blue" })).toBeVisible();
-    await user.type(open.getByLabelText("New value"), "Charcoal");
-    await user.click(open.getByRole("button", { name: "Add value" }));
-    await user.click(open.getByRole("button", { name: "Save Color" }));
-
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(savedDrafts).toHaveLength(1));
-
-    const before = unchangedPayload();
-    expect(lastSaved()).toStrictEqual({
-      ...before,
-      products: [
-        {
-          ...before.products[0],
-          options: [
-            { key: "color", name: "Color", values: ["Ocean Blue", "Charcoal"] },
-            { key: "size", name: "Size", values: ["M", "L"] },
-          ],
-        },
-      ],
-    });
-  });
-
-  it("relabels a choice attribute without dropping the choices it is constrained to", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
-    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
-    const open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
-    await user.clear(open.getByLabelText("Label"));
-    await user.type(open.getByLabelText("Label"), "Waterproof rating");
-    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
-
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(savedDrafts).toHaveLength(1));
-
-    const before = unchangedPayload();
-    expect(lastSaved()).toStrictEqual({
-      ...before,
-      products: [
-        {
-          ...before.products[0],
-          attributes: [
-            {
-              // The key does not follow the label the way the add form's does: it was derived
-              // when the attribute was created, and the tools that read it have not moved.
-              key: "waterproofing",
-              label: "Waterproof rating",
-              attribute_type: "choice",
-              value: "20k",
-              unit: null,
-              choices: ["10k", "20k", "30k"],
-            },
-          ],
-        },
-      ],
-    });
-  });
-
-  it("empties the choices when a choice attribute is edited into a text one", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
-    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
-    const open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
-    await user.selectOptions(open.getByLabelText("Type"), "text");
-    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
-
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(savedDrafts).toHaveLength(1));
-
-    // The builder normalises, so the edit path cannot carry choices a text attribute may not
-    // hold — which is what an edit that spread `{...attribute, ...changes}` would have done.
-    expect(lastSaved().products[0].attributes).toStrictEqual([
-      {
-        key: "waterproofing",
-        label: "Waterproofing",
-        attribute_type: "text",
-        value: "20k",
-        unit: null,
-        choices: [],
-      },
-    ]);
-  });
-
-  it("keeps an attribute's type, value and choices as one through a Discard", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    // The lab holds a choice, 20k among three; the draft retypes it to text "x".
-    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
-    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
-    let open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
-    await user.selectOptions(open.getByLabelText("Type"), "text");
-    await user.clear(open.getByLabelText("Value"));
-    await user.type(open.getByLabelText("Value"), "x");
-    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
-    // Reopened, and only the value typed in.
-    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
-    open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
-    await user.clear(open.getByLabelText("Value"));
-    await user.type(open.getByLabelText("Value"), "green");
-
-    // Following the type back to a choice under the typed value would build a choice whose
-    // value is none of its choices.
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
-
-    await waitFor(() =>
-      expect(
-        within(card.getByRole("form", { name: "Edit Waterproofing" })).getByLabelText("Type"),
-      ).toHaveValue("text"),
-    );
-    open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
-    expect(open.getByLabelText("Value")).toHaveValue("green");
-    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(savedDrafts).toHaveLength(1));
-    expect(lastSaved().products[0].attributes).toStrictEqual([
-      {
-        key: "waterproofing",
-        label: "Waterproofing",
-        attribute_type: "text",
-        value: "green",
-        unit: null,
-        choices: [],
-      },
-    ]);
-  });
-
-  it("nulls the unit when a measurement attribute is edited into a text one", async () => {
-    const user = userEvent.setup();
-    currentContent = {
-      ...READY_CONTENT,
-      products: [
-        {
-          ...READY_CONTENT.products[0],
-          attributes: [
-            {
-              key: "waterproofing",
-              label: "Waterproofing",
-              attribute_type: "measurement",
-              value: "20000",
-              unit: "mm",
-              choices: [],
-            },
-          ],
-        },
-      ],
-    };
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const card = within(await screen.findByRole("region", { name: "Custom attributes (typed)" }));
-    await user.click(card.getByRole("button", { name: "Edit Waterproofing" }));
-    const open = within(card.getByRole("form", { name: "Edit Waterproofing" }));
-    expect(open.getByLabelText("Unit")).toHaveValue("mm");
-    await user.selectOptions(open.getByLabelText("Type"), "text");
-    await user.click(open.getByRole("button", { name: "Save Waterproofing" }));
-
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(savedDrafts).toHaveLength(1));
-
-    expect(lastSaved().products[0].attributes).toStrictEqual([
-      {
-        key: "waterproofing",
-        label: "Waterproofing",
-        attribute_type: "text",
-        value: "20000",
-        unit: null,
-        choices: [],
-      },
-    ]);
-  });
-
-  it("corrects a review's body and keeps the id the row displays", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const card = within(await screen.findByRole("region", { name: "Ratings and reviews" }));
-    await user.click(card.getByRole("button", { name: "Edit review one" }));
-    const open = within(card.getByRole("form", { name: "Edit review one" }));
-    await user.clear(open.getByLabelText("Body"));
-    await user.type(open.getByLabelText("Body"), "Dry all day.");
-    await user.click(open.getByRole("button", { name: "Save review one" }));
-
-    await user.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(savedDrafts).toHaveLength(1));
-
-    const before = unchangedPayload();
-    expect(lastSaved()).toStrictEqual({
-      ...before,
-      products: [
-        {
-          ...before.products[0],
-          reviews: [{ id: "one", author_display_name: "Camille", rating: 5, body: "Dry all day." }],
-        },
-      ],
-    });
-  });
-
   it("moves a variant's option value and leaves its price, stock and availability", async () => {
     const user = userEvent.setup();
     renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
@@ -2733,37 +2538,6 @@ describe("editing a saved entry in place", () => {
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(savedDrafts).toHaveLength(1));
     expect(lastSaved().products[0].variants).toStrictEqual(unchangedPayload().products[0].variants);
-  });
-
-  it("keeps an open row's typing through a Discard that moves its entry, and follows the rest", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const options = within(await screen.findByRole("region", { name: "Options" }));
-    await user.click(options.getByRole("button", { name: "Edit Size" }));
-    const name = within(options.getByRole("form", { name: "Edit Size" })).getByLabelText(
-      "Option name",
-    );
-    await user.clear(name);
-    await user.type(name, "Fit");
-    await user.click(options.getByRole("button", { name: "Save Size" }));
-    // Opened again on the draft's rename, and typed in: a value added, the name left alone.
-    await user.click(options.getByRole("button", { name: "Edit Fit" }));
-    const fit = within(options.getByRole("form", { name: "Edit Fit" }));
-    await user.type(fit.getByLabelText("New value"), "XXL");
-    await user.click(fit.getByRole("button", { name: "Add value" }));
-
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
-
-    // The lab holds "Size": the untouched name follows it, and so does the row's own name —
-    // the form, its buttons and what the prompt would call it — while the typed value stays.
-    const open = within(await options.findByRole("form", { name: "Edit Size" }));
-    expect(open.getByLabelText("Option name")).toHaveValue("Size");
-    expect(open.getByText("XXL")).toBeVisible();
-    expect(options.getByRole("button", { name: "Save Size" })).toBeVisible();
-    expect(
-      screen.getByText(/^Editing Size\. Save or Cancel before opening another row/),
-    ).toBeVisible();
   });
 
   it("corrects only the SKU of a variant whose option order is not the product's", async () => {
@@ -2887,98 +2661,6 @@ describe("editing a saved entry in place", () => {
     expect(savedDrafts).toEqual([]);
   });
 
-  it("refuses a media reference another entry holds, on both the row and the add form", async () => {
-    const user = userEvent.setup();
-    currentContent = {
-      ...READY_CONTENT,
-      products: [
-        {
-          ...READY_CONTENT.products[0],
-          media: [
-            { reference: "media/alpine-shell.jpg", alt_text: "Hood up in the rain" },
-            { reference: "media/alpine-charcoal.jpg", alt_text: "Charcoal, front" },
-          ],
-        },
-      ],
-    };
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const card = within(await screen.findByRole("region", { name: "Media references" }));
-    await user.click(card.getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
-    const open = within(card.getByRole("form", { name: "Edit media/alpine-shell.jpg" }));
-    const reference = open.getByLabelText("Reference");
-    await user.clear(reference);
-    await user.type(reference, "media/alpine-charcoal.jpg");
-
-    // Greying Save without saying why was the defect: the refusal is announced where it was
-    // typed, on `DerivedIdField`'s collision model.
-    expect(reference).toBeInvalid();
-    expect(reference).toHaveAccessibleDescription(
-      /media\/alpine-charcoal\.jpg is already a media reference of this product/,
-    );
-    // Save is refused by that same line, not by a second copy of it.
-    expectRefused(
-      open.getByRole("button", { name: "Save media/alpine-shell.jpg" }),
-      /media\/alpine-charcoal\.jpg is already a media reference of this product/,
-    );
-    expect(
-      open.getAllByText(/media\/alpine-charcoal\.jpg is already a media reference/),
-    ).toHaveLength(1);
-    await user.click(open.getByRole("button", { name: "Cancel editing media/alpine-shell.jpg" }));
-
-    // The add form refuses the same duplicate in the same words — it refused nothing at all
-    // before, and two entries sharing a reference are one key in the change summary.
-    await user.type(card.getByLabelText("Reference"), "media/alpine-charcoal.jpg");
-    await user.type(card.getByLabelText("Alt text"), "Charcoal again");
-    // Add is refused by the field's own line, as the open row's Save is (PLAN-UX Slice 33).
-    const add = card.getByRole("button", { name: "Add media" });
-    expectRefused(add, /media\/alpine-charcoal\.jpg is already a media reference of this product/);
-    expect(
-      card.getAllByText(/media\/alpine-charcoal\.jpg is already a media reference/),
-    ).toHaveLength(1);
-    await user.click(add);
-
-    expect(card.getByLabelText("Reference")).toBeInvalid();
-    expect(card.getAllByRole("listitem")).toHaveLength(2);
-    expect(savedDrafts).toEqual([]);
-  });
-
-  it("refuses a media row with no reference, and an option row with no value, saying why", async () => {
-    const user = userEvent.setup();
-    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
-
-    const options = within(await screen.findByRole("region", { name: "Options" }));
-    await user.click(options.getByRole("button", { name: "Edit Size" }));
-    const openOption = within(options.getByRole("form", { name: "Edit Size" }));
-    const values = openOption
-      .getAllByRole("button", { name: /^Remove / })
-      .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
-    for (const name of values) {
-      await user.click(openOption.getByRole("button", { name }));
-      const confirm = openOption.queryByRole("button", { name: "Remove it" });
-      if (confirm) {
-        await user.click(confirm);
-      }
-    }
-    expectRefused(
-      options.getByRole("button", { name: "Save Size" }),
-      "An option needs at least one value before a variant can choose it.",
-    );
-    await user.click(options.getByRole("button", { name: "Cancel editing Size" }));
-
-    const media = within(screen.getByRole("region", { name: "Media references" }));
-    const [edit] = media.getAllByRole("button", { name: /^Edit / });
-    const entry = (edit.getAttribute("aria-label") ?? "").replace(/^Edit /, "");
-    await user.click(edit);
-    const open = within(media.getByRole("form", { name: `Edit ${entry}` }));
-    await user.clear(open.getByLabelText("Reference"));
-    const save = open.getByRole("button", { name: `Save ${entry}` });
-    expectRefused(save, "A media entry needs a reference.");
-    await user.click(save);
-    expect(open.getByLabelText("Reference")).toHaveValue("");
-    expect(savedDrafts).toEqual([]);
-  });
-
   it("says nothing in the open row reaches the draft, and Cancel proves it", async () => {
     const user = userEvent.setup();
     // Read on tone of voice since the three document collections left their rows for a page
@@ -2997,6 +2679,818 @@ describe("editing a saved entry in place", () => {
 
     expect(tone.getByText("Warm and precise")).toBeVisible();
     expect(savedDrafts).toEqual([]);
+  });
+});
+
+/**
+ * A product's options, media, attributes and reviews, each edited in the one form below its
+ * list (ADR 0074, PLAN-UX Slice 38). As in *editing a saved entry in place*, an edit is checked
+ * against the whole payload the save carried, not against the list on screen.
+ */
+describe("a product's four lists, edited in the form below them", () => {
+  const PRODUCT = `/shops/${SHOP_ID}/products/alpine-shell-jacket`;
+
+  async function card(name: string) {
+    renderAt(PRODUCT);
+    return within(await screen.findByRole("region", { name }));
+  }
+
+  function itemOf(region: ReturnType<typeof within>, name: string): HTMLElement {
+    return region.getByText(name, { selector: "span" }).closest("li") as HTMLElement;
+  }
+
+  function leaveForOrders(user: ReturnType<typeof userEvent.setup>) {
+    return user.click(
+      within(screen.getByLabelText("Shop workspace")).getByRole("link", { name: "Orders" }),
+    );
+  }
+
+  describe("options", () => {
+    it("loads an option into the form, takes a value, and saves it where it stands", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      const color = itemOf(options, "Color");
+      expect(within(color).getByText("color", { selector: "code" })).toBeVisible();
+      expect(within(color).getByRole("list", { name: "Values of Color" })).toBeVisible();
+      const pencil = within(color).getByRole("button", { name: "Edit Color" });
+      await user.click(pencil);
+
+      expect(color).toHaveAttribute("aria-current", "true");
+      const form = within(options.getByRole("group", { name: "Edit Color" }));
+      expect(form.getByLabelText("Option name")).toHaveFocus();
+      // The saved values are the chips, each with the name the chip field gives it.
+      expect(form.getByRole("button", { name: "Remove Ocean Blue" })).toBeVisible();
+      await user.type(form.getByLabelText("New value"), "Charcoal");
+      await user.click(form.getByRole("button", { name: "Add value" }));
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+
+      expect(pencil).toHaveFocus();
+      expect(options.getByRole("group", { name: "Add an option" })).toBeVisible();
+      expect(
+        within(within(color).getByRole("list", { name: "Values of Color" }))
+          .getAllByRole("listitem")
+          .map((chip) => chip.textContent),
+      ).toEqual(["Ocean Blue", "Charcoal"]);
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const before = unchangedPayload();
+      expect(lastSaved()).toStrictEqual({
+        ...before,
+        products: [
+          {
+            ...before.products[0],
+            options: [
+              { key: "color", name: "Color", values: ["Ocean Blue", "Charcoal"] },
+              { key: "size", name: "Size", values: ["M", "L"] },
+            ],
+          },
+        ],
+      });
+    });
+
+    it("shows the key fixed while editing, because a variant chooses by it", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+      const key = within(options.getByRole("group", { name: "Edit Size" })).getByLabelText(
+        "Option key",
+      );
+      expect(key).toHaveValue("size");
+      expect(key).toHaveAttribute("readonly");
+      expect(key).toHaveAccessibleDescription(/A variant chooses by it\./);
+      await user.type(key, "-two");
+      expect(key).toHaveValue("size");
+    });
+
+    it("derives the key while adding, and refuses one another option holds after Add option", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+      const add = within(options.getByRole("group", { name: "Add an option" }));
+      const button = add.getByRole("button", { name: "Add option" });
+
+      await user.type(add.getByLabelText("Option name"), "Colour");
+      expect(add.getByLabelText("Option key")).toHaveValue("colour");
+      await user.clear(add.getByLabelText("Option key"));
+      await user.type(add.getByLabelText("Option key"), "color");
+      expectRefused(button, "color is already in the draft.");
+      expect(add.getByLabelText("Option key")).toHaveAttribute("aria-invalid", "true");
+      expect(add.getByLabelText("Option key")).toHaveAccessibleDescription(
+        /color is already in the draft\./,
+      );
+      await user.clear(add.getByLabelText("Option key"));
+      await user.type(add.getByLabelText("Option key"), "Not a key");
+      expectRefused(button, ENTRY_KEY_RULE);
+    });
+
+    it("refuses the form with its first rule after Add option, in the order it asks", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      // Blank, it is refused and says why, and marks nothing until something is typed.
+      const add = options.getByRole("group", { name: "Add an option" });
+      const button = within(add).getByRole("button", { name: "Add option" });
+      expectRefused(button, OPTION_NAME_RULE);
+      expect(within(add).getByLabelText("Option name")).not.toHaveAttribute("aria-invalid");
+      await submitWithoutPressing(button);
+      expect(options.getAllByRole("button", { name: /^Edit / })).toHaveLength(2);
+
+      await user.click(options.getByRole("button", { name: "Edit Color" }));
+      const form = options.getByRole("group", { name: "Edit Color" });
+      await user.click(within(form).getByRole("button", { name: "Remove Ocean Blue" }));
+      await expectRulesInFieldOrder(
+        user,
+        form,
+        within(form).getByRole("button", { name: "Save changes" }),
+        {
+          "Option name": { rule: OPTION_NAME_RULE, answer: "Color" },
+          "New value": { rule: OPTION_NEEDS_VALUE, answer: "Ocean Blue{Enter}" },
+        },
+      );
+    });
+
+    it("cancels an edit to an empty add form, handing focus back to the Edit", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      const pencil = options.getByRole("button", { name: "Edit Size" });
+      await user.click(pencil);
+      await user.type(options.getByLabelText("Option name"), " typed");
+      await user.click(options.getByRole("button", { name: "Cancel" }));
+
+      expect(pencil).toHaveFocus();
+      expect(itemOf(options, "Size")).not.toHaveAttribute("aria-current");
+      const add = within(options.getByRole("group", { name: "Add an option" }));
+      expect(add.getByLabelText("Option name")).toHaveValue("");
+      expect(add.getByLabelText("Option key")).toHaveValue("");
+      expect(add.queryAllByRole("button", { name: /^Remove / })).toEqual([]);
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    });
+
+    it("leaves no value typed in New value behind when an edit is cancelled or saved", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      for (const finish of ["Cancel", "Save changes"]) {
+        await user.click(options.getByRole("button", { name: "Edit Color" }));
+        await user.type(
+          within(options.getByRole("group", { name: "Edit Color" })).getByLabelText("New value"),
+          "Charcoal",
+        );
+        await user.click(options.getByRole("button", { name: finish }));
+        const add = within(options.getByRole("group", { name: "Add an option" }));
+        expect(add.getByLabelText("New value"), finish).toHaveValue("");
+      }
+      // Nor into the same option's edit opened again.
+      await user.click(options.getByRole("button", { name: "Edit Color" }));
+      await user.type(options.getByLabelText("New value"), "Charcoal");
+      await user.click(options.getByRole("button", { name: "Edit Color" }));
+      expect(
+        within(options.getByRole("group", { name: "Edit Color" })).getByLabelText("New value"),
+      ).toHaveValue("");
+      // Nor from one option's edit into another's.
+      await user.type(options.getByLabelText("New value"), "Charcoal");
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+      expect(
+        within(options.getByRole("group", { name: "Edit Size" })).getByLabelText("New value"),
+      ).toHaveValue("");
+    });
+
+    it("does not ask about an option loaded into the form and left untouched", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+      await leaveForOrders(user);
+
+      expect(await screen.findByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("leaves the draft clean when an untouched option is saved", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      const pencil = options.getByRole("button", { name: "Edit Size" });
+      await user.click(pencil);
+      await user.click(options.getByRole("button", { name: "Save changes" }));
+
+      expect(pencil).toHaveFocus();
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    });
+
+    it("empties the form when the option it edits is removed, its variants' values going with it", async () => {
+      window.localStorage.removeItem("agent-lab.confirm-before-delete");
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+      await user.type(options.getByLabelText("Option name"), " typed");
+      await user.click(options.getByRole("button", { name: "Remove Size" }));
+      const confirm = options.getByRole("group", { name: "Remove the option “Size”?" });
+      expect(confirm).toHaveFocus();
+      // The confirm stands in the item's place, on the list, not under it.
+      expect(confirm.closest("li")?.parentElement).toBe(
+        within(options.getByRole("group", { name: "Declared" })).getAllByRole("list")[0],
+      );
+      await user.click(within(confirm).getByRole("button", { name: "Remove it" }));
+
+      expect(options.getByText("Removed the option “Size” from the draft.")).toHaveFocus();
+      const add = within(options.getByRole("group", { name: "Add an option" }));
+      expect(add.getByLabelText("Option name")).toHaveValue("");
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const [product] = lastSaved().products;
+      expect(product.options.map((option) => option.key)).toEqual(["color"]);
+      expect(product.variants.map((variant) => variant.option_values)).toEqual([
+        [{ key: "color", value: "Ocean Blue" }],
+        [{ key: "color", value: "Ocean Blue" }],
+      ]);
+    });
+
+    it("follows the draft through a Discard while clean, and keeps a typed edit's work", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+      const name = within(options.getByRole("group", { name: "Edit Size" })).getByLabelText(
+        "Option name",
+      );
+      await user.clear(name);
+      await user.type(name, "Fit");
+      await user.click(options.getByRole("button", { name: "Save changes" }));
+
+      // Opened again on the draft's rename and left alone: the lab holds "Size", and so does the
+      // form once the Discard lands.
+      await user.click(options.getByRole("button", { name: "Edit Fit" }));
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+      const clean = within(await options.findByRole("group", { name: "Edit Size" }));
+      expect(clean.getByLabelText("Option name")).toHaveValue("Size");
+
+      // Renamed again and opened with a value typed: the Discard puts "Size" back on the list,
+      // and the form keeps everything it was given.
+      await user.clear(clean.getByLabelText("Option name"));
+      await user.type(clean.getByLabelText("Option name"), "Fit");
+      await user.click(clean.getByRole("button", { name: "Save changes" }));
+      await user.click(options.getByRole("button", { name: "Edit Fit" }));
+      const fit = within(options.getByRole("group", { name: "Edit Fit" }));
+      await user.type(fit.getByLabelText("New value"), "XXL{Enter}");
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+      const dirty = within(await options.findByRole("group", { name: "Edit Size" }));
+      expect(dirty.getByLabelText("Option name")).toHaveValue("Fit");
+      expect(dirty.getByRole("button", { name: "Remove XXL" })).toBeVisible();
+      expect(itemOf(options, "Size")).toHaveAttribute("aria-current", "true");
+    });
+
+    it("asks before leaving an option typed in its form, with the form's own reason", async () => {
+      const user = userEvent.setup();
+      const options = await card("Options");
+
+      await user.type(
+        within(options.getByRole("group", { name: "Add an option" })).getByLabelText("Option name"),
+        "Fit",
+      );
+      await leaveForOrders(user);
+
+      const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      expect(prompt).toHaveTextContent(
+        "The Options form holds “Fit”, which has not been added to the draft.",
+      );
+      expect(prompt).toHaveTextContent(itemFormReason("an option", "draft"));
+      expectRefused(within(prompt).getByRole("button", { name: "Save and leave" }), /Stay, then/);
+    });
+  });
+
+  describe("media references", () => {
+    const TWO_MEDIA = () => {
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          {
+            ...READY_CONTENT.products[0],
+            media: [
+              { reference: "media/alpine-shell.jpg", alt_text: "Hood up in the rain" },
+              { reference: "media/alpine-charcoal.jpg", alt_text: "Charcoal, front" },
+            ],
+          },
+        ],
+      };
+    };
+
+    it("refuses a reference another entry holds after Save changes, the field marked", async () => {
+      const user = userEvent.setup();
+      TWO_MEDIA();
+      const media = await card("Media references");
+
+      await user.click(media.getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
+      const form = within(media.getByRole("group", { name: "Edit media/alpine-shell.jpg" }));
+      const reference = form.getByLabelText("Reference");
+      expect(reference).toHaveFocus();
+      await user.clear(reference);
+      await user.type(reference, "media/alpine-charcoal.jpg");
+
+      const save = form.getByRole("button", { name: "Save changes" });
+      const taken = "media/alpine-charcoal.jpg is already a media reference of this product.";
+      expectRefused(save, taken);
+      expect(
+        save.compareDocumentPosition(refusalElement(save)) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(reference).toHaveAttribute("aria-invalid", "true");
+      expect((reference.getAttribute("aria-describedby") ?? "").split(" ")).toContain(
+        refusalElement(save).id,
+      );
+      // Said once, after the buttons, and not a second time on the field.
+      expect(media.getAllByText(taken)).toHaveLength(1);
+      await user.click(save);
+      await submitWithoutPressing(save);
+      expect(media.getAllByRole("button", { name: /^Edit / })).toHaveLength(2);
+      await user.click(form.getByRole("button", { name: "Cancel" }));
+
+      // The add form refuses the same duplicate in the same words.
+      const add = within(media.getByRole("group", { name: "Add a media reference" }));
+      await user.type(add.getByLabelText("Reference"), "media/alpine-charcoal.jpg");
+      await user.type(add.getByLabelText("Alt text"), "Charcoal again");
+      expectRefused(add.getByRole("button", { name: "Add media" }), taken);
+      expect(add.getByLabelText("Reference")).toHaveAttribute("aria-invalid", "true");
+      await user.click(add.getByRole("button", { name: "Add media" }));
+      expect(media.getAllByRole("button", { name: /^Edit / })).toHaveLength(2);
+      expect(savedDrafts).toEqual([]);
+    });
+
+    it("moves a reference where it stands, the reference being its own key", async () => {
+      const user = userEvent.setup();
+      const media = await card("Media references");
+
+      const item = itemOf(media, "media/alpine-shell.jpg");
+      expect(within(item).getByText("media/alpine-shell.jpg", { selector: "span" })).toHaveClass(
+        "font-mono",
+      );
+      expect(within(item).getByText("Hood up in the rain")).toBeVisible();
+      await user.click(within(item).getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
+      const form = within(media.getByRole("group", { name: "Edit media/alpine-shell.jpg" }));
+      await user.clear(form.getByLabelText("Reference"));
+      await user.type(form.getByLabelText("Reference"), " media/alpine-shell-front.jpg ");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+
+      expect(
+        media.getByRole("button", { name: "Edit media/alpine-shell-front.jpg" }),
+      ).toHaveFocus();
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const before = unchangedPayload();
+      expect(lastSaved()).toStrictEqual({
+        ...before,
+        products: [
+          {
+            ...before.products[0],
+            media: [{ reference: "media/alpine-shell-front.jpg", alt_text: "Hood up in the rain" }],
+          },
+        ],
+      });
+    });
+
+    it("refuses the form with its first rule after Add media, in the order it asks", async () => {
+      const user = userEvent.setup();
+      const media = await card("Media references");
+
+      const add = media.getByRole("group", { name: "Add a media reference" });
+      const button = within(add).getByRole("button", { name: "Add media" });
+      expectRefused(button, MEDIA_NEEDS_REFERENCE);
+      expect(within(add).getByLabelText("Reference")).not.toHaveAttribute("aria-invalid");
+
+      await user.click(media.getByRole("button", { name: "Edit media/alpine-shell.jpg" }));
+      const form = media.getByRole("group", { name: "Edit media/alpine-shell.jpg" });
+      await expectRulesInFieldOrder(
+        user,
+        form,
+        within(form).getByRole("button", { name: "Save changes" }),
+        {
+          Reference: { rule: MEDIA_NEEDS_REFERENCE, answer: "media/alpine-shell.jpg" },
+          "Alt text": { rule: MEDIA_ALT_TEXT_RULE, answer: "Hood up in the rain" },
+        },
+      );
+    });
+
+    it("cancels an edit to an empty add form, handing focus back to the Edit", async () => {
+      const user = userEvent.setup();
+      const media = await card("Media references");
+
+      const pencil = media.getByRole("button", { name: "Edit media/alpine-shell.jpg" });
+      await user.click(pencil);
+      await user.type(media.getByLabelText("Alt text"), " typed");
+      await user.click(media.getByRole("button", { name: "Cancel" }));
+
+      expect(pencil).toHaveFocus();
+      expect(itemOf(media, "media/alpine-shell.jpg")).not.toHaveAttribute("aria-current");
+      const add = within(media.getByRole("group", { name: "Add a media reference" }));
+      expect(add.getByLabelText("Reference")).toHaveValue("");
+      expect(add.getByLabelText("Alt text")).toHaveValue("");
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    });
+
+    it("leaves the draft clean when an untouched media entry is saved", async () => {
+      const user = userEvent.setup();
+      const media = await card("Media references");
+
+      const pencil = media.getByRole("button", { name: "Edit media/alpine-shell.jpg" });
+      await user.click(pencil);
+      await user.click(media.getByRole("button", { name: "Save changes" }));
+
+      expect(pencil).toHaveFocus();
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    });
+  });
+
+  describe("custom attributes", () => {
+    const ATTRIBUTES = "Custom attributes (typed)";
+
+    it("reads an attribute as its label, key and type, its value one of its choices", async () => {
+      const attributes = await card(ATTRIBUTES);
+
+      const item = itemOf(attributes, "Waterproofing");
+      const label = within(item).getByText("Waterproofing", { selector: "span" });
+      const type = within(item).getByText("Choice", { selector: "span" });
+      const key = within(item).getByText("waterproofing", { selector: "code" });
+      expect(label.compareDocumentPosition(type) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(type.compareDocumentPosition(key) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(item).getByText("20k", { selector: "span" })).toBeVisible();
+      expect(within(item).getByText("one of")).toBeVisible();
+    });
+
+    it("relabels a choice attribute without dropping its choices, the key fixed", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      const form = within(attributes.getByRole("group", { name: "Edit Waterproofing" }));
+      expect(form.getByLabelText("Label")).toHaveFocus();
+      // The key does not follow the label the way the add form's does: it was derived when
+      // the attribute was created, and the tools that read it have not moved.
+      expect(form.getByLabelText("Key")).toHaveValue("waterproofing");
+      expect(form.getByLabelText("Key")).toHaveAttribute("readonly");
+      await user.clear(form.getByLabelText("Label"));
+      await user.type(form.getByLabelText("Label"), "Waterproof rating");
+      expect(form.getByLabelText("Key")).toHaveValue("waterproofing");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const before = unchangedPayload();
+      expect(lastSaved()).toStrictEqual({
+        ...before,
+        products: [
+          {
+            ...before.products[0],
+            attributes: [
+              {
+                key: "waterproofing",
+                label: "Waterproof rating",
+                attribute_type: "choice",
+                value: "20k",
+                unit: null,
+                choices: ["10k", "20k", "30k"],
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    it("empties the choices when a choice attribute is edited into a text one", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      const form = within(attributes.getByRole("group", { name: "Edit Waterproofing" }));
+      await user.selectOptions(form.getByLabelText("Type"), "text");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      // The builder normalises, so the edit cannot carry choices a text attribute may not hold.
+      expect(lastSaved().products[0].attributes).toStrictEqual([
+        {
+          key: "waterproofing",
+          label: "Waterproofing",
+          attribute_type: "text",
+          value: "20k",
+          unit: null,
+          choices: [],
+        },
+      ]);
+    });
+
+    it("nulls the unit when a measurement attribute is edited into a text one", async () => {
+      const user = userEvent.setup();
+      currentContent = {
+        ...READY_CONTENT,
+        products: [
+          {
+            ...READY_CONTENT.products[0],
+            attributes: [
+              {
+                key: "waterproofing",
+                label: "Waterproofing",
+                attribute_type: "measurement",
+                value: "20000",
+                unit: "mm",
+                choices: [],
+              },
+            ],
+          },
+        ],
+      };
+      const attributes = await card(ATTRIBUTES);
+
+      expect(itemOf(attributes, "Waterproofing")).toHaveTextContent("20000 mm");
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      const form = within(attributes.getByRole("group", { name: "Edit Waterproofing" }));
+      expect(form.getByLabelText("Unit")).toHaveValue("mm");
+      await user.selectOptions(form.getByLabelText("Type"), "text");
+      expect(form.queryByLabelText("Unit")).toBeNull();
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      expect(lastSaved().products[0].attributes).toStrictEqual([
+        {
+          key: "waterproofing",
+          label: "Waterproofing",
+          attribute_type: "text",
+          value: "20000",
+          unit: null,
+          choices: [],
+        },
+      ]);
+    });
+
+    it("keeps an attribute's type, value and choices as one through a Discard", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      // The lab holds a choice, 20k among three; the draft retypes it to text "x".
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      let form = within(attributes.getByRole("group", { name: "Edit Waterproofing" }));
+      await user.selectOptions(form.getByLabelText("Type"), "text");
+      await user.clear(form.getByLabelText("Value"));
+      await user.type(form.getByLabelText("Value"), "x");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+
+      // Opened again and left alone, the form follows the Discard whole: the choice, its value
+      // and its three choices, never the text type over the lab's value or the reverse.
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+      form = within(attributes.getByRole("group", { name: "Edit Waterproofing" }));
+      await waitFor(() => expect(form.getByLabelText("Type")).toHaveValue("choice"));
+      expect(form.getByLabelText("Value")).toHaveValue("20k");
+      expect(form.getByRole("button", { name: "Remove 30k" })).toBeVisible();
+
+      // Retyped again, saved, opened, and only the value typed in: the form is the operator's
+      // now, and keeps the text type with the value through the Discard that puts the choice
+      // back. Following the type alone would build a choice whose value is none of its choices.
+      await user.selectOptions(form.getByLabelText("Type"), "text");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      form = within(attributes.getByRole("group", { name: "Edit Waterproofing" }));
+      await user.clear(form.getByLabelText("Value"));
+      await user.type(form.getByLabelText("Value"), "green");
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+      await waitFor(() => expect(screen.getByText("All changes saved")).toBeInTheDocument());
+
+      expect(form.getByLabelText("Type")).toHaveValue("text");
+      expect(form.getByLabelText("Value")).toHaveValue("green");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      expect(lastSaved().products[0].attributes).toStrictEqual([
+        {
+          key: "waterproofing",
+          label: "Waterproofing",
+          attribute_type: "text",
+          value: "green",
+          unit: null,
+          choices: [],
+        },
+      ]);
+    });
+
+    it("cannot save a choice attribute whose value is none of its choices, after a Discard or not", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      const form = within(attributes.getByRole("group", { name: "Edit Waterproofing" }));
+      await user.clear(form.getByLabelText("Value"));
+      await user.type(form.getByLabelText("Value"), "green");
+      const save = form.getByRole("button", { name: "Save changes" });
+      expectRefused(save, ATTRIBUTE_VALUE_AMONG_CHOICES_RULE);
+      expect(form.getByLabelText("New choice")).toHaveAttribute("aria-invalid", "true");
+
+      // A Discard leaves the typed value, and with it the refusal.
+      await user.type(screen.getByLabelText("Description"), " Taped seams.");
+      await user.click(screen.getByRole("button", { name: "Discard changes" }));
+      await waitFor(() => expect(screen.getByText("All changes saved")).toBeInTheDocument());
+      expect(form.getByLabelText("Value")).toHaveValue("green");
+      expectRefused(save, ATTRIBUTE_VALUE_AMONG_CHOICES_RULE);
+      await user.click(save);
+      await submitWithoutPressing(save);
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+      expect(savedDrafts).toEqual([]);
+    });
+
+    it("returns to an empty add form when an edit is cancelled, handing focus back to the Edit", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      const pencil = attributes.getByRole("button", { name: "Edit Waterproofing" });
+      await user.click(pencil);
+      await user.type(attributes.getByLabelText("New choice"), "40k");
+      await user.click(attributes.getByRole("button", { name: "Cancel" }));
+
+      expect(pencil).toHaveFocus();
+      expect(itemOf(attributes, "Waterproofing")).not.toHaveAttribute("aria-current");
+      const add = within(attributes.getByRole("group", { name: "Add an attribute" }));
+      expect(add.getByLabelText("Label")).toHaveValue("");
+      expect(add.getByLabelText("Type")).toHaveValue("text");
+      expect(add.getByLabelText("Value")).toHaveValue("");
+      await user.selectOptions(add.getByLabelText("Type"), "choice");
+      expect(add.getByLabelText("New choice")).toHaveValue("");
+    });
+
+    it("leaves no choice typed in New choice behind when the edit is opened again", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      await user.type(attributes.getByLabelText("New choice"), "40k");
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+
+      expect(
+        within(attributes.getByRole("group", { name: "Edit Waterproofing" })).getByLabelText(
+          "New choice",
+        ),
+      ).toHaveValue("");
+    });
+
+    it("refuses the form with its first rule after Add attribute, in the order it asks", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      const add = attributes.getByRole("group", { name: "Add an attribute" });
+      expectRefused(
+        within(add).getByRole("button", { name: "Add attribute" }),
+        ATTRIBUTE_LABEL_RULE,
+      );
+      expect(within(add).getByLabelText("Label")).not.toHaveAttribute("aria-invalid");
+
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      const form = attributes.getByRole("group", { name: "Edit Waterproofing" });
+      for (const choice of ["10k", "20k", "30k"]) {
+        await user.click(within(form).getByRole("button", { name: `Remove ${choice}` }));
+      }
+      await expectRulesInFieldOrder(
+        user,
+        form,
+        within(form).getByRole("button", { name: "Save changes" }),
+        {
+          Label: { rule: ATTRIBUTE_LABEL_RULE, answer: "Waterproofing" },
+          Value: { rule: ATTRIBUTE_VALUE_RULE, answer: "20k" },
+          "New choice": { rule: ATTRIBUTE_NEEDS_CHOICE, answer: "20k{Enter}" },
+        },
+      );
+    });
+
+    it("asks a measurement for a number and its unit, in that order", async () => {
+      const user = userEvent.setup();
+      const attributes = await card(ATTRIBUTES);
+
+      await user.click(attributes.getByRole("button", { name: "Edit Waterproofing" }));
+      const form = attributes.getByRole("group", { name: "Edit Waterproofing" });
+      await user.selectOptions(within(form).getByLabelText("Type"), "measurement");
+      const save = within(form).getByRole("button", { name: "Save changes" });
+      // "20k" is no number.
+      expectRefused(save, ATTRIBUTE_MEASUREMENT_RULE);
+      expect(within(form).getByLabelText("Value")).toHaveAttribute("aria-invalid", "true");
+      await expectRulesInFieldOrder(user, form, save, {
+        Label: { rule: ATTRIBUTE_LABEL_RULE, answer: "Waterproofing" },
+        Value: { rule: ATTRIBUTE_VALUE_RULE, answer: "20000" },
+        Unit: { rule: ATTRIBUTE_UNIT_RULE, answer: "mm" },
+      });
+    });
+  });
+
+  describe("reviews", () => {
+    const REVIEWS = "Ratings and reviews";
+
+    it("corrects a review's body where it stands and keeps the id its item reads", async () => {
+      const user = userEvent.setup();
+      const reviews = await card(REVIEWS);
+
+      const item = itemOf(reviews, "5★");
+      expect(within(item).getByText("one", { selector: "code" })).toBeVisible();
+      expect(within(item).getByText("“Dry.” — Camille")).toBeVisible();
+      const pencil = within(item).getByRole("button", { name: "Edit review one" });
+      expect(within(item).getByRole("button", { name: "Remove review one" })).toBeVisible();
+      await user.click(pencil);
+      const form = within(reviews.getByRole("group", { name: "Edit review one" }));
+      expect(form.getByLabelText("Author")).toHaveFocus();
+      await user.clear(form.getByLabelText("Body"));
+      await user.type(form.getByLabelText("Body"), "Dry all day.");
+      await user.click(form.getByRole("button", { name: "Save changes" }));
+      expect(pencil).toHaveFocus();
+      expect(reviews.getByRole("group", { name: "Add a review" })).toBeVisible();
+
+      await user.click(screen.getByRole("button", { name: "Save draft" }));
+      await waitFor(() => expect(savedDrafts).toHaveLength(1));
+      const before = unchangedPayload();
+      expect(lastSaved()).toStrictEqual({
+        ...before,
+        products: [
+          {
+            ...before.products[0],
+            reviews: [
+              { id: "one", author_display_name: "Camille", rating: 5, body: "Dry all day." },
+            ],
+          },
+        ],
+      });
+    });
+
+    it("refuses the form with its first rule after Add review, in the order it asks", async () => {
+      const user = userEvent.setup();
+      const reviews = await card(REVIEWS);
+
+      const add = reviews.getByRole("group", { name: "Add a review" });
+      expectRefused(within(add).getByRole("button", { name: "Add review" }), REVIEW_AUTHOR_RULE);
+      expect(within(add).getByLabelText("Author")).not.toHaveAttribute("aria-invalid");
+
+      await user.click(reviews.getByRole("button", { name: "Edit review one" }));
+      const form = reviews.getByRole("group", { name: "Edit review one" });
+      await expectRulesInFieldOrder(
+        user,
+        form,
+        within(form).getByRole("button", { name: "Save changes" }),
+        {
+          Author: { rule: REVIEW_AUTHOR_RULE, answer: "Camille" },
+          Body: { rule: REVIEW_BODY_RULE, answer: "Dry." },
+        },
+      );
+    });
+
+    it("asks before leaving an edited review, with the form's own reason", async () => {
+      const user = userEvent.setup();
+      const reviews = await card(REVIEWS);
+
+      await user.click(reviews.getByRole("button", { name: "Edit review one" }));
+      await user.type(
+        within(reviews.getByRole("group", { name: "Edit review one" })).getByLabelText("Body"),
+        " Mostly.",
+      );
+      await leaveForOrders(user);
+
+      const prompt = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      expect(prompt).toHaveTextContent(
+        "The Ratings and reviews form holds an edit to review one that has not reached the draft.",
+      );
+      expect(prompt).toHaveTextContent(itemFormReason("a review", "draft"));
+    });
+
+    it("cancels an edit to an empty add form, handing focus back to the Edit", async () => {
+      const user = userEvent.setup();
+      const reviews = await card(REVIEWS);
+
+      const pencil = reviews.getByRole("button", { name: "Edit review one" });
+      await user.click(pencil);
+      await user.click(
+        within(reviews.getByRole("group", { name: "Rating" })).getByRole("radio", {
+          name: "2 stars",
+        }),
+      );
+      await user.click(reviews.getByRole("button", { name: "Cancel" }));
+
+      expect(pencil).toHaveFocus();
+      const add = within(reviews.getByRole("group", { name: "Add a review" }));
+      expect(add.getByLabelText("Author")).toHaveValue("");
+      expect(add.getByLabelText("Body")).toHaveValue("");
+      expect(add.getByRole("radio", { name: "5 stars" })).toBeChecked();
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    });
+
+    it("leaves the draft clean when an untouched review is saved", async () => {
+      const user = userEvent.setup();
+      const reviews = await card(REVIEWS);
+
+      const pencil = reviews.getByRole("button", { name: "Edit review one" });
+      await user.click(pencil);
+      await user.click(reviews.getByRole("button", { name: "Save changes" }));
+
+      expect(pencil).toHaveFocus();
+      expect(screen.getByText("All changes saved")).toBeInTheDocument();
+    });
   });
 });
 
@@ -5447,13 +5941,14 @@ describe("deleting and duplicating a product", () => {
       expect(lastSaved().products).toEqual([]);
     });
 
-    it("takes an open row of the product with it, without asking about the row", async () => {
+    it("takes an edit typed in one of its forms with it, without asking about the form", async () => {
       window.localStorage.setItem(CONFIRM_KEY, "false");
       const user = userEvent.setup();
       const { router } = renderAt(`${products}/alpine-shell-jacket`);
       await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
       const options = within(screen.getByRole("region", { name: "Options" }));
       await user.click(options.getByRole("button", { name: "Edit Size" }));
+      await user.type(options.getByLabelText("Option name"), " typed");
 
       await user.click(screen.getByRole("button", { name: "Delete" }));
 
@@ -5730,13 +6225,29 @@ describe("deleting and duplicating a product", () => {
       expect(lastSaved().products).toHaveLength(2);
     });
 
+    it("goes to the copy without asking when a form below a list was opened and left untouched", async () => {
+      const user = userEvent.setup();
+      const { router } = renderAt(`${products}/alpine-shell-jacket`);
+      await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
+      // Loaded and unchanged is not unsaved work (ADR 0051, ADR 0074).
+      const options = within(screen.getByRole("region", { name: "Options" }));
+      await user.click(options.getByRole("button", { name: "Edit Size" }));
+
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+
+      await waitFor(() => expect(address(router)).toBe(`${products}/alpine-shell-jacket-copy`));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
     it("makes no second copy on a press after the unsaved-work prompt kept the operator on the source", async () => {
       const user = userEvent.setup();
       const { router } = renderAt(`${products}/alpine-shell-jacket`);
       await screen.findByRole("heading", { level: 1, name: "Alpine Shell Jacket" });
-      // An open row is work no other page can save, so leaving for the copy asks (ADR 0051).
+      // An edit typed in a form below a list is work no other page can save, so leaving for
+      // the copy asks (ADR 0051).
       const options = within(screen.getByRole("region", { name: "Options" }));
       await user.click(options.getByRole("button", { name: "Edit Size" }));
+      await user.type(options.getByLabelText("Option name"), " typed");
 
       await user.click(screen.getByRole("button", { name: "Duplicate" }));
       await user.click(await screen.findByRole("button", { name: "Stay on this page" }));
