@@ -3,7 +3,13 @@ import { type RefObject, useId, useRef } from "react";
 import { ConfirmRemove, RemovalNotice } from "../components/ConfirmRemove";
 import { DerivedIdField } from "../components/DerivedIdField";
 import { FieldGroup, FieldHint, FieldRows } from "../components/FieldHint";
-import { EditButton, ItemFormRow, ListItem, RemoveButton } from "../components/ItemList";
+import {
+  EditButton,
+  FixedKeyField,
+  ItemFormRow,
+  ListItem,
+  RemoveButton,
+} from "../components/ItemList";
 import { Card } from "../components/WorkspaceChrome";
 import { SLUG_MAX_LENGTH, slugify, uniqueSuggestion } from "../lib/entryIds";
 import { labelOf, PAYMENT_METHOD_KIND } from "../lib/enumLabels";
@@ -37,7 +43,7 @@ import {
   paymentRefusal,
   transitWindow,
 } from "../lib/shopMethods";
-import { fieldControlClasses, readOnlyValueClasses, validationMessageClasses } from "../lib/ui";
+import { fieldControlClasses, validationMessageClasses } from "../lib/ui";
 import { useShopWorkspace } from "../shell/useShopWorkspace";
 
 /**
@@ -147,11 +153,7 @@ function MethodIdField({
 }) {
   const suggested = uniqueSuggestion(slugify(name, ""), taken);
   if (editing) {
-    return (
-      <FieldHint label="ID" hint={ID_FIXED_HINT}>
-        <input className={`${readOnlyValueClasses} font-mono`} value={value} readOnly />
-      </FieldHint>
-    );
+    return <FixedKeyField label="ID" hint={ID_FIXED_HINT} value={value} />;
   }
   return (
     <DerivedIdField
