@@ -356,3 +356,11 @@ the question this ADR left open under *Deliberately not here*. Busy still wins o
 still says nothing and still wears the faded weight. ADR 0065 also writes "Checking the draft…"
 for a Publish whose gate has not answered, and closes the deferral of *Materialize snapshot* and
 *Clone sandbox*: both are refused before the press.
+
+## Amendment — 2026-10-01: the Start sweep's count
+
+*Verification*'s "all 648 combinations" was the count on the day it was written. The axes have
+grown since — the scenario's and the arms' with the versions they wait on (ADR 0064), the name's
+with the padding Python's `str.strip()` reads and `trim()` does not — so `experimentStart.test.ts`
+now sweeps 4 · 16 · 4 · 3 · 3 · 2 · 2 = 9216 combinations of the same seven causes, and pins
+that count.
