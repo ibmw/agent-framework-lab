@@ -656,13 +656,38 @@ function variantOptionValues(
 ): VariantSchema["option_values"] {
   const carried = stored.map((entry) => ({
     key: entry.key,
-    value: chosen[entry.key] ?? entry.value,
+    value: choiceStillOffered(options, entry.key, chosen) ?? entry.value,
   }));
   const declared = new Set(stored.map((entry) => entry.key));
   const gained = options
     .filter((option) => !declared.has(option.key))
-    .map((option) => ({ key: option.key, value: chosen[option.key] ?? option.values[0] }));
+    .map((option) => ({
+      key: option.key,
+      value: choiceStillOffered(options, option.key, chosen) ?? option.values[0],
+    }));
   return [...carried, ...gained];
+}
+
+/**
+ * The value typed for an option, while the option still offers it. A choice is typed against
+ * the values on screen, and a *Discard changes* can take one away while the choice is held —
+ * the open row and the add form both outlive a discard. A typed choice the option no longer
+ * offers is dropped rather than written: the builder falls back to the value the variant
+ * already holds, or to the option's first for a variant being added.
+ *
+ * This answers for the typed choice only. A variant whose *stored* value the option does not
+ * offer — authored through the API, or left by an option value's one-press removal (ADR
+ * 0060) — still writes that stored value, which the gate raises as
+ * `variant_unknown_option_value`, while its select shows the option's first value.
+ */
+function choiceStillOffered(
+  options: readonly OptionSchema[],
+  key: string,
+  chosen: Record<string, string>,
+): string | undefined {
+  const value = chosen[key];
+  const option = options.find((entry) => entry.key === key);
+  return value !== undefined && option?.values.includes(value) ? value : undefined;
 }
 
 /**
@@ -955,7 +980,7 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
   });
   const [optionValues, setOptionValues] = useState<Record<string, string>>({});
   const chosenValues = product.options.map(
-    (option) => optionValues[option.key] ?? option.values[0],
+    (option) => choiceStillOffered(product.options, option.key, optionValues) ?? option.values[0],
   );
   const takenSkus = product.variants.map((variant) => variant.sku);
   const { value: suggestedSku, takenBase: takenSkuBase } = uniqueVariantSku(
@@ -1325,7 +1350,9 @@ function VariantsCard({ product, onChange, currencies }: PricedEditorProps) {
             <select
               id={`new-variant-${option.key}`}
               className={`${fieldControlClasses} w-full`}
-              value={optionValues[option.key] ?? option.values[0]}
+              value={
+                choiceStillOffered(product.options, option.key, optionValues) ?? option.values[0]
+              }
               onChange={(event) =>
                 setOptionValues({ ...optionValues, [option.key]: event.target.value })
               }

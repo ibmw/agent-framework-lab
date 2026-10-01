@@ -2582,6 +2582,44 @@ describe("editing a saved entry in place", () => {
     expect(lastSaved().products[0].variants).toStrictEqual(unchangedPayload().products[0].variants);
   });
 
+  it("drops a variant's choice of a value the page's Discard took away, and writes what it shows", async () => {
+    const user = userEvent.setup();
+    renderAt(`/shops/${SHOP_ID}/products/alpine-shell-jacket`);
+
+    // XL is a value only the unsaved draft offers.
+    const options = within(await screen.findByRole("region", { name: "Options" }));
+    await user.click(options.getByRole("button", { name: "Edit Size" }));
+    const size = within(options.getByRole("group", { name: "Edit Size" }));
+    await user.type(size.getByLabelText("New value"), "XL{Enter}");
+    await user.click(size.getByRole("button", { name: "Save changes" }));
+
+    const variants = within(screen.getByRole("region", { name: "Variants" }));
+    await user.click(variants.getByRole("button", { name: "Edit NS-ASJ-OB-M" }));
+    await user.selectOptions(variants.getByLabelText("Size for NS-ASJ-OB-M"), "XL");
+    await user.selectOptions(variants.getByLabelText("Size"), "XL");
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    // The lab offers M and L. Both the open row and the add form keep what was typed across a
+    // Discard, and neither may keep a choice nobody can see any more: each shows the value it
+    // will write.
+    await waitFor(() =>
+      expect(variants.getByLabelText("Size for NS-ASJ-OB-M")).toHaveDisplayValue("M"),
+    );
+    expect(variants.getByLabelText("Size")).toHaveDisplayValue("M");
+    await user.click(variants.getByRole("button", { name: "Save NS-ASJ-OB-M" }));
+    await user.click(variants.getByRole("button", { name: "Add variant" }));
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(savedDrafts).toHaveLength(1));
+    const saved = lastSaved().products[0].variants;
+    expect(saved.slice(0, 2)).toStrictEqual(unchangedPayload().products[0].variants);
+    expect(saved).toHaveLength(3);
+    expect(saved[2].option_values).toStrictEqual([
+      { key: "color", value: "Ocean Blue" },
+      { key: "size", value: "M" },
+    ]);
+  });
+
   it("corrects only the SKU of a variant whose option order is not the product's", async () => {
     const user = userEvent.setup();
     // Authored through the API rather than through this form, so its two option values are in
